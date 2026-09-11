@@ -107,3 +107,20 @@ describe("source-specific removal", () => {
     expect(removeDirect).toHaveBeenCalledWith({ userId: "u_2f81", grantId: "g_88" });
   });
 });
+
+describe("initial focus", () => {
+  // The dialog's focus trap focuses the first focusable element on open. A
+  // destructive confirm rendered first got that focus for free, so Enter —
+  // pressed on reflex to close a dialog that just opened — revoked access.
+  it("lands on Cancel, never on the destructive confirm", () => {
+    open({ sources: [direct], grantId: "g_88" });
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+
+  it("lands on Cancel for a bundle removal too", () => {
+    open({ sources: [bundle] });
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+});

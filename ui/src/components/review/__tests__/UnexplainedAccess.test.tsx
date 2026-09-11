@@ -296,6 +296,27 @@ describe("Unexplained access — triage", () => {
     fireEvent.click(rowToggle!);
     expect(screen.getByText("zg_4f19c8")).toBeInTheDocument();
   });
+
+  // "Made by" used to render `item.upstream_actor` — Zitadel's raw editor id —
+  // as the entire value, with no name resolution at all. It is a Zitadel user
+  // id like any other, so it goes through the same UserName component the
+  // rest of the row uses, and its own "cannot resolve" fallback labels the id
+  // instead of leaving it to stand alone.
+  it("does not show the evidence panel's 'Made by' as a bare id", () => {
+    drift.data = [item({ zitadel_grant_id: "zg_1", upstream_actor: "228719872436817921" })];
+    renderTriage();
+
+    const rowToggle = screen
+      .getAllByRole("button", { expanded: false })
+      .find((button) => !button.hasAttribute("aria-describedby"));
+    fireEvent.click(rowToggle!);
+
+    // Scoped to the evidence row itself — the row's holder (also unresolved
+    // in this test environment) would otherwise give a second "Unknown
+    // account" and make a plain getByText ambiguous.
+    const madeByLabel = screen.getByText("Made by");
+    expect(madeByLabel.nextElementSibling?.textContent).toMatch(/Unknown account/);
+  });
 });
 
 describe("Unexplained access — bulk resolution is rehearsed", () => {
@@ -600,5 +621,27 @@ describe("the revoke confirm, once it has run", () => {
     await waitFor(() => expect(within(dialog).getByText(/Nothing was changed/i)).toBeInTheDocument());
     expect(within(dialog).getByRole("button", { name: "Revoke access" })).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Done" })).toBeNull();
+  });
+
+  it("opens with Cancel focused, not the destructive Revoke access button", () => {
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+
+  it("doesn't claim the grant leaves Zitadel on confirm when the result says it only queues", () => {
+    // The pre-confirm copy used to say "removed from Zitadel as you confirm" —
+    // a promise the outcome directly underneath it (queued, sends on its own)
+    // contradicts. Both halves of the dialog must agree on the same tense.
+    drift.data = [item({ id: "d1" })];
+    renderTriage();
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByText(/removed from Zitadel as you confirm/i)).toBeNull();
+    expect(within(dialog).getByText(/send on their own/i)).toBeInTheDocument();
   });
 });

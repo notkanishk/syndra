@@ -270,6 +270,15 @@ function DirectDialog({
                 : undefined
         }
       >
+        {/* Cancel/Done comes FIRST in the markup, not just visually — the
+            dialog's focus trap (Modal.tsx) focuses the first focusable
+            element in the panel on open, and a destructive confirm rendered
+            first got that focus for free: Enter, pressed on reflex to close
+            a dialog that just opened, revoked access instead. The safe exit
+            takes the initial focus; the destructive action never does. */}
+        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onClose}>
+          {succeeded(outcome) ? "Done" : "Cancel"}
+        </Button>
         {/* Same rule as the bundle dialog: an action that has run is not an
             action any more, and leaving it armed lets a second click revoke
             again. */}
@@ -305,9 +314,6 @@ function DirectDialog({
             {source?.queued ? "Withdraw the queued grant" : "Revoke access"}
           </Button>
         )}
-        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onClose}>
-          {succeeded(outcome) ? "Done" : "Cancel"}
-        </Button>
       </ModalFooter>
     </Modal>
   );
@@ -395,6 +401,16 @@ function BundleDialog({
             : "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."
         }
       >
+        {/* First in the markup, same reason as the direct dialog: the focus
+            trap focuses the first focusable element on open, and the safe
+            exit must be the one that gets it, never the destructive confirm
+            below. */}
+        <Button
+          variant={succeeded(outcome) ? "accent" : "outline"}
+          onClick={onClose}
+        >
+          {succeeded(outcome) ? "Done" : "Cancel"}
+        </Button>
         {/* Gone once it has run. A destructive confirm that stays armed after
             it succeeded fires again on the next click — which is what a person
             does when the dialog does not close, and each press queued another
@@ -449,12 +465,6 @@ function BundleDialog({
             {source.queued ? "Withdraw the queued change" : "Remove bundle"}
           </Button>
         )}
-        <Button
-          variant={succeeded(outcome) ? "accent" : "outline"}
-          onClick={onClose}
-        >
-          {succeeded(outcome) ? "Done" : "Cancel"}
-        </Button>
       </ModalFooter>
     </Modal>
   );

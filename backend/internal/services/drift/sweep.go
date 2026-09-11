@@ -27,9 +27,14 @@ type DriftResult struct {
 	// out to account for them after all. Reported separately from created: a
 	// sweep that raises three and retracts three has not been quiet, it has
 	// changed its mind, and an operator watching the queue deserves to see which.
-	DriftItemsRetracted int  `json:"drift_items_retracted,omitempty"`
-	ReEnqueued          int  `json:"re_enqueued"` // syndra_only replays
-	Truncated           bool `json:"truncated"`
+	DriftItemsRetracted int `json:"drift_items_retracted,omitempty"`
+	// DriftItemsClosedGone counts target_only findings closed for the opposite
+	// reason: not because Syndra now explains the grant, but because a
+	// COMPLETE observation no longer contains it at all. Never set on a
+	// truncated or failed read — that read cannot tell "gone" from "unseen".
+	DriftItemsClosedGone int  `json:"drift_items_closed_gone,omitempty"`
+	ReEnqueued           int  `json:"re_enqueued"` // syndra_only replays
+	Truncated            bool `json:"truncated"`
 	// WriteFailures counts findings this pass reached and could not write down.
 	// Each one is logged and skipped so a single bad row cannot cost the rest
 	// of the sweep — but a pass that lost a finding has not reconciled the
@@ -203,6 +208,11 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	}
 
 	zitSet := buildHolderSet(nil, zit)
+
+	// Reached only past the truncated-read return above: closing a row for
+	// "gone" concludes from an absence, and only a complete read entitles the
+	// sweep to that conclusion.
+	res.DriftItemsClosedGone = closeGoneDrift(ctx, target, zitSet)
 
 	// The third state, for the half of this sweep that WRITES (change
 	// `reconciliation-as-merge`).
@@ -630,4 +640,53 @@ func retractExplained(
 		log.Printf("[DRIFT] retracted %d finding(s) on %s that Syndra now accounts for", retracted, target)
 	}
 	return retracted
+}
+
+// closeGoneDrift closes pending target_only findings whose grant is no longer
+// present in the observed set at all — the opposite of retractExplained, which
+// closes findings Syndra now accounts for. This one closes findings nobody
+// needs to account for any more, because the access itself is gone.
+//
+// Callable ONLY from a complete observation (Sweep enforces this by placement:
+// this runs after the truncated-read early return). A truncated read cannot
+// distinguish "gone" from "not seen because it was past the cap", so it must
+// close nothing — see the mutation-sensitive test for this guard.
+func closeGoneDrift(ctx context.Context, target string, zitSet map[services.HolderKey]bool) int {
+	pending, err := svcPendingDriftItems(ctx, target)
+	if err != nil {
+		log.Printf("[DRIFT] gone-closure skipped: could not read pending findings: %v", err)
+		return 0
+	}
+
+	closed := 0
+	for _, item := range pending {
+		if item.Target != target || item.DriftType != db.DriftTargetOnly {
+			continue
+		}
+		// Every role on the row has to be gone. A row naming two roles where
+		// one is still live in Zitadel is still a finding about that one, and
+		// closing the whole row would erase it.
+		stillPresent := false
+		for _, rk := range item.RoleKeys {
+			if zitSet[services.HolderKey{UserID: item.UserID, ProjectID: item.ProjectID, RoleKey: rk}] {
+				stillPresent = true
+				break
+			}
+		}
+		if stillPresent {
+			continue
+		}
+		if err := closeGoneDriftItem(ctx, item.ID, target); err != nil {
+			if errors.Is(err, db.ErrDriftNotPending) {
+				continue // triaged by a human between the read and the write
+			}
+			log.Printf("[DRIFT] gone-closure failed for finding %s: %v", item.ID, err)
+			continue
+		}
+		closed++
+	}
+	if closed > 0 {
+		log.Printf("[DRIFT] closed %d finding(s) on %s no longer present in Zitadel", closed, target)
+	}
+	return closed
 }

@@ -87,6 +87,15 @@ describe("bundle deletion", () => {
     expect(document.body.textContent).toMatch(/takes nothing away from anybody/i);
   });
 
+  it("does not autofocus the destructive button on open", () => {
+    render(<BundlesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
+
+    expect(document.activeElement).not.toBe(
+      screen.getByRole("button", { name: "Delete and revoke" }),
+    );
+  });
+
   it("deletes only on the confirming button", async () => {
     render(<BundlesPage />);
     fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
@@ -120,6 +129,27 @@ describe("bundle rename", () => {
         description: "Trained on the mill",
       }),
     );
+  });
+
+  /**
+   * `setOutcome` used to fire alongside `onClose`, which unmounts the dialog
+   * before "Now called Lab Technician" is ever painted. It now stays open on
+   * success until Done is pressed, same fix as the create dialog.
+   */
+  it("shows the rename landed and stays open until Done is pressed", async () => {
+    render(<BundlesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lab Technician" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(document.body.textContent).toMatch(/Now called Lab Technician/),
+    );
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(document.body.textContent).not.toMatch(/Now called Lab Technician/);
   });
 });
 

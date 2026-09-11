@@ -1,10 +1,25 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import type { TargetHealth, TargetInventory, TargetSummary } from "@/lib/queries/useTargets";
+
+const nameResolverMiss = { value: undefined, resolved: true } as const;
+
+// Adoption asks an operator to type a raw Syndra ID with no picker — the one
+// check available before an irreversible hand-off is showing whose name that
+// ID actually resolves to, both while typing and in the result afterwards.
+vi.mock("@/lib/queries/useNameResolver", () => ({
+  useNameResolver: () => ({
+    resolveUser: (id: string) =>
+      id === "s-99" ? { value: { display_name: "Sai Khurana" }, resolved: true } : nameResolverMiss,
+    resolveProject: () => nameResolverMiss,
+    resolveRole: () => nameResolverMiss,
+    resolveBundle: () => nameResolverMiss,
+  }),
+}));
 
 // 9.2/9.20/9.21 — the operation set comes from the manifest, and the health
 // states render as distinct things rather than as one "status".
@@ -311,6 +326,23 @@ describe("one target's page", () => {
     expect(screen.getByText("account.purge")).toBeInTheDocument();
   });
 
+  // These three shipped with no plain-language description, so the row read
+  // as a bare operation id with nothing beside it — every other row had one.
+  it("describes activity.get, password.rotate and storage.status in plain language", () => {
+    state.roster = [
+      summary([
+        { id: "activity.get", scope: "member", confirm: false, available: true },
+        { id: "password.rotate", scope: "member", confirm: true, available: true },
+        { id: "storage.status", scope: "member", confirm: false, available: true },
+      ]),
+    ];
+    renderTarget();
+
+    expect(screen.getByText("read what happened on the system for one person")).toBeInTheDocument();
+    expect(screen.getByText("replace a person's password on the system")).toBeInTheDocument();
+    expect(screen.getByText("read space used and quota")).toBeInTheDocument();
+  });
+
   // 9.2 — an operation removed from a manifest disappears without a frontend
   // change. Asserted by rendering a manifest without it: nothing in this
   // component names an operation, so there is no list to edit.
@@ -359,7 +391,7 @@ describe("one target's page", () => {
 
     // A state somebody chose reads as a decision, not a fault: the reason they
     // gave is on screen, and nothing on the page calls it an outage.
-    expect(screen.getByText(/Set on purpose: rotating the API key/)).toBeInTheDocument();
+    expect(screen.getByText(/set that on purpose: rotating the API key/)).toBeInTheDocument();
     expect(screen.queryByText(/did not answer/i)).toBeNull();
     expect(screen.queryByText(/Not answering/)).toBeNull();
   });
@@ -408,6 +440,93 @@ describe("one target's page", () => {
     expect(screen.getByText("root")).toBeInTheDocument();
     expect(screen.getByText(/Syndra leaves them alone/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /revoke/i })).toBeNull();
+  });
+});
+
+/**
+ * The top band, restructured to match /zitadel: one status card and a
+ * 3-tile row, replacing the "Can Syndra reach it" card and its label/value
+ * grid.
+ */
+describe("the top band: one status card and three tiles", () => {
+  it("gives one calm sentence when reachable and active, with no leftover grid", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByText(/Reachable — answered just now\./)).toBeInTheDocument();
+    expect(screen.getByText(/talking to TrueNAS normally/)).toBeInTheDocument();
+    expect(screen.queryByText("Can Syndra reach it")).toBeNull();
+    expect(screen.queryByText("Last answered")).toBeNull();
+  });
+
+  it("shows the accounts Syndra manages, read from the same inventory the census uses", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = {
+      target: "truenas",
+      bound: 4,
+      unmanaged: [],
+      current: true,
+      read_at: new Date().toISOString(),
+    };
+    renderTarget();
+
+    const tile = screen.getByText("Accounts Syndra manages").closest(".card");
+    expect(tile).not.toBeNull();
+    expect(within(tile as HTMLElement).getByText("4")).toBeInTheDocument();
+  });
+
+  it("names the maintenance state on its own tile, matching the control below", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "draining" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    // The tile's own label, not the "Maintenance" card title further down —
+    // both are legitimately on screen at once.
+    expect(screen.getAllByText("Maintenance").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Finishing up")).toBeInTheDocument();
+  });
+
+  it("does not double the product name beside its version", () => {
+    state.roster = [summary([])];
+    state.health = {
+      reachable: true,
+      lifecycle: "active",
+      product: "TrueNAS",
+      product_version: "TrueNAS-25.10.5",
+    };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.queryByText(/TrueNAS TrueNAS-25\.10\.5/)).toBeNull();
+    expect(screen.getByText("TrueNAS 25.10.5")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Maintenance: one compact row, one helper line — not the reason repeated
+ * under every button.
+ */
+describe("maintenance control is a single compact row", () => {
+  it("shows the 'say why first' helper once, not once per button", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getAllByText(/Say why first/)).toHaveLength(1);
+  });
+
+  it("marks the current state and disables reselecting it", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByRole("button", { name: /Already active/ })).toBeDisabled();
   });
 });
 
@@ -717,6 +836,24 @@ describe("adopting an account", () => {
     expect(
       screen.getByText(/becomes the account of the person named below/).textContent,
     ).toContain("TrueNAS");
+  });
+
+  // Typed, not picked, so the one check available before the point of no
+  // return is showing whose name that ID actually resolves to.
+  it("shows whose name the typed ID resolves to, before and after confirming", () => {
+    openAdoptForSai();
+
+    fireEvent.change(screen.getByLabelText("Person"), { target: { value: "s-99" } });
+    expect(screen.getByText("Sai Khurana")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "sai" } });
+    fireEvent.click(screen.getByRole("button", { name: /Assign sai to this person/ }));
+
+    // The backend's own outcome text never names the person — it is written
+    // for the audit trail. The row must, so the operator sees who they just
+    // handed the account to rather than only that something happened.
+    expect(screen.getByText(/Assigned to/)).toBeInTheDocument();
+    expect(screen.getByText("Sai Khurana")).toBeInTheDocument();
   });
 
   it("reports the outcome under the account it happened to", () => {

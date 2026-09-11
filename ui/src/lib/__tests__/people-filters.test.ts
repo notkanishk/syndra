@@ -4,6 +4,7 @@ import {
   applyFilters,
   describeFilters,
   EMPTY_FILTERS,
+  hasAccess,
   hasAnyFilter,
   parseFilters,
   peopleHref,
@@ -34,6 +35,18 @@ function person(overrides: Partial<UserListEntry> = {}): UserListEntry {
     ...overrides,
   } as UserListEntry;
 }
+
+describe("hasAccess", () => {
+  it("falls back to effective_role_count while nothing has been observed", () => {
+    expect(hasAccess(person({ effective_role_count: 0 }))).toBe(false);
+    expect(hasAccess(person({ effective_role_count: 1 }))).toBe(true);
+  });
+
+  it("defers to the observed count once one exists, even if it disagrees", () => {
+    expect(hasAccess(person({ effective_role_count: 3, observed_role_count: 0 }))).toBe(false);
+    expect(hasAccess(person({ effective_role_count: 0, observed_role_count: 1 }))).toBe(true);
+  });
+});
 
 describe("parseFilters", () => {
   it("ignores an attention value it doesn't recognise", () => {
@@ -117,11 +130,33 @@ describe("applyFilters", () => {
     expect(kept[0].user.id).toBe("u1");
   });
 
+  it("departed also defers to the observed count once one exists", () => {
+    const rows = [
+      person({
+        user: { ...person().user, status: "departed" },
+        effective_role_count: 2,
+        observed_role_count: 0,
+      }),
+    ];
+    expect(applyFilters(rows, { ...EMPTY_FILTERS, attention: "departed" })).toHaveLength(0);
+  });
+
   it("finds people with no access at all", () => {
     const rows = [person({ effective_role_count: 0 }), person({ user: { ...person().user, id: "u2" } })];
     const kept = applyFilters(rows, { ...EMPTY_FILTERS, attention: "no-access" });
     expect(kept).toHaveLength(1);
     expect(kept[0].user.id).toBe("u1");
+  });
+
+  it("prefers what Zitadel observed over what was given, once observed", () => {
+    // effective_role_count says they have access, but the observed count —
+    // once it exists — is the one that answers "no access at all".
+    const rows = [
+      person({ effective_role_count: 3, observed_role_count: 0 }),
+      person({ user: { ...person().user, id: "u2" }, effective_role_count: 0, observed_role_count: 2 }),
+    ];
+    const kept = applyFilters(rows, { ...EMPTY_FILTERS, attention: "no-access" });
+    expect(kept.map((entry) => entry.user.id)).toEqual(["u1"]);
   });
 
   it("stacks filters rather than picking one", () => {

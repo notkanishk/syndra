@@ -20,6 +20,10 @@ export interface CascadeSummaryRow {
   cascade_id?: string;
   status: string;
   completed_at?: string;
+  // Set only after a post-write read of Zitadel showed this write actually
+  // landed there — "applied" alone means Syndra sent it, not that Zitadel was
+  // read back and agreed.
+  confirmed_at?: string;
 }
 
 /**
@@ -34,6 +38,10 @@ export interface CascadeGroupRow {
   applied: number;
   waiting: number;
   failed: number;
+  // Of `applied`, how many Zitadel has actually been read back and confirmed
+  // holds. Always <= applied; the gap is what "sent" and "confirmed" disagree
+  // about.
+  confirmed: number;
   user_ids: string[];
   writes: CascadeSummaryRow[];
   started_at: string;

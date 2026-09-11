@@ -8,6 +8,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName } from "@/components/names";
+import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useApplications, type ApplicationView } from "@/lib/queries/useApplications";
 
 /**
@@ -96,7 +97,13 @@ export default function AppsPage() {
             />
           }
         >
-          {rows.map((entry) => (
+          {rows.map((entry) => {
+            const people = holdersLine(
+              entry.assigned_user_count,
+              undefined,
+              entry.observed_user_count,
+            );
+            return (
             <Link
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
@@ -120,10 +127,15 @@ export default function AppsPage() {
               </span>
 
               <span className="text-[15px] tablet:w-[110px] tablet:text-right">
-                {entry.assigned_user_count}
+                {people.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {entry.assigned_user_count === 1 ? " person" : " people"}
+                  {people.headline === "1" ? " person" : " people"}
                 </span>
+                {people.note && (
+                  <span className={`block text-[12.5px] ${holdersToneClass[people.tone]}`}>
+                    {people.note}
+                  </span>
+                )}
               </span>
 
               <span
@@ -136,7 +148,8 @@ export default function AppsPage() {
                 <Mono>{entry.application.format_type}</Mono>
               </span>
             </Link>
-          ))}
+            );
+          })}
         </ListStates>
       </Card>
     </div>

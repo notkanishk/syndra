@@ -73,7 +73,39 @@
   `drift_items` only — the self-mutation guard means Syndra's own grants
   never have an event, so running this over the observation store would
   flag every grant Syndra makes.
+- [x] 3.3a A pending `target_only` row whose grant Zitadel no longer holds at
+  all did not close — only `retractExplained` closed rows, and only when
+  Syndra's own state explained the grant, so a grant removed out of band
+  (`zitadel.grant_removed`) left its finding open forever (prod: "47 items"
+  where Zitadel held 46 unexplained). Fixed 2026-09-11: `drift/sweep.go`'s
+  `closeGoneDrift`, called only past the truncated-read guard, closes such a
+  row to `db.DriftResolved` ("resolved") via the new `db.CloseGoneDrift`
+  (migration 000050 adds the status). Tests:
+  `TestSweep_ClosesAFindingWhoseGrantHasVanished`,
+  `TestSweep_LeavesAFindingWhoseGrantIsStillPresent`,
+  `TestSweep_TruncatedObservationClosesNothing` (mutation-sensitive on the
+  completeness guard).
 - [x] 3.4 The truncation limit is stated AND enforced where it decides
   something: a revoke may only be confirmed from a complete answer. The
   pre-flight stays capped because it concludes presence, where a miss costs a
   call that 409 absorbs; the confirmation concludes absence and cannot
+
+## 4. Holding is observed (2026-09-11 production walk)
+
+- [x] 4.1 `RoleHolderFacts` returns `HolderFacts{Given, Confirmed, Observed,
+  Basis}` from one snapshot; `ObservedHolderCounts` counts whoever Zitadel
+  shows. Users, projects, roles, apps and role-members responses carry
+  `observed_*` fields and the observation basis. `is_unused` requires
+  observed == 0. Test: `TestRoleHolderFacts_ObservedCountsWhoeverGaveIt`.
+- [x] 4.2 Every UI holder/access number reads observed; recorded counts only
+  explain (`ui/src/lib/holders.ts`, one helper for every surface).
+- [x] 4.3 `db.ConfirmFromObservation` stamps `confirmed_at` from a complete
+  listing (adds by presence, revokes by absence); called from
+  `observe.Sweep` only past the completeness guard. Live test:
+  `TestConfirmFromObservationStampsWhatTheIndexShows`.
+- [x] 4.4 Migration 000050 down is `NOT VALID` so a rollback keeps rows the
+  sweep closed as gone.
+- [x] 4.5 A member's own page reads what Zitadel holds for them through the
+  same observer route the operator page uses (`GET /zitadel/users/{id}/grants`
+  is now self-or-operator). One reader, one answer, both audiences. Test:
+  `TestZitadelUserGrantsRoute_SelfReadableByMember` (mutation-checked).

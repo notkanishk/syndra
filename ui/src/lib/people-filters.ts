@@ -153,6 +153,20 @@ export function isDeparted(status: string | undefined): boolean {
   }
 }
 
+/**
+ * Whether Zitadel — or, absent an observation, Syndra's record — shows this
+ * person holding anything at all. THE ONE COPY: "no access" and "departed,
+ * still has access" are the same question asked in opposite directions, and
+ * both must answer it off what was actually observed once that exists,
+ * never off the given count alone (holding is observed; explanation is
+ * recorded).
+ */
+export function hasAccess(entry: UserListEntry): boolean {
+  return entry.observed_role_count !== undefined
+    ? entry.observed_role_count > 0
+    : entry.effective_role_count > 0;
+}
+
 function matchesAttention(entry: UserListEntry, attention: Attention): boolean {
   switch (attention) {
     case "expiring":
@@ -162,11 +176,11 @@ function matchesAttention(entry: UserListEntry, attention: Attention): boolean {
     case "requests":
       return entry.open_request_count > 0;
     case "no-access":
-      return entry.effective_role_count === 0;
+      return !hasAccess(entry);
     case "departed":
       // Only departed people who still hold something: a cleanly offboarded
       // account is not work, and listing it as such would bury the ones that are.
-      return isDeparted(entry.user.status) && entry.effective_role_count > 0;
+      return isDeparted(entry.user.status) && hasAccess(entry);
   }
 }
 

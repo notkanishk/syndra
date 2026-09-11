@@ -288,12 +288,23 @@ type UserListItem struct {
 	// inside the watch window, so the row can say "1 expires in 2 days"
 	// rather than only "1 expiring".
 	SoonestExpiry *time.Time `json:"soonest_expiry,omitempty"`
+
+	// ObservedRoleCount / ObservedProjectCount are what Zitadel shows this
+	// person holding, whoever gave it — the only numbers a screen may call
+	// "their access". Nil when Observation.ReadAt is nil: not checked, not zero.
+	ObservedRoleCount    *int             `json:"observed_role_count,omitempty"`
+	ObservedProjectCount *int             `json:"observed_project_count,omitempty"`
+	Observation          ObservationBasis `json:"observation"`
 }
 
 type ApplicationView struct {
-	Application       ApplicationCatalog `json:"application"`
-	ConsumedRoles     []string           `json:"consumed_roles"`
-	AssignedUserCount int                `json:"assigned_user_count"`
+	Application   ApplicationCatalog `json:"application"`
+	ConsumedRoles []string           `json:"consumed_roles"`
+	// AssignedUserCount is what Syndra decided — Recorded. ObservedUserCount is
+	// what Zitadel shows holding a role on this app's project — the headline.
+	AssignedUserCount int              `json:"assigned_user_count"`
+	ObservedUserCount *int             `json:"observed_user_count,omitempty"`
+	Observation       ObservationBasis `json:"observation"`
 }
 
 // ApplicationSimulation is the dry run of a real token. CustomClaims is the
@@ -338,10 +349,13 @@ type ProjectSummary struct {
 	RuleOutCount int `json:"rule_out_count"`
 	// ConfirmedMemberCount is how many of MemberCount's people the observation
 	// store also shows holding a role here — nil when Observation.ReadAt is nil.
-	ConfirmedMemberCount *int             `json:"confirmed_member_count,omitempty"`
-	Observation          ObservationBasis `json:"observation"`
-	RoleKeys             []string         `json:"role_keys"`
-	SampleMembers        []string         `json:"sample_members"`
+	ConfirmedMemberCount *int `json:"confirmed_member_count,omitempty"`
+	// ObservedMemberCount is how many people Zitadel shows holding any role
+	// here, whoever gave it — the headline number. Nil when never observed.
+	ObservedMemberCount *int             `json:"observed_member_count,omitempty"`
+	Observation         ObservationBasis `json:"observation"`
+	RoleKeys            []string         `json:"role_keys"`
+	SampleMembers       []string         `json:"sample_members"`
 }
 
 type CatalogResponse struct {
@@ -438,6 +452,11 @@ type CascadeSummary struct {
 	CascadeID   string     `json:"cascade_id,omitempty"`
 	Status      string     `json:"status"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	// ConfirmedAt is when a post-write read of Zitadel showed this write actually
+	// landed — set only after `status` is already "applied", never before. An
+	// applied write with no ConfirmedAt is one Syndra sent but has not yet
+	// verified; the two must never be collapsed into one "went through" fact.
+	ConfirmedAt *time.Time `json:"confirmed_at,omitempty"`
 }
 
 // CascadeGroup is Change history's unit: every write one triggering event
@@ -445,12 +464,16 @@ type CascadeSummary struct {
 // diff — "8 applied", "2 waiting", "no writes" is the whole vocabulary, and a
 // half-applied cascade has to be visible AS a half-applied cascade.
 type CascadeGroup struct {
-	CascadeID string           `json:"cascade_id"`
-	Source    string           `json:"source"`               // bundle | rule | lifecycle_cascade
-	SourceRef string           `json:"source_ref,omitempty"` // originating bundle/rule id
-	Applied   int              `json:"applied"`
-	Waiting   int              `json:"waiting"`
-	Failed    int              `json:"failed"`
+	CascadeID string `json:"cascade_id"`
+	Source    string `json:"source"`               // bundle | rule | lifecycle_cascade
+	SourceRef string `json:"source_ref,omitempty"` // originating bundle/rule id
+	Applied   int    `json:"applied"`
+	Waiting   int    `json:"waiting"`
+	Failed    int    `json:"failed"`
+	// Confirmed counts the Applied writes that also have a ConfirmedAt — read
+	// back from Zitadel and found actually there, not just sent. Always <=
+	// Applied; the gap is what "sent" and "confirmed" disagree about.
+	Confirmed int              `json:"confirmed"`
 	UserIDs   []string         `json:"user_ids"`
 	Writes    []CascadeSummary `json:"writes"`
 	StartedAt time.Time        `json:"started_at"`
@@ -842,6 +865,9 @@ type CatalogRole struct {
 	// ConfirmedUserCount is how many of AssignedUserCount's holders the
 	// observation store also shows holding the role — nil when Observation.ReadAt
 	// is nil, because "not checked yet" must never render as a confirmed zero.
-	ConfirmedUserCount *int             `json:"confirmed_user_count,omitempty"`
-	Observation        ObservationBasis `json:"observation"`
+	ConfirmedUserCount *int `json:"confirmed_user_count,omitempty"`
+	// ObservedUserCount is how many people Zitadel shows holding the role,
+	// whoever gave it — the headline number. Nil when never observed.
+	ObservedUserCount *int             `json:"observed_user_count,omitempty"`
+	Observation       ObservationBasis `json:"observation"`
 }

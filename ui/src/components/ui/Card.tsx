@@ -106,7 +106,7 @@ export function CardRow({
   // One definition of the line, used by all three shapes. It used to be typed
   // twice, and the copies had already drifted: only one of them lifted its
   // 60px floor above the tablet breakpoint.
-  const line = `flex min-h-[60px] items-center gap-[18px] px-5 py-3.5 tablet:min-h-0 ${className}`;
+  const line = `flex flex-wrap min-h-[60px] items-center gap-[18px] px-5 py-3.5 tablet:min-h-0 ${className}`;
 
   if (!disclosure) {
     return (

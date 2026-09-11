@@ -20,7 +20,7 @@ import {
   SelectionBar,
 } from "@/components/ui/SelectionBar";
 import { useRowSelection } from "@/lib/useRowSelection";
-import { ProjectName } from "@/components/names";
+import { ProjectName, RoleRef } from "@/components/names";
 import {
   useBulkSetConfirmationMode,
   type ConfirmationMode,
@@ -287,6 +287,13 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
   const [validated, setValidated] = useState<{ ok: boolean; notes: string[] } | null>(null);
 
   const existingRules = useMappingRules().data ?? [];
+  // Saved used to close the dialog in the same tick as setOutcome, which
+  // discarded `savedDetail()` — the operator's only account of whether the
+  // rule waits under Pending changes or already applied — before it ever
+  // painted. Now the footer swaps to Done, same as DeleteRuleConfirm below.
+  // Both `applied` (auto mode) and `queued` (manual mode) mean the rule
+  // itself saved; only a thrown error leaves the form armed to retry.
+  const saved = outcome?.kind === "applied" || outcome?.kind === "queued";
 
   const rolesFor = (projectId: string) =>
     (catalog.data ?? []).filter((role) => role.project_id === projectId);
@@ -392,6 +399,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
       <ModalHeader
         title={rule ? `Editing ${shortRuleId(rule.id)}` : "New automatic rule"}
         titleId="rule-title"
+        chip={rule && ruleChip(rule)}
         lede="Anybody who holds the first role gets the second — everyone who holds it today, and everyone who is given it later."
       />
 
@@ -538,6 +546,12 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
               : undefined
         }
       >
+        {saved && (
+          <Button variant="accent" onClick={onClose}>
+            Done
+          </Button>
+        )}
+        {!saved && (
         <Button
           variant="accent"
           disabled={!complete || !validated?.ok}
@@ -565,19 +579,23 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
                   await setMode.mutateAsync({ id: rule.id, mode });
                 }
                 setOutcome({
-                  kind: "applied",
+                  // "Applied" over the rule itself is always true — it is a
+                  // Syndra-side row, not a Zitadel mutation. What the pill
+                  // must not contradict is `savedDetail(mode)` just below: a
+                  // manual rule's access still waits under Pending changes,
+                  // so the outcome for that half is `queued`.
+                  kind: mode === "auto" ? "applied" : "queued",
                   message: "Rule updated",
                   detail: savedDetail(mode),
                 });
               } else {
                 await create.mutateAsync({ ...input, confirmation_mode: mode });
                 setOutcome({
-                  kind: "applied",
+                  kind: mode === "auto" ? "applied" : "queued",
                   message: "Rule created",
                   detail: savedDetail(mode),
                 });
               }
-              onClose();
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -585,6 +603,8 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
         >
           {rule ? "Save rule" : "Create rule"}
         </Button>
+        )}
+        {!saved && (
         <Button
           disabled={!complete}
           reason={!complete ? "Fill in every field above first." : undefined}
@@ -599,13 +619,14 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
         >
           {validated ? "Check again" : "Check rule"}
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
+        )}
+        {!saved && <Button onClick={onClose}>Cancel</Button>}
         {/*
           Outline, and last. A rule is retired from the same place it is retargeted, because
           those are the two things you come here to do — but a solid red button beside Save is
           one slip away from revoking a term's worth of access.
         */}
-        {rule && (
+        {!saved && rule && (
           <Button variant="danger" disabled={busy} onClick={() => setConfirmingDelete(true)}>
             Delete rule
           </Button>
@@ -660,6 +681,7 @@ function DeleteRuleConfirm({
       <ModalHeader
         title={`Delete ${shortRuleId(rule.id)}?`}
         titleId="rule-delete-title"
+        chip={ruleChip(rule)}
         lede={`Some people may hold ${label} only because of this rule.`}
       />
 
@@ -686,8 +708,26 @@ function DeleteRuleConfirm({
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter note="If you only want the rule to give a different role, edit it instead of deleting it.">
+        {/* First in the DOM, not first on screen: Modal focuses the panel's
+            first focusable element on open, and a dialog must not open with
+            the cursor already on the button that revokes access. `order-2`
+            keeps this where it has always sat, visually, after the
+            destructive button. */}
+        {/* `onDeleted` closes the editor this dialog opened over, and it was
+            never called — so deleting a rule left the operator looking at an
+            editor for a rule that no longer exists. Called from the dismiss
+            button rather than from the mutation, because closing the editor
+            takes the outcome with it. */}
+        <Button
+          className="order-2"
+          disabled={remove.isPending}
+          onClick={gone ? onDeleted : onCancel}
+        >
+          {gone ? "Done" : "Keep the rule"}
+        </Button>
         {!gone && (
         <Button
+          className="order-1"
           variant="dangerConfirm"
           isPending={remove.isPending}
           onClick={async () => {
@@ -724,14 +764,6 @@ function DeleteRuleConfirm({
           Delete rule and revoke access
         </Button>
         )}
-        {/* `onDeleted` closes the editor this dialog opened over, and it was
-            never called — so deleting a rule left the operator looking at an
-            editor for a rule that no longer exists. Called from the dismiss
-            button rather than from the mutation, because closing the editor
-            takes the outcome with it. */}
-        <Button disabled={remove.isPending} onClick={gone ? onDeleted : onCancel}>
-          {gone ? "Done" : "Keep the rule"}
-        </Button>
       </ModalFooter>
     </Modal>
   );
@@ -740,4 +772,23 @@ function DeleteRuleConfirm({
 /** "R-014" reads as a rule; a raw UUID reads as noise. */
 function shortRuleId(id: string): string {
   return `R-${id.replace(/-/g, "").slice(0, 4)}`;
+}
+
+/**
+ * The rule, as the sentence it produces — above the dialog title, because the
+ * title alone is only ever this rule's short id. `R-014` means nothing to the
+ * person deciding whether to edit or delete it; the project/role pair does.
+ */
+function ruleChip(rule: MappingRuleRow) {
+  return (
+    <span className="text-[13px]">
+      <RoleRef projectId={rule.source_project} roleKey={rule.source_role} className="text-muted" />
+      <span aria-hidden className="mx-2 text-faint">⇒</span>
+      <RoleRef
+        projectId={rule.target_project}
+        roleKey={rule.target_role}
+        className="font-semibold"
+      />
+    </span>
+  );
 }

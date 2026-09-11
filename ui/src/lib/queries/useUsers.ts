@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { CascadeOutcome } from "@/lib/types";
 
 // Shapes mirror the backend `users.go` handler responses. Kept narrow to what
@@ -36,6 +37,13 @@ export interface UserListEntry {
   open_request_count: number;
   unexplained_count: number;
   soonest_expiry?: string | null;
+  /**
+   * What Zitadel shows this person holding right now — not Syndra's record of
+   * what was granted. Absent, not zero, when the org has never been read.
+   */
+  observed_role_count?: number;
+  observed_project_count?: number;
+  observation?: ObservationBasis;
 }
 
 export interface AccessRoleReason {
@@ -186,6 +194,14 @@ export interface CreateGrantInput {
   duration_days: number;
 }
 
+/** The outbox handle the direct-grant endpoint returns. `status` is "pending"
+ * unless the caller opts into inline apply, which this hook never does — so
+ * the caller must not assume "applied" from a bare 202. */
+export interface CreateGrantResult {
+  outbox_id: string;
+  status: string;
+}
+
 /**
  * Creates a direct grant. The proxy injects `granted_by` for demo sessions and
  * the backend derives it from the JWT subject for OIDC sessions.
@@ -194,7 +210,7 @@ export function useCreateGrant(userId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateGrantInput) => {
-      return await request(`/users/${userId}/grants`, { method: "POST", body: input });
+      return await request<CreateGrantResult>(`/users/${userId}/grants`, { method: "POST", body: input });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.access(userId) });

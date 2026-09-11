@@ -252,6 +252,120 @@ func TestSweep_RetractsAnExcludedFindingAsExternalNotAsOwned(t *testing.T) {
 
 // A row explained by two DIFFERENT sources has no single honest status, so it
 // is left for a human rather than closed under whichever came first.
+// Prod: a webhook recorded zitadel.grant_removed for a user/project/role, so
+// the pending target_only row nothing ever explains is now also a row
+// nothing needs to explain — the grant itself is gone. Only retractExplained
+// closed rows before this; a row for access that vanished, rather than
+// access Syndra came to own, sat forever ("47 items" where Zitadel held 46
+// unexplained). closeGoneDrift is the other half: it closes what the sweep's
+// COMPLETE read no longer contains at all.
+func TestSweep_ClosesAFindingWhoseGrantHasVanished(t *testing.T) {
+	stubSweep(t)
+
+	// Zitadel holds nothing for this triple any more.
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return nil, nil
+	}))
+	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
+		return []models.DriftItem{{
+			ID: "d-gone", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
+			UserID: "shikha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+		}}, nil
+	}))
+
+	var closed []string
+	t.Cleanup(swap(&closeGoneDriftItem, func(_ context.Context, id, target string) error {
+		closed = append(closed, id+"@"+target)
+		return nil
+	}))
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if len(closed) != 1 || closed[0] != "d-gone@"+db.TargetZitadel {
+		t.Fatalf("expected the vanished finding to be closed, got %v", closed)
+	}
+	if res.DriftItemsClosedGone != 1 {
+		t.Errorf("the result must report the closure, got %d", res.DriftItemsClosedGone)
+	}
+}
+
+// And it must NOT close one that is still present in Zitadel — closing it
+// would discard a live finding nobody has triaged.
+func TestSweep_LeavesAFindingWhoseGrantIsStillPresent(t *testing.T) {
+	stubSweep(t)
+
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
+	}))
+	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
+		return []models.DriftItem{{
+			ID: "d-live", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
+			UserID: "shikha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+		}}, nil
+	}))
+
+	closed := 0
+	t.Cleanup(swap(&closeGoneDriftItem, func(context.Context, string, string) error {
+		closed++
+		return nil
+	}))
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if closed != 0 {
+		t.Fatal("a finding was closed while its grant is still present in Zitadel")
+	}
+	if res.DriftItemsClosedGone != 0 {
+		t.Errorf("expected no closures reported, got %d", res.DriftItemsClosedGone)
+	}
+}
+
+// Mutation-sensitive: a truncated (or failed) observation cannot tell "gone"
+// from "unseen past the cap", so it must close NOTHING. This fails if the
+// completeness guard around closeGoneDrift's call site is ever removed —
+// everything here is set up exactly as TestSweep_ClosesAFindingWhoseGrantHasVanished
+// is, except the observation is incomplete.
+func TestSweep_TruncatedObservationClosesNothing(t *testing.T) {
+	stubSweep(t)
+
+	t.Cleanup(swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+		return db.Observation{Scope: "org", ObservedAt: testObservedAt, Complete: false}, nil
+	}))
+	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+		return nil, nil // Zitadel appears to hold nothing — but the read was incomplete
+	}))
+	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
+		return []models.DriftItem{{
+			ID: "d-gone", Target: db.TargetZitadel, DriftType: db.DriftTargetOnly,
+			UserID: "shikha", ProjectID: "p-admin", RoleKeys: []string{"admin-staff"},
+		}}, nil
+	}))
+
+	closed := 0
+	t.Cleanup(swap(&closeGoneDriftItem, func(context.Context, string, string) error {
+		closed++
+		return nil
+	}))
+
+	res, err := Sweep(context.Background())
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if !res.Truncated {
+		t.Fatal("expected the sweep to report truncated")
+	}
+	if closed != 0 {
+		t.Fatal("a finding was closed from a truncated read — absence cannot be concluded from an incomplete observation")
+	}
+	if res.DriftItemsClosedGone != 0 {
+		t.Errorf("expected no closures reported on a truncated read, got %d", res.DriftItemsClosedGone)
+	}
+}
+
 func TestSweep_LeavesAFindingWithMixedExplanations(t *testing.T) {
 	stubSweep(t)
 

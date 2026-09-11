@@ -377,6 +377,10 @@ task 3.3 in `tasks.md` for the full account, including the owner's addition:
 a sweep-sourced finding now says, at read time, whether attribution is
 unavailable and — separately — whether an event was probably missed.
 
+**Done, 2026-09-11 (closure).** A pending drift row whose grant is absent from
+a complete observation is closed as gone; a partial observation closes
+nothing.
+
 Drift's sweep and reconciliation's diff used to list Zitadel themselves. The
 question is not whether to tidy them into the observer for consistency. It is
 what each CONCLUDES, and what a wrong conclusion costs.
@@ -455,3 +459,37 @@ One scheduled listing removed. Drift's own read disappears; reconciliation
 gains an observation it was making anyway, now recorded and shared rather than
 discarded. The only new expense is drift running more often, which is a database
 diff against a store that is already in memory.
+
+## Holding is observed; explanation is recorded
+
+The 2026-09-11 walk of production as a fresh operator found the same
+contradiction on six screens: People said "No roles yet" beside "9
+unexplained"; Projects said "4 confirmed" for a project Zitadel showed
+fifteen people in; Roles called a role "Unused" that three people held. Each
+number was honest and each answered a different question, and none said
+which.
+
+The rule that ends it: **a number a screen calls people, holders, roles or
+access is what Zitadel shows — Observed. Syndra's own records only explain
+that number.** One snapshot (`accessSnapshot`) yields three readings per
+role, `HolderFacts{Given, Confirmed, Observed}`, and every surface derives
+its headline from Observed and its note from the other two:
+
+- `Observed − Confirmed` → "N unexplained" (drift; the same rows Drift lists)
+- `Given − Confirmed` → "N not in Zitadel yet" (sent or waiting)
+- both zero → "confirmed"
+
+Observed and Confirmed are nil, not zero, when nothing has ever been
+observed; the screen then says "not checked yet" and shows Given as what
+Syndra decided, never as what anybody has. `is_unused` requires Observed to
+be zero too: a role Syndra never gave but Zitadel shows held is drift, not
+unused.
+
+The same rule closed a second fallacy on the Advanced Home: "Sent, and not
+seen back yet: 23" read `confirmed_at IS NULL` — a record stamped only since
+read-back shipped — while the observation store already held every one of
+those grants. Records may not lag the truth they summarise, so the observer
+now stamps them: after every **complete** listing, `db.ConfirmFromObservation`
+marks applied adds present in the index and applied revokes absent from it.
+The post-write read-back and the sweep both end in the same stamp; a surface
+reading `confirmed_at` and one reading the index can no longer disagree.

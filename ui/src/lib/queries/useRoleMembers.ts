@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { RoleReason } from "@/components/access/AccessSource";
 import { request } from "@/lib/api-client";
+import type { ObservationBasis } from "@/lib/queries/useRoles";
+import type { UserProfile } from "@/lib/types";
 
 /** One holder of a (project, role) pair, with the sources that produced it. */
 export interface RoleMember {
@@ -13,6 +15,12 @@ export interface RoleMember {
   expires?: string;
   /** Present only for a direct source — the id the removal endpoint takes. */
   grant_id?: string;
+  /**
+   * Whether Zitadel currently shows this person holding the role. `false`
+   * means Syndra's record says so but the last read didn't see it there —
+   * "not in Zitadel yet". Absent when the role has never been observed.
+   */
+  in_zitadel?: boolean;
   /**
    * What this role confers and this person does not have.
    *
@@ -54,6 +62,14 @@ export interface RoleMembersView {
   direct_count: number;
   bundle_count: number;
   automatic_count: number;
+  /**
+   * People Zitadel shows holding this role with no Syndra record of it at
+   * all — not even a member row with `in_zitadel: false`. `null`, not an
+   * empty array, when the role has never been observed: an empty array would
+   * read as "checked, and nobody extra holds it".
+   */
+  observed_only: UserProfile[] | null;
+  observation?: ObservationBasis;
 }
 
 export function useRoleMembers(projectId: string, roleKey: string) {

@@ -87,58 +87,65 @@ func (s *accessSnapshot) For(userID string) (map[roleKey]*models.EffectiveRole, 
 	return roleMap, bundles, nil
 }
 
-// RoleHolderCounts is the ONE entry point for "how many people hold this role".
+// HolderFacts is three readings of ONE snapshot, each keyed "project:role".
 //
-// Exported so the handlers that need the number take this path rather than
-// growing one of their own. There were two before — this and a UNION over the
-// ledger and bundle tables — and they disagreed on screen: a role listed with
-// "4 holders" whose own page said "0 people hold this role".
+// Given is Recorded — Syndra decided somebody should hold it. Observed is what
+// Zitadel actually holds, as of Basis, whoever gave it. Confirmed is their
+// intersection. A surface that says "who holds this" shows Observed; Given and
+// Confirmed only explain it — given by Syndra, not yet in Zitadel, unexplained.
+// Observed and Confirmed are nil, not empty, when Basis.ReadAt is nil: nothing
+// has been read, so there is no absence to report.
+type HolderFacts struct {
+	Given     map[string]int
+	Confirmed map[string]int
+	Observed  map[string]int
+	Basis     models.ObservationBasis
+}
+
+// NobodyObserved is the only way to conclude that no one holds key: a complete,
+// current observation in which the key does not appear. A nil map (never
+// observed) or a truncated read cannot say so — Go's zero for a missing map
+// entry must never be read as Zitadel's answer.
+func (f HolderFacts) NobodyObserved(key string) bool {
+	return f.Observed != nil && f.Basis.Current && !f.Basis.Truncated && f.Observed[key] == 0
+}
+
+// RoleHolderCounts is the recorded reading of RoleHolderFacts — how many people
+// each role was GIVEN to. Never presentable as somebody having access.
 func RoleHolderCounts(ctx context.Context) (map[string]int, error) {
-	recorded, _, _, err := RoleHolderFacts(ctx)
-	return recorded, err
+	f, err := RoleHolderFacts(ctx)
+	return f.Given, err
 }
 
-// RoleHolderConfirmation is RoleHolderCounts' companion — see
-// accessSnapshot.ConfirmedHolderCounts.
-//
-// ponytail: a second accessSnapshot, not a second counting mechanism — same
-// directory listing, same collectUserRoles per user, so it cannot disagree
-// with RoleHolderCounts about who holds what. Doubles the per-request fan-out
-// at GlobalRoleCatalog's call site; at this deployment's ~200-user scale
-// that's still one cheap listing plus 2N lookups, not worth threading a
-// shared snapshot through the exported seam tests already depend on. Revisit
-// if that scale assumption stops holding.
+// RoleHolderConfirmation is the confirmed reading of RoleHolderFacts.
 func RoleHolderConfirmation(ctx context.Context) (map[string]int, models.ObservationBasis, error) {
-	_, confirmed, basis, err := RoleHolderFacts(ctx)
-	return confirmed, basis, err
+	f, err := RoleHolderFacts(ctx)
+	return f.Confirmed, f.Basis, err
 }
 
-// RoleHolderFacts answers both questions from ONE snapshot.
+// RoleHolderFacts answers every holder question from ONE snapshot.
 //
-// How many people a role was GIVEN to, and how many of those Zitadel confirms,
-// are two different facts and a surface needs both — but they are two readings
-// of one pass, not two passes. Asking for them separately built the snapshot
-// twice per request: two directory listings and two walks over every user, for
-// numbers that are by construction derived from the same walk.
-//
-// The snapshot exists precisely to be built once and read many times. Two of
-// them is not a second way to count — neither could disagree with the other —
-// but it is the shape a second way to count would take, and it costs double for
-// nothing.
-func RoleHolderFacts(ctx context.Context) (map[string]int, map[string]int, models.ObservationBasis, error) {
+// There used to be two counting mechanisms and they disagreed on screen; then
+// one snapshot read twice, which cost double for nothing. Now one snapshot,
+// three readings, and no surface can show a number the others cannot derive.
+func RoleHolderFacts(ctx context.Context) (HolderFacts, error) {
 	snap, err := newAccessSnapshot(ctx)
 	if err != nil {
-		return nil, nil, models.ObservationBasis{}, err
+		return HolderFacts{}, err
 	}
-	recorded, err := snap.HolderCounts()
+	given, err := snap.HolderCounts()
 	if err != nil {
-		return nil, nil, models.ObservationBasis{}, err
+		return HolderFacts{}, err
 	}
 	confirmed, basis, err := snap.ConfirmedHolderCounts()
 	if err != nil {
-		return nil, nil, models.ObservationBasis{}, err
+		return HolderFacts{}, err
 	}
-	return recorded, confirmed, basis, nil
+	observed, err := snap.ObservedHolderCounts()
+	if err != nil {
+		return HolderFacts{}, err
+	}
+	return HolderFacts{Given: given, Confirmed: confirmed, Observed: observed, Basis: basis}, nil
 }
 
 // HolderCounts is how many people hold each role, keyed "project:role".
@@ -263,6 +270,41 @@ func (s *accessSnapshot) ConfirmedHolderCounts() (map[string]int, models.Observa
 	return counts, basis, nil
 }
 
+// ObservedHolderCounts is how many people Zitadel shows holding each role,
+// whoever gave it — the only reading a screen may call "holders". Nil when
+// nothing has been observed, for the same reason ConfirmedHolderCounts is.
+func (s *accessSnapshot) ObservedHolderCounts() (map[string]int, error) {
+	basis, err := s.Basis()
+	if err != nil {
+		return nil, err
+	}
+	if basis.ReadAt == nil {
+		return nil, nil
+	}
+	counts := make(map[string]int)
+	for _, u := range s.users {
+		observed, err := s.Observed(u.ID)
+		if err != nil {
+			return nil, err
+		}
+		for key := range observed {
+			counts[key]++
+		}
+	}
+	return counts, nil
+}
+
+// hasObservedProject is hasProjectRole's observed twin, over the store's
+// "projectID:roleKey" keys rather than Syndra's role map.
+func hasObservedProject(observed map[string]bool, projectID string) bool {
+	for key := range observed {
+		if strings.HasPrefix(key, projectID+":") {
+			return true
+		}
+	}
+	return false
+}
+
 func Catalog(ctx context.Context) (models.CatalogResponse, error) {
 	users, err := directory.Default.Users(ctx)
 	if err != nil {
@@ -351,6 +393,10 @@ func loadAttention(ctx context.Context) (attentionIndex, error) {
 func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attentionIndex) ([]models.UserListItem, error) {
 	query = strings.ToLower(strings.TrimSpace(query))
 	items := make([]models.UserListItem, 0, len(snap.Users()))
+	basis, err := snap.Basis()
+	if err != nil {
+		return nil, fmt.Errorf("observation basis: %w", err)
+	}
 
 	for _, user := range snap.Users() {
 		roleMap, bundles, err := snap.For(user.ID)
@@ -399,6 +445,20 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 			ExpiringCount:      attention.expiring[user.ID],
 			OpenRequestCount:   attention.requests[user.ID],
 			UnexplainedCount:   attention.unexplained[user.ID],
+			Observation:        basis,
+		}
+		if basis.ReadAt != nil {
+			observed, err := snap.Observed(user.ID)
+			if err != nil {
+				return nil, err
+			}
+			projects := map[string]bool{}
+			for key := range observed {
+				projects[strings.SplitN(key, ":", 2)[0]] = true
+			}
+			roles, projs := len(observed), len(projects)
+			item.ObservedRoleCount = &roles
+			item.ObservedProjectCount = &projs
 		}
 		if when, ok := attention.soonest[user.ID]; ok {
 			soonest := when
@@ -572,9 +632,14 @@ func listApplicationsFromSnapshot(snap *accessSnapshot) ([]models.ApplicationVie
 		return nil, err
 	}
 	views := make([]models.ApplicationView, 0, len(apps))
+	basis, err := snap.Basis()
+	if err != nil {
+		return nil, fmt.Errorf("observation basis: %w", err)
+	}
 
 	for _, app := range apps {
 		assignedCount := 0
+		observedCount := 0
 		for _, user := range snap.Users() {
 			roleMap, _, err := snap.For(user.ID)
 			if err != nil {
@@ -583,6 +648,15 @@ func listApplicationsFromSnapshot(snap *accessSnapshot) ([]models.ApplicationVie
 			if hasProjectRole(roleMap, app.ProjectID) {
 				assignedCount++
 			}
+			if basis.ReadAt != nil {
+				observed, err := snap.Observed(user.ID)
+				if err != nil {
+					return nil, err
+				}
+				if hasObservedProject(observed, app.ProjectID) {
+					observedCount++
+				}
+			}
 		}
 
 		consumedRoles, err := directory.Default.RoleKeysForProject(snap.ctx, app.ProjectID)
@@ -590,11 +664,17 @@ func listApplicationsFromSnapshot(snap *accessSnapshot) ([]models.ApplicationVie
 			return nil, err
 		}
 
-		views = append(views, models.ApplicationView{
+		view := models.ApplicationView{
 			Application:       app,
 			ConsumedRoles:     consumedRoles,
 			AssignedUserCount: assignedCount,
-		})
+			Observation:       basis,
+		}
+		if basis.ReadAt != nil {
+			observed := observedCount
+			view.ObservedUserCount = &observed
+		}
+		views = append(views, view)
 	}
 
 	return views, nil
@@ -755,25 +835,29 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 	for _, project := range projects {
 		memberCount := 0
 		confirmedMemberCount := 0
+		observedMemberCount := 0
 		sampleMembers := []string{}
 		for _, user := range snap.Users() {
 			roleMap, _, err := snap.For(user.ID)
 			if err != nil {
 				return nil, err
 			}
+			var observed map[string]bool
+			if basis.ReadAt != nil {
+				if observed, err = snap.Observed(user.ID); err != nil {
+					return nil, err
+				}
+				if hasObservedProject(observed, project.ID) {
+					observedMemberCount++
+				}
+			}
 			if hasProjectRole(roleMap, project.ID) {
 				memberCount++
 				if len(sampleMembers) < 3 {
 					sampleMembers = append(sampleMembers, user.Name)
 				}
-				if basis.ReadAt != nil {
-					observed, err := snap.Observed(user.ID)
-					if err != nil {
-						return nil, err
-					}
-					if hasObservedProjectRole(roleMap, observed, project.ID) {
-						confirmedMemberCount++
-					}
+				if observed != nil && hasObservedProjectRole(roleMap, observed, project.ID) {
+					confirmedMemberCount++
 				}
 			}
 		}
@@ -820,8 +904,9 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 			Observation:   basis,
 		}
 		if basis.ReadAt != nil {
-			confirmed := confirmedMemberCount
+			confirmed, observed := confirmedMemberCount, observedMemberCount
 			summary.ConfirmedMemberCount = &confirmed
+			summary.ObservedMemberCount = &observed
 		}
 		projectSummaries = append(projectSummaries, summary)
 	}

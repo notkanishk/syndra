@@ -5,13 +5,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PendingChangesPage from "@/app/governance/pending/page";
 import type { PendingRow } from "@/lib/queries/usePropagation";
+import type { BundleRow } from "@/lib/queries/useBundles";
+import type { MappingRuleRow } from "@/lib/queries/useMappingRules";
 
 const pending = vi.hoisted(() => ({ data: [] as PendingRow[] }));
 const summary = vi.hoisted(() => ({ reachable: true }));
+const bundles = vi.hoisted(() => ({ data: [] as BundleRow[] }));
+const rules = vi.hoisted(() => ({ data: [] as MappingRuleRow[] }));
 
 vi.mock("@/lib/queries/usePropagation", () => ({
   usePendingPropagations: () => ({ ...pending, isLoading: false, error: null, refetch: () => {} }),
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("@/lib/queries/useBundles", () => ({
+  useBundles: () => ({ ...bundles, isLoading: false, error: null }),
+}));
+
+vi.mock("@/lib/queries/useMappingRules", () => ({
+  useMappingRules: () => ({ ...rules, isLoading: false, error: null }),
 }));
 
 vi.mock("@/lib/queries/useGovernance", () => ({
@@ -49,6 +61,8 @@ function renderPending() {
 beforeEach(() => {
   pending.data = [];
   summary.reachable = true;
+  bundles.data = [];
+  rules.data = [];
 });
 
 describe("Pending changes", () => {
@@ -87,5 +101,53 @@ describe("Pending changes", () => {
       screen.getByText(/Sending is paused/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Send / })).toBeDisabled();
+  });
+});
+
+/**
+ * Caused by: a name, never a bare handle standing in for one.
+ */
+describe("Pending changes · caused by", () => {
+  it("names the bundle, with the handle kept alongside for tracing", () => {
+    bundles.data = [{ id: "bundle-1111-2222", name: "Woodshop access" }];
+    pending.data = [row({ source: "bundle", source_ref: "bundle-1111-2222" })];
+    renderPending();
+
+    expect(screen.getByText("Woodshop access")).toBeInTheDocument();
+    expect(screen.getByText(/b_bund/)).toBeInTheDocument();
+  });
+
+  it("names the rule by its mapping when the bundle/rule list has not loaded", () => {
+    rules.data = [
+      {
+        id: "rule-1111-2222",
+        source_project: "p1",
+        source_role: "trained",
+        target_project: "p2",
+        target_role: "door",
+        holder_count: 3,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    ];
+    pending.data = [row({ source: "rule", source_ref: "rule-1111-2222" })];
+    renderPending();
+
+    expect(screen.getByText("trained → door")).toBeInTheDocument();
+  });
+
+  it("never leaves the handle as the only label, even before the lookup resolves", () => {
+    pending.data = [row({ source: "bundle", source_ref: "bundle-9999-0000" })];
+    renderPending();
+
+    expect(screen.getByText("Bundle")).toBeInTheDocument();
+    expect(screen.getByText(/b_bund/)).toBeInTheDocument();
+  });
+
+  it("links a c_ handle to Change history", () => {
+    pending.data = [row({ cascade_id: "cas-8841-aaaa" })];
+    renderPending();
+
+    const link = screen.getByRole("link", { name: /Change history/i });
+    expect(link).toHaveAttribute("href", "/operations/cascades?cascade=cas-8841-aaaa");
   });
 });

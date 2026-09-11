@@ -603,8 +603,36 @@ export function RehearsalDialog({
 
         {step === "review" && (
           <>
+            {/* Cancel/Back precedes the confirm button in DOM order so the
+                focus trap's initial focus (first focusable element) never
+                lands on a destructive `dangerConfirm`; `order-1`/`order-2`
+                keep the visual layout unchanged, matching the same fix in
+                bundles/page.tsx's delete dialog.
+                Disabled while a write is out. Abandoning the dialog mid-apply
+                does not abandon the write — it only takes away the report of
+                what it did, which is the one thing the operator still needs. */}
+            {compose ? (
+              <Button
+                className="order-2"
+                disabled={busy}
+                reason={busy ? "Wait for the change to finish." : undefined}
+                onClick={() => setStep("compose")}
+              >
+                Back
+              </Button>
+            ) : (
+              <Button
+                className="order-2"
+                disabled={busy}
+                reason={busy ? "Wait for the change to finish." : undefined}
+                onClick={onClose}
+              >
+                Cancel
+              </Button>
+            )}
             <Button
               variant={destructive ? "dangerConfirm" : "accent"}
+              className="order-1"
               isPending={busy}
               disabled={Boolean(applyBlocked)}
               // Not while a write is out: "Waiting for the preview." under a
@@ -624,24 +652,6 @@ export function RehearsalDialog({
                   ? definitionLabel
                   : applyLabel(plan, noun)}
             </Button>
-            {/*
-              Disabled while a write is out. Abandoning the dialog mid-apply
-              does not abandon the write — it only takes away the report of
-              what it did, which is the one thing the operator still needs.
-            */}
-            {compose ? (
-              <Button
-                disabled={busy}
-                reason={busy ? "Wait for the change to finish." : undefined}
-                onClick={() => setStep("compose")}
-              >
-                Back
-              </Button>
-            ) : (
-              <Button disabled={busy} reason={busy ? "Wait for the change to finish." : undefined} onClick={onClose}>
-                Cancel
-              </Button>
-            )}
           </>
         )}
 

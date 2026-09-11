@@ -28,6 +28,11 @@ export interface ProjectSummaryRow {
    */
   confirmed_member_count?: number;
   /**
+   * What Zitadel shows as members right now — not who Syndra decided belongs.
+   * Absent, not zero, when the org has never been read.
+   */
+  observed_member_count?: number;
+  /**
    * One basis for the whole response — identical on every row. Optional so
    * fixtures that don't care about confirmation aren't forced to fabricate
    * one; a missing basis reads the same as "never observed".

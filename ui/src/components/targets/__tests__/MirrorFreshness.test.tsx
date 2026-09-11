@@ -82,7 +82,7 @@ describe("how old the add-on's mirror is", () => {
     renderTarget();
 
     // The card's own answer stands unqualified.
-    expect(screen.getByText(/answering, tested, and accepting/)).toBeInTheDocument();
+    expect(screen.getByText(/talking to TrueNAS normally/)).toBeInTheDocument();
     expect(screen.queryByText(/too old to act on/)).toBeNull();
     // And above all: no instruction that cannot change what it points at.
     expect(screen.queryByText(/reload the page to read it again/)).toBeNull();

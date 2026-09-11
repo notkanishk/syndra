@@ -523,12 +523,26 @@ function NeedsAttention({ entry }: { entry: UserListEntry }) {
       </span>
     );
   }
-  return <span className="text-[13.5px] text-faint">—</span>;
+  // Nothing to report renders nothing — not a lone dash under the access
+  // text at phone width, where this is the only thing in the column. The
+  // header keeps the column's width on desktop regardless.
+  return null;
 }
 
+/**
+ * What Zitadel shows this person holding, not what Syndra decided to give
+ * them — "holding is observed; explanation is recorded". Falls back to the
+ * recorded count only in the one case where there is nothing else to say:
+ * before the org has ever been read.
+ */
 function describeAccess(entry: UserListEntry): string {
-  if (entry.effective_role_count === 0) return "No roles yet";
-  const roles = `${entry.effective_role_count} ${entry.effective_role_count === 1 ? "role" : "roles"}`;
-  if (!entry.project_count) return roles;
-  return `${roles} across ${entry.project_count} ${entry.project_count === 1 ? "project" : "projects"}`;
+  if (!entry.observation?.read_at) return "Not checked yet";
+  if ((entry.observed_role_count ?? 0) === 0) {
+    return entry.effective_role_count > 0 ? "Not in Zitadel yet" : "Nothing yet";
+  }
+  const count = entry.observed_role_count ?? 0;
+  const roles = `${count} ${count === 1 ? "role" : "roles"}`;
+  const projects = entry.observed_project_count ?? 0;
+  if (!projects) return roles;
+  return `${roles} across ${projects} ${projects === 1 ? "project" : "projects"}`;
 }

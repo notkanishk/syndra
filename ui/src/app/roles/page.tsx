@@ -13,7 +13,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Select } from "@/components/ui/Select";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
-import { confirmedNote, humanizeKey } from "@/lib/format";
+import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { humanizeKey } from "@/lib/format";
 
 /**
  * E2 index · /roles — the cross-project role index, and the landing target for
@@ -195,7 +196,13 @@ export default function RolesPage() {
             )
           }
         >
-          {rows.map((role) => (
+          {rows.map((role) => {
+            const holders = holdersLine(
+              role.assigned_user_count,
+              role.confirmed_user_count,
+              role.observed_user_count,
+            );
+            return (
             <Link
               key={`${role.project_id}:${role.role_key}`}
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
@@ -231,18 +238,21 @@ export default function RolesPage() {
                 )}
               </span>
               <span className="w-full text-[15px] tablet:w-[110px] tablet:text-right">
-                {role.assigned_user_count}
+                {holders.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {role.assigned_user_count === 1 ? " holder" : " holders"}
+                  {holders.headline === "1" ? " holder" : " holders"}
                 </span>
-                {/* Recorded is what Syndra decided; this is what Zitadel has
-                    confirmed of it — never the same word, never the same line. */}
-                <span className="block text-[12.5px] text-faint">
-                  {confirmedNote(role.assigned_user_count, role.confirmed_user_count)}
-                </span>
+                {/* Recorded is what Syndra decided; this is what Zitadel shows
+                    right now — never the same word, never the same line. */}
+                {holders.note && (
+                  <span className={`block text-[12.5px] ${holdersToneClass[holders.tone]}`}>
+                    {holders.note}
+                  </span>
+                )}
               </span>
             </Link>
-          ))}
+            );
+          })}
         </ListStates>
       </Card>
 

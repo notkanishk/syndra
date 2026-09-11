@@ -27,6 +27,11 @@ const (
 	DriftAttributed     = "attributed"
 	DriftRevoked        = "revoked"
 	DriftMarkedExternal = "marked_external"
+	// DriftResolved closes a finding that is neither explained by Syndra
+	// (DriftAttributed) nor excluded by an operator (DriftMarkedExternal) —
+	// the grant it described simply is not present any more. See
+	// CloseGoneDrift.
+	DriftResolved = "resolved"
 )
 
 // DriftFilter narrows a drift listing. Empty fields are ignored.
@@ -318,6 +323,46 @@ func RetractExplainedDrift(ctx context.Context, driftID, target, status, because
 	if owned {
 		if err := tx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit retract tx: %w", err)
+		}
+	}
+	return nil
+}
+
+// CloseGoneDrift closes a pending target_only finding whose grant has
+// disappeared from Zitadel entirely, per a COMPLETE observation — the caller
+// (the sweep) is the one that knows whether its read was complete, and this
+// function trusts that judgement completely: it has no way of its own to tell
+// "gone" from "unseen past a truncated read's cap".
+//
+// Resolves to `resolved`, deliberately distinct from RetractExplainedDrift's
+// `attributed`/`marked_external`: this asserts neither that Syndra now owns
+// the grant nor that an operator excluded it, only that there is nothing left
+// to explain. `resolved_by` is "syndra", not a person, mirroring the sweep's
+// own retractions — and the payload names why, so a closed row can still be
+// read back and argued with. If the grant reappears the row is gone, not
+// reopened, and the next sweep raises a fresh finding for it.
+func CloseGoneDrift(ctx context.Context, driftID, target string) error {
+	payload, err := json.Marshal(map[string]string{
+		"resolution": "gone",
+		"reason":     "no longer present in Zitadel",
+	})
+	if err != nil {
+		return fmt.Errorf("gone-resolution payload: %w", err)
+	}
+
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin close-gone tx: %w", err)
+	}
+	if owned {
+		defer tx.Rollback(ctx) // no-op after Commit
+	}
+	if _, err := claimDriftTx(ctx, tx, driftID, target, DriftResolved, "syndra", string(payload)); err != nil {
+		return err
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit close-gone tx: %w", err)
 		}
 	}
 	return nil

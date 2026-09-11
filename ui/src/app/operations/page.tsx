@@ -17,6 +17,7 @@ import {
 } from "@/lib/queries/useOperations";
 import { ClockTime, LogTime } from "@/components/ui/Time";
 import { outcomeOf, type EventOutcome } from "@/lib/event-outcome";
+import { formatShortDate } from "@/lib/format";
 
 type Source = "all" | "provider" | "onboarding";
 
@@ -62,6 +63,11 @@ export default function EventActivityPage() {
     [all, source, outcome],
   );
   const filtered = source !== "all" || outcome !== "all";
+  // Grouped by calendar day, newest first — `stream` already sorts that way,
+  // so this only has to notice when the day changes. Without it every row
+  // showed a bare "13:33:18" with no date anywhere near it, so a week of
+  // history read as one long out-of-order minute.
+  const days = useMemo(() => groupByDay(stream), [stream]);
 
   const isLoading = events.isLoading || triggers.isLoading;
   const error = events.error ?? triggers.error;
@@ -151,50 +157,80 @@ export default function EventActivityPage() {
             )
           }
         >
-          {stream.map((row) => (
-            <div key={row.id}>
-              <div
-                // Only the error row is tinted, and only because it is the row
-                // somebody is scrolling to find. A log where half the lines are
-                // coloured is a log nobody reads.
-                className={`row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:gap-4 ${
-                  row.failed ? "bg-danger-soft" : ""
-                }`}
-              >
-                <Mono className="w-[64px] shrink-0 text-faint">
-                  <LogTime iso={row.at} />
-                </Mono>
-                <span className="w-[160px] shrink-0 truncate text-[12.5px] font-semibold">
-                  {row.type}
-                </span>
-                <span
-                  className={`min-w-[240px] flex-1 text-[13.5px] leading-[1.5] ${
-                    row.failed ? "text-danger-text" : "text-muted"
-                  }`}
-                >
-                  {row.sentence}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setOpenDetails((cur) => (cur === row.id ? null : row.id))}
-                  aria-expanded={openDetails === row.id}
-                  className="shrink-0 text-[13px] text-faint motion-tint hover:text-ink"
-                >
-                  {openDetails === row.id ? "Hide details" : "Show details"}
-                </button>
+          {days.map((group) => (
+            <div key={group.day}>
+              <div className="row-divider bg-tint-1 px-5 py-2 text-[12.5px] font-semibold text-muted">
+                {group.day}
               </div>
+              {group.rows.map((row) => (
+                <div key={row.id}>
+                  <div
+                    // Only the error row is tinted, and only because it is the row
+                    // somebody is scrolling to find. A log where half the lines are
+                    // coloured is a log nobody reads.
+                    className={`row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:gap-4 ${
+                      row.failed ? "bg-danger-soft" : ""
+                    }`}
+                  >
+                    <Mono className="w-[64px] shrink-0 text-faint">
+                      <LogTime iso={row.at} />
+                    </Mono>
+                    <span className="w-[160px] shrink-0 truncate text-[12.5px] font-semibold">
+                      {row.type}
+                    </span>
+                    <span
+                      className={`min-w-[240px] flex-1 text-[13.5px] leading-[1.5] ${
+                        row.failed ? "text-danger-text" : "text-muted"
+                      }`}
+                    >
+                      {row.sentence}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setOpenDetails((cur) => (cur === row.id ? null : row.id))}
+                      aria-expanded={openDetails === row.id}
+                      className="shrink-0 text-[13px] text-faint motion-tint hover:text-ink"
+                    >
+                      {openDetails === row.id ? "Hide details" : "Show details"}
+                    </button>
+                  </div>
 
-              {openDetails === row.id && (
-                <pre className="row-divider overflow-x-auto bg-surface-0 px-5 py-3.5 font-mono text-[12.5px] leading-[1.7] text-muted">
-                  {JSON.stringify(row.details, null, 2)}
-                </pre>
-              )}
+                  {openDetails === row.id && (
+                    <pre className="row-divider overflow-x-auto bg-surface-0 px-5 py-3.5 font-mono text-[12.5px] leading-[1.7] text-muted">
+                      {JSON.stringify(row.details, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              ))}
             </div>
           ))}
         </ListStates>
       </Card>
     </div>
   );
+}
+
+/** One calendar day's slice of the timeline, in the order it was given. */
+interface StreamDay {
+  day: string;
+  rows: StreamRow[];
+}
+
+/**
+ * Groups an already-sorted stream by the local calendar day, keyed by the
+ * SAME `formatShortDate` the row's own clock is read against — a UTC-derived
+ * key here and a local-time clock on the row is exactly the mismatch that put
+ * an entry under the wrong date.
+ */
+function groupByDay(rows: StreamRow[]): StreamDay[] {
+  const groups: StreamDay[] = [];
+  for (const row of rows) {
+    const day = formatShortDate(row.at);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.rows.push(row);
+    else groups.push({ day, rows: [row] });
+  }
+  return groups;
 }
 
 interface StreamRow {

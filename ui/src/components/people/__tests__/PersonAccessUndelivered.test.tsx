@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonAccess } from "@/components/people/PersonAccess";
+import { formatClock } from "@/lib/format";
 
 /**
  * A role nothing has delivered must not read as held.
@@ -23,6 +24,8 @@ const state = vi.hoisted(() => ({
   // not "granted" — it is a discrepancy, and the page must say so.
   zitadel: [] as Array<{ id: string; projectId: string; roleKeys: string[] }>,
   unreachable: false,
+  loading: false,
+  observedAt: undefined as string | undefined,
 }));
 
 vi.mock("@/lib/ui-view", () => ({
@@ -32,8 +35,8 @@ vi.mock("@/lib/ui-view", () => ({
 
 vi.mock("@/lib/queries/useUpstream", () => ({
   useUpstreamUserGrants: () => ({
-    data: { items: state.zitadel, total: state.zitadel.length },
-    isLoading: false,
+    data: { items: state.zitadel, total: state.zitadel.length, observedAt: state.observedAt },
+    isLoading: state.loading,
     error: state.unreachable ? new Error("unreachable") : null,
   }),
 }));
@@ -90,6 +93,8 @@ beforeEach(() => {
   state.zitadel = [];
   state.advanced = false;
   state.unreachable = false;
+  state.loading = false;
+  state.observedAt = undefined;
 });
 
 describe("a role whose grant has not been sent", () => {
@@ -184,5 +189,54 @@ describe("a role Syndra records that Zitadel does not have", () => {
 
     expect(screen.getByText(/Could not check Zitadel/i)).toBeInTheDocument();
     expect(screen.queryByText("Not in Zitadel")).toBeNull();
+  });
+});
+
+describe("a role Zitadel confirms", () => {
+  // The truth is Zitadel: a role it showed must say so positively, not only
+  // stay silent while the negative states around it complain.
+  it("says so, with the read time from the observation basis", () => {
+    state.zitadel = [{ id: "zg1", projectId: "p-audio", roleKeys: ["community"] }];
+    state.observedAt = "2026-09-11T04:40:00Z";
+    state.projects = project([{ kind: "direct", description: "" }]);
+    renderPerson();
+
+    expect(screen.getByText(/In Zitadel/)).toBeInTheDocument();
+    // The test runner's local timezone need not be UTC, so the expectation is
+    // computed with the same `formatClock` the row renders through, rather
+    // than a hardcoded hour that only holds in one zone.
+    expect(
+      screen.getByText(new RegExp(`read ${formatClock(state.observedAt)}`)),
+    ).toBeInTheDocument();
+  });
+
+  it("still says so with no read time, rather than nothing", () => {
+    state.zitadel = [{ id: "zg1", projectId: "p-audio", roleKeys: ["community"] }];
+    state.projects = project([{ kind: "direct", description: "" }]);
+    renderPerson();
+
+    expect(screen.getByText("In Zitadel")).toBeInTheDocument();
+  });
+});
+
+describe("the group label above a role Syndra decided", () => {
+  // "Granted" sat above a row reading "Waiting to be sent" — contradictory.
+  // The per-row state carries the truth now; the label just names the group.
+  it("says Given, not Granted", () => {
+    state.projects = project([{ kind: "direct", description: "" }]);
+    renderPerson();
+
+    expect(screen.getByText("Given")).toBeInTheDocument();
+    expect(screen.queryByText("Granted")).toBeNull();
+  });
+});
+
+describe("a role whose standing Zitadel has not answered yet", () => {
+  it("says it is checking, never nothing", () => {
+    state.loading = true;
+    state.projects = project([{ kind: "direct", description: "" }]);
+    renderPerson();
+
+    expect(screen.getByText("Checking Zitadel…")).toBeInTheDocument();
   });
 });

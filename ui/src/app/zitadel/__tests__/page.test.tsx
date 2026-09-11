@@ -106,6 +106,41 @@ describe("Identity provider · projects tile names its source", () => {
   });
 });
 
+/**
+ * (6) The tile headline reads as a fact while there is nothing to do, and
+ * only turns into an instruction once the same status crosses its threshold
+ * — "Replace within 53 days" beside a body saying "Nothing to do" was two
+ * readings of one number disagreeing.
+ */
+describe("Identity provider · signing key tile is truthful and calm", () => {
+  it("gives the age as a fact, not an instruction, while within the limit", async () => {
+    rotation.value = {
+      key_installed: true,
+      status: "ok",
+      age_days: 12,
+      threshold_days: 90,
+      last_rotated_at: "2026-07-01T00:00:00Z",
+    };
+    renderPage();
+    expect(await screen.findByText("12 days old")).toBeInTheDocument();
+    expect(screen.queryByText(/Replace within/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Replace by .* · nothing to do/)).toBeInTheDocument();
+  });
+
+  it("only turns into an instruction once the threshold is actually crossed", async () => {
+    rotation.value = {
+      key_installed: true,
+      status: "warn",
+      age_days: 85,
+      threshold_days: 90,
+      last_rotated_at: "2026-01-01T00:00:00Z",
+    };
+    renderPage();
+    expect(await screen.findByText(/Replace within 5 days/)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing to do/)).not.toBeInTheDocument();
+  });
+});
+
 describe("Identity provider · signing key", () => {
   it("shows the rotate command the backend reported, with a copy control", async () => {
     renderPage();

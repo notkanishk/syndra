@@ -637,7 +637,11 @@ type ActivityReport struct {
 	UncoveredShares []string `json:"uncovered_shares,omitempty"`
 
 	Outcome Outcome `json:"-"`
-	Err     error   `json:"-"`
+	// Status is the add-on's raw HTTP status, carried so a caller can tell a
+	// specific rejection (422: no bound account) from every other one without
+	// string-matching Err's text.
+	Status int   `json:"-"`
+	Err    error `json:"-"`
 }
 
 // ActivityEvent is one entry from the target's audit log.
@@ -699,7 +703,7 @@ func Activity(ctx context.Context, target, subject, since string) ActivityReport
 		a.Registration.BaseURL+"/operations/activity.get", body, callTimeout)
 	a.br.record(timeNow(), resp)
 
-	out := ActivityReport{Outcome: resp.Outcome, Err: resp.Err}
+	out := ActivityReport{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err}
 	if resp.Outcome != OutcomeSucceeded {
 		return out
 	}

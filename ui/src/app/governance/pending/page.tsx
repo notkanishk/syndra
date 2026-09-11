@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Term } from "@/components/ui/Term";
 import { useMemo, useState } from "react";
 
@@ -14,6 +15,8 @@ import { shortId } from "@/lib/audit-vocabulary";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
+import { useBundles, type BundleRow } from "@/lib/queries/useBundles";
+import { useMappingRules, type MappingRuleRow } from "@/lib/queries/useMappingRules";
 import {
   useDrainPropagations,
   usePendingPropagations,
@@ -36,6 +39,12 @@ export default function PendingChangesPage() {
   const pending = usePendingPropagations();
   const summary = useGovernanceSummary();
   const drain = useDrainPropagations();
+  // Named, not just numbered: a bundle or rule is the thing an operator
+  // recognizes. Both lists are small and already cached elsewhere in the
+  // product, so loading them here to label a handle costs nothing a reload
+  // of Bundles or Access wouldn't have paid anyway.
+  const bundles = useBundles();
+  const rules = useMappingRules();
 
   const rows = useMemo(() => pending.data ?? [], [pending.data]);
   const reachable = summary.data?.pending_propagation.zitadel_reachable ?? true;
@@ -155,16 +164,8 @@ export default function PendingChangesPage() {
                     ))}
                   </span>
 
-                  <span className="truncate text-[13px] tablet:w-[160px] tablet:shrink-0">
-                    {/* The prefix comes from the row's own source. It was
-                        hardcoded to "R", so every bundle cascade printed a
-                        rule's handle while the legend below explained that
-                        R_ meant a rule — the legend was right and the rows
-                        were lying to it. */}
-                    <Mono className="text-accent-text">
-                      {shortId(row.source_ref, row.source === "bundle" ? "b" : "R")}
-                    </Mono>{" "}
-                    <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
+                  <span className="w-full text-[13px] tablet:w-[160px] tablet:shrink-0">
+                    <CausedBy row={row} bundles={bundles.data} rules={rules.data} />
                   </span>
 
                   <span className="text-[13px] text-faint tablet:w-[78px] tablet:shrink-0 tablet:text-right">
@@ -220,6 +221,51 @@ function groupByCascade(rows: PendingPropagationRow[]): CascadeGroup[] {
     byKey.get(key)!.push(row);
   }
   return order.map((key) => ({ key, rows: byKey.get(key)! }));
+}
+
+/**
+ * What set this change off — a bundle's name or a rule's mapping, never the
+ * bare handle on its own. The handle stays alongside, muted, for tracing back
+ * to Bundles, Access or Change history; it just never stands in for the name.
+ */
+function CausedBy({
+  row,
+  bundles,
+  rules,
+}: {
+  row: PendingPropagationRow;
+  bundles?: BundleRow[];
+  rules?: MappingRuleRow[];
+}) {
+  const isBundle = row.source === "bundle";
+  const bundle = isBundle ? bundles?.find((b) => b.id === row.source_ref) : undefined;
+  const rule = !isBundle ? rules?.find((r) => r.id === row.source_ref) : undefined;
+
+  const name = bundle
+    ? bundle.name
+    : rule
+      ? `${rule.source_role} → ${rule.target_role}`
+      : isBundle
+        ? "Bundle"
+        : "Automatic rule";
+
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-1.5">
+      <span className="truncate">{name}</span>
+      <Mono className="text-faint">{shortId(row.source_ref, isBundle ? "b" : "R")}</Mono>
+      {row.cascade_id ? (
+        <Link
+          href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
+          aria-label="See what this change set off, in Change history"
+          className="motion-tint hover:text-accent-text"
+        >
+          <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
+        </Link>
+      ) : (
+        <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
+      )}
+    </span>
+  );
 }
 
 function verb(opType: string): string {

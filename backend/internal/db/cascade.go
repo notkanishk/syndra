@@ -455,7 +455,7 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 	const columns = `
 		SELECT COALESCE(cascade_id::text, id::text) AS group_id,
 		       id, op_type, user_id, project_id, role_keys, source, COALESCE(source_ref,''),
-		       COALESCE(cascade_id::text,''), status, created_at, completed_at
+		       COALESCE(cascade_id::text,''), status, created_at, completed_at, confirmed_at
 		FROM propagation_outbox
 		WHERE source = ANY($1::text[])`
 
@@ -498,7 +498,8 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		var c models.CascadeSummary
 		var createdAt time.Time
 		if err := rows.Scan(&groupID, &c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys,
-			&c.Source, &c.SourceRef, &c.CascadeID, &c.Status, &createdAt, &c.CompletedAt); err != nil {
+			&c.Source, &c.SourceRef, &c.CascadeID, &c.Status, &createdAt, &c.CompletedAt,
+			&c.ConfirmedAt); err != nil {
 			return nil, fmt.Errorf("scan cascade group row: %w", err)
 		}
 
@@ -520,6 +521,9 @@ func GetCascadeGroups(ctx context.Context, limit int, cascadeID string) ([]model
 		switch c.Status {
 		case "applied":
 			g.Applied++
+			if c.ConfirmedAt != nil {
+				g.Confirmed++
+			}
 			if c.CompletedAt != nil && (g.SettledAt == nil || c.CompletedAt.After(*g.SettledAt)) {
 				g.SettledAt = c.CompletedAt
 			}

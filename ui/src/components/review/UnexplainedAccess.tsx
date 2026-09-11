@@ -565,7 +565,7 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       <div>
         <div className="type-label mb-1.5">If you revoke</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
-          The access is removed from Zitadel as you confirm. An app they are already signed in to keeps what it was told until they sign in again.
+          This queues the removal — revocations send on their own, every few minutes. An app they are already signed in to keeps what it was told until they sign in again.
         </p>
       </div>
       <div>
@@ -583,7 +583,9 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
           <dt className="text-faint">Created</dt>
           <dd>{item.upstream_created_at ? formatLongDate(item.upstream_created_at) : "unknown"}</dd>
           <dt className="text-faint">Made by</dt>
-          <dd className="truncate">{item.upstream_actor || "unknown"}</dd>
+          <dd className="truncate">
+            {item.upstream_actor ? <UserName id={item.upstream_actor} /> : "unknown"}
+          </dd>
           <dt className="text-faint">Last seen</dt>
           <dd>{item.last_seen_at ? formatLongDate(item.last_seen_at) : "—"}</dd>
         </dl>
@@ -637,7 +639,7 @@ function ResolutionDialog({
     },
     revoke: {
       title: "Revoke this access?",
-      lede: "This revokes the access in Zitadel (ends it there) and records your decision in Syndra, so the next check will not list it again.",
+      lede: "This queues removal of the access in Zitadel and records your decision in Syndra, so the next check will not list it again.",
       confirm: "Revoke access",
       variant: "dangerConfirm" as const,
     },
@@ -659,7 +661,8 @@ function ResolutionDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                The grant is removed from Zitadel as you confirm.
+                This queues the removal in Syndra; revocations send on their own, every few
+                minutes. Until then they still have the access.
               </span>
             </div>
             <p className="text-[13.5px] leading-[1.55] text-muted">
@@ -686,6 +689,18 @@ function ResolutionDialog({
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
+        {/* Cancel is first in the DOM — and so is what the dialog's opening
+            focus lands on — so that the destructive fill on Revoke's confirm
+            button is never also the button the Modal focus trap hands the
+            cursor to. `order-2` puts it back on the right, where the confirm
+            action has always sat. */}
+        <Button
+          variant={succeeded(outcome) ? "accent" : "outline"}
+          className="order-2"
+          onClick={onClose}
+        >
+          {succeeded(outcome) ? "Done" : "Cancel"}
+        </Button>
         {/* This is the highest-stakes revoke in the product, and it stayed
             armed after it ran: a second click on the same "Revoke access"
             button revoked an already-revoked grant a second time, on a
@@ -694,6 +709,7 @@ function ResolutionDialog({
         {!succeeded(outcome) && (
           <Button
             variant={copy.variant}
+            className="order-1"
             isPending={busy}
             onClick={async () => {
               try {
@@ -729,9 +745,6 @@ function ResolutionDialog({
             {copy.confirm}
           </Button>
         )}
-        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onClose}>
-          {succeeded(outcome) ? "Done" : "Cancel"}
-        </Button>
       </ModalFooter>
     </Modal>
   );

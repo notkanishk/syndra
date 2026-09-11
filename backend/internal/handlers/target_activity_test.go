@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"syndra/internal/addons"
@@ -98,8 +99,67 @@ func TestTargetActivity_UnreadableIsNotEmpty(t *testing.T) {
 	if body["readable"] != false {
 		t.Fatalf("an unreachable target must say so, got %v", body["readable"])
 	}
+	if body["reason"] != "unreachable" {
+		t.Fatalf("expected reason=unreachable, got %v", body["reason"])
+	}
 	if _, present := body["events"]; present {
 		t.Fatal("an unreadable log must not carry an events list at all")
+	}
+}
+
+// A 422 on activity.get is the add-on saying the subject has no bound
+// account — a positive fact, not a failure — and it must never surface as
+// "addon returned 422".
+func TestTargetActivity_NoBoundAccountIsNotAFailure(t *testing.T) {
+	withActivity(t, func(context.Context, string, string, string) addons.ActivityReport {
+		return addons.ActivityReport{
+			Outcome: addons.OutcomeRejected,
+			Status:  http.StatusUnprocessableEntity,
+			Err:     errors.New("addon returned 422"),
+		}
+	})
+
+	rr := activityRequest("?subject=u1")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["readable"] != false {
+		t.Fatalf("expected readable=false, got %v", body["readable"])
+	}
+	if body["reason"] != "no_account" {
+		t.Fatalf("expected reason=no_account, got %v", body["reason"])
+	}
+	if body["detail"] != "" {
+		t.Fatalf("no_account must carry no detail text, got %v", body["detail"])
+	}
+}
+
+// Every other failure keeps its own plain-language detail — never a raw
+// status number leaking to the client.
+func TestTargetActivity_OtherFailuresGetPlainLanguageDetail(t *testing.T) {
+	withActivity(t, func(context.Context, string, string, string) addons.ActivityReport {
+		return addons.ActivityReport{
+			Outcome: addons.OutcomeIndeterminate,
+			Status:  http.StatusInternalServerError,
+			Err:     errors.New("addon returned 500"),
+		}
+	})
+
+	rr := activityRequest("?subject=u1")
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["reason"] != "unreachable" {
+		t.Fatalf("expected reason=unreachable, got %v", body["reason"])
+	}
+	detail, _ := body["detail"].(string)
+	if detail == "" || strings.Contains(detail, "500") || strings.Contains(detail, "422") {
+		t.Fatalf("detail must be plain language with no raw status code, got %q", detail)
 	}
 }
 

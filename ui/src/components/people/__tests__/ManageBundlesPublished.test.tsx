@@ -14,7 +14,10 @@ import { ManageBundles } from "@/components/people/ManageBundles";
  * the apply then granted neither of the sets they had been shown.
  */
 
-const state = vi.hoisted(() => ({ roleQueries: vi.fn() }));
+const state = vi.hoisted(() => ({
+  roleQueries: vi.fn(),
+  assignAsync: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/queries/useBundles", () => ({
   useBundles: () => ({
@@ -35,7 +38,7 @@ vi.mock("@/lib/queries/useBundles", () => ({
 vi.mock("@/lib/queries/useMappingRules", () => ({ useMappingRules: () => ({ data: [] }) }));
 
 vi.mock("@/lib/queries/useUsers", () => ({
-  useAssignBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useAssignBundle: () => ({ mutateAsync: state.assignAsync, isPending: false }),
   useUserAccess: () => ({ data: { projects: [] } }),
 }));
 
@@ -50,6 +53,7 @@ beforeEach(() => {
     },
     allLoaded: true,
   });
+  state.assignAsync = vi.fn().mockResolvedValue(undefined);
 });
 
 function open() {
@@ -82,5 +86,38 @@ describe("ManageBundles", () => {
 
     expect(screen.getByText(/2 unpublished changes/)).toBeInTheDocument();
     expect(screen.getByText(/an assignment gives v2/)).toBeInTheDocument();
+  });
+
+  // The pre-apply hint used to promise "Queues for confirmation" every time
+  // something was staged, which the apply outcome does not always keep: a
+  // change that reaches nobody's effective access is reported as `applied`,
+  // not queued. The hint must hold in both cases.
+  it("hints at what the button does without promising a queue that may not happen", () => {
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+
+    expect(screen.getByText("Recorded in Syndra first, not sent yet")).toBeInTheDocument();
+    expect(screen.queryByText(/queues for confirmation/i)).not.toBeInTheDocument();
+  });
+
+  it("reports Applied — not queued — when the assignment reaches nobody yet", async () => {
+    state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 0 } });
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
+
+    expect(await screen.findByText("Applied")).toBeInTheDocument();
+    expect(screen.queryByText("Waiting to be sent")).not.toBeInTheDocument();
+    expect(screen.getByText(/nothing is waiting to be sent/i)).toBeInTheDocument();
+  });
+
+  it("reports the change waiting, and where to send it, when it enqueues a cascade", async () => {
+    state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 2 } });
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
+
+    expect(await screen.findByText("Waiting to be sent")).toBeInTheDocument();
+    expect(screen.getByText(/2 changes wait under pending changes/i)).toBeInTheDocument();
   });
 });
