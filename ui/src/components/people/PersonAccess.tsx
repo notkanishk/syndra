@@ -12,6 +12,7 @@ import {
   type RoleReason,
 } from "@/components/access/AccessSource";
 import { ResolvedProjectName } from "@/components/names";
+import { UserName } from "@/components/names/UserName";
 import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
@@ -721,7 +722,9 @@ function RoleGroup({
                   {grant?.granted_by && (
                     <>
                       <dt className="text-faint">Granted by</dt>
-                      <dd>{grant.granted_by}</dd>
+                      <dd>
+                        <UserName id={grant.granted_by} />
+                      </dd>
                     </>
                   )}
                 </dl>

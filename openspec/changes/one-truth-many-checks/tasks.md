@@ -109,3 +109,9 @@
   same observer route the operator page uses (`GET /zitadel/users/{id}/grants`
   is now self-or-operator). One reader, one answer, both audiences. Test:
   `TestZitadelUserGrantsRoute_SelfReadableByMember` (mutation-checked).
+- [x] 4.6 A revoke overtaken by a later delivered add for the same roles is
+  settled by that add, not "unseen": `ConfirmFromObservation` stamps it, so
+  the Home queue stops listing withdrawals whose absence can never be seen
+  again. Live test: `TestConfirmFromObservationSettlesARevokeOvertakenByALaterAdd`.
+  The SQL also enforces the completeness guard itself (latest org
+  observation complete and error-free) rather than trusting the caller.

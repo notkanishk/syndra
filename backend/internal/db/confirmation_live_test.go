@@ -170,3 +170,41 @@ func TestConfirmFromObservationRefusesAPartialListing(t *testing.T) {
 		t.Fatalf("row confirmed from a partial listing")
 	}
 }
+
+// A revoke that a later add overtook is settled by the later write. Left
+// unstamped it would sit on the Home queue forever as "not seen back", when
+// the truth is that the index now answers for the add.
+func TestConfirmFromObservationSettlesARevokeOvertakenByALaterAdd(t *testing.T) {
+	ctx := liveDB(t)
+	var revoke string
+	key, _ := newOutboxIdempotencyKey()
+	if err := PG.QueryRow(ctx, `
+		INSERT INTO propagation_outbox
+			(op_type, user_id, project_id, role_keys, payload_json, idempotency_key,
+			 initiated_by, source, target, status, completed_at, intent_seq)
+		VALUES ('revoke','u1','p1',ARRAY['community'],'{}',$1,'tester','direct','zitadel','applied',
+		        NOW() - interval '1 day', nextval('propagation_outbox_intent_seq'))
+		RETURNING id`, key).Scan(&revoke); err != nil {
+		t.Fatalf("seed revoke: %v", err)
+	}
+	key2, _ := newOutboxIdempotencyKey()
+	if _, err := PG.Exec(ctx, `
+		INSERT INTO propagation_outbox
+			(op_type, user_id, project_id, role_keys, payload_json, idempotency_key,
+			 initiated_by, source, target, status, completed_at, intent_seq)
+		VALUES ('add','u1','p1',ARRAY['community'],'{}',$1,'tester','direct','zitadel','applied',
+		        NOW(), nextval('propagation_outbox_intent_seq'))`, key2); err != nil {
+		t.Fatalf("seed add: %v", err)
+	}
+	if err := RecordOrgObservation(ctx, []ObservedGrant{{GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"community"}}}, true, ""); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	if _, err := ConfirmFromObservation(ctx); err != nil {
+		t.Fatalf("ConfirmFromObservation: %v", err)
+	}
+	var at *time.Time
+	PG.QueryRow(ctx, `SELECT confirmed_at FROM propagation_outbox WHERE id=$1`, revoke).Scan(&at)
+	if at == nil {
+		t.Fatalf("an overtaken revoke was left unconfirmed")
+	}
+}
