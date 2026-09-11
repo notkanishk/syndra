@@ -71,6 +71,43 @@ describe("the target's own log, beside Syndra's", () => {
     expect(screen.queryByText(/No recorded activity/i)).toBeNull();
   });
 
+  // `no_account` is a POSITIVE fact — this person has nothing bound on the
+  // target — not a failed read, and must never read as an error the way
+  // `unreachable` does.
+  it("reads a missing account as neutral, not as a failed read", async () => {
+    state.activity = {
+      target: "truenas",
+      subject: "u1",
+      readable: false,
+      reason: "no_account",
+      detail: "",
+    };
+    renderTab();
+
+    await waitFor(() =>
+      expect(screen.getByText(/has no account for this person/i)).toBeTruthy(),
+    );
+    expect(screen.queryByText(/not a claim that nothing\s+happened/i)).toBeNull();
+  });
+
+  // Every other failure keeps the warning tone and its own detail — never a
+  // raw status code, which the backend already keeps out of `detail`.
+  it("keeps the warning tone and detail for an unreachable target", async () => {
+    state.activity = {
+      target: "truenas",
+      subject: "u1",
+      readable: false,
+      reason: "unreachable",
+      detail: "the add-on did not answer",
+    };
+    renderTab();
+
+    await waitFor(() =>
+      expect(screen.getByText(/not a claim that nothing\s+happened/i)).toBeTruthy(),
+    );
+    expect(screen.getByText(/the add-on did not answer/)).toBeInTheDocument();
+  });
+
   // A short list on a target that was watching only half the shares is not a quiet
   // week, and the operator cannot tell without being told.
   it("names the shares nothing was watching", async () => {

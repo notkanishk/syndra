@@ -256,3 +256,38 @@ func ObservedGrantsPage(ctx context.Context, limit, offset int) ([]ObservedGrant
 	}
 	return out, total, rows.Err()
 }
+
+// ConfirmFromObservation stamps confirmed_at on every applied Zitadel write
+// that a COMPLETE observation now substantiates: an add whose roles the index
+// shows the person holding, a revoke whose roles it shows them not holding.
+//
+// The observer is the one pipe that turns a record into a confirmed fact —
+// the post-write read-back and the sweep both end here — so a surface that
+// reads confirmed_at cannot disagree with one that reads the index. Absence is
+// only evidence under a complete listing, so the statement refuses to stamp
+// anything unless the latest org observation is complete and clean.
+func ConfirmFromObservation(ctx context.Context) (int64, error) {
+	tag, err := querier(ctx).Exec(ctx, `
+		UPDATE propagation_outbox o SET confirmed_at = NOW()
+		 WHERE o.status = 'applied' AND o.confirmed_at IS NULL AND o.target = 'zitadel'
+		   -- Enforced here, not left to the caller: only a complete, clean org
+		   -- listing may stand behind a confirmation, because a revoke is
+		   -- confirmed by absence.
+		   AND COALESCE((SELECT complete AND error IS NULL FROM zitadel_observations
+		                  WHERE scope = 'org' ORDER BY observed_at DESC LIMIT 1), false)
+		   AND (
+		     (o.op_type IN ('add','replace') AND EXISTS (
+		        SELECT 1 FROM zitadel_grants_index g
+		         WHERE g.user_id = o.user_id AND g.project_id = o.project_id
+		           AND g.role_keys @> o.role_keys))
+		     OR
+		     (o.op_type = 'revoke' AND NOT EXISTS (
+		        SELECT 1 FROM zitadel_grants_index g
+		         WHERE g.user_id = o.user_id AND g.project_id = o.project_id
+		           AND g.role_keys && o.role_keys))
+		   )`)
+	if err != nil {
+		return 0, fmt.Errorf("confirm from observation: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}

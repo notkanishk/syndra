@@ -214,7 +214,10 @@ func NewRouter() http.Handler {
 	// including the ones still waiting. A half-applied cascade has to be
 	// visible AS a half-applied cascade.
 	mux.HandleFunc("GET /api/v1/propagations/cascade-groups", withCORS(withOperatorAuth(handleGetCascadeGroups)))
-	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleListZitadelUserGrants)))
+	// Self-readable: a member must be able to see what Zitadel holds for THEM
+	// through the same observer pipe the operator page uses — one reader, one
+	// answer, for both audiences.
+	mux.HandleFunc("GET /api/v1/zitadel/users/{id}/grants", withCORS(withSelfOrOperatorAuth(handleListZitadelUserGrants)))
 	mux.HandleFunc("POST /api/v1/zitadel/users/{id}/grants", withCORS(withOperatorAuth(handleAssignZitadelGrant)))
 	mux.HandleFunc("PUT /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleUpdateZitadelGrant)))
 	mux.HandleFunc("DELETE /api/v1/zitadel/users/{id}/grants/{grantId}", withCORS(withOperatorAuth(handleRemoveZitadelGrant)))

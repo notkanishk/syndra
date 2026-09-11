@@ -141,3 +141,64 @@ func TestObservationBasis_NamesFailureAndTruncationSeparately(t *testing.T) {
 		t.Fatalf("expected Truncated=true — an incomplete read may not be presented as exhaustive")
 	}
 }
+
+// A holder Zitadel shows that Syndra never gave must still be counted as a
+// holder. Given and Observed are different readings of one snapshot; the old
+// "confirmed" number was their intersection and hid every unexplained holder
+// from every count on every screen.
+func TestRoleHolderFacts_ObservedCountsWhoeverGaveIt(t *testing.T) {
+	now := time.Now()
+	withConfirmationDeps(t,
+		[]models.UserProfile{{ID: "u1"}, {ID: "u2"}},
+		map[string]map[roleKey]*models.EffectiveRole{
+			"u1": {{projectID: "p1", roleKey: "member"}: {ProjectID: "p1", RoleKey: "member"}},
+			"u2": {},
+		},
+		func(context.Context) (db.Observation, error) {
+			return db.Observation{ObservedAt: now, Complete: true}, nil
+		},
+		func(_ context.Context, userID string) ([]db.ObservedGrant, error) {
+			switch userID {
+			case "u1":
+				return []db.ObservedGrant{{UserID: "u1", ProjectID: "p1", RoleKeys: []string{"member", "admin"}}}, nil
+			case "u2":
+				return []db.ObservedGrant{{UserID: "u2", ProjectID: "p1", RoleKeys: []string{"member"}}}, nil
+			}
+			return nil, nil
+		},
+	)
+
+	facts, err := RoleHolderFacts(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := facts.Given["p1:member"]; got != 1 {
+		t.Fatalf("given p1:member = %d, want 1", got)
+	}
+	if got := facts.Confirmed["p1:member"]; got != 1 {
+		t.Fatalf("confirmed p1:member = %d, want 1", got)
+	}
+	if got := facts.Observed["p1:member"]; got != 2 {
+		t.Fatalf("observed p1:member = %d, want 2 — u2 holds it in Zitadel with no Syndra record", got)
+	}
+	if got := facts.Observed["p1:admin"]; got != 1 {
+		t.Fatalf("observed p1:admin = %d, want 1", got)
+	}
+}
+
+// Never observed is not "nobody holds it". A nil Observed map must not let a
+// role be called unused; only a complete, current read may.
+func TestHolderFacts_NobodyObservedNeedsACompleteRead(t *testing.T) {
+	never := HolderFacts{}
+	if never.NobodyObserved("p1:member") {
+		t.Fatalf("a never-observed role was called unheld")
+	}
+	truncated := HolderFacts{Observed: map[string]int{}, Basis: models.ObservationBasis{Current: true, Truncated: true}}
+	if truncated.NobodyObserved("p1:member") {
+		t.Fatalf("a truncated read was allowed to conclude an absence")
+	}
+	complete := HolderFacts{Observed: map[string]int{}, Basis: models.ObservationBasis{Current: true}}
+	if !complete.NobodyObserved("p1:member") {
+		t.Fatalf("a complete read that does not show the role should conclude nobody holds it")
+	}
+}

@@ -33,9 +33,8 @@ vi.mock("@/lib/queries/useHolds", async () => {
       error: null,
     }),
     useCreateHold: () => ({
-      mutate: (input: Record<string, unknown>, opts?: { onSuccess?: () => void }) => {
+      mutateAsync: async (input: Record<string, unknown>) => {
         state.held.push(input);
-        opts?.onSuccess?.();
       },
       isPending: false,
       error: null,
@@ -101,6 +100,39 @@ describe("taking access away on a target", () => {
     fireEvent.click(confirm());
     expect(state.revoked).toHaveLength(1);
     expect(state.revoked[0].reason).toBe("offboarding");
+  });
+
+  // The footer used to say the hold "reaches TrueNAS when someone sends it
+  // from Pending changes" — direct contradiction of the backend's own
+  // disclosure, below, that a revocation drains on its own. One dialog must
+  // not tell the operator both.
+  it("does not claim the hold needs a manual send from Pending changes", () => {
+    renderTakeAway();
+    expect(screen.getByText(/revocations send on their own, every few minutes/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sends it from Pending changes/i)).toBeNull();
+  });
+
+  it("says the same thing about how it lands before and after confirming", () => {
+    state.result = {
+      status: "revoked",
+      allowance_id: "a1",
+      rotated: true,
+      queued: true,
+      disclosure:
+        "The credential is already replaced. The account lock drains on its own — revocations do not wait for an operator, because a queued one is access somebody still has.",
+      detail: "New connections are refused now and the credential has been replaced.",
+    };
+    renderTakeAway();
+
+    fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
+      target: { value: "Ada Rivera" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /revoke access for Ada Rivera/i }));
+
+    // The result screen's own disclosure — drains on its own, no operator
+    // action needed — must not have been contradicted by the form it replaced.
+    expect(screen.getByText(/drains on its own/i)).toBeInTheDocument();
   });
 
   // Half of it going through is its own outcome, and the surface names which

@@ -222,7 +222,7 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	// confirms of it are different questions and the surface needs both — but
 	// they are two readings of one walk over the directory, not two walks.
 	// Asked separately they built the snapshot twice per request.
-	userCounts, confirmedCounts, basis, err := svcRoleHolderFacts(ctx)
+	facts, err := svcRoleHolderFacts(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("count holders: %w", err)
 	}
@@ -238,7 +238,7 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	catalog := make([]models.CatalogRole, 0, len(seen))
 	for key, entry := range seen {
 		usage := usageCounts[key]
-		assignedUsers := userCounts[key]
+		assignedUsers := facts.Given[key]
 		projectName, ok := projectNames[entry.projectID]
 		if !ok {
 			// Referenced role pointing at a project not currently visible in
@@ -259,13 +259,19 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 			BundleCount:       usage.BundleCount,
 			RuleCount:         usage.RuleCount,
 			AssignedUserCount: assignedUsers,
-			IsUnused:          usage.BundleCount+usage.RuleCount == 0 && assignedUsers == 0,
-			Source:            entry.source,
-			Observation:       basis,
+			// Unused means nobody holds it by any account — Zitadel's included.
+			// A role Syndra never gave but Zitadel shows held is drift, not unused.
+			IsUnused:    usage.BundleCount+usage.RuleCount == 0 && assignedUsers == 0 && facts.NobodyObserved(key),
+			Source:      entry.source,
+			Observation: facts.Basis,
 		}
-		if confirmedCounts != nil {
-			confirmed := confirmedCounts[key]
+		if facts.Confirmed != nil {
+			confirmed := facts.Confirmed[key]
 			cr.ConfirmedUserCount = &confirmed
+		}
+		if facts.Observed != nil {
+			observed := facts.Observed[key]
+			cr.ObservedUserCount = &observed
 		}
 		catalog = append(catalog, cr)
 	}

@@ -505,11 +505,29 @@ func handleTargetActivity(w http.ResponseWriter, r *http.Request) {
 		// answers 200 when the add-on is down: "the log could not be read" is
 		// the answer to the question, and it must not render as "no activity".
 		// Those two are the whole point of this surface.
+		//
+		// A 422 on activity.get is the add-on saying the subject has no bound
+		// account on this target — a positive fact, not a failure, and it must
+		// not surface as "addon returned 422". Everything else is a genuine
+		// unreachable/failed read: the raw error goes to the log, and the
+		// client gets a plain-language sentence with no status numbers in it.
+		if report.Outcome == addons.OutcomeRejected && report.Status == http.StatusUnprocessableEntity {
+			jsonResponse(w, http.StatusOK, map[string]any{
+				"target":   target,
+				"subject":  subject,
+				"readable": false,
+				"reason":   "no_account",
+				"detail":   "",
+			})
+			return
+		}
+		log.Printf("[TARGETS] could not read %s's activity for %s: %v", target, subject, report.Err)
 		jsonResponse(w, http.StatusOK, map[string]any{
 			"target":   target,
 			"subject":  subject,
 			"readable": false,
-			"detail":   errText(report.Err),
+			"reason":   "unreachable",
+			"detail":   "the activity log could not be read",
 		})
 		return
 	}

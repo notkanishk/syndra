@@ -39,7 +39,7 @@ const applied = (): BulkPlan =>
 let onRehearse: (acknowledgeScope: boolean) => Promise<BulkPlan>;
 let onApply: (planId: string) => Promise<BulkPlan>;
 
-function open(extra: { definitionLabel?: string } = {}) {
+function open(extra: { definitionLabel?: string; destructive?: boolean } = {}) {
   return render(
     <RehearsalDialog
       title="Grant a role"
@@ -56,6 +56,25 @@ function open(extra: { definitionLabel?: string } = {}) {
 beforeEach(() => {
   onRehearse = vi.fn(async () => plan());
   onApply = vi.fn(async () => applied());
+});
+
+// The shared `Modal` autofocuses the first focusable element in DOM order on
+// open. A destructive `dangerConfirm` review-step button used to be that
+// first element, so any caller passing `destructive` (role/bundle removal,
+// mapping deletion) opened with the cursor already on the confirm — the same
+// hazard `order-1`/`order-2` closes on the bundle-delete dialog.
+describe("the destructive confirm's place in the tab order", () => {
+  it("puts Cancel before it in DOM order, matching the visual layout", async () => {
+    open({ destructive: true });
+    const apply = await screen.findByRole("button", { name: "Apply to 1 person" });
+    expect(apply.className).toMatch(/bg-danger\b/);
+
+    const buttons = screen.getAllByRole("button").map((b) => b.textContent);
+    const cancelIndex = buttons.indexOf("Cancel");
+    const applyIndex = buttons.indexOf("Apply to 1 person");
+    expect(cancelIndex).toBeGreaterThanOrEqual(0);
+    expect(cancelIndex).toBeLessThan(applyIndex);
+  });
 });
 
 describe("the approval the dialog holds", () => {

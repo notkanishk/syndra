@@ -125,6 +125,17 @@ describe("breadcrumbs", () => {
     // A member has no Audit destination, so no crumb claims they do.
     expect(crumbsFor("/audit", "member")).toEqual([]);
   });
+
+  // ADVANCED_NAV is `[...BASIC_NAV, ...]` — a superset, not a different tree —
+  // so a Basic operator who reaches an Advanced-only page still landed on a
+  // real, named place. Falling back to "Syndra" here read as the page itself
+  // being unknown rather than the sidebar simply not showing it in this view.
+  it("names an Advanced-only page for a Basic operator, from the full operator nav", () => {
+    expect(crumbsFor("/governance/pending", "basic")).toEqual([
+      { label: "Automation" },
+      { label: "Pending changes", href: "/governance/pending" },
+    ]);
+  });
 });
 
 describe("member reachability", () => {
@@ -225,8 +236,17 @@ describe("the target rows", () => {
     ]);
   });
 
-  it("does not claim a target's path for a basic operator, who has no System group", () => {
-    expect(crumbsFor("/system/targets/truenas", "basic")).toEqual([]);
+  // Basic has no System group of its own, but the crumb names the PAGE, not
+  // the sidebar — a Basic operator who reaches a target's route (a link, a
+  // bookmark, a direct URL) still landed somewhere real. Falling back to
+  // "Syndra" here was the same defect as any other Advanced-only route
+  // visited from Basic: the view toggle governs the rail, not the page's own
+  // name.
+  it("still names a target's path for a basic operator, from the full operator nav", () => {
+    expect(crumbsFor("/system/targets/truenas", "basic")).toEqual([
+      { label: "System" },
+      { label: "TrueNAS" },
+    ]);
   });
 
   // Static also means the breadcrumb can find it. A row the rail highlights and

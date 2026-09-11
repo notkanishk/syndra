@@ -33,6 +33,11 @@ export interface CatalogRole {
    */
   confirmed_user_count?: number;
   /**
+   * What Zitadel shows holding the role right now — not Syndra's record of
+   * who was granted it. Absent, not zero, when the org has never been read.
+   */
+  observed_user_count?: number;
+  /**
    * One basis for the whole response — identical on every row. Optional so
    * fixtures that don't care about confirmation aren't forced to fabricate
    * one; a missing basis reads the same as "never observed".

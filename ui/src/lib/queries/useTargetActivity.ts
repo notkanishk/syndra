@@ -24,6 +24,13 @@ export interface TargetActivity {
   /** Absent entirely when `readable` is false — never an empty list standing in. */
   events?: TargetActivityEvent[];
   /**
+   * Present only when `readable` is false. `no_account` is a positive fact —
+   * this person has nothing bound on the target — and must read as neutral,
+   * never as an error; `unreachable` is everything else that stopped the read
+   * (the target down, a bad response), and keeps the warning tone.
+   */
+  reason?: "no_account" | "unreachable";
+  /**
    * Shares with auditing switched off. Without it a short list reads as a quiet
    * week when half the shares were never being watched.
    */

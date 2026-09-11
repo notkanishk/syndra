@@ -222,4 +222,40 @@ describe("BulkDialog", () => {
     expect(screen.getByRole("button", { name: "Preview the change" })).toBeInTheDocument();
     expect(screen.getByLabelText("Reason")).toHaveValue("New cohort");
   });
+
+  // The summary line and Ada's own row are two sentences about the same
+  // apply, computed from the same plan — this pins them to agreeing rather
+  // than the summary claiming "applied" over a row still marked "queued".
+  it("keeps the summary outcome and the per-row outcome saying the same thing, by name", async () => {
+    open();
+    await rehearse();
+    api.plan = plan({
+      outcomes: [
+        {
+          user_id: "u1",
+          name: "Ada Lovelace",
+          email: "ada@example.edu",
+          effect: "queued",
+          detail: "Waiting to be sent to Zitadel.",
+        },
+        api.plan!.outcomes![1],
+        api.plan!.outcomes![2],
+      ],
+      summary: { total: 3, apply: 0, no_change: 1, blocked: 1, failed: 0, succeeded: 0, queued: 1 },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply to 1 person" }));
+    await waitFor(() => expect(api.applied).toHaveLength(1));
+
+    // Summary: queued outranks a clean apply, so the headline pill reads
+    // "Waiting to be sent" — never "Applied" while a row is still queued.
+    // Ada's own row carries the same pill, so both mentions agree rather
+    // than one saying "applied" over a row still marked queued.
+    expect(screen.getAllByText("Waiting to be sent").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("Applied")).not.toBeInTheDocument();
+    // Pending changes is where the operator sends it from — the next step.
+    expect(screen.getAllByText(/pending changes/i).length).toBeGreaterThanOrEqual(1);
+    // Named rather than by id.
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.queryByText("u1")).not.toBeInTheDocument();
+  });
 });

@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
+import { ProjectName } from "@/components/names";
 import { roleLabel } from "@/lib/format";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateRole, useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 
@@ -38,6 +40,7 @@ export function CreateRoleDialog({
   const projects = useProjects();
   const catalog = useGlobalRoleCatalog();
   const create = useCreateRole();
+  const resolver = useNameResolver();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   const [projectId, setProjectId] = useState(pinnedProjectId ?? "");
@@ -48,8 +51,6 @@ export function CreateRoleDialog({
   const [cloneFrom, setCloneFrom] = useState("");
 
   const all: CatalogRole[] = catalog.data ?? [];
-  const pinnedName = projects.data?.find((entry) => entry.project.id === pinnedProjectId)?.project
-    .name;
 
   const valid = /^[a-zA-Z0-9_-]+$/.test(roleKey);
   const duplicate = all.some((role) => role.project_id === projectId && role.role_key === roleKey);
@@ -69,8 +70,11 @@ export function CreateRoleDialog({
             {pinnedProjectId ? (
               // Stated, not editable. The dialog was opened from this project's
               // own page; a select here would invite changing it by accident.
+              // Named through the shared resolver rather than a bare id — the
+              // one this dialog is pinned to is the one thing on this screen an
+              // operator should never have to read as a raw Zitadel id.
               <div className="flex items-center rounded-inner border border-line-strong px-[15px] py-3 text-[15px]">
-                {pinnedName ?? pinnedProjectId}
+                <ProjectName id={pinnedProjectId} />
               </div>
             ) : (
               <Select
@@ -193,10 +197,11 @@ export function CreateRoleDialog({
             isPending={create.isPending}
             onClick={async () => {
               const [cloneProject, cloneRole] = cloneFrom.split(":");
-              const project =
-                all.find((role) => role.project_id === projectId)?.project_name ??
-                projects.data?.find((entry) => entry.project.id === projectId)?.project.name ??
-                projectId;
+              // The shared resolver, not another hand-rolled catalog scan —
+              // this dialog already had two of those and both could still
+              // fall through to the raw id, which is exactly the leak this
+              // resolves for every other name on screen.
+              const project = resolver.resolveProject(projectId).value?.name ?? projectId;
               try {
                 await create.mutateAsync({
                   project_id: projectId,

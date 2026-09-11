@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   rows: [] as ExpiringGrantRow[],
   acknowledge: vi.fn(),
   clear: vi.fn(),
+  extend: vi.fn(),
 }));
 
 // A ceiling of four, so the unit logic can be exercised without rendering six
@@ -36,7 +37,7 @@ vi.mock("@/lib/queries/useExpiringAccess", () => ({
 
 vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useUsers")>()),
-  useCreateGrant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateGrant: () => ({ mutateAsync: state.extend, isPending: false }),
 }));
 
 // Captures what the bulk dialog is handed, without rendering it.
@@ -76,6 +77,9 @@ beforeEach(() => {
   state.rows = [grant()];
   state.acknowledge = vi.fn().mockResolvedValue({ message: "ok" });
   state.clear = vi.fn().mockResolvedValue({ message: "ok" });
+  // Auto mode by default — most environments apply a grant inline. The
+  // "pending" case (manual mode) is exercised on its own below.
+  state.extend = vi.fn().mockResolvedValue({ outbox_id: "ob1", status: "applied" });
   bulk.props = null;
 });
 
@@ -328,4 +332,44 @@ describe("the expiry queue gates on people, not on grants", () => {
     expect(screen.getByText(/8 roles selected/)).toBeTruthy();
     expect(screen.queryByText(/you can change at most/)).toBeNull();
   });
+});
+
+describe("extending a single row", () => {
+  // This endpoint enqueues to the outbox in manual mode instead of applying
+  // inline (see CreateGrantResult's own doc comment: "the caller must not
+  // assume 'applied' from a bare 202"). The row used to ignore the response
+  // and always say "Extended", which claims Zitadel has it when only
+  // Syndra's ledger does.
+  it("says the extension is still queued when the grant does not apply inline", async () => {
+    state.extend = vi.fn().mockResolvedValue({ outbox_id: "ob1", status: "pending" });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
+
+    await waitFor(() => expect(document.body.textContent).toMatch(/Waiting to be sent/i));
+    expect(document.body.textContent).toMatch(/Pending changes/);
+    expect(document.body.textContent).not.toMatch(/Extended by 90 days/);
+  });
+
+  it("says the extension is done once Zitadel has it", async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
+
+    await waitFor(() => expect(document.body.textContent).toMatch(/Extended by 90 days/));
+  });
+});
+
+// UserName's own "cannot resolve" fallback always appends the id as a muted
+// mono trailer — this row used to hand it the id AGAIN as the fallback text,
+// so an acknowledger nobody could resolve rendered as the same raw id twice
+// side by side, with no readable label anywhere in it.
+it("names who acknowledged with a readable label, not the raw id twice over", () => {
+  state.rows = [
+    grant({ acknowledged: { by: "op_2f81a9", at: "2026-08-04T09:00:00Z" } }),
+  ];
+  renderPage();
+  // Two, not one: the row's own "granted by" already uses this same fallback
+  // phrase for an unresolved id, and the acknowledger now does too. Before the
+  // fix, the acknowledger fell back to its own raw id instead of this phrase,
+  // so only one match existed here.
+  expect(screen.getAllByText(/somebody no longer listed/i)).toHaveLength(2);
 });

@@ -52,8 +52,8 @@ func noopRoleDeps() {
 	svcDbGetRoleUsageCounts = func(_ context.Context) (map[string]db.RoleUsage, error) {
 		return map[string]db.RoleUsage{}, nil
 	}
-	svcRoleHolderFacts = func(_ context.Context) (map[string]int, map[string]int, models.ObservationBasis, error) {
-		return map[string]int{}, nil, models.ObservationBasis{}, nil
+	svcRoleHolderFacts = func(context.Context) (HolderFacts, error) {
+		return HolderFacts{Given: map[string]int{}}, nil
 	}
 	svcDbGetAllReferencedRoleKeys = func(_ context.Context) ([][2]string, error) {
 		return nil, nil

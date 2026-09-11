@@ -38,6 +38,7 @@ var (
 	}
 	recordOrg  = db.RecordOrgObservation
 	recordUser = db.RecordUserObservation
+	confirm    = db.ConfirmFromObservation
 	clientOK   = func() bool { return zitadel.MgmtClient != nil }
 )
 
@@ -165,6 +166,13 @@ func Sweep(ctx context.Context) error {
 		log.Printf("[OBSERVE] incomplete sweep: %d grants seen, nothing removed — %s", o.GrantsSeen, o.Error)
 		return nil
 	}
-	log.Printf("[OBSERVE] sweep complete: %d grants", o.GrantsSeen)
+	// One pipe: a complete listing is the only thing that may turn an accepted
+	// write into a confirmed one, for adds by presence and revokes by absence.
+	n, err := confirm(ctx)
+	if err != nil {
+		log.Printf("[OBSERVE] sweep complete: %d grants; confirmation failed: %v", o.GrantsSeen, err)
+		return nil
+	}
+	log.Printf("[OBSERVE] sweep complete: %d grants, %d writes confirmed", o.GrantsSeen, n)
 	return nil
 }

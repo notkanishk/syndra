@@ -138,6 +138,19 @@ export function formatClock(iso: string | null | undefined): string {
   return date.toLocaleTimeString(DATE_LOCALE, { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+/**
+ * "14:32" when the moment is today, otherwise "10 Sept 14:32". For a feed that
+ * is NOT grouped under its date: a bare clock beside a day-old entry reads as
+ * today, which is a false statement about when something happened.
+ */
+export function formatWhen(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  const clock = formatClock(iso);
+  return date.toDateString() === now.toDateString() ? clock : `${formatShortDate(iso)} ${clock}`;
+}
+
 /** "18 Dec 2026" — the form a resolved expiry date is confirmed in. */
 export function formatLongDate(iso: string | null | undefined): string {
   if (!iso) return "—";
