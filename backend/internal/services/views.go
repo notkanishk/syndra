@@ -566,6 +566,9 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 	if err != nil {
 		return models.UserAccessView{}, err
 	}
+	// Presence may be concluded from any read; absence only from a complete
+	// one. Everything below that states "you hold nothing here" checks this.
+	completeRead := basis.ReadAt != nil && basis.Current && !basis.Truncated
 
 	projectBuckets := make(map[string]*models.ProjectAccessView)
 	for _, role := range roleMap {
@@ -632,12 +635,14 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		})
 		sort.Strings(bucket.EffectiveRoleKeys)
 		if bucket.ObservedRoleKeys == nil && observed != nil {
-			// observed is non-nil only when something has been observed, so an
-			// empty list here is a checked absence and may say so. When nothing
-			// has been observed the field stays nil and the screen says
-			// "checking", never "you hold nothing".
 			bucket.ObservedRoleKeys = observed[bucket.ProjectID]
-			if bucket.ObservedRoleKeys == nil {
+			// Nothing observed on this project. Saying so out loud is an
+			// absence claim, so it needs a read that saw everything: a capped
+			// sweep upserts only what it reached and deletes nothing, which
+			// leaves a person it never got to looking exactly like a person
+			// who holds nothing. Presence above is safe either way — seeing a
+			// grant is proof it is there, whatever the read missed.
+			if bucket.ObservedRoleKeys == nil && completeRead {
 				bucket.ObservedRoleKeys = []string{}
 			}
 		}
@@ -664,8 +669,12 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		hints = append(hints, "This user spans several systems; review whether every downstream permission is still required.")
 	}
 
+	// A total is a statement about everything, so it rests on a read that saw
+	// everything. Under a capped or failed sweep the honest answer is "we have
+	// not finished looking", not a number that would read as the whole of what
+	// this person holds.
 	var observedRoleCount *int
-	if observed != nil {
+	if completeRead {
 		total := 0
 		for _, roleKeys := range observed {
 			total += len(roleKeys)
@@ -733,22 +742,31 @@ func listApplicationsFromSnapshot(snap *accessSnapshot) ([]models.ApplicationVie
 
 	for _, app := range apps {
 		assignedCount := 0
+		confirmedCount := 0
 		observedCount := 0
 		for _, user := range snap.Users() {
 			roleMap, _, err := snap.For(user.ID)
 			if err != nil {
 				return nil, err
 			}
-			if hasProjectRole(roleMap, app.ProjectID) {
-				assignedCount++
-			}
+			var observed map[string]bool
 			if basis.ReadAt != nil {
-				observed, err := snap.Observed(user.ID)
-				if err != nil {
+				if observed, err = snap.Observed(user.ID); err != nil {
 					return nil, err
 				}
 				if hasObservedProject(observed, app.ProjectID) {
 					observedCount++
+				}
+			}
+			if hasProjectRole(roleMap, app.ProjectID) {
+				assignedCount++
+				// The overlap: given AND observed. Without it the app list had
+				// to pass "confirmed: unknown" to holdersLine, which reads it
+				// as zero — so an app whose holders all match showed "N
+				// unexplained" and "N not in Zitadel yet" at once, about the
+				// same N people.
+				if observed != nil && hasObservedProjectRole(roleMap, observed, app.ProjectID) {
+					confirmedCount++
 				}
 			}
 		}
@@ -765,7 +783,8 @@ func listApplicationsFromSnapshot(snap *accessSnapshot) ([]models.ApplicationVie
 			Observation:       basis,
 		}
 		if basis.ReadAt != nil {
-			observed := observedCount
+			confirmed, observed := confirmedCount, observedCount
+			view.ConfirmedUserCount = &confirmed
 			view.ObservedUserCount = &observed
 		}
 		views = append(views, view)

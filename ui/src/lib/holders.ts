@@ -40,7 +40,15 @@ export function holdersLine(
     return { headline: String(given), note: "not checked yet", tone: "muted" };
   }
 
-  const base = confirmed ?? 0;
+  // The overlap is unknown — this caller does not compute it. It is NOT zero:
+  // reading it as zero calls every holder both unexplained and undelivered at
+  // once, about the same people. State what Zitadel shows and claim nothing
+  // about how much of it the record explains.
+  if (confirmed === undefined) {
+    return { headline: String(observed), note: "", tone: "ok" };
+  }
+
+  const base = confirmed;
   const unexplained = observed - base;
   const missing = given - base;
 

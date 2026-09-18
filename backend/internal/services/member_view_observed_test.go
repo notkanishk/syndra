@@ -1,7 +1,9 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -144,5 +146,122 @@ func TestExplainUserAccess_ObservedNothingIsAnEmptyListNotNil(t *testing.T) {
 	}
 	if view.ObservedRoleCount == nil || *view.ObservedRoleCount != 0 {
 		t.Fatalf("want a checked zero, got %v", view.ObservedRoleCount)
+	}
+}
+
+// A capped sweep upserts only what it reached and deletes nothing, so a person
+// it never got to has no rows in the index — indistinguishable, from the store
+// alone, from a person who holds nothing. Concluding the second from the first
+// tells somebody their access is gone because a listing ran long.
+//
+// Presence still counts: a grant the sweep DID see is proof, whatever it
+// missed. Only the absences wait for a complete read.
+func TestExplainUserAccess_ATruncatedSweepConcludesNoAbsence(t *testing.T) {
+	noRecordsFor(t, []models.DirectGrant{
+		{ProjectID: "p1", RoleKey: "laser"},
+		{ProjectID: "p2", RoleKey: "kiln"},
+	})
+	observedStore(t,
+		db.Observation{ObservedAt: time.Now(), Complete: false}, // hit its cap
+		nil,
+		[]db.ObservedGrant{{GrantID: "g1", UserID: "dev_admin", ProjectID: "p1", RoleKeys: []string{"laser"}}},
+	)
+
+	view, err := ExplainUserAccess(context.Background(), "dev_admin")
+	if err != nil {
+		t.Fatalf("ExplainUserAccess: %v", err)
+	}
+	if view.ObservedRoleCount != nil {
+		t.Fatalf("a capped read cannot total what somebody holds, got %d", *view.ObservedRoleCount)
+	}
+	if seen := projectIn(t, view, "p1"); len(seen.ObservedRoleKeys) != 1 {
+		t.Fatalf("a grant the sweep saw is still held, got %v", seen.ObservedRoleKeys)
+	}
+	if unseen := projectIn(t, view, "p2"); unseen.ObservedRoleKeys != nil {
+		t.Fatalf("the sweep never reached this project; it may not report an empty holding, got %v", unseen.ObservedRoleKeys)
+	}
+}
+
+// Same rule, other failure: the sweep did not succeed at all.
+func TestExplainUserAccess_AFailedSweepConcludesNoAbsence(t *testing.T) {
+	noRecordsFor(t, []models.DirectGrant{{ProjectID: "p1", RoleKey: "laser"}})
+	observedStore(t,
+		db.Observation{ObservedAt: time.Now(), Complete: true, Error: "zitadel did not answer"},
+		nil, nil,
+	)
+
+	view, err := ExplainUserAccess(context.Background(), "dev_admin")
+	if err != nil {
+		t.Fatalf("ExplainUserAccess: %v", err)
+	}
+	if view.ObservedRoleCount != nil {
+		t.Fatalf("the read failed, yet a holding was totalled: %d", *view.ObservedRoleCount)
+	}
+	if got := projectIn(t, view, "p1"); got.ObservedRoleKeys != nil {
+		t.Fatalf("the read failed; it may not report an empty holding, got %v", got.ObservedRoleKeys)
+	}
+}
+
+// The distinction has to survive the wire. `omitempty` on a slice drops it at
+// len == 0, which would make "never checked" and "checked, holds nothing"
+// arrive as the same absent field.
+func TestUserAccessView_NullAndEmptyHoldingsAreDifferentOnTheWire(t *testing.T) {
+	unread, err := json.Marshal(models.ProjectAccessView{ProjectID: "p1"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	checked, err := json.Marshal(models.ProjectAccessView{ProjectID: "p1", ObservedRoleKeys: []string{}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !bytes.Contains(unread, []byte(`"observed_role_keys":null`)) {
+		t.Fatalf("an unread holding must arrive as null, got %s", unread)
+	}
+	if !bytes.Contains(checked, []byte(`"observed_role_keys":[]`)) {
+		t.Fatalf("a checked-empty holding must arrive as [], got %s", checked)
+	}
+}
+
+// An application row shows Zitadel's headcount and explains it with Syndra's
+// record. Explaining needs the OVERLAP — how many of the people Syndra gave
+// this project to are also the people Zitadel shows holding it. Without it the
+// list had to say "the overlap is unknown", which the UI read as zero, so an
+// app whose holders all matched reported every one of them as unexplained AND
+// as not yet delivered, at the same time, about the same people.
+func TestListApplications_CarriesTheOverlapNotJustTheTwoTotals(t *testing.T) {
+	setupSnapshotTestFixtures(t, 2, 1, 1)
+
+	// Both people were given a role on p0; only one of them holds it.
+	svcGetDirectGrantsForUser = func(_ context.Context, userID string, _ bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{ProjectID: "p0", RoleKey: "member"}}, nil
+	}
+	observedStore(t,
+		db.Observation{ObservedAt: time.Now(), Complete: true},
+		nil,
+		[]db.ObservedGrant{{GrantID: "g0", UserID: "u0", ProjectID: "p0", RoleKeys: []string{"member"}}},
+	)
+	svcObservedGrantsFor = func(_ context.Context, userID string) ([]db.ObservedGrant, error) {
+		if userID != "u0" {
+			return nil, nil
+		}
+		return []db.ObservedGrant{{GrantID: "g0", UserID: "u0", ProjectID: "p0", RoleKeys: []string{"member"}}}, nil
+	}
+
+	views, err := ListApplications(context.Background())
+	if err != nil {
+		t.Fatalf("ListApplications: %v", err)
+	}
+	if len(views) != 1 {
+		t.Fatalf("want one app, got %d", len(views))
+	}
+	app := views[0]
+	if app.AssignedUserCount != 2 {
+		t.Fatalf("want 2 given, got %d", app.AssignedUserCount)
+	}
+	if app.ObservedUserCount == nil || *app.ObservedUserCount != 1 {
+		t.Fatalf("want 1 observed, got %v", app.ObservedUserCount)
+	}
+	if app.ConfirmedUserCount == nil || *app.ConfirmedUserCount != 1 {
+		t.Fatalf("want the overlap reported as 1, got %v — undefined reads as zero downstream", app.ConfirmedUserCount)
 	}
 }

@@ -73,10 +73,11 @@ export interface UserAccessProject {
    * can actually use. The three lists above are Syndra's records: what was
    * decided, and by whom. This is what is true.
    *
-   * Absent — not empty — while nothing has been observed. An empty array is a
-   * checked absence and may be rendered as one; `undefined` may not.
+   * null — not empty — while nothing has been observed, or while the read
+   * that happened was too incomplete to conclude an absence. An empty array is
+   * a checked absence and may be rendered as one; null may not.
    */
-  observed_role_keys?: string[];
+  observed_role_keys: string[] | null;
 }
 
 export interface UserAccessView {
