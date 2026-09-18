@@ -29,7 +29,8 @@ func stubDrainDeps(t *testing.T) {
 		swap(&zitadelReachable, func(context.Context) bool { return true }),
 		swap(&claimPending, func(context.Context, string, int) ([]models.PendingPropagation, error) { return nil, nil }),
 		swap(&grantIndexHasRole, func(context.Context, string, string, string) (bool, error) { return false, nil }),
-		swap(&liveUserGrantRoles, func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }),
+		// One seam for "what does Zitadel hold for this pair". Empty id means no
+		// grant yet, which is what a drain test that has not said otherwise means.
 		swap(&liveUserGrant, func(context.Context, string, string) (string, map[string]bool, error) { return "", map[string]bool{}, nil }),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
@@ -109,8 +110,8 @@ func TestDrain_HaltsWhenZitadelOffline(t *testing.T) {
 func TestDrain_ShortCircuitsOnWhatZitadelReports(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("o2", "add")
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil
 	}
 	var addCalled bool
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { addCalled = true; return nil }
@@ -139,8 +140,8 @@ func TestDrain_AStaleIndexCannotSkipTheCall(t *testing.T) {
 	// The cache insists she has it.
 	grantIndexHasRole = func(context.Context, string, string, string) (bool, error) { return true, nil }
 	// Zitadel says otherwise, and Zitadel is the one being changed.
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "", map[string]bool{}, nil
 	}
 	var addCalled bool
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { addCalled = true; return nil }
@@ -279,7 +280,7 @@ func TestDrain_RevokeShortCircuitsWhenAbsent(t *testing.T) {
 		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// Live grants don't contain role "r" → nothing to revoke → applied without a call.
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{}, nil }
 	var removeCalled bool
 	zitadelRemoveUserGrant = func(context.Context, string, string) error { removeCalled = true; return nil }
 	var appliedID string
@@ -494,8 +495,8 @@ func TestDrain_ReplaceDoesNotShortCircuitOnExtraRole(t *testing.T) {
 	}
 	// Zitadel currently holds {old,new}; target is {new}. The extra "old" means
 	// the desired state is not yet reached — replace must run.
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"old": true, "new": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"old": true, "new": true}, nil
 	}
 	var updateCalled bool
 	zitadelUpdateUserGrant = func(context.Context, string, string, []string) error { updateCalled = true; return nil }
@@ -514,8 +515,8 @@ func TestDrain_ReplaceShortCircuitsOnExactMatch(t *testing.T) {
 	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rp2", OpType: "replace", UserID: "u", ProjectID: "p", RoleKeys: []string{"a", "b"}, ZitadelGrantID: "g1"}}, nil
 	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"a": true, "b": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"a": true, "b": true}, nil
 	}
 	var updateCalled bool
 	zitadelUpdateUserGrant = func(context.Context, string, string, []string) error { updateCalled = true; return nil }
@@ -537,7 +538,7 @@ func TestDrain_RevokeReconcilesLedgerOnApplied(t *testing.T) {
 	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "direct"}}, nil
 	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{"r": true}, nil }
 	var gotID string
 	reconcileLedger = func(_ context.Context, outboxID string) error {
 		gotID = outboxID
@@ -569,7 +570,7 @@ func TestDrain_CascadeRevokeReconcilesScopedToItsOwnSource(t *testing.T) {
 	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv-b", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "bundle", SourceRef: "b1"}}, nil
 	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{"r": true}, nil }
 	var gotID string
 	reconcileLedger = func(_ context.Context, outboxID string) error {
 		gotID = outboxID
@@ -591,7 +592,7 @@ func TestDrain_RevokeShortCircuitAlsoReconcilesLedger(t *testing.T) {
 		return []models.PendingPropagation{{ID: "rv2", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// Already absent in Zitadel → short-circuit. The stale ledger row must still go.
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{}, nil }
 	var reconciled bool
 	reconcileLedger = func(context.Context, string) error { reconciled = true; return nil }
 
@@ -622,7 +623,7 @@ func TestDrain_LedgerReconcileFailureLeavesRowForRetry(t *testing.T) {
 	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv3", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) { return map[string]bool{"r": true}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{"r": true}, nil }
 	reconcileLedger = func(context.Context, string) error {
 		return errors.New("db unavailable")
 	}
@@ -647,8 +648,8 @@ func TestDrain_RevokePartialCallsUpdateWithRemainingRoles(t *testing.T) {
 	}
 	// The grant currently holds r1 (from this row's source) AND r2 (from some
 	// other source) — only r1 may go.
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r1": true, "r2": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r1": true, "r2": true}, nil
 	}
 	var removeCalled bool
 	var updateRoles []string
@@ -674,8 +675,8 @@ func TestDrain_RevokeSoleRoleCallsRemoveUserGrant(t *testing.T) {
 	}
 	// The grant holds only r1 — nothing survives the revoke, so the whole grant
 	// must go (identical to pre-fix behavior for the sole-role case).
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r1": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r1": true}, nil
 	}
 	var removeCalled, updateCalled bool
 	zitadelRemoveUserGrant = func(context.Context, string, string) error { removeCalled = true; return nil }
@@ -695,8 +696,8 @@ func TestDrain_RevokeLiveLookupErrorRequeuesInsteadOfRemoving(t *testing.T) {
 	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv-err", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r1"}, ZitadelGrantID: "g1"}}, nil
 	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return nil, errors.New("zitadel unreachable")
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "", nil, errors.New("zitadel unreachable")
 	}
 	var removeCalled, updateCalled bool
 	zitadelRemoveUserGrant = func(context.Context, string, string) error { removeCalled = true; return nil }
@@ -1133,8 +1134,8 @@ func TestAnAddThatCannotBeRememberedStillSettles(t *testing.T) {
 func TestDrain_AppliedChangeClearsTheCachedClaims(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("o7", "add")
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{}, nil
 	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
 	var cleared string
@@ -1153,8 +1154,8 @@ func TestDrain_AppliedChangeClearsTheCachedClaims(t *testing.T) {
 func TestDrain_AFailedCacheClearStillAppliesTheRow(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("o8", "add")
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{}, nil
 	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
 	invalidateClaims = func(context.Context, string) error { return errors.New("redis is down") }
@@ -1177,8 +1178,8 @@ func TestDrain_AFailedCacheClearStillAppliesTheRow(t *testing.T) {
 func TestDrain_AnObservedWriteIsConfirmed(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("oc1", "add")
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{}, nil
 	}
 	observeUser = func(context.Context, string) (observe.Result, error) {
 		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{"r"}}}}, nil
@@ -1205,8 +1206,8 @@ func TestDrain_AnObservedWriteIsConfirmed(t *testing.T) {
 func TestDrain_AWriteZitadelHasNotYetSurfacedIsStillApplied(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("oc2", "add")
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{}, nil
 	}
 	observeUser = func(context.Context, string) (observe.Result, error) {
 		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{}}}}, nil
@@ -1241,8 +1242,8 @@ func TestDrain_ARevokeIsConfirmedByTheRoleBeingGone(t *testing.T) {
 			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
 		}}, nil
 	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil // still there, so the revoke runs
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil // still there, so the revoke runs
 	}
 	observeUser = func(context.Context, string) (observe.Result, error) {
 		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{}}}}, nil
@@ -1269,8 +1270,8 @@ func TestDrain_ARevokeThatLeftTheRoleInPlaceIsNotConfirmed(t *testing.T) {
 			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
 		}}, nil
 	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil // there before the revoke
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil // there before the revoke
 	}
 	observeUser = func(context.Context, string) (observe.Result, error) {
 		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{"r"}}}}, nil
@@ -1302,8 +1303,8 @@ func TestDrain_ARevokeThatLeftTheRoleInPlaceIsNotConfirmed(t *testing.T) {
 func TestDrain_ARowIsAppliedBeforeItIsConfirmed(t *testing.T) {
 	stubDrainDeps(t)
 	claimPending = oneRow("oc5", "add")
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{}, nil
 	}
 	observeUser = func(context.Context, string) (observe.Result, error) {
 		return observe.Result{Observation: db.Observation{Complete: true}, Grants: []db.ObservedGrant{{ProjectID: "p", RoleKeys: []string{"r"}}}}, nil
@@ -1343,8 +1344,8 @@ func TestDrain_ATruncatedReadCannotConfirmARevoke(t *testing.T) {
 			RoleKeys: []string{"r"}, ZitadelGrantID: "g1",
 		}}, nil
 	}
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil
 	}
 	zitadelRemoveUserGrant = func(context.Context, string, string) error { return nil }
 	// The role is not in what was seen — but what was seen is not everything.

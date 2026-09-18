@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"syndra/internal/cache"
@@ -102,6 +103,14 @@ var (
 		if err != nil {
 			return "", nil, err
 		}
+		// Absence is a conclusion on every path that calls this — "no grant"
+		// makes the add create one, the replace recreate one, and the revoke
+		// call itself done — so it may only be drawn from a read that saw
+		// everything. A truncated page hides the grant we would duplicate or
+		// wrongly declare gone, so it is an error, not an empty answer.
+		if res.Total > len(res.Items) {
+			return "", nil, fmt.Errorf("incomplete grant read for user %s: %d grants exist, %d returned", userID, res.Total, len(res.Items))
+		}
 		id := ""
 		out := map[string]bool{}
 		for _, g := range res.Items {
@@ -115,11 +124,6 @@ var (
 		}
 		return id, out, nil
 	}
-	liveUserGrantRoles = func(ctx context.Context, userID, projectID string) (map[string]bool, error) {
-		_, roles, err := liveUserGrant(ctx, userID, projectID)
-		return roles, err
-	}
-
 	pruneTerminal = db.PruneTerminalPropagations
 	prunePlans    = db.PruneSpentPlans
 

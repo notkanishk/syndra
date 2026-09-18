@@ -211,6 +211,13 @@ type ProjectAccessView struct {
 	SourceRoles         []EffectiveRole `json:"source_roles"`
 	DerivedRoles        []EffectiveRole `json:"derived_roles"`
 	EffectiveRoleKeys   []string        `json:"effective_role_keys"`
+	// ObservedRoleKeys is what Zitadel shows this person holding on this
+	// project — the roles they can actually use. The three lists above are
+	// Syndra's records, which say what was DECIDED; this says what is true.
+	//
+	// nil, not empty, when nothing has ever been observed: a screen may not
+	// render "holds nothing here" from a read that never happened.
+	ObservedRoleKeys []string `json:"observed_role_keys,omitempty"`
 }
 
 // AllowanceBand is the third band beside Source and Derived (design §6).
@@ -252,6 +259,14 @@ type UserAccessView struct {
 	// like it had never been used.
 	Allowances   []AllowanceBand `json:"allowances"`
 	CleanupHints []string        `json:"cleanup_hints"`
+	// ObservedRoleCount is how many roles Zitadel shows this person holding,
+	// across every project. The headline number on any screen that answers
+	// "what can I use" — nil while nothing has been observed, so that a page
+	// says "checking" rather than "nothing".
+	ObservedRoleCount *int `json:"observed_role_count,omitempty"`
+	// Observation is what that count rests on: when the read happened, whether
+	// it succeeded, and whether it saw everything.
+	Observation ObservationBasis `json:"observation"`
 }
 
 // UserListItem is one row of the People index. Beyond the counts, it carries

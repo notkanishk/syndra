@@ -412,14 +412,16 @@ never taught about a new source. Five were fixed in `bundle-lifecycle-repair`
   bundles (all through the pinned version). Two real divergences remain:
   *queued revocations* are subtracted by the cascade and by neither of the other
   two, so mid-revocation the cascade says gone, `UserExpectsRole` says expected
-  and the token still carries it; and `cache/deps.go`'s `bundleRolesFor` LOGS
-  AND RETURNS NIL on a read error, so a transient database blip compiles a token
-  with the person's bundle roles missing and caches it for 24h. The other two
-  return the error. That one is a wrong-access bug waiting on a bad minute.
+  and the token still carries it. ~~and `cache/deps.go`'s `bundleRolesFor` LOGS
+  AND RETURNS NIL on a read error~~ **Fixed 2026-09-18:** `bundleRolesFor`
+  returns the error and `CompileUserCache` fails the compile, like its two
+  neighbours. A blip no longer mints a token missing the person's bundle roles
+  (`TestCompileUserCache_AnUnreadableBundleIsNotAnEmptyOne`, mutation-checked).
 
-- **"Who holds this role" has three implementations that disagree by design.**
-  `GetEffectiveUserCounts` (no rules), `MappingHolders` (rules, one hop),
-  `collectUserRoles` (fixpoint). `roles.go` names the gap honestly, but the
+- **"Who holds this role" has ~~three~~ two implementations that disagree by
+  design.** ~~`GetEffectiveUserCounts` (no rules),~~ (gone — the holder counts
+  now come from `RoleHolderFacts`, one snapshot), `MappingHolders` (rules, one
+  hop), `collectUserRoles` (fixpoint). `roles.go` names the gap honestly, but the
   number feeds the rule editor's "Nobody holds the first role yet, so saving
   changes nothing today" — printed above a Save that reaches the rule-derived
   cohort. The role-members page and the role-catalog count will show different
@@ -541,12 +543,19 @@ is observed"). What is still open, and whose it is:
   all three keeps the member mount line true), the role key, and the Zitadel
   project that carries it. Syndra's key is `ACCOUNT_WRITE` only; the objects
   must exist on the NAS before the first mapping validates.
-- **Member landing still lists Syndra's decision, then marks it.**
-  `ExplainUserAccess` builds "My access" from Syndra's tables; the row's
-  "Ready to use / Not there yet" mark now comes from the observer route
-  (`GET /zitadel/users/{id}/grants`, self-readable). Folding the observed
-  standing into `UserAccessView` itself would make it one response instead of
-  two — worth doing when that view is next touched.
+- ~~**Member landing still lists Syndra's decision, then marks it.**~~
+  **Done 2026-09-18.** `UserAccessView` now carries `observed_role_count` and
+  the basis, and each `ProjectAccessView` carries `observed_role_keys` — one
+  response, one read, from `observedRolesByProject`. The headline counts what
+  Zitadel holds rather than summing `effective_role_keys` (which put "two
+  permissions" above two rows both saying the role had not arrived), and a
+  project the person holds that no record explains now appears on their own
+  page instead of being visible only to an operator. `MemberAccess` dropped its
+  second call to `useUpstreamUserGrants`.
+  **Still open here:** `PersonAccess` (the operator's view of the same person)
+  keeps its own `useUpstreamUserGrants` call for grant ids and grantor names,
+  which `UserAccessView` does not carry. Same store, second request — worth
+  folding when that component is next touched.
 - **Test account.** `testuser` (Syndra admin, the throwaway account)
   held the Ops Admin bundle and a 30-day direct grant during the walk; both were revoked and read back as gone. Remove the account when the
   walk is over. Its password was rotated on first login (Zitadel forced it).

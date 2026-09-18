@@ -49,7 +49,7 @@ var mayReadZitadelGrantsLive = map[string]zitadelReadExemption{
 	// call is a FULL paginated read across every project the person holds
 	// anything in, and a complete one DELETES this person's rows not seen —
 	// the store's whole safety property (db.RecordUserObservation). This
-	// probe (`liveUserGrantRoles`, Limit:100, ONE page, no continuation) is
+	// probe (`liveUserGrant`, Limit:100, ONE page, no continuation) is
 	// deliberately narrower and does not declare completeness the way the
 	// observer's contract requires; feeding its result through
 	// RecordUserObservation would let a person with more than 100 grants
@@ -60,7 +60,7 @@ var mayReadZitadelGrantsLive = map[string]zitadelReadExemption{
 	// observer's job.
 	"backend/internal/services/propagation/deps.go": {
 		reason: "write-path correctness reads (pre-flight + read-back after write), not a display — see the comment above this entry",
-		allow:  2, // zitadelReachable (ListAllGrants, Limit:1 probe) + liveUserGrantRoles (ListUserGrants)
+		allow:  2, // zitadelReachable (ListAllGrants, Limit:1 probe) + liveUserGrant (ListUserGrants)
 	},
 
 	// A liveness probe for the governance banner: Limit:1, result discarded,

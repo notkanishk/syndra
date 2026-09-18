@@ -104,21 +104,6 @@ export interface EffectiveRole {
   is_source: boolean;
 }
 
-export interface ProjectAccessView {
-  project_id: string;
-  project_name: string;
-  source_roles: EffectiveRole[];
-  derived_roles: EffectiveRole[];
-  effective_role_keys: string[];
-}
-
-export interface UserAccessView {
-  user: UserProfile;
-  bundles: Bundle[];
-  projects: ProjectAccessView[];
-  cleanup_hints: string[];
-}
-
 /**
  * What a cascade did, as the backend reports it.
  *

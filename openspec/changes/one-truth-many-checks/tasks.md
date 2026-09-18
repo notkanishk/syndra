@@ -34,7 +34,13 @@
 - [x] 3.1 The observation store and its periodic sweep — what a read saw about
   everything, not only about a write just made. `internal/observe`, `db.Observation`,
   wired in `cmd/api/main.go` at `OBSERVE_SWEEP_INTERVAL` (default 5m)
-- [ ] 3.2 Counts and dashboard tiles read verdicts rather than records
+- [x] 3.2 Counts and dashboard tiles read verdicts rather than records. Done
+  across 4.1–4.8 and audited end to end on 2026-09-18: every tile on Today and
+  on the Makerspace panel either reads observation (`holdersLine`, `hasAccess`,
+  `is_unused`) or counts Syndra's OWN records — queued writes, pending
+  requests, drift findings, bundle assignments — which are records by nature,
+  since Zitadel has no notion of a bundle. No tile turns a record into a claim
+  about what somebody holds.
 - [x] 3.3 Only the observer may call Zitadel; delete the direct reads from
   surfaces and guard against their return. Done, 2026-09-11: the webhook no
   longer writes `zitadel_grants_index` from event payloads (it re-observes
@@ -125,3 +131,39 @@
 - [x] 4.8 Grant dialog's "N people hold it" and Pending changes' CAUSED BY
   read observed holders and name a direct grant "Given by hand" — no more
   "Automatic rule" on a grant somebody chose by hand.
+
+## 5. The write path reads the truth too (2026-09-18)
+
+- [x] 5.1 A revoke and a replace wrote to `propagation_outbox.zitadel_grant_id`,
+  read from the grant index when the row was ENQUEUED — in manual mode, days
+  before it is sent. If the grant was recreated in Zitadel meanwhile, or the
+  index had no row at enqueue (empty id), the write targeted nothing and failed
+  until the retry budget ran out. Both now use the id from the read they
+  already make. Tests: `TestDrain_RevokeWritesToTheGrantThatExistsNow`,
+  `TestDrain_RevokeOfEveryRoleRemovesTheGrantThatExistsNow`,
+  `TestDrain_ReplaceWritesToTheGrantThatExistsNow` (all mutation-checked).
+- [x] 5.2 A replace whose grant Zitadel no longer holds recreates it rather
+  than failing forever against a dead id; a revoke whose grant is already gone
+  settles instead of retrying. Both are absence conclusions, so both rest on
+  5.3. Test: `TestDrain_ReplaceRecreatesAGrantZitadelNoLongerHolds`,
+  `TestDrain_RevokeOfAGrantAlreadyGoneSettlesWithoutCalling`.
+- [x] 5.3 `liveUserGrant` refuses a truncated listing. Every caller draws a
+  conclusion from an empty answer — add creates, replace recreates, revoke
+  calls itself done — and absence may only be concluded from a read that saw
+  everything. Test: `TestLiveUserGrant_RefusesAPageThatDidNotSeeEverything`.
+- [x] 5.4 One seam for "what does Zitadel hold for this pair":
+  `liveUserGrantRoles` deleted, its three callers now use `liveUserGrant`. Two
+  injectable seams over one fact is the duplication this change exists to end.
+- [x] 5.5 `cache/deps.go`'s `bundleRolesFor` returned nil on a read error, so a
+  database blip compiled a token with the person's bundle roles missing and
+  cached it. It returns the error now, and `CompileUserCache` fails the compile
+  like its two neighbours. Test:
+  `TestCompileUserCache_AnUnreadableBundleIsNotAnEmptyOne` (mutation-checked).
+- [x] 5.6 `UserAccessView` carries the observation: `observed_role_count`, the
+  basis, and `observed_role_keys` per project. The member landing renders one
+  response instead of two, counts what Zitadel holds in its headline, and shows
+  access no record explains. Tests: `member_view_observed_test.go` (four cases,
+  nil-vs-zero mutation-checked), `MemberAccessStanding.test.tsx` (six).
+- [x] 5.7 One basis builder: `observationBasis` is the single place that turns
+  the latest org sweep into "how current is this", called by both
+  `accessSnapshot.Basis` and the per-person view.

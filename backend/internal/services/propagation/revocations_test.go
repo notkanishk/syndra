@@ -32,8 +32,8 @@ func TestDrainRevocations_DispatchesWithdrawals(t *testing.T) {
 	stubDrainDeps(t)
 	t.Cleanup(swap(&claimRevocations, revokeRows("r1")))
 	// A live grant the revoke has to remove, or alreadyExists short-circuits.
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil
 	}
 	var removed string
 	zitadelRemoveUserGrant = func(_ context.Context, _, grantID string) error { removed = "called"; _ = grantID; return nil }
@@ -128,8 +128,8 @@ func TestDrainRevocations_ASpentRowDoesNotBlockTheOnesBehindIt(t *testing.T) {
 		out[0].Attempts = maxRetries
 		return out, nil
 	}))
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil
 	}
 	zitadelRemoveUserGrant = func(context.Context, string, string) error { return statusErr(503) }
 	var requeued []string
@@ -216,8 +216,8 @@ func TestDrainRevocations_OneTargetsOutageDoesNotStopAnother(t *testing.T) {
 		return []addons.Registration{{Target: "truenas"}}
 	}))
 	t.Cleanup(swap(&claimRevocations, revokeRows("r1")))
-	liveUserGrantRoles = func(context.Context, string, string) (map[string]bool, error) {
-		return map[string]bool{"r": true}, nil
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil
 	}
 	var applied []string
 	markApplied = func(_ context.Context, id string) error { applied = append(applied, id); return nil }

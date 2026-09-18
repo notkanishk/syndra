@@ -2,7 +2,7 @@ package cache
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"time"
 
 	"syndra/internal/db"
@@ -44,15 +44,19 @@ var (
 
 // bundleRolesFor returns everything this user gets from their bundles, each
 // resolved through the version THEY are pinned to.
-func bundleRolesFor(ctx context.Context, userID string) []models.BundleRole {
+// A read error is returned, never logged away: the caller persists what this
+// returns as the facts a token is built from, and an empty answer is
+// indistinguishable from "belongs to no bundle". Swallowing it here mints a
+// token missing every bundle role the person holds, for as long as that cache
+// entry lives.
+func bundleRolesFor(ctx context.Context, userID string) ([]models.BundleRole, error) {
 	byBundle, err := dbGetUserBundleRoles(ctx, userID)
 	if err != nil {
-		log.Printf("[CACHE] bundle roles unavailable for %s: %v", userID, err)
-		return nil
+		return nil, fmt.Errorf("bundle roles for %s: %w", userID, err)
 	}
 	var roles []models.BundleRole
 	for _, r := range byBundle {
 		roles = append(roles, r...)
 	}
-	return roles
+	return roles, nil
 }
