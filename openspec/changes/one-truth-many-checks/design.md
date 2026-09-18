@@ -528,3 +528,29 @@ outbox instead of at a tile.
 
 The general shape: any place that reads a fact and then acts on a *different*
 copy of that fact is this bug. Grep for a read whose result is partly discarded.
+
+## One read, not two reads that agree
+
+`ObservationSnapshot` is the smallest expression of the whole rule.
+
+The drift sweep needs two things: how complete the covering read was, and the
+grants that read left behind. It reported the first as the footing for the
+second. Both queries were correct. Run as two statements under read committed —
+where each statement gets its own snapshot — a sweep committing between them
+left the sweep citing one generation's completeness over another generation's
+rows. Everything it then concluded about absence rested on a completeness that
+described a read it had not diffed.
+
+Nothing here was a wrong query. The defect was that two facts which are one fact
+were fetched twice, and the same shape has now produced four bugs in this
+change: two counting pipes, two grant-id sources, two "was this observed"
+predicates, and this. The lesson is narrower than "use transactions":
+
+> When one conclusion rests on two reads, the two reads are one read. Fetch
+> them together or the conclusion is about a world that never existed.
+
+`db.InReadSnapshot` is where that lives — repeatable read so the statements
+share a snapshot, read only so a write cannot join a transaction holding no
+access lock. It is worth knowing what it does not cover: a write that opens its
+own transaction is unaffected, and correctly so, since it was never part of the
+read.

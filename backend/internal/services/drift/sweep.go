@@ -85,7 +85,10 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 	// one of them permits a conclusion. ErrNoObservation is not an outage — it
 	// is a fresh deployment, or a sweep that has not finished its first pass —
 	// and it may never render as a clean bill.
-	obs, err := latestOrgObservation(ctx)
+	// The covering read and the rows it produced, from one snapshot. Read
+	// apart, a sweep committing between them leaves this one reporting a
+	// complete observation over another observation's grants.
+	obs, observedGrants, err := observationSnapshot(ctx)
 	if err != nil {
 		if errors.Is(err, db.ErrNoObservation) {
 			return DriftResult{
@@ -98,11 +101,7 @@ func Sweep(ctx context.Context) (DriftResult, error) {
 		// A failure to read SYNDRA'S OWN store is not a statement about
 		// Zitadel — the row this would leave behind belongs to the target,
 		// and this failure is not about the target.
-		return DriftResult{}, fmt.Errorf("drift sweep: read latest observation: %w", err)
-	}
-	observedGrants, err := allObservedGrants(ctx)
-	if err != nil {
-		return DriftResult{}, fmt.Errorf("drift sweep: read observed grants: %w", err)
+		return DriftResult{}, fmt.Errorf("drift sweep: read observation snapshot: %w", err)
 	}
 	zit := services.ObservedToUserGrants(observedGrants)
 	// truncated, in this sweep's vocabulary, now means what obs.Complete means:

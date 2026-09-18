@@ -212,12 +212,33 @@ one snapshot per screen; interrogate, never reconstruct; deterministic output.
   no longer puts somebody on the "no access at all" list. Tests in
   `people-filters.test.ts` (mutation-checked).
 
+- [x] 6.7 **The basis and the rows are one read.** `drift/sweep.go` read how
+  complete the covering observation was, then read the grants it left behind,
+  as two statements. Read committed gives each statement its own snapshot, so a
+  sweep committing in between left the drift sweep citing one generation's
+  completeness over another generation's rows — a clean bill signed for a world
+  nobody looked at. `db.ObservationSnapshot` returns both from ONE
+  repeatable-read, read-only transaction (`db.InReadSnapshot`), and the sweep's
+  two seams collapse into one. Reconciliation's on-demand diff had the same
+  straddle between `observeOrg` and its read-back and now takes the same pair;
+  `observeOrg`'s own result is kept only for the one question it answers, which
+  is whether there was anything to read at all.
+
+  Proven against a live Postgres, not a mock: the test opens the snapshot,
+  reads the observation, commits a whole new generation from outside, then
+  reads the rows. `TestObservationSnapshot_RowsAndBasisCannotStraddleASweep`,
+  `..._NeverObservedTravelsAsItself`,
+  `TestInReadSnapshot_RefusesAWriteThatWouldJoinIt`. Mutation-checked on the
+  line that carries the whole guarantee: dropping to read committed reproduces
+  the original defect exactly ("the rows came from a generation the basis does
+  not describe"), and read-write lets a joining write through.
+
+  The live run corrected two things a mock would have let stand: an incomplete
+  observation deletes nothing, so both generations' rows survive it — which is
+  precisely why the completeness must describe the rows it was read with — and
+  read-only only refuses writes that enlist via `querier(ctx)`, not writes that
+  open their own transaction. Both are written into the code's comments.
+
 ### Left open, deliberately
 
-- **Drift's sweep reads its basis and its rows in two queries**
-  (`drift/sweep.go`, `latestOrgObservation` then `allObservedGrants`). Nothing
-  synchronises them, so a concurrent on-demand reconcile can leave the reported
-  completeness describing a different generation of the index than the rows
-  actually diffed. One scheduler makes it unlikely today; the fix is to read
-  both in one transaction. Not taken now because it touches the drift writer on
-  a production deployment and wants its own live test.
+Nothing. Every finding from the 2026-09-18 review is closed.

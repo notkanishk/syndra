@@ -73,8 +73,9 @@ var (
 	// what bounds what it may conclude — never a per-row timestamp, because an
 	// out-of-band grant is not in the store at all until a sweep covers it, and
 	// no row can speak for an absence.
-	latestOrgObservation = db.LatestOrgObservation // ErrNoObservation ⇒ "not checked yet"
-	allObservedGrants    = db.AllObservedGrants
+	// One seam, because it answers one question: what did the last covering
+	// read see, and how complete was it. ErrNoObservation ⇒ "not checked yet".
+	observationSnapshot = db.ObservationSnapshot
 
 	// idempotency-key minting for re-enqueued rows: reuse the outbox's crypto/rand
 	// helper (the repo has NO uuid module). Returns (string, error); the sweep
