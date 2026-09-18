@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -252,5 +253,34 @@ func TestCompileUserCache_ResolvesBundlesThroughThePinnedVersion(t *testing.T) {
 	}
 	if len(roles) != 1 || roles[0] != "student" {
 		t.Fatalf("expected only the pinned version's roles, got %v", roles)
+	}
+}
+
+// A bundle-role read that fails used to be logged and treated as "belongs to no
+// bundle": the compile carried on and wrote a cache holding only direct grants.
+// The token minted from it is missing every role the person's bundles give
+// them, and it stays that way for the life of the entry — a door that opened
+// yesterday refuses them today because a database blip coincided with a login.
+// Its two neighbours in this function (base grants, mapping rules) already fail
+// the compile; there is no reason this read alone should decide, on its own, to
+// answer a question it could not read.
+func TestCompileUserCache_AnUnreadableBundleIsNotAnEmptyOne(t *testing.T) {
+	resetCacheDeps(t)
+	cached := setupNoopRedis(t)
+
+	dbGetDirectGrantsForUser = func(_ context.Context, _ string, _ bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{{ProjectID: "proj1", RoleKey: "staff"}}, nil
+	}
+	dbGetActiveMappingRules = func(_ context.Context) ([]models.MappingRule, error) { return nil, nil }
+	dbGetUserBundleRoles = func(_ context.Context, _ string) (map[string][]models.BundleRole, error) {
+		return nil, errors.New("connection refused")
+	}
+
+	err := CompileUserCache(context.Background(), "user1", "proj1")
+	if err == nil {
+		t.Fatal("a cache was compiled from roles that could not be read")
+	}
+	if cached.value != "" {
+		t.Fatalf("nothing may be written when the facts are incomplete, wrote %q", cached.value)
 	}
 }

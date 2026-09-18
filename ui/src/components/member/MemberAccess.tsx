@@ -13,7 +13,6 @@ import {
   type RoleReason,
 } from "@/components/access/AccessSource";
 import { Withheld } from "@/components/ui/Withheld";
-import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { daysUntil, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
@@ -29,18 +28,19 @@ import { daysUntil, formatShortDate, humanizeKey, roleLabel } from "@/lib/format
 export function MemberAccess({ session }: { session: SessionUser }) {
   const access = useUserAccess(session.id);
   const grants = useUserGrants(session.id);
-  // What Zitadel actually holds for this person, read through the observer —
-  // the same pipe the operator page uses. Syndra's own list says what was
-  // decided; this says what is usable right now.
-  const upstream = useUpstreamUserGrants(session.id);
-  const held = new Set(
-    (upstream.data?.items ?? []).flatMap((g) => g.roleKeys.map((rk) => `${g.projectId}:${rk}`)),
-  );
-  const standing = (projectId: string, roleKey: string): Standing => {
-    if (upstream.isLoading) return "checking";
-    if (upstream.error || !upstream.data) return "unreachable";
-    if (held.has(`${projectId}:${roleKey}`)) return "held";
-    return upstream.data.complete === false ? "unreachable" : "missing";
+  // What Zitadel holds for this person arrives WITH the records that explain
+  // it, in one response. It used to be a second call, which meant this screen
+  // could render a headline from Syndra's records against rows marked from
+  // Zitadel's — two answers to one question, disagreeing in front of the
+  // person whose access it is.
+  const observation = access.data?.observation;
+  const standing = (project: (typeof projects)[number], roleKey: string): Standing => {
+    if (access.isLoading) return "checking";
+    // Absent, not empty: nothing has been observed yet, so nothing may be
+    // reported as missing.
+    if (!project.observed_role_keys || !observation?.read_at) return "checking";
+    if (project.observed_role_keys.includes(roleKey)) return "held";
+    return observation.current === false || observation.truncated ? "unreachable" : "missing";
   };
 
   if (access.isLoading) {
@@ -62,7 +62,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 
   const projects = access.data?.projects ?? [];
   const bundles = access.data?.bundles ?? [];
-  const roleCount = projects.reduce((total, project) => total + project.effective_role_keys.length, 0);
+  // The headline counts what they HOLD, not what was decided for them. Summing
+  // effective_role_keys put "You have four roles" above four rows each saying
+  // the role had not reached Zitadel yet.
+  const roleCount = access.data?.observed_role_count;
 
   const expiringGrant = (grants.data ?? [])
     .filter((grant) => grant.expires_at)
@@ -149,10 +152,26 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                   <ReasonSentence
                     reasons={role.reasons}
                     expiresAt={expiryFor(grants.data, project.project_id, role.role_key)}
-                    standing={standing(project.project_id, role.role_key)}
+                    standing={standing(project, role.role_key)}
                   />
                 </div>
               ))}
+              {/* Something they hold that Syndra has no reason for. The
+                  operator's People page calls this "unexplained"; the person
+                  holding it should not be the only one who cannot see it. */}
+              {(project.observed_role_keys ?? [])
+                .filter((roleKey) => !project.effective_role_keys.includes(roleKey))
+                .map((roleKey) => (
+                  <div
+                    key={`held-${roleKey}`}
+                    className="row-divider flex items-center gap-3.5 px-5 py-3"
+                  >
+                    <span className="flex-1 text-[15px] font-semibold">{humanizeKey(roleKey)}</span>
+                    <span className="text-right text-[13.5px] leading-[1.5] text-faint">
+                      You can use this. Nobody wrote down who gave it to you.
+                    </span>
+                  </div>
+                ))}
             </Card>
           ))}
         </div>
@@ -317,10 +336,16 @@ function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
 }
 
-function summarySentence(bundles: number, roles: number, expiring: boolean): string {
+// `roles` is undefined while nothing has been observed. The sentence then talks
+// only about memberships — a decided fact — rather than naming a number of
+// permissions nobody has checked.
+function summarySentence(bundles: number, roles: number | undefined, expiring: boolean): string {
   const parts: string[] = [];
   if (bundles > 0) parts.push(`${countWord(bundles)} ${bundles === 1 ? "membership" : "memberships"}`);
-  parts.push(`${countWord(roles)} ${roles === 1 ? "permission" : "permissions"}`);
+  if (roles !== undefined) {
+    parts.push(`${countWord(roles)} ${roles === 1 ? "permission" : "permissions"}`);
+  }
+  if (parts.length === 0) return "Checking what you can use.";
   const base = parts.join(" and ");
   return expiring ? `${capitalise(base)}. One expires soon.` : `${capitalise(base)}.`;
 }

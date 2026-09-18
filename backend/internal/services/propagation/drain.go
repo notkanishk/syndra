@@ -631,7 +631,7 @@ func alreadyExists(ctx context.Context, row models.PendingPropagation) (bool, er
 		// it said so, "409 absorbs any dup" — and an optimisation is not
 		// permitted to decide that a mutation need not happen. One live list
 		// per row is the price of the answer being true.
-		live, err := liveUserGrantRoles(ctx, row.UserID, row.ProjectID) // one list, not per-role
+		_, live, err := liveUserGrant(ctx, row.UserID, row.ProjectID) // one list, not per-role
 		if err != nil {
 			return false, nil // can't confirm → proceed; 409 absorbs any dup
 		}
@@ -646,7 +646,7 @@ func alreadyExists(ctx context.Context, row models.PendingPropagation) (bool, er
 		// a superseded role still present in Zitadel means UpdateUserGrant must run
 		// to remove it. The presence-only grant index cannot prove the absence of
 		// extras, so replace always uses the live list and requires an exact match.
-		live, err := liveUserGrantRoles(ctx, row.UserID, row.ProjectID)
+		_, live, err := liveUserGrant(ctx, row.UserID, row.ProjectID)
 		if err != nil {
 			return false, nil // can't confirm → proceed; UpdateUserGrant sets exact state
 		}
@@ -660,7 +660,7 @@ func alreadyExists(ctx context.Context, row models.PendingPropagation) (bool, er
 		}
 		return true, nil
 	case "revoke":
-		live, err := liveUserGrantRoles(ctx, row.UserID, row.ProjectID)
+		_, live, err := liveUserGrant(ctx, row.UserID, row.ProjectID)
 		if err != nil {
 			return false, nil // can't confirm absence → let the revoke run
 		}
@@ -705,7 +705,21 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 			err = zitadelUpdateUserGrant(ctx, row.UserID, grantID, merged)
 		}
 	case "replace":
-		err = zitadelUpdateUserGrant(ctx, row.UserID, row.ZitadelGrantID, row.RoleKeys)
+		// row.ZitadelGrantID was read from the grant index when this row was
+		// enqueued, which in manual mode can be days before it is sent. The id
+		// that matters is the one Zitadel holds now.
+		grantID, _, lerr := liveUserGrant(ctx, row.UserID, row.ProjectID)
+		if lerr != nil {
+			return classifyZitadelError(lerr), fmt.Sprintf("replace: could not read live grant: %v", lerr)
+		}
+		if grantID == "" {
+			if len(row.RoleKeys) == 0 {
+				return ackApplied, ""
+			}
+			err = zitadelAddUserGrant(ctx, row.UserID, row.ProjectID, row.RoleKeys)
+		} else {
+			err = zitadelUpdateUserGrant(ctx, row.UserID, grantID, row.RoleKeys)
+		}
 	case "revoke":
 		// A Zitadel grant is ONE aggregate per (user, project) holding ALL of that
 		// project's roles in role_keys[] — but the cascade enqueues PER-ROLE
@@ -715,7 +729,7 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 		// zitadel/orchestrator.go's sole-vs-multi logic: read the grant's live
 		// roles, subtract what this row revokes, and only remove the whole grant
 		// when nothing survives.
-		live, liveErr := liveUserGrantRoles(ctx, row.UserID, row.ProjectID)
+		grantID, live, liveErr := liveUserGrant(ctx, row.UserID, row.ProjectID)
 		if liveErr != nil {
 			// Can't confirm what would survive. Removing/updating blind here is
 			// the exact data-loss path this fix exists to close, so the
@@ -728,6 +742,14 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 			// queue acquires a row that can never settle.
 			return classifyZitadelError(liveErr), fmt.Sprintf("revoke: could not read live grant roles: %v", liveErr)
 		}
+		// No grant to revoke, and the read that says so is a complete one
+		// (liveUserGrant refuses a truncated page). The end state this row
+		// asks for is already the live one — retrying a remembered id that
+		// Zitadel no longer knows is how a revoke queue acquires a row that
+		// can never settle.
+		if grantID == "" {
+			return ackApplied, ""
+		}
 		revoked := make(map[string]bool, len(row.RoleKeys))
 		for _, rk := range row.RoleKeys {
 			revoked[rk] = true
@@ -739,9 +761,9 @@ func classifyDispatch(ctx context.Context, row models.PendingPropagation) (ackCl
 			}
 		}
 		if len(remaining) == 0 {
-			err = zitadelRemoveUserGrant(ctx, row.UserID, row.ZitadelGrantID)
+			err = zitadelRemoveUserGrant(ctx, row.UserID, grantID)
 		} else {
-			err = zitadelUpdateUserGrant(ctx, row.UserID, row.ZitadelGrantID, remaining)
+			err = zitadelUpdateUserGrant(ctx, row.UserID, grantID, remaining)
 		}
 	default:
 		log.Printf("[PROPAGATION] unknown op_type=%s row=%s", row.OpType, row.ID)

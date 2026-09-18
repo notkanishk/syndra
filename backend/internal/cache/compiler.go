@@ -60,7 +60,11 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 	}
 
 	// What their bundles give them, through each assignment's pinned version.
-	for _, r := range bundleRolesFor(ctx, userID) {
+	bundleRoles, err := bundleRolesFor(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("cache compile: %w", err)
+	}
+	for _, r := range bundleRoles {
 		if activeRoles[r.ProjectID] == nil {
 			activeRoles[r.ProjectID] = make(map[string]bool)
 		}

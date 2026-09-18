@@ -36,6 +36,16 @@ func resetGovernanceDeps(t *testing.T) {
 	origHoldsDue := svcAllowancesDueForReview
 	t.Cleanup(func() { svcAllowancesDueForReview = origHoldsDue })
 	svcAllowancesDueForReview = func(context.Context) ([]db.Allowance, error) { return nil, nil }
+	// And the observation store, same reason again: the access view now reports
+	// what Zitadel holds beside what was decided. The default is the honest one
+	// — nothing has ever been observed — so a test that says nothing about the
+	// store gets "not checked yet" rather than a fabricated zero.
+	origObs, origObsGrants := svcLatestOrgObservation, svcObservedGrantsFor
+	t.Cleanup(func() { svcLatestOrgObservation, svcObservedGrantsFor = origObs, origObsGrants })
+	svcLatestOrgObservation = func(context.Context) (db.Observation, error) {
+		return db.Observation{}, db.ErrNoObservation
+	}
+	svcObservedGrantsFor = func(context.Context, string) ([]db.ObservedGrant, error) { return nil, nil }
 	// And what has been recorded and not yet sent, same reason again: the
 	// access view marks each source with whether its grant has actually been
 	// delivered, and that read is one more nil pool away.

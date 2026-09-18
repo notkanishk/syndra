@@ -68,6 +68,15 @@ export interface UserAccessProject {
   source_roles: AccessRole[];
   derived_roles: AccessRole[];
   effective_role_keys: string[];
+  /**
+   * What Zitadel shows this person holding on this project — the roles they
+   * can actually use. The three lists above are Syndra's records: what was
+   * decided, and by whom. This is what is true.
+   *
+   * Absent — not empty — while nothing has been observed. An empty array is a
+   * checked absence and may be rendered as one; `undefined` may not.
+   */
+  observed_role_keys?: string[];
 }
 
 export interface UserAccessView {
@@ -94,6 +103,14 @@ export interface UserAccessView {
    */
   allowances: AllowanceBand[];
   cleanup_hints: string[];
+  /**
+   * How many roles Zitadel shows this person holding, across every project.
+   * The headline number on any screen answering "what can I use" — absent,
+   * never zero, while nothing has been observed.
+   */
+  observed_role_count?: number;
+  /** When that was read, whether it succeeded, and whether it saw everything. */
+  observation: ObservationBasis;
 }
 
 export interface AllowanceBand {

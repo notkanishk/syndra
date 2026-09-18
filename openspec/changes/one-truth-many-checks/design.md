@@ -493,3 +493,38 @@ now stamps them: after every **complete** listing, `db.ConfirmFromObservation`
 marks applied adds present in the index and applied revokes absent from it.
 The post-write read-back and the sweep both end in the same stamp; a surface
 reading `confirmed_at` and one reading the index can no longer disagree.
+
+## A write reads too
+
+The rule above is about what a screen says. It applies equally to what a write
+does, and the first draft of this change did not say so, which is how three
+bugs survived it.
+
+A write is a conclusion. `AddUserGrant` concludes there is no grant to merge
+into; `RemoveUserGrant` concludes the id it names is the grant that exists;
+`UpdateUserGrant` concludes the roles it sends are the whole set. Every one of
+those is an absence claim or an identity claim about Zitadel's state, and the
+same rule governs it: **interrogate, never remember.**
+
+What that forbids, concretely:
+
+- **A remembered id.** `propagation_outbox.zitadel_grant_id` is written when a
+  row is enqueued and read when it is dispatched, and in manual mode those are
+  days apart. A grant removed and recreated in between leaves the id naming
+  nothing, and the row 404s until its retry budget is spent. The dispatch
+  already reads the live grant to decide what survives a partial revoke; it
+  uses that id now. Nothing else may.
+- **A cached index.** `zitadel_grants_index` is an observation, not a
+  permission to skip a call. It answers "what did we last see", which is the
+  right answer for a screen and the wrong one for a mutation.
+- **A truncated read.** `liveUserGrant` returns an error rather than an empty
+  answer when the listing admits it did not see everything, because all three
+  of its callers turn empty into an action.
+
+And what it requires: when the live read says the end state already holds — the
+grant is gone and the row asked for it to be gone — the row is settled, not
+retried. That is the same "absence from a complete read" rule pointed at the
+outbox instead of at a tile.
+
+The general shape: any place that reads a fact and then acts on a *different*
+copy of that fact is this bug. Grep for a read whose result is partly discarded.

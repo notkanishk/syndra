@@ -218,24 +218,37 @@ func (s *accessSnapshot) Basis() (models.ObservationBasis, error) {
 	if s.basisComputed {
 		return s.basis, nil
 	}
-	obs, err := svcLatestOrgObservation(s.ctx)
+	basis, err := observationBasis(s.ctx)
+	if err != nil {
+		return models.ObservationBasis{}, err
+	}
+	s.basis = basis
+	s.basisComputed = true
+	return s.basis, nil
+}
+
+// observationBasis is the one place that turns the latest org sweep into the
+// footing a number rests on. Every surface that reports an observed count cites
+// it, so there is exactly one answer to "how current is this" in the product.
+//
+// Nothing observed yet is not an error: it is a zero-value basis with a nil
+// ReadAt, which every reader is required to render as "not checked yet".
+func observationBasis(ctx context.Context) (models.ObservationBasis, error) {
+	obs, err := svcLatestOrgObservation(ctx)
 	if errors.Is(err, db.ErrNoObservation) {
-		s.basisComputed = true
-		return s.basis, nil
+		return models.ObservationBasis{}, nil
 	}
 	if err != nil {
 		return models.ObservationBasis{}, err
 	}
 	at := obs.ObservedAt
-	s.basis = models.ObservationBasis{
+	return models.ObservationBasis{
 		ReadAt: &at,
 		// Current is false only when the sweep itself failed. A capped-but-
 		// clean read is still current; Truncated says the cap part on its own.
 		Current:   obs.Error == "",
 		Truncated: !obs.Complete,
-	}
-	s.basisComputed = true
-	return s.basis, nil
+	}, nil
 }
 
 // ConfirmedHolderCounts is HolderCounts' companion: of the people HolderCounts
@@ -545,6 +558,15 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		return models.UserAccessView{}, err
 	}
 
+	// What Zitadel shows this person holding. Read here, beside the records,
+	// so one response carries both — a screen that fetched the records and
+	// then asked a second endpoint what was real could render the two against
+	// each other, and the member landing did exactly that.
+	observed, basis, err := observedRolesByProject(ctx, userID)
+	if err != nil {
+		return models.UserAccessView{}, err
+	}
+
 	projectBuckets := make(map[string]*models.ProjectAccessView)
 	for _, role := range roleMap {
 		bucket := projectBuckets[role.ProjectID]
@@ -568,6 +590,29 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		bucket.EffectiveRoleKeys = append(bucket.EffectiveRoleKeys, role.RoleKey)
 	}
 
+	// A project Zitadel holds for them that Syndra has no reason for still
+	// belongs on this page. It is access they have — the operator sees it as
+	// "unexplained", and the person holding it should not be the only one who
+	// cannot see it at all.
+	for projectID, roleKeys := range observed {
+		if projectBuckets[projectID] != nil {
+			continue
+		}
+		name := projectID
+		if resolved, nameErr := directory.Default.ProjectName(ctx, projectID); nameErr == nil {
+			name = resolved
+		}
+		projectBuckets[projectID] = &models.ProjectAccessView{
+			ProjectID:           projectID,
+			ProjectName:         name,
+			ProjectNameResolved: name != projectID,
+			SourceRoles:         []models.EffectiveRole{},
+			DerivedRoles:        []models.EffectiveRole{},
+			EffectiveRoleKeys:   []string{},
+			ObservedRoleKeys:    roleKeys,
+		}
+	}
+
 	projects := make([]models.ProjectAccessView, 0, len(projectBuckets))
 	for _, bucket := range projectBuckets {
 		if bucket.SourceRoles == nil {
@@ -586,6 +631,16 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 			return bucket.DerivedRoles[i].RoleKey < bucket.DerivedRoles[j].RoleKey
 		})
 		sort.Strings(bucket.EffectiveRoleKeys)
+		if bucket.ObservedRoleKeys == nil && observed != nil {
+			// observed is non-nil only when something has been observed, so an
+			// empty list here is a checked absence and may say so. When nothing
+			// has been observed the field stays nil and the screen says
+			// "checking", never "you hold nothing".
+			bucket.ObservedRoleKeys = observed[bucket.ProjectID]
+			if bucket.ObservedRoleKeys == nil {
+				bucket.ObservedRoleKeys = []string{}
+			}
+		}
 		projects = append(projects, *bucket)
 	}
 	sort.Slice(projects, func(i, j int) bool {
@@ -609,13 +664,52 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		hints = append(hints, "This user spans several systems; review whether every downstream permission is still required.")
 	}
 
+	var observedRoleCount *int
+	if observed != nil {
+		total := 0
+		for _, roleKeys := range observed {
+			total += len(roleKeys)
+		}
+		observedRoleCount = &total
+	}
+
 	return models.UserAccessView{
-		Allowances:   allowances,
-		User:         user,
-		Bundles:      ensureBundles(bundles),
-		Projects:     projects,
-		CleanupHints: hints,
+		Allowances:        allowances,
+		User:              user,
+		Bundles:           ensureBundles(bundles),
+		Projects:          projects,
+		CleanupHints:      hints,
+		ObservedRoleCount: observedRoleCount,
+		Observation:       basis,
 	}, nil
+}
+
+// observedRolesByProject is what the observation store holds for one person,
+// folded to project → roles, with the basis it rests on.
+//
+// Returns a nil map — never an empty one — when nothing has ever been observed.
+// The distinction is the whole point: an empty map is "we looked and they hold
+// nothing", and nil is "we have not looked", and a screen that confuses the two
+// tells somebody their access is gone when it is merely unread.
+func observedRolesByProject(ctx context.Context, userID string) (map[string][]string, models.ObservationBasis, error) {
+	basis, err := observationBasis(ctx)
+	if err != nil {
+		return nil, models.ObservationBasis{}, err
+	}
+	if basis.ReadAt == nil {
+		return nil, basis, nil
+	}
+	grants, err := svcObservedGrantsFor(ctx, userID)
+	if err != nil {
+		return nil, models.ObservationBasis{}, fmt.Errorf("observed grants for %s: %w", userID, err)
+	}
+	byProject := make(map[string][]string, len(grants))
+	for _, g := range grants {
+		keys := append([]string{}, g.RoleKeys...)
+		sort.Strings(keys)
+		byProject[g.ProjectID] = keys
+	}
+	return byProject, basis, nil
 }
 
 func ListApplications(ctx context.Context) ([]models.ApplicationView, error) {

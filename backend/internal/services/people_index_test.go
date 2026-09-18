@@ -13,7 +13,13 @@ import (
 // behaviour is in what it aggregates, not where it came from.
 func snapshotWith(users []models.UserProfile, roles map[string]map[roleKey]*models.EffectiveRole,
 	bundles map[string][]models.Bundle) *accessSnapshot {
-	snap := &accessSnapshot{ctx: context.Background(), users: users, roles: map[string]userRoles{}}
+	// basisComputed with a zero basis: this fixture has observed nothing, which
+	// is the honest default and keeps Basis() from reaching a nil pool. A test
+	// that needs a covering read sets snap.basis itself.
+	snap := &accessSnapshot{
+		ctx: context.Background(), users: users, roles: map[string]userRoles{},
+		basisComputed: true,
+	}
 	for _, u := range users {
 		snap.roles[u.ID] = userRoles{roleMap: roles[u.ID], bundles: bundles[u.ID]}
 	}
