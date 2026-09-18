@@ -32,6 +32,7 @@ import {
   parseFilters,
   serializeFilters,
   type PeopleFilters,
+  observedHolding,
 } from "@/lib/people-filters";
 import { BULK_MAX_USERS, type BulkOp } from "@/lib/queries/useBulkGrants";
 import { useProjects } from "@/lib/queries/useProjects";
@@ -536,11 +537,15 @@ function NeedsAttention({ entry }: { entry: UserListEntry }) {
  * before the org has ever been read.
  */
 function describeAccess(entry: UserListEntry): string {
-  if (!entry.observation?.read_at) return "Not checked yet";
-  if ((entry.observed_role_count ?? 0) === 0) {
+  const count = observedHolding(entry);
+  if (count === undefined) {
+    // Told apart, because they ask different things of an operator: nobody has
+    // looked yet, versus the look did not finish.
+    return entry.observation?.read_at ? "Couldn’t check" : "Not checked yet";
+  }
+  if (count === 0) {
     return entry.effective_role_count > 0 ? "Not in Zitadel yet" : "Nothing yet";
   }
-  const count = entry.observed_role_count ?? 0;
   const roles = `${count} ${count === 1 ? "role" : "roles"}`;
   const projects = entry.observed_project_count ?? 0;
   if (!projects) return roles;

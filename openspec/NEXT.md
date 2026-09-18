@@ -556,6 +556,13 @@ is observed"). What is still open, and whose it is:
   keeps its own `useUpstreamUserGrants` call for grant ids and grantor names,
   which `UserAccessView` does not carry. Same store, second request — worth
   folding when that component is next touched.
+- **Drift's sweep reads its basis and its rows in two unsynchronised queries**
+  (`drift/sweep.go`). A concurrent on-demand reconcile can leave the reported
+  completeness describing a different generation of `zitadel_grants_index` than
+  the rows diffed. Unlikely under one scheduler; the fix is one transaction
+  around both reads, and it wants a live test against the drift writer. Found
+  by the 2026-09-18 architecture review; full write-up in
+  `one-truth-many-checks/tasks.md` §6.
 - **Test account.** `testuser` (Syndra admin, the throwaway account)
   held the Ops Admin bundle and a 30-day direct grant during the walk; both were revoked and read back as gone. Remove the account when the
   walk is over. Its password was rotated on first login (Zitadel forced it).

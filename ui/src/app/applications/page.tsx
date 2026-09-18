@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
+import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName } from "@/components/names";
@@ -22,6 +23,12 @@ import { useApplications, type ApplicationView } from "@/lib/queries/useApplicat
 export default function AppsPage() {
   const apps = useApplications();
   const rows = useMemo(() => apps.data ?? [], [apps.data]);
+  const basis = rows[0]?.observation;
+  const readState: ReadState = {
+    readAt: basis?.read_at,
+    current: basis ? basis.current : undefined,
+    truncated: basis?.truncated,
+  };
 
   // The common failure, surfaced on the index rather than making somebody open
   // every app to find it: two apps reading the same project through different
@@ -73,6 +80,12 @@ export default function AppsPage() {
         </div>
       )}
 
+      {/* One basis for the whole page — every row carries an identical copy,
+          so the freshness is stated once here rather than once per row. The
+          People column's "unexplained" and "not in Zitadel yet" are only
+          honest beside it. */}
+      <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
+
       <Card>
         <CardColumns>
           <span className="w-[170px]">App</span>
@@ -100,7 +113,7 @@ export default function AppsPage() {
           {rows.map((entry) => {
             const people = holdersLine(
               entry.assigned_user_count,
-              undefined,
+              entry.confirmed_user_count,
               entry.observed_user_count,
             );
             return (

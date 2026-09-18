@@ -162,9 +162,31 @@ export function isDeparted(status: string | undefined): boolean {
  * recorded).
  */
 export function hasAccess(entry: UserListEntry): boolean {
-  return entry.observed_role_count !== undefined
-    ? entry.observed_role_count > 0
-    : entry.effective_role_count > 0;
+  const held = observedHolding(entry);
+  return held !== undefined ? held > 0 : entry.effective_role_count > 0;
+}
+
+/**
+ * How many roles Zitadel shows this person holding, or `undefined` when that
+ * cannot honestly be stated.
+ *
+ * THE ONE COPY of that judgement. A row's filter membership and the words
+ * printed on it are the same question, and they used to decide it differently
+ * — the filter on whether `observed_role_count` was present, the label on
+ * whether `observation.read_at` was — so a row could be counted as having no
+ * access beside text saying it had not been checked.
+ *
+ * Presence is safe from any read: seeing a grant proves it is there. A ZERO is
+ * an absence claim, so it waits for a read that succeeded and saw everything —
+ * a capped sweep deletes nothing and simply never reaches some people, which
+ * looks exactly like holding nothing.
+ */
+export function observedHolding(entry: UserListEntry): number | undefined {
+  if (entry.observed_role_count === undefined) return undefined;
+  if (entry.observed_role_count > 0) return entry.observed_role_count;
+  const basis = entry.observation;
+  if (!basis?.read_at || basis.current === false || basis.truncated) return undefined;
+  return 0;
 }
 
 function matchesAttention(entry: UserListEntry, attention: Attention): boolean {

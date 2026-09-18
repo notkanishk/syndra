@@ -53,6 +53,8 @@ function person(overrides: Partial<UserListEntry> = {}): UserListEntry {
     expiring_count: 0,
     open_request_count: 0,
     unexplained_count: 0,
+    // An observed count only ever arrives with the basis it was read on.
+    observation: { read_at: "2026-09-18T10:00:00Z", current: true, truncated: false },
     ...overrides,
   } as UserListEntry;
 }

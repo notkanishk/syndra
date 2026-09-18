@@ -215,9 +215,14 @@ type ProjectAccessView struct {
 	// project — the roles they can actually use. The three lists above are
 	// Syndra's records, which say what was DECIDED; this says what is true.
 	//
-	// nil, not empty, when nothing has ever been observed: a screen may not
-	// render "holds nothing here" from a read that never happened.
-	ObservedRoleKeys []string `json:"observed_role_keys,omitempty"`
+	// nil, not empty, when nothing has ever been observed — or when the read
+	// that happened was not complete enough to conclude an absence. A screen
+	// may not render "holds nothing here" from a read that never happened.
+	//
+	// No `omitempty`: it omits a slice whenever len == 0, which collapses the
+	// nil and the empty case into the same absent field and destroys the very
+	// distinction this comment describes. null and [] must both reach the wire.
+	ObservedRoleKeys []string `json:"observed_role_keys"`
 }
 
 // AllowanceBand is the third band beside Source and Derived (design §6).
@@ -317,8 +322,13 @@ type ApplicationView struct {
 	ConsumedRoles []string           `json:"consumed_roles"`
 	// AssignedUserCount is what Syndra decided — Recorded. ObservedUserCount is
 	// what Zitadel shows holding a role on this app's project — the headline.
-	AssignedUserCount int              `json:"assigned_user_count"`
-	ObservedUserCount *int             `json:"observed_user_count,omitempty"`
+	AssignedUserCount int `json:"assigned_user_count"`
+	// ConfirmedUserCount is how many of AssignedUserCount's people the
+	// observation store also shows holding a role here — the overlap, without
+	// which a surface cannot tell "given and live" from "given, and separately
+	// somebody else turned up".
+	ConfirmedUserCount *int             `json:"confirmed_user_count,omitempty"`
+	ObservedUserCount  *int             `json:"observed_user_count,omitempty"`
 	Observation       ObservationBasis `json:"observation"`
 }
 

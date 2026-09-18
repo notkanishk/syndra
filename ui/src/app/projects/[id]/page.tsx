@@ -9,6 +9,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
 import { useApplications } from "@/lib/queries/useApplications";
@@ -40,11 +41,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const served = (apps.data ?? []).filter((entry) => entry.application.project_id === id);
   const [creating, setCreating] = useState(false);
 
-  const people = holdersLine(
-    project?.member_count ?? 0,
-    project?.confirmed_member_count,
-    project?.observed_member_count,
-  );
+  // Only once the project itself is in hand. `member_count ?? 0` rendered
+  // "0 people" for a project still loading — and for ever, for an id that
+  // resolves to nothing — which is a fabricated zero, not a count.
+  const people = project
+    ? holdersLine(project.member_count, project.confirmed_member_count, project.observed_member_count)
+    : null;
+  const readState: ReadState = {
+    readAt: project?.observation?.read_at,
+    current: project?.observation ? project.observation.current : undefined,
+    truncated: project?.observation?.truncated,
+  };
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -55,17 +62,19 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         meta={
           <span className="flex flex-wrap items-center gap-2">
             <span>
-              {people.headline} {people.headline === "1" ? "person" : "people"} · {projectRoles.length}{" "}
+              {people ? `${people.headline} ${people.headline === "1" ? "person" : "people"} · ` : ""}
+              {projectRoles.length}{" "}
               {projectRoles.length === 1 ? "role" : "roles"}
               {served.length > 0
                 ? ` · serves ${served.map((entry) => entry.application.name).join(" and ")}`
                 : " · no app reads this yet"}
             </span>
-            {people.note && (
+            {people?.note && (
               <span className={`text-[13.5px] ${holdersToneClass[people.tone]}`}>
                 {people.note}
               </span>
             )}
+            {project && <ReadFreshness state={readState} subject="What Zitadel confirmed" />}
             <Mono className="text-faint">{id}</Mono>
           </span>
         }

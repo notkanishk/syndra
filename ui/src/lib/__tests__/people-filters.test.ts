@@ -32,6 +32,10 @@ function person(overrides: Partial<UserListEntry> = {}): UserListEntry {
     expiring_count: 0,
     open_request_count: 0,
     unexplained_count: 0,
+    // A complete read, unless a case says otherwise. An observed count only
+    // ever reaches a row alongside the basis it was read on, and a zero means
+    // nothing without one.
+    observation: { read_at: "2026-09-18T10:00:00Z", current: true, truncated: false },
     ...overrides,
   } as UserListEntry;
 }
@@ -45,6 +49,29 @@ describe("hasAccess", () => {
   it("defers to the observed count once one exists, even if it disagrees", () => {
     expect(hasAccess(person({ effective_role_count: 3, observed_role_count: 0 }))).toBe(false);
     expect(hasAccess(person({ effective_role_count: 0, observed_role_count: 1 }))).toBe(true);
+  });
+
+  // A capped sweep deletes nothing and simply never reaches some people, so
+  // their observed count is zero for want of looking. Reading that as "no
+  // access" puts somebody on the "nobody has given them anything" list because
+  // a listing ran long.
+  it("does not read a zero from an incomplete read as no access", () => {
+    const truncated = { read_at: "2026-09-18T10:00:00Z", current: true, truncated: true };
+    expect(
+      hasAccess(person({ effective_role_count: 3, observed_role_count: 0, observation: truncated })),
+    ).toBe(true);
+    const failed = { read_at: "2026-09-18T10:00:00Z", current: false, truncated: false };
+    expect(
+      hasAccess(person({ effective_role_count: 3, observed_role_count: 0, observation: failed })),
+    ).toBe(true);
+  });
+
+  // Presence needs no such proof: seeing a grant is proof it is there.
+  it("still trusts a holding seen by an incomplete read", () => {
+    const truncated = { read_at: "2026-09-18T10:00:00Z", current: true, truncated: true };
+    expect(
+      hasAccess(person({ effective_role_count: 0, observed_role_count: 2, observation: truncated })),
+    ).toBe(true);
   });
 });
 

@@ -167,3 +167,57 @@
 - [x] 5.7 One basis builder: `observationBasis` is the single place that turns
   the latest org sweep into "how current is this", called by both
   `accessSnapshot.Basis` and the per-person view.
+
+## 6. Found by reviewing the whole rule (2026-09-18)
+
+An adversarial pass over every surface the rule governs, backend and frontend,
+against the five invariants: absence needs a complete read; nil is not zero;
+one snapshot per screen; interrogate, never reconstruct; deterministic output.
+
+- [x] 6.1 `ObservedRoleKeys` was tagged `omitempty`, which drops a slice at
+  len == 0 and so collapsed null and `[]` into the same absent field. The
+  nil-vs-empty distinction the code takes care to preserve was destroyed at the
+  JSON boundary. Tag removed. Test:
+  `TestUserAccessView_NullAndEmptyHoldingsAreDifferentOnTheWire`.
+- [x] 6.2 `ExplainUserAccess` concluded absence from `basis.ReadAt != nil`
+  alone. A capped sweep upserts what it reached and deletes nothing, so a
+  person it never got to has no rows and looks exactly like a person who holds
+  nothing — the page would have told them, in their own words, that they hold
+  zero roles. Both the per-project empty list and the total now require
+  current AND not truncated; presence is still concluded from any read. Tests:
+  `TestExplainUserAccess_ATruncatedSweepConcludesNoAbsence`,
+  `..._AFailedSweepConcludesNoAbsence` (mutation-checked).
+- [x] 6.3 The applications list passed `undefined` as the confirmed count,
+  because `ApplicationView` had no overlap field, and `holdersLine` read
+  undefined as zero. Every populated row therefore claimed "N unexplained" and
+  "N not in Zitadel yet" simultaneously, about the same N people — the exact
+  contradiction this change exists to end, on a page nobody had re-read.
+  `ApplicationView.ConfirmedUserCount` added (the same overlap ListProjects
+  already computes), and `holdersLine` now refuses to invent an overlap it was
+  not given. Tests: `TestListApplications_CarriesTheOverlapNotJustTheTwoTotals`
+  (mutation-checked), `holders.test.ts` "claims nothing about an overlap it was
+  not given" (mutation-checked).
+- [x] 6.4 `/projects/[id]` rendered `member_count ?? 0` — "0 people" for a
+  project still loading, and for ever for an id that resolves to nothing. The
+  line is omitted until the project is in hand.
+- [x] 6.5 `/applications` and `/projects/[id]` stated observed counts with no
+  freshness beside them, unlike `/roles` and `/projects`. Both carry
+  `ReadFreshness` now, so a stale or capped read is visible where its numbers
+  are.
+- [x] 6.6 People's row label and People's filters decided "was this observed"
+  two different ways — the label on `observation.read_at`, the filter on
+  `observed_role_count` being present — so a row could be counted as having no
+  access beside text saying it had not been checked. One predicate now,
+  `observedHolding`, and it gates a zero on a complete read: a truncated sweep
+  no longer puts somebody on the "no access at all" list. Tests in
+  `people-filters.test.ts` (mutation-checked).
+
+### Left open, deliberately
+
+- **Drift's sweep reads its basis and its rows in two queries**
+  (`drift/sweep.go`, `latestOrgObservation` then `allObservedGrants`). Nothing
+  synchronises them, so a concurrent on-demand reconcile can leave the reported
+  completeness describing a different generation of the index than the rows
+  actually diffed. One scheduler makes it unlikely today; the fix is to read
+  both in one transaction. Not taken now because it touches the drift writer on
+  a production deployment and wants its own live test.

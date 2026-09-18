@@ -22,6 +22,13 @@ export interface ApplicationView {
    * zero, when the org has never been read.
    */
   observed_user_count?: number;
+  /**
+   * How many of `assigned_user_count`'s people the observation store also
+   * shows holding a role here. Absent — not zero — while nothing has been
+   * observed; passing `undefined` where a real overlap exists makes
+   * `holdersLine` report every holder as both unexplained and undelivered.
+   */
+  confirmed_user_count?: number;
   observation?: ObservationBasis;
 }
 

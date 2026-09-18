@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { holdersLine } from "@/lib/holders";
 
+describe("holdersLine, overlap unknown", () => {
+  // undefined confirmed is "this caller does not compute the overlap", which
+  // is not the same fact as an overlap of zero. Reading it as zero made the
+  // applications list call every holder unexplained AND undelivered at once,
+  // about the same people — two contradictory claims from one honest number.
+  it("claims nothing about an overlap it was not given", () => {
+    expect(holdersLine(5, undefined, 5)).toEqual({ headline: "5", note: "", tone: "ok" });
+    expect(holdersLine(5, undefined, 3)).toEqual({ headline: "3", note: "", tone: "ok" });
+  });
+});
+
 describe("holdersLine", () => {
   it("reads as unchecked when Zitadel has never been read", () => {
     expect(holdersLine(5, undefined, undefined)).toEqual({
@@ -33,11 +44,10 @@ describe("holdersLine", () => {
     });
   });
 
-  it("treats a never-confirmed observed count as fully unexplained", () => {
-    // confirmed is undefined (never confirmed at all), not zero — the base
-    // must fall back to 0, not to `given`. Mutation-sensitive: `confirmed ??
-    // given` here would silently hide real drift.
-    expect(holdersLine(5, undefined, 3)).toEqual({
+  // A confirmed count of ZERO is a real answer — the overlap was computed and
+  // it is empty — so the drift is stated in full.
+  it("treats a confirmed zero as fully unexplained", () => {
+    expect(holdersLine(5, 0, 3)).toEqual({
       headline: "3",
       note: "3 unexplained · 5 not in Zitadel yet",
       tone: "danger",
