@@ -76,7 +76,7 @@ func TestSweep_AccountsForEverySourceOfIntent(t *testing.T) {
 			t.Cleanup(swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
 				return exclusions, nil
 			}))
-			t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+			t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 				all := append([]zitadel.UserGrant{
 					{ID: "g1", UserID: user, ProjectID: project, RoleKeys: []string{role}},
 				}, extraZitadel...)
@@ -124,7 +124,7 @@ func TestSweep_AccountsForEverySourceOfIntent(t *testing.T) {
 // returned true unconditionally would pass the test above.
 func TestSweep_AGrantNothingAccountsForIsStillDrift(t *testing.T) {
 	stubSweep(t)
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "the-role")}, nil
 	}))
 

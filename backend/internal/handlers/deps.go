@@ -159,12 +159,14 @@ var (
 	observeOrg           = observe.Org
 	dbObservedGrantsPage = db.ObservedGrantsPage
 	dbObservedGrantsFor  = db.ObservedGrantsFor
-	// dbAllObservedGrants is reconciliation's on-demand diff (one-truth-many-checks,
-	// "The last two readers"): the operator's [Check Zitadel again] calls
-	// observeOrg to force a fresh, recorded read, then diffs whatever the store
-	// holds afterwards — the same store the drift sweep and discovery.go read,
-	// so a fresh press does not open a second, private pipe into Zitadel.
-	dbAllObservedGrants = db.AllObservedGrants
+	// dbObservationSnapshot is reconciliation's on-demand diff
+	// (one-truth-many-checks, "The last two readers"): the operator's [Check
+	// Zitadel again] calls observeOrg to force a fresh, recorded read, then
+	// diffs whatever the store holds afterwards — the same store the drift
+	// sweep and discovery.go read, so a fresh press does not open a second,
+	// private pipe into Zitadel. Basis and rows come back from ONE snapshot,
+	// so the completeness this reports belongs to the rows it diffed.
+	dbObservationSnapshot = db.ObservationSnapshot
 
 	// Real-time webhook drift detection (C6): a surviving grant_added event
 	// (already past the self-mutation guard) that Syndra neither expects nor

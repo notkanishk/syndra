@@ -33,7 +33,7 @@ func bundleHolderGrant(userID, projectID, roleKey string) db.BundleDerivedGrant 
 func TestSweep_ABundleRoleIsNotDrift(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
@@ -66,7 +66,7 @@ func TestSweep_ABundleRoleIsNotDrift(t *testing.T) {
 func TestSweep_ARoleTheHoldersVersionDoesNotCarryIsStillDrift(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	// Their pin carries a DIFFERENT role. Nothing accounts for admin-staff.
@@ -95,7 +95,7 @@ func TestSweep_ARoleTheHoldersVersionDoesNotCarryIsStillDrift(t *testing.T) {
 func TestSweep_AFailedBundleReadAbortsRatherThanFlaggingEverything(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
@@ -126,7 +126,7 @@ func TestSweep_AFailedBundleReadAbortsRatherThanFlaggingEverything(t *testing.T)
 func TestSweep_RetractsAFindingItCanNowExplain(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcAllBundleDerivedGrants, func(context.Context) ([]db.BundleDerivedGrant, error) {
@@ -263,7 +263,7 @@ func TestSweep_ClosesAFindingWhoseGrantHasVanished(t *testing.T) {
 	stubSweep(t)
 
 	// Zitadel holds nothing for this triple any more.
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return nil, nil
 	}))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
@@ -296,7 +296,7 @@ func TestSweep_ClosesAFindingWhoseGrantHasVanished(t *testing.T) {
 func TestSweep_LeavesAFindingWhoseGrantIsStillPresent(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "shikha", "p-admin", "admin-staff")}, nil
 	}))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {
@@ -332,10 +332,10 @@ func TestSweep_LeavesAFindingWhoseGrantIsStillPresent(t *testing.T) {
 func TestSweep_TruncatedObservationClosesNothing(t *testing.T) {
 	stubSweep(t)
 
-	t.Cleanup(swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+	t.Cleanup(swap(&stubObs, func(context.Context) (db.Observation, error) {
 		return db.Observation{Scope: "org", ObservedAt: testObservedAt, Complete: false}, nil
 	}))
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return nil, nil // Zitadel appears to hold nothing — but the read was incomplete
 	}))
 	t.Cleanup(swap(&svcPendingDriftItems, func(context.Context, string) ([]models.DriftItem, error) {

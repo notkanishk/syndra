@@ -38,7 +38,7 @@ func withReconciliationDeps(
 
 	origAll := svcAllDirectGrants
 	origObserveOrg := observeOrg
-	origAllObserved := dbAllObservedGrants
+	origAllObserved := dbObservationSnapshot
 	origRules := svcGetActiveMappingRulesRecon
 	origExclusions := svcGetExclusions
 	origBundled := svcAllBundleDerivedGrantsRecon
@@ -62,18 +62,18 @@ func withReconciliationDeps(
 	observeOrg = func(context.Context) (db.Observation, error) {
 		return db.Observation{Scope: "org", ObservedAt: testReconciliationObservedAt, Complete: complete, Error: obsErr}, nil
 	}
-	dbAllObservedGrants = func(context.Context) ([]db.ObservedGrant, error) {
+	dbObservationSnapshot = func(context.Context) (db.Observation, []db.ObservedGrant, error) {
 		out := make([]db.ObservedGrant, len(zitadelGrants))
 		for i, g := range zitadelGrants {
 			out[i] = db.ObservedGrant{GrantID: g.ID, UserID: g.UserID, ProjectID: g.ProjectID, RoleKeys: g.RoleKeys}
 		}
-		return out, nil
+		return db.Observation{Scope: "org", ObservedAt: testReconciliationObservedAt, Complete: complete, Error: obsErr}, out, nil
 	}
 
 	t.Cleanup(func() {
 		svcAllDirectGrants = origAll
 		observeOrg = origObserveOrg
-		dbAllObservedGrants = origAllObserved
+		dbObservationSnapshot = origAllObserved
 		svcGetActiveMappingRulesRecon = origRules
 		svcGetExclusions = origExclusions
 		svcAllBundleDerivedGrantsRecon = origBundled
@@ -355,10 +355,11 @@ func TestReconciliationRefusesWhenThereIsNothingToAsk(t *testing.T) {
 		return db.Observation{}, nil
 	}
 	// ...while the store still remembers a world from when there was one.
-	dbAllObservedGrants = func(context.Context) ([]db.ObservedGrant, error) {
-		return []db.ObservedGrant{{
-			GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"member"},
-		}}, nil
+	dbObservationSnapshot = func(context.Context) (db.Observation, []db.ObservedGrant, error) {
+		return db.Observation{Scope: "org", ObservedAt: testReconciliationObservedAt, Complete: true},
+			[]db.ObservedGrant{{
+				GrantID: "g1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"member"},
+			}}, nil
 	}
 
 	rr := httptest.NewRecorder()

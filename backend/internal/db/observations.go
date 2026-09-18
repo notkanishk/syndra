@@ -301,3 +301,32 @@ func ConfirmFromObservation(ctx context.Context) (int64, error) {
 	}
 	return tag.RowsAffected(), nil
 }
+
+// ObservationSnapshot is the covering read and the rows it produced, read
+// together: how complete the last org sweep was, and the grants that sweep left
+// in the index.
+//
+// One call rather than two, because the two facts are one fact. Read
+// separately, a sweep committing in between leaves the caller citing one
+// generation's completeness over another generation's rows — reporting a
+// complete read while diffing against a partial one, which is how a clean bill
+// gets signed for a world nobody looked at. The snapshot is what makes
+// "absence only from a complete read" a statement about the same read.
+func ObservationSnapshot(ctx context.Context) (Observation, []ObservedGrant, error) {
+	var obs Observation
+	var grants []ObservedGrant
+	err := InReadSnapshot(ctx, func(ctx context.Context) error {
+		var err error
+		if obs, err = LatestOrgObservation(ctx); err != nil {
+			return err
+		}
+		grants, err = AllObservedGrants(ctx)
+		return err
+	})
+	if err != nil {
+		// ErrNoObservation travels: "nobody has looked" is the caller's to
+		// handle, and flattening it here would turn it into an outage.
+		return Observation{}, nil, err
+	}
+	return obs, grants, nil
+}

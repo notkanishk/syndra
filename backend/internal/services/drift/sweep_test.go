@@ -24,16 +24,32 @@ func observedGrant(grantID, userID, projectID string, roles ...string) db.Observ
 	return db.ObservedGrant{GrantID: grantID, UserID: userID, ProjectID: projectID, RoleKeys: roles}
 }
 
+// The sweep reads the covering observation and its grants as ONE fact, from
+// one snapshot. These two knobs are the test's way of composing that pair —
+// a case that cares about completeness sets stubObs, one that cares about the
+// rows sets stubGrants, and the seam below hands back whichever pair is
+// current. They are test ergonomics, not two production readers.
+var stubObs = func(context.Context) (db.Observation, error) { return db.Observation{}, nil }
+var stubGrants = func(context.Context) ([]db.ObservedGrant, error) { return nil, nil }
+
 // stubSweep sets safe no-op defaults; each test overrides only what it asserts.
 func stubSweep(t *testing.T) {
+	t.Cleanup(swap(&observationSnapshot, func(ctx context.Context) (db.Observation, []db.ObservedGrant, error) {
+		obs, err := stubObs(ctx)
+		if err != nil {
+			return db.Observation{}, nil, err
+		}
+		grants, err := stubGrants(ctx)
+		return obs, grants, err
+	}))
 	// A complete org observation with nothing in it, by default — the ROLLOUT
 	// state once a sweep has run at least once and Zitadel holds nothing this
 	// test cares about. Tests that need "never observed" or "incomplete"
-	// override latestOrgObservation directly.
-	t.Cleanup(swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+	// override stubObs directly.
+	t.Cleanup(swap(&stubObs, func(context.Context) (db.Observation, error) {
 		return db.Observation{Scope: "org", ObservedAt: testObservedAt, Complete: true}, nil
 	}))
-	t.Cleanup(swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) { return nil, nil }))
+	t.Cleanup(swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) { return nil, nil }))
 	t.Cleanup(swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) { return nil, nil }))
 	t.Cleanup(swap(&svcGetActiveMappingRules, func(context.Context) ([]models.MappingRule, error) { return nil, nil }))
 	// The bundle-derived inventory and the retraction pass. Default to "no
@@ -78,7 +94,7 @@ func stubSweep(t *testing.T) {
 
 func TestSweep_UnexplainedZitadelGrantBecomesDrift(t *testing.T) {
 	stubSweep(t)
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var driftType string
@@ -104,7 +120,7 @@ func TestSweep_RuleDerivedGrantIsNotDrift(t *testing.T) {
 	defer swap(&svcGetActiveMappingRules, func(context.Context) ([]models.MappingRule, error) {
 		return []models.MappingRule{{SourceProject: "p1", SourceRole: "member", TargetProject: "p2", TargetRole: "contributor"}}, nil
 	})()
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{
 			observedGrant("g1", "u1", "p1", "member"),
 			observedGrant("g2", "u1", "p2", "contributor"),
@@ -168,7 +184,7 @@ func TestSweep_SyndraOnlySkipsReEnqueueWhenPendingOutboxAdd(t *testing.T) {
 // finished, must halt cleanly and say so — never render as a clean bill.
 func TestSweep_HaltsWhenNeverObserved(t *testing.T) {
 	stubSweep(t)
-	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+	defer swap(&stubObs, func(context.Context) (db.Observation, error) {
 		return db.Observation{}, db.ErrNoObservation
 	})()
 	res, err := Sweep(context.Background())
@@ -185,7 +201,7 @@ func TestSweep_ExcludedGrantIsNotDrift(t *testing.T) {
 	defer swap(&svcGetExclusions, func(_ context.Context, target string) ([]models.ExternalGrantExclusion, error) {
 		return []models.ExternalGrantExclusion{{Target: target, UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
 	})()
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var created int
@@ -211,7 +227,7 @@ func TestSweep_EveryWriteNamesTheTargetItSwept(t *testing.T) {
 	defer swap(&svcAllDirectGrants, func(context.Context) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{UserID: "u2", ProjectID: "p2", RoleKey: "gone"}}, nil
 	})()
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 
@@ -249,7 +265,7 @@ func TestSweep_EveryWriteNamesTheTargetItSwept(t *testing.T) {
 // about an unnamed target reads as a clean bill of health for all of them.
 func TestSweep_HaltedResultStillNamesItsTarget(t *testing.T) {
 	stubSweep(t)
-	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+	defer swap(&stubObs, func(context.Context) (db.Observation, error) {
 		return db.Observation{}, db.ErrNoObservation
 	})()
 	res, _ := Sweep(context.Background())
@@ -266,7 +282,7 @@ func TestSweep_ExclusionOnAnotherTargetDoesNotSuppressDrift(t *testing.T) {
 	defer swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
 		return []models.ExternalGrantExclusion{{Target: "truenas", UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}, nil
 	})()
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var created int
@@ -288,7 +304,7 @@ func TestSweep_ExclusionOnAnotherTargetDoesNotSuppressDrift(t *testing.T) {
 // "no drift", which is the opposite of what happened.
 func TestSweep_ANeverObservedTargetRecordsUnreconciledAndFindsNothing(t *testing.T) {
 	stubSweep(t)
-	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+	defer swap(&stubObs, func(context.Context) (db.Observation, error) {
 		return db.Observation{}, db.ErrNoObservation
 	})()
 	// Nothing has been observed. Neither half of the diff may run: one would
@@ -344,7 +360,7 @@ func TestSweep_ANeverObservedTargetRecordsUnreconciledAndFindsNothing(t *testing
 // and the unreconciled period ends with the same write that records it.
 func TestSweep_ResumesOnReturn(t *testing.T) {
 	stubSweep(t)
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var created int
@@ -389,10 +405,10 @@ func TestSweep_AnIncompleteObservationConcludesNoAbsenceAndNoCleanBill(t *testin
 	})()
 	// The org observation did not finish. What it saw is real; what it did not
 	// reach is unknown, so absence cannot be concluded from it.
-	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+	defer swap(&stubObs, func(context.Context) (db.Observation, error) {
 		return db.Observation{Scope: "org", ObservedAt: testObservedAt, Complete: false}, nil
 	})()
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g", "u1", "p1", "viewer")}, nil
 	})()
 	defer swap(&insertPending, func(context.Context, string, string, string, []string, string, string, string, string) (string, error) {
@@ -431,7 +447,7 @@ func TestSweep_AnIncompleteObservationConcludesNoAbsenceAndNoCleanBill(t *testin
 // not lose the findings.
 func TestSweep_AFailedCurrencyRecordDoesNotDiscardTheWork(t *testing.T) {
 	stubSweep(t)
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	defer swap(&markReconciled, func(context.Context, string) (db.TargetReconciliation, error) {
@@ -455,7 +471,7 @@ func TestSweep_AFailedCurrencyRecordDoesNotDiscardTheWork(t *testing.T) {
 // yield the same findings. See db.driftItemSelect and DriftEvidence.
 func TestSweep_TargetOnlyFindingCitesTheObservation(t *testing.T) {
 	stubSweep(t)
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "viewer")}, nil
 	})()
 	var gotObservedAt *time.Time
@@ -663,7 +679,7 @@ func TestSweep_TheBaseDoesNotAdvancePastAnUnresolvedFinding(t *testing.T) {
 	})()
 	// Zitadel still holds another role for the same user, so the base is
 	// rewritten and the question is what it keeps.
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g1", "u1", "p1", "editor")}, nil
 	})()
 	defer swap(&svcGetExclusions, func(context.Context, string) ([]models.ExternalGrantExclusion, error) {
@@ -697,10 +713,10 @@ func TestSweep_TheBaseDoesNotAdvancePastAnUnresolvedFinding(t *testing.T) {
 // refuses to conclude; it must also refuse to record.
 func TestSweep_AnIncompleteObservationRecordsNoBase(t *testing.T) {
 	stubSweep(t)
-	defer swap(&latestOrgObservation, func(context.Context) (db.Observation, error) {
+	defer swap(&stubObs, func(context.Context) (db.Observation, error) {
 		return db.Observation{Scope: "org", ObservedAt: testObservedAt, Complete: false}, nil
 	})()
-	defer swap(&allObservedGrants, func(context.Context) ([]db.ObservedGrant, error) {
+	defer swap(&stubGrants, func(context.Context) ([]db.ObservedGrant, error) {
 		return []db.ObservedGrant{observedGrant("g", "u1", "p1", "viewer")}, nil
 	})()
 

@@ -82,12 +82,11 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obs, err := observeOrg(ctx)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	observed, err := dbAllObservedGrants(ctx)
+	// Force a fresh, recorded read. Its own result answers exactly one
+	// question — was there anything to read at all — because the diff below
+	// must be footed on the observation that produced the rows it compares,
+	// and between these two calls the scheduled sweep may record another.
+	justRead, err := observeOrg(ctx)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -105,9 +104,17 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 	// Checked before the emptiness test below, because it is a different fact
 	// with a different answer: there is nothing to compare against, rather
 	// than something that would not answer.
-	if obs.ObservedAt.IsZero() {
+	if justRead.ObservedAt.IsZero() {
 		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_NOT_CONFIGURED",
 			"Syndra has no connection to Zitadel, so there is nothing to compare against.")
+		return
+	}
+
+	// The basis and the rows, from one snapshot: whichever observation is
+	// latest when this runs, these are the grants IT left behind.
+	obs, observed, err := dbObservationSnapshot(ctx)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 	if !obs.Complete && len(observed) == 0 {

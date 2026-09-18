@@ -37,9 +37,47 @@ func InTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return nil
 }
 
-// txKey carries an in-progress access-mutation transaction. It is unexported
-// and the only writer is InTxLockingAccess, so a transaction cannot arrive in a
-// context by accident.
+// beginReadSnapshot opens the transaction InReadSnapshot runs in. Its own
+// variable for the same reason beginTx is: the isolation level IS the contract,
+// and a test has to be able to assert it was asked for.
+var beginReadSnapshot = func(ctx context.Context) (pgx.Tx, error) {
+	return PG.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+}
+
+// InReadSnapshot runs fn against ONE immutable view of the database, so that
+// several reads inside it cannot straddle a concurrent commit.
+//
+// Read committed — the default — gives each STATEMENT its own snapshot, which
+// is the right default for a handler answering one question and the wrong one
+// for a caller whose answer is assembled from two queries. The drift sweep is
+// exactly that caller: it reads how complete the last observation was, then
+// reads the grants that observation left behind, and reports the first as the
+// footing for the second. A sweep committing between those two statements
+// leaves it citing one generation's completeness over another generation's
+// rows — a clean bill signed for a world that was never read.
+//
+// Read only, so a write that would JOIN this transaction — anything routed
+// through querier(ctx), which is how a write enlists in an ambient one — is
+// refused by Postgres rather than quietly running inside a snapshot that holds
+// no access lock. A write that opens its own transaction (beginTx, as
+// RecordOrgObservation does) is unaffected and simply commits outside; that is
+// correct, since it was never part of this read.
+//
+// Nothing is committed: the transaction is rolled back on the way out, which
+// for a read-only snapshot is the cheapest correct ending.
+func InReadSnapshot(ctx context.Context, fn func(context.Context) error) error {
+	tx, err := beginReadSnapshot(ctx)
+	if err != nil {
+		return fmt.Errorf("begin read snapshot: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	return fn(context.WithValue(ctx, txKey, tx))
+}
+
+// txKey carries an in-progress transaction. It is unexported and its only
+// writers are InTxLockingAccess (a write transaction holding the access lock)
+// and InReadSnapshot (a read-only snapshot), so a transaction cannot arrive in
+// a context by accident.
 type txKeyType struct{}
 
 var txKey txKeyType
