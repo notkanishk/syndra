@@ -27,6 +27,9 @@ vi.mock("@/components/names", () => ({
   UserName: ({ id, fallback }: { id: string; fallback?: React.ReactNode }) => (
     <span>{id === "u1" ? "Ada Lovelace" : id === "op" ? "Sam Patel" : (fallback ?? id)}</span>
   ),
+  BundleName: ({ id, fallback }: { id: string; fallback?: React.ReactNode }) => (
+    <span>{id === "b1" ? "Community · Basic" : (fallback ?? id)}</span>
+  ),
   ProjectName: ({ id }: { id: string }) => <span>{id === "pLaser" ? "Laser Lab" : id}</span>,
   // Mirrors the real component's shape: project name and role key are separate
   // elements, so a test can assert on either half of the pair.
@@ -82,25 +85,41 @@ describe("PersonActivity", () => {
     expect(audit.filter).toMatchObject({ userId: "u1" });
   });
 
-  it("says who acted when the person was acted upon", () => {
+  // Told from THEIR side, because this page is already about them: naming
+  // them in the sentence would say "Ada Lovelace" twice on Ada's own tab and
+  // bury the one fact the row adds, which is who did it.
+  it("says who acted when the person was acted upon, in the passive", () => {
     audit.data = [entry({ actor_id: "op", target_id: "u1" })];
     renderIn(<PersonActivity userId="u1" name="Ada" />);
-    expect(screen.getByText("Gave direct access")).toBeInTheDocument();
+    expect(screen.getByText("Given direct access")).toBeInTheDocument();
     // The person did not do this — the row must not imply they did.
     expect(screen.getByText(/by/)).toBeInTheDocument();
     expect(screen.getByText("Sam Patel")).toBeInTheDocument();
   });
 
-  it("says who was affected when the person acted", () => {
+  // When they DID it, the shared renderer names what they did it to — the same
+  // sentence Lately and the Audit log show for the same row.
+  it("names who was affected when the person acted", () => {
     audit.data = [entry({ actor_id: "u1", target_id: "u2" })];
     renderIn(<PersonActivity userId="u1" name="Ada" />);
-    expect(screen.getByText(/to/)).toBeInTheDocument();
+    expect(document.body.textContent).toContain("Gave u2 direct access");
+  });
+
+  // A bundle edit stores a BUNDLE id in target_id. Handing that to the person
+  // resolver is how the home page came to read "Unknown account 9e93893d-…".
+  it("names a bundle as a bundle, not as an unknown account", () => {
+    audit.data = [entry({ actor_id: "u1", target_id: "b1", action: "bundle.role_removed" })];
+    renderIn(<PersonActivity userId="u1" name="Ada" />);
+    expect(document.body.textContent).toContain("Community · Basic");
+    expect(document.body.textContent).not.toMatch(/Unknown account/);
   });
 
   it("marks a destructive verb and leaves the rest of the row uncoloured", () => {
     audit.data = [entry({ action: "direct_grant.revoked" })];
     renderIn(<PersonActivity userId="u1" name="Ada" />);
-    expect(screen.getByText("Revoked direct access").className).toContain("text-danger-text");
+    expect(screen.getByText("Their direct access was revoked").className).toContain(
+      "text-danger-text",
+    );
   });
 
   it("admits when the feed is capped instead of implying it is complete", () => {

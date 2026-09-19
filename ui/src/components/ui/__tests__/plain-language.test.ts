@@ -469,3 +469,44 @@ describe("an error reaches the page in the product's voice", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * An audit event is rendered in ONE place.
+ *
+ * `entry.target_id` holds a person's id on most actions and a bundle's id on a
+ * bundle edit, so a screen showing an event has to dispatch on the action
+ * before it picks a resolver. `EventLine` does that. Three screens rendered
+ * events and only one of them knew: Lately read a bundle edit as "Unknown
+ * account 9e93893d-…", and a person's Activity tab read "Gave somebody a
+ * bundle" on the page of the somebody.
+ *
+ * Both were fixed by hand, twice, a day apart — which is the shape of a rule
+ * that needs checking rather than remembering. A screen may take the verb from
+ * `describeAction` for its own phrasing (Activity tells an event from the
+ * target's side, in the passive), but the moment it renders `target_id` it
+ * must go through the shared renderer.
+ */
+describe("one renderer knows what an audit target is", () => {
+  const ALLOWED_TARGET_RESOLVERS = new Set([
+    // The renderer itself.
+    "components/audit/EventLine.tsx",
+    // The CSV export, which resolves names through the same targetKind switch
+    // rather than rendering components.
+    "app/audit/page.tsx",
+  ]);
+
+  it("never hands an audit target_id straight to a name resolver", () => {
+    const offenders = sources()
+      .filter(({ path }) => !ALLOWED_TARGET_RESOLVERS.has(path))
+      .flatMap(({ path, source }) =>
+        /<(UserName|ProjectName|BundleName)[^>]*\bid=\{[\w.]*\btarget_id\}/.test(source)
+          ? [path]
+          : [],
+      );
+
+    expect(
+      offenders,
+      "a target_id is only sometimes a person — render it with <EventSentence>",
+    ).toEqual([]);
+  });
+});
