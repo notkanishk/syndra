@@ -23,6 +23,7 @@ import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { FilterPills, Select } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
 import { useProjects } from "@/lib/queries/useProjects";
@@ -157,11 +158,13 @@ function OperatorQueue() {
       <PageHeader
         title="Requests"
         lede="What members have asked for. Approve gives them the access for the time they asked, starting now; decline closes it, and they may ask again."
-        actions={
-          <>
-          {openRows.length > 0 && (
-            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
-          )}
+      />
+
+      {/* One control, so it stays on the row rather than behind a panel: a
+          disclosure hiding a single five-way switch costs a click and hides
+          nothing. Selection mode is an action on the list, so it trails. */}
+      <FilterBar
+        leading={
           <FilterPills<StatusFilter>
             label="Filter by status"
             value={status}
@@ -174,7 +177,11 @@ function OperatorQueue() {
               { value: "all", label: "All" },
             ]}
           />
-          </>
+        }
+        trailing={
+          openRows.length > 0 ? (
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          ) : null
         }
       />
 

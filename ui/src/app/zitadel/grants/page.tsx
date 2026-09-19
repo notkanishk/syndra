@@ -8,6 +8,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { FilterBar } from "@/components/ui/FilterBar";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ProjectName, UserName } from "@/components/names";
 import { useUpstreamGrants } from "@/lib/queries/useUpstream";
@@ -60,22 +61,27 @@ export default function UpstreamGrantsPage() {
         </div>
       )}
 
+      {/* The same row every other list narrows itself from. This search used
+          to sit inside the card's own header, which is the one place in the
+          product a search lived below the card line rather than above it. */}
+      <FilterBar
+        search={
+          <Input
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setLimit(PAGE);
+            }}
+            placeholder="Role key or id"
+            aria-label="Filter roles held by role key or id"
+          />
+        }
+      />
+
       <Card>
         <CardHeader
           title="Every role Zitadel has given"
           count={grants.data?.total ?? rows.length}
-          action={
-            <Input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setLimit(PAGE);
-              }}
-              placeholder="Role key or id"
-              aria-label="Filter roles held by role key or id"
-              className="w-[280px]"
-            />
-          }
         />
 
         <CardColumns>

@@ -10,6 +10,8 @@ import { Badge, Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Select } from "@/components/ui/Select";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
@@ -78,48 +80,66 @@ export default function RolesPage() {
         title="Roles"
         lede="Every role in every project — one named kind of access each. Open a role to see who holds it."
         actions={
-          <>
-            <Select
-              value={project}
-              onChange={(event) => setProject(event.target.value)}
-              aria-label="Filter by project"
-              className="w-[180px]"
-            >
-              <option value="">All projects</option>
-              {projects.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={group}
-              onChange={(event) => setGroup(event.target.value)}
-              aria-label="Filter by group"
-              className="w-[170px]"
-            >
-              <option value="">All groups</option>
-              {groups.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={unusedOnly ? "unused" : ""}
-              onChange={(event) =>
-                router.replace(event.target.value === "unused" ? "/roles?unused=1" : "/roles")
-              }
-              aria-label="Filter by usage"
-              className="w-[190px]"
-            >
-              <option value="">All roles</option>
-              <option value="unused">Unused only ({unusedCount})</option>
-            </Select>
-            <Button variant="accent" onClick={() => setCreating(true)}>
-              New role
-            </Button>
-          </>
+          <Button variant="accent" onClick={() => setCreating(true)}>
+            New role
+          </Button>
+        }
+      />
+
+      {/* Three selects in the page header stretched to the width of the
+          actions area. They narrow the list rather than acting on it, so they
+          belong on the list's own row — "New role" is the action, and stays. */}
+      <FilterBar
+        filters={
+          <FilterPanel
+            activeCount={[project, group, unusedOnly ? "1" : ""].filter(Boolean).length}
+            onClear={() => {
+              setProject("");
+              setGroup("");
+              router.replace("/roles");
+            }}
+          >
+            <FilterField label="Project">
+              <Select
+                value={project}
+                onChange={(event) => setProject(event.target.value)}
+                aria-label="Filter by project"
+              >
+                <option value="">All projects</option>
+                {projects.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Group">
+              <Select
+                value={group}
+                onChange={(event) => setGroup(event.target.value)}
+                aria-label="Filter by group"
+              >
+                <option value="">All groups</option>
+                {groups.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Usage">
+              <Select
+                value={unusedOnly ? "unused" : ""}
+                onChange={(event) =>
+                  router.replace(event.target.value === "unused" ? "/roles?unused=1" : "/roles")
+                }
+                aria-label="Filter by usage"
+              >
+                <option value="">All roles</option>
+                <option value="unused">Unused only ({unusedCount})</option>
+              </Select>
+            </FilterField>
+          </FilterPanel>
         }
       />
 

@@ -13,6 +13,8 @@ import { FilterChip } from "@/components/ui/FilterChip";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { Select } from "@/components/ui/Select";
 import {
   RowCheckbox,
@@ -29,6 +31,7 @@ import {
   describeFilters,
   hasAnyFilter,
   isDeparted,
+  EMPTY_FILTERS,
   parseFilters,
   serializeFilters,
   type PeopleFilters,
@@ -135,6 +138,16 @@ export default function PeoplePage() {
     [projects.data, filters.project],
   );
   const scope = describeFilters(filters, projectName);
+  // What the panel is hiding. Search is not counted — it is on the row, in
+  // plain sight, and a badge reading "1" beside text somebody can already see
+  // is a badge that means nothing.
+  const narrowingCount = [
+    filters.project,
+    filters.role,
+    filters.bundle,
+    filters.version,
+    filters.attention,
+  ].filter(Boolean).length;
 
   const exitBulk = useCallback(() => {
     router.replace(`/users${serializeFilters(filters)}`, { scroll: false });
@@ -171,51 +184,64 @@ export default function PeoplePage() {
               }`
             : undefined
         }
-        actions={
-          <>
-            <Input
-              value={queryDraft}
-              onChange={(event) => setQueryDraft(event.target.value)}
-              // Role keys are searchable here because "who has `trained` in the
-              // laser lab" gets typed on this page before anyone thinks to go
-              // to Roles. The placeholder has to say so or nobody tries it.
-              placeholder="Search name, email or role key…"
-              aria-label="Search people by name, email or role key"
-              className="min-w-[240px]"
-            />
-            <Select
-              value={filters.project}
-              onChange={(event) => setParams({ project: event.target.value, role: "" })}
-              aria-label="Filter by project"
-              className="w-[170px]"
-            >
-              <option value="">Any project</option>
-              {(projects.data ?? []).map((row) => (
-                <option key={row.project.id} value={row.project.id}>
-                  {row.project.name}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={filters.attention}
-              onChange={(event) =>
-                setParams({ attention: event.target.value as PeopleFilters["attention"] })
-              }
-              aria-label="Filter by what needs attention"
-              className="w-[190px]"
-            >
-              <option value="">Anything</option>
-              {ATTENTION_VALUES.map((value) => (
-                <option key={value} value={value}>
-                  {ATTENTION_LABELS[value]}
-                </option>
-              ))}
-            </Select>
-            <SelectModeToggle
-              active={bulkMode}
-              onToggle={() => (bulkMode ? exitBulk() : setParams({}, { bulk: "1" }))}
-            />
-          </>
+      />
+
+      {/* The filters live on their own row, not in the page header: three
+          controls in the header stretched to the width of the actions area and
+          stacked into three tall rows beside the title. Search stays visible —
+          it is the fastest way to one person, and a search behind a disclosure
+          is a search nobody uses. */}
+      <FilterBar
+        search={
+          <Input
+            value={queryDraft}
+            onChange={(event) => setQueryDraft(event.target.value)}
+            placeholder="Search name, email or role key…"
+            aria-label="Search people by name, email or role key"
+          />
+        }
+        filters={
+          <FilterPanel
+            activeCount={narrowingCount}
+            onClear={() => setParams(EMPTY_FILTERS)}
+          >
+            <FilterField label="Project">
+              <Select
+                value={filters.project}
+                onChange={(event) => setParams({ project: event.target.value, role: "" })}
+                aria-label="Filter by project"
+              >
+                <option value="">Any project</option>
+                {(projects.data ?? []).map((row) => (
+                  <option key={row.project.id} value={row.project.id}>
+                    {row.project.name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Needs attention">
+              <Select
+                value={filters.attention}
+                onChange={(event) =>
+                  setParams({ attention: event.target.value as PeopleFilters["attention"] })
+                }
+                aria-label="Filter by what needs attention"
+              >
+                <option value="">Anything</option>
+                {ATTENTION_VALUES.map((value) => (
+                  <option key={value} value={value}>
+                    {ATTENTION_LABELS[value]}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+          </FilterPanel>
+        }
+        trailing={
+          <SelectModeToggle
+            active={bulkMode}
+            onToggle={() => (bulkMode ? exitBulk() : setParams({}, { bulk: "1" }))}
+          />
         }
       />
 
