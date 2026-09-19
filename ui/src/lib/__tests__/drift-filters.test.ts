@@ -55,8 +55,8 @@ describe("parseDriftFilters", () => {
   });
 });
 
-// Three go to the backend and three are applied here. Sending one of the
-// client-side three as a request param would silently mean "of whatever the
+// Two go to the backend and four are applied here. Sending one of the
+// client-side four as a request param would silently mean "of whatever the
 // server chose to return", which is a worse lie than not offering it.
 describe("driftRequest", () => {
   it("sends only what the endpoint actually filters on", () => {
@@ -68,13 +68,20 @@ describe("driftRequest", () => {
       role: "community",
       age: "week",
     });
-    expect(req).toEqual({ project_id: "p1", user_id: "u1", source: "webhook" });
+    expect(req).toEqual({ project_id: "p1", source: "webhook" });
+  });
+
+  // The endpoint DOES accept user_id, and asking it is the bug: the person
+  // dropdown is built from the people in the queue, so a server-narrowed queue
+  // leaves that list holding only the name already chosen.
+  it("never asks the server to narrow to one person", () => {
+    const req = driftRequest({ ...EMPTY_DRIFT_FILTERS, user: "u1" });
+    expect(req).not.toHaveProperty("user_id");
   });
 
   it("omits an empty filter rather than sending a blank", () => {
     expect(driftRequest(EMPTY_DRIFT_FILTERS)).toEqual({
       project_id: undefined,
-      user_id: undefined,
       source: undefined,
     });
   });
@@ -131,6 +138,30 @@ describe("applyDriftFilters", () => {
     const rows = [row({ id: "bad", detected_at: "not-a-date" })];
     expect(applyDriftFilters(rows, EMPTY_DRIFT_FILTERS, NOW)).toHaveLength(1);
     expect(applyDriftFilters(rows, { ...EMPTY_DRIFT_FILTERS, age: "today" }, NOW)).toHaveLength(0);
+  });
+});
+
+// The bug this `except` argument exists to prevent: a dropdown whose options
+// are narrowed by the value already selected offers exactly that one value,
+// and the only way back is the "Any" row.
+describe("options for a filter's own control", () => {
+  const rows = [
+    row({ id: "a", user_id: "u1", role_keys: ["community"] }),
+    row({ id: "b", user_id: "u2", role_keys: ["kiln"] }),
+  ];
+
+  it("keeps every person in hand once one is chosen", () => {
+    const chosen = { ...EMPTY_DRIFT_FILTERS, user: "u1" };
+    expect(applyDriftFilters(rows, chosen, NOW).map((r) => r.id)).toEqual(["a"]);
+    // ...but the list the CONTROL is built from still holds both.
+    const forControl = applyDriftFilters(rows, chosen, NOW, "user");
+    expect(forControl.map((r) => r.user_id)).toEqual(["u1", "u2"]);
+  });
+
+  it("still applies the other filters to those options", () => {
+    const chosen = { ...EMPTY_DRIFT_FILTERS, user: "u1", role: "kiln" };
+    const forControl = applyDriftFilters(rows, chosen, NOW, "user");
+    expect(forControl.map((r) => r.user_id)).toEqual(["u2"]);
   });
 });
 
