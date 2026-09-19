@@ -212,7 +212,7 @@ function OperatorQueue() {
           skeleton={<RowSkeleton rows={4} label="Loading requests" />}
           empty={
             <EmptyState
-              title={status === "pending" ? "No open requests." : "Nothing here."}
+              title={status === "pending" ? "No open requests." : `No ${status} requests match those filters.`}
               guidance={
                 status === "pending"
                   ? "New requests appear here the moment someone submits one."

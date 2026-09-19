@@ -593,7 +593,7 @@ function DeleteBundleDialog({
           <ul className="flex flex-col gap-1 text-muted">
             {holders > 0 && (
               <li>
-                Each holder loses whichever of its {roleCount}{" "}
+                Everyone holding it loses whichever of its {roleCount}{" "}
                 {roleCount === 1 ? "role" : "roles"} nothing else gives them — a rule or direct
                 access to the same role keeps it.
               </li>
@@ -752,7 +752,7 @@ function RemovalImpact({
         Dropping <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} />{" "}
         from the working copy
       </div>
-      <p className="mb-2.5 max-w-[60ch] text-[13.5px] leading-[1.55] text-ink/[.78]">
+      <p className="mb-2.5 max-w-[60ch] text-[13.5px] leading-[1.55] text-ink/80">
         Nobody loses anything today. This is what would happen to the{" "}
         {holders.length} {holders.length === 1 ? "person" : "people"} holding{" "}
         {bundleName} <em>if</em> you publish the next version and move them onto it.

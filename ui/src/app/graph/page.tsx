@@ -223,7 +223,7 @@ export default function AccessMapPage() {
               </nav>
 
               <div className="flex flex-wrap items-baseline gap-3.5">
-                <h2 className="font-display text-[30px] font-medium tracking-[-0.02em]">
+                <h2 className="type-section-title">
                   {focus.label}
                 </h2>
                 <span className="text-[14px] text-faint">

@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFailure, sentence } from "@/lib/outcome";
 import { formatBytes } from "@/lib/format";
 import { useState } from "react";
 
@@ -240,9 +241,7 @@ export function DormantAccounts({ target }: { target: string }) {
           </p>
           {remove.error && (
             <p className="text-[13.5px] text-danger-text">
-              {remove.error instanceof Error
-                ? remove.error.message
-                : "That did not go through. Nothing was changed."}
+              {sentence(describeFailure(remove.error))}
             </p>
           )}
         </div>

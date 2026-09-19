@@ -207,7 +207,7 @@ export function RowField({ label, children }: { label: string; children: React.R
   return (
     <div className="flex flex-col gap-0.5 py-1.5">
       <span className="type-label">{label}</span>
-      <span className="text-[13.5px] text-ink/[.82]">{children}</span>
+      <span className="text-[13.5px] text-ink/80">{children}</span>
     </div>
   );
 }

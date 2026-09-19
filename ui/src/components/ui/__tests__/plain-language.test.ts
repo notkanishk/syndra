@@ -430,3 +430,42 @@ function tagAt(source: string, at: number): string {
   }
   return source.slice(at, i + 1);
 }
+
+/**
+ * A thrown error's own `message` is the transport speaking, not the product.
+ *
+ * Six components rendered `error instanceof Error ? error.message : "…"`
+ * straight into the page. That is the one shape §8 forbids — a status line, a
+ * decoder complaint or a stack lands in front of somebody who came to give a
+ * person access — and it was copy-pasted from the single place that argues for
+ * it (`MergeFindings`, where an operator is pressing a button that will never
+ * work and needs the reason verbatim).
+ *
+ * `describeFailure` is the seam: it turns a 403 into "You don't have permission
+ * to do this" and a 404 into "That item no longer exists", and passes anything
+ * else through. Rendering it costs the same and cannot leak a status code.
+ */
+describe("an error reaches the page in the product's voice", () => {
+  const ALLOWED = new Set([
+    // The describer itself: reading `.message` is its whole job.
+    "lib/outcome.ts",
+    // Names the field in a comment about the API client's error shape.
+    "lib/api-client.ts",
+    // An operator pressing a control that cannot work needs the target's own
+    // words; the file argues this at its call site.
+    "components/targets/MergeFindings.tsx",
+  ]);
+
+  it("never renders a caught error's message directly", () => {
+    const offenders = sources()
+      .filter(({ path }) => !ALLOWED.has(path))
+      .flatMap(({ path, source }) =>
+        /\berror\.message\b/i.test(source) ? [path] : [],
+      );
+
+    expect(
+      offenders,
+      "route it through describeFailure() so a status code cannot reach a person",
+    ).toEqual([]);
+  });
+});

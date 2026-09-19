@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { describeFailure, sentence } from "@/lib/outcome";
 
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { Button } from "@/components/ui/Button";
@@ -82,9 +83,7 @@ export function AddRolesToBundle({
           return next;
         });
       } catch (error) {
-        setFailure(
-          error instanceof Error ? error.message : `${roleKey} couldn't be added to ${name}.`,
-        );
+        setFailure(sentence(describeFailure(error)));
         // `break`, and nothing else. This used to set a local flag because the
         // dialog closed itself on success and a failed apply must not be
         // closed over — the flag outlived the auto-close, and a variable that

@@ -137,9 +137,9 @@ function HealthCell({
       className="panel flex flex-col gap-1 px-4 py-3.5 motion-tint hover:bg-[var(--hover)]"
     >
       <span className="type-label">{label}</span>
-      <span className={`font-display text-[26px] leading-none ${TONE_CLASS[tone]}`}>{value}</span>
+      <span className={`font-display text-[24px] leading-none ${TONE_CLASS[tone]}`}>{value}</span>
       <span className="flex items-center gap-2 text-[12.5px] text-faint">
-        {/* Healthy is a DOT here, never the value. Four 26px lime numerals in
+        {/* Healthy is a DOT here, never the value. Four 24px lime numerals in
             a row would make "nothing is wrong" the loudest thing on the page,
             and this state earns its meaning by being the quietest. */}
         {tone === "calm" && (

@@ -166,7 +166,7 @@ export default function PeoplePage() {
         lede="Everyone Syndra knows, and what each can use. Open a person to see and change their access; select several to change them together."
         meta={
           all.length > 0
-            ? `${all.length} ${all.length === 1 ? "account" : "accounts"}${
+            ? `${all.length} ${all.length === 1 ? "person" : "people"}${
                 expiringSoon > 0 ? ` · ${expiringSoon} with access expiring inside 30 days` : ""
               }`
             : undefined

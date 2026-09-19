@@ -576,6 +576,18 @@ is observed"). What is still open, and whose it is:
   with tabs above it. And `Term`'s definition portals to the body: every Card is
   `overflow-hidden`, so a popover inside one was sliced off at the card's edge.
   Both reusable, so the next screen that needs either gets it right by default.
+- **App-wide consistency sweep, 2026-09-20.** A caught error's own `message`
+  was rendered straight to the page in six components — a status line or a
+  decoder complaint in front of somebody giving a person access, which §8 of
+  the copy guide forbids. All six route through `describeFailure` now, and
+  `plain-language.test.ts` guards the shape with the one argued exception
+  (`MergeFindings`) named. Also: "holder" as a noun (banned by the guide) on
+  two screens; the People page counting its own rows as "accounts"; "Nothing
+  here." as an empty title; a page with no gap between its header and its
+  content; a heading hand-reimplementing `type-section-title`; a card title
+  written as a raw 22px so it alone did not scale; and eleven near-duplicate
+  ink opacities (`/[.82]`, `/[.78]`, `/[.74]`, `/[.66]`, three of them within
+  4% of each other) collapsed onto the plain scale.
 - **Test account.** `testuser` (Syndra admin, the throwaway account)
   held the Ops Admin bundle and a 30-day direct grant during the walk; both were revoked and read back as gone. Remove the account when the
   walk is over. Its password was rotated on first login (Zitadel forced it).

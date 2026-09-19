@@ -137,7 +137,7 @@ export default function RolesPage() {
         >
           i
         </span>
-        <div className="text-[14px] leading-[1.55] text-ink/[.78]">
+        <div className="text-[14px] leading-[1.55] text-ink/80">
           <strong className="font-semibold text-ink">This list may be partial.</strong> It covers
           roles Syndra created and roles Zitadel reports. A role created straight in Zitadel, on a
           project Syndra cannot read, is not here.{" "}
@@ -240,7 +240,7 @@ export default function RolesPage() {
               <span className="w-full text-[15px] tablet:w-[110px] tablet:text-right">
                 {holders.headline}
                 <span className="text-[13px] text-faint tablet:hidden">
-                  {holders.headline === "1" ? " holder" : " holders"}
+                  {holders.headline === "1" ? " person" : " people"}
                 </span>
                 {/* Recorded is what Syndra decided; this is what Zitadel shows
                     right now — never the same word, never the same line. */}

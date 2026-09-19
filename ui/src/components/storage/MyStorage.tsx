@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFailure, sentence } from "@/lib/outcome";
 import { formatBytes } from "@/lib/format";
 import Link from "next/link";
 import { useState } from "react";
@@ -410,9 +411,7 @@ function CredentialForm({ view }: { view: MyTargetView }) {
       )}
       {set.error && (
         <p className="text-[13.5px] text-danger-text">
-          {set.error instanceof Error
-            ? set.error.message
-            : "That did not go through. Nothing was changed."}
+          {sentence(describeFailure(set.error))}
         </p>
       )}
     </form>

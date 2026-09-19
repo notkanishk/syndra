@@ -134,7 +134,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         <div className="flex flex-wrap gap-[18px]">
           {projects.map((project) => (
             <Card key={project.project_id} className="min-w-[420px] flex-1">
-              <div className="px-5 py-4 font-display text-[22px] font-semibold">
+              <div className="px-5 py-4 type-card-title">
                 <ResolvedProjectName
                   name={project.project_name}
                   resolved={project.project_name_resolved}

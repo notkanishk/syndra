@@ -134,7 +134,7 @@ function NavRow({
       } ${
         active
           ? "bg-accent-soft font-semibold text-accent-text"
-          : `${nested ? "text-muted" : "text-ink/[.74]"} hover:bg-[var(--hover)]`
+          : `${nested ? "text-muted" : "text-ink/75"} hover:bg-[var(--hover)]`
       }`}
     >
       {!nested && (
