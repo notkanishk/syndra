@@ -78,10 +78,13 @@ export function FilterPanel({
           // Right-aligned: the button sits at the end of its row on wide
           // screens, and a panel hanging off the left of it would run past the
           // window edge. z-40 clears the page and stays under a modal.
-          className="settle-in absolute right-0 top-[calc(100%+8px)] z-40 w-[min(22rem,calc(100vw-2rem))] rounded-panel border border-line-strong bg-surface-2 p-4 shadow-popover"
+          className="settle-in absolute right-0 top-[calc(100%+8px)] z-40 flex max-h-[min(72vh,34rem)] w-[min(22rem,calc(100vw-2rem))] flex-col rounded-panel border border-line-strong bg-surface-2 p-4 shadow-popover"
         >
-          <div className="flex flex-col gap-3.5">{children}</div>
-          <div className="mt-4 flex items-center justify-between border-t border-line pt-3.5">
+          {/* The fields scroll, the footer does not. Six of them run past the
+              bottom of a laptop window, and Clear and Done are the two
+              controls somebody needs once they have finished choosing. */}
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">{children}</div>
+          <div className="mt-4 flex shrink-0 items-center justify-between border-t border-line pt-3.5">
             <button
               type="button"
               onClick={onClear}
