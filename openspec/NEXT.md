@@ -556,6 +556,19 @@ is observed"). What is still open, and whose it is:
   keeps its own `useUpstreamUserGrants` call for grant ids and grantor names,
   which `UserAccessView` does not carry. Same store, second request — worth
   folding when that component is next touched.
+- **Screens walked 2026-09-19, six faults fixed.** One event renderer for
+  Lately and the Audit page (`components/audit/EventLine.tsx`) — `target_id` is
+  a person on most actions and a bundle on a bundle edit, and only the audit
+  page dispatched on that, so the same row read "Community · Basic" on one
+  screen and "Unknown account 9e93893d-…" on the other. The thing acted on is
+  named inside the sentence now, not appended after a dash. A person's project
+  card states the read once (heading = evidence, row = verdict) instead of
+  repeating "In Zitadel · read 22:51" on every line. Access Zitadel holds that
+  no record explains is named on the holder's own page instead of rendering as
+  "0 roles". Drift filters moved into the URL (`lib/drift-filters.ts`) and grew
+  person, role, age and origin. Home's greeting wraps, its headline lost the
+  word that made it read oddly, and its onboarding card stopped counting a
+  missing default bundle as a person. One date dialect across all four screens.
 - **Test account.** `testuser` (Syndra admin, the throwaway account)
   held the Ops Admin bundle and a 30-day direct grant during the walk; both were revoked and read back as gone. Remove the account when the
   walk is over. Its password was rotated on first login (Zitadel forced it).
