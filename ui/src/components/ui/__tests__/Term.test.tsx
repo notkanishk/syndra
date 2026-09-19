@@ -75,3 +75,36 @@ describe("Term", () => {
     }
   });
 });
+
+/**
+ * Every Card in this product is `overflow-hidden` — that is what makes its
+ * rounded corners clip its rows — so a popover positioned inside one was cut
+ * off at the card's edge. On Home the definition opened downwards and the
+ * bottom two thirds of it were sliced away by the card it belonged to.
+ */
+describe("the open definition escapes the card that would clip it", () => {
+  it("renders outside the clipping ancestor, not inside it", () => {
+    const { container } = render(
+      <div className="card overflow-hidden" data-testid="clipper">
+        <Term name="bundle" />
+      </div>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /bundle/i }));
+
+    const note = screen.getByRole("note");
+    expect(container.querySelector('[data-testid="clipper"]')!.contains(note)).toBe(false);
+    expect(document.body.contains(note)).toBe(true);
+  });
+
+  // aria-describedby resolves by id across the whole document, so moving the
+  // node must not cost the marked-up word its meaning for a screen reader.
+  it("keeps the description reachable from the term, open or shut", () => {
+    render(<Term name="bundle" />);
+    const trigger = screen.getByRole("button", { name: /bundle/i });
+    const describedBy = trigger.getAttribute("aria-describedby")!;
+
+    expect(document.getElementById(describedBy)).not.toBeNull();
+    fireEvent.click(trigger);
+    expect(document.getElementById(describedBy)).not.toBeNull();
+  });
+});
