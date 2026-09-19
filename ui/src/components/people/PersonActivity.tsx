@@ -11,6 +11,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Card } from "@/components/ui/Card";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, machineName } from "@/lib/audit-vocabulary";
+import { EventSentence } from "@/components/audit/EventLine";
 import { formatClock, formatList, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -263,7 +264,7 @@ function TargetEventRow({ event }: { event: TargetActivityEvent }) {
 }
 
 function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
-  const { verb, destructive } = describeAction(entry.action);
+  const { verb, passive, destructive } = describeAction(entry.action);
   const direction = actedOn(entry, userId);
 
   return (
@@ -272,25 +273,37 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
         {formatClock(entry.created_at)}
       </span>
 
+      {/* The sentence changes with direction, because "Gave direct access"
+          beside somebody's name means two opposite things depending on whether
+          they were the hand or the recipient.
+
+          Acted: the SHARED renderer, which knows a target_id is a person on
+          most actions and a bundle on a bundle edit. This row used to print a
+          bare verb and hand every target to the person resolver, so it read
+          "Gave somebody a bundle" — on the page of the somebody — and would
+          have called a bundle an unknown account.
+
+          Affected: the passive, because the person it happened to is the
+          heading of this page. "Gave Gurasheesh Paul Singh a bundle" on
+          Gurasheesh's own Activity tab says his name twice and buries the one
+          fact the row adds, which is who did it. */}
       <span className="min-w-[240px] flex-1 text-[14px]">
-        <span className={destructive ? "font-semibold text-danger-text" : "font-semibold"}>
-          {verb}
-        </span>
-        {/* The subject line changes with direction, because "Granted direct
-            access" beside somebody's name means two opposite things depending
-            on whether they were the hand or the recipient. */}
-        {direction === "affected" ? (
-          <span className="text-muted">
-            {" — by "}
-            <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
-          </span>
-        ) : direction === "acted" && entry.target_id && entry.target_id !== "-" ? (
-          <span className="text-muted">
-            {" — to "}
-            <UserName id={entry.target_id} />
-          </span>
+        {direction === "acted" ? (
+          <EventSentence entry={entry} />
         ) : (
-          <span className="text-muted"> — by themselves</span>
+          <>
+            <span className={destructive ? "font-semibold text-danger-text" : "font-semibold"}>
+              {passive ?? verb}
+            </span>
+            {direction === "both" ? (
+              <span className="text-muted"> — by themselves</span>
+            ) : (
+              <span className="text-muted">
+                {" — by "}
+                <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
+              </span>
+            )}
+          </>
         )}
       </span>
 

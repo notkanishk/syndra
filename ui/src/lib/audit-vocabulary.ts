@@ -22,21 +22,27 @@ import type { AuditEntry } from "@/lib/queries/useAudit";
  * bundle" rather than a verb and a name joined by a dash. What fills the slot
  * is decided by `targetKind`, which is why the slot never says what KIND of
  * thing it is: the resolver already knows.
+ *
+ * `passive` is the same event told from the TARGET's side, for a screen that
+ * is already about that person — their own Activity tab, where naming them in
+ * every row repeats the heading above it. "Gave somebody a bundle" was the
+ * placeholder that made this necessary: on Gurasheesh's page, that somebody
+ * was Gurasheesh. Only the actions a person can be the target of have one.
  */
 export const AUDIT_ACTIONS: Record<
   string,
-  { verb: string; template?: string; destructive?: boolean }
+  { verb: string; template?: string; passive?: string; destructive?: boolean }
 > = {
-  "direct_grant.upserted": { verb: "Gave direct access", template: "Gave {} direct access" },
-  "direct_grant.replaced": { verb: "Replaced somebody's direct access", template: "Replaced {}'s direct access" },
-  "direct_grant.revoked": { verb: "Revoked direct access", template: "Revoked {}'s direct access", destructive: true },
+  "direct_grant.upserted": { verb: "Gave direct access", template: "Gave {} direct access", passive: "Given direct access" },
+  "direct_grant.replaced": { verb: "Replaced somebody's direct access", template: "Replaced {}'s direct access", passive: "Their direct access was replaced" },
+  "direct_grant.revoked": { verb: "Revoked direct access", template: "Revoked {}'s direct access", passive: "Their direct access was revoked", destructive: true },
   // The record itself was deleted by hand, as opposed to a revoke that a rule,
   // an expiry or a review set off.
-  "direct_grant.removed": { verb: "Revoked direct access by hand", template: "Revoked {}'s direct access by hand", destructive: true },
-  "direct_grant.revoked_by_expiry": { verb: "Ended access on its expiry date", template: "Ended {}'s access on its expiry date", destructive: true },
+  "direct_grant.removed": { verb: "Revoked direct access by hand", template: "Revoked {}'s direct access by hand", passive: "Their direct access was revoked by hand", destructive: true },
+  "direct_grant.revoked_by_expiry": { verb: "Ended access on its expiry date", template: "Ended {}'s access on its expiry date", passive: "Their access ended on its expiry date", destructive: true },
   "bundle.created": { verb: "Created a bundle", template: "Created the {} bundle" },
-  "bundle.assigned": { verb: "Gave somebody a bundle", template: "Gave {} a bundle" },
-  "bundle.unassigned": { verb: "Removed somebody from a bundle", template: "Removed {} from a bundle", destructive: true },
+  "bundle.assigned": { verb: "Gave somebody a bundle", template: "Gave {} a bundle", passive: "Given a bundle" },
+  "bundle.unassigned": { verb: "Removed somebody from a bundle", template: "Removed {} from a bundle", passive: "Removed from a bundle", destructive: true },
   "bundle.role_added": { verb: "Added a role to a bundle", template: "Added a role to the {} bundle" },
   "bundle.role_removed": { verb: "Removed a role from a bundle", template: "Removed a role from the {} bundle", destructive: true },
   "bundle.welcome_set": { verb: "Set the default bundle for new members" },
@@ -48,15 +54,15 @@ export const AUDIT_ACTIONS: Record<
   // find it under the verb they read.
   "bundle.deleted": { verb: "Retired a bundle", destructive: true },
   "bundle.version_published": { verb: "Published a bundle version", template: "Published a version of the {} bundle" },
-  "bundle.holder_moved": { verb: "Moved somebody to a different bundle version", template: "Moved {} to a different bundle version" },
-  welcome_bundle_assigned: { verb: "Gave a new member the default bundle", template: "Gave {} the default bundle, as a new member" },
+  "bundle.holder_moved": { verb: "Moved somebody to a different bundle version", template: "Moved {} to a different bundle version", passive: "Moved to a different bundle version" },
+  welcome_bundle_assigned: { verb: "Gave a new member the default bundle", template: "Gave {} the default bundle, as a new member", passive: "Given the default bundle, as a new member" },
   "mapping_rule.created": { verb: "Created an automatic rule" },
   "mapping_rule.updated": { verb: "Changed an automatic rule" },
   "mapping_rule.deleted": { verb: "Deleted an automatic rule", destructive: true },
   "role.created": { verb: "Created a role" },
   "access_request.created": { verb: "Asked for access" },
-  "access_request.approved": { verb: "Approved a request", template: "Approved {}'s request" },
-  "access_request.rejected": { verb: "Declined a request", template: "Declined {}'s request" },
+  "access_request.approved": { verb: "Approved a request", template: "Approved {}'s request", passive: "Their request was approved" },
+  "access_request.rejected": { verb: "Declined a request", template: "Declined {}'s request", passive: "Their request was declined" },
   // Not destructive, and deliberately not phrased as a refusal — the person who filed it took it
   // back. `requestOutcome` keeps the same distinction on the request screens.
   "access_request.withdrawn": { verb: "Withdrew their request" },
@@ -80,10 +86,15 @@ const HOLD_LAPSED = /^allowance\.([a-z0-9_-]+)\.lapsed$/;
 
 export function describeAction(
   action: string,
-): { verb: string; template?: string; destructive: boolean } {
+): { verb: string; template?: string; passive?: string; destructive: boolean } {
   const known = AUDIT_ACTIONS[action];
   if (known) {
-    return { verb: known.verb, template: known.template, destructive: Boolean(known.destructive) };
+    return {
+      verb: known.verb,
+      template: known.template,
+      passive: known.passive,
+      destructive: Boolean(known.destructive),
+    };
   }
   const account = action.match(ACCOUNT_CHANGE);
   if (account) {
@@ -194,7 +205,11 @@ export function traceFor(entry: AuditEntry): AuditTrace {
  */
 export function actedOn(entry: AuditEntry, userId: string): "acted" | "affected" | "both" {
   const isActor = entry.actor_id === userId;
-  const isTarget = entry.target_id === userId;
+  // Only a row whose target is a PERSON can have this person as its target.
+  // `target_id` holds a bundle id on a bundle edit, and comparing a person's
+  // id against one is a comparison that can only ever answer "no" — which
+  // this function then reported as "somebody else did this TO them".
+  const isTarget = targetKind(entry.action) === "user" && entry.target_id === userId;
   if (isActor && isTarget) return "both";
   return isActor ? "acted" : "affected";
 }
