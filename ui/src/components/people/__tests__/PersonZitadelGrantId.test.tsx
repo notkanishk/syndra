@@ -123,7 +123,7 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
   it("distinguishes an unreadable Zitadel from an absent grant", () => {
     state.error = new Error("upstream down");
     renderPerson(true);
-    expect(document.body.textContent).toMatch(/Zitadel grant · unavailable/);
+    expect(document.body.textContent).toMatch(/Zitadel couldn’t be read just now/);
     expect(document.body.textContent).not.toMatch(/none —/);
   });
 });

@@ -145,7 +145,7 @@ describe("the project header when Zitadel has no grant", () => {
     ]);
     renderPerson();
 
-    expect(screen.getByText(/have not been sent/i)).toBeInTheDocument();
+    expect(screen.getByText(/Not sent to Zitadel yet/i)).toBeInTheDocument();
     // Drift will not list it — a bundle's own grant is not drift — so the old
     // pointer ended in an empty screen and an operator concluding the drift
     // report was broken.
@@ -202,11 +202,12 @@ describe("a role Zitadel confirms", () => {
     renderPerson();
 
     expect(screen.getByText(/In Zitadel/)).toBeInTheDocument();
+    // The read time is the project heading's job now — it is the evidence for
+    // every row beneath it, and it was being printed again on each of them.
     // The test runner's local timezone need not be UTC, so the expectation is
-    // computed with the same `formatClock` the row renders through, rather
-    // than a hardcoded hour that only holds in one zone.
+    // computed with the same `formatClock` the heading renders through.
     expect(
-      screen.getByText(new RegExp(`read ${formatClock(state.observedAt)}`)),
+      screen.getByText(new RegExp(`Read from Zitadel ${formatClock(state.observedAt)}`)),
     ).toBeInTheDocument();
   });
 
@@ -238,5 +239,54 @@ describe("a role whose standing Zitadel has not answered yet", () => {
     renderPerson();
 
     expect(screen.getByText("Checking Zitadel…")).toBeInTheDocument();
+  });
+});
+
+/**
+ * A grant Zitadel holds that no Syndra record explains. The operator's People
+ * page calls this "unexplained"; on the person's own page it used to render as
+ * a project card reading "0 roles" — the one sentence that is flatly untrue
+ * about access somebody can use right now.
+ */
+describe("access nothing explains", () => {
+  it("names the roles and says nothing explains them", () => {
+    state.zitadel = [{ id: "zg1", projectId: "p-audio", roleKeys: ["community", "kiln"] }];
+    state.observedAt = "2026-09-11T04:40:00Z";
+    state.projects = [
+      {
+        project_id: "p-audio",
+        project_name: "Audio-Dash",
+        project_name_resolved: true,
+        effective_role_keys: ["community"],
+        observed_role_keys: ["community", "kiln"],
+        source_roles: [{ role_key: "community", reasons: [{ kind: "direct", description: "" }] }],
+        derived_roles: [],
+      },
+    ] as never;
+    renderPerson();
+
+    expect(screen.getByText(/Nothing explains this/i)).toBeInTheDocument();
+    expect(screen.getByText("Kiln")).toBeInTheDocument();
+    // The recorded count and the unexplained count are never added together —
+    // a combined "2 roles" hides the row this band exists to surface.
+    expect(screen.getByText(/1 role Syndra never gave/i)).toBeInTheDocument();
+  });
+
+  it("says nothing when the observation has not happened", () => {
+    state.zitadel = [];
+    state.projects = [
+      {
+        project_id: "p-audio",
+        project_name: "Audio-Dash",
+        project_name_resolved: true,
+        effective_role_keys: ["community"],
+        observed_role_keys: null,
+        source_roles: [{ role_key: "community", reasons: [{ kind: "direct", description: "" }] }],
+        derived_roles: [],
+      },
+    ] as never;
+    renderPerson();
+
+    expect(screen.queryByText(/Nothing explains this/i)).toBeNull();
   });
 });

@@ -11,7 +11,8 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
-import { UserName, BundleName } from "@/components/names";
+import { UserName } from "@/components/names";
+import { EventSentence } from "@/components/audit/EventLine";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { describeAction, machineName, targetKind, shortId } from "@/lib/audit-vocabulary";
 import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
@@ -175,7 +176,7 @@ export default function AuditPage() {
                 <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
               </span>
               <span className="w-full text-[14px] text-muted tablet:min-w-[240px] tablet:flex-1">
-                <Sentence entry={entry} />
+                <EventSentence entry={entry} />
               </span>
               <TraceCell entry={entry} className="tablet:w-[80px] tablet:shrink-0 tablet:text-right" />
             </div>
@@ -212,51 +213,6 @@ export default function AuditPage() {
       </Card>
     </div>
   );
-}
-
-/**
- * The verb, in words, with only the destructive one carrying colour. Unknown
- * actions fall back to the raw key rather than a guess — a log that invents a
- * description for something it doesn't recognise is worse than one that admits
- * it.
- */
-function Sentence({ entry }: { entry: AuditEntry }) {
-  const { verb, destructive } = describeAction(entry.action);
-  const hasTarget = entry.target_id && entry.target_id !== "-" && entry.target_id !== "system";
-
-  return (
-    <>
-      <span className={destructive ? "font-semibold text-danger-text" : undefined}>{verb}</span>
-      {hasTarget ? (
-        <>
-          {" — "}
-          <TargetRef entry={entry} />
-        </>
-      ) : null}
-    </>
-  );
-}
-
-/**
- * `entry.target_id` is only sometimes a person — see `targetKind`. A raw uuid
- * must never be the visible label, so a bundle or rule id renders through its
- * own name (or a "retired" fallback plus its short handle) rather than
- * through the person resolver, which would report it as an unknown account.
- */
-function TargetRef({ entry }: { entry: AuditEntry }) {
-  const kind = targetKind(entry.action);
-  if (kind === "bundle") {
-    return (
-      <BundleName
-        id={entry.target_id}
-        fallback={`a retired bundle (${shortId(entry.target_id, "b")})`}
-      />
-    );
-  }
-  if (kind === "rule") {
-    return <>{`a rule (${shortId(entry.target_id, "R")})`}</>;
-  }
-  return <UserName id={entry.target_id} />;
 }
 
 /**

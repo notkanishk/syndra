@@ -6,7 +6,8 @@ import { useMemo } from "react";
 import { UserName } from "@/components/names";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
-import { describeAction, machineName } from "@/lib/audit-vocabulary";
+import { machineName } from "@/lib/audit-vocabulary";
+import { EventSentence } from "@/components/audit/EventLine";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { formatWhen, humanizeKey } from "@/lib/format";
 import { hasAccess, isDeparted, peopleHref } from "@/lib/people-filters";
@@ -375,33 +376,26 @@ function RecentActivity() {
       {rows.length === 0 ? (
         <div className="px-5 py-3.5 text-[14px] text-faint">Nothing recorded yet.</div>
       ) : (
-        rows.map((entry) => {
-          const { verb, destructive } = describeAction(entry.action);
-          return (
-            <div key={entry.id} className="row-divider flex flex-wrap items-baseline gap-3 px-5 py-2.5">
-              {/* formatWhen prints a bare time for today ("14:32") but a full
-                  date for anything older ("10 Sept 14:32") — wider than the
-                  clock-only column this used to be. */}
-              <span className="w-[92px] shrink-0 text-[12.5px] text-faint">
-                {formatWhen(entry.created_at)}
-              </span>
-              <span className="w-[150px] shrink-0 truncate text-[14px] font-semibold">
-                <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
-                <span className={destructive ? "font-semibold text-danger-text" : undefined}>
-                  {verb}
-                </span>
-                {entry.target_id && entry.target_id !== "-" && entry.target_id !== "system" ? (
-                  <>
-                    {" — "}
-                    <UserName id={entry.target_id} />
-                  </>
-                ) : null}
-              </span>
-            </div>
-          );
-        })
+        rows.map((entry) => (
+          <div key={entry.id} className="row-divider flex flex-wrap items-baseline gap-3 px-5 py-2.5">
+            {/* formatWhen prints a bare time for today ("14:32") but a full
+                date for anything older ("10 Sept 14:32") — wider than the
+                clock-only column this used to be. */}
+            <span className="w-[92px] shrink-0 text-[12.5px] text-faint">
+              {formatWhen(entry.created_at)}
+            </span>
+            <span className="w-[150px] shrink-0 truncate text-[14px] font-semibold">
+              <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
+            </span>
+            {/* The SAME renderer the Audit page uses. This panel used to hand
+                every target_id to the person resolver, so a bundle edit read
+                "Unknown account 9e93893d-…" here and "Community · Basic" there
+                — one event, two screens, disagreeing. */}
+            <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
+              <EventSentence entry={entry} />
+            </span>
+          </div>
+        ))
       )}
     </Card>
   );

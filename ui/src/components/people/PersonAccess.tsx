@@ -137,9 +137,11 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
       : upstreamGrants.isLoading
         ? "unknown"
         : "read";
-  // When the observation store's read happened — the basis for every "In
-  // Zitadel" claim below. A positive mark with no read time attached is an
-  // assertion with no evidence behind it.
+  // When the observation store's read happened — the basis every "In Zitadel"
+  // claim below rests on. Stated ONCE per project, on the heading, because
+  // every role in that card was read from this same observation; a clock
+  // repeated on each row is the same fact printed twice and crowds out the
+  // part that actually differs between rows.
   const readAt = upstreamGrants.data?.observedAt;
 
   if (access.isLoading) {
@@ -354,14 +356,22 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   resolved={project.project_name_resolved}
                   id={project.project_id}
                 />
-                <span className="text-[13.5px] text-faint">
-                  {project.effective_role_keys.length}{" "}
-                  {project.effective_role_keys.length === 1 ? "role" : "roles"}
-                </span>
-                {advanced && isOperator && (
+                <ProjectRoleTally
+                  recorded={project.effective_role_keys.length}
+                  unexplained={unexplainedIn(project).length}
+                />
+                {/* Not gated on Advanced. The read time is the EVIDENCE for
+                    every "In Zitadel" below it, and a positive claim whose
+                    basis is only visible to operators in one view is a claim
+                    most readers are asked to take on faith. The grant id
+                    inside stays Advanced-only — that is a handle, not
+                    evidence. */}
+                {(
                   <ZitadelGrantId
                     id={zitadelGrantByProject.get(project.project_id)}
                     readAt={readAt}
+                    showId={advanced && isOperator}
+                    isOperator={isOperator}
                     loading={upstreamGrants.isLoading}
                     unreachable={Boolean(upstreamGrants.error)}
                     // Absent because nothing has been sent yet is not absent
@@ -380,7 +390,6 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <RoleGroup
                 confirmation={confirmation}
                 inZitadel={zitadelRolesByProject.get(project.project_id)}
-                readAt={readAt}
                 label="Given"
                 roles={project.source_roles}
                 projectId={project.project_id}
@@ -395,7 +404,6 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <RoleGroup
                 confirmation={confirmation}
                 inZitadel={zitadelRolesByProject.get(project.project_id)}
-                readAt={readAt}
                 label="Automatic"
                 roles={project.derived_roles}
                 projectId={project.project_id}
@@ -406,6 +414,11 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 isOperator={isOperator}
                 onRemove={setRemoval}
                 onReveal={revealInAdvanced}
+              />
+              <UnexplainedRoles
+                roleKeys={unexplainedIn(project)}
+                projectId={project.project_id}
+                isOperator={isOperator}
               />
             </Card>
           ))}
@@ -465,21 +478,127 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
 }
 
 /**
- * What Zitadel showed for this project — advanced only: in Basic, this line is noise around the
- * thing that matters.
+ * Roles Zitadel holds on this project that no Syndra record explains.
  *
- * The truth is Zitadel, so the primary line states what it showed positively ("In Zitadel · read
- * 04:53"), not a raw grant id — an id on its own answers "what is it called", never "is it
- * there". The id is still the handle an operator needs for Zitadel's own console or a ticket, so
- * it stays, as a muted suffix behind the positive statement rather than the statement itself.
+ * Both lists come from the same response, so this is a subtraction rather than
+ * a second opinion: observed minus recorded. An empty result is only an empty
+ * result once something has been observed — `observed_role_keys` is null until
+ * then, and null subtracts to nothing rather than to "all of them are fine".
+ */
+function unexplainedIn(project: {
+  effective_role_keys: string[];
+  observed_role_keys?: string[] | null;
+}): string[] {
+  if (!project.observed_role_keys) return [];
+  return project.observed_role_keys.filter((key) => !project.effective_role_keys.includes(key));
+}
+
+/**
+ * What this project holds, in two numbers that mean different things.
  *
- * Four states, and none of them guesses. An absent grant is stated as absent rather than shown
- * as a dash: Syndra listing roles for a project Zitadel has no grant for is a real condition,
- * and naming it is not the same as interpreting it — Reconciliation is where that gets triaged.
+ * They are never added together. "3 roles" is what Syndra decided; anything
+ * unexplained is access it did not, and a combined "4 roles" would hide exactly
+ * the row an operator is here to find. The second number is only ever shown
+ * when it is non-zero, so an ordinary project reads as one plain count.
+ */
+function ProjectRoleTally({ recorded, unexplained }: { recorded: number; unexplained: number }) {
+  return (
+    <span className="flex flex-wrap items-center gap-2 text-[13.5px]">
+      {recorded > 0 || unexplained === 0 ? (
+        <span className="text-faint">
+          {recorded} {recorded === 1 ? "role" : "roles"}
+        </span>
+      ) : null}
+      {unexplained > 0 && (
+        <span className="font-semibold text-warn-text">
+          {unexplained} {unexplained === 1 ? "role" : "roles"} Syndra never gave
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The drift band, on the page of the person it concerns.
+ *
+ * This access is real — Zitadel holds it and they can use it right now — and
+ * nothing in Syndra says who gave it or why. Before this band existed the
+ * project rendered as an empty card reading "0 roles", which is the one
+ * sentence that is flatly untrue about it.
+ *
+ * Deliberately not styled as an error: it is a question, not a fault, and the
+ * answer might be "that was fine". Triage lives on Drift, and the link goes
+ * there rather than offering a removal this screen cannot explain.
+ */
+function UnexplainedRoles({
+  roleKeys,
+  projectId,
+  isOperator,
+}: {
+  roleKeys: string[];
+  projectId: string;
+  isOperator: boolean;
+}) {
+  if (roleKeys.length === 0) return null;
+  return (
+    <div className="row-divider px-5 py-3.5">
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-warn-text">
+          Nothing explains this
+        </span>
+        <span className="text-[13.5px] text-muted">
+          {isOperator
+            ? "In Zitadel, with no bundle, rule or grant behind it."
+            : "You can use this. Nobody wrote down who gave it to you."}
+        </span>
+      </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        {roleKeys.map((key) => (
+          <span
+            key={key}
+            className="rounded-pill border border-line-strong px-2.5 py-1 text-[13.5px] font-semibold"
+          >
+            {humanizeKey(key)}
+          </span>
+        ))}
+        {isOperator && (
+          <Link
+            href={`/governance/drift?project=${encodeURIComponent(projectId)}`}
+            className="flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent motion-tint hover:underline desktop:min-h-0"
+          >
+            Decide on Drift →
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The project heading's line about Zitadel — the EVIDENCE, not the verdict.
+ *
+ * This used to repeat the row's own sentence: the heading said "In Zitadel ·
+ * read 22:51" and every role beneath it said "In Zitadel · read 22:51" again,
+ * so a card with two roles made the same claim three times and none of the
+ * three said anything the others did not.
+ *
+ * Split by what each can actually know. A grant in Zitadel is per (user,
+ * project) and carries every role, so the heading is the right place for when
+ * it was read and what its id is — facts about the READ, true for the whole
+ * card. Whether one particular role is in it differs per row, so that stays on
+ * the row. Now the heading says how we know, the row says what we found, and
+ * neither repeats the other.
+ *
+ * Four states, and none of them guesses. An absent grant is stated as absent
+ * rather than shown as a dash: Syndra listing roles for a project Zitadel has
+ * no grant for is a real condition, and naming it is not the same as
+ * interpreting it — Drift is where that gets triaged.
  */
 function ZitadelGrantId({
   id,
   readAt,
+  showId,
+  isOperator,
   loading,
   unreachable,
   unsent,
@@ -487,6 +606,9 @@ function ZitadelGrantId({
   id: string | undefined;
   /** When this observation was taken — the basis the positive statement below cites. */
   readAt: string | undefined;
+  /** The raw grant id is an operator's handle for Zitadel's console or a ticket. */
+  showId: boolean;
+  isOperator: boolean;
   loading: boolean;
   unreachable: boolean;
   /** Every role here is still queued, so Zitadel has not been told yet. */
@@ -499,8 +621,8 @@ function ZitadelGrantId({
       // explanation anywhere for why the id is missing, and it was reachable
       // by hover alone — so on a phone the row said "unavailable" and nothing
       // else, which reads as a defect in Syndra rather than a read that failed.
-      <span className="text-[13px] text-faint">
-        Zitadel grant · unavailable — it could not be read just now
+      <span className="text-[13px] text-warn-text">
+        Zitadel couldn&rsquo;t be read just now
       </span>
     );
   }
@@ -508,15 +630,22 @@ function ZitadelGrantId({
     return (
       <span className="text-[13px] text-faint">
         {unsent
-          ? "Not in Zitadel yet — these changes have not been sent"
-          : "Not in Zitadel — see Drift › Side by side"}
+          ? "Not sent to Zitadel yet"
+          : isOperator
+            ? "No grant in Zitadel — see Drift › Side by side"
+            : "No grant in Zitadel yet"}
       </span>
     );
   }
   return (
-    <span className="text-[13px] font-semibold text-healthy">
-      In Zitadel{readAt ? ` · read ${formatClock(readAt)}` : ""}{" "}
-      <Mono className="font-normal text-faint">{id}</Mono>
+    <span className="text-[13px] text-faint">
+      {readAt ? `Read from Zitadel ${formatClock(readAt)}` : "Read from Zitadel"}
+      {showId ? (
+        <>
+          {" "}
+          <Mono className="font-normal text-faint">{id}</Mono>
+        </>
+      ) : null}
     </span>
   );
 }
@@ -535,7 +664,6 @@ function RoleGroup({
   label,
   confirmation,
   inZitadel,
-  readAt,
   roles,
   projectId,
   projectName,
@@ -554,8 +682,6 @@ function RoleGroup({
   confirmation: Confirmation;
   /** The roles Zitadel reports for this project. Absent when it was not asked. */
   inZitadel: Set<string> | undefined;
-  /** When that observation was taken — the basis "In Zitadel" cites. */
-  readAt: string | undefined;
   roles: AccessRole[];
   projectId: string;
   projectName: string;
@@ -641,9 +767,12 @@ function RoleGroup({
                   {/* The positive mark. The truth is Zitadel, so a role it
                       confirmed says so outright — not only silence where the
                       negative states would otherwise complain. */}
+                  {/* The read time is stated once, on the project heading
+                      above: every role in this card was read from the same
+                      observation, so repeating the clock on each row says
+                      nothing new and buries the part that differs. */}
                   <span className="font-semibold text-healthy">
                     In <ZitadelWord isOperator={isOperator} />
-                    {readAt ? ` · read ${formatClock(readAt)}` : ""}
                   </span>
                   {expires ? (
                     <span className="font-semibold text-warn-text">

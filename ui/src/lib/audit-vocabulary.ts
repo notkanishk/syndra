@@ -15,19 +15,30 @@ import type { AuditEntry } from "@/lib/queries/useAudit";
  * wrong sentence in an audit log is the one kind of bug nobody catches until it
  * matters.
  */
-export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean }> = {
-  "direct_grant.upserted": { verb: "Gave direct access" },
-  "direct_grant.replaced": { verb: "Replaced somebody's direct access" },
-  "direct_grant.revoked": { verb: "Revoked direct access", destructive: true },
+/**
+ * `verb` is the sentence with nothing named — used when the row carries no
+ * target. `template` is the same sentence with a `{}` slot for the thing it
+ * happened to, so a screen renders "Removed a role from the Community · Basic
+ * bundle" rather than a verb and a name joined by a dash. What fills the slot
+ * is decided by `targetKind`, which is why the slot never says what KIND of
+ * thing it is: the resolver already knows.
+ */
+export const AUDIT_ACTIONS: Record<
+  string,
+  { verb: string; template?: string; destructive?: boolean }
+> = {
+  "direct_grant.upserted": { verb: "Gave direct access", template: "Gave {} direct access" },
+  "direct_grant.replaced": { verb: "Replaced somebody's direct access", template: "Replaced {}'s direct access" },
+  "direct_grant.revoked": { verb: "Revoked direct access", template: "Revoked {}'s direct access", destructive: true },
   // The record itself was deleted by hand, as opposed to a revoke that a rule,
   // an expiry or a review set off.
-  "direct_grant.removed": { verb: "Revoked direct access by hand", destructive: true },
-  "direct_grant.revoked_by_expiry": { verb: "Ended access on its expiry date", destructive: true },
-  "bundle.created": { verb: "Created a bundle" },
-  "bundle.assigned": { verb: "Gave somebody a bundle" },
-  "bundle.unassigned": { verb: "Removed somebody from a bundle", destructive: true },
-  "bundle.role_added": { verb: "Added a role to a bundle" },
-  "bundle.role_removed": { verb: "Removed a role from a bundle", destructive: true },
+  "direct_grant.removed": { verb: "Revoked direct access by hand", template: "Revoked {}'s direct access by hand", destructive: true },
+  "direct_grant.revoked_by_expiry": { verb: "Ended access on its expiry date", template: "Ended {}'s access on its expiry date", destructive: true },
+  "bundle.created": { verb: "Created a bundle", template: "Created the {} bundle" },
+  "bundle.assigned": { verb: "Gave somebody a bundle", template: "Gave {} a bundle" },
+  "bundle.unassigned": { verb: "Removed somebody from a bundle", template: "Removed {} from a bundle", destructive: true },
+  "bundle.role_added": { verb: "Added a role to a bundle", template: "Added a role to the {} bundle" },
+  "bundle.role_removed": { verb: "Removed a role from a bundle", template: "Removed a role from the {} bundle", destructive: true },
   "bundle.welcome_set": { verb: "Set the default bundle for new members" },
   // Not "Renamed": the endpoint rewrites name and description, and the row records neither.
   // Claiming a rename for a description edit would be a specific falsehood in place of a vague
@@ -36,16 +47,16 @@ export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean
   // Same word the console puts on the button. An operator looking for what they just did should
   // find it under the verb they read.
   "bundle.deleted": { verb: "Retired a bundle", destructive: true },
-  "bundle.version_published": { verb: "Published a bundle version" },
-  "bundle.holder_moved": { verb: "Moved somebody to a different bundle version" },
-  welcome_bundle_assigned: { verb: "Gave a new member the default bundle" },
+  "bundle.version_published": { verb: "Published a bundle version", template: "Published a version of the {} bundle" },
+  "bundle.holder_moved": { verb: "Moved somebody to a different bundle version", template: "Moved {} to a different bundle version" },
+  welcome_bundle_assigned: { verb: "Gave a new member the default bundle", template: "Gave {} the default bundle, as a new member" },
   "mapping_rule.created": { verb: "Created an automatic rule" },
   "mapping_rule.updated": { verb: "Changed an automatic rule" },
   "mapping_rule.deleted": { verb: "Deleted an automatic rule", destructive: true },
   "role.created": { verb: "Created a role" },
   "access_request.created": { verb: "Asked for access" },
-  "access_request.approved": { verb: "Approved a request" },
-  "access_request.rejected": { verb: "Declined a request" },
+  "access_request.approved": { verb: "Approved a request", template: "Approved {}'s request" },
+  "access_request.rejected": { verb: "Declined a request", template: "Declined {}'s request" },
   // Not destructive, and deliberately not phrased as a refusal — the person who filed it took it
   // back. `requestOutcome` keeps the same distinction on the request screens.
   "access_request.withdrawn": { verb: "Withdrew their request" },
@@ -67,9 +78,13 @@ export const AUDIT_ACTIONS: Record<string, { verb: string; destructive?: boolean
 const ACCOUNT_CHANGE = /^entitlement\.([a-z0-9_-]+)\.enqueued$/;
 const HOLD_LAPSED = /^allowance\.([a-z0-9_-]+)\.lapsed$/;
 
-export function describeAction(action: string): { verb: string; destructive: boolean } {
+export function describeAction(
+  action: string,
+): { verb: string; template?: string; destructive: boolean } {
   const known = AUDIT_ACTIONS[action];
-  if (known) return { verb: known.verb, destructive: Boolean(known.destructive) };
+  if (known) {
+    return { verb: known.verb, template: known.template, destructive: Boolean(known.destructive) };
+  }
   const account = action.match(ACCOUNT_CHANGE);
   if (account) {
     return {
