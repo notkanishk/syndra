@@ -117,6 +117,26 @@ describe("Home names the onboarding gap instead of staying silent", () => {
     state.onboarding = { welcome_bundle_configured: false, missed: [] };
     renderHome();
 
-    expect(await screen.findByText("One thing here needs you.")).toBeTruthy();
+    expect(await screen.findByText("One thing needs you.")).toBeTruthy();
+  });
+});
+
+/**
+ * The card's badge counts PEOPLE. It used to add one for "no default bundle is
+ * configured", so a card headed "New people without a bundle · 1" could be
+ * about nobody at all — a settings fact wearing a people badge. The headline
+ * above still counts it, because it is genuinely something that needs doing;
+ * the badge on a card about people is not the place to say so.
+ */
+describe("the card's count is a count of people", () => {
+  it("does not count a missing default bundle as a person", async () => {
+    state.onboarding = { welcome_bundle_configured: false, missed: [] };
+    renderHome();
+
+    expect(await screen.findByText("New people without a bundle")).toBeTruthy();
+    expect(screen.getByText(/No default/)).toBeTruthy();
+    const badges = Array.from(document.querySelectorAll('[data-testid="card-count"]'));
+    expect(badges.length).toBeGreaterThan(0);
+    expect(badges.map((b) => b.textContent)).toContain("0");
   });
 });

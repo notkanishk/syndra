@@ -118,7 +118,7 @@ describe("the headline's count is not the nav's count", () => {
   it("scopes the headline to this page, matching the nav's own disambiguation", () => {
     state.governance.merge_findings = 3;
     renderHome();
-    expect(screen.getByText(/Three things here need you\./)).toBeTruthy();
+    expect(screen.getByText(/Three things need you\./)).toBeTruthy();
   });
 });
 

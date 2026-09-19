@@ -161,10 +161,13 @@ export function formatLongDate(iso: string | null | undefined): string {
 
 /** "Friday 31 July" — the line under a greeting. */
 export function formatWeekday(date: Date = new Date()): string {
+  // Short month, matching formatShortDate everywhere else. "Saturday 19
+  // September" beside a feed of "18 Sept" rows is the same product speaking
+  // two dialects on one screen.
   return date.toLocaleDateString(DATE_LOCALE, {
     weekday: "long",
     day: "numeric",
-    month: "long",
+    month: "short",
   });
 }
 

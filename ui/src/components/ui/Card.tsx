@@ -56,6 +56,7 @@ export function CardHeader({
           where the difference is the whole message. */}
       {count !== undefined && (
         <span
+          data-testid="card-count"
           className={`rounded-pill px-2.5 py-0.5 text-[12.5px] font-bold ${
             count === 0 ? "border border-line-strong text-label" : badgeTone
           }`}

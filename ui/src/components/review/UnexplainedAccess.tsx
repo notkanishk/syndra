@@ -41,7 +41,19 @@ import {
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { Relative } from "@/components/ui/Time";
-import { formatLongDate, formatRelative } from "@/lib/format";
+import { formatLongDate, formatRelative, humanizeKey } from "@/lib/format";
+import {
+  AGE_LABELS,
+  EMPTY_DRIFT_FILTERS,
+  ORIGIN_LABELS,
+  applyDriftFilters,
+  driftRequest,
+  hasAnyDriftFilter,
+  parseDriftFilters,
+  serializeDriftFilters,
+  type DriftFilters,
+} from "@/lib/drift-filters";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
   outcomeFromError,
   statesNothingChanged,
@@ -73,24 +85,34 @@ export function UnexplainedAccess() {
   const tab: Tab = params.get("tab") === "reconciliation" ? "reconciliation" : "triage";
 
   /**
-   * Two filters, server-side, and deliberately not three.
+   * Six filters, in the URL, so a narrowed queue is a link somebody can send.
    *
-   * `source` is the one an operator asks for by name: a sweep-found row has no
-   * actor to attribute — the sweep compares grant sets and genuinely cannot know
-   * who — so "show me only what the sweep found" is "show me the ones I'll have
-   * to judge without evidence". `project_id` scopes a queue to the thing that
-   * went wrong, which is usually one project.
+   * Three are request parameters (project, person, how it was found); three are
+   * applied here over what came back, because they ask about fields the
+   * endpoint does not filter on. `drift-filters.ts` says which is which.
    *
-   * `user_id` the backend also accepts, and this screen does NOT offer: "select
-   * everything else for this person" is already on every row, works from the row
-   * you are looking at, and doesn't ask anyone to find a name in a list of three
-   * hundred. A select there would be a worse version of a control that exists.
+   * The person and role choices are built from the rows actually in the queue
+   * rather than from the whole directory: there is no use offering three
+   * hundred names when nine of them have drift, and a filter that can return
+   * nothing is a filter that wastes a click.
    */
-  const [source, setSource] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const drift = useDriftItems({ source: source || undefined, project_id: projectId || undefined });
+  const filters = useMemo(
+    () => parseDriftFilters(new URLSearchParams(params.toString())),
+    [params],
+  );
+  const setFilters = useCallback(
+    (next: Partial<DriftFilters>) => {
+      const merged = { ...filters, ...next };
+      router.replace(
+        `/governance/drift${serializeDriftFilters(merged, tab === "reconciliation" ? { tab } : {})}`,
+        { scroll: false },
+      );
+    },
+    [filters, router, tab],
+  );
+  const drift = useDriftItems(driftRequest(filters));
   const projects = useProjects();
-  const filtered = Boolean(source || projectId);
+  const filtered = hasAnyDriftFilter(filters);
   const reconcile = useReconcileNow();
   const [scanOutcome, setScanOutcome] = useState<Outcome | null>(null);
 
@@ -101,7 +123,28 @@ export function UnexplainedAccess() {
   const [limit, setLimit] = useState(PAGE);
   const [bulkOp, setBulkOp] = useState<"adopt" | "external" | null>(null);
 
-  const items = useMemo(() => drift.data ?? [], [drift.data]);
+  // What the request returned, before this page's own three filters — the
+  // person and role choices are drawn from here, so every option offered
+  // matches at least one row.
+  const returned = useMemo(() => drift.data ?? [], [drift.data]);
+  const items = useMemo(() => applyDriftFilters(returned, filters), [returned, filters]);
+  const resolver = useNameResolver();
+  // Options drawn from the queue itself, so nothing on offer returns nothing.
+  const people = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const item of returned) {
+      if (byId.has(item.user_id)) continue;
+      byId.set(item.user_id, resolver.resolveUser(item.user_id).value?.display_name ?? item.user_id);
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [returned, resolver]);
+  const roleKeys = useMemo(
+    () => Array.from(new Set(returned.flatMap((item) => item.role_keys))).sort(),
+    [returned],
+  );
+
   const visible = items.slice(0, limit);
   // Selection spans the whole queue, not the rendered page: a triage backlog is
   // exactly the case where paging four times before you can act is the tedium
@@ -175,8 +218,8 @@ export function UnexplainedAccess() {
         actions={
           <>
             <Select
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
+              value={filters.project}
+              onChange={(event) => setFilters({ project: event.target.value })}
               aria-label="Filter by project"
               className="w-[180px]"
             >
@@ -187,16 +230,68 @@ export function UnexplainedAccess() {
                 </option>
               ))}
             </Select>
+            <Select
+              value={filters.user}
+              onChange={(event) => setFilters({ user: event.target.value })}
+              aria-label="Filter by person"
+              className="w-[180px]"
+            >
+              <option value="">Anyone</option>
+              {people.map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value={filters.role}
+              onChange={(event) => setFilters({ role: event.target.value })}
+              aria-label="Filter by role"
+              className="w-[170px]"
+            >
+              <option value="">Any role</option>
+              {roleKeys.map((key) => (
+                <option key={key} value={key}>
+                  {humanizeKey(key)}
+                </option>
+              ))}
+            </Select>
+            <FilterPills
+              label="Filter by what is known about where it came from"
+              value={filters.origin}
+              onChange={(value) => setFilters({ origin: value as DriftFilters["origin"] })}
+              options={[
+                { value: "", label: "Any origin" },
+                ...Object.entries(ORIGIN_LABELS).map(([value, label]) => ({ value, label })),
+              ]}
+            />
+            <FilterPills
+              label="Filter by how long it has been waiting"
+              value={filters.age}
+              onChange={(value) => setFilters({ age: value as DriftFilters["age"] })}
+              options={[
+                { value: "", label: "Any age" },
+                ...Object.entries(AGE_LABELS).map(([value, label]) => ({ value, label })),
+              ]}
+            />
             <FilterPills
               label="Filter by how it was found"
-              value={source}
-              onChange={setSource}
+              value={filters.source}
+              onChange={(value) => setFilters({ source: value })}
               options={[
                 { value: "", label: "Any source" },
                 { value: "webhook", label: "Caught as it happened" },
                 { value: "reconciliation_sweep", label: "Found by the scheduled check" },
               ]}
             />
+            {filtered && (
+              <Button
+                variant="ghost"
+                onClick={() => setFilters(EMPTY_DRIFT_FILTERS)}
+              >
+                Clear filters
+              </Button>
+            )}
             <Button
               isPending={reconcile.isPending}
               onClick={async () => {
@@ -294,10 +389,7 @@ export function UnexplainedAccess() {
                     guidance="There may still be items under another project, or found the other way."
                     action={{
                       label: "Clear filters",
-                      onClick: () => {
-                        setSource("");
-                        setProjectId("");
-                      },
+                      onClick: () => setFilters(EMPTY_DRIFT_FILTERS),
                     }}
                   />
                 ) : (
