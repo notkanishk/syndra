@@ -8,6 +8,8 @@ import { Mono } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { BundleName, ProjectName, UserName } from "@/components/names";
 import {
   useOnboardingTriggers,
@@ -83,34 +85,46 @@ export default function EventActivityPage() {
             needs a decision.
           </>
         }
-        actions={
-          <>
-            <FilterPills<Source>
-              label="Filter by source"
-              value={source}
-              onChange={setSource}
-              options={[
-                { value: "all", label: "All sources" },
-                { value: "provider", label: "Zitadel" },
-                { value: "onboarding", label: "New people" },
-              ]}
-            />
-            <FilterPills<EventOutcome>
-              label="Filter by outcome"
-              value={outcome}
-              onChange={setOutcome}
-              options={[
-                { value: "all", label: "Any outcome" },
-                { value: "done", label: "Done" },
-                { value: "waiting", label: "Waiting" },
-                { value: "failed", label: "Failed" },
-                // The reason this filter exists. `dropped_enrichment_incomplete`
-                // was invented so a deliberate non-action stops being silent;
-                // until now there was no way to ask the screen for one.
-                { value: "dropped", label: "Not acted on" },
-              ]}
-            />
-          </>
+      />
+
+      {/* Two pill groups in the page header ran the width of the actions
+          area. Same row as every other list's filters now. */}
+      <FilterBar
+        filters={
+          <FilterPanel
+            activeCount={[source !== "all", outcome !== "all"].filter(Boolean).length}
+            onClear={() => {
+              setSource("all");
+              setOutcome("all");
+            }}
+          >
+            <FilterField label="Source">
+              <FilterPills<Source>
+                label="Filter by source"
+                value={source}
+                onChange={setSource}
+                options={[
+                  { value: "all", label: "All sources" },
+                  { value: "provider", label: "Zitadel" },
+                  { value: "onboarding", label: "New people" },
+                ]}
+              />
+            </FilterField>
+            <FilterField label="Outcome">
+              <FilterPills<EventOutcome>
+                label="Filter by outcome"
+                value={outcome}
+                onChange={setOutcome}
+                options={[
+                  { value: "all", label: "Any outcome" },
+                  { value: "done", label: "Done" },
+                  { value: "waiting", label: "Waiting" },
+                  { value: "failed", label: "Failed" },
+                  { value: "dropped", label: "Not acted on" },
+                ]}
+              />
+            </FilterField>
+          </FilterPanel>
         }
       />
 

@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
 import { WithheldInline } from "@/components/ui/Withheld";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { FilterBar } from "@/components/ui/FilterBar";
 import { useCrumb } from "@/lib/page-crumb";
 import { peopleHref } from "@/lib/people-filters";
 import { useRoleMembers, type RoleMember } from "@/lib/queries/useRoleMembers";
@@ -87,6 +88,25 @@ export default function RoleMembersPage({
         }
       />
 
+      {/* One control, so it stays on the row. It used to sit inside the card
+          header behind a literal "Filter by source:" label, which is the only
+          place in the product a filter introduced itself in prose. */}
+      <FilterBar
+        leading={
+          <FilterPills<Filter>
+            label="Filter by access source"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "All" },
+              { value: "direct", label: `Direct ${view?.direct_count ?? 0}` },
+              { value: "bundle", label: `Bundle ${view?.bundle_count ?? 0}` },
+              { value: "mapping", label: `Automatic ${view?.automatic_count ?? 0}` },
+            ]}
+          />
+        }
+      />
+
       <Card>
         <div className="flex flex-wrap items-center gap-3 px-5 py-4">
           <span className="type-card-title">
@@ -118,19 +138,6 @@ export default function RoleMembersPage({
               </span>
             )
           )}
-          <span className="flex-1" />
-          <span className="text-[13.5px] text-faint">Filter by source:</span>
-          <FilterPills<Filter>
-            label="Filter by access source"
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: "all", label: "All" },
-              { value: "direct", label: `Direct ${view?.direct_count ?? 0}` },
-              { value: "bundle", label: `Bundle ${view?.bundle_count ?? 0}` },
-              { value: "mapping", label: `Automatic ${view?.automatic_count ?? 0}` },
-            ]}
-          />
         </div>
 
         <ListStates

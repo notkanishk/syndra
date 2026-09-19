@@ -510,3 +510,40 @@ describe("one renderer knows what an audit target is", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Filters live on the filter row, never in the page header.
+ *
+ * Six screens each arranged their own. People put a search box and two selects
+ * in `PageHeader actions`, where they stretched to the width of the actions
+ * area and stacked into three tall rows beside the title; Drift put six there
+ * and pushed its own queue below the fold. The header is for what the page IS
+ * and for acting on it — "New role", "Ask for access". What narrows a list
+ * goes on the list's own row, through `FilterBar`.
+ */
+describe("filters are not page-header actions", () => {
+  it("keeps narrowing controls out of PageHeader", () => {
+    const offenders = sources().flatMap(({ path, source }) => {
+      const at = source.indexOf("actions={");
+      if (at < 0) return [];
+      // The actions prop's own text, to its closing brace at depth zero.
+      let depth = 0;
+      let i = source.indexOf("{", at);
+      const start = i;
+      for (; i < source.length; i += 1) {
+        if (source[i] === "{") depth += 1;
+        else if (source[i] === "}") {
+          depth -= 1;
+          if (depth === 0) break;
+        }
+      }
+      const actions = source.slice(start, i);
+      return /aria-label="Filter|<FilterPills/.test(actions) ? [path] : [];
+    });
+
+    expect(
+      offenders,
+      "put it in a <FilterBar> under the header, not in the header's actions",
+    ).toEqual([]);
+  });
+});
