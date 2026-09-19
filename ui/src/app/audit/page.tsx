@@ -18,7 +18,7 @@ import { describeAction, machineName, targetKind, shortId } from "@/lib/audit-vo
 import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDebounce } from "@/lib/useDebounce";
-import { formatShortDate } from "@/lib/format";
+import { formatWhen } from "@/lib/format";
 
 type Window = "7" | "30" | "all";
 
@@ -169,8 +169,8 @@ export default function AuditPage() {
               key={entry.id}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-4"
             >
-              <Mono className="text-faint tablet:w-[110px] tablet:shrink-0">
-                {formatShortDate(entry.created_at)}
+              <Mono className="text-faint tablet:w-[124px] tablet:shrink-0">
+                {formatWhen(entry.created_at)}
               </Mono>
               <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
                 <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />

@@ -27,6 +27,7 @@ import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
 import { Withheld } from "@/components/ui/Withheld";
+import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
@@ -563,7 +564,7 @@ function UnexplainedRoles({
         ))}
         {isOperator && (
           <Link
-            href={`/governance/drift?project=${encodeURIComponent(projectId)}`}
+            href={driftHref({ project: projectId })}
             className="flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent motion-tint hover:underline desktop:min-h-0"
           >
             Decide on Drift →

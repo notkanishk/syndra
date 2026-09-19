@@ -125,7 +125,12 @@ export function Home({ session }: { session: SessionUser }) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="type-greeting">
+        {/* max-w in characters, not pixels: the greeting is a sentence, and a
+            sentence that runs the full width of a wide window is read in
+            sweeps rather than at a glance. It wraps rather than clipping, and
+            `text-balance` keeps the two lines close in length instead of
+            leaving one word stranded. */}
+        <h1 className="type-greeting max-w-[22ch] text-balance sm:max-w-[34ch]">
           {greeting()}
           {who ? `, ${who}` : ""}. <span className="text-ink/40">{headline}</span>
         </h1>
@@ -376,10 +381,14 @@ function ExpiringRow({
  * <Term name="bundle">bundle</Term> was actually given, this moment.
  */
 function OnboardingGaps({ report }: { report: MissedOnboardingReport }) {
-  const count = (report.welcome_bundle_configured ? 0 : 1) + report.missed.length;
+  // The count counts PEOPLE. It used to add one for "no default bundle is
+  // configured", so a card headed "New people without a bundle · 1" could be
+  // about nobody at all — the 1 was a settings fact wearing a people badge.
+  // The setting still gets said, as its own row, where it reads as the cause
+  // it is rather than as a person.
   return (
     <Card>
-      <CardHeader title="New people without a bundle" count={count} />
+      <CardHeader title="New people without a bundle" count={report.missed.length} />
       {!report.welcome_bundle_configured && (
         <CardRow>
           <div className="flex-1 text-[14.5px]">
@@ -683,9 +692,9 @@ function firstName(session: SessionUser): string {
 // telling them apart reads as one total that disagrees with itself.
 function workSentence(count: number, loading: boolean): string {
   if (loading) return "Checking.";
-  if (count === 0) return "Nothing here needs you.";
-  if (count === 1) return "One thing here needs you.";
-  return `${spell(count)} things here need you.`;
+  if (count === 0) return "Nothing needs you right now.";
+  if (count === 1) return "One thing needs you.";
+  return `${spell(count)} things need you.`;
 }
 
 const WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];

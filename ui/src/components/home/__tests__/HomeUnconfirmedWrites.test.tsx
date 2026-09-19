@@ -164,7 +164,7 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
   it("counts toward the headline in Advanced", async () => {
     state.unconfirmed = { count: 1, top: [] };
     renderHome();
-    expect(await screen.findByText("One thing here needs you.")).toBeTruthy();
+    expect(await screen.findByText("One thing needs you.")).toBeTruthy();
   });
 
   // Basic's headline does not count it, so Basic must not show the block: the
