@@ -10,15 +10,26 @@ import type { DriftTriageItem } from "@/lib/queries/useDrift";
  * any screen can link into a pre-filtered Drift queue the way Home links into
  * pre-filtered People.
  *
- * Three of these are request parameters the backend already accepts. Three are
- * applied here, over the rows that came back, because they ask about fields the
- * endpoint does not filter on. Which is which is stated on each one — a filter
- * that silently means "of the first page" would be a worse lie than no filter.
+ * Two of these are request parameters the backend already accepts. Four are
+ * applied here, over the rows that came back — three because they ask about
+ * fields the endpoint does not filter on, and one (person) because asking the
+ * server would break the control that sets it. Which is which is stated on each
+ * one: a filter that silently meant "of the first page" would be a worse lie
+ * than no filter at all.
  */
 export interface DriftFilters {
   /** Server: `project_id`. */
   project: string;
-  /** Server: `user_id`. */
+  /**
+   * Client, deliberately, although the endpoint accepts `user_id`.
+   *
+   * The person dropdown is built from the people who appear in the queue. Ask
+   * the SERVER to narrow to one person and the queue comes back holding only
+   * that person — so the dropdown rebuilds from their rows alone and collapses
+   * to the one name already chosen, with no way back except "Anyone". Filtering
+   * here keeps every name in hand. The queue is a triage backlog of tens of
+   * rows, not a page of thousands; it is all in the browser already.
+   */
   user: string;
   /** Server: `source` — webhook, or the scheduled sweep. */
   source: string;
@@ -79,29 +90,38 @@ function matchesAge(detectedAt: string, age: DriftFilters["age"], now: Date): bo
   return days > 30;
 }
 
-/** The three the backend filters on, as the query hook wants them. */
+/** The two the backend filters on, as the query hook wants them. */
 export function driftRequest(filters: DriftFilters): {
   project_id?: string;
-  user_id?: string;
   source?: string;
 } {
   return {
     project_id: filters.project || undefined,
-    user_id: filters.user || undefined,
     source: filters.source || undefined,
   };
 }
 
-/** The three this page applies itself, over what the request returned. */
+/**
+ * The four this page applies itself, over what the request returned.
+ *
+ * `except` drops one filter from the pass — that is how a dropdown's own
+ * options are built. A list of people narrowed by the person already chosen
+ * has exactly one name in it, which is the bug this argument exists to
+ * prevent: every other filter still applies, so the options stay relevant,
+ * but never so relevant that they exclude the alternatives.
+ */
 export function applyDriftFilters(
   items: DriftTriageItem[],
   filters: DriftFilters,
   now: Date = new Date(),
+  except?: keyof DriftFilters,
 ): DriftTriageItem[] {
+  const on = (key: keyof DriftFilters) => key !== except && Boolean(filters[key]);
   return items.filter((item) => {
-    if (filters.origin && originOf(item) !== filters.origin) return false;
-    if (filters.role && !item.role_keys.includes(filters.role)) return false;
-    if (!matchesAge(item.detected_at, filters.age, now)) return false;
+    if (on("user") && item.user_id !== filters.user) return false;
+    if (on("origin") && originOf(item) !== filters.origin) return false;
+    if (on("role") && !item.role_keys.includes(filters.role)) return false;
+    if (on("age") && !matchesAge(item.detected_at, filters.age, now)) return false;
     return true;
   });
 }

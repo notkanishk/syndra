@@ -133,20 +133,27 @@ export function UnexplainedAccess() {
   const returned = useMemo(() => drift.data ?? [], [drift.data]);
   const items = useMemo(() => applyDriftFilters(returned, filters), [returned, filters]);
   const resolver = useNameResolver();
-  // Options drawn from the queue itself, so nothing on offer returns nothing.
+  // Options drawn from the queue itself, so nothing on offer returns nothing —
+  // and each list is built with its OWN filter lifted, or choosing a name would
+  // leave the name list holding only that name.
   const people = useMemo(() => {
     const byId = new Map<string, string>();
-    for (const item of returned) {
+    for (const item of applyDriftFilters(returned, filters, new Date(), "user")) {
       if (byId.has(item.user_id)) continue;
       byId.set(item.user_id, resolver.resolveUser(item.user_id).value?.display_name ?? item.user_id);
     }
     return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
       a.name.localeCompare(b.name),
     );
-  }, [returned, resolver]);
+  }, [returned, filters, resolver]);
   const roleKeys = useMemo(
-    () => Array.from(new Set(returned.flatMap((item) => item.role_keys))).sort(),
-    [returned],
+    () =>
+      Array.from(
+        new Set(
+          applyDriftFilters(returned, filters, new Date(), "role").flatMap((item) => item.role_keys),
+        ),
+      ).sort(),
+    [returned, filters],
   );
 
   const visible = items.slice(0, limit);
