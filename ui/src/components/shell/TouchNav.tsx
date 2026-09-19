@@ -444,7 +444,7 @@ function SheetRow({
       aria-current={active ? "page" : undefined}
       className={`flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] motion-press ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
-      } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-ink/[.82]"}`}
+      } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-ink/80"}`}
     >
       <span className="flex-1 truncate">{label}</span>
 

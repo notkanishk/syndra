@@ -143,7 +143,7 @@ export default function IdentityProviderPage() {
  */
 function TheName() {
   return (
-    <Card className="px-5 py-[18px]">
+    <Card className="px-5 py-4">
       <p className="type-card-title">Syn keeps the door. Syndra keeps the list.</p>
       <p className="mt-2 max-w-[68ch] text-[14px] leading-[1.6] text-muted">
         Syn keeps the door of Frigg&rsquo;s hall and bars it against those who should not enter.

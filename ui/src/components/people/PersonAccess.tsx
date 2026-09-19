@@ -309,7 +309,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               >
                 i
               </span>
-              <p className="text-[14.5px] leading-[1.55] text-ink/[.78]">
+              <p className="text-[14.5px] leading-[1.55] text-ink/80">
                 <strong className="font-semibold text-ink">
                   {multiSource.projectName} / {multiSource.roleKey} is held twice
                 </strong>{" "}

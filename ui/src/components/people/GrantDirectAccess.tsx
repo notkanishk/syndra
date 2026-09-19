@@ -200,7 +200,7 @@ export function GrantDirectAccess({
         </div>
       </div>
 
-      <div className="accent-note mx-6 mt-4 px-4 py-3.5 text-[14px] leading-[1.55] text-ink/[.78]">
+      <div className="accent-note mx-6 mt-4 px-4 py-3.5 text-[14px] leading-[1.55] text-ink/80">
         {resolved.date ? (
           <>
             On {formatLongDate(resolved.date)} the sweep removes this automatically. They&rsquo;ll

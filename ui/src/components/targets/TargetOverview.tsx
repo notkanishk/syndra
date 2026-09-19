@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFailure, sentence } from "@/lib/outcome";
 import { Fragment, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
@@ -426,9 +427,7 @@ function ReconcileControl({ target }: { target: string }) {
       {run.error && (
         <CardRow>
           <span className="text-[13.5px] text-danger-text">
-            {run.error instanceof Error
-              ? run.error.message
-              : "The check did not complete. Nothing was changed."}
+            {sentence(describeFailure(run.error))}
           </span>
         </CardRow>
       )}
@@ -529,9 +528,7 @@ function ReconcileControl({ target }: { target: string }) {
           {release.error && (
             <CardRow>
               <span className="text-[13.5px] text-danger-text">
-                {release.error instanceof Error
-                  ? release.error.message
-                  : "Could not stop tracking it. Nothing was changed."}
+                {sentence(describeFailure(release.error))}
               </span>
             </CardRow>
           )}
@@ -1069,9 +1066,7 @@ function ResolveConflictDialog({
         />
         {resolve.error && (
           <p className="text-[13.5px] text-danger-text">
-            {resolve.error instanceof Error
-              ? resolve.error.message
-              : "That did not go through. Nothing was changed."}
+            {sentence(describeFailure(resolve.error))}
           </p>
         )}
       </div>
@@ -1168,9 +1163,7 @@ function ResolveFindingDialog({
         />
         {resolve.error && (
           <p className="text-[13.5px] text-danger-text">
-            {resolve.error instanceof Error
-              ? resolve.error.message
-              : "That did not go through. Nothing was changed."}
+            {sentence(describeFailure(resolve.error))}
           </p>
         )}
       </div>
@@ -1523,9 +1516,7 @@ function AdoptPanel({
       </div>
       {Boolean(error) && (
         <p className="text-[13.5px] text-danger-text">
-          {error instanceof Error
-            ? error.message
-            : "That did not go through. Nothing was changed."}
+          {sentence(describeFailure(error))}
         </p>
       )}
     </form>

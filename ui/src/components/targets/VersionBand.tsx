@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFailure, sentence } from "@/lib/outcome";
 import { useState } from "react";
 
 import { Relative } from "@/components/ui/Time";
@@ -164,9 +165,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
 
       {Boolean(publish.error) && (
         <div className="row-divider px-5 py-3 text-[13.5px] text-danger-text">
-          {publish.error instanceof Error
-            ? publish.error.message
-            : "That set could not be published. Nothing was changed."}
+          {sentence(describeFailure(publish.error))}
         </div>
       )}
     </Card>

@@ -16,7 +16,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
  */
 export default function HoldsDuePage() {
   return (
-    <>
+    <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Holds due"
         lede={
@@ -27,6 +27,6 @@ export default function HoldsDuePage() {
         }
       />
       <HoldsDueForReview />
-    </>
+    </div>
   );
 }

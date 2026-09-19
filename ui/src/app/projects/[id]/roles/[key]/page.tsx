@@ -58,7 +58,7 @@ export default function RoleMembersPage({
   const holdCount = (view?.members.length ?? 0) + observedOnly.length;
 
   return (
-    <div className="flex flex-col gap-[22px]">
+    <div className="flex flex-col gap-[18px]">
       <PageHeader
         eyebrow={view?.project_name ?? id}
         title={view?.display_name || humanizeKey(roleKey)}

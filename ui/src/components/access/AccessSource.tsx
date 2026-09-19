@@ -105,7 +105,7 @@ export function SourceChip({ kind }: { kind: SourceKind }) {
   }
   if (kind === "bundle") {
     return (
-      <span className={`${base} bg-tint-2 text-ink/[.82]`}>
+      <span className={`${base} bg-tint-2 text-ink/80`}>
         <i
           aria-hidden
           className="block h-2 w-2 flex-none rounded-pill border-2 border-ink/80"
@@ -115,10 +115,10 @@ export function SourceChip({ kind }: { kind: SourceKind }) {
     );
   }
   return (
-    <span className={`${base} border border-dashed border-ink/[.34] text-ink/[.66]`}>
+    <span className={`${base} border border-dashed border-ink/35 text-ink/70`}>
       <i
         aria-hidden
-        className="block h-2 w-2 flex-none rounded-pill border border-dashed border-ink/[.66]"
+        className="block h-2 w-2 flex-none rounded-pill border border-dashed border-ink/70"
       />
       {SOURCE_LABEL.mapping}
     </span>

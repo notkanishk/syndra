@@ -12,7 +12,7 @@ import React from "react";
 type Tone = "neutral" | "accent" | "warn" | "danger" | "dangerSoft" | "warnSoft";
 
 const TONES: Record<Tone, string> = {
-  neutral: "bg-tint-2 text-ink/[.82]",
+  neutral: "bg-tint-2 text-ink/80",
   accent: "bg-accent-dense text-accent-ink",
   warn: "bg-warn text-warn-ink",
   danger: "bg-danger text-danger-ink",

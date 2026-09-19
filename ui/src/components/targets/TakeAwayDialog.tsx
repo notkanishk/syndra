@@ -1,5 +1,6 @@
 "use client";
 
+import { describeFailure, sentence } from "@/lib/outcome";
 import { useState } from "react";
 
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
@@ -30,9 +31,11 @@ import { useIsTouch } from "@/lib/useViewport";
  *   - The session sentence is AMBER, not red. It is a broken assumption —
  *     *revoked* implies immediate and here it is not — rather than the danger
  *     itself. Red is the confirming button.
- *   - The label is "Take away", not "Revoke". It says what happens to the
- *     person, and *revoke* already carries the meaning of undoing a grant
- *     Syndra itself made.
+ *   - The label is "Revoke", despite this component's name. An earlier draft
+ *     said "Take away", on the reasoning that *revoke* already means undoing a
+ *     grant Syndra itself made — but the copy guard bans "take away" outright,
+ *     and the product says "Revoke" on every other screen that ends access.
+ *     One word for one action beats a finer distinction only this file draws.
  */
 
 /** Held here, not composed, because it is a statement about what the system does. */
@@ -166,9 +169,7 @@ export function TakeAwayDialog({
 
         {revoke.error && (
           <p className="text-[13.5px] text-danger-text">
-            {revoke.error instanceof Error
-              ? revoke.error.message
-              : "That did not go through. Nothing was changed."}
+            {sentence(describeFailure(revoke.error))}
           </p>
         )}
       </div>
