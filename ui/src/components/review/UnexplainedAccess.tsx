@@ -54,6 +54,7 @@ import {
   type DriftFilters,
 } from "@/lib/drift-filters";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import {
   outcomeFromError,
   statesNothingChanged,
@@ -113,6 +114,9 @@ export function UnexplainedAccess() {
   const drift = useDriftItems(driftRequest(filters));
   const projects = useProjects();
   const filtered = hasAnyDriftFilter(filters);
+  // On the button, so "why am I seeing so few rows" never needs the panel
+  // opened to answer it — that question is the one a hidden filter creates.
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
   const reconcile = useReconcileNow();
   const [scanOutcome, setScanOutcome] = useState<Outcome | null>(null);
 
@@ -217,81 +221,6 @@ export function UnexplainedAccess() {
         }
         actions={
           <>
-            <Select
-              value={filters.project}
-              onChange={(event) => setFilters({ project: event.target.value })}
-              aria-label="Filter by project"
-              className="w-[180px]"
-            >
-              <option value="">All projects</option>
-              {(projects.data ?? []).map((entry) => (
-                <option key={entry.project.id} value={entry.project.id}>
-                  {entry.project.name}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={filters.user}
-              onChange={(event) => setFilters({ user: event.target.value })}
-              aria-label="Filter by person"
-              className="w-[180px]"
-            >
-              <option value="">Anyone</option>
-              {people.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={filters.role}
-              onChange={(event) => setFilters({ role: event.target.value })}
-              aria-label="Filter by role"
-              className="w-[170px]"
-            >
-              <option value="">Any role</option>
-              {roleKeys.map((key) => (
-                <option key={key} value={key}>
-                  {humanizeKey(key)}
-                </option>
-              ))}
-            </Select>
-            <FilterPills
-              label="Filter by what is known about where it came from"
-              value={filters.origin}
-              onChange={(value) => setFilters({ origin: value as DriftFilters["origin"] })}
-              options={[
-                { value: "", label: "Any origin" },
-                ...Object.entries(ORIGIN_LABELS).map(([value, label]) => ({ value, label })),
-              ]}
-            />
-            <FilterPills
-              label="Filter by how long it has been waiting"
-              value={filters.age}
-              onChange={(value) => setFilters({ age: value as DriftFilters["age"] })}
-              options={[
-                { value: "", label: "Any age" },
-                ...Object.entries(AGE_LABELS).map(([value, label]) => ({ value, label })),
-              ]}
-            />
-            <FilterPills
-              label="Filter by how it was found"
-              value={filters.source}
-              onChange={(value) => setFilters({ source: value })}
-              options={[
-                { value: "", label: "Any source" },
-                { value: "webhook", label: "Caught as it happened" },
-                { value: "reconciliation_sweep", label: "Found by the scheduled check" },
-              ]}
-            />
-            {filtered && (
-              <Button
-                variant="ghost"
-                onClick={() => setFilters(EMPTY_DRIFT_FILTERS)}
-              >
-                Clear filters
-              </Button>
-            )}
             <Button
               isPending={reconcile.isPending}
               onClick={async () => {
@@ -320,6 +249,10 @@ export function UnexplainedAccess() {
       {/* Under the control that ran it, above the queue it describes. */}
       {scanOutcome && <ActionOutcome outcome={scanOutcome} />}
 
+      {/* Tabs first — they decide what this page IS. Filters below them,
+          because they only narrow whichever view is showing. Six controls
+          strung along the page header wrapped into five stacked full-width
+          rows and pushed the queue itself below the fold. */}
       <div className="flex flex-wrap items-center gap-2">
         <Tabs
           label="Views of unexplained access"
@@ -338,11 +271,92 @@ export function UnexplainedAccess() {
             { value: "reconciliation" as const, label: "Side by side" },
           ]}
         />
+        <span className="flex-1" />
+        {tab === "triage" && (
+          <FilterPanel
+            activeCount={activeFilterCount}
+            onClear={() => setFilters(EMPTY_DRIFT_FILTERS)}
+          >
+            <FilterField label="Project">
+              <Select
+                value={filters.project}
+                onChange={(event) => setFilters({ project: event.target.value })}
+                aria-label="Filter by project"
+              >
+                <option value="">All projects</option>
+                {(projects.data ?? []).map((entry) => (
+                  <option key={entry.project.id} value={entry.project.id}>
+                    {entry.project.name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Person">
+              <Select
+                value={filters.user}
+                onChange={(event) => setFilters({ user: event.target.value })}
+                aria-label="Filter by person"
+              >
+                <option value="">Anyone</option>
+                {people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="Role">
+              <Select
+                value={filters.role}
+                onChange={(event) => setFilters({ role: event.target.value })}
+                aria-label="Filter by role"
+              >
+                <option value="">Any role</option>
+                {roleKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {humanizeKey(key)}
+                  </option>
+                ))}
+              </Select>
+            </FilterField>
+            <FilterField label="What is known about it">
+              <FilterPills
+                label="Filter by what is known about where it came from"
+                value={filters.origin}
+                onChange={(value) => setFilters({ origin: value as DriftFilters["origin"] })}
+                options={[
+                  { value: "", label: "Any" },
+                  ...Object.entries(ORIGIN_LABELS).map(([value, label]) => ({ value, label })),
+                ]}
+              />
+            </FilterField>
+            <FilterField label="How long it has waited">
+              <FilterPills
+                label="Filter by how long it has been waiting"
+                value={filters.age}
+                onChange={(value) => setFilters({ age: value as DriftFilters["age"] })}
+                options={[
+                  { value: "", label: "Any" },
+                  ...Object.entries(AGE_LABELS).map(([value, label]) => ({ value, label })),
+                ]}
+              />
+            </FilterField>
+            <FilterField label="How it was found">
+              <FilterPills
+                label="Filter by how it was found"
+                value={filters.source}
+                onChange={(value) => setFilters({ source: value })}
+                options={[
+                  { value: "", label: "Any" },
+                  { value: "webhook", label: "Caught as it happened" },
+                  { value: "reconciliation_sweep", label: "By the scheduled check" },
+                ]}
+              />
+            </FilterField>
+          </FilterPanel>
+        )}
         {tab === "triage" && items.length > 0 && (
-          <>
-            <span className="flex-1" />
-            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
-          </>
+          <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
         )}
       </div>
 
@@ -555,6 +569,7 @@ function TriageRow({
           type="button"
           onClick={onExpand}
           aria-expanded={expanded}
+          data-testid="drift-row-toggle"
           className="flex min-h-[44px] w-full min-w-0 items-center gap-2.5 text-left tablet:w-[186px] desktop:min-h-0"
         >
           <UserAvatar id={item.user_id} size="row" />

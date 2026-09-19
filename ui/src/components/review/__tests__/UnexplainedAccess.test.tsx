@@ -286,14 +286,11 @@ describe("Unexplained access — triage", () => {
     renderTriage();
 
     expect(screen.queryByText("zg_4f19c8")).not.toBeInTheDocument();
-    // The row toggle. `{ expanded: false }` alone stopped being unique when
-    // the page lede gained a <Term>, whose definition popover is also a
-    // collapsed disclosure — and which always describes itself, where a row
-    // toggle never does.
-    const rowToggle = screen
-      .getAllByRole("button", { expanded: false })
-      .find((button) => !button.hasAttribute("aria-describedby"));
-    fireEvent.click(rowToggle!);
+    // The row toggle, by its own hook. Matching on "a collapsed disclosure
+    // that does not describe itself" was a heuristic about every OTHER
+    // disclosure on the page, so it broke once when the lede gained a <Term>
+    // and again when the filters became a panel.
+    fireEvent.click(screen.getAllByTestId("drift-row-toggle")[0]);
     expect(screen.getByText("zg_4f19c8")).toBeInTheDocument();
   });
 
@@ -306,10 +303,7 @@ describe("Unexplained access — triage", () => {
     drift.data = [item({ zitadel_grant_id: "zg_1", upstream_actor: "228719872436817921" })];
     renderTriage();
 
-    const rowToggle = screen
-      .getAllByRole("button", { expanded: false })
-      .find((button) => !button.hasAttribute("aria-describedby"));
-    fireEvent.click(rowToggle!);
+    fireEvent.click(screen.getAllByTestId("drift-row-toggle")[0]);
 
     // Scoped to the evidence row itself — the row's holder (also unresolved
     // in this test environment) would otherwise give a second "Unknown
