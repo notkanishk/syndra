@@ -569,6 +569,13 @@ is observed"). What is still open, and whose it is:
   person, role, age and origin. Home's greeting wraps, its headline lost the
   word that made it read oddly, and its onboarding card stopped counting a
   missing default bundle as a person. One date dialect across all four screens.
+- **Filters behind one button; the glossary popover escapes its card.** Six
+  controls along the Drift header wrapped into five stacked full-width rows and
+  pushed the queue below the fold — they are one panel now
+  (`components/ui/FilterPanel.tsx`), behind a button carrying the active count,
+  with tabs above it. And `Term`'s definition portals to the body: every Card is
+  `overflow-hidden`, so a popover inside one was sliced off at the card's edge.
+  Both reusable, so the next screen that needs either gets it right by default.
 - **Test account.** `testuser` (Syndra admin, the throwaway account)
   held the Ops Admin bundle and a 30-day direct grant during the walk; both were revoked and read back as gone. Remove the account when the
   walk is over. Its password was rotated on first login (Zitadel forced it).
