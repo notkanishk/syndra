@@ -1,0 +1,159 @@
+{
+  "projectId": "7133b076-0060-40fa-8ec6-e7ad8cbb94d1",
+  "shape": "package",
+  "pkg": "ui",
+  "globalName": "Syndra",
+  "buildCmd": "bun .design-sync/build-css.mjs && ./node_modules/.bin/tsc -p .design-sync/tsconfig.types.json",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": ".design-sync/.cache/syndra.css",
+  "componentSrcMap": {
+    "BundleName": "src/components/names/BundleName.tsx",
+    "ProjectName": "src/components/names/ProjectName.tsx",
+    "ResolvedProjectName": "src/components/names/ProjectName.tsx",
+    "RoleRef": "src/components/names/RoleRef.tsx",
+    "UserAvatar": "src/components/names/UserAvatar.tsx",
+    "UserName": "src/components/names/UserName.tsx",
+    "AccountSheet": "src/components/shell/AccountSheet.tsx",
+    "AppShell": "src/components/shell/AppShell.tsx",
+    "Sidebar": "src/components/shell/Sidebar.tsx",
+    "SyndraMark": "src/components/shell/SyndraMark.tsx",
+    "ThemeToggle": "src/components/shell/ThemeToggle.tsx",
+    "TopBar": "src/components/shell/TopBar.tsx",
+    "TouchNav": "src/components/shell/TouchNav.tsx",
+    "ViewSwitch": "src/components/shell/ViewSwitch.tsx",
+    "DegradedBanner": "src/components/states/DegradedBanner.tsx",
+    "RowSkeleton": "src/components/states/index.tsx",
+    "EmptyState": "src/components/states/index.tsx",
+    "ErrorState": "src/components/states/index.tsx",
+    "ListStates": "src/components/states/index.tsx",
+    "OfflineBanner": "src/components/states/OfflineBanner.tsx",
+    "AcknowledgeCount": "src/components/ui/Acknowledge.tsx",
+    "ConfirmByTyping": "src/components/ui/Acknowledge.tsx",
+    "ActionOutcome": "src/components/ui/ActionOutcome.tsx",
+    "Avatar": "src/components/ui/Avatar.tsx",
+    "Badge": "src/components/ui/Badge.tsx",
+    "Chip": "src/components/ui/Badge.tsx",
+    "Mono": "src/components/ui/Badge.tsx",
+    "StatusDot": "src/components/ui/Badge.tsx",
+    "CountChip": "src/components/ui/Badge.tsx",
+    "Button": "src/components/ui/Button.tsx",
+    "ButtonLink": "src/components/ui/Button.tsx",
+    "Card": "src/components/ui/Card.tsx",
+    "CardHeader": "src/components/ui/Card.tsx",
+    "CardRow": "src/components/ui/Card.tsx",
+    "CardHeaderLink": "src/components/ui/Card.tsx",
+    "CardColumns": "src/components/ui/Card.tsx",
+    "RowField": "src/components/ui/Card.tsx",
+    "CommandBlock": "src/components/ui/CommandBlock.tsx",
+    "CopyableValue": "src/components/ui/CopyableValue.tsx",
+    "ClipboardUnavailableNote": "src/components/ui/CopyableValue.tsx",
+    "FilterBar": "src/components/ui/FilterBar.tsx",
+    "FilterChip": "src/components/ui/FilterChip.tsx",
+    "FilterPanel": "src/components/ui/FilterPanel.tsx",
+    "FilterField": "src/components/ui/FilterPanel.tsx",
+    "Input": "src/components/ui/Input.tsx",
+    "Textarea": "src/components/ui/Input.tsx",
+    "FieldLabel": "src/components/ui/Input.tsx",
+    "FieldHint": "src/components/ui/Input.tsx",
+    "Modal": "src/components/ui/Modal.tsx",
+    "ModalHeader": "src/components/ui/Modal.tsx",
+    "ModalFooter": "src/components/ui/Modal.tsx",
+    "PageHeader": "src/components/ui/PageHeader.tsx",
+    "MetaDot": "src/components/ui/PageHeader.tsx",
+    "MetaRow": "src/components/ui/PageHeader.tsx",
+    "PlanReview": "src/components/ui/PlanReview.tsx",
+    "ReadFreshness": "src/components/ui/ReadFreshness.tsx",
+    "RehearsalDialog": "src/components/ui/RehearsalDialog.tsx",
+    "Select": "src/components/ui/Select.tsx",
+    "Segmented": "src/components/ui/Select.tsx",
+    "FilterPills": "src/components/ui/Select.tsx",
+    "SelectionBar": "src/components/ui/SelectionBar.tsx",
+    "SelectionAction": "src/components/ui/SelectionBar.tsx",
+    "RowCheckbox": "src/components/ui/SelectionBar.tsx",
+    "SelectModeToggle": "src/components/ui/SelectionBar.tsx",
+    "SelectAllRow": "src/components/ui/SelectionBar.tsx",
+    "Skeleton": "src/components/ui/Skeleton.tsx",
+    "SkeletonCardList": "src/components/ui/Skeleton.tsx",
+    "StatCard": "src/components/ui/StatCard.tsx",
+    "Tabs": "src/components/ui/Tabs.tsx",
+    "Term": "src/components/ui/Term.tsx",
+    "Relative": "src/components/ui/Time.tsx",
+    "LogTime": "src/components/ui/Time.tsx",
+    "ClockTime": "src/components/ui/Time.tsx",
+    "WithheldPill": "src/components/ui/Withheld.tsx",
+    "Withheld": "src/components/ui/Withheld.tsx",
+    "WithheldInline": "src/components/ui/Withheld.tsx"
+  },
+  "provider": {
+    "component": "SyndraRoot"
+  },
+  "extraFonts": [
+    ".design-sync/fonts/fonts.css"
+  ],
+  "libOverrides": {
+    "dts.mjs": "types come from tsc declarations of .design-sync/entry.tsx; the app ships no .d.ts tree"
+  },
+  "dtsPropsFor": {
+    "AppShell": "/** Signed-in user; role \"admin\" unlocks the Basic/Advanced view switch. */\n  session: { id: string; name: string; email: string; title: string; team: string; status: string; avatar: string; role: \"admin\" | \"user\"; accessToken?: string; sessionType: \"demo\" | \"oidc\" };\n  children: React.ReactNode;",
+    "TopBar": "session: { id: string; name: string; email: string; title: string; team: string; status: string; avatar: string; role: \"admin\" | \"user\"; accessToken?: string; sessionType: \"demo\" | \"oidc\" };",
+    "AccountSheet": "session: { id: string; name: string; email: string; title: string; team: string; status: string; avatar: string; role: \"admin\" | \"user\"; accessToken?: string; sessionType: \"demo\" | \"oidc\" };",
+    "ActionOutcome": "outcome: { kind: \"applied\" | \"queued\" | \"no_change\" | \"refused\" | \"failed\"; /** What happened, in physical terms. */ message: string; detail?: string; /** Present on refused and failed. */ requestId?: string };\n  placement?: \"inline\" | \"block\";\n  className?: string;",
+    "PlanReview": "plan: { op: \"assign_role\" | \"remove_role\" | \"assign_bundle\" | \"remove_bundle\" | \"extend\" | \"create_mapping\" | \"edit_mapping\" | \"delete_mapping\" | \"rollback_mappings\" | \"publish_bundle_version\" | \"move_bundle_holders\"; /** Present on a rehearsal (the approval an apply must cite). */ plan_id?: string; applied: boolean; outcomes: Array<{ user_id: string; name: string; email: string; effect: \"apply\" | \"applied\" | \"no_change\" | \"blocked\" | \"failed\" | \"queued\"; detail: string; consequence?: string; grant_ids?: string[] }>; summary: { total: number; apply: number; no_change: number; blocked: number; failed: number; succeeded: number; queued: number } };\n  /** What the plan rows are, singular/plural, e.g. [\"account\", \"accounts\"]. */\n  noun?: [string, string];",
+    "ReadFreshness": "state: { /** When the target was read; absent = never. */ readAt?: string | null; /** false = from the add-on mirror (provisional at any age). */ current?: boolean; /** The read hit the add-on cap. */ truncated?: boolean };\n  subject?: string;\n  onRefresh?: () => void;\n  refreshing?: boolean;\n  className?: string;",
+    "Withheld": "items: Array<{ /** Entitlement field it applies to, e.g. \"group\", \"share\". */ field: string; /** The value withheld, as the member would recognise it. */ value: string; reason: string; /** Which system it is on. */ target?: string; /** Who decided it. */ actorId?: string; /** Past the promised review date. */ reviewDue?: boolean }>;\n  audience?: \"member\" | \"operator\";\n  className?: string;",
+    "WithheldInline": "items: Array<{ /** Entitlement field it applies to, e.g. \"group\", \"share\". */ field: string; /** The value withheld, as the member would recognise it. */ value: string; reason: string; /** Which system it is on. */ target?: string; /** Who decided it. */ actorId?: string; /** Past the promised review date. */ reviewDue?: boolean }>;",
+    "Segmented": "/** Generic over the option value type in source; string here. */\n  options: { value: string; label: string; }[];\n  value: string;\n  onChange: (next: string) => void;\n  size?: \"sm\" | \"md\";\n  label: string;",
+    "FilterPills": "/** Generic over the option value type in source; string here. */\n  options: { value: string; label: string; }[];\n  value: string;\n  onChange: (next: string) => void;\n  label: string;",
+    "Tabs": "/** Generic over the option value type in source; string here. */\n  options: { value: string; label: React.ReactNode; }[];\n  value: string;\n  onSelect: (next: string) => void;\n  /** Names the group for a screen reader — \"Views of this person's access\". */\n  label: string;\n  className?: string;"
+  },
+  "overrides": {
+    "Sidebar": {
+      "cardMode": "column",
+      "viewport": "1200x1000"
+    },
+    "Modal": {
+      "cardMode": "single",
+      "viewport": "1000x760"
+    },
+    "ModalHeader": {
+      "cardMode": "single",
+      "viewport": "1000x760"
+    },
+    "ModalFooter": {
+      "cardMode": "single",
+      "viewport": "1000x760"
+    },
+    "RehearsalDialog": {
+      "cardMode": "single",
+      "viewport": "1100x900"
+    },
+    "AppShell": {
+      "cardMode": "column",
+      "viewport": "1200x800"
+    },
+    "TopBar": {
+      "cardMode": "column",
+      "viewport": "1200x800"
+    },
+    "TouchNav": {
+      "cardMode": "column",
+      "viewport": "390x844"
+    },
+    "AccountSheet": {
+      "cardMode": "single"
+    },
+    "Input": {
+      "cardMode": "column"
+    },
+    "Textarea": {
+      "cardMode": "column"
+    },
+    "FieldLabel": {
+      "cardMode": "column"
+    },
+    "FieldHint": {
+      "cardMode": "column"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}
