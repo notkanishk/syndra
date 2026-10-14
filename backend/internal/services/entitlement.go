@@ -129,7 +129,16 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 	// Deny beats allow, and it beats derivation. A denial that lost to the role
 	// layer would be a suspension an operator recorded and the system ignored.
 	denied := map[string]db.Allowance{}
+	overrides := map[string]db.Allowance{}
 	for _, a := range allowances {
+		if a.Direction == db.AllowanceSet {
+			// One person's value for one field, applied below over what their
+			// roles give. The latest wins if two are in force.
+			if prev, ok := overrides[a.Field]; !ok || a.CreatedAt.After(prev.CreatedAt) {
+				overrides[a.Field] = a
+			}
+			continue
+		}
 		if a.Direction != db.AllowanceDeny {
 			// The additive arm is refused at the write, so reaching here means
 			// a row predates that refusal or was written around it. Ignored
@@ -177,6 +186,18 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 			continue
 		}
 		set.Fields[m.Field] = sortedKeys(values[m.Field])
+	}
+
+	// A per-person value replaces what the roles give, but only for someone the
+	// target reaches at all: an exception for a person with no mapped role is
+	// a setting for an account that should not exist.
+	if mappedAny {
+		for field, a := range overrides {
+			if IsLifecycleField(field) {
+				continue
+			}
+			set.Fields[field] = []string{a.Value}
+		}
 	}
 
 	set.Lifecycle = resolveLifecycle(mappedAny, denied, &set)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -20,6 +21,8 @@ var (
 	bucketIdempotency = []byte("idempotency")
 	bucketSnapshot    = []byte("snapshot")
 	bucketBindings    = []byte("bindings")
+	// bucketIDs holds the high-water mark of the uids/gids handed out.
+	bucketIDs = []byte("ids")
 )
 
 // idempotencyTTL is the actual replay window, and saying so is the point.
@@ -46,7 +49,7 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("open store: %w", err)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings} {
+		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings, bucketIDs} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return err
 			}
@@ -189,12 +192,14 @@ type Subject struct {
 	// ID is the middleware's record key, which is what a write takes as its
 	// first argument. Distinct from UID, which is the unix identity a binding
 	// recognises an account by across a rename.
-	ID         apiID    `json:"id"`
-	Username   string   `json:"username"`
-	UID        int64    `json:"uid"`
-	Groups     []string `json:"groups"`
-	Enabled    bool     `json:"enabled"`
-	SMBEnabled bool     `json:"smb_enabled"`
+	ID       apiID    `json:"id"`
+	Username string   `json:"username"`
+	UID      int64    `json:"uid"`
+	Groups   []string `json:"groups"`
+	// Home is where the account's home folder is, empty when it has none.
+	Home       string `json:"home,omitempty"`
+	Enabled    bool   `json:"enabled"`
+	SMBEnabled bool   `json:"smb_enabled"`
 	// PasswordSet is whether the account has a usable credential.
 	//
 	// Not an entitlement and never mapped to one: it is a fact about the target
@@ -211,6 +216,11 @@ type Subject struct {
 	// altogether. The add-on refuses to adopt or purge it whatever any caller
 	// asks, so this exists to explain the refusal before somebody meets it.
 	Self bool `json:"self,omitempty"`
+
+	// builtinGroups are the account's built-in memberships, as record ids.
+	// Not on the wire: no mapping can explain them, so the backend never sees
+	// them. Kept so a convergence's full replace writes them back unchanged.
+	builtinGroups []apiID
 }
 
 var snapshotKey = []byte("latest")
@@ -263,6 +273,13 @@ type Binding struct {
 	// apply created one. Adoption hands somebody else's account to a subject if
 	// it is wrong, so who decided it survives.
 	BoundBy string `json:"bound_by"`
+	// WantsSMB is the SMB state the last apply asked for, nil before any did.
+	//
+	// Desire, not observation. The member's first password is the only call
+	// TrueNAS accepts `smb: true` on, so that call needs what Syndra WANTS; the
+	// snapshot says what the NAS HAS, which for a new account is "off" because
+	// nothing could turn it on yet.
+	WantsSMB *bool `json:"wants_smb,omitempty"`
 }
 
 func (s *Store) PutBinding(b Binding) error {
@@ -324,4 +341,32 @@ func (s *Store) BoundUsernames() (map[string]string, error) {
 		})
 	})
 	return out, err
+}
+
+var highWaterKey = []byte("high_water")
+
+// ClaimID hands out the next identity number in [floor, ceiling], above both
+// the last one this store handed out and the highest the target reports in the
+// range. Never the same number twice: the high-water mark only rises, and it
+// is written in the same transaction that reads it.
+func (s *Store) ClaimID(floor, ceiling, observedMax int64) (int64, error) {
+	var claimed int64
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(bucketIDs)
+		last := floor - 1
+		if raw := b.Get(highWaterKey); raw != nil {
+			if n, err := strconv.ParseInt(string(raw), 10, 64); err == nil && n > last {
+				last = n
+			}
+		}
+		if observedMax > last {
+			last = observedMax
+		}
+		claimed = last + 1
+		if claimed > ceiling {
+			return fmt.Errorf("the identity range %d–%d is used up; raise TRUENAS_ID_CEILING", floor, ceiling)
+		}
+		return b.Put(highWaterKey, []byte(strconv.FormatInt(claimed, 10)))
+	})
+	return claimed, err
 }

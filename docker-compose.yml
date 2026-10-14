@@ -311,6 +311,11 @@ services:
       # manifest omits the connection block and the member page omits the mount
       # instructions rather than printing a host that does not answer.
       - TRUENAS_SHARE_HOST=${TRUENAS_SHARE_HOST:-}
+      # The uid/gid range new accounts are given, one number per account and
+      # its personal group, never handed out twice (addons/truenas/identity.go
+      # has why 200000–999999). Change only before the first account is made.
+      - TRUENAS_ID_FLOOR=${TRUENAS_ID_FLOOR:-200000}
+      - TRUENAS_ID_CEILING=${TRUENAS_ID_CEILING:-999999}
       # Read from a mounted file where one is given. The Dockerfile calls this
       # the least trusted container in the deployment, and an environment value
       # is readable from `docker inspect` and /proc/1/environ — while the TLS

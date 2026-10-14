@@ -333,6 +333,14 @@ func main() {
 		go awaitFirstManifests(ctx)
 	}
 
+	// Target health: one read per add-on every 30s, so "offline" is confirmed
+	// (three misses in a row, addons.HealthOf) rather than said on the first
+	// slow answer, and the count keeps moving when nobody has a page open.
+	// Read-only, and never awaited at shutdown: an abandoned read changes nothing.
+	if len(addons.Registered()) > 0 {
+		go periodic.New("HEALTH", 30*time.Second, 30*time.Second, addons.ProbeAll).Start(ctx)
+	}
+
 	// The observation sweep.
 	//
 	// Its interval is the bound on how stale any surface's answer can be, and

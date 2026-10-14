@@ -321,7 +321,7 @@ func handleAssignZitadelGrant(w http.ResponseWriter, r *http.Request) {
 	// Zitadel directly. The operator drains it explicitly; the legacy URL still
 	// resolves, only the response shape (202 + outbox handle) changed.
 	payload, _ := json.Marshal(req)
-	res, err := dbEnqueueDirectGrantPropagation(r.Context(), db.EnqueueParams{
+	res, err := grantDirect(r.Context(), db.EnqueueParams{
 		UserID:      userID,
 		ProjectID:   req.ProjectID,
 		RoleKeys:    req.RoleKeys,
@@ -376,7 +376,7 @@ func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	payload, _ := json.Marshal(req)
-	res, err := dbEnqueueDirectGrantPropagation(r.Context(), db.EnqueueParams{
+	res, err := grantDirect(r.Context(), db.EnqueueParams{
 		UserID:         userID,
 		ProjectID:      projectID,
 		RoleKeys:       req.RoleKeys,
@@ -406,7 +406,7 @@ func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
 		return
 	}
-	res, err := dbEnqueueDirectGrantPropagation(r.Context(), db.EnqueueParams{
+	res, err := grantDirect(r.Context(), db.EnqueueParams{
 		UserID:         userID,
 		ProjectID:      projectID,
 		RoleKeys:       roleKeys,

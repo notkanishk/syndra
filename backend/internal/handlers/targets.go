@@ -72,6 +72,25 @@ type targetSummary struct {
 	CircuitOpen bool `json:"circuit_open"`
 	// LastError is why the last manifest read failed, when one did.
 	LastError string `json:"last_error,omitempty"`
+	// Health is the confirmed reachability (addons.HealthOf): offline only
+	// after three failed reads in a row, unknown until Syndra can tell.
+	Health addons.HealthState `json:"health"`
+	// Status is the one reading the row and the header show, decided here so
+	// no screen can rank them differently (A-01): cannot_connect, then
+	// offline, then waiting_to_retry, then checking, then answering. The
+	// breaker used to win over everything, which sent an operator to the
+	// Syndra server while TrueNAS itself was down.
+	Status string `json:"status"`
+	// Project is the Zitadel project this system serves, nil until chosen.
+	// Shown read-only on Connected systems; a nil one is that row's Needs you.
+	Project *targetProjectRef `json:"project"`
+}
+
+type targetProjectRef struct {
+	ID string `json:"id"`
+	// Name is empty when Zitadel's projects could not be read, and the row
+	// shows the project as unnamed rather than as missing.
+	Name string `json:"name"`
 }
 
 type operationSummary struct {
@@ -96,9 +115,29 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 	for _, tc := range addonsTransportCredentials() {
 		transport[tc.Target] = tc
 	}
+	projects, err := dbTargetProjects(r.Context())
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	names := map[string]string{}
+	if len(projects) > 0 {
+		// Non-fatal: the id is Syndra's own record and still shown.
+		if catalog, err := directoryProjects(r.Context()); err == nil {
+			for _, p := range catalog {
+				names[p.ID] = p.Name
+			}
+		} else {
+			log.Printf("[TARGETS] could not name target projects: %v (non-fatal)", err)
+		}
+	}
 	out := make([]targetSummary, 0, len(registrations))
 	for _, reg := range registrations {
-		out = append(out, describeTarget(reg, transport[reg.Target]))
+		s := describeTarget(reg, transport[reg.Target])
+		if id, ok := projects[reg.Target]; ok {
+			s.Project = &targetProjectRef{ID: id, Name: names[id]}
+		}
+		out = append(out, s)
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"targets": out})
 }
@@ -133,6 +172,7 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 			"target":    target,
 			"reachable": false,
 			"detail":    errText(health.Err),
+			"health":    addonsHealthOf(target),
 		}
 		if anchored && anchor.Compromised() {
 			body["log_anchor"] = anchor
@@ -148,14 +188,9 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conflicts := bindingConflicts(r, target)
-	if !anchored && len(conflicts) == 0 {
-		jsonResponse(w, http.StatusOK, health)
-		return
-	}
 	// Merged rather than nested under a second request, because the operator's
 	// question is one question: is this target all right.
-	merged := targetHealthWithAnchor{TargetHealth: health, BindingConflicts: conflicts}
+	merged := targetHealthWithAnchor{TargetHealth: health, BindingConflicts: bindingConflicts(r, target), Health: addonsHealthOf(target)}
 	if anchored {
 		merged.LogAnchor = &anchor
 	}
@@ -191,10 +226,13 @@ type targetHealthWithAnchor struct {
 	// written by this system, and neither is authoritative, which is why it
 	// needs a person rather than a reconcile.
 	BindingConflicts []db.BindingConflict `json:"binding_conflicts,omitempty"`
+	// Health is the confirmed answer beside this live one: one failed read is
+	// not an outage, three in a row are, and this says which (addons.HealthOf).
+	Health addons.HealthState `json:"health"`
 }
 
 func describeTarget(reg addons.Registration, transport addons.TransportCredential) targetSummary {
-	s := targetSummary{Target: reg.Target, Registered: true, AuthMode: reg.AuthMode()}
+	s := targetSummary{Target: reg.Target, Registered: true, AuthMode: reg.AuthMode(), Health: addonsHealthOf(reg.Target)}
 	s.TransportStatus, s.TransportError = transport.Status, transport.Error
 
 	a, err := addonsGet(reg.Target)
@@ -216,7 +254,25 @@ func describeTarget(reg addons.Registration, transport addons.TransportCredentia
 			SecretParams: op.SecretParams,
 		})
 	}
+	s.Status = targetStatus(s)
 	return s
+}
+
+// targetStatus ranks the readings that can be true at once (A-01, "which
+// reading wins"): what an operator must look at first comes first.
+func targetStatus(s targetSummary) string {
+	switch {
+	case s.TransportStatus == "error":
+		return "cannot_connect"
+	case s.Health.Status == addons.HealthOffline:
+		return "offline"
+	case s.CircuitOpen:
+		return "waiting_to_retry"
+	case s.Health.Status == addons.HealthUnknown:
+		return "checking"
+	default:
+		return "answering"
+	}
 }
 
 func errText(err error) string {

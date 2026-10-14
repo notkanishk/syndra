@@ -9,6 +9,8 @@ import (
 	"syndra/internal/auth"
 	"syndra/internal/cache"
 	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 	"syndra/internal/observe"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
@@ -450,6 +452,7 @@ var (
 	addonsTransportCredentials = addons.TransportCredentials
 	addonsGet                  = addons.Get
 	addonsHealth               = addons.Health
+	addonsHealthOf             = addons.HealthOf
 	// How a member reaches a target, for the instructions on their own page.
 	addonsConnection = addons.ConnectionFor
 	// The backend's memory of an add-on's mutation log, read beside that add-on's
@@ -478,6 +481,14 @@ var (
 	svcHeldRoles               = services.HeldRoles
 	dbCountMergeFindings       = db.CountStandingMergeFindings
 	dbGetLogAnchor             = db.GetLogAnchor
+	dbTargetProject            = db.TargetProject
+	dbTargetProjects           = db.TargetProjects
+	dbRequireTargetProject     = db.RequireTargetProject
+	dbSetTargetProject         = db.SetTargetProject
+	resolveMappingProject      = mappingProject
+	svcConvergeProjectChange   = services.ConvergeProjectChange
+	svcConvergeSubjectOn       = services.ConvergeSubjectOn
+	directoryProjects          = func(ctx context.Context) ([]models.ProjectCatalog, error) { return directory.Default.Projects(ctx) }
 	dbStandingBindingConflicts = db.StandingBindingConflicts
 	dbResolveBindingConflict   = db.ResolveBindingConflict
 	dbResolveLogViolation      = db.ResolveLogViolation
