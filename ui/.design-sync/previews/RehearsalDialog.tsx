@@ -4,7 +4,7 @@ const noop = () => {};
 /** The card wrapper is transformed, so it is the containing block for the fixed overlay: give it the viewport. */
 const stage = { margin: -24, height: "100dvh" } as const;
 const row = (user_id: string, name: string, effect: any, detail: string, consequence?: string) => ({
-  user_id, name, email: `${name.toLowerCase().replace(" ", ".")}@ashoka.edu.in`, effect, detail, consequence,
+  user_id, name, email: `${name.toLowerCase().replace(" ", ".")}@example.edu`, effect, detail, consequence,
 });
 
 const grant = {
