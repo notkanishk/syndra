@@ -26,6 +26,13 @@
 - [x] 2.4 `handleSetMyCredential` refuses `draining` / `read_only` with `409 TARGET_PAUSED` before dispatch. Test that nothing is dispatched
 - [x] 2.5 The operator health read and `GET /api/v1/targets` expose the monitor's state beside the live read. Tests
 
+## 2b. A-01 from design: the states between answering and offline
+
+- [ ] 2b.1 Monitor keeps the last three results, `missed_since` (the first miss of the current run) and `started_at`. Tests
+- [ ] 2b.2 One backend `status` with A-01's precedence: `cannot_connect` > `offline` > `waiting_to_retry` > `checking` > `answering`. It goes on the targets list and the health read. Test for each pairing
+- [ ] 2b.3 Values answer carries `builtin_count` and two built-in example names, for "TrueNAS has no groups of its own yet". Test
+- [ ] 2b.4 UI renames at the A-01 call sites, with their tests. Check pips (aria-label) on Connected systems and the system page
+
 ## 3. Backend: one project per target (D3–D5)
 
 - [x] 3.1 Migration 000051:
