@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MappingManagement } from "@/components/targets/MappingManagement";
 import type { MappingHistory, RoleMapping } from "@/lib/queries/useMappings";
+import type { TargetReach } from "@/lib/queries/useTargets";
 
 const miss = { value: undefined, resolved: true } as const;
 
@@ -53,6 +54,15 @@ const state: {
   rehearsals: [],
   rehearsalExtras: {},
 };
+
+// What each group opens is read from the system; these tests are about the
+// mappings themselves.
+const reach = { data: undefined as TargetReach | undefined };
+
+vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/useTargets")>()),
+  useTargetReach: () => ({ data: reach.data, isLoading: false, error: null }),
+}));
 
 vi.mock("@/lib/queries/useMappings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useMappings")>(
@@ -126,8 +136,9 @@ describe("what roles reach a target", () => {
     state.holders = ["u1", "u2", "u3"];
     renderMappings();
 
-    expect(screen.getByText("group = lab_makers")).toBeInTheDocument();
-    expect(screen.getByText("3 people")).toBeInTheDocument();
+    expect(screen.getByText("group → lab_makers")).toBeInTheDocument();
+    const row = screen.getByText("group → lab_makers").closest("div") as HTMLElement;
+    expect(row.parentElement?.textContent).toMatch(/3 people/);
   });
 
   // The cohort is the reason this row can offer a convergence at all: the
@@ -349,5 +360,38 @@ describe("publishing a version", () => {
 
     expect(screen.queryAllByRole("button", { name: /^Publish/ })).toHaveLength(0);
     expect(screen.queryAllByPlaceholderText(/Why this set is the one to keep/)).toHaveLength(0);
+  });
+});
+
+// A-02 §3/§4: each row says what its group opens, read from the system's
+// folder permissions; a group that opens nothing is said in amber; the read's
+// age is said once, and a last-known read dims the lines, not the mapping.
+describe("what each group opens", () => {
+  it("lists the places under the row, or says it opens nothing", () => {
+    state.holders = ["u1", "u2"];
+    reach.data = {
+      read: true,
+      current: true,
+      read_at: new Date().toISOString(),
+      groups: { lab_makers: [{ share: "main", folder: "waddle_share", path: "/mnt/p/main/waddle_share", access: "change" }] },
+    };
+    const { unmount } = renderMappings();
+    expect(screen.getByText("main › waddle_share")).toBeInTheDocument();
+    expect(screen.getByText("can change files")).toBeInTheDocument();
+    expect(screen.getByText(/read from TrueNAS's folder permissions/)).toBeInTheDocument();
+    unmount();
+
+    reach.data = { read: true, current: false, read_at: "2026-10-14T09:02:00Z", groups: { lab_makers: [] } };
+    renderMappings();
+    expect(screen.getByText(/Opens nothing yet\. No folder on TrueNAS gives lab_makers anything/)).toBeInTheDocument();
+    expect(screen.getByText(/as last read from TrueNAS's folder permissions at/)).toBeInTheDocument();
+  });
+
+  it("says nothing was read rather than drawing nothing", () => {
+    reach.data = { read: false };
+    renderMappings();
+    expect(screen.getByText("What each group opens: not read from TrueNAS yet")).toBeInTheDocument();
+    expect(screen.queryByText(/Opens nothing/)).toBeNull();
+    reach.data = undefined;
   });
 });

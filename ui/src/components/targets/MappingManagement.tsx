@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
@@ -7,10 +8,12 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
-import { AddMappingButton, RefusedFields } from "@/components/targets/AddMappingDialog";
+import { AddMappingButton, RefusedFields, placeName } from "@/components/targets/AddMappingDialog";
+import { StatusDot } from "@/components/ui/Badge";
+import { useTargetReach, type ReachPlace, type TargetReach } from "@/lib/queries/useTargets";
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { Relative } from "@/components/ui/Time";
-import { RoleRef, UserName } from "@/components/names";
+import { UserName } from "@/components/names";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
@@ -28,7 +31,7 @@ import {
   type MappingVersion,
   type RoleMapping,
 } from "@/lib/queries/useMappings";
-import { roleLabel } from "@/lib/format";
+import { formatClock, humanizeKey, roleLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -58,6 +61,7 @@ import { useIsTouch } from "@/lib/useViewport";
  */
 export function MappingManagement({ target }: { target: string }) {
   const mappings = useMappings(target);
+  const reach = useTargetReach(target);
   const [editing, setEditing] = useState<RoleMapping | null>(null);
   const [deleting, setDeleting] = useState<RoleMapping | null>(null);
   const name = targetLabel(target);
@@ -66,9 +70,9 @@ export function MappingManagement({ target }: { target: string }) {
     <>
       <Card>
         <CardHeader
-          title="Which roles are mapped here"
+          title={`What roles reach ${name}`}
           count={mappings.data?.length}
-          note="Editing one moves access for everybody holding that role"
+          note={<OpensNote name={name} reach={reach.data} />}
           action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
         <ListStates
@@ -90,6 +94,8 @@ export function MappingManagement({ target }: { target: string }) {
                 key={mapping.id}
                 mapping={mapping}
                 first={i === 0}
+                opens={mapping.field === "group" && reach.data?.read ? (reach.data.groups?.[mapping.value] ?? []) : undefined}
+                dim={reach.data?.read === true && reach.data.current === false}
                 onEdit={() => setEditing(mapping)}
                 onDelete={() => setDeleting(mapping)}
               />
@@ -134,36 +140,89 @@ function useRoleName(projectId: string, roleKey: string): string {
   return roleLabel(project, roleKey, role);
 }
 
+/**
+ * The freshness of what each group opens, said once in the card header
+ * (A-02 §3). The mappings themselves are Syndra's own record and need none.
+ */
+function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefined }) {
+  if (!reach) return null;
+  if (!reach.read) return <>What each group opens: not read from {name} yet</>;
+  return reach.current ? (
+    <>
+      What each group opens, read from {name}&apos;s folder permissions <Relative iso={reach.read_at} />
+    </>
+  ) : (
+    <>What each group opens, as last read from {name}&apos;s folder permissions at {formatClock(reach.read_at)}</>
+  );
+}
+
 function MappingRow({
   mapping,
   first,
+  opens,
+  dim,
   onEdit,
   onDelete,
 }: {
   mapping: RoleMapping;
   first: boolean;
+  /** What its group opens; undefined when not read or not a group. */
+  opens: ReachPlace[] | undefined;
+  /** Last known, not a fresh read: the lines dim, the mapping doesn't. */
+  dim: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const holders = useMappingHolders(mapping.id);
   const cohort = holders.data?.holders ?? [];
   const roleName = useRoleName(mapping.project_id, mapping.role_key);
+  const resolver = useNameResolver();
+  // The project is the system's one, named in the strip; the row names the role.
+  const label = resolver.resolveRole(mapping.project_id, mapping.role_key).value?.display_name || humanizeKey(mapping.role_key);
+  const name = targetLabel(mapping.target);
 
   return (
-    <CardRow first={first} className="flex-wrap">
-      <span className="text-[14px]">
-        <RoleRef projectId={mapping.project_id} roleKey={mapping.role_key} />
+    <CardRow first={first} className="flex-wrap items-start">
+      <span className="flex w-[260px] flex-none flex-col gap-0.5">
+        <Link
+          href={`/projects/${mapping.project_id}`}
+          className="text-[14.5px] font-semibold text-ink hover:text-accent-text hover:underline"
+        >
+          {label}
+        </Link>
+        <span className="type-mono text-[12.5px] text-faint">{mapping.role_key}</span>
       </span>
-      <span aria-hidden className="text-faint">
-        →
+      <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-[3px]">
+        <span className="type-mono text-[13.5px]">
+          {mapping.field} → {mapping.value}
+        </span>
+        {opens && (
+          <span className="flex flex-col gap-0.5" style={{ opacity: dim ? 0.62 : 1 }}>
+            {opens.length === 0 ? (
+              <span className="flex items-baseline gap-2 text-[13px] leading-[1.5] text-warn-text [text-wrap:pretty]">
+                <StatusDot tone="warn" />
+                <span>
+                  Opens nothing yet. No folder on {name} gives {mapping.value} anything, so its{" "}
+                  {holders.isLoading ? "" : `${cohort.length} `}
+                  {cohort.length === 1 ? "person gets" : "people get"} an account and nowhere to connect.{" "}
+                  <span className="text-ink">Look at the folder&apos;s permissions on {name}.</span>
+                </span>
+              </span>
+            ) : (
+              opens.map((place, i) => (
+                <span key={place.path} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[13px] leading-[1.5] text-muted">
+                  <span className="text-faint">{i === 0 ? "Opens" : "and"}</span>
+                  <span className="type-mono text-[12.5px] text-ink">{placeName(place)}</span>
+                  <span>{place.access === "change" ? "can change files" : "read only"}</span>
+                </span>
+              ))
+            )}
+          </span>
+        )}
       </span>
-      <span className="font-mono text-[13.5px]">
-        {mapping.field} = {mapping.value}
-      </span>
-      <span className="text-[13px] text-faint">
-        {holders.isLoading
-          ? "…"
-          : `${cohort.length} ${cohort.length === 1 ? "person" : "people"}`}
+      <span className="w-[110px] flex-none text-right text-[15px]">
+        {holders.isLoading ? "…" : cohort.length}
+        <span className="text-[13px] text-muted tablet:hidden"> people</span>
       </span>
       <span className="flex-1" />
       <ConvergeButton

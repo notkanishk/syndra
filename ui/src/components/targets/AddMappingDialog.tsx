@@ -1,18 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Select } from "@/components/ui/Select";
+import { Relative } from "@/components/ui/Time";
+import { ApiError } from "@/lib/api-client";
+import { formatClock } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import {
   rehearseMappingCreate,
   useCreateMapping,
+  useMappings,
   type MappingRehearsal,
 } from "@/lib/queries/useMappings";
 import { useProjects } from "@/lib/queries/useProjects";
+import {
+  useMappableValues,
+  useTargetReach,
+  useTargets,
+  type MappableValues,
+  type ReachPlace,
+} from "@/lib/queries/useTargets";
 
 /**
  * Adding a mapping (design M1, M5).
@@ -29,107 +40,121 @@ import { useProjects } from "@/lib/queries/useProjects";
  * plan that was reviewed.
  */
 export function AddMappingDialog({ target, onClose }: { target: string; onClose: () => void }) {
+  const name = targetLabel(target);
+  const roster = useTargets();
+  const row = (roster.data ?? []).find((t) => t.target === target);
+  const project = row?.project ?? undefined;
   const projects = useProjects();
+  const mappings = useMappings(target);
+  const values = useMappableValues(target, FIELD);
+  const reach = useTargetReach(target);
   const create = useCreateMapping();
-  const [projectId, setProjectId] = useState("");
   const [roleKey, setRoleKey] = useState("");
-  // `group` is what this add-on takes today. Prefilled rather than fixed: the
-  // add-on's schema is the authority on which fields exist, and hard-coding the
-  // list here would be a second definition of it — one that goes stale the day
-  // an add-on declares a third. The backend refuses an undeclared field and
-  // names the declared set in the refusal.
-  const [field, setField] = useState("group");
   const [value, setValue] = useState("");
   const [rehearsed, setRehearsed] = useState<MappingRehearsal | null>(null);
 
-  const rows = useMemo(() => projects.data ?? [], [projects.data]);
-  const roles = useMemo(
-    () => rows.find((entry) => entry.project.id === projectId)?.role_keys ?? [],
-    [rows, projectId],
-  );
+  // The system's one project's roles, less the ones already mapped.
+  const mapped = new Set((mappings.data ?? []).filter((m) => m.field === FIELD).map((m) => m.role_key));
+  const roles = (projects.data ?? [])
+    .find((r) => r.project.id === project?.id)
+    ?.project.roles.filter((r) => !mapped.has(r.key)) ?? [];
 
-  const ready = Boolean(projectId && roleKey && field.trim() && value.trim());
-  const name = targetLabel(target);
+  const list = values.data;
+  const neverRead = values.error instanceof ApiError && values.error.code === "VALUES_NEVER_READ";
+  const noGroups = Boolean(list && list.values.length === 0);
+  const fieldName = list ? `${list.label} on ${name}` : `Group on ${name}`;
+  const ready = Boolean(project && roleKey && value && list && !noGroups);
+  const notReadyReason = neverRead
+    ? `Nothing to preview until ${name} lists its groups.`
+    : noGroups
+      ? `Nothing to preview until ${name} has a group of its own.`
+      : "Nothing is sent until you apply the preview.";
 
   return (
     <RehearsalDialog
-      title={`Add a mapping to ${name}`}
-      lede={`Everybody holding the role gets an account on ${name} in this group the next time Syndra reconciles. Nothing changes until you preview the list below and apply it.`}
+      title="Add a mapping"
+      lede={`Everyone who holds the role gets an account on ${name} in this group. The preview says how many people that is before anything is sent.`}
       noun={["person", "people"]}
       ready={ready}
+      notReadyReason={notReadyReason}
       definitionLabel="Save mapping"
       compose={
-        <div className="grid gap-3">
-          <label className="grid gap-1.5 text-[14px]">
-            <span>Project</span>
-            <Select
-              value={projectId}
-              onChange={(e) => {
-                setProjectId(e.target.value);
-                // The role belongs to the project. Keeping a stale one selected
-                // would offer a pair that does not exist.
-                setRoleKey("");
-              }}
-            >
-              <option value="">Choose a project</option>
-              {rows.map((entry) => (
-                <option key={entry.project.id} value={entry.project.id}>
-                  {entry.project.name}
+        <div className="grid gap-4">
+          <div className="grid gap-1.5">
+            <FieldLabel htmlFor="m-role">Role in {project?.name || "its project"}</FieldLabel>
+            <Select id="m-role" value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
+              <option value="">{roles.length ? "Choose a role" : "No role left to map"}</option>
+              {roles.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.label || r.key}
                 </option>
               ))}
             </Select>
-          </label>
-          <span className="-mt-1.5 text-[13px] text-faint">
-            The machine or area the role belongs to — the Laser Cutter, the Studio.
-          </span>
-
-          <label className="grid gap-1.5 text-[14px]">
-            <span>Role</span>
-            <Select
-              value={roleKey}
-              disabled={!projectId}
-              onChange={(e) => setRoleKey(e.target.value)}
-            >
-              <option value="">{projectId ? "Choose a role" : "Choose a project first"}</option>
-              {roles.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </Select>
-          </label>
-          {projectId && roles.length === 0 && (
-            // Not an empty dropdown. A project with no roles cannot confer
-            // anything, and saying so is the answer to why the list is empty.
-            <span className="-mt-1.5 text-[13px] text-faint">
-              This project has no roles yet, so there is nothing to map.
-            </span>
-          )}
-
-          <div className="grid gap-1.5 text-[14px]">
-            <label className="grid gap-1.5">
-              <span>Account setting</span>
-              <Input value={field} onChange={(e) => setField(e.target.value)} />
-            </label>
-            {/* Outside the label, deliberately. Inside it the hint becomes part
-                of the control's accessible name, so a screen reader announces
-                the whole paragraph where the field's name should be. */}
-            <span className="text-[13px] text-faint">
-              Which account setting this role controls on {name} — normally{" "}
-              <span className="type-mono">group</span>. Anything {name} does not support is
-              refused, and the supported ones are named.
-            </span>
+            <FieldHint>Roles already mapped are not offered.</FieldHint>
           </div>
 
-          <div className="grid gap-1.5 text-[14px]">
-            <label className="grid gap-1.5">
-              <span>Value</span>
-              <Input value={value} onChange={(e) => setValue(e.target.value)} />
-            </label>
-            <span className="text-[13px] text-faint">
-              Checked against {name} before you go further — a group that does not exist
-              there is refused now, not later.
-            </span>
+          <div className="grid gap-1.5">
+            <FieldLabel htmlFor="m-val">{fieldName}</FieldLabel>
+            {neverRead || noGroups || !list ? (
+              <>
+                <Select id="m-val" disabled>
+                  <option>
+                    {neverRead ? `Waiting for ${name}'s list` : noGroups ? "No groups to offer" : `Reading ${name}'s groups…`}
+                  </option>
+                </Select>
+                <FieldHint>{neverRead ? "Not read yet." : list ? <>Read from {name} <Relative iso={list.read_at} />.</> : " "}</FieldHint>
+                {(neverRead || noGroups) && (
+                  <div role="status" className="panel flex flex-col gap-1.5 px-4 py-3.5 text-[14px] leading-[1.55]">
+                    <span className="font-semibold">
+                      {neverRead ? `${name} hasn't listed its groups yet.` : `${name} has no groups of its own yet.`}
+                    </span>
+                    <span className="text-muted [text-wrap:pretty]">
+                      {neverRead
+                        ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
+                            row?.health?.started_at ? ` since Syndra restarted at ${formatClock(row.health.started_at)}` : " yet"
+                          }. This usually clears within a minute and a half.`
+                        : builtinSentence(name, list)}
+                    </span>
+                    <span className="mt-1 flex">
+                      <Button variant="outline" size="sm" onClick={() => void values.refetch()}>
+                        Read again
+                      </Button>
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <Select id="m-val" value={value} onChange={(e) => setValue(e.target.value)}>
+                  <option value="">Choose a group</option>
+                  {list.values.map((v) => (
+                    <option key={v} value={v}>
+                      {list.labels?.[v] ?? v}
+                    </option>
+                  ))}
+                </Select>
+                <FieldHint>
+                  {list.current ? (
+                    <>
+                      Groups made on {name}, read <Relative iso={list.read_at} />. Its built-in groups are never
+                      offered.
+                    </>
+                  ) : (
+                    `The list ${name} gave at ${formatClock(list.read_at)}.`
+                  )}
+                </FieldHint>
+                {value && <OpensLine name={name} places={reach.data?.read ? reach.data.groups?.[value] : undefined} />}
+                {!list.current && (
+                  <div role="status" className="warn-note flex flex-col gap-1 px-3.5 py-3 text-[14px] leading-[1.55]">
+                    <span className="font-semibold text-warn-text">This list is from {formatClock(list.read_at)}.</span>
+                    <span>
+                      Syndra can&apos;t read {name}&apos;s groups right now. You can still preview. A group deleted since{" "}
+                      {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       }
@@ -137,30 +162,44 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
         rehearsed?.value_checked === false ? (
           <>
             <span className="font-semibold">
-              {name} could not be reached, so <span className="type-mono">{value}</span> was
-              not checked.
+              {name} could not be reached, so <span className="type-mono">{value}</span> was not checked.
             </span>{" "}
             The mapping is allowed through so an outage does not look like your mistake. If{" "}
-            <span className="type-mono">{value}</span> does not exist, the change fails when it
-            reaches {name} and waits in Pending changes until somebody fixes it.
+            <span className="type-mono">{value}</span> does not exist, the change fails when it reaches {name} and
+            waits in Pending changes until somebody fixes it.
           </>
         ) : undefined
       }
       onRehearse={async (acknowledgeScope) => {
-        const plan = await rehearseMappingCreate(
-          { target, projectId, roleKey, field: field.trim(), value: value.trim() },
-          acknowledgeScope,
-        );
-        setRehearsed(plan);
-        return plan;
+        try {
+          const plan = await rehearseMappingCreate(
+            { target, projectId: project?.id ?? "", roleKey, field: FIELD, value },
+            acknowledgeScope,
+          );
+          setRehearsed(plan);
+          return plan;
+        } catch (error) {
+          // The one refusal a picker leaves: the group went away on the
+          // system after the list was read. Read it again, and say so.
+          if (error instanceof ApiError && error.details?.value === "unresolvable") {
+            const gone = value;
+            setValue("");
+            void values.refetch();
+            throw new ApiError(400, {
+              error: "VALIDATION_FAILED",
+              message: `${gone} is no longer on ${name}. It was deleted on ${name} after the list was read, and the preview asked again. Pick another group, or create it on ${name}. The list above is fresh.`,
+            });
+          }
+          throw error;
+        }
       }}
       onApply={async (planId) => {
         const result = await create.mutateAsync({
           target,
-          projectId,
+          projectId: project?.id ?? "",
           roleKey,
-          field: field.trim(),
-          value: value.trim(),
+          field: FIELD,
+          value,
           planId,
         });
         // Queued, never applied: the row is written here and the people it
@@ -187,6 +226,49 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
       onClose={onClose}
     />
   );
+}
+
+/**
+ * The field a mapping sets here. One today that a role picks a value for; the
+ * home folder and its limit come with A-03.
+ */
+const FIELD = "group";
+
+/** "It lists 34 groups, all of them built in, like builtin_users and …" */
+function builtinSentence(name: string, list: MappableValues | undefined): string {
+  const count = list?.builtin_count ?? 0;
+  const examples = list?.builtin_examples ?? [];
+  const like = examples.length ? `, like ${examples.join(" and ")}` : "";
+  return `It lists ${count} group${count === 1 ? "" : "s"}, all of them built in${like}. Syndra never offers those: a role mapped to one would give everyone who holds it the NAS's administration or its default share access. Make a group on ${name}, under Credentials → Groups, then read again.`;
+}
+
+/**
+ * What a group opens, under the picker, so the operator sees what a mapping
+ * gives before the preview (A-02 §3).
+ */
+export function OpensLine({ name, places }: { name: string; places: ReachPlace[] | undefined }) {
+  if (!places) return null;
+  if (places.length === 0) {
+    return <span className="text-[13.5px] text-warn-text">Opens nothing on {name} yet.</span>;
+  }
+  return (
+    <span className="text-[13.5px] leading-[1.5] text-ink [text-wrap:pretty]">
+      Opens{" "}
+      {places.map((p, i) => (
+        <Fragment key={p.path}>
+          {i > 0 && (i === places.length - 1 ? ", and " : ", ")}
+          <span className="type-mono text-[12.5px]">{placeName(p)}</span>,{" "}
+          {p.access === "change" ? "can change files" : "read only"}
+        </Fragment>
+      ))}
+      .
+    </span>
+  );
+}
+
+/** `main › waddle_share`. */
+export function placeName(p: ReachPlace): string {
+  return [p.share, ...(p.folder ? p.folder.split("/") : [])].join(" › ");
 }
 
 /**

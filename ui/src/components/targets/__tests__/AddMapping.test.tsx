@@ -3,7 +3,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddMappingDialog } from "@/components/targets/AddMappingDialog";
+import { ApiError } from "@/lib/api-client";
 import type { MappingRehearsal } from "@/lib/queries/useMappings";
+import type { MappableValues, TargetReach } from "@/lib/queries/useTargets";
 
 /**
  * Adding a mapping (designs M1, M5).
@@ -20,12 +22,18 @@ const state = {
   rehearsals: [] as Array<{ input: Record<string, unknown>; acknowledgeScope: boolean }>,
   created: [] as Array<Record<string, unknown>>,
   rehearsed: null as MappingRehearsal | null,
+  rehearseError: null as unknown,
+  values: null as MappableValues | null,
+  valuesError: null as unknown,
+  refetched: 0,
+  reach: { read: true, current: true, read_at: "2026-10-14T09:00:00Z", groups: {} } as TargetReach,
 };
 
 vi.mock("@/lib/queries/useMappings", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useMappings")>()),
   rehearseMappingCreate: vi.fn(async (input: Record<string, unknown>, acknowledgeScope: boolean) => {
     state.rehearsals.push({ input, acknowledgeScope });
+    if (state.rehearseError) throw state.rehearseError;
     return state.rehearsed;
   }),
   useCreateMapping: () => ({
@@ -35,13 +43,51 @@ vi.mock("@/lib/queries/useMappings", async (importOriginal) => ({
     }),
     isPending: false,
   }),
+  useMappings: () => ({
+    data: [{ id: "m0", target: "truenas", project_id: "pLab", role_key: "lead", field: "group", value: "leads" }],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/useTargets")>()),
+  useTargets: () => ({
+    data: [
+      {
+        target: "truenas",
+        project: { id: "pLab", name: "Laser Lab" },
+        health: { status: "online", recent: [], started_at: "2026-10-14T09:38:00Z" },
+      },
+    ],
+    isLoading: false,
+    error: null,
+  }),
+  useMappableValues: () => ({
+    data: state.values ?? undefined,
+    error: state.valuesError,
+    isLoading: false,
+    refetch: () => {
+      state.refetched++;
+    },
+  }),
+  useTargetReach: () => ({ data: state.reach, isLoading: false, error: null }),
 }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({
     data: [
-      { project: { id: "pLab", name: "Laser Lab" }, role_keys: ["trained", "lead"] },
-      { project: { id: "pEmpty", name: "Studio" }, role_keys: [] },
+      {
+        project: {
+          id: "pLab",
+          name: "Laser Lab",
+          roles: [
+            { key: "trained", label: "Trained operator" },
+            { key: "lead", label: "Lab lead" },
+          ],
+        },
+      },
+      { project: { id: "pOther", name: "Studio", roles: [{ key: "studio", label: "Studio user" }] } },
     ],
     isLoading: false,
     error: null,
@@ -52,9 +98,27 @@ vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
 }));
 
+function values(over: Partial<MappableValues> = {}): MappableValues {
+  return {
+    field: "group",
+    label: "Group",
+    single: false,
+    values: ["makers", "leads"],
+    enumerable: true,
+    read_at: new Date().toISOString(),
+    current: true,
+    ...over,
+  };
+}
+
 beforeEach(() => {
   state.rehearsals = [];
   state.created = [];
+  state.rehearseError = null;
+  state.values = values();
+  state.valuesError = null;
+  state.refetched = 0;
+  state.reach = { read: true, current: true, read_at: "2026-10-14T09:00:00Z", groups: {} };
   state.rehearsed = {
     op: "create_mapping",
     plan_id: "plan_61a8",
@@ -70,15 +134,16 @@ beforeEach(() => {
 
 function compose() {
   render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
-  fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pLab" } });
-  fireEvent.change(screen.getByLabelText("Role"), { target: { value: "trained" } });
-  fireEvent.change(screen.getByLabelText("Value"), { target: { value: "makers" } });
+  fireEvent.change(screen.getByLabelText("Role in Laser Lab"), { target: { value: "trained" } });
+  fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "makers" } });
 }
+
+const preview = () => screen.getByRole("button", { name: /preview/i });
 
 describe("adding a mapping", () => {
   it("rehearses before it writes anything", async () => {
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    fireEvent.click(preview());
 
     await waitFor(() => expect(state.rehearsals.length).toBe(1));
     expect(state.rehearsals[0].input).toMatchObject({
@@ -88,64 +153,101 @@ describe("adding a mapping", () => {
       field: "group",
       value: "makers",
     });
-    // The blast radius is a backend refusal, not a checkbox drawn upfront.
     expect(state.rehearsals[0].acknowledgeScope).toBe(false);
     expect(state.created).toEqual([]);
   });
 
   it("applies the plan it was shown, citing it", async () => {
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    fireEvent.click(preview());
     fireEvent.click(await screen.findByRole("button", { name: /^Apply/ }));
 
     await waitFor(() => expect(state.created.length).toBe(1));
-    expect(state.created[0]).toMatchObject({ planId: "plan_61a8", value: "makers" });
+    expect(state.created[0]).toMatchObject({ planId: "plan_61a8", value: "makers", projectId: "pLab" });
   });
 
-  // A role belongs to a project, so a stale selection would offer a pair that
-  // does not exist.
-  //
-  // Asserted by returning to the first project rather than by reading the
-  // select after the switch: a `<select>` whose value has no matching option
-  // reports "" on its own, so the obvious version of this test passes whether
-  // or not the state was ever cleared. Coming back is what tells them apart —
-  // an uncleared role reappears.
-  it("clears the role when the project changes, and does not restore it", () => {
+  // The system has one project; its roles are the only ones offered, less
+  // those already mapped.
+  it("offers only the system's project's roles that aren't mapped yet", () => {
+    render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
+    const roles = Array.from((screen.getByLabelText("Role in Laser Lab") as HTMLSelectElement).options).map((o) => o.textContent);
+    expect(roles).toEqual(["Choose a role", "Trained operator"]);
+    expect(screen.getByText("Roles already mapped are not offered.")).toBeTruthy();
+  });
+
+  it("will not rehearse until it has a role and a group", () => {
+    render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
+    expect(preview().hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Role in Laser Lab"), { target: { value: "trained" } });
+    expect(preview().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("says what the picked group opens before the preview", () => {
+    state.reach = {
+      read: true,
+      current: true,
+      groups: {
+        makers: [
+          { share: "main", folder: "waddle_share", path: "/mnt/p/main/waddle_share", access: "change" },
+          { share: "main", folder: "quack_share", path: "/mnt/p/main/quack_share", access: "read" },
+        ],
+        leads: [],
+      },
+    };
     compose();
-    expect((screen.getByLabelText("Role") as HTMLSelectElement).value).toBe("trained");
-
-    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pEmpty" } });
-    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pLab" } });
-
-    expect((screen.getByLabelText("Role") as HTMLSelectElement).value).toBe("");
-    // And the form knows it is incomplete again.
-    expect(screen.getByRole("button", { name: /preview/i }).hasAttribute("disabled")).toBe(true);
+    expect(document.body.textContent).toMatch(/Opens main › waddle_share, can change files, and main › quack_share, read only\./);
+    fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "leads" } });
+    expect(screen.getByText("Opens nothing on TrueNAS yet.")).toBeTruthy();
   });
 
-  // Not an empty dropdown. A project with no roles cannot confer anything, and
-  // saying so is the answer to why the list is empty.
-  it("says why a project offers no roles", () => {
-    render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pEmpty" } });
-
-    expect(screen.getByText(/This project has no roles/)).toBeTruthy();
-  });
-
-  it("will not rehearse until it has all four", () => {
-    render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /preview/i }).hasAttribute("disabled")).toBe(true);
-  });
-
-  // The same honesty the edit path has: a check that could not run must not
-  // read as one that passed.
   it("says when the value could not be checked", async () => {
     state.rehearsed = { ...(state.rehearsed as MappingRehearsal), value_checked: false };
     compose();
-    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    fireEvent.click(preview());
+    await waitFor(() => expect(document.body.textContent).toMatch(/could not be reached, so/));
+  });
+});
 
-    await waitFor(() =>
-      expect(document.body.textContent).toMatch(/could not be reached, so/),
-    );
+describe("the group list", () => {
+  // A-01 §3: a NAS with only built-in groups is a fresh NAS, not a fault.
+  it("explains a NAS with no groups of its own, and reads again", () => {
+    state.values = values({ values: [], builtin_count: 34, builtin_examples: ["builtin_users", "builtin_administrators"] });
+    render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
+    expect((screen.getByLabelText("Group on TrueNAS") as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getByText("TrueNAS has no groups of its own yet.")).toBeTruthy();
+    expect(screen.getByText(/It lists 34 groups, all of them built in, like builtin_users and builtin_administrators/)).toBeTruthy();
+    expect(screen.getByText("Nothing to preview until TrueNAS has a group of its own.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Read again" }));
+    expect(state.refetched).toBe(1);
+  });
+
+  it("says when the list was never read, with no count", () => {
+    state.values = null;
+    state.valuesError = new ApiError(409, { error: "VALUES_NEVER_READ", message: "never" });
+    render(<AddMappingDialog target="truenas" onClose={vi.fn()} />);
+    expect(screen.getByText("TrueNAS hasn't listed its groups yet.")).toBeTruthy();
+    expect(screen.getByText(/hasn't answered since Syndra restarted at \d\d:\d\d/)).toBeTruthy();
+    expect(screen.queryByText(/It lists/)).toBeNull();
+    expect(preview().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("labels a last-known list with its time, and lets it through", () => {
+    state.values = values({ current: false, read_at: "2026-10-14T09:02:00Z" });
+    compose();
+    expect(screen.getByText(/^The list TrueNAS gave at \d\d:\d\d\.$/)).toBeTruthy();
+    expect(screen.getByText(/^This list is from/)).toBeTruthy();
+    expect(preview().hasAttribute("disabled")).toBe(false);
+  });
+
+  // The one refusal a picker leaves: the group went away after the list was
+  // read. The list is read again and the choice cleared.
+  it("reads the list again when the group went away", async () => {
+    state.rehearseError = new ApiError(400, { error: "VALIDATION_FAILED", message: "gone", details: { value: "unresolvable" } });
+    compose();
+    fireEvent.click(preview());
+    await waitFor(() => expect(document.body.textContent).toMatch(/makers is no longer on TrueNAS/));
+    expect(state.refetched).toBe(1);
+    expect((screen.getByLabelText("Group on TrueNAS") as HTMLSelectElement).value).toBe("");
   });
 });
 

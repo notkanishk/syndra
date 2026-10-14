@@ -43,6 +43,13 @@ const history: MappingHistory = {
   ],
 };
 
+// What each group opens is read from the system; these tests are about the
+// mappings themselves.
+vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/useTargets")>()),
+  useTargetReach: () => ({ data: undefined, isLoading: false, error: null }),
+}));
+
 vi.mock("@/lib/queries/useMappings", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useMappings")>(
     "@/lib/queries/useMappings",
