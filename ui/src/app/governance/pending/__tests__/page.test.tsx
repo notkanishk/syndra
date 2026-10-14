@@ -98,7 +98,7 @@ describe("Pending changes", () => {
 
     expect(screen.getByText(/Zitadel is not answering/)).toBeInTheDocument();
     expect(
-      screen.getByText(/Sending is paused/),
+      screen.getByText(/Sending waits until Zitadel answers/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Send / })).toBeDisabled();
   });

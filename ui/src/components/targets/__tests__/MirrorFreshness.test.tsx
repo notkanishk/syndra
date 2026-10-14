@@ -82,7 +82,7 @@ describe("how old the add-on's mirror is", () => {
     renderTarget();
 
     // The card's own answer stands unqualified.
-    expect(screen.getByText(/talking to TrueNAS normally/)).toBeInTheDocument();
+    expect(screen.getByText(/Accepting changes\. Nothing is in flight\./)).toBeInTheDocument();
     expect(screen.queryByText(/too old to act on/)).toBeNull();
     // And above all: no instruction that cannot change what it points at.
     expect(screen.queryByText(/reload the page to read it again/)).toBeNull();
@@ -93,6 +93,8 @@ describe("how old the add-on's mirror is", () => {
       reachable: false,
       detail: "the target could not be read",
       snapshot_taken_at: FOUR_HOURS_AGO,
+      status: "offline",
+      health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: FOUR_HOURS_AGO },
     };
     renderTarget();
 
@@ -103,7 +105,12 @@ describe("how old the add-on's mirror is", () => {
   });
 
   it("does not imply an earlier copy exists when none does", () => {
-    currentHealth = { reachable: false, detail: "the target could not be read" };
+    currentHealth = {
+      reachable: false,
+      detail: "the target could not be read",
+      status: "offline",
+      health: { status: "offline", recent: ["missed", "missed", "missed"] },
+    };
     renderTarget();
 
     expect(screen.getByText(/no earlier copy to show/)).toBeInTheDocument();

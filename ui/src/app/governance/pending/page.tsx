@@ -114,7 +114,7 @@ export default function PendingChangesPage() {
               Zitadel is not answering, as of <ClockTime />.
             </div>
             <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-              Sending is paused. Nothing is lost: the changes wait in order, and nothing has
+              Sending waits until Zitadel answers. Nothing is lost: the changes wait in order, and nothing has
               reached any system. Send them once Zitadel is back.
             </p>
           </div>

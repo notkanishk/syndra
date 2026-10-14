@@ -25,15 +25,20 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 	dbGetLogAnchor = func(context.Context, string) (db.LogAnchor, bool, error) { return db.LogAnchor{}, false, nil }
 	since := time.Date(2026, 10, 14, 9, 40, 0, 0, time.UTC)
 
+	creds := addonsTransportCredentials
+	t.Cleanup(func() { addonsTransportCredentials = creds })
+	addonsTransportCredentials = func() []addons.TransportCredential { return nil }
+
 	for _, tc := range []struct {
-		name  string
-		live  addons.TargetHealth
-		state addons.HealthState
+		name   string
+		live   addons.TargetHealth
+		state  addons.HealthState
+		status string
 	}{
 		{"answering", addons.TargetHealth{Reachable: true, Outcome: addons.OutcomeSucceeded},
-			addons.HealthState{Status: addons.HealthOnline, CheckedAt: since}},
+			addons.HealthState{Status: addons.HealthOnline, CheckedAt: since}, "answering"},
 		{"down", addons.TargetHealth{Outcome: addons.OutcomeUnreached, Err: errors.New("no route")},
-			addons.HealthState{Status: addons.HealthOffline, CheckedAt: since.Add(time.Minute), ReachableSince: &since}},
+			addons.HealthState{Status: addons.HealthOffline, CheckedAt: since.Add(time.Minute), ReachableSince: &since}, "offline"},
 	} {
 		addonsHealth = func(context.Context, string) addons.TargetHealth { return tc.live }
 		addonsHealthOf = func(string) addons.HealthState { return tc.state }
@@ -45,12 +50,16 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 
 		var body struct {
 			Health addons.HealthState `json:"health"`
+			Status string             `json:"status"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
 		if body.Health.Status != tc.state.Status {
 			t.Errorf("%s: want health %s, got %s (%s)", tc.name, tc.state.Status, body.Health.Status, rr.Body.String())
+		}
+		if body.Status != tc.status {
+			t.Errorf("%s: the system page reads the same ranked status as the roster, want %s, got %q", tc.name, tc.status, body.Status)
 		}
 		if tc.state.ReachableSince != nil && (body.Health.ReachableSince == nil || !body.Health.ReachableSince.Equal(since)) {
 			t.Errorf("%s: an outage carries when it began: %s", tc.name, rr.Body.String())
