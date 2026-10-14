@@ -10,7 +10,7 @@ import { Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
 import { CountChip, Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -19,6 +19,8 @@ import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFre
 import { StatCard } from "@/components/ui/StatCard";
 import { Relative } from "@/components/ui/Time";
 import { CheckPips, ReadingWord, targetReading } from "@/components/targets/TargetReading";
+import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
+import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatRelative } from "@/lib/format";
@@ -68,6 +70,11 @@ export function TargetOverview({ target }: { target: string }) {
   const waitingKnown = !findings.isLoading && !health.isLoading;
   const name = targetLabel(target);
   const lifecycle = health.data?.lifecycle ?? "active";
+  // One Zitadel project per system (3a). Unknown until the roster answers;
+  // null is "not chosen", and everything that gives access waits for it.
+  const project = registered?.project;
+  const gated = registered !== undefined && project === null;
+  const [justSet, setJustSet] = useState<string | null>(null);
 
   return (
     <div className="grid gap-5">
@@ -90,10 +97,22 @@ export function TargetOverview({ target }: { target: string }) {
         }
       />
 
+      {/* The project comes first: its step while unchosen, its result for the
+          visit it was chosen in, then a thin strip that is the only link to the
+          mappings. */}
+      {gated && !justSet ? (
+        <ProjectStep target={target} onSet={setJustSet} />
+      ) : justSet ? (
+        <ProjectSet target={target} project={justSet} />
+      ) : project ? (
+        <SetupStrip target={target} project={project} />
+      ) : null}
+
       {/* The touch form of the four regions: a way to skip one rather than a
           way to hide three. Everything below it is present and scrollable, so a
-          finding cannot end up behind a tab nobody selected. */}
-      <RegionIndex waiting={waitingKnown ? waiting : null} />
+          finding cannot end up behind a tab nobody selected. Gone while the
+          project is unchosen: there is nowhere to go yet. */}
+      {!(gated && !justSet) && <RegionIndex waiting={waitingKnown ? waiting : null} />}
 
       <div className="grid gap-8">
         {/* Region 0 · the band.
@@ -179,6 +198,16 @@ export function TargetOverview({ target }: { target: string }) {
           <LifecycleControl target={target} health={health.data} />
         </Region>
 
+        {/* What reports on the system and its pause stays live above; what
+            waits for the project is drawn whole, inert, under one line. */}
+        <NotOpenYet
+          open={!(gated && !justSet)}
+          size="page"
+          title={`Waits for ${name}'s Zitadel project`}
+          why="Waiting on you, accounts and reconciliation open once it is set."
+          step={{ label: "Choose it above ↑", href: "#project" }}
+        >
+        <div className="grid gap-8">
         {/* Region 1 · second on the page, and not first.
 
             Three findings on a target that has not answered for forty minutes
@@ -213,7 +242,7 @@ export function TargetOverview({ target }: { target: string }) {
           title="People and their access here"
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
-          <MappingCensus target={target} />
+          <MappingCensus target={target} project={project?.name} />
           <PeopleOnTarget target={target} />
           <Inventory target={target} />
           <DormantAccounts target={target} />
@@ -230,6 +259,8 @@ export function TargetOverview({ target }: { target: string }) {
           {registered && <Capabilities registered={registered} />}
           <ReconcileControl target={target} />
         </Region>
+        </div>
+        </NotOpenYet>
       </div>
     </div>
   );
@@ -1243,7 +1274,7 @@ function Reading({
  * find that sentence at the top of what they clicked into, or the click feels
  * like it went somewhere else.
  */
-function MappingCensus({ target }: { target: string }) {
+function MappingCensus({ target, project }: { target: string; project?: string }) {
   const mappings = useMappings(target);
   const rows = mappings.data ?? [];
 
@@ -1262,8 +1293,9 @@ function MappingCensus({ target }: { target: string }) {
             ) : (
               <>
                 <strong className="font-semibold">
-                  {rows.length === 1 ? "One role is mapped to" : `${rows.length} roles are mapped to`}{" "}
-                  {targetLabel(target)}.
+                  {rows.length === 1 ? "One role" : `${rows.length} roles`}
+                  {project ? ` in ${project}` : ""} {rows.length === 1 ? "reaches" : "reach"}{" "}
+                  {targetLabel(target)} through mappings.
                 </strong>{" "}
                 {/* M6 states how many people hold those roles here. The number
                     is distinct people across every mapped role, and nothing
@@ -1277,12 +1309,9 @@ function MappingCensus({ target }: { target: string }) {
           </p>
           <p className="max-w-[78ch] text-[13.5px] leading-[1.55] text-muted">
             Editing one changes access for everybody holding that role. Mappings and their
-            published versions have their own screen.
+            published versions have their own screen, linked at the top of this page.
           </p>
         </div>
-        <ButtonLink href={`/system/targets/${target}/mappings`} size="sm" className="shrink-0">
-          {rows.length === 0 ? "Add the first mapping" : "Open mappings"}
-        </ButtonLink>
       </div>
     </Card>
   );

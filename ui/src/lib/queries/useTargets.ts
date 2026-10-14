@@ -497,3 +497,72 @@ export function useSetLifecycle(target: string) {
     },
   });
 }
+
+/**
+ * Choosing the Zitadel project a system serves (D3). Changes nobody's access;
+ * the roster carries it, so the roster is read again.
+ */
+export function useSetTargetProject(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (projectId: string) =>
+      request<{ target: string; project: { id: string; name: string } }>(`/targets/${target}/project`, {
+        method: "PUT",
+        body: { project_id: projectId },
+      }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets"] });
+    },
+  });
+}
+
+/** One place a group opens, as the target read it from its folder permissions. */
+export interface ReachPlace {
+  share: string;
+  folder?: string;
+  path: string;
+  access: "read" | "change";
+}
+
+/** What each of a system's own groups opens (A-02 §3). `read: false` is "not read yet". */
+export interface TargetReach {
+  read: boolean;
+  read_at?: string;
+  current?: boolean;
+  groups?: Record<string, ReachPlace[]>;
+}
+
+export function useTargetReach(target: string | undefined) {
+  return useQuery({
+    queryKey: ["targets", target, "reach"],
+    queryFn: () => request<TargetReach>(`/targets/${target}/reach`),
+    enabled: Boolean(target),
+  });
+}
+
+/** A field's values, for the mapping dialog's pickers (D6–D7). */
+export interface MappableValues {
+  field: string;
+  label: string;
+  single: boolean;
+  values: string[];
+  labels?: Record<string, string>;
+  enumerable: boolean;
+  builtin_count?: number;
+  builtin_examples?: string[];
+  read_at: string;
+  current: boolean;
+}
+
+export function useMappableValues(target: string | undefined, field: string, enabled = true) {
+  return useQuery({
+    queryKey: ["targets", target, "mappable-values", field],
+    queryFn: () =>
+      request<MappableValues>(`/targets/${target}/mappable-values?field=${encodeURIComponent(field)}`),
+    enabled: Boolean(target) && enabled,
+    // Read when the dialog opens, every time: a group made on TrueNAS a minute
+    // ago must be offered.
+    staleTime: 0,
+    retry: false,
+  });
+}

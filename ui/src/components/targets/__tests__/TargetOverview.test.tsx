@@ -35,7 +35,20 @@ const state = {
   ownerDecided: [] as Array<{ id: string; owner: string; note: string }>,
   adopted: [] as Array<{ username: string; subjectId: string }>,
   adoptResult: { status: "adopted", detail: "The account is now bound to that person." } as unknown,
+  projectSet: [] as string[],
 };
+
+vi.mock("@/lib/queries/useProjects", () => ({
+  useProjects: () => ({
+    data: [
+      { project: { id: "p1", name: "Network storage", kind: "", description: "", roles: [{ key: "a", label: "A" }, { key: "b", label: "B" }] } },
+      { project: { id: "p2", name: "Wood shop", kind: "", description: "", roles: [] } },
+      { project: { id: "p3", name: "Laser Lab", kind: "", description: "", roles: [{ key: "op", label: "Operator" }] } },
+    ],
+    isLoading: false,
+    error: null,
+  }),
+}));
 
 vi.mock("@/lib/queries/useTargets", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>(
@@ -71,6 +84,14 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useSetLifecycle: () => ({ mutate: vi.fn(), isPending: false }),
+    useSetTargetProject: () => ({
+      mutate: (id: string, opts?: { onSuccess?: () => void }) => {
+        state.projectSet.push(id);
+        opts?.onSuccess?.();
+      },
+      isPending: false,
+      error: null,
+    }),
     useReconcileTarget: () => ({
       mutate: vi.fn(),
       isPending: false,
@@ -98,6 +119,7 @@ function summary(operations: TargetSummary["operations"]): TargetSummary {
     callable: true,
     operations,
     circuit_open: false,
+    project: { id: "p1", name: "Network storage" },
   };
 }
 
@@ -899,5 +921,52 @@ describe("adopting an account", () => {
       outcome.parentElement!.parentElement!.textContent,
       "an unattributed outcome says 'Adopted.' about none of eight accounts in particular",
     ).toContain("sai");
+  });
+});
+
+// 3a: the project comes before anything that gives access. Health and the
+// pause stay live; what waits is drawn whole and inert under one line.
+describe("the system's Zitadel project", () => {
+  it("asks for it first, and holds back what waits on it", () => {
+    state.roster = [
+      { ...summary([]), project: null },
+      { ...summary([]), target: "door", project: { id: "p3", name: "Laser Lab" } },
+    ];
+    state.health = { reachable: true, lifecycle: "active", status: "answering", health: { status: "online", recent: ["answered"] } };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.projectSet = [];
+    renderTarget();
+
+    expect(screen.getByText("Choose TrueNAS's Zitadel project")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 2")).toBeInTheDocument();
+    const select = screen.getByLabelText("Zitadel project") as HTMLSelectElement;
+    const options = Array.from(select.options).map((o) => [o.textContent, o.disabled]);
+    expect(options).toContainEqual(["Network storage · 2 roles", false]);
+    expect(options).toContainEqual(["Wood shop · no roles yet", false]);
+    expect(options).toContainEqual(["Laser Lab · used by Door", true]);
+
+    expect(screen.getByText("Waits for TrueNAS's Zitadel project")).toBeInTheDocument();
+    const fence = () => document.getElementById("waiting")?.closest("[aria-disabled]");
+    expect(fence()?.hasAttribute("inert")).toBe(true);
+    // What reports on the system stays live.
+    expect(screen.getByText("Is it answering").closest("[aria-disabled]")).toBeNull();
+
+    fireEvent.change(select, { target: { value: "p1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use this project" }));
+    expect(state.projectSet).toEqual(["p1"]);
+    expect(screen.getByText("TrueNAS uses Network storage.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Map its roles to TrueNAS groups →" })).toBeInTheDocument();
+    expect(fence()).toBeNull();
+  });
+
+  it("is a thin strip once set, and the only link to the mappings", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByRole("link", { name: "Network storage" }).getAttribute("href")).toBe("/projects/p1");
+    expect(screen.getAllByRole("link", { name: /mapping/i })).toHaveLength(1);
+    expect(screen.queryByText("Choose TrueNAS's Zitadel project")).toBeNull();
   });
 });

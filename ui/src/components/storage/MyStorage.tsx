@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
-import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
+import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
@@ -489,21 +489,23 @@ function Folders({
         </div>
       ) : (
         <NotOpenYet
-          locked={locked}
+          open={!locked}
           title={state === "restored" ? "Set a new password to open these" : "Set your password to open these"}
           why={`Until then, ${label} turns every sign-in away.`}
           step={{ label: "Set it above ↑", href: "#storage-password" }}
         >
-          {places.map((place) => (
-            <PlaceBlock
-              key={place.path}
-              place={place}
-              offline={offline}
-              showAddresses={!!host}
-              homeKept={!!place.home && !!view.home_kept}
-              roleName={roleName}
-            />
-          ))}
+          <div className="flex flex-col gap-3.5">
+            {places.map((place) => (
+              <PlaceBlock
+                key={place.path}
+                place={place}
+                offline={offline}
+                showAddresses={!!host}
+                homeKept={!!place.home && !!view.home_kept}
+                roleName={roleName}
+              />
+            ))}
+          </div>
         </NotOpenYet>
       )}
 
@@ -527,44 +529,6 @@ function Folders({
           defaultDevice={device}
         />
       )}
-    </div>
-  );
-}
-
-/**
- * A section someone can't use yet (proposed/NotOpenYet.md): dashed, a
- * full-strength lead line saying what opens it, and the contents previewed at
- * 0.45, inert, so they see what they're about to get.
- */
-function NotOpenYet({
-  locked,
-  title,
-  why,
-  step,
-  children,
-}: {
-  locked: boolean;
-  title: string;
-  why: string;
-  step: { label: string; href: string };
-  children: React.ReactNode;
-}) {
-  if (!locked) return <div className="flex flex-col gap-3.5">{children}</div>;
-  return (
-    <div className="flex flex-col gap-3.5 rounded-inner border border-dashed border-line-strong px-4 pb-4 pt-3.5">
-      <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
-        <span className="inline-flex items-center gap-2.5 text-[15px] font-semibold text-ink">
-          <StatusDot tone="neutral" />
-          {title}
-        </span>
-        <span className="text-[14px] text-muted [text-wrap:pretty]">{why}</span>
-        <a href={step.href} className="ml-auto whitespace-nowrap text-[14px] font-semibold text-accent-text">
-          {step.label}
-        </a>
-      </div>
-      <div aria-disabled="true" inert className="flex select-none flex-col gap-3.5 opacity-45">
-        {children}
-      </div>
     </div>
   );
 }
