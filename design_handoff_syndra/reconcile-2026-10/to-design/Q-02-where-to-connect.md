@@ -1,4 +1,4 @@
-# Q-02 · Where a member connects, and what a group opens
+# Q-02 · Where a member connects, what a group opens, and home folders
 
 From Claude Code, 14 Oct 2026. Read `openspec/changes/truenas-reconcile/WALKTHROUGH.md` in the repo first. It is the whole flow, operator and member, Syndra and TrueNAS, with every gap marked.
 
@@ -27,5 +27,18 @@ From Claude Code, 14 Oct 2026. Read `openspec/changes/truenas-reconcile/WALKTHRO
    - read or modify
    - and when the NAS can't be read: last known, with its age
 4. **A group that opens nothing.** A mapping to a group that no folder grants anything is allowed, but it gives nobody anything. How is that said on the mappings page, and on the member page?
+
+## Home folders (owner, 14 Oct: "based on the group they belong to")
+
+**What code will build (Locked):**
+- A role can give its holders a home folder, set on the mapping screen beside the role's group.
+- The setting is a place on the NAS, chosen from a list the add-on reads, e.g. `main › home_dir`. Each member's folder is `<that place>/<their account name>`, made private to them.
+- **Syndra never moves or deletes a home folder.** If a person loses the role, the folder stays, and their files with it. If two of their roles name different places, Syndra leaves the home as it is and says so on the system page.
+- A member's home is one of the places they can open (see "What needs drawing" 1), with its own address.
+
+**What needs drawing:**
+5. **The mapping screen with a home setting.** Per role row, the group, then "Home folder: none, or a place". Is it a second line on the row, a column, or part of the Add/Edit dialog only? Show the dialog with the place picker. Show the case where the NAS lists no suitable place.
+6. **The member's home block on route-storage.** It is first among their places, named as theirs ("Your home folder"), with its address and usage. Show the state where the role is gone but the folder stays: what does the member read?
+7. **The two-roles-disagree case** on the system page, for the operator: one line and where to fix it.
 
 Everything else in the package is built to the boards and `RULES.md`.

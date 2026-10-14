@@ -107,3 +107,15 @@ Take away, holds that deny, the dormant sweep, release and lifecycle never wait.
 2. **The picker offers every group made on the NAS**, minus the built-in ones. It assumes no naming convention.
 3. **Composed roles come later.** Today TrueNAS has only the wide base groups. An administrator-facing way to compose roles is owed, with details still to settle (`openspec/NEXT.md`, "TrueNAS add-on — owed after the October reconcile"). It is blocked on the untraced `EnforceMappingRules` path, because the first composed role is the first mapping rule in production.
 4. **ACLs are NFSv4 with inheritance** on every share dataset (read from the production NAS, 14 Oct). `aclmode` is RESTRICTED, so the "what this group can open" line can be built from `filesystem.getacl`.
+
+---
+
+## A-01, read against the code (14 Oct 2026)
+
+Every part of A-01 can be built as drawn. What it needs from code:
+
+- **Check pips and "Missed 1 check, 09:40".** The monitor keeps only a count today. It will also keep the last three results, and the first miss of the current run even before it is offline: `recent: ["answered", "answered", "missed"]` and `missed_since`.
+- **"Syndra restarted at 09:38".** That is the process start time. It is carried on the monitor's state as `started_at`, so "Checking" can say it.
+- **Which reading wins.** The precedence is computed on the backend, not in each screen, as one `status` on the targets list and the health read: `cannot_connect` > `offline` > `waiting_to_retry` > `checking` > `answering`. Today `circuit_open` is a separate boolean that the UI let win, and that is the wrong turn A-01 names.
+- **"It lists 34 groups, all of them built in, like builtin_users and builtin_administrators".** The add-on's values answer gains `builtin_count` and the first two built-in names in read order. The values list itself still never contains them.
+- **The renames** ("Waiting to retry"; "Sending waits until Zitadel answers"; "The queue stops at that change"; "Account changes are paused …") are copy only, at the places A-01 lists, with their tests.
