@@ -180,6 +180,7 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 			"reachable": false,
 			"detail":    errText(health.Err),
 			"health":    addonsHealthOf(target),
+			"status":    liveStatus(target),
 		}
 		if anchored && anchor.Compromised() {
 			body["log_anchor"] = anchor
@@ -197,7 +198,8 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 
 	// Merged rather than nested under a second request, because the operator's
 	// question is one question: is this target all right.
-	merged := targetHealthWithAnchor{TargetHealth: health, BindingConflicts: bindingConflicts(r, target), Health: addonsHealthOf(target)}
+	merged := targetHealthWithAnchor{TargetHealth: health, BindingConflicts: bindingConflicts(r, target),
+		Health: addonsHealthOf(target), Status: liveStatus(target)}
 	if anchored {
 		merged.LogAnchor = &anchor
 	}
@@ -236,6 +238,8 @@ type targetHealthWithAnchor struct {
 	// Health is the confirmed answer beside this live one: one failed read is
 	// not an outage, three in a row are, and this says which (addons.HealthOf).
 	Health addons.HealthState `json:"health"`
+	// Status is the same ranked reading the roster row shows, read now.
+	Status string `json:"status"`
 }
 
 func describeTarget(reg addons.Registration, transport addons.TransportCredential) targetSummary {
@@ -268,18 +272,38 @@ func describeTarget(reg addons.Registration, transport addons.TransportCredentia
 // targetStatus ranks the readings that can be true at once (A-01, "which
 // reading wins"): what an operator must look at first comes first.
 func targetStatus(s targetSummary) string {
+	return statusOf(s.TransportStatus == "error", s.Health, s.CircuitOpen)
+}
+
+func statusOf(cannotSign bool, health addons.HealthState, circuitOpen bool) string {
 	switch {
-	case s.TransportStatus == "error":
+	case cannotSign:
 		return "cannot_connect"
-	case s.Health.Status == addons.HealthOffline:
+	case health.Status == addons.HealthOffline:
 		return "offline"
-	case s.CircuitOpen:
+	case circuitOpen:
 		return "waiting_to_retry"
-	case s.Health.Status == addons.HealthUnknown:
+	case health.Status == addons.HealthUnknown:
 		return "checking"
 	default:
 		return "answering"
 	}
+}
+
+// liveStatus is targetStatus for one target, read now, for the system page:
+// the roster is cached for minutes and a status must not be.
+func liveStatus(target string) string {
+	cannotSign := false
+	for _, tc := range addonsTransportCredentials() {
+		if tc.Target == target && tc.Status == "error" {
+			cannotSign = true
+		}
+	}
+	circuitOpen := false
+	if a, err := addonsGet(target); err == nil {
+		circuitOpen = a.CircuitOpen()
+	}
+	return statusOf(cannotSign, addonsHealthOf(target), circuitOpen)
 }
 
 func errText(err error) string {

@@ -3,7 +3,8 @@
 import Link from "next/link";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { Mono } from "@/components/ui/Badge";
+import { ReadingWord, targetReading, type Reading } from "@/components/targets/TargetReading";
 import { Card, CardColumns, CardRow } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
@@ -50,7 +51,7 @@ export default function ConnectedSystemsPage() {
       <Card>
         <CardColumns>
           <span className="min-w-0 flex-1">System</span>
-          <span className="w-[150px] shrink-0">Status</span>
+          <span className="w-[190px] shrink-0">Status</span>
           <span className="w-[110px] shrink-0 text-right">Things it can do</span>
         </CardColumns>
 
@@ -95,6 +96,7 @@ export default function ConnectedSystemsPage() {
  */
 function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   const reading = readingFor(row);
+  const name = targetLabel(row.target);
 
   return (
     <CardRow first={first} className="flex-wrap">
@@ -103,17 +105,32 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           href={`/system/targets/${row.target}`}
           className="text-[15.5px] font-semibold hover:underline"
         >
-          {targetLabel(row.target)}
+          {name}
         </Link>
-        <Mono className="block truncate text-faint">{row.target}</Mono>
+        {/* The project it serves, read-only: it is set in one place, the
+            system's own page. Absent is the row's Needs you. */}
+        {row.project === null ? (
+          <Link
+            href={`/system/targets/${row.target}`}
+            className="flex min-h-[44px] items-center text-[13px] font-semibold text-accent-text desktop:min-h-0"
+          >
+            Choose its Zitadel project →
+          </Link>
+        ) : row.project ? (
+          <span className="block truncate text-[13px] text-muted">
+            Serves {row.project.name || "a project Syndra couldn't name"}
+          </span>
+        ) : (
+          <Mono className="block truncate text-faint">{row.target}</Mono>
+        )}
       </span>
 
-      {/* A dot and a word, the same idiom the target's own health card uses —
-          never colour alone. Green and amber are one word to an operator who
-          cannot tell them apart, and one word in a greyscale screenshot. */}
-      <span className="flex w-[150px] shrink-0 items-center gap-2 text-[13.5px]">
-        <StatusDot tone={reading.tone} />
-        <span className={STATUS_TONE[reading.tone].label}>{reading.label}</span>
+      {/* A dot and a word, the same idiom the target's own page uses — never
+          colour alone — with the check pips when a check was missed, and the
+          time it began faint under it. */}
+      <span className="flex w-[190px] shrink-0 flex-col gap-0.5 text-[13.5px]">
+        <ReadingWord reading={reading} recent={row.health?.recent ?? []} />
+        {reading.line && <span className="pl-4 text-[12.5px] text-faint">{reading.line}</span>}
       </span>
 
       {/* A count, and only when there is a manifest to count. Rendering 0 for a
@@ -126,41 +143,33 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
 
       {/* Which machine to look at. The status word alone sends a reader to the
           wrong one: two of these are faults on the Syndra server. */}
-      {reading.detail && (
-        <span className="w-full text-[13px] text-muted">{reading.detail}</span>
-      )}
+      {reading.detail && <span className="w-full text-[13px] text-muted">{reading.detail}</span>}
     </CardRow>
   );
 }
 
 /**
- * Registration is deployment configuration, a manifest having been read is a
- * runtime fact, and a transport secret that will not load is a fault on
- * Syndra's side. Three failures, in the order an operator has to rule them out:
- * a broken transport explains everything below it, and a suspended breaker
- * explains a target that would otherwise answer.
+ * The backend ranks what can be true at once (A-01): cannot connect, offline,
+ * waiting to retry, checking, answering. One reading here, besides: an add-on
+ * registered and not answered yet, which is where every add-on starts.
  */
-function readingFor(row: TargetSummary): { tone: StatusTone; label: string; detail?: string } {
+function readingFor(row: TargetSummary): Reading & { detail?: string } {
   const name = targetLabel(row.target);
-  if (row.transport_status === "error")
+  const reading = targetReading({ status: row.status, health: row.health, name, transportError: row.transport_error });
+  if (row.status === "cannot_connect") {
+    return { ...reading, detail: `Syndra cannot read the key it signs requests with. ${reading.look}` };
+  }
+  if (row.status === "offline") return { ...reading, detail: reading.look };
+  if (row.status === "waiting_to_retry") return { ...reading, detail: reading.sentence };
+  if (!row.callable) {
+    // Neutral, not amber. Registered-and-not-yet-answered resolves on its own
+    // within a refresh interval, and colouring it would cost amber its meaning.
     return {
-      tone: "danger",
-      label: "Cannot connect",
-      detail: `Syndra cannot read the key it signs requests with. Look at the Syndra server, not at ${name}.`,
+      tone: "neutral",
+      word: "Not answered yet",
+      pips: false,
+      detail: "The add-on is configured and has not answered yet. This usually clears by itself within a minute or two.",
     };
-  if (row.circuit_open)
-    return {
-      tone: "warn",
-      label: "Paused after failures",
-      detail: `Syndra stopped calling ${name} after repeated failures and will try again by itself. This does not mean ${name} is down — look at the Syndra server.`,
-    };
-  if (row.callable) return { tone: "healthy", label: "Answering" };
-  // Neutral, not amber. Registered-and-not-yet-answered is where every add-on
-  // starts, and it resolves on its own within a refresh interval — see the tone
-  // itself for why colouring it would cost amber its meaning elsewhere.
-  return {
-    tone: "neutral",
-    label: "Not answered yet",
-    detail: `The add-on is configured and has not answered yet. This usually clears by itself within a minute or two.`,
-  };
+  }
+  return reading;
 }

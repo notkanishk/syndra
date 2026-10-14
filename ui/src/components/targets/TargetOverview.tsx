@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { StatCard } from "@/components/ui/StatCard";
 import { Relative } from "@/components/ui/Time";
+import { CheckPips, ReadingWord, targetReading } from "@/components/targets/TargetReading";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
 import { formatBytes, formatRelative } from "@/lib/format";
@@ -577,82 +578,90 @@ function StatusVerdict({
     );
   }
 
-  if (transportError) {
+  const reading = targetReading({ status: health?.status, health: health?.health, name, transportError });
+  const recent = health?.health?.recent ?? [];
+
+  if (transportError || health?.status === "cannot_connect") {
     return (
       <div className="danger-note px-5 py-4">
-        <div className="text-[15px] font-semibold text-danger-text">
-          Not answering — connection key missing.
-        </div>
+        <div className="text-[15px] font-semibold text-danger-text">Cannot connect.</div>
         <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
           Syndra cannot read the key it uses to talk to {name}, so it cannot make any request.
           This is a problem on <strong className="font-semibold">the Syndra server</strong>, not
-          on {name}: {transportError}
+          on {name}{transportError ? `: ${transportError}` : "."}
         </p>
       </div>
     );
   }
 
-  // `circuit_open` forces this branch even when the last reading said
-  // `reachable`: it means Syndra itself has stopped attempting requests
-  // after repeated failures, which is not the same fact as the target
-  // answering normally, and an operator who reads the tile below as healthy
-  // would look at the wrong machine when Syndra is the one backing off.
-  if (!health || !health.reachable || health.circuit_open) {
+  // The monitor's confirmed answer leads. One failed live read is a missed
+  // check, not an outage; three in a row are offline (A-01).
+  if (health?.status === "offline" || health?.status === "waiting_to_retry") {
+    const offline = health.status === "offline";
     return (
-      <div className="danger-note px-5 py-4">
-        <div className="text-[15px] font-semibold text-danger-text">
-          {health?.circuit_open ? "Paused after failures." : "Not answering."}
+      <div className="warn-note px-5 py-4">
+        <div className="flex flex-wrap items-center gap-2.5 text-[15px] font-semibold text-warn-text">
+          {offline ? `${name} isn't answering.` : `Syndra is waiting before it calls ${name} again.`}
+          {offline && <CheckPips recent={recent} />}
         </div>
         <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-          {health?.circuit_open ? (
-            <>
-              Syndra has stopped trying to reach {name} for a while after repeated failures, and
-              will try again by itself.{" "}
-              <strong className="font-semibold">This does not mean {name} is down</strong> — look
-              at the Syndra server.
-            </>
-          ) : (
-            <>
-              {health?.detail || `${name} did not answer.`} The program that connects Syndra to{" "}
-              {name}, on the Syndra server, is the thing to look at.
-            </>
-          )}
+          {reading.sentence} {offline && reading.look}
         </p>
-        {health && !health.reachable && (
-          <div className="mt-2">
-            <ReadFreshness
-              subject={`${name}'s last known state`}
-              state={{ readAt: health.snapshot_taken_at, current: false }}
-            />
-          </div>
-        )}
+        {!health.reachable && <LastKnown name={name} readAt={health.snapshot_taken_at} />}
+      </div>
+    );
+  }
+
+  if (!health || health.status === "checking") {
+    return (
+      <div className="panel px-5 py-4">
+        <div className="flex flex-wrap items-center gap-2.5 text-[15px] font-semibold">
+          <ReadingWord reading={reading} recent={recent} />
+        </div>
+        <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">{reading.sentence}</p>
       </div>
     );
   }
 
   const lifecycle = health.lifecycle ?? "active";
   const paused = lifecycle !== "active";
+  // The add-on's own breaker toward the system, while Syndra's checks still
+  // answer: the connector on the Syndra server is holding off, and says so.
+  const holdingOff = health.circuit_open;
 
   return (
     <div className="panel px-5 py-4">
-      <div className="flex items-center gap-2.5 text-[15px] font-semibold">
-        <span
-          aria-hidden
-          className={`h-2 w-2 flex-none rounded-pill ${paused ? "bg-accent" : "bg-healthy"}`}
-        />
-        Reachable — answered just now.
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] font-semibold">
+        <ReadingWord reading={reading} recent={recent} />
+        <span className="text-[13px] font-normal text-faint">
+          {reading.line ?? (health.health?.checked_at ? <>Answered <Relative iso={health.health.checked_at} /></> : null)}
+        </span>
       </div>
       <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-        {paused
-          ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)} — somebody set that on purpose${
-              health.lifecycle_note ? `: ${health.lifecycle_note}.` : "."
-            } ${
-              lifecycle === "draining"
-                ? "New changes are refused and the ones already sent are being allowed to finish."
-                : "Every change is refused at once. Reads keep working."
-            }`
-          : `Syndra is talking to ${name} normally. Changes you send from Pending changes reach it as soon as you send them.`}
+        {holdingOff
+          ? `The add-on on the Syndra server is waiting before it calls ${name} again, after repeated failures, and tries again by itself. Changes for ${name} wait, and nothing is lost.`
+          : paused
+            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)} — somebody set that on purpose${
+                health.lifecycle_note ? `: ${health.lifecycle_note}.` : "."
+              } ${
+                lifecycle === "draining"
+                  ? "New changes are refused and the ones already sent are being allowed to finish."
+                  : "Every change is refused at once. Reads keep working."
+              }`
+            : (reading.sentence ??
+              (health.in_flight ? `Accepting changes. ${health.in_flight} in flight.` : "Accepting changes. Nothing is in flight."))}
       </p>
+      {/* A missed check is not an outage, but this read did fail: what is on
+          screen is the last copy, and says so. */}
+      {!health.reachable && <LastKnown name={name} readAt={health.snapshot_taken_at} />}
+    </div>
+  );
+}
+
+function LastKnown({ name, readAt }: { name: string; readAt?: string }) {
+  return (
+    <div className="mt-2">
+      <ReadFreshness subject={`${name}'s last known state`} state={{ readAt, current: false }} />
     </div>
   );
 }
@@ -1669,7 +1678,7 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
               and this message is its only trace.
             </p>
             <p className="text-[13px] text-faint">
-              This does not affect the &ldquo;Paused after failures&rdquo; reading above.
+              This does not affect the &ldquo;Waiting to retry&rdquo; reading above.
             </p>
             {reason && (
               <p className="text-[13px] text-muted">

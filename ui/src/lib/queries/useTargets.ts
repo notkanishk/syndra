@@ -24,6 +24,27 @@ export interface TargetOperation {
   secret_params?: string[];
 }
 
+/**
+ * What the health monitor can stand behind (A-01): offline only after three
+ * missed checks in a row, unknown until Syndra can tell.
+ */
+export interface HealthState {
+  status: "online" | "offline" | "unknown";
+  checked_at?: string;
+  /** When the current run of misses began; set only while offline. */
+  reachable_since?: string;
+  lifecycle?: string;
+  /** The last three checks, oldest first. */
+  recent: Array<"answered" | "missed">;
+  /** The first miss of the current run, before it is ever offline. */
+  missed_since?: string;
+  /** When this Syndra process started. */
+  started_at?: string;
+}
+
+/** The one reading a row and a header show, ranked on the backend (A-01). */
+export type TargetStatus = "cannot_connect" | "offline" | "waiting_to_retry" | "checking" | "answering";
+
 export interface TargetSummary {
   target: string;
   registered: boolean;
@@ -37,6 +58,10 @@ export interface TargetSummary {
   manifest_fetched_at?: string;
   circuit_open: boolean;
   last_error?: string;
+  health?: HealthState;
+  status?: TargetStatus;
+  /** The Zitadel project this system serves; null until chosen. */
+  project?: { id: string; name: string } | null;
 }
 
 export function useTargets() {
@@ -57,6 +82,10 @@ export interface TargetHealth {
   version_tested?: boolean;
   version_note?: string;
   circuit_open?: boolean;
+  /** The confirmed reading beside this live one. */
+  health?: HealthState;
+  /** The same ranked reading the roster row shows, read now. */
+  status?: TargetStatus;
   lifecycle?: string;
   lifecycle_note?: string;
   in_flight?: number;

@@ -296,7 +296,8 @@ describe("one target's page", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    expect(screen.getByText(/Connection key missing/i)).toBeTruthy();
+    expect(screen.getByText("Cannot connect.")).toBeTruthy();
+    expect(screen.getByText(/a problem on/)).toBeTruthy();
     // The path, because "no secret configured" and "the mount is missing" are
     // the same symptom and different fixes.
     expect(screen.getByText(/run\/secrets\/addon\/truenas\.key/)).toBeTruthy();
@@ -396,12 +397,41 @@ describe("one target's page", () => {
     expect(screen.queryByText(/Not answering/)).toBeNull();
   });
 
-  it("distinguishes Syndra backing off from the target being down", () => {
+  // A-01: Syndra's breaker is "waiting to retry", and it sends the operator to
+  // the Syndra server; an outage outranks it and sends them to TrueNAS.
+  it("distinguishes Syndra waiting to retry from the target being down", () => {
     state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active", circuit_open: true };
-    renderTarget();
+    state.health = { reachable: true, lifecycle: "active", status: "waiting_to_retry", health: { status: "online", recent: ["answered"] } };
+    const { unmount } = renderTarget();
+    expect(screen.getByText("Syndra is waiting before it calls TrueNAS again.")).toBeInTheDocument();
+    expect(screen.getByText(/look at the Syndra server/)).toBeInTheDocument();
+    unmount();
 
-    expect(screen.getByText(/stopped trying to reach TrueNAS/i)).toBeInTheDocument();
+    state.health = {
+      reachable: false,
+      status: "offline",
+      health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
+    };
+    renderTarget();
+    expect(screen.getByText("TrueNAS isn't answering.")).toBeInTheDocument();
+    expect(screen.getByText(/Look at TrueNAS\./)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Last 3 checks: missed, missed, missed" })).toBeInTheDocument();
+  });
+
+  // One failed read is a missed check, not an outage: still Answering, said
+  // faintly with the pips, and what is on screen is the last copy.
+  it("keeps a missed check calm, and says the screen is the last copy", () => {
+    state.roster = [summary([])];
+    state.health = {
+      reachable: false,
+      status: "answering",
+      health: { status: "online", recent: ["answered", "answered", "missed"], missed_since: "2026-10-14T09:40:00Z" },
+    };
+    renderTarget();
+    expect(screen.getAllByText("Answering").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Missed its last check, at/)).toBeInTheDocument();
+    expect(screen.getByText(/no earlier copy to show/)).toBeInTheDocument();
+    expect(screen.queryByText(/isn't answering/)).toBeNull();
   });
 
   it("labels a stale inventory with its age and refuses adoption from it", () => {
@@ -455,8 +485,8 @@ describe("the top band: one status card and three tiles", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    expect(screen.getByText(/Reachable — answered just now\./)).toBeInTheDocument();
-    expect(screen.getByText(/talking to TrueNAS normally/)).toBeInTheDocument();
+    expect(screen.getAllByText("Answering").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Accepting changes\. Nothing is in flight\./)).toBeInTheDocument();
     expect(screen.queryByText("Can Syndra reach it")).toBeNull();
     expect(screen.queryByText("Last answered")).toBeNull();
   });
