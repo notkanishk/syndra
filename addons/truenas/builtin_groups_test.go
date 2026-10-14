@@ -125,3 +125,22 @@ func TestATruncatedGroupReadIsAnError(t *testing.T) {
 		t.Fatalf("convergence must refuse a partial group index, got %v", err)
 	}
 }
+
+// A NAS whose groups are all built in offers nothing, and says what it left
+// out, so the picker can explain the empty list instead of looking broken.
+func TestAnAllBuiltinNASSaysWhatItLeftOut(t *testing.T) {
+	s := testServer(t, &fakeRPC{users: `[]`, groups: `[
+		{"id":41,"gid":545,"group":"builtin_users","builtin":true},
+		{"id":43,"gid":544,"group":"builtin_administrators","builtin":true},
+		{"id":44,"gid":546,"group":"builtin_guests","builtin":true}]`})
+	rr, out := valuesOf(t, s, FieldGroup)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", rr.Code)
+	}
+	if len(out.Values) != 0 || out.Values == nil {
+		t.Fatalf("values = %#v, want an empty list", out.Values)
+	}
+	if out.BuiltinCount != 3 || strings.Join(out.BuiltinExamples, ",") != "builtin_users,builtin_administrators" {
+		t.Fatalf("count=%d examples=%v; the first two in read order", out.BuiltinCount, out.BuiltinExamples)
+	}
+}
