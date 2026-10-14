@@ -57,3 +57,27 @@ func TestTargetHealthCarriesTheConfirmedState(t *testing.T) {
 		}
 	}
 }
+
+// One reading wins, in A-01's order. The breaker never outranks an outage:
+// that sent an operator to the Syndra server while TrueNAS itself was down.
+func TestOneReadingWinsInDesignsOrder(t *testing.T) {
+	off := addons.HealthState{Status: addons.HealthOffline}
+	on := addons.HealthState{Status: addons.HealthOnline}
+	unknown := addons.HealthState{Status: addons.HealthUnknown}
+	for _, tc := range []struct {
+		name string
+		s    targetSummary
+		want string
+	}{
+		{"key fails beats everything", targetSummary{TransportStatus: "error", CircuitOpen: true, Health: off}, "cannot_connect"},
+		{"offline beats the breaker", targetSummary{CircuitOpen: true, Health: off}, "offline"},
+		{"breaker while checks answer", targetSummary{CircuitOpen: true, Health: on}, "waiting_to_retry"},
+		{"breaker beats checking", targetSummary{CircuitOpen: true, Health: unknown}, "waiting_to_retry"},
+		{"can't tell yet", targetSummary{Health: unknown}, "checking"},
+		{"answering", targetSummary{Health: on}, "answering"},
+	} {
+		if got := targetStatus(tc.s); got != tc.want {
+			t.Errorf("%s: want %s, got %s", tc.name, tc.want, got)
+		}
+	}
+}

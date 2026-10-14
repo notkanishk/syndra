@@ -35,6 +35,15 @@ type HealthState struct {
 	// Lifecycle is the add-on's own lifecycle from its last answer, empty when it
 	// has not answered.
 	Lifecycle string `json:"lifecycle,omitempty"`
+	// Recent is the last three checks, oldest first: "answered" or "missed".
+	// Shorter until three have run. The operator's check pips (A-01).
+	Recent []string `json:"recent"`
+	// MissedSince is the first miss of the current run, set from the first
+	// missed check: "Missed 1 check, 09:40" before it is ever offline.
+	MissedSince *time.Time `json:"missed_since,omitempty"`
+	// StartedAt is when this Syndra process started, so "Checking" can say
+	// "Syndra restarted at 09:38 and hasn't heard from TrueNAS since".
+	StartedAt time.Time `json:"started_at"`
 }
 
 type healthRecord struct {
@@ -43,6 +52,7 @@ type healthRecord struct {
 	firstFailedAt time.Time
 	everSucceeded bool
 	lastLifecycle string
+	recent        []string
 }
 
 // healthMonitor remembers health reads so "offline" means confirmed.
@@ -51,12 +61,13 @@ type healthRecord struct {
 // say "can't tell" until the next probes (≤ 90s) rather than guess. A table is
 // the upgrade if restarts during outages turn out to matter.
 type healthMonitor struct {
-	mu      sync.Mutex
-	records map[string]*healthRecord
+	mu        sync.Mutex
+	records   map[string]*healthRecord
+	startedAt time.Time
 }
 
 func newHealthMonitor() *healthMonitor {
-	return &healthMonitor{records: map[string]*healthRecord{}}
+	return &healthMonitor{records: map[string]*healthRecord{}, startedAt: time.Now().UTC()}
 }
 
 // monitor is fed by every Health read, wherever it was made from, so the
@@ -72,6 +83,14 @@ func (m *healthMonitor) observe(target string, reachable bool, lifecycle string,
 		m.records[target] = r
 	}
 	r.checkedAt = at
+	result := "missed"
+	if reachable {
+		result = "answered"
+	}
+	r.recent = append(r.recent, result)
+	if len(r.recent) > offlineThreshold {
+		r.recent = r.recent[len(r.recent)-offlineThreshold:]
+	}
 	if reachable {
 		r.failures, r.firstFailedAt, r.everSucceeded = 0, time.Time{}, true
 		r.lastLifecycle = lifecycle
@@ -88,9 +107,14 @@ func (m *healthMonitor) state(target string) HealthState {
 	defer m.mu.Unlock()
 	r := m.records[target]
 	if r == nil {
-		return HealthState{Status: HealthUnknown}
+		return HealthState{Status: HealthUnknown, Recent: []string{}, StartedAt: m.startedAt}
 	}
-	st := HealthState{CheckedAt: r.checkedAt, Lifecycle: r.lastLifecycle}
+	st := HealthState{CheckedAt: r.checkedAt, Lifecycle: r.lastLifecycle, StartedAt: m.startedAt,
+		Recent: append([]string{}, r.recent...)}
+	if r.failures > 0 {
+		missed := r.firstFailedAt
+		st.MissedSince = &missed
+	}
 	switch {
 	case r.failures >= offlineThreshold:
 		since := r.firstFailedAt
