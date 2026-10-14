@@ -119,3 +119,16 @@ Every part of A-01 can be built as drawn. What it needs from code:
 - **Which reading wins.** The precedence is computed on the backend, not in each screen, as one `status` on the targets list and the health read: `cannot_connect` > `offline` > `waiting_to_retry` > `checking` > `answering`. Today `circuit_open` is a separate boolean that the UI let win, and that is the wrong turn A-01 names.
 - **"It lists 34 groups, all of them built in, like builtin_users and builtin_administrators".** The add-on's values answer gains `builtin_count` and the first two built-in names in read order. The values list itself still never contains them.
 - **The renames** ("Waiting to retry"; "Sending waits until Zitadel answers"; "The queue stops at that change"; "Account changes are paused …") are copy only, at the places A-01 lists, with their tests.
+
+## A-02, read against the code (14 Oct 2026)
+
+Every part of A-02 can be built as drawn, with A for naming (the folder). It arrived with one new pattern, `proposed/NotOpenYet.md`, and two standing rules now in `RULES.md`. What it needs from code:
+
+- **One block per place, and what a group opens.** Both read one thing: the add-on's `reach`, derived from TrueNAS's folder ACLs at each enabled share's root and first-level folders (task 8.1). Each place is `{share, folder, path, access: read|change, dataset}`. Per group for the mappings page, and per member from their own groups for `/me/targets`. Cached on the reconcile pass with its read time, so the card header's "read from TrueNAS's folder permissions 3 min ago" is the cache's age, and "not read from TrueNAS yet" is no cache.
+- **"Nothing saved here yet".** Usage is reported per reachable place, from its dataset's user quota table, 0 when the member has no row. A read-only place carries no usage.
+- **"from your Fabrication lead role".** The backend knows which mapping put the member in each group, so it names the role. The add-on never sees roles.
+- **Access given back.** `/me/targets` gains `needs_new_password` (the account has had a password, and SMB stays off until a new one) and `restored_at`, the time the deny hold was lifted. Distinct from `reenrol` and from a first password.
+- **Home folder values as `share › folder`.** The values answer gains a label per value. The value stays the absolute path, which is what converge writes.
+- **"Makes 34 home folders in main › home_dir; 2 people already have one there".** The plan already projects each person's home; the rehearsal sums them.
+- **"[Priya Nair]'s roles name two home folders".** The resolver already sees two values for a single field. The system page's Waiting on you lists them, grouped by the pair of mappings.
+- **"You no longer hold Lab Tech, the role that gave you this folder".** `storage.status` reports the account's home, and the backend compares it with what the member's roles want now.
