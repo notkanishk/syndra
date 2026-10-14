@@ -38,6 +38,7 @@ type fakeRPC struct {
 	methods string
 	// answers is any other method's result by name, so a test can give the
 	// home and quota reads (`filesystem.stat`, `pool.dataset.*`) an answer.
+	// "method /path" answers one path's read.
 	answers map[string]string
 	calls   []string
 	params  []any
@@ -76,6 +77,15 @@ func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, err
 	}
 	if msg, ok := f.refuse[method]; ok {
 		return errorEnvelope(msg), nil
+	}
+	// A per-path answer ("filesystem.getacl /mnt/tank/main") wins over the
+	// method's own, for reads made once per folder.
+	if args, ok := params.([]any); ok && len(args) > 0 {
+		if at, ok := args[0].(string); ok {
+			if body, ok := f.answers[method+" "+at]; ok {
+				return envelope(body), nil
+			}
+		}
 	}
 	if body, ok := f.answers[method]; ok {
 		return envelope(body), nil

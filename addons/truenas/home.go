@@ -150,32 +150,24 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f GiB", float64(n)/gib)
 }
 
-// homePlaces are where a role may put home folders: every dataset inside an
-// enabled SMB share, so a home is always somewhere a member can reach. The
-// share's own root is left out: homes belong in a folder of their own.
-func (s *server) homePlaces() ([]string, error) {
-	var shares []struct {
-		Path    string `json:"path"`
-		Enabled bool   `json:"enabled"`
+// homePlaces are where a role may put home folders: the folders at the top of
+// each enabled SMB share that are datasets of their own, so a home is always
+// somewhere a member can reach, and its limit is a quota on a dataset that
+// holds only homes. The share's own root is left out (homes belong in a folder
+// of their own), and so are hidden folders and plain directories: on the live
+// NAS an application's share has two dozen of each, and none is a place for
+// people's homes. Each is labelled the way people say it, `main › home_dir`.
+func (s *server) homePlaces() (paths []string, labels map[string]string, err error) {
+	read, _, _, err := s.readACLs()
+	if err != nil {
+		return nil, nil, err
 	}
-	if err := s.nas.call("sharing.smb.query", []any{[]any{}, map[string]any{"select": []string{"path", "enabled"}}}, &shares); err != nil {
-		return nil, fmt.Errorf("read shares: %w", err)
-	}
-	var datasets []struct {
-		Mountpoint string `json:"mountpoint"`
-	}
-	if err := s.nas.call("pool.dataset.query", []any{[]any{}, map[string]any{"select": []string{"name", "mountpoint"}}}, &datasets); err != nil {
-		return nil, fmt.Errorf("read datasets: %w", err)
-	}
-	places := []string{}
-	for _, d := range datasets {
-		for _, sh := range shares {
-			root := strings.TrimRight(sh.Path, "/")
-			if sh.Enabled && root != "" && strings.HasPrefix(d.Mountpoint, root+"/") {
-				places = append(places, d.Mountpoint)
-				break
-			}
+	labels = map[string]string{}
+	for _, p := range read.places {
+		if p.folder != "" && !strings.HasPrefix(p.folder, ".") && read.mounts[p.path] != "" {
+			paths = append(paths, p.path)
+			labels[p.path] = p.share + " › " + p.folder
 		}
 	}
-	return uniqueSorted(places), nil
+	return uniqueSorted(paths), labels, nil
 }

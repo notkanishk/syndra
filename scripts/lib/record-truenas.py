@@ -82,6 +82,10 @@ def shape(rows, _depth=0):
             t = jtype(v)
             if t == "dict":
                 inner.setdefault(k, []).append(v)
+            elif t == "list" and any(isinstance(x, dict) for x in v):
+                # A list of objects (an ACL's entries) is recorded by the
+                # union of its elements, the same as a dict one level down.
+                inner.setdefault(k, []).extend(x for x in v if isinstance(x, dict))
             if t == "null":
                 types.setdefault(k, "null")
             elif types.get(k) in (None, "null"):
@@ -245,6 +249,8 @@ async def main():
         if not dataset:
             doc["reads"]["pool.dataset.get_quota"] = {
                 "skipped": "no enabled SMB share under /mnt to derive a dataset from"}
+            doc["reads"]["filesystem.getacl"] = {
+                "skipped": "no enabled SMB share under /mnt to read the permissions of"}
         else:
             r = await rpc("pool.dataset.get_quota", [dataset, "USER"])
             if "error" in r:
@@ -259,6 +265,22 @@ async def main():
                     shape(rows), sampled_rows=len(rows),
                     quota_types=sorted({str(r.get("quota_type")) for r in rows}),
                 )
+
+        # Where a group can connect (reach.go): the share root's ACL, read
+        # unsimplified exactly as the add-on reads it, and its first-level
+        # folders. Derived from the same share as the quota read, never a
+        # hand-picked path. Shapes only: an ACL's values name groups.
+        if dataset:
+            share_path = "/mnt/" + dataset
+            r = await rpc("filesystem.getacl", [share_path, False, False])
+            doc["reads"]["filesystem.getacl"] = (
+                {"refused_fields": fields(r["error"]), "code": r["error"].get("code")}
+                if "error" in r else shape([r["result"]]))
+            r = await rpc("filesystem.listdir", [share_path, [["type", "=", "DIRECTORY"]],
+                                                 {"select": ["name", "path"], "limit": 1}])
+            doc["reads"]["filesystem.listdir"] = (
+                {"refused_fields": fields(r["error"]), "code": r["error"].get("code")}
+                if "error" in r else shape([x for x in (r["result"] or []) if isinstance(x, dict)]))
 
         if WRITE:
             existing = (await rpc("user.query", [[["username", "=", PROBE_USER]], {"select": ["id"]}])).get("result") or []

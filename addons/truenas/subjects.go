@@ -233,16 +233,9 @@ func withoutSystemAccounts(users []nasUser) []nasUser {
 // it: the audit path counts them, everything that offers or writes leaves them
 // out.
 func (s *server) groupIndex() (byID map[string]string, byName map[string]apiID, builtin map[string]bool, err error) {
-	var groups []nasGroup
-	query := []any{
-		[]any{},
-		map[string]any{"select": []string{"id", "gid", "group", "builtin"}, "limit": subjectReadCap + 1},
-	}
-	if err := s.nas.call("group.query", query, &groups); err != nil {
-		return nil, nil, nil, fmt.Errorf("read groups: %w", err)
-	}
-	if len(groups) > subjectReadCap {
-		return nil, nil, nil, errGroupsTruncated
+	groups, err := s.readGroups()
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	byID = make(map[string]string, len(groups))
 	byName = make(map[string]apiID, len(groups))
@@ -255,6 +248,22 @@ func (s *server) groupIndex() (byID map[string]string, byName map[string]apiID, 
 		}
 	}
 	return byID, byName, builtin, nil
+}
+
+// readGroups reads every group, refusing half a list.
+func (s *server) readGroups() ([]nasGroup, error) {
+	var groups []nasGroup
+	query := []any{
+		[]any{},
+		map[string]any{"select": []string{"id", "gid", "group", "builtin"}, "limit": subjectReadCap + 1},
+	}
+	if err := s.nas.call("group.query", query, &groups); err != nil {
+		return nil, fmt.Errorf("read groups: %w", err)
+	}
+	if len(groups) > subjectReadCap {
+		return nil, errGroupsTruncated
+	}
+	return groups, nil
 }
 
 // groupsOf names the groups one account belongs to.

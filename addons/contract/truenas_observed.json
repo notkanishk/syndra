@@ -472,6 +472,72 @@
       "quota_types": [
         "USER"
       ]
+    },
+    "filesystem.getacl": {
+      "keys": [
+        "acl",
+        "aclflags",
+        "acltype",
+        "gid",
+        "group",
+        "path",
+        "trivial",
+        "uid",
+        "user"
+      ],
+      "types": {
+        "acl": "list",
+        "aclflags": "dict",
+        "acltype": "str",
+        "gid": "int",
+        "group": "null",
+        "path": "str",
+        "trivial": "bool",
+        "uid": "int",
+        "user": "null"
+      },
+      "nested": {
+        "acl": {
+          "keys": [
+            "flags",
+            "id",
+            "perms",
+            "tag",
+            "type",
+            "who"
+          ],
+          "types": {
+            "flags": "dict",
+            "id": "int",
+            "perms": "dict",
+            "tag": "str",
+            "type": "str",
+            "who": "null"
+          }
+        },
+        "aclflags": {
+          "keys": [
+            "autoinherit",
+            "defaulted",
+            "protected"
+          ],
+          "types": {
+            "autoinherit": "bool",
+            "defaulted": "bool",
+            "protected": "bool"
+          }
+        }
+      }
+    },
+    "filesystem.listdir": {
+      "keys": [
+        "name",
+        "path"
+      ],
+      "types": {
+        "name": "str",
+        "path": "str"
+      }
     }
   },
   "write_rules": [
