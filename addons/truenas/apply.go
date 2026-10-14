@@ -497,7 +497,9 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		if err != nil {
 			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
 		}
-		update["groups"] = ids
+		// Plus the built-in memberships, which current.Groups never listed:
+		// the replace is of the groups Syndra manages, not of the account's.
+		update["groups"] = append(ids, current.builtinGroups...)
 	}
 	if desired.managed[FieldEnabled] && current.Enabled != desired.enabled {
 		update["locked"] = !desired.enabled

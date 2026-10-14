@@ -317,9 +317,10 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 	}
 	u := m.updates[0]
 	// An empty list is an instruction, not an omission: it means "in no managed
-	// group", which is different from the field being absent.
-	if groups, ok := u["groups"].([]apiID); !ok || len(groups) != 0 {
-		t.Errorf("groups must be set to empty, got %v", u["groups"])
+	// group", which is different from the field being absent. builtin_users
+	// (41) is not a managed group, so it is carried through, not removed.
+	if groups, ok := u["groups"].([]apiID); !ok || len(groups) != 1 || groups[0].String() != "41" {
+		t.Errorf("managed groups must be emptied and builtin_users kept, got %v", u["groups"])
 	}
 	if u["locked"] != true || u["smb"] != false {
 		t.Errorf("disabling must lock and clear SMB: %v", u)
@@ -766,8 +767,9 @@ func TestGroupsAreWrittenAsTheIdsTheReadResolves(t *testing.T) {
 	if len(m.updates) != 1 {
 		t.Fatalf("want one update, got %d", len(m.updates))
 	}
+	// lab_makers' record id, then builtin_users' (41), carried through.
 	groups, ok := m.updates[0]["groups"].([]apiID)
-	if !ok || len(groups) != 1 || groups[0].String() != "42" {
+	if !ok || len(groups) != 2 || groups[0].String() != "42" || groups[1].String() != "41" {
 		t.Fatalf("want the record id of lab_makers, got %#v", m.updates[0]["groups"])
 	}
 

@@ -203,7 +203,7 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 	field := r.PathValue("field")
 	switch field {
 	case FieldGroup:
-		_, byName, err := s.groupIndex()
+		_, byName, builtin, err := s.groupIndex()
 		if err != nil {
 			// Unreadable, which is not the same as empty. 503 rather than an
 			// empty enumerable list: the backend fails open on a read it could
@@ -214,7 +214,12 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 		}
 		names := make([]string, 0, len(byName))
 		for name := range byName {
-			names = append(names, name)
+			// Left out of the list rather than marked in it. The backend's value
+			// check reads this list, so a built-in group is unresolvable to a
+			// mapping as well as absent from the picker.
+			if !builtin[name] {
+				names = append(names, name)
+			}
 		}
 		sort.Strings(names)
 		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: names, Enumerable: true})
