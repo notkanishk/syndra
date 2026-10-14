@@ -38,6 +38,20 @@ const state = {
   projectSet: [] as string[],
 };
 
+vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/useUsers")>()),
+  useUsers: (q: string) => ({
+    data: q
+      ? [
+          { user: { id: "s-99", name: "Sai Khurana", email: "sai@example.edu", title: "Lab technician", team: "Design", status: "active", avatar: "" } },
+          { user: { id: "s-12", name: "Kabir Rao", email: "kabir@example.edu", title: "Student", team: "", status: "active", avatar: "" } },
+        ]
+      : [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({
     data: [
@@ -824,7 +838,10 @@ describe("what roles reach here · the census and its handoff", () => {
 describe("adopting an account", () => {
   const twoAccounts = {
     target: "truenas",
-    bound: 0,
+    bound: 1,
+    accounts: [
+      { target: "truenas", subject_id: "s-12", username: "kabir.r", bound_by: "op", bound_at: "", last_seen_at: "" },
+    ],
     unmanaged: [
       { username: "sai", uid: 3000 },
       { username: "kabir", uid: 3002 },
@@ -844,85 +861,70 @@ describe("adopting an account", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Assign to a person" })[0]);
   }
 
-  // It used to render after the whole list: click Adopt on the first account
-  // and the form opened under the LAST one, describing an account nobody had
-  // pointed at.
-  it("opens under the account it is about, not at the foot of the list", () => {
-    openAdoptForSai();
+  function chooseSai() {
+    fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "sa" } });
+    fireEvent.click(screen.getByRole("radio", { name: /Sai Khurana/ }));
+  }
 
-    const owner = screen.getByLabelText("Person").closest("form")!.parentElement!
-      .parentElement!;
-    expect(owner.textContent).toContain("sai");
-    expect(owner.textContent, "the form is not attached to another account").not.toContain("kabir");
+  // #57: a dialog about the account it was opened from.
+  it("opens a dialog about the account it was opened from", () => {
+    openAdoptForSai();
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Assign sai to a person")).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain("kabir ");
   });
 
   // Red is this product's word for a click that takes access away. This one
   // gives somebody an account.
   it("does not dress a grant as a destruction", () => {
     openAdoptForSai();
-
-    const submit = screen.getByRole("button", { name: /Assign sai to this person/ });
-    expect(submit.className, "dangerConfirm is reserved for removing access").not.toContain(
-      "bg-danger",
-    );
-    // The irreversibility is carried by rung 3 and by the copy, both of which
-    // must still be there for the colour change to be safe.
+    const submit = screen.getByRole("button", { name: /^Assign sai/ });
+    expect(submit.className, "dangerConfirm is reserved for removing access").not.toContain("bg-danger");
     expect(screen.getByText(/There is no undo/)).toBeInTheDocument();
     expect(screen.getByText(/Type the account name/)).toBeInTheDocument();
   });
 
-  // The old copy said "hands ... to that person" above a field that had not
-  // asked who yet, and directly above "nothing on the account changes now".
-  // Both true, and together they read as a contradiction.
-  it("names the person it is referring to, and separates what moves from what stays", () => {
+  // Found by name or email, never by a pasted ID; namesakes told apart by
+  // title, team and email; someone with an account here can't be chosen.
+  it("finds the person by name, and won't give a second account", () => {
     openAdoptForSai();
+    fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "a" } });
 
-    // A visible label, not a placeholder that disappears the moment you type.
-    expect(screen.getByLabelText("Person")).toBeInTheDocument();
-    expect(screen.getByText(/becomes the account of the person named below/)).toBeInTheDocument();
-    expect(screen.getByText(/is theirs from that moment/)).toBeInTheDocument();
-    // What stays: Syndra writes nothing to the account itself.
-    expect(screen.getByText(/changes nothing in the account now/)).toBeInTheDocument();
-    // And the target is named IN THE SENTENCE, because "its shares" is not a
-    // thing an operator can go and check against anything.
-    expect(
-      screen.getByText(/becomes the account of the person named below/).textContent,
-    ).toContain("TrueNAS");
+    const sai = screen.getByRole("radio", { name: /Sai Khurana/ });
+    expect(sai.textContent).toContain("Lab technician · Design");
+    expect(sai.textContent).toContain("sai@example.edu");
+    const kabir = screen.getByRole("radio", { name: /Kabir Rao/ });
+    expect(kabir.hasAttribute("disabled")).toBe(true);
+    expect(kabir.textContent).toContain("Already has kabir.r on TrueNAS");
   });
 
-  // Typed, not picked, so the one check available before the point of no
-  // return is showing whose name that ID actually resolves to.
-  it("shows whose name the typed ID resolves to, before and after confirming", () => {
+  it("says what changes and what stays, once someone is chosen", () => {
     openAdoptForSai();
-
-    fireEvent.change(screen.getByLabelText("Person"), { target: { value: "s-99" } });
-    expect(screen.getByText("Sai Khurana")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "sai" } });
-    fireEvent.click(screen.getByRole("button", { name: /Assign sai to this person/ }));
-
-    // The backend's own outcome text never names the person — it is written
-    // for the audit trail. The row must, so the operator sees who they just
-    // handed the account to rather than only that something happened.
-    expect(screen.getByText(/Assigned to/)).toBeInTheDocument();
-    expect(screen.getByText("Sai Khurana")).toBeInTheDocument();
+    expect(screen.queryByText("Changes")).toBeNull();
+    chooseSai();
+    expect(screen.getByRole("radio", { name: /Sai Khurana/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Changes")).toBeInTheDocument();
+    expect(screen.getByText(/belongs to/).textContent).toContain("Sai Khurana");
+    expect(screen.getByText(/Its home folder, its shares and its group memberships/)).toBeInTheDocument();
   });
 
-  it("reports the outcome under the account it happened to", () => {
+  it("assigns only once the name is typed, and reports it under the account", () => {
     openAdoptForSai();
+    chooseSai();
+    const submit = screen.getByRole("button", { name: "Assign sai to Sai Khurana" });
+    expect(submit.hasAttribute("disabled")).toBe(true);
 
-    fireEvent.change(screen.getByLabelText("Person"), { target: { value: "s-99" } });
     fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "sai" } });
-    fireEvent.click(screen.getByRole("button", { name: /Assign sai to this person/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Assign sai to Sai Khurana" }));
 
     expect(state.adopted).toEqual([{ username: "sai", subjectId: "s-99" }]);
+    expect(screen.queryByRole("dialog")).toBeNull();
     const outcome = screen.getByText(/bound to that person/).closest("[role=status]")!;
-    expect(
-      outcome.parentElement!.parentElement!.textContent,
-      "an unattributed outcome says 'Adopted.' about none of eight accounts in particular",
-    ).toContain("sai");
+    expect(outcome.parentElement!.parentElement!.textContent).toContain("sai");
+    expect(screen.getByText(/Assigned to/)).toBeInTheDocument();
   });
 });
+
 
 // 3a: the project comes before anything that gives access. Health and the
 // pause stay live; what waits is drawn whole and inert under one line.

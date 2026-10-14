@@ -42,8 +42,11 @@ import {
   type BindingConflict,
   type LogAnchor,
   type TargetHealth,
+  type BoundAccount,
   type TargetSummary,
 } from "@/lib/queries/useTargets";
+import { useUsers } from "@/lib/queries/useUsers";
+import { Avatar } from "@/components/ui/Avatar";
 
 /**
  * One add-on target's operator page (9.20, 1.18/1.19, 15.6; design §21).
@@ -1383,28 +1386,9 @@ function Inventory({ target }: { target: string }) {
               key={account.username}
               first={i === 0}
               // Under the row it is about, never at the foot of the list.
-              expanded={adopting === account.username || result?.username === account.username}
+              expanded={result?.username === account.username}
               disclosure={
-                adopting === account.username ? (
-                  <AdoptPanel
-                    username={account.username}
-                    target={target}
-                    pending={adopt.isPending}
-                    error={adopt.error}
-                    onCancel={() => setAdopting(null)}
-                    onAdopt={(subjectId) =>
-                      adopt.mutate(
-                        { username: account.username, subjectId },
-                        {
-                          onSuccess: (res) => {
-                            setResult({ username: account.username, subjectId, result: res });
-                            setAdopting(null);
-                          },
-                        },
-                      )
-                    }
-                  />
-                ) : result?.username === account.username ? (
+                result?.username === account.username ? (
                   <AdoptionOutcome
                     result={result.result}
                     subjectId={result.subjectId}
@@ -1443,6 +1427,27 @@ function Inventory({ target }: { target: string }) {
               )}
             </CardRow>
           ))}
+          {adopting && (
+            <AdoptPanel
+              username={adopting}
+              target={target}
+              accounts={inventory.data?.accounts ?? []}
+              pending={adopt.isPending}
+              error={adopt.error}
+              onCancel={() => setAdopting(null)}
+              onAdopt={(subjectId) =>
+                adopt.mutate(
+                  { username: adopting, subjectId },
+                  {
+                    onSuccess: (res) => {
+                      setResult({ username: adopting, subjectId, result: res });
+                      setAdopting(null);
+                    },
+                  },
+                )
+              }
+            />
+          )}
         </>
       </ListStates>
     </Card>
@@ -1460,6 +1465,7 @@ function Inventory({ target }: { target: string }) {
 function AdoptPanel({
   username,
   target,
+  accounts,
   pending,
   error,
   onAdopt,
@@ -1467,97 +1473,143 @@ function AdoptPanel({
 }: {
   username: string;
   target: string;
+  /** Who already has an account here: they can't be given a second. */
+  accounts: BoundAccount[];
   pending: boolean;
   error: unknown;
   onAdopt: (subjectId: string) => void;
   onCancel: () => void;
 }) {
-  const [subjectId, setSubjectId] = useState("");
+  const name = targetLabel(target);
+  const [q, setQ] = useState("");
+  const [chosen, setChosen] = useState<{ id: string; name: string } | null>(null);
+  const people = useUsers(q.trim());
   const confirm = useTypedConfirmation(username);
-  const fieldId = `adopt-subject-${username}`;
+  const has = new Map(accounts.map((a) => [a.subject_id, a.username]));
+  const matches = q.trim() ? (people.data ?? []).slice(0, 8) : [];
+  const first = chosen?.name.split(" ")[0];
 
   return (
-    <form
-      className="grid gap-3.5 text-[14px]"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onAdopt(subjectId);
-      }}
-    >
-      {/* Two sentences that used to read as a contradiction — "hands over
-          everything" directly above "nothing changes" — because the thing that
-          moves and the thing that stays were never named apart. What moves is
-          who the account BELONGS to. What stays is everything in it.
-
-          "that person" was also a pronoun with nothing in front of it: the
-          field naming the person came afterwards, so the first thing an
-          operator read referred to something they had not been asked for yet. */}
-      <p className="text-muted">
-        <Mono className="text-ink">{username}</Mono> becomes the account of the person named
-        below. Everything it already holds on {targetLabel(target)} — its home directory, its
-        shares, its group memberships — is theirs from that moment.{" "}
-        <strong className="font-semibold text-ink">There is no undo</strong>, and none that
-        gives the data back.
-      </p>
-      <p className="text-[13.5px] text-faint">
-        Syndra changes nothing in the account now. The next time it brings accounts in line,
-        it adds whatever the person&rsquo;s roles give them, on top of what is already there.
-      </p>
-      <div>
-        <FieldLabel htmlFor={fieldId}>Person</FieldLabel>
-        <Input id={fieldId} value={subjectId} onChange={(e) => setSubjectId(e.target.value)} />
-        {/* The hint is outside the label on purpose: inside it, every control's
-            accessible name becomes its title plus a paragraph. */}
-        <FieldHint>
-          Their Syndra ID — the long code at the end of the address when you open their page
-          under People.
-        </FieldHint>
-        {/* Typed, not picked — so the one check available before the point of
-            no return is showing whose name that code actually resolves to. */}
-        {subjectId.trim() !== "" && (
-          <p className="text-[13.5px]">
-            <UserName id={subjectId.trim()} fallback="No account matches that ID" />
-          </p>
-        )}
-      </div>
-      <ConfirmByTyping
-        expected={username}
-        noun="account name"
-        value={confirm.typed}
-        onChange={confirm.setTyped}
+    <Modal open onClose={onCancel} size="md" labelledBy="adopt-title" busy={pending}>
+      <ModalHeader
+        title={`Assign ${username} to a person`}
+        titleId="adopt-title"
+        lede={`${username} becomes the account of the person you choose. Everything it already holds on ${name} is theirs from that moment. There is no undo, and none that gives the data back.`}
       />
-      <div className="flex gap-2">
-        {/* Not `dangerConfirm`. A solid red fill is this product's word for a
-            click that TAKES ACCESS AWAY, and this one gives an account to
-            somebody. Dressing a grant as a destruction spends the red on the
-            wrong act, and the next real one reads as routine. What makes this
-            irreversible is carried where it belongs: rung 3 above, and the
-            sentence that says there is no undo. */}
+      <form
+        id="adopt-form"
+        className="flex flex-col gap-4 px-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (chosen) onAdopt(chosen.id);
+        }}
+      >
+        <div className="flex flex-col gap-2">
+          <FieldLabel htmlFor="adopt-q">Person</FieldLabel>
+          <Input
+            id="adopt-q"
+            value={q}
+            placeholder="Search by name or email"
+            aria-label="Search people by name or email"
+            onChange={(e) => {
+              setQ(e.target.value);
+              setChosen(null);
+            }}
+          />
+          {matches.length > 0 && (
+            <div role="radiogroup" aria-label={`People matching ${q.trim()}`} className="flex flex-col gap-1.5">
+              {matches.map(({ user }) => {
+                const already = has.get(user.id);
+                const on = chosen?.id === user.id;
+                const sub = [user.title, user.team].filter(Boolean).join(" · ");
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    aria-disabled={Boolean(already)}
+                    disabled={Boolean(already)}
+                    onClick={() => setChosen({ id: user.id, name: user.name || user.email })}
+                    className={`flex min-h-[52px] items-center gap-3 rounded-[12px] border px-3 py-2 text-left ${
+                      on ? "border-accent-line bg-accent-soft" : "border-transparent hover-tint"
+                    } ${already ? "cursor-default opacity-55" : ""}`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`inline-flex h-6 w-6 flex-none items-center justify-center rounded-pill border-[1.5px] ${
+                        on ? "border-accent" : "border-line-strong"
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-pill ${on ? "bg-accent" : "bg-transparent"}`} />
+                    </span>
+                    <Avatar name={user.name} />
+                    <span className="flex min-w-0 flex-1 flex-col gap-px">
+                      <span className="text-[14.5px] font-semibold">{user.name || user.email}</span>
+                      {sub && <span className="text-[12.5px] text-muted">{sub}</span>}
+                      <span className="text-[12.5px] text-faint">{user.email}</span>
+                    </span>
+                    {already && (
+                      <span className="text-right text-[12.5px] text-faint">
+                        Already has {already} on {name}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {q.trim() && !people.isLoading && matches.length === 0 && (
+            <FieldHint>Nobody matches {q.trim()}.</FieldHint>
+          )}
+        </div>
+
+        {chosen && (
+          <div className="flex flex-col rounded-inner border border-line-strong">
+            <div className="flex gap-3.5 px-4 py-3">
+              <span className="w-[72px] flex-none text-[12.5px] font-semibold text-label">Changes</span>
+              <span className="text-[14px] leading-[1.5]">
+                {username} belongs to <strong className="font-semibold">{chosen.name}</strong>, for good.
+              </span>
+            </div>
+            <div className="row-divider flex gap-3.5 px-4 py-3">
+              <span className="w-[72px] flex-none text-[12.5px] font-semibold text-label">Stays</span>
+              <span className="text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
+                Its home folder, its shares and its group memberships, as they are. The next time Syndra brings
+                accounts in line, it adds what {first}&apos;s roles give them on top.
+              </span>
+            </div>
+          </div>
+        )}
+
+        <ConfirmByTyping expected={username} noun="account name" value={confirm.typed} onChange={confirm.setTyped} />
+        {Boolean(error) && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(error))}</p>}
+      </form>
+      <ModalFooter>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        {/* Violet, not red: it gives an account to someone, and red is kept
+            for taking access away. Rung 3 is the typed name, and the lede
+            says there is no undo. */}
         <Button
           type="submit"
+          form="adopt-form"
           variant="accent"
           isPending={pending}
-          disabled={!subjectId || !confirm.armed || pending}
+          disabled={!chosen || !confirm.armed || pending}
           reason={
-            !pending && !subjectId
-              ? "Enter the person's Syndra ID."
+            !pending && !chosen
+              ? "Choose the person first."
               : !pending && !confirm.armed
                 ? `Type ${username} to confirm.`
                 : undefined
           }
         >
-          {`Assign ${username} to this person`}
+          {chosen ? `Assign ${username} to ${chosen.name}` : `Assign ${username}`}
         </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-      {Boolean(error) && (
-        <p className="text-[13.5px] text-danger-text">
-          {sentence(describeFailure(error))}
-        </p>
-      )}
-    </form>
+      </ModalFooter>
+    </Modal>
   );
 }
 
