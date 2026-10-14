@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -144,13 +143,13 @@ func entitlementState(s *Subject) map[string]any {
 	}
 	groups := append([]string(nil), s.Groups...)
 	sort.Strings(groups)
-	// The home in the mapping's own vocabulary: the place, not the folder in
-	// it, so a home the role made reads as agreeing with the role. The limit is
-	// not reported: a failed quota read would then read as drift, and the limit
-	// is set on every apply instead.
+	// The home in the mapping's own vocabulary: whether the account has one,
+	// wherever it is, so a home made before the location changed still reads
+	// as agreeing with the role. The limit is not reported: a failed quota read
+	// would then read as drift, and the limit is set on every apply instead.
 	home := []string{}
 	if s.Home != "" {
-		home = []string{path.Dir(s.Home)}
+		home = []string{"true"}
 	}
 	return map[string]any{
 		FieldGroup:      groups,
@@ -197,9 +196,11 @@ type desiredState struct {
 	groups     []string
 	enabled    bool
 	smbEnabled bool
-	// homes are the places the subject's roles put a home folder. One is the
-	// instruction; several disagree, and the home is left as it is.
-	homes []string
+	// wantsHome is a role giving its holder a home folder. Where it goes is
+	// the system's one home location, homeRoot, filled from the add-on's own
+	// setting rather than sent per role: two roles can't disagree about it.
+	wantsHome bool
+	homeRoot  string
 	// homeQuota is the largest limit any of their roles (or an operator, for
 	// this one person) gives, in bytes. Zero when none was given.
 	homeQuota int64
@@ -209,7 +210,18 @@ type desiredState struct {
 	managed map[string]bool
 }
 
-func decodeDesired(raw map[string]json.RawMessage) (desiredState, error) {
+// decodeDesired is decodeDesiredFields with the system's home location filled
+// in, so the plan and the apply decide homes from the same place.
+func (s *server) decodeDesired(raw map[string]json.RawMessage) (desiredState, error) {
+	d, err := decodeDesiredFields(raw)
+	if err != nil || !d.wantsHome {
+		return d, err
+	}
+	d.homeRoot, err = s.homeRoot()
+	return d, err
+}
+
+func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
 	d := desiredState{managed: map[string]bool{}}
 	for field, value := range raw {
 		d.managed[field] = true
@@ -228,11 +240,16 @@ func decodeDesired(raw map[string]json.RawMessage) (desiredState, error) {
 				return desiredState{}, fmt.Errorf("field %q must be a boolean", field)
 			}
 		case FieldHome:
-			var places []string
-			if err := json.Unmarshal(value, &places); err != nil {
-				return desiredState{}, fmt.Errorf("field %q must be a list of places", field)
+			var gives []string
+			if err := json.Unmarshal(value, &gives); err != nil {
+				return desiredState{}, fmt.Errorf("field %q must be a list of \"true\"", field)
 			}
-			d.homes = uniqueSorted(places)
+			for _, g := range gives {
+				if g != "true" {
+					return desiredState{}, fmt.Errorf("field %q: a role either gives a home folder (\"true\") or names nothing, not %q", field, g)
+				}
+			}
+			d.wantsHome = len(gives) > 0
 		case FieldHomeQuota:
 			var limits []string
 			if err := json.Unmarshal(value, &limits); err != nil {
@@ -380,7 +397,7 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 
 // applyOne is the convergence.
 func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
-	desired, err := decodeDesired(req.Desired)
+	desired, err := s.decodeDesired(req.Desired)
 	if err != nil {
 		return ApplyOutcome{}, http.StatusBadRequest, err
 	}

@@ -71,6 +71,9 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /values/{field}", s.auth.authenticated(s.handleValues))
 	// What each group opens, read from the folder ACLs (reach.go).
 	mux.HandleFunc("GET /reach", s.auth.authenticated(s.handleReach))
+	// System-wide choices: where home folders go (settings.go).
+	mux.HandleFunc("GET /settings", s.auth.authenticated(s.handleSettings))
+	mux.HandleFunc("PUT /settings/{name}", s.auth.authenticated(s.handlePutSetting))
 	mux.HandleFunc("POST /apply", s.auth.authenticated(s.handleApply))
 	mux.HandleFunc("POST /plan", s.auth.authenticated(s.handlePlan))
 	// The runtime setter §18 says the three states need. Without it the only

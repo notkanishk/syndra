@@ -87,8 +87,8 @@ const (
 	FieldGroup      = "group"
 	FieldEnabled    = "enabled"
 	FieldSMBEnabled = "smb_enabled"
-	// FieldHome is where a role puts its holders' home folders: a place on the
-	// NAS, under which each person gets <place>/<account name>.
+	// FieldHome is a role giving its holders a home folder ("true"). Each
+	// person's is <the system's home location>/<account name>, settings.go.
 	FieldHome = "home"
 	// FieldHomeQuota is the most a person may store in the home folder's
 	// dataset, in bytes. Several roles: the largest wins.
@@ -108,7 +108,7 @@ const (
 func entitlementSchema() []EntitlementField {
 	return []EntitlementField{
 		{Name: FieldGroup, Type: "string[]", Label: "Group"},
-		{Name: FieldHome, Type: "string", Label: "Home folder", Single: true},
+		{Name: FieldHome, Type: "bool", Label: "Gives a home folder", Single: true},
 		{Name: FieldHomeQuota, Type: "int", Label: "Home folder limit", Single: true, PerPerson: true},
 		{Name: FieldEnabled, Type: "bool", Lifecycle: true},
 		{Name: FieldSMBEnabled, Type: "bool", Lifecycle: true},
@@ -255,12 +255,11 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 		sort.Strings(out.Values)
 		writeJSON(w, http.StatusOK, out)
 	case FieldHome:
-		places, labels, err := s.homePlaces()
-		if err != nil {
-			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
-			return
-		}
-		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: places, Enumerable: true, Labels: labels})
+		// A role gives a home folder or names nothing. One value, so the
+		// backend's value check refuses anything else; where homes go is the
+		// system's own setting (settings.go).
+		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: []string{"true"}, Enumerable: true,
+			Labels: map[string]string{"true": "Gives a home folder"}})
 	case FieldHomeQuota:
 		// A byte count, not a list: structure only, which the backend reads as
 		// "any value of the declared type", never as "no value is valid".

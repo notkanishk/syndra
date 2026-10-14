@@ -73,21 +73,21 @@ func (s *server) statOwner(p string) (int64, error) {
 // decideHome applies the rules above. uid is the account's, or -1 for one that
 // does not exist yet.
 func (s *server) decideHome(desired desiredState, username, current string, uid int64) (homeDecision, error) {
-	if !desired.managed[FieldHome] || len(desired.homes) == 0 {
+	if !desired.managed[FieldHome] || !desired.wantsHome {
 		return homeDecision{}, nil
 	}
-	if len(desired.homes) > 1 {
-		return homeDecision{note: fmt.Sprintf("Two of %s's roles give different home folders (%s), so the home was left as it is.",
-			username, strings.Join(desired.homes, " and "))}, nil
+	if desired.homeRoot == "" {
+		return homeDecision{note: fmt.Sprintf("%s's role gives a home folder, and this system has no place for home folders chosen yet, so none was made.", username)}, nil
 	}
-	want := path.Join(desired.homes[0], username)
+	want := path.Join(desired.homeRoot, username)
 	switch current {
 	case want:
 		return homeDecision{}, nil
 	case "":
 	default:
-		return homeDecision{note: fmt.Sprintf("%s's home is %s. The role puts homes in %s, and Syndra never moves a home folder; move it on TrueNAS if it should be there.",
-			username, current, desired.homes[0])}, nil
+		// Already has one, made before the location changed or by hand. It
+		// stays where it is: Syndra never moves a home folder.
+		return homeDecision{}, nil
 	}
 	owner, err := s.statOwner(want)
 	switch {

@@ -630,6 +630,57 @@ func ReadValues(ctx context.Context, target, field string) Values {
 	return out
 }
 
+// TargetSetting is one system-wide choice a target's add-on keeps, such as
+// where home folders go, with what it may be.
+type TargetSetting struct {
+	Name       string            `json:"name"`
+	Label      string            `json:"label"`
+	Value      string            `json:"value"`
+	SetBy      string            `json:"set_by,omitempty"`
+	SetAt      *time.Time        `json:"set_at,omitempty"`
+	Values     []string          `json:"values"`
+	Labels     map[string]string `json:"labels,omitempty"`
+	ValuesRead bool              `json:"values_read"`
+}
+
+// ReadSettings asks a target for its settings. ok is false when it couldn't
+// say, which is not "it has none".
+func ReadSettings(ctx context.Context, target string) (settings []TargetSetting, ok bool) {
+	resp, ok := settingsCall(ctx, target, http.MethodGet, "/settings", nil)
+	if !ok || resp.Outcome != OutcomeSucceeded {
+		return nil, false
+	}
+	var out struct {
+		Settings []TargetSetting `json:"settings"`
+	}
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return nil, false
+	}
+	return out.Settings, true
+}
+
+// PutSetting asks a target to change one setting. The add-on is the judge of
+// what the value may be; its status and body come back for the handler to
+// relay. ok is false when nothing answered.
+func PutSetting(ctx context.Context, target, name, value, actor string) (CallResponse, bool) {
+	body, _ := json.Marshal(map[string]string{"value": value, "actor": actor})
+	return settingsCall(ctx, target, http.MethodPut, "/settings/"+url.PathEscape(name), body)
+}
+
+func settingsCall(ctx context.Context, target, method, path string, body []byte) (CallResponse, bool) {
+	a, err := Get(target)
+	if err != nil || !a.br.allow(timeNow()) {
+		return CallResponse{}, false
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return CallResponse{}, false
+	}
+	resp := doAuthenticated(ctx, cred, method, a.Registration.BaseURL+path, body, callTimeout)
+	a.br.record(timeNow(), resp)
+	return resp, resp.Status != 0
+}
+
 // Reach is what each of a target's own groups opens, as the target last read
 // its folder permissions. Read false is "not read from the target yet": the
 // target hasn't managed a read since its add-on started, or the add-on can't be

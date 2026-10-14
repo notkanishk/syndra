@@ -18,7 +18,7 @@ func stubValuesSchema(t *testing.T) {
 	addonsEntitlementSchema = func(string) ([]addons.EntitlementField, error) {
 		return []addons.EntitlementField{
 			{Name: "group", Type: "string[]", Label: "Group on TrueNAS"},
-			{Name: "home", Type: "string", Label: "Home folder", Single: true},
+			{Name: "home", Type: "bool", Label: "Gives a home folder", Single: true},
 			{Name: "enabled", Type: "bool", Lifecycle: true},
 		}, nil
 	}
@@ -48,17 +48,17 @@ func TestMappableValuesAreFreshThenLastKnownThenNeverRead(t *testing.T) {
 			return addons.Values{Outcome: addons.OutcomeUnreached}
 		}
 		return addons.Values{Outcome: addons.OutcomeSucceeded, Enumerable: true,
-			Values: []string{"/mnt/p/main/home_dir"}, Labels: map[string]string{"/mnt/p/main/home_dir": "main › home_dir"}}
+			Values: []string{"true"}, Labels: map[string]string{"true": "Gives a home folder"}}
 	}
 
 	rr, fresh := getMappableValues(t, "nas-a", "home")
-	if rr.Code != http.StatusOK || !fresh.Current || fresh.ReadAt.IsZero() || !fresh.Single || fresh.Label != "Home folder" {
+	if rr.Code != http.StatusOK || !fresh.Current || fresh.ReadAt.IsZero() || !fresh.Single || fresh.Label != "Gives a home folder" {
 		t.Fatalf("fresh: %d %+v", rr.Code, fresh)
 	}
-	if body := rr.Body.String(); !strings.Contains(body, `"values":["/mnt/p/main/home_dir"]`) || !strings.Contains(body, `"read_at":`) {
+	if body := rr.Body.String(); !strings.Contains(body, `"values":["true"]`) || !strings.Contains(body, `"read_at":`) {
 		t.Errorf("the answer is one flat object: %s", body)
 	}
-	if fresh.Labels["/mnt/p/main/home_dir"] != "main › home_dir" {
+	if fresh.Labels["true"] != "Gives a home folder" {
 		t.Errorf("labels didn't cross: %v", fresh.Labels)
 	}
 

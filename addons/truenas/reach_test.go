@@ -151,9 +151,10 @@ func TestAGroupOpensWhatTheFolderACLsGiveIt(t *testing.T) {
 	if _, ok := out.Groups["builtin_users"]; ok {
 		t.Error("a built-in group was reported as one of the makerspace's own")
 	}
-	// What every account opens: main's root through builtin_users, and the
-	// open share through everyone@. The disabled share is nowhere.
-	if got := describe(out.Everyone); got != "main:read,open:read" {
+	// What every account opens: the open share, through everyone@. main's
+	// root opens to builtin_users, which Syndra's accounts aren't in, so it is
+	// not everyone's. The disabled share is nowhere.
+	if got := describe(out.Everyone); got != "open:read" {
 		t.Errorf("everyone opens %q", got)
 	}
 	if !out.Current || out.ReadAt.IsZero() {
@@ -321,22 +322,5 @@ func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 	}
 	if res, _, _ := s.storageStatus(OperationRequest{Subject: "sub-1"}); res.Storage.NeedsNewPassword {
 		t.Fatal("SMB that isn't wanted was reported as waiting for a password")
-	}
-}
-
-// A role's home folder goes in a folder at the top of a share that is a dataset
-// of its own, offered the way people say it. The share root, a plain
-// directory, a hidden folder and a disabled share are not offered.
-func TestHomeValuesAreTheFoldersAtTheTopOfEachShare(t *testing.T) {
-	s := testServer(t, reachFake())
-	rr, out := valuesOf(t, s, FieldHome)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
-	}
-	if got := strings.Join(out.Values, ","); got != "/mnt/tank/main/home_dir,/mnt/tank/main/quack,/mnt/tank/main/waddle" {
-		t.Fatalf("values = %s", got)
-	}
-	if out.Labels["/mnt/tank/main/home_dir"] != "main › home_dir" {
-		t.Errorf("labels = %v", out.Labels)
 	}
 }
