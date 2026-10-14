@@ -275,6 +275,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/targets/{target}/health", withCORS(withOperatorAuth(handleTargetHealth)))
 	mux.HandleFunc("GET /api/v1/targets/{target}/reach", withCORS(withOperatorAuth(handleTargetReach)))
 	mux.HandleFunc("GET /api/v1/targets/{target}/mappable-values", withCORS(withOperatorAuth(handleMappableValues)))
+	mux.HandleFunc("GET /api/v1/targets/{target}/settings", withCORS(withOperatorAuth(handleTargetSettings)))
+	mux.HandleFunc("PUT /api/v1/targets/{target}/settings/{name}", withCORS(withOperatorAuth(handlePutTargetSetting)))
 	// What the target's own audit log holds for one subject. Operator-gated:
 	// the member-facing read is storage.status, which takes no subject at all.
 	mux.HandleFunc("GET /api/v1/targets/{target}/system-health", withCORS(withOperatorAuth(handleTargetSystemHealth)))

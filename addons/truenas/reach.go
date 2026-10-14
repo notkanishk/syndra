@@ -338,17 +338,13 @@ func datasetAt(mounts map[string]string, at string) string {
 }
 
 // gidsOf maps group ids, as user.query lists them, to gids, which is what an
-// ACL names. It also returns builtin_users' gid: every local account is in it,
-// so what it opens is what every account opens.
-func gidsOf(groups []nasGroup) (byID map[string]int64, byName map[string]int64, everyone principals) {
-	byID, byName, everyone = map[string]int64{}, map[string]int64{}, principals{}
+// ACL names.
+func gidsOf(groups []nasGroup) map[string]int64 {
+	byID := make(map[string]int64, len(groups))
 	for _, g := range groups {
-		byID[g.ID.String()], byName[g.Name] = g.GID, g.GID
-		if g.Name == "builtin_users" {
-			everyone[g.GID] = true
-		}
+		byID[g.ID.String()] = g.GID
 	}
-	return byID, byName, everyone
+	return byID
 }
 
 // ReachResponse is what each of the makerspace's groups opens.
@@ -360,8 +356,9 @@ type ReachResponse struct {
 	// Groups is every group of the makerspace's own, with what holding it opens
 	// beyond what every account opens. An empty list is "opens nothing yet".
 	Groups map[string][]Place `json:"groups"`
-	// Everyone is what every account opens, mapped or not: through everyone@,
-	// or through builtin_users, which every local account is in.
+	// Everyone is what every account opens whatever its groups, through
+	// everyone@. builtin_users is not everyone: Syndra never adds its accounts
+	// to it, and only accounts made by hand on TrueNAS are in it.
 	Everyone []Place `json:"everyone"`
 }
 
@@ -381,18 +378,13 @@ func (s *server) handleReach(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
 		return
 	}
-	_, _, everyone := gidsOf(groups)
+	nobody := principals{} // an account in no group: what everyone@ alone opens
 	out := ReachResponse{ReadAt: at, Current: current, Groups: map[string][]Place{},
-		Everyone: placesFor(read.places, everyone, nil)}
+		Everyone: placesFor(read.places, nobody, nil)}
 	for _, g := range groups {
-		if g.Builtin {
-			continue
+		if !g.Builtin {
+			out.Groups[g.Name] = placesFor(read.places, principals{g.GID: true}, nobody)
 		}
-		who := principals{g.GID: true}
-		for gid := range everyone {
-			who[gid] = true
-		}
-		out.Groups[g.Name] = placesFor(read.places, who, everyone)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -409,7 +401,7 @@ func (s *server) memberPlaces(uid int64, groupIDs []apiID, home string) ([]Place
 	if err != nil {
 		return nil, err
 	}
-	byID, _, _ := gidsOf(groups)
+	byID := gidsOf(groups)
 	who := principals{}
 	for _, id := range groupIDs {
 		if gid, ok := byID[id.String()]; ok {

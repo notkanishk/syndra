@@ -108,7 +108,7 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	status.Usable = !account.PasswordDisabled && !account.Locked && !status.NeedsNewPassword
 
 	// Best-effort like usage: whether the account works is the urgent half.
-	if places, err := s.memberPlaces(account.UID, account.Groups, account.Home); err == nil {
+	if places, err := s.memberPlaces(account.UID, account.Groups, homeOf(account.Home)); err == nil {
 		status.Places, status.PlacesReadable = places, true
 	}
 

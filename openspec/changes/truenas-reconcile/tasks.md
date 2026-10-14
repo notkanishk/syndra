@@ -106,10 +106,11 @@
   - no longer wanted: kept.
   - Tests for each
 - [x] 10.3 Refuse to point a home at a folder that already exists and is owned by another uid. The outcome names the folder. Test
-- [x] 10.4 Two roles naming different places: everything else lands, the home is left as it is, and the outcome says which two. Test
+- [x] 10.4 (superseded by 10.8) Two roles naming different places: everything else lands, the home is left as it is, and the outcome says which two. Test
 - [x] 10.6 Home folder limit: `home_quota`, a per-role value in bytes, where the largest of a person's roles wins. It is set as a user quota on the home's dataset. A limit nobody gives any more is left as it is, never removed into "unlimited". The add-on key needs TrueNAS's DATASET_WRITE role to set it (owner decision).
 - [x] 10.7 Per-person limit: an allowance with direction `set` (migration 000052). It is allowed only on fields the add-on marks per-person, bounded by an expiry or a review date, and applied by the resolver over the roles' value, only for someone the target reaches.
-- [ ] 10.5 UI (after A-02): the home setting on the mapping screen, and "Your home folder" first among the member's places
+- [x] 10.8 One home location per system (owner, 15 Oct). A role says only whether it gives a home folder (`home: "true"`) and its default limit; the higher limit among a person's roles wins. The location is the add-on's own setting, `home_root`, chosen from the dataset folders at the top of each share and set through Syndra (`GET/PUT /targets/{t}/settings/{name}`, who and when recorded). Changing it moves nothing: homes already made stay. With none chosen, no home is made and the outcome says why. Supersedes 10.4 and A-02 §5/§7. Tests
+- [ ] 10.5 UI (after A-03): the system's home location, the mapping dialog's "Gives a home folder" and limit, one person's own limit, and "Your home folder" first among the member's places
 
 ## 11. Identity numbers never reused (found 14 Oct, read-only audit)
 
@@ -119,7 +120,8 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 - [x] 11.2 The personal group gets the same number: `group.create {gid: uid}`, then `user.create {group: <id>}`. If the user create fails, the group create is undone. Test
 - [ ] 11.3 Remediation, on the NAS:
   - [x] the 25 orphaned home folders are owned by root and private to the Admin group (14 Oct, with the owner's approval; the state before is kept for undo)
-  - [ ] the three Syndra-created accounts are recreated in the new range (owner approval)
+  - [x] the three Syndra-created accounts and their personal groups are deleted on TrueNAS (15 Oct, owner's approval); Syndra makes them again in the new range once the add-on and UI are complete
+  - [ ] their three bindings are released in Syndra ("Check for differences" on the system page lists them as pointing at nothing; owner, signed in)
 
 ## 7a. Mapping dialog (owner, 14 Oct)
 
@@ -143,8 +145,8 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 - [x] 8.3 Operator: `GET /targets/{t}/reach`, every group at once, so the card header says the read's age once (A-02 §3). Always 200, with `read: false` for "not read from TrueNAS yet". Tests
 - [x] 8.4 Usage per place from its dataset's user quota table, only where the member can change files. No row is 0 ("Nothing saved here yet"); an unreadable table is no usage, never 0. Test
 - [ ] 8.6 "from your Fabrication lead role" (A-02 §1): name the mapping that put the member in the group that opens each place
-- [ ] 8.7 Home values are the dataset folders at the top of each share, not hidden, labelled `share › folder` [x add-on and values endpoint]. Preview counts homes it will make ("Makes 34 home folders in main › home_dir; 2 people already have one there")
-- [ ] 8.8 "[Name]'s roles name two home folders" in Waiting on you, grouped by the pair of mappings (A-02 §7)
+- [ ] 8.7 Preview counts homes it will make ("Makes 34 home folders in main › home_dir; 2 people already have one there"). The places offered for the location are the dataset folders at the top of each share, not hidden, labelled `share › folder` [x]
+- [x] 8.8 Retired with 10.8: with one location, two roles can't name two home folders
 - [ ] 8.9 "You no longer hold Lab Tech, the role that gave you this folder" (A-02 §6): the account's home against what the member's roles want now
 - [x] 8.10 Access given back: `needs_new_password` from the add-on (account has a password, SMB off, SMB wanted), and `restored_at` on `/me/targets`, the latest end of a deny hold on that target, lifted or lapsed. Tests
 - [ ] 8.5 UI: share blocks render from `reach`, and the `smb://host/group` derivation is deleted
@@ -164,6 +166,6 @@ The only Syndra writes in 60 days were prod's 3 `user.create` and 1 `user.update
 - [x] P1 Accounts were created with the zsh shell. They now get `/usr/sbin/nologin`, verified against `user.shell_choices`.
 - [x] P1 Dev and prod shared the production NAS and its API key, and dev holds an unsent outbox row that would have drained against production. Dev's add-on was stopped on 14 Oct (owner: dev pushes nothing). It restarts on the next `docker compose up -d`. A separate key, or no NAS at all for dev, is still owed.
 - [x] P2 The three Syndra-created accounts were switched to nologin on 14 Oct (owner approved). SSH password login, SSH keys and sudo were already off.
-- [ ] P2 Two Syndra-created accounts are still `smb: false`, with no password yet. Once the fix deploys, their first password switches SMB on. The test account was fixed by hand.
+- [x] P2 (moot: the accounts were deleted on 15 Oct, 11.3) Two Syndra-created accounts were `smb: false`, with no password yet. Once the fix deploys, their first password switches SMB on. The test account was fixed by hand.
 - [ ] P2 Share permissions must come from the role groups, never `builtin_users`. Syndra deliberately never adds members to it (D8). The NAS-side permission changes are with the owner.
 - [ ] P2 NAS hardening and data-protection findings that aren't Syndra's own were reported to the owner directly. They are deliberately not recorded in this public repository.

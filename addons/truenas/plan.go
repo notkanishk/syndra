@@ -139,7 +139,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 
 // planOne says what would happen to one subject, and issues no mutating call.
 func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed map[string]string, truncated bool) ApplyOutcome {
-	desired, err := decodeDesired(req.Desired)
+	desired, err := s.decodeDesired(req.Desired)
 	if err != nil {
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectBlocked,
@@ -251,10 +251,11 @@ func projected(current *Subject, desired desiredState, username string) Subject 
 	if desired.managed[FieldSMBEnabled] {
 		out.SMBEnabled = desired.smbEnabled
 	}
-	// A home folder is planned only where the apply would make one: one place,
-	// and no home yet. Moving one is never planned, because it is never done.
-	if desired.managed[FieldHome] && len(desired.homes) == 1 && out.Home == "" {
-		out.Home = path.Join(desired.homes[0], username)
+	// A home folder is planned only where the apply would make one: a home
+	// location chosen, and no home yet. Moving one is never planned, because it
+	// is never done.
+	if desired.managed[FieldHome] && desired.wantsHome && desired.homeRoot != "" && out.Home == "" {
+		out.Home = path.Join(desired.homeRoot, username)
 	}
 	return out
 }
