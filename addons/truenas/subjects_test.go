@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,6 +36,9 @@ type fakeRPC struct {
 	// methods overrides what `core.get_methods` enumerates; empty means every
 	// method this add-on uses is present.
 	methods string
+	// answers is any other method's result by name, so a test can give the
+	// home and quota reads (`filesystem.stat`, `pool.dataset.*`) an answer.
+	answers map[string]string
 	calls   []string
 	params  []any
 }
@@ -55,6 +59,12 @@ func envelope(result string) json.RawMessage {
 
 func errorEnvelope(message string) json.RawMessage {
 	encoded, _ := json.Marshal(message)
+	// A refusal naming an errno, as the middleware sends a CallError: the
+	// symbolic name sits in data.errname. "[ENOENT] ..." in a fixture is that.
+	if strings.HasPrefix(message, "[ENOENT]") {
+		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":` + string(encoded) +
+			`,"data":{"error":2,"errname":"ENOENT"}}}`)
+	}
 	return json.RawMessage(`{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":` + string(encoded) + `}}`)
 }
 
@@ -67,6 +77,9 @@ func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, err
 	if msg, ok := f.refuse[method]; ok {
 		return errorEnvelope(msg), nil
 	}
+	if body, ok := f.answers[method]; ok {
+		return envelope(body), nil
+	}
 	switch method {
 	case "user.query":
 		// Filters are APPLIED, not ignored. A fake that answered every query
@@ -75,7 +88,7 @@ func (f *fakeRPC) Call(method string, _ int64, params any) (json.RawMessage, err
 		// already shipped one production bug through.
 		return envelope(filterRows(orEmptyList(f.users), params)), nil
 	case "group.query":
-		return envelope(orEmptyList(f.groups)), nil
+		return envelope(filterRows(orEmptyList(f.groups), params)), nil
 	case "system.version":
 		// A supported release unless a fixture says otherwise. Every connection
 		// re-probes, so a fake that answered with an empty string would blank
@@ -136,7 +149,7 @@ func filterRows(rows string, params any) string {
 		return rows
 	}
 
-	type equality struct{ field, want string }
+	type equality struct{ field, op, want string }
 	checks := make([]equality, 0, len(filters))
 	for _, raw := range filters {
 		f, ok := raw.([]any)
@@ -148,13 +161,15 @@ func filterRows(rows string, params any) string {
 		// fixture — the hole that let a lookup resolve the wrong account and the
 		// test agree with it. The day somebody needs `~`, `in` or `nin`, this
 		// says so instead of agreeing with them.
-		if op, _ := f[1].(string); op != "=" {
+		op, _ := f[1].(string)
+		if op != "=" && op != ">=" && op != "<=" {
 			panic(fmt.Sprintf("fakeRPC: unhandled query operator %q — teach filterRows about it", op))
 		}
 		field, _ := f[0].(string)
-		// Compared as text: the fixture decodes numbers to float64 and the
-		// caller holds int64, and this fake has no business caring.
-		checks = append(checks, equality{field: field, want: fmt.Sprint(f[2])})
+		// Compared as text for equality: the fixture decodes numbers to
+		// float64 and the caller holds int64, and this fake has no business
+		// caring. Ranges compare as numbers, which is all they are used for.
+		checks = append(checks, equality{field: field, op: op, want: fmt.Sprint(f[2])})
 	}
 
 	var decoded []map[string]any
@@ -168,8 +183,16 @@ func filterRows(rows string, params any) string {
 	for _, row := range decoded {
 		matches := true
 		for _, check := range checks {
-			if fmt.Sprint(row[check.field]) != check.want {
-				matches = false
+			got := fmt.Sprint(row[check.field])
+			switch check.op {
+			case "=":
+				matches = got == check.want
+			default:
+				g, err1 := strconv.ParseFloat(got, 64)
+				w, err2 := strconv.ParseFloat(check.want, 64)
+				matches = err1 == nil && err2 == nil && ((check.op == ">=" && g >= w) || (check.op == "<=" && g <= w))
+			}
+			if !matches {
 				break
 			}
 		}
@@ -178,6 +201,15 @@ func filterRows(rows string, params any) string {
 		}
 	}
 	if opts, ok := args[len(args)-1].(map[string]any); ok {
+		// One descending sort key, the only shape this add-on sends.
+		if order, ok := opts["order_by"].([]string); ok && len(order) == 1 && strings.HasPrefix(order[0], "-") {
+			key := strings.TrimPrefix(order[0], "-")
+			sort.SliceStable(kept, func(i, j int) bool {
+				a, _ := strconv.ParseFloat(fmt.Sprint(kept[i][key]), 64)
+				b, _ := strconv.ParseFloat(fmt.Sprint(kept[j][key]), 64)
+				return a > b
+			})
+		}
 		if limit, ok := opts["limit"].(int); ok && limit > 0 && len(kept) > limit {
 			kept = kept[:limit]
 		}

@@ -50,6 +50,10 @@ type server struct {
 	// must never become delete-capable, which is the property the separate
 	// dialer exists to hold.
 	elevated func(apiKey string) (rpc, error)
+
+	// idFloor and idCeiling bound the uids and gids this add-on hands out
+	// (identity.go). Zero means the defaults.
+	idFloor, idCeiling int64
 }
 
 func (s *server) routes() http.Handler {

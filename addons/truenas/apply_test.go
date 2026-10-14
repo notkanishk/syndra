@@ -27,6 +27,10 @@ type mutatingRPC struct {
 	updates []map[string]any
 	creates []map[string]any
 	nextUID int64
+	// Personal groups made and undone, and a switch to refuse the account
+	// create that follows one.
+	groupCreates, groupDeletes int
+	refuseUserCreate           bool
 	// nextID is deliberately not nextUID. The record key and the unix uid are
 	// different numbers on a real target, and a fake that used one for both
 	// would agree with the bug where a write lands on the wrong account.
@@ -57,11 +61,17 @@ func (m *mutatingRPC) remember(params any) {
 	if err := json.Unmarshal([]byte(orEmptyList(m.fakeRPC.users)), &rows); err != nil {
 		return
 	}
+	if uid, ok := create["uid"].(int64); ok {
+		m.nextUID = uid
+	}
 	locked, _ := create["locked"].(bool)
 	smb, _ := create["smb"].(bool)
 	row := map[string]any{
 		"id": m.nextID, "username": create["username"], "uid": m.nextUID,
 		"locked": locked, "smb": smb, "groups": create["groups"],
+	}
+	if home, ok := create["home"]; ok {
+		row["home"] = home
 	}
 	if row["groups"] == nil {
 		row["groups"] = []apiID{}
@@ -99,7 +109,20 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 			}
 		}
 		return envelope(`null`), nil
+	case "group.create":
+		// A personal group, as the create path makes one before the account.
+		m.groupCreates++
+		if m.refuseUserCreate {
+			return envelope(`93`), nil
+		}
+		return envelope(`92`), nil
+	case "group.delete":
+		m.groupDeletes++
+		return envelope(`null`), nil
 	case "user.create":
+		if m.refuseUserCreate {
+			return errorEnvelope("user_create.username: refused"), nil
+		}
 		args, _ := params.([]any)
 		if len(args) == 1 {
 			if c, ok := args[0].(map[string]any); ok {
@@ -149,7 +172,7 @@ func (m *mutatingRPC) applyUpdate(id any, update map[string]any) {
 				}
 			}
 			switch k {
-			case "locked", "smb", "groups":
+			case "locked", "smb", "groups", "home":
 				rows[i][k] = v
 			}
 		}

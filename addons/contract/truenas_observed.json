@@ -1,7 +1,7 @@
 {
   "_comment": "Recorded from a real target by scripts/record-truenas-fixtures.sh. Do not hand-edit: a fixture somebody can write by hand is a fixture that can agree with the code and disagree with the target.",
   "reads": {
-    "system.version": "TrueNAS-25.10.5",
+    "system.version": "TrueNAS-25.10.7",
     "auth.me": {
       "keys": [
         "account_attributes",
@@ -75,6 +75,7 @@
         "builtin",
         "group",
         "groups",
+        "home",
         "id",
         "locked",
         "password_disabled",
@@ -86,6 +87,7 @@
         "builtin": "bool",
         "group": "dict",
         "groups": "list",
+        "home": "str",
         "id": "int",
         "locked": "bool",
         "password_disabled": "bool",
@@ -120,14 +122,74 @@
     },
     "group.query": {
       "keys": [
+        "builtin",
         "gid",
         "group",
         "id"
       ],
       "types": {
+        "builtin": "bool",
         "gid": "int",
         "group": "str",
         "id": "int"
+      }
+    },
+    "filesystem.stat": {
+      "keys": [
+        "acl",
+        "allocation_size",
+        "atime",
+        "attributes",
+        "btime",
+        "ctime",
+        "dev",
+        "gid",
+        "group",
+        "inode",
+        "is_ctldir",
+        "is_mountpoint",
+        "mode",
+        "mount_id",
+        "mtime",
+        "nlink",
+        "realpath",
+        "size",
+        "type",
+        "uid",
+        "user"
+      ],
+      "types": {
+        "acl": "bool",
+        "allocation_size": "int",
+        "atime": "float",
+        "attributes": "list",
+        "btime": "float",
+        "ctime": "float",
+        "dev": "int",
+        "gid": "int",
+        "group": "str",
+        "inode": "int",
+        "is_ctldir": "bool",
+        "is_mountpoint": "bool",
+        "mode": "int",
+        "mount_id": "int",
+        "mtime": "float",
+        "nlink": "int",
+        "realpath": "str",
+        "size": "int",
+        "type": "str",
+        "uid": "int",
+        "user": "str"
+      }
+    },
+    "pool.dataset.query": {
+      "keys": [
+        "mountpoint",
+        "name"
+      ],
+      "types": {
+        "mountpoint": "str",
+        "name": "str"
       }
     },
     "sharing.smb.query": {
@@ -188,6 +250,7 @@
       "nested": {
         "event_data": {
           "keys": [
+            "attr_type",
             "authDescription",
             "becameAccount",
             "becameDomain",
@@ -195,6 +258,10 @@
             "clientAccount",
             "clientDomain",
             "clientPolicyAccessCheck",
+            "dosmode",
+            "file",
+            "file_type",
+            "host",
             "localAddress",
             "logonId",
             "logonType",
@@ -205,22 +272,31 @@
             "netlogonSecureChannelType",
             "netlogonTrustAccount",
             "netlogonTrustAccountSid",
+            "operations",
+            "parameters",
             "passwordType",
             "remoteAddress",
             "result",
             "serverPolicyAccessCheck",
             "serviceDescription",
+            "ts",
+            "unix_token",
             "vers",
             "workstation"
           ],
           "types": {
+            "attr_type": "str",
             "authDescription": "null",
-            "becameAccount": "null",
-            "becameDomain": "null",
-            "becameSid": "null",
+            "becameAccount": "str",
+            "becameDomain": "str",
+            "becameSid": "str",
             "clientAccount": "str",
             "clientDomain": "str",
             "clientPolicyAccessCheck": "null",
+            "dosmode": "null",
+            "file": "dict",
+            "file_type": "str",
+            "host": "str",
             "localAddress": "str",
             "logonId": "str",
             "logonType": "int",
@@ -231,11 +307,15 @@
             "netlogonSecureChannelType": "int",
             "netlogonTrustAccount": "null",
             "netlogonTrustAccountSid": "null",
+            "operations": "dict",
+            "parameters": "dict",
             "passwordType": "str",
             "remoteAddress": "str",
             "result": "dict",
             "serverPolicyAccessCheck": "null",
             "serviceDescription": "str",
+            "ts": "dict",
+            "unix_token": "dict",
             "vers": "dict",
             "workstation": "str"
           }
@@ -248,9 +328,9 @@
             "vers"
           ],
           "types": {
-            "service": "null",
-            "session_id": "null",
-            "tcon_id": "null",
+            "service": "str",
+            "session_id": "str",
+            "tcon_id": "str",
             "vers": "dict"
           }
         },
@@ -290,16 +370,65 @@
           "serviceDescription",
           "vers",
           "workstation"
+        ],
+        "CLOSE": [
+          "file",
+          "operations",
+          "result",
+          "vers"
+        ],
+        "CONNECT": [
+          "host",
+          "result",
+          "unix_token",
+          "vers"
+        ],
+        "CREATE": [
+          "file",
+          "file_type",
+          "parameters",
+          "result",
+          "vers"
+        ],
+        "DISCONNECT": [
+          "host",
+          "operations",
+          "result",
+          "unix_token",
+          "vers"
+        ],
+        "READ": [
+          "file",
+          "result",
+          "vers"
+        ],
+        "SET_ATTR": [
+          "attr_type",
+          "dosmode",
+          "file",
+          "result",
+          "ts",
+          "vers"
+        ],
+        "WRITE": [
+          "file",
+          "result",
+          "vers"
         ]
       },
       "event_data_types": {
+        "attr_type": "str",
         "authDescription": "null",
-        "becameAccount": "null",
-        "becameDomain": "null",
-        "becameSid": "null",
+        "becameAccount": "str",
+        "becameDomain": "str",
+        "becameSid": "str",
         "clientAccount": "str",
         "clientDomain": "str",
         "clientPolicyAccessCheck": "null",
+        "dosmode": "null",
+        "file": "dict",
+        "file_type": "str",
+        "host": "str",
         "localAddress": "str",
         "logonId": "str",
         "logonType": "int",
@@ -310,11 +439,15 @@
         "netlogonSecureChannelType": "int",
         "netlogonTrustAccount": "null",
         "netlogonTrustAccountSid": "null",
+        "operations": "dict",
+        "parameters": "dict",
         "passwordType": "str",
         "remoteAddress": "str",
         "result": "dict",
         "serverPolicyAccessCheck": "null",
         "serviceDescription": "str",
+        "ts": "dict",
+        "unix_token": "dict",
         "vers": "dict",
         "workstation": "str"
       },
@@ -405,5 +538,5 @@
       "accepted": true
     }
   ],
-  "product_version": "TrueNAS-25.10.5"
+  "product_version": "TrueNAS-25.10.7"
 }

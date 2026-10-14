@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 )
@@ -210,7 +211,7 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 	}
 
 	after := projected(current, desired, current.Username)
-	if sameSet(after.Groups, current.Groups) && after.Enabled == current.Enabled && after.SMBEnabled == current.SMBEnabled {
+	if sameSet(after.Groups, current.Groups) && after.Enabled == current.Enabled && after.SMBEnabled == current.SMBEnabled && after.Home == current.Home {
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
 			Detail:      "Already in the requested state.",
@@ -250,11 +251,19 @@ func projected(current *Subject, desired desiredState, username string) Subject 
 	if desired.managed[FieldSMBEnabled] {
 		out.SMBEnabled = desired.smbEnabled
 	}
+	// A home folder is planned only where the apply would make one: one place,
+	// and no home yet. Moving one is never planned, because it is never done.
+	if desired.managed[FieldHome] && len(desired.homes) == 1 && out.Home == "" {
+		out.Home = path.Join(desired.homes[0], username)
+	}
 	return out
 }
 
 func describePlannedChange(before, after Subject) string {
 	var parts []string
+	if after.Home != before.Home && after.Home != "" {
+		parts = append(parts, "gets a home folder at "+after.Home)
+	}
 	if !sameSet(before.Groups, after.Groups) {
 		gained, lost := diffSets(before.Groups, after.Groups)
 		if len(gained) > 0 {
