@@ -20,7 +20,7 @@ export const Warn = () => (
 export const Danger = () => (
   <Card>
     <CardHeader title="Access Zitadel shows but Syndra never granted" count={3} tone="danger" note="Checked 2 min ago" />
-    <CardRow first><span style={body}>Wood shop · Supervisor held by vivek.nair@ashoka.edu.in</span></CardRow>
+    <CardRow first><span style={body}>Wood shop · Supervisor held by vivek.nair@example.edu</span></CardRow>
   </Card>
 );
 

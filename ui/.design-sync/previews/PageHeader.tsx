@@ -23,7 +23,7 @@ export const PersonMeta = () => (
     meta={
       <MetaRow>
         {[
-          "aanya.rao_ug25@ashoka.edu.in",
+          "aanya.rao_ug25@example.edu",
           "Student lead",
           "Robotics club",
           <Mono key="id">312874519023645698</Mono>,

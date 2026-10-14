@@ -3,7 +3,7 @@ import { AccountSheet, ThemeToggle } from "ui";
 const operator = {
   id: "284019337710552064",
   name: "Priya Nair",
-  email: "priya.nair@ashoka.edu.in",
+  email: "priya.nair@example.edu",
   title: "Makerspace Manager",
   team: "Makerspace",
   status: "active",

@@ -5,7 +5,7 @@ const box = { width: 340 } as const;
 export const ForAnInput = () => (
   <div style={box}>
     <FieldLabel htmlFor="email">University email</FieldLabel>
-    <Input id="email" defaultValue="aanya.rao@ashoka.edu.in" />
+    <Input id="email" defaultValue="aanya.rao@example.edu" />
   </div>
 );
 

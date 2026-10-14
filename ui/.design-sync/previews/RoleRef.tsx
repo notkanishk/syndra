@@ -2,9 +2,9 @@ import { Card, CardRow, RoleRef, SyndraRoot, UserName } from "ui";
 
 const catalog = {
   users: [
-    { id: "284019337710552064", name: "Aanya Rao", email: "aanya.rao@ashoka.edu.in", title: "Student", team: "Fabrication", status: "active", avatar: "" },
-    { id: "284019337710553311", name: "Kabir Mehta", email: "kabir.mehta@ashoka.edu.in", title: "Student", team: "Wood Shop", status: "active", avatar: "" },
-    { id: "284019337710554187", name: "Priya Nair", email: "priya.nair@ashoka.edu.in", title: "Makerspace staff", team: "Staff", status: "active", avatar: "" },
+    { id: "284019337710552064", name: "Aanya Rao", email: "aanya.rao@example.edu", title: "Student", team: "Fabrication", status: "active", avatar: "" },
+    { id: "284019337710553311", name: "Kabir Mehta", email: "kabir.mehta@example.edu", title: "Student", team: "Wood Shop", status: "active", avatar: "" },
+    { id: "284019337710554187", name: "Priya Nair", email: "priya.nair@example.edu", title: "Makerspace staff", team: "Staff", status: "active", avatar: "" },
   ],
   projects: [
     { id: "382075332397630470", name: "Laser Cutter", kind: "machine", description: "", roles: [

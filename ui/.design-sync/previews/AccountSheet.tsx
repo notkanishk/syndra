@@ -4,7 +4,7 @@ import { AccountSheet } from "ui";
 const operator = {
   id: "284019337710552064",
   name: "Priya Nair",
-  email: "priya.nair@ashoka.edu.in",
+  email: "priya.nair@example.edu",
   title: "Makerspace Manager",
   team: "Makerspace",
   status: "active",
@@ -14,7 +14,7 @@ const operator = {
 };
 
 /** Every naming source came up empty: the email names the human, never the id. */
-const unnamed = { ...operator, id: "284019337710552077", name: "", email: "arjun.das@ashoka.edu.in", avatar: "AD", role: "user" as const };
+const unnamed = { ...operator, id: "284019337710552077", name: "", email: "arjun.das@example.edu", avatar: "AD", role: "user" as const };
 
 /** The chip that opens the sheet. The name shows from the tablet breakpoint up. */
 export const Trigger = () => <AccountSheet session={operator} />;
