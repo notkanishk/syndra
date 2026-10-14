@@ -27,12 +27,12 @@ describe("Notice", () => {
   it("offers its action as an outline button and the reference as a copyable value", () => {
     const retry = vi.fn();
     render(
-      <Notice tone="danger" title="Couldn't load" action={{ label: "Try again", onClick: retry }} reference="ABCDE12345">
+      <Notice tone="danger" title="Couldn't load" action={{ label: "Try again", onClick: retry }} reference="req_7f3a91c2">
         Nothing was changed.
       </Notice>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(retry).toHaveBeenCalledOnce();
-    expect(screen.getByText("ABCDE12345")).toBeTruthy();
+    expect(screen.getByText("req_7f3a91c2")).toBeTruthy();
   });
 });
