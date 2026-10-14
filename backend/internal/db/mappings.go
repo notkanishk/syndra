@@ -139,11 +139,11 @@ func GetRoleMapping(ctx context.Context, id string) (RoleMapping, error) {
 	if !looksLikeUUID(id) {
 		return RoleMapping{}, fmt.Errorf("%w: %s", ErrMappingNotFound, id)
 	}
-	const q = `
-		SELECT id, target, project_id, role_key, field, value, created_by, updated_by, created_at, updated_at
+	q := `
+		SELECT ` + roleMappingColumns("") + `
 		  FROM target_role_mappings WHERE id = $1`
 	var m RoleMapping
-	err := querier(ctx).QueryRow(ctx, q, id).Scan(&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy, &m.CreatedAt, &m.UpdatedAt)
+	err := querier(ctx).QueryRow(ctx, q, id).Scan(m.scanDest()...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return RoleMapping{}, fmt.Errorf("%w: %s", ErrMappingNotFound, id)
 	}
@@ -156,8 +156,8 @@ func GetRoleMapping(ctx context.Context, id string) (RoleMapping, error) {
 // ListRoleMappings returns a target's whole binding set, or every target's when
 // target is empty.
 func ListRoleMappings(ctx context.Context, target string) ([]RoleMapping, error) {
-	const q = `
-		SELECT id, target, project_id, role_key, field, value, created_by, updated_by, created_at, updated_at
+	q := `
+		SELECT ` + roleMappingColumns("") + `
 		  FROM target_role_mappings
 		 WHERE ($1 = '' OR target = $1)
 		 ORDER BY target, project_id, role_key, field`
@@ -186,8 +186,8 @@ func MappingsForRoles(ctx context.Context, target string, roles []RoleRef) ([]Ro
 	// (pB, roleA) — a cross join over two IN lists would confer, on a project
 	// the subject holds nothing in, whatever a role of the same name means
 	// somewhere else.
-	const q = `
-		SELECT m.id, m.target, m.project_id, m.role_key, m.field, m.value, m.created_by, m.updated_by, m.created_at, m.updated_at
+	q := `
+		SELECT ` + roleMappingColumns("m.") + `
 		  FROM target_role_mappings m
 		  JOIN unnest($2::text[], $3::text[]) AS held(project_id, role_key)
 		    ON held.project_id = m.project_id AND held.role_key = m.role_key
@@ -278,11 +278,30 @@ func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, e
 	return out, rows.Err()
 }
 
+// roleMappingFields is the one column list every RoleMapping read selects, and
+// scanDest is the one destination list it scans into, kept side by side. They
+// were written out in each query, and one copy dropped two columns: the scan
+// failed at runtime on every role-set lookup, and the mapping dialog showed the
+// pgx error to an operator. A column added here is added to every read.
+var roleMappingFields = []string{"id", "target", "project_id", "role_key", "field", "value", "created_by", "updated_by", "created_at", "updated_at"}
+
+func roleMappingColumns(prefix string) string {
+	cols := make([]string, len(roleMappingFields))
+	for i, f := range roleMappingFields {
+		cols[i] = prefix + f
+	}
+	return strings.Join(cols, ", ")
+}
+
+func (m *RoleMapping) scanDest() []any {
+	return []any{&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy, &m.CreatedAt, &m.UpdatedAt}
+}
+
 func scanRoleMappings(rows pgx.Rows) ([]RoleMapping, error) {
 	var out []RoleMapping
 	for rows.Next() {
 		var m RoleMapping
-		if err := rows.Scan(&m.ID, &m.Target, &m.ProjectID, &m.RoleKey, &m.Field, &m.Value, &m.CreatedBy, &m.UpdatedBy, &m.CreatedAt, &m.UpdatedAt); err != nil {
+		if err := rows.Scan(m.scanDest()...); err != nil {
 			return nil, fmt.Errorf("scan role mapping: %w", err)
 		}
 		out = append(out, m)

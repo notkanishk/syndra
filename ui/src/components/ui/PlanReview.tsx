@@ -2,6 +2,7 @@
 
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import { PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
+import { UserName } from "@/components/names/UserName";
 
 /**
  * The rehearsal, rendered.
@@ -82,7 +83,10 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
     <div className="row-divider flex items-start gap-4 px-4 py-3">
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14.5px] font-semibold">
-          {outcome.name || outcome.email || "Name not available"}
+          {/* A plan names people when its backend surface could; otherwise the
+              resolver does, from the id every outcome carries. Never a dead
+              "Name not available": that read as a broken group or person. */}
+          {outcome.name || outcome.email || <UserName id={outcome.user_id} />}
         </span>
         <span className="block text-[13px] text-muted">
           {outcome.detail}
