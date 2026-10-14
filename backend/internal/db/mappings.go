@@ -187,7 +187,7 @@ func MappingsForRoles(ctx context.Context, target string, roles []RoleRef) ([]Ro
 	// the subject holds nothing in, whatever a role of the same name means
 	// somewhere else.
 	const q = `
-		SELECT m.id, m.target, m.project_id, m.role_key, m.field, m.value, m.created_by, m.updated_by
+		SELECT m.id, m.target, m.project_id, m.role_key, m.field, m.value, m.created_by, m.updated_by, m.created_at, m.updated_at
 		  FROM target_role_mappings m
 		  JOIN unnest($2::text[], $3::text[]) AS held(project_id, role_key)
 		    ON held.project_id = m.project_id AND held.role_key = m.role_key
