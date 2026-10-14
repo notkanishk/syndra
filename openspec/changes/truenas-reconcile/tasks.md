@@ -96,3 +96,15 @@
 - [ ] 7.3 Owner reruns `/design-sync` so `Notice` and `ConnectionGuide` reach the design system
 - [ ] 7.4 Fold in A-01 from design (operator intermediate state, "paused" wording, NAS with no groups of its own)
 - [ ] 7.5 Codebase-memory re-index (`detect_changes`)
+
+## Found in production, 14 Oct 2026 (read-only audit of drive.makerspace.tools)
+
+The only Syndra writes in 60 days were prod's 3 `user.create` and 1 `user.update`, all on 14 Oct. No group was stripped and no account was locked. Dev made no writes.
+
+- [x] P1 The first password never switched SMB on. `desiredSMB` read the observed snapshot (fixed: `Binding.WantsSMB`). Convergence also never sends a standalone SMB enable now. TrueNAS refuses it and takes the whole update with it.
+- [x] P1 Accounts were created with the zsh shell. They now get `/usr/sbin/nologin`, verified against `user.shell_choices`.
+- [x] P1 Dev and prod shared the production NAS and its API key, and dev holds an unsent outbox row that would have drained against production. Dev's add-on was stopped on 14 Oct (owner: dev pushes nothing). It restarts on the next `docker compose up -d`. A separate key, or no NAS at all for dev, is still owed.
+- [x] P2 The three Syndra-created accounts were switched to nologin on 14 Oct (owner approved). SSH password login, SSH keys and sudo were already off.
+- [ ] P2 Two Syndra-created accounts are still `smb: false`, with no password yet. Once the fix deploys, their first password switches SMB on. The test account was fixed by hand.
+- [ ] P2 Share permissions must come from the role groups, never `builtin_users`. Syndra deliberately never adds members to it (D8). The NAS-side permission changes are with the owner.
+- [ ] P2 NAS hardening and data-protection findings that aren't Syndra's own were reported to the owner directly. They are deliberately not recorded in this public repository.

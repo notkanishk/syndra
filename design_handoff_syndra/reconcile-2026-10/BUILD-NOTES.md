@@ -92,7 +92,7 @@ Written 14 Oct 2026, after reading the repo at `8c46586`. **Where this file and 
 
 ## Owner's answers (14 Oct 2026)
 
-1. **Existing mappings are inferred.** A system whose mappings all sit in one project gets that project. A system whose mappings span several stops migration 000051 with a list of them, to be fixed by hand. Nothing is guessed or deleted.
+1. **Existing mappings are inferred**, and if inference is in the way, wiping the role → group mappings and starting clean is acceptable (owner, 14 Oct). A system whose mappings all sit in one project gets that project. One whose mappings span several stops migration 000051 with a list.
 2. **The picker offers every group made on the NAS**, minus the built-in ones. It assumes no naming convention.
 3. **Composed roles come later.** Today TrueNAS has only the wide base groups. An administrator-facing way to compose roles is owed, with details still to settle (`openspec/NEXT.md`, "TrueNAS add-on — owed after the October reconcile"). It is blocked on the untraced `EnforceMappingRules` path, because the first composed role is the first mapping rule in production.
-4. **ACL mode is unknown.** It is being read from the dev NAS, read-only. The "what this group can open" line waits on that.
+4. **ACLs are NFSv4 with inheritance** on every share dataset (read from the production NAS, 14 Oct). `aclmode` is RESTRICTED, so the "what this group can open" line can be built from `filesystem.getacl`.
