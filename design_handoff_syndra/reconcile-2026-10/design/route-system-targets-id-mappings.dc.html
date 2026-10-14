@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Mappings board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /system/targets/[target]/mappings</span>
+    <h1 class="type-page-title" style="margin:0">Mappings</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Which roles reach a connected system, and the published versions of that set. Reached from the system's page; no rail row. One band holds the top permanently and always says one of three things: the rows match the newest version, the rows are ahead of it, or nothing is published yet. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#9</strong> whether TrueNAS knows a group is checked when the value is edited, never per row · <strong style="color:var(--ink)">#10</strong> no "accounts already on the NAS are unaffected" card · <strong style="color:var(--ink)">#12</strong> one Publish, in the band; a blank note is refused · <strong style="color:var(--ink)">#6 #7</strong> the size step is rung 2 and branches on its code · <strong style="color:var(--ink)">#69</strong> a publish that moves nobody can be applied and says so · rollback previews one plan for the whole version, counting people losing and gaining.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Phase 2 · area 1</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#13</strong> drawn, owner's ruling applied: a mapping is a role and a group. The role comes from the system's one Zitadel project, the group from the add-on's own list, so no project field, no typed setting and no typed value. The setting a mapping fills comes from the add-on's schema; with one, it is the field's label. Implementation: <span class="type-mono">proposed/Mapping-implementation-notes.md</span>.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Add a mapping moves to the page header, as every page's own action · the project field goes: the system has one · the group is a list from TrueNAS, not a text box · the band's changes list is the one place a removed mapping is seen · a row ahead of its version says so in its own cell, not a tinted row · the band reads in words, not "v4 + 3" · the current version's Roll back is disabled with "In force", not absent.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/system/targets/truenas" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ paused }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+    <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+      <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Syndra has paused calls to TrueNAS.</span>
+      <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Mappings are Syndra's own record, so this page is current and you can still change it. A new value can't be checked with TrueNAS until calls resume, and changes reach TrueNAS then.</p>
+    </div>
+  </div></sc-if>
+
+  <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:12px">
+    <a href="route-system-targets-id.dc.html?frame=default" class="inline-flex min-h-11 items-center desktop:min-h-6" style="font-size:13.5px;font-weight:600"><span aria-hidden="true">←&nbsp;</span>TrueNAS</a>
+    <x-import component-from-global-scope="Syndra.PageHeader" title="Mappings" meta="{{ meta }}" lede="{{ pageLede }}" actions="{{ addEl }}" hint-size="100%,120px"></x-import>
+  </div>
+
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+    <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+      <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">The mappings for TrueNAS could not be read.</span>
+      <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for them. Nothing was changed.</p>
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_4e07b19c</span> · quote this if you ask for help</span></div>
+    </div>
+  </div></sc-if>
+
+  <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,240px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 3 }}" avatar="{{ false }}" label="Loading mappings" hint-size="100%,240px"></x-import></x-import></sc-if>
+
+  <sc-if value="{{ noProject }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,170px"><x-import component-from-global-scope="Syndra.EmptyState" title="TrueNAS has no Zitadel project yet." guidance="A mapping ties one of that project's roles to a TrueNAS group, so the project comes first. It is chosen on TrueNAS's own page." hint-size="100%,150px"></x-import><div style="padding:0 20px 18px"><a href="route-system-targets-id.dc.html?frame=noproject" style="font-size:13.5px;font-weight:600">Choose it on TrueNAS's page →</a></div></x-import></sc-if>
+  <sc-if value="{{ showPage }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:16px">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px">
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 20px;padding:18px 20px">
+        <span style="flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <span style="display:flex;align-items:flex-start;gap:9px;font-family:var(--font-display);font-size:18px;line-height:1.4;font-weight:600;color:{{ bandInk }}"><span style="flex:none;display:flex;align-items:center;height:1.4em"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ bandTone }}" hint-size="8px,8px"></x-import></span><span style="display:block;min-width:0;text-wrap:pretty">{{ bandWord }}</span></span>
+          <span style="padding-left:17px;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ bandText }}</span>
+        </span>
+        <span style="flex:none;white-space:nowrap;display:flex;flex-direction:column;align-items:flex-end;gap:6px"><x-import component-from-global-scope="Syndra.Button" variant="{{ pubVariant }}" disabled="{{ pubOff }}" hint-size="170px,40px">{{ pubLabel }}</x-import><sc-if value="{{ pubOff }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--faint)">Nothing to publish</span></sc-if></span>
+      </div>
+      <sc-if value="{{ hasEdits }}" hint-placeholder-val="{{ false }}">
+        <div class="row-divider" style="padding:12px 20px 4px"><span class="type-label" style="color:var(--label)">Not yet published · what rolling back to version 4 would undo</span></div>
+        <sc-for list="{{ edits }}" as="e" hint-placeholder-count="3"><div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 18px;padding:9px 20px">
+          <span style="width:90px;flex:none;font-size:13.5px;font-weight:600;color:{{ e.ink }}">{{ e.kind }}</span>
+          <span style="flex:1 1 320px;min-width:0;font-size:14px;line-height:1.5;text-wrap:pretty"><a href="route-projects-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ e.role }}</a> <span style="color:var(--muted)">· </span><span class="type-mono" style="font-size:13px;color:var(--muted)">{{ e.what }}</span></span>
+          <span style="font-size:13px;color:var(--faint)"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ e.who }}</a>, {{ e.when }}</span>
+          <span style="width:110px;flex:none;text-align:right;font-size:14px">{{ e.people }}</span>
+        </div></sc-for>
+        <div style="height:10px"></div>
+      </sc-if>
+    </x-import>
+
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="What roles reach TrueNAS" count="{{ rowCount }}" hint-size="100%,56px"></x-import>
+      <sc-if value="{{ hasRows }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:260px;flex:none"><button type="button" aria-label="Sort by role" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink)">Role<span aria-hidden="true" style="font-size:11px">↑</span></button></span><span class="hidden tablet:block" style="flex:1 1 0;min-width:0">On TrueNAS</span><span class="hidden tablet:block" style="width:110px;flex:none;text-align:right"><button type="button" aria-label="Sort by people" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit">People</button></span><span class="hidden desktop:block" style="width:200px;flex:none"></span></x-import>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="3"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:13px 20px">
+          <span style="width:260px;flex:none;display:flex;flex-direction:column;gap:2px"><a href="route-projects-id.dc.html?frame=default" style="font-size:14.5px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.role }}</a><span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span>
+          <span style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-mono" style="font-size:13.5px">group → {{ r.value }}</span><sc-if value="{{ r.hasDiff }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--warn-text)">{{ r.diff }}</span></sc-if></span>
+          <span style="width:110px;flex:none;text-align:right;font-size:15px">{{ r.people }}<span class="tablet:hidden" style="font-size:13px;color:var(--muted)"> people</span></span>
+          <span style="width:200px;flex:none;display:flex;justify-content:flex-end;gap:8px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Change</x-import><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="96px,34px">Remove</x-import></span>
+        </div></sc-for>
+      </sc-if>
+      <sc-if value="{{ noRows }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No role reaches TrueNAS." guidance="Until one does, Syndra gives nobody an account there. Add a mapping: pick a role and the group it should reach, and the preview says how many people that is before anything is sent." hint-size="100%,150px"></x-import></sc-if>
+    </x-import>
+
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="Published versions" count="{{ verCount }}" note="A version is the whole set, not one row" hint-size="100%,56px"></x-import>
+      <sc-if value="{{ hasRows }}" hint-placeholder-val="{{ true }}"><sc-for list="{{ versions }}" as="v" hint-placeholder-count="3"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:12px 20px">
+        <span style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">Version {{ v.n }}</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ v.who }}</a>, {{ v.when }} · “{{ v.note }}”</span></span>
+        <span style="width:110px;flex:none;text-align:right;font-size:14px;color:var(--muted)">{{ v.count }}</span>
+        <span style="width:200px;flex:none;display:flex;justify-content:flex-end;align-items:center;gap:10px"><sc-if value="{{ v.inForce }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--faint)">In force</span></sc-if><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ v.inForce }}" hint-size="110px,34px">Roll back</x-import></span>
+      </div></sc-for></sc-if>
+      <sc-if value="{{ noRows }}" hint-placeholder-val="{{ false }}"><div style="padding:0 20px 16px;font-size:14px;color:var(--muted)">None yet, so there is nothing to roll back to.</div></sc-if>
+    </x-import>
+  </div></sc-if>
+</div>
+
+<sc-if value="{{ dlgAdd }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="add-title" hint-size="560px,640px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Add a mapping" title-id="add-title" lede="Everyone who holds the role gets an account on TrueNAS in this group. The preview says how many people that is before anything is sent." hint-size="100%,100px"></x-import>
+  <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="m-role" hint-size="80px,18px">Role in Network storage</x-import><x-import component-from-global-scope="Syndra.Select" id="m-role" hint-size="100%,46px"><option>Laser operator</option><option>Member</option></x-import><x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,20px">Roles already mapped are not offered.</x-import></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="m-val" hint-size="80px,18px">Group on TrueNAS</x-import><x-import component-from-global-scope="Syndra.Select" id="m-val" aria-invalid="{{ addRefused }}" hint-size="100%,46px"><option>laser-users</option><option>archive-admins</option><option>archive-write</option><option>fabrication</option><option>fabrication-leads</option><option>members</option></x-import><x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,20px">{{ groupHint }}</x-import></div>
+    <sc-if value="{{ addRefused }}" hint-placeholder-val="{{ false }}"><div role="alert" class="danger-note" style="padding:12px 14px;display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.55;color:var(--ink)"><span style="font-weight:600;color:var(--danger-text)">laser-users is no longer on TrueNAS.</span><span>It was deleted on TrueNAS after the list was read, and the preview asked again. Nothing was changed. Pick another group, or create it on TrueNAS. The list above is fresh.</span></div></sc-if>
+    <sc-if value="{{ addUnchecked }}" hint-placeholder-val="{{ false }}"><div role="status" class="warn-note" style="padding:12px 14px;display:flex;flex-direction:column;gap:4px;font-size:14px;line-height:1.55;color:var(--ink)"><span style="font-weight:600;color:var(--warn-text)">This list is from 09:02.</span><span>Calls to TrueNAS are paused, so Syndra can't read its groups now. You can still preview. A group deleted since 09:02 fails when the mapping is applied, once calls resume, and the failure is reported.</span></div></sc-if>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ addNote }}" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" disabled="{{ addRefused }}" hint-size="110px,40px">Preview</x-import></x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ dlgPub }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="pub-title" hint-size="560px,520px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Publish as version 5" title-id="pub-title" lede="Records today's three changes, with the rest of the set, as a version you can return to. Nobody's access changes: all three are already live." hint-size="100%,100px"></x-import>
+  <div style="padding:0 24px;display:flex;flex-direction:column;gap:6px">
+    <x-import component-from-global-scope="Syndra.FieldLabel" html-for="pub-note" hint-size="160px,18px">Why this set is right</x-import>
+    <x-import component-from-global-scope="Syndra.Textarea" id="pub-note" default-value="Laser operators get their own group; archive admins can now write." hint-size="100%,72px"></x-import>
+    <x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,40px">Required. Whoever decides, months from now, whether to roll back to version 5 reads this and nothing else.</x-import>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="160px,40px">Publish version 5</x-import></x-import>
+</x-import>
+</sc-if>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: 2, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const st = this.st, S = window.Syndra, h = React.createElement;
+    const known = !/^(loading|error)$/.test(st), none = st === "none", noProject = st === "no-project";
+    const edits = /^(edits|publish)$/.test(st), paused = /^(paused|add-unchecked)$/.test(st);
+    const v4 = [
+      { role: "Archive admin", key: "p_storage · archive-admin", value: "archive-admins", people: 3 },
+      { role: "Fabrication lead", key: "p_storage · fabrication-lead", value: "fabrication", people: 34 },
+    ];
+    const ahead = [
+      { role: "Archive admin", key: "p_storage · archive-admin", value: "archive-write", people: 3, diff: "Version 4 has archive-admins" },
+      { role: "Fabrication lead", key: "p_storage · fabrication-lead", value: "fabrication", people: 34 },
+      { role: "Laser operator", key: "p_storage · laser-operator", value: "laser-users", people: 12, diff: "Not in version 4" },
+    ];
+    const rows = (none ? [] : edits ? ahead : v4).map(r => Object.assign({ diff: "" }, r, { hasDiff: !!r.diff }));
+    const versions = [
+      { n: 4, who: "Sai Khurana", when: "3 weeks ago", note: "summer build cohort", count: "2 mappings" },
+      { n: 3, who: "Sai Khurana", when: "8 weeks ago", note: "archive admins split out of fabrication", count: "2 mappings" },
+      { n: 2, who: "Kanishk Singh", when: "4 months ago", note: "first mapping for the new NAS", count: "1 mapping" },
+    ].map((v, i) => Object.assign(v, { inForce: i === 0 && !edits }));
+    const band = none ? { tone: "neutral", ink: "var(--ink)", word: "Nothing published yet", text: "No version exists, so there is nothing to roll back to and nothing to compare the rows against." }
+      : edits ? { tone: "warn", ink: "var(--warn-text)", word: "Version 4, plus 3 changes not yet published", text: "The rows below are live: each change went through its own preview. Publishing records them as version 5, so a later rollback has something to return to. Rolling back to version 4 would undo all three." }
+      : { tone: "healthy", ink: "var(--ink)", word: "Matches version 4", text: "Published 3 weeks ago by Sai Khurana: “summer build cohort”. What the rows say is what version 4 says." };
+    const f = (frame, label, note, phone) => phone ? { src: "route-system-targets-id-mappings.dc.html?frame=" + frame, label, note, w: 390, h: 1500, boxW: 390, boxH: 1100, scale: 1 } : { src: "route-system-targets-id-mappings.dc.html?frame=" + frame, label, note, w: 1440, h: 1180, boxW: 720, boxH: 590, scale: 0.5 };
+    const n = rows.length;
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", known, paused, noProject, showPage: known && !noProject,
+      pageLede: noProject ? "A mapping gives everyone who holds one of the system's Zitadel project roles an account on TrueNAS, in a group. Changing one moves access for all of them, so every change is previewed before anything is sent." : "A mapping gives everyone who holds one of Network storage's roles an account on TrueNAS, in a group. Changing one moves access for all of them, so every change is previewed before anything is sent.",
+      groupHint: st === "add-unchecked" ? "The list TrueNAS gave at 09:02." : st === "add-refused" ? "Read again from TrueNAS just now." : "TrueNAS's own list of groups, read 2 seconds ago.",
+      meta: !known ? "TrueNAS" : noProject ? "TrueNAS · no Zitadel project yet" : S ? h(S.MetaRow, null, [h("span", { key: "t", style: { whiteSpace: "nowrap" } }, "TrueNAS"), h("span", { key: "p", style: { whiteSpace: "nowrap" } }, "Zitadel project ", h("a", { href: "route-projects-id.dc.html?frame=default", style: { color: "var(--ink)", fontWeight: 600 } }, "Network storage")), h("span", { key: "n", style: { whiteSpace: "nowrap" } }, none ? "no mappings" : n + " mappings · version 4")]) : "",
+      addEl: S && known && !noProject ? h("span", { style: { flex: "none", whiteSpace: "nowrap" } }, h(S.Button, { variant: none ? "accent" : "outline" }, "Add a mapping")) : null,
+      bandTone: band.tone, bandInk: band.ink, bandWord: band.word, bandText: band.text,
+      pubOff: !edits, pubVariant: edits ? "accent" : "outline", pubLabel: edits ? "Publish as version 5" : "Publish",
+      hasEdits: edits,
+      edits: [
+        { kind: "Changed", ink: "var(--warn-text)", role: "Archive admin", what: "archive-admins → archive-write", who: "Kanishk Singh", when: "2 days ago", people: "3 people" },
+        { kind: "Added", ink: "var(--ink)", role: "Laser operator", what: "group → laser-users", who: "Kanishk Singh", when: "2 days ago", people: "12 people" },
+        { kind: "Removed", ink: "var(--ink)", role: "Member", what: "group → fabrication-read", who: "Sai Khurana", when: "5 hours ago", people: "61 people" },
+      ],
+      rows, hasRows: !none, noRows: none, rowCount: n, versions, verCount: none ? 0 : 3,
+      dlgAdd: /^add/.test(st), dlgPub: st === "publish",
+      
+      addRefused: st === "add-refused", addUnchecked: st === "add-unchecked", addPlain: st === "add",
+      addNote: st === "add-refused" ? "Pick another group to preview again." : "Nothing is sent until you apply the preview.",
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("default", "Default — matches version 4", "The band is healthy and Publish is disabled with its reason, so the band never changes shape. Each row: the role, linking to its project; what it sets on TrueNAS; how many people hold the role. The version in force shows In force and cannot be rolled back to."),
+          f("edits", "Ahead of version 4", "The figure this page exists for. The band is amber and lists the three unpublished changes with who, when and how many people, because a removed mapping has no row and is seen nowhere else. Rows say how they differ from version 4 in their own cell. Publish is the one violet control."),
+          f("publish", "Publish", "One control (#12). The note is required: it is the only record of why a set was right. Nobody's access changes, and the result says so (#69)."),
+          f("none", "Nothing published", "The live deployment's state. A neutral band, an empty state naming what is missing, and Add a mapping as the page's one violet action."),
+          f("add", "Add a mapping (#13)", "Two choices: a role in the system's one Zitadel project, and a group from TrueNAS's own list. The add-on declares one mappable setting today, so the setting is the field's label, not a picker. Preview hands the plan to the shared preview, which counts people and meets the size step if the backend asks."),
+          f("add-refused", "The group went away", "A typo is no longer possible, so the only refusal left is a group deleted on TrueNAS after the list was read. Red, nothing changed, a fresh list, no Try again."),
+          f("add-unchecked", "List from last known", "Calls are paused: the list is the one TrueNAS gave at 09:02, labelled with its time. Amber, allowed through, and it says where a deleted group would surface."),
+          f("no-project", "No project yet", "Reached by a link before the system has a project: one sentence on why the project comes first, and the way to choose it. Nothing else renders."),
+          f("paused", "Paused (degraded)", "Mappings are Syndra's own record, so the page stays current and live under the Notice. Nothing dims."),
+          f("loading", "Loading", "Title and lede known; no band reading, count or version until the read answers."),
+          f("error", "Error", "The red Notice in the page's place. Nothing was changed."),
+        ] },
+        { title: "Phone · 390", frames: [f("edits", "Phone — ahead of version 4", "The band stacks, its changes wrap to kind, role, who, then people with its noun; Publish goes full width under the reading.", true)] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

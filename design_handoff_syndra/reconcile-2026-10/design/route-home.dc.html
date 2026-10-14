@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Home board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /</span>
+    <h1 class="type-page-title" style="margin:0">Home</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">What needs an operator today, then how the makerspace stands. Advanced view. Each frame below is the real app shell and components from the attached design system, rendered at its true width.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Carried · settled</span>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#1</strong> Home, not Today · <strong style="color:var(--ink)">#25</strong> unreadable systems and disputed values count, so "Nothing needs you" can't show while either is open · <strong style="color:var(--ink)">#26</strong> Merge findings links to each system · <strong style="color:var(--ink)">#28</strong> sent but not seen back, saying what it is not · <strong style="color:var(--ink)">#29</strong> new people without a bundle; a missing welcome bundle counts in the headline, not the badge · <strong style="color:var(--ink)">#30</strong> each unreadable system's reason is a sentence · <strong style="color:var(--ink)">#31</strong> "N things need you"; the headline counts blocks, each badge counts its own noun.</p>
+    </div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Carried · shell</span>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The rail is the system's own Sidebar: <strong style="color:var(--ink)">#2</strong> violet accent, lime only for healthy · <strong style="color:var(--ink)">#3 #22</strong> Drift · <strong style="color:var(--ink)">#4</strong> Zitadel, Connected systems, Incoming events · <strong style="color:var(--ink)">#5</strong> Unfinished revocations · <strong style="color:var(--ink)">#5b</strong> Holds due, kept as built · <strong style="color:var(--ink)">#19</strong> phone tabs from the rail tree · <strong style="color:var(--ink)">#20</strong> tablet keeps the labelled rail · <strong style="color:var(--ink)">#21</strong> 44px view switch below desktop · <strong style="color:var(--ink)">#23</strong> Connected systems is a fixed row.</p>
+    </div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Phase 2 · area 3</span>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#24</strong> the makerspace stays below the queue, always, and every number in it opens the list it counts; no figure you can only look at · <strong style="color:var(--ink)">#27</strong> re-decided against B15: a clear block gives up its seat, because Home is a queue to empty, not a map to read. A block you empty while here says its outcome, then folds (<a href="Motion.dc.html#5b">5b</a>). The read line under the headline names what was checked and is clear, so a missing block never reads as a missing check · errors and pauses are one Notice above the title (<a href="Motion.dc.html#6a">6a</a>). Layout 1c, chosen 2 Oct.</p>
+    </div>
+  </section>
+
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ desktopFrames }}" as="f" hint-placeholder-count="5">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)">
+            <iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe>
+          </div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)">
+            <iframe src="{{ f.src }}" title="{{ f.label }}" style="width:390px;height:844px;border:0"></iframe>
+          </div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+
+  <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.PageHeader" title="What needs you" lede="Nothing is counted until every source has answered." hint-size="100%,110px"></x-import>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 3 }}" avatar="{{ false }}" label="Loading requests" hint-size="100%,200px"></x-import></x-import>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 3 }}" avatar="{{ false }}" label="Loading expiring access" hint-size="100%,200px"></x-import></x-import>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't check what needs you.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server didn't answer when this page asked. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
+          <span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span>
+        </div>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.PageHeader" title="What needs you" lede="Syndra won't say that nothing does until it can check. How the makerspace stands, below, was read separately." hint-size="100%,110px"></x-import>
+  </sc-if>
+
+  <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import><h1 class="type-page-title" style="margin:0">Nothing needs you</h1></div>
+      <p style="margin:0;max-width:80ch;font-size:15px;line-height:1.55;color:var(--muted)">Every request is answered, nothing is waiting for you to send, and every connected system was read in the last ten minutes.</p>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Everything below is real, read 14 minutes ago, and may have changed since. Giving and revoking access is paused until Zitadel answers, because a decision made on an old read can be wrong.</p>
+        <p style="margin:0;font-size:13px;color:var(--muted)">For the person who runs the Syndra server: Zitadel at auth.makerspace.edu did not answer within 5 seconds.</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ stQueue }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.PageHeader" title="8 things need you" lede="What needs you today. Each block is something you can finish here; how the makerspace stands follows below." hint-size="100%,110px"></x-import>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px;align-items:start">
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Requests" count="{{ 3 }}" action="{{ linkRequests }}" hint-size="100%,60px"></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Priya Nair</a></span><span style="font-size:13.5px;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser cutter · Operator</a>, for 30 days</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="140px,34px">Approve for Priya</x-import></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Omar Haddad</a></span><span style="font-size:13.5px;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Wood shop · Member</a>, until the end of term</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="140px,34px">Approve for Omar</x-import></x-import>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Expiring access" count="{{ 2 }}" tone="warn" note="Ends unless you extend it" action="{{ linkExpiring }}" hint-size="100%,60px"></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Aanya Rao</a></span><span style="font-size:13.5px;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser cutter · Operator</a> · ends 4 Oct (in 2 days)</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="90px,34px">Extend</x-import></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Mei Tanaka</a></span><span style="font-size:13.5px;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">3D printers · Member</a> · ends 6 Oct (in 4 days)</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="90px,34px">Extend</x-import></x-import>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Sent but not seen back" count="{{ 1 }}" tone="warn" hint-size="100%,60px"></x-import>
+        <div style="padding:0 20px 12px;font-size:13.5px;line-height:1.55;color:var(--muted)">Zitadel accepted this more than 20 minutes ago and Syndra has not seen it there since. It has not failed, and it is not waiting for you to send it.</div>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Sai Khurana</a></span><span style="font-size:13.5px;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Wood shop · Supervisor</a> · sent 2 Oct 09:12</span></div></x-import>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="New people without a bundle" count="{{ 2 }}" tone="warn" hint-size="100%,60px"></x-import>
+        <div style="padding:0 20px 12px;font-size:13.5px;line-height:1.55;color:var(--warn-text)">No welcome bundle is set, so everyone who joins is given nothing.</div>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Lena Brandt</a></span><span style="font-size:13.5px;color:var(--muted)">Joined 1 Oct · holds nothing</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="120px,34px">Give a bundle</x-import></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Ravi Iyer</a></span><span style="font-size:13.5px;color:var(--muted)">Joined 30 Sept · holds nothing</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="120px,34px">Give a bundle</x-import></x-import>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Drift" count="{{ 4 }}" tone="danger" action="{{ linkDrift }}" hint-size="100%,60px"></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Meera Pillai</a></span><span style="font-size:13.5px;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Electronics bench · Operator</a>, added in Zitadel with no record</span></div></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Arjun Das</a></span><span style="font-size:13.5px;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">3D printers · Member</a>, removed in Zitadel</span></div></x-import>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Systems nobody could read" count="{{ 1 }}" tone="warn" hint-size="100%,60px"></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600">TrueNAS</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">TrueNAS refused Syndra's key, so nothing on it has been read since 1 Oct 22:10. Look at Syndra's settings for the add-on.</span></div><a href="route-system-targets-id.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open TrueNAS →</a></x-import>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Merge findings" count="{{ 3 }}" tone="warn" hint-size="100%,60px"></x-import>
+        <div style="padding:0 20px 12px;font-size:13.5px;line-height:1.55;color:var(--muted)">Differences Syndra will not settle on its own. They are kept with each system.</div>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="flex:1;font-size:15.5px;font-weight:600">TrueNAS</span><span style="font-size:13.5px;color:var(--muted)">3 findings</span><a href="route-system-targets-id.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open TrueNAS →</a></x-import>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Pending changes" count="{{ 12 }}" action="{{ linkPending }}" hint-size="100%,60px"></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><span style="flex:1;font-size:14.5px;line-height:1.55;color:var(--muted)">12 changes are waiting for you to send them to Zitadel. Nothing changes there until you do.</span></x-import>
+      </x-import>
+
+    </div>
+    <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ lastKnown }}" subject="What needs you" hint-size="100%,24px"></x-import></sc-if>
+  </sc-if>
+
+
+  <sc-if value="{{ stLayoutB }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.PageHeader" title="8 things need you" lede="What needs you today, most urgent first. Each row is something you can finish here." hint-size="100%,110px"></x-import>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,600px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Needs you" count="{{ 8 }}" note="Most urgent first" hint-size="100%,60px"></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.StatusDot" tone="danger" hint-size="7px,7px"></x-import><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Drift · 4</span><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Meera Pillai</a> and 3 others</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">Access in Zitadel that no record in Syndra explains.</span></div><a href="route-drift.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open Drift →</a></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Expiring access · 2</span><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Aanya Rao</a>, ends 4 Oct (in 2 days)</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser cutter · Operator</a>. Ends unless you extend it.</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Extend</x-import></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Systems nobody could read · 1</span><span style="font-size:15px;font-weight:600">TrueNAS</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">TrueNAS refused Syndra's key; nothing has been read since 1 Oct 22:10.</span></div><a href="route-system-targets-id.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open TrueNAS →</a></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Sent but not seen back · 1</span><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Sai Khurana</a> · <a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Wood shop · Supervisor</a></span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">Zitadel accepted it 2 Oct 09:12; Syndra has not seen it there since. Not failed, and not waiting on you.</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Read again</x-import></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">New people without a bundle · 2</span><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Lena Brandt</a> and <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Ravi Iyer</a></span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">No welcome bundle is set, so everyone who joins is given nothing.</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Give a bundle</x-import></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Merge findings · 3</span><span style="font-size:15px;font-weight:600">TrueNAS</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">Differences Syndra will not settle on its own.</span></div><a href="route-system-targets-id.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open TrueNAS →</a></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.StatusDot" tone="accent" hint-size="7px,7px"></x-import><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Requests · 3</span><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Priya Nair</a> and 2 others</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser cutter · Operator</a>, for 30 days.</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Approve for Priya</x-import></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><x-import component-from-global-scope="Syndra.StatusDot" tone="accent" hint-size="7px,7px"></x-import><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Pending changes · 12</span><span style="font-size:15px;font-weight:600">12 changes waiting for you to send</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">Nothing changes in Zitadel until you send them.</span></div><a href="route-pending.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open Pending changes →</a></x-import>
+      </x-import>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <h2 class="type-card-title" style="margin:0">The makerspace</h2>
+        <x-import component-from-global-scope="Syndra.StatCard" label="Connected systems" value="2 of 3 read" detail="TrueNAS has not been read since 1 Oct 22:10" tone="warn" hint-size="100%,110px"></x-import>
+        <x-import component-from-global-scope="Syndra.StatCard" label="People" value="248" detail="12 whose access ends this month" hint-size="100%,110px"></x-import>
+        <x-import component-from-global-scope="Syndra.StatCard" label="Where access lives" value="41 roles" detail="Across 9 projects and 6 bundles" hint-size="100%,110px"></x-import>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ stLayoutC }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.PageHeader" title="8 things need you" lede="What needs you today. Time-sensitive work changes on its own if you wait; the rest waits for you." hint-size="100%,110px"></x-import>
+    <div style="margin-top:-10px;padding-left:20px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 24px">
+      <div style="flex:0 1 auto;min-width:240px"><x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ readState }}" subject="What needs you" hint-size="240px,24px"></x-import></div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:13.5px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Checked, nothing waiting:</span><a href="route-revocations.dc.html?frame=default" style="color:var(--ink);text-decoration:none;white-space:nowrap" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Unfinished revocations</a><span aria-hidden="true">·</span><a href="route-holds.dc.html?frame=default" style="color:var(--ink);text-decoration:none;white-space:nowrap" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Holds due</a></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:24px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:4px"><h2 class="type-card-title" style="margin:0">Time-sensitive</h2><span style="font-size:13.5px;color:var(--muted)">Access ends, stays wrong, or goes unseen if you wait.</span></div>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px"><x-import component-from-global-scope="Syndra.CardHeader" title="Drift" count="{{ 4 }}" tone="danger" hint-size="100%,60px"></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Meera Pillai</a> and 3 others</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">Access in Zitadel that no record explains.</span></div><a href="route-drift.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open Drift →</a></x-import></x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px"><x-import component-from-global-scope="Syndra.CardHeader" title="Expiring access" count="{{ 2 }}" tone="warn" action="{{ linkExpiring }}" hint-size="100%,60px"></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Aanya Rao</a></span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser cutter · Operator</a> · ends 4 Oct (in 2 days)</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="120px,34px">Extend</x-import></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Mei Tanaka</a></span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">3D printers · Member</a> · ends 6 Oct (in 4 days)</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="120px,34px">Extend</x-import></x-import></x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px"><x-import component-from-global-scope="Syndra.CardHeader" title="Systems nobody could read" count="{{ 1 }}" tone="warn" hint-size="100%,60px"></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">TrueNAS</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">Refused Syndra's key; not read since 1 Oct 22:10.</span></div><a href="route-system-targets-id.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open TrueNAS →</a></x-import></x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px"><x-import component-from-global-scope="Syndra.CardHeader" title="Sent but not seen back" count="{{ 1 }}" tone="warn" hint-size="100%,60px"></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Sai Khurana</a></span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Wood shop · Supervisor</a> · sent 2 Oct 09:12. Not failed, and not waiting on you.</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="120px,34px">Read again</x-import></x-import></x-import>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:4px"><h2 class="type-card-title" style="margin:0">When you're ready</h2><span style="font-size:13.5px;color:var(--muted)">Nothing changes until you act.</span></div>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px"><x-import component-from-global-scope="Syndra.CardHeader" title="Requests" count="{{ 3 }}" hint-size="100%,60px"></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Priya Nair</a></span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser cutter · Operator</a>, for 30 days</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="120px,34px">Approve for Priya</x-import></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Omar Haddad</a></span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Wood shop · Member</a>, until the end of term</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="120px,34px">Approve for Omar</x-import></x-import></x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px"><x-import component-from-global-scope="Syndra.CardHeader" title="New people without a bundle" count="{{ 2 }}" tone="warn" hint-size="100%,60px"></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Lena Brandt</a> and <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Ravi Iyer</a></span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">No welcome bundle is set, so everyone who joins is given nothing.</span></div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="120px,34px">Give a bundle</x-import></x-import></x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px"><x-import component-from-global-scope="Syndra.CardHeader" title="Merge findings" count="{{ 3 }}" tone="warn" hint-size="100%,60px"></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">TrueNAS</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">Differences Syndra will not settle on its own.</span></div><a href="route-system-targets-id.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open TrueNAS →</a></x-import></x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px"><x-import component-from-global-scope="Syndra.CardHeader" title="Pending changes" count="{{ 12 }}" hint-size="100%,60px"></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">12 changes waiting for you to send</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted)">Nothing changes in Zitadel until you send them.</span></div><a href="route-pending.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="white-space:nowrap;text-decoration:none">Open Pending changes →</a></x-import></x-import>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ showZone }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:16px;padding-top:12px">
+      <h2 class="type-section-title" style="margin:0">The makerspace</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px">
+        <a href="route-systems.dc.html?frame=default" aria-label="Connected systems" style="display:flex;color:inherit;text-decoration:none;border-radius:var(--radius-card)" style-hover="box-shadow:0 0 0 1px var(--accent-line)"><x-import component-from-global-scope="Syndra.StatCard" label="Connected systems" value="{{ sysVal }}" detail="{{ sysDetail }}" tone="{{ sysTone }}" hint-size="100%,120px"></x-import></a>
+        <a href="route-users.dc.html?frame=default" aria-label="People" style="display:flex;color:inherit;text-decoration:none;border-radius:var(--radius-card)" style-hover="box-shadow:0 0 0 1px var(--accent-line)"><x-import component-from-global-scope="Syndra.StatCard" label="People" value="248" detail="12 whose access ends this month" tone="neutral" hint-size="100%,120px"></x-import></a>
+        <a href="route-projects.dc.html?frame=default" aria-label="Where access lives" style="display:flex;color:inherit;text-decoration:none;border-radius:var(--radius-card)" style-hover="box-shadow:0 0 0 1px var(--accent-line)"><x-import component-from-global-scope="Syndra.StatCard" label="Where access lives" value="41 roles" detail="Across 9 projects and 6 bundles" tone="neutral" hint-size="100%,120px"></x-import></a>
+      </div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Lately" action="{{ linkAudit }}" hint-size="100%,60px"></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><span style="flex:1;font-size:14.5px"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Kanishk Singh</a> gave <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Priya Nair</a> <a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser cutter · Operator</a></span><span style="font-size:13.5px;color:var(--faint)">2 Oct 09:40</span></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="flex:1;font-size:14.5px">Zitadel reported <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Lena Brandt</a> signing in for the first time</span><span style="font-size:13.5px;color:var(--faint)">1 Oct 16:02</span></x-import>
+      </x-import>
+    </div>
+  </sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    const st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    const people = [["u1", "Kanishk Singh"], ["u2", "Priya Nair"], ["u3", "Aanya Rao"]].map(([id, n]) => ({ id, display_name: n, email: n.split(" ")[0].toLowerCase() + "@makerspace.edu" }));
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: people, projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.st = st;
+    this.homeError = Object.assign(new Error("Home could not be read"), { status: 503 });
+  }
+  link(href, label) { const S = window.Syndra; return S ? React.createElement(S.CardHeaderLink, { href }, label) : null; }
+  renderVals() {
+    const st = this.st;
+    const f = (frame, label, note) => ({ src: "route-home.dc.html?frame=" + frame, label, note });
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame,
+      rootData: this.rootData, session: this.session, homeError: this.homeError, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty",
+      stQueue: st === "layoutA",
+      stDegraded: st === "degraded", stLayoutB: st === "layoutB", stLayoutC: st === "layoutC" || st === "default" || st === "degraded" || st === "phone",
+      lastKnown: { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false },
+      readState: st === "degraded" ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 20000).toISOString(), current: true },
+      sysVal: st === "empty" ? "3 of 3 read" : "2 of 3 read", sysDetail: st === "empty" ? "All read in the last ten minutes" : "TrueNAS has not been read since 1 Oct 22:10", sysTone: st === "empty" ? "neutral" : "warn",
+      showZone: st !== "loading" && st !== "layoutB",
+      linkRequests: this.link("route-requests.dc.html?frame=default", "See all 3 requests →"),
+      linkExpiring: this.link("route-expiring.dc.html?frame=default", "Open Expiring access →"),
+      linkDrift: this.link("route-drift.dc.html?frame=default", "Open Drift →"),
+      linkPending: this.link("route-pending.dc.html?frame=default", "Open Pending changes →"),
+      linkAudit: this.link("/audit", "Open Audit →"),
+      desktopFrames: [
+        f("default", "Default — 8 things need you", "Layout 1c. A clear block gives up its seat (#27); the read line under the headline says what was checked and is clear, each name linking to its page. The headline counts blocks; each badge counts its own noun (#31). Each number in The makerspace opens the list it counts (#24)."),
+        f("empty", "Empty — nothing needs you", "One line, with the healthy dot, then the makerspace, which agrees with it: every system read. Only possible when every system was read and nothing is disputed (#25)."),
+        f("loading", "Loading", "Skeleton rows at their real height; no reassuring sentence until every source answers (#27)."),
+        f("error", "Error — couldn't check", "One red Notice above a stable title; never 'Nothing needs you' on a failed read, and no count. The makerspace below was read separately."),
+        f("degraded", "Degraded — last known data", "Zitadel is not answering, so Home shows what it last read; the read line carries its age. Giving and revoking pause until it answers. Needs the backend to keep its last good read — see proposed/DegradedBanner.md."),
+      ],
+      layoutFrames: [
+        { id: "1a", src: "route-home.dc.html?frame=layoutA", label: "1a · Blocks in a grid (as built)", note: "One card per kind of work, two across, the makerspace below. Easy to scan by kind; the most urgent block is not necessarily first.", pick: false },
+        { id: "1b", src: "route-home.dc.html?frame=layoutB", label: "1b · One queue, most urgent first", note: "Every kind of work becomes one row in a single list, with the makerspace in a column beside it. Reads like an inbox. Detail stays one tap away on each page.", pick: false },
+        { id: "1c", src: "route-home.dc.html?frame=layoutC", label: "1c · Time-sensitive, then when you're ready — chosen", note: "Left: work that changes on its own if you wait. Right: work that only waits. Chosen 2 Oct 2026; every Home state below uses it.", pick: true },
+      ],
+      phoneFrames: [
+        f("phone", "Phone — default", "Time-sensitive stacks above When you're ready. Advanced collapses to one go-to bar (#19)."),
+        f("empty", "Phone — empty", "The same one line, then the makerspace."),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-resort-a{from{opacity:.35}to{opacity:1}}@keyframes sy-resort-b{from{opacity:.35}to{opacity:1}}@keyframes sy-flash-a{from{background-color:var(--accent-soft)}to{background-color:transparent}}@keyframes sy-flash-b{from{background-color:var(--accent-soft)}to{background-color:transparent}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Drift board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /governance/drift</span>
+    <h1 class="type-page-title" style="margin:0">Drift</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Access in Zitadel that nothing in Syndra explains, and access Syndra gave that Zitadel no longer holds. The highest-stakes list in the product: every row is decided one look at a time. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#55</strong> a removed grant tells its history; a system nobody could read sits above the list; Check Zitadel again reports No change · <strong style="color:var(--ink)">#58</strong> Who made it? one row at a time · <strong style="color:var(--ink)">#59</strong> what the check cannot see and "worth a look" are two sentences · <strong style="color:var(--ink)">#60</strong> filters in one panel · <strong style="color:var(--ink)">#61</strong> the bar says revoking is one row at a time · <strong style="color:var(--ink)">#103</strong> the 500 ceiling.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The answers sit under the reason. Side by side is folded into the list: two cards, one per direction, each with its count and what it means for the person, then "Everything else agrees". Search finds a person or role. Every heading sorts: Who and Found order; What and Why gather equal values together. The list starts ordered by Found.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The name links to the person, so the evidence gets its own "Show evidence" (the whole Who cell was the toggle) · the legend joins the lede · the red "one row at a time" box goes: it reports no failure, and the bar already says it · the role reads as its name with the key beneath, and links to its project · Found takes the 110px seat · a disabled Adopt says why · tab count is a plain number.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/governance/drift" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">The rows below are real, read 14 minutes ago, and may have changed since. Adopting, revoking and marking are paused until Zitadel answers.</p>
+      </div>
+    </div></sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Drift" meta="{{ meta }}" lede="Access in Zitadel that nothing in Syndra gave, and access Syndra gave that Zitadel no longer holds. Adopt keeps it and lets Syndra look after it; Revoke ends it; Owned elsewhere means another system manages it and Syndra stops asking." actions="{{ checkEl }}" hint-size="100%,140px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    
+    <sc-if value="{{ stChecked }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ checkedOutcome }}" hint-size="100%,60px"></x-import></sc-if>
+    <sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" trailing="{{ selectEl }}" hint-size="100%,44px"></x-import></sc-if><sc-if value="{{ hasfreshEl }}" hint-placeholder-val="{{ false }}"><div style="margin-top:-4px">{{ freshEl }}</div></sc-if>
+
+    <sc-if value="{{ stUnread }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">TrueNAS hasn't been read since 1 Oct 22:10.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">It refused Syndra's key, so anything that drifted on it is not in this list. The Zitadel rows below are current.</p>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load drift.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_9d04b7e1</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ showQueue }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" label="Loading drift" hint-size="100%,280px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Everything is explained." guidance="Every piece of access in Zitadel traces back to something Syndra did, and everything Syndra gave is there." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
+      <sc-if value="{{ stFiltered }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Nothing unexplained matches those filters." guidance="There may still be drift under another project, or found the other way." action="{{ clearAction }}" hint-size="100%,140px"></x-import></sc-if>
+    </x-import>
+    </sc-if>
+    <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:16px">
+      <sc-if value="{{ navRow }}" hint-placeholder-val="{{ false }}">{{ navEl }}</sc-if>
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+      <div id="{{ g.id }}" style="scroll-margin-top:16px">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,360px">
+        <div style="border-radius:var(--radius-card) var(--radius-card) 0 0;animation:{{ g.flashAnim }}"><x-import component-from-global-scope="Syndra.CardHeader" title="{{ g.titleEl }}" count="{{ g.count }}" tone="{{ g.tone }}" note="{{ g.hint }}" action="{{ g.actionEl }}" hint-size="100%,60px"></x-import></div>
+        <div style="display:grid;grid-template-rows:{{ g.fold.fr }};visibility:{{ g.fold.vis }};transition:{{ g.fold.trans }}"><div style="min-height:0;overflow:hidden;opacity:{{ g.fold.op }};transition:{{ g.fold.opTrans }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><span style="width:26px;flex:none"></span></sc-if><span style="width:180px;flex:none"><button type="button" aria-label="Sort by who" onClick="{{ sortWho }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWho }}" style-hover="color:var(--ink)">Who<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWho }};opacity:{{ opWho }}">↑</span></button></span><span style="width:200px;flex:none"><button type="button" aria-label="Sort by what they can get into" onClick="{{ sortWhat }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWhat }}" style-hover="color:var(--ink)">What they can get into<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWhat }};opacity:{{ opWhat }}">↑</span></button></span><span class="hidden desktop:block" style="flex:1 1 0;min-width:0"><button type="button" aria-label="Sort by why syndra can't explain it" onClick="{{ sortWhy }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWhy }}" style-hover="color:var(--ink)">Why Syndra can't explain it<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWhy }};opacity:{{ opWhy }}">↑</span></button></span><span class="hidden tablet:block desktop:hidden" style="flex:1 1 0"></span><span style="width:110px;flex:none;text-align:right"><button type="button" aria-label="Sort by found" onClick="{{ sortFound }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colFound }}" style-hover="color:var(--ink)">Found<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotFound }};opacity:{{ opFound }}">↑</span></button></span></x-import>
+        <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><sc-if value="{{ g.someChosen }}" hint-placeholder-val="{{ false }}"><div role="checkbox" aria-checked="mixed" class="row-divider" style="display:flex;align-items:center;gap:14px;min-height:44px;padding:8px 20px;cursor:pointer;user-select:none"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">–</span><span style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:600">Select these 4 items</span></span></div></sc-if><sc-if value="{{ g.noneChosen }}" hint-placeholder-val="{{ true }}"><div role="checkbox" aria-checked="false" class="row-divider" style="display:flex;align-items:center;gap:14px;min-height:44px;padding:8px 20px;cursor:pointer;user-select:none"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span><span style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:600">Select these 4 items</span></span></div></sc-if></sc-if>
+        <div style="animation:{{ g.sortAnim }}"><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+        <sc-if value="{{ r.hasRun }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;align-items:baseline;gap:10px;padding:12px 20px 8px;background:var(--surface-0)"><span class="type-label" style="color:var(--ink)">{{ r.run }}</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">{{ r.runCount }}</span></div></sc-if>
+        <div class="row-divider flex flex-col gap-3 px-5 py-4" style="background:{{ r.bg }};box-shadow:inset 3px 0 0 {{ r.edge }};animation:{{ r.anim }}">
+          <div class="flex w-full flex-col items-start gap-2 tablet:flex-row tablet:gap-[18px]">
+            <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><span style="width:26px;flex:none;padding-top:7px"><span role="checkbox" aria-checked="{{ r.checked }}" aria-label="Select this row" tabindex="0" style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:26px;cursor:pointer"><sc-if value="{{ r.checked }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">✓</span></sc-if><sc-if value="{{ r.unchecked }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span></sc-if></span></span></sc-if>
+            <span class="flex w-full items-center gap-3 tablet:w-[180px] tablet:shrink-0">
+              <x-import component-from-global-scope="Syndra.Avatar" name="{{ r.who }}" hint-size="34px,34px"></x-import>
+              <span class="min-w-0">
+                <span class="block text-[14.5px] font-semibold" style="text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.who }}</a></span>
+                <span class="block text-[12.5px] text-faint">{{ r.holder }}</span>
+              </span>
+            </span>
+            <span class="w-full tablet:w-[200px] tablet:shrink-0" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px">
+              <span style="font-size:14px;line-height:1.45;text-wrap:pretty"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.role }}</a></span>
+              <span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ r.key }}</span>
+              <sc-if value="{{ r.hasDir }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--muted)">{{ r.dir }}</span></sc-if>
+              <sc-if value="{{ r.hasBadge }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Badge" tone="{{ r.badgeTone }}" hint-size="110px,24px">{{ r.badge }}</x-import></sc-if>
+            </span>
+            <span class="hidden desktop:block" style="flex:1 1 0;min-width:0">
+              <span style="display:flex;flex-direction:column;gap:10px">
+                <span style="display:flex;flex-direction:column;gap:4px">
+                  <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><sc-for list="{{ r.reason }}" as="np" hint-placeholder-count="1"><sc-if value="{{ np.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ np.href }}" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ np.t }}</a></sc-if><sc-if value="{{ np.isText }}" hint-placeholder-val="{{ true }}">{{ np.t }}</sc-if></sc-for></span>
+                  <sc-if value="{{ r.hasSecond }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;line-height:1.55;color:var(--warn-text);text-wrap:pretty">{{ r.second }}</span></sc-if>
+                  <sc-if value="{{ r.ask }}" hint-placeholder-val="{{ false }}"><span><button type="button" class="inline-flex min-h-[44px] items-center desktop:min-h-6" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Who made it?</button></span></sc-if>
+                  <sc-if value="{{ r.hasAnswer }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;line-height:1.5;color:var(--muted)"><sc-for list="{{ r.answer }}" as="np" hint-placeholder-count="1"><sc-if value="{{ np.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ np.href }}" style="color:var(--ink);font-weight:600;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ np.t }}</a></sc-if><sc-if value="{{ np.isText }}" hint-placeholder-val="{{ true }}">{{ np.t }}</sc-if></sc-for></span></sc-if>
+                </span>
+                <sc-if value="{{ belowLayout }}" hint-placeholder-val="{{ true }}">
+                  <span style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 8px">
+                    <x-import component-from-global-scope="Syndra.Button" variant="{{ r.adoptVariant }}" size="sm" disabled="{{ r.adoptOff }}" hint-size="80px,34px">Adopt</x-import>
+                    <x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" disabled="{{ stDegraded }}" hint-size="80px,34px">Revoke</x-import>
+                    <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="140px,34px">Owned elsewhere</x-import>
+                    <span style="width:6px"></span>
+                    <button type="button" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.evidenceLabel }}</button>
+                    <button type="button" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Select similar rows</button>
+                  </span>
+                </sc-if>
+                <sc-if value="{{ r.adoptOff }}" hint-placeholder-val="{{ false }}"><sc-if value="{{ r.isService }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">Adopt is off: this account re-creates its own access on every deploy, whatever Syndra records.</span></sc-if></sc-if>
+              </span>
+            </span>
+            <span class="hidden tablet:block desktop:hidden" style="flex:1 1 0"></span>
+            <span class="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0 tablet:text-right" style="padding-top:2px"><span class="tablet:hidden">Found </span>{{ r.found }}</span>
+            <sc-if value="{{ colLayout }}" hint-placeholder-val="{{ false }}">
+              <span class="hidden desktop:block" style="width:300px;flex:none">
+                <span style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+                  <span style="display:flex;justify-content:flex-end;gap:8px">
+                    <x-import component-from-global-scope="Syndra.Button" variant="{{ r.adoptVariant }}" size="sm" disabled="{{ r.adoptOff }}" hint-size="80px,34px">Adopt</x-import>
+                    <x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" disabled="{{ stDegraded }}" hint-size="80px,34px">Revoke</x-import>
+                    <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="140px,34px">Owned elsewhere</x-import>
+                  </span>
+                  <button type="button" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted)">Select similar rows</button>
+                </span>
+              </span>
+            </sc-if>
+          </div>
+
+          <div class="desktop:hidden"><div style="display:flex;flex-direction:column;gap:10px">
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><sc-for list="{{ r.reason }}" as="np" hint-placeholder-count="1"><sc-if value="{{ np.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ np.href }}" style="color:var(--ink);text-decoration:none">{{ np.t }}</a></sc-if><sc-if value="{{ np.isText }}" hint-placeholder-val="{{ true }}">{{ np.t }}</sc-if></sc-for></span>
+            <sc-if value="{{ r.hasSecond }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;line-height:1.55;color:var(--warn-text);text-wrap:pretty">{{ r.second }}</span></sc-if>
+            <sc-if value="{{ r.ask }}" hint-placeholder-val="{{ false }}"><span><button type="button" class="inline-flex min-h-[44px] items-center" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted)">Who made it?</button></span></sc-if>
+            <sc-if value="{{ r.isService }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">Adopt is off: this account re-creates its own access on every deploy, whatever Syndra records.</span></sc-if>
+            <span style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
+              <x-import component-from-global-scope="Syndra.Button" variant="{{ r.adoptVariant }}" size="sm" disabled="{{ r.adoptOff }}" hint-size="80px,34px">Adopt</x-import>
+              <x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" disabled="{{ stDegraded }}" hint-size="80px,34px">Revoke</x-import>
+              <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="140px,34px">Owned elsewhere</x-import>
+              <button type="button" class="min-h-[44px]" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted)">{{ r.evidenceLabel }}</button>
+            </span>
+          </div></div>
+
+          <sc-if value="{{ r.expanded }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;padding:16px 18px;border-radius:var(--radius-inner);background:var(--surface-0)">
+              <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label">If you revoke</span><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">She loses entry to the electronics bench. Revocations send on their own every few minutes; an app she is already signed in to keeps what it was told until she signs in again.</p></div>
+              <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label">If you adopt</span><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Syndra records this as access you gave, and the row leaves this list. Her access does not change.</p></div>
+              <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label">Evidence</span>
+                <div class="type-mono" style="display:grid;grid-template-columns:84px minmax(0,1fr);gap:4px 12px;font-size:12.5px;color:var(--muted)"><span style="color:var(--faint)">Zitadel id</span><span>291803447120556</span><span style="color:var(--faint)">Created</span><span>2 Oct 2026, 18:40</span><span style="color:var(--faint)">Made by</span><span style="font-family:var(--font-sans)"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Rohan Mehta</a></span><span style="color:var(--faint)">Last seen</span><span>5 Oct 2026, 09:34</span></div>
+              </div>
+            </div>
+          </sc-if>
+        </div></sc-for></div>
+        <sc-if value="{{ g.hasFoot }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 20px"><span style="font-size:13.5px;color:var(--muted)">{{ g.footText }}</span><sc-if value="{{ g.canMore }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" on-click="{{ g.more }}" hint-size="120px,34px">{{ g.moreLabel }}</x-import></sc-if><sc-if value="{{ g.canAll }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ g.all }}" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Show all {{ g.count }}</button></sc-if><sc-if value="{{ g.canReset }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ g.reset }}" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Back to 10</button></sc-if><sc-if value="{{ g.hasNext }}" hint-placeholder-val="{{ false }}"><span style="flex:1 1 auto"></span><a href="#{{ g.nextId }}" onClick="{{ g.nextJump }}" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="text-decoration:none">{{ g.nextLabel }}</a></sc-if></div></sc-if>
+        </div></div>
+      </x-import>
+      </div>
+      </sc-for>
+      <span style="display:inline-flex;align-items:center;gap:10px;padding:2px 4px;font-size:13.5px;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Everything else in Zitadel agrees with Syndra.</span>
+    </div></sc-if>
+  </div>
+
+  <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.SelectionBar" count="{{ 2 }}" noun="{{ itemNoun }}" composition="2 people" ceiling="{{ 500 }}" on-take-ceiling="{{ noop }}" on-clear="{{ noop }}" hint-size="100%,64px"><span style="font-size:13px;color:var(--faint)">Revoking is one row at a time.</span><x-import component-from-global-scope="Syndra.SelectionAction" on-click="{{ noop }}" hint-size="180px,36px">Preview adopting these</x-import><x-import component-from-global-scope="Syndra.SelectionAction" on-click="{{ noop }}" hint-size="260px,36px">Preview marking these owned elsewhere</x-import></x-import></sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    this.chips = q.get("chips") || "right";
+    const m = this.st;
+    this.preScroll = this.st === "many-scrolled" ? "sec-s" : null;
+    this.state = { sort: m === "many-sort-why" ? "why" : m === "many-sort-what" ? "what" : "found", dir: 1, open: { z: m !== "many-fold", s: true }, shown: { z: m === "many-more" ? 35 : 10, s: 10 } };
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: this.st === "empty" ? 0 : 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  scroller() { if (this._sc && this._sc.isConnected) return this._sc; let p = document.getElementById((this.navIds || [])[0]); while (p && p !== document.body) { const o = getComputedStyle(p).overflowY; if (o === "auto" || o === "scroll") break; p = p.parentElement; } this._sc = p && p !== document.body ? p : null; return this._sc; }
+  spy() { const ids = this.navIds; if (!ids || ids.length < 2 || !document.getElementById(ids[0])) return; const sc = this.scroller(); const top = sc ? sc.getBoundingClientRect().top : 0; let active = ids[0]; ids.forEach(id => { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top - top < 120) active = id; }); const rest = document.getElementById("jump-rest"); const scrolled = rest ? rest.getBoundingClientRect().bottom - top < 0 : false; if (active !== this.state.active || scrolled !== this.state.scrolled) this.setState({ active, scrolled }); }
+  componentDidMount() { this._spy = () => this.spy(); document.addEventListener("scroll", this._spy, true); setTimeout(this._spy, 300); if (this.preScroll) setTimeout(() => this.goTo(this.preScroll, true), 1200); }
+  componentWillUnmount() { document.removeEventListener("scroll", this._spy, true); }
+  goTo(id, instant) { const el = document.getElementById(id); if (!el) return; const sc = this.scroller(); const off = el.getBoundingClientRect().top - (sc ? sc.getBoundingClientRect().top : 0) - 64; const rm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; const behavior = instant || rm ? "auto" : "smooth"; if (sc) sc.scrollTo({ top: sc.scrollTop + off, behavior }); else window.scrollTo({ top: window.scrollY + off, behavior }); }
+  jumpNav(items, label, align) { const S = window.Syndra, h = React.createElement; if (!S || items.length < 2) return { rest: null, float: null };
+    const act = items.some(i => i.id === this.state.active) ? this.state.active : items[0].id, idx = items.findIndex(i => i.id === act), up = !!this.state.scrolled;
+    const go = (it) => (e) => { if (e) e.preventDefault(); this.setState(s => ({ flash: { id: it.id, n: ((s.flash || {}).n || 0) + 1 } })); it.go(); };
+    const dot = (it) => it.tone ? h(S.StatusDot, { tone: it.tone }) : null;
+    const rest = h("nav", { id: "jump-rest", "aria-label": label, style: { display: "flex", flexWrap: "wrap", gap: 8, marginLeft: align === "start" ? 0 : "auto" } }, items.map(it => h("a", { key: it.id, href: "#" + it.id, onClick: go(it), style: { textDecoration: "none", color: "inherit", borderRadius: "var(--radius-pill)" } }, h(S.Chip, { className: "gap-2" }, dot(it), it.label, h("span", { className: "text-faint" }, it.count), h("span", { "aria-hidden": true, style: { color: "var(--faint)", fontSize: 12 } }, "↓")))));
+    const float = h("div", { "aria-hidden": !up, style: { position: "sticky", top: 0, zIndex: 5, height: 0, marginBottom: -(this.jnGap || 16) } }, h("nav", { "aria-label": label + " (while scrolling)", "aria-hidden": !up, style: { position: "absolute", top: 12, left: "50%", transform: "translate(-50%, " + (up ? "0" : "-8px") + ")", opacity: up ? 1 : 0, pointerEvents: up ? "auto" : "none", transition: up ? "opacity var(--duration-tint) var(--ease-tint), transform var(--duration-settle) var(--ease-settle)" : "opacity var(--duration-tint) var(--ease-tint), transform 0s linear var(--duration-tint)", display: "flex", gap: 2, padding: 4, borderRadius: "var(--radius-pill)", border: "1px solid var(--line-strong)", background: "var(--surface-1)", boxShadow: "var(--shadow-dialog)", whiteSpace: "nowrap", maxWidth: "calc(100% - 24px)", overflowX: "auto" } },
+      items.map((it, i) => { const on = it.id === act; return h("a", { key: it.id, href: "#" + it.id, tabIndex: up ? 0 : -1, "aria-current": on ? "location" : undefined, onClick: go(it), style: { display: "inline-flex", alignItems: "center", gap: 8, minHeight: 36, padding: "0 14px", borderRadius: "var(--radius-pill)", textDecoration: "none", fontSize: 13, fontWeight: 600, color: on ? "var(--ink)" : "var(--muted)", background: on ? "var(--surface-2)" : "transparent", transition: "background-color var(--duration-tint) var(--ease-tint), color var(--duration-tint) var(--ease-tint)" } }, dot(it), it.label, h("span", { style: { color: "var(--faint)", fontWeight: 500 } }, it.count), on ? null : h("span", { "aria-hidden": true, style: { color: "var(--faint)", fontSize: 12 } }, i < idx ? "↑" : "↓")); })));
+    return { rest, float }; }
+  foldS(open) { return open ? { fr: "1fr", op: 1, vis: "visible", trans: "grid-template-rows var(--duration-settle) var(--ease-settle), visibility 0s", opTrans: "opacity var(--duration-tint) var(--ease-tint) 140ms" } : { fr: "0fr", op: 0, vis: "hidden", trans: "grid-template-rows var(--duration-settle) var(--ease-settle) 120ms, visibility 0s linear 380ms", opTrans: "opacity var(--duration-tint) var(--ease-tint)" }; }
+  flashA(on, n) { return on ? (n % 2 ? "sy-flash-a" : "sy-flash-b") + " var(--duration-flash) ease-out 280ms both" : "none"; }
+  toggle(k) { this.setState(s => ({ open: Object.assign({}, s.open, { [k]: !s.open[k] }) })); }
+  more(k, n) { this.setState(s => ({ shown: Object.assign({}, s.shown, { [k]: s.shown[k] + n }), fresh: Object.assign({}, s.fresh, { [k]: s.shown[k] }) })); clearTimeout(this._fr); this._fr = setTimeout(() => this.setState({ fresh: {} }), 900); }
+  reset(k) { this.goTo("sec-" + k); setTimeout(() => this.setState(s => ({ shown: Object.assign({}, s.shown, { [k]: 10 }) })), 480); }
+  setSort(key) { this.setState(s => ({ sort: key, dir: s.sort === key ? -s.dir : 1, sortTick: (s.sortTick || 0) + 1 })); }
+  go(id, smooth) { const el = document.getElementById(id); if (!el) return; let p = el.parentElement; while (p && p !== document.body) { const o = getComputedStyle(p).overflowY; if ((o === "auto" || o === "scroll") && p.scrollHeight > p.clientHeight) break; p = p.parentElement; } const off = el.getBoundingClientRect().top - 64; if (p && p !== document.body) p.scrollTo({ top: p.scrollTop + off - p.getBoundingClientRect().top, behavior: smooth ? "smooth" : "auto" }); else window.scrollTo({ top: window.scrollY + off, behavior: smooth ? "smooth" : "auto" }); }
+  jump(e, k) { if (e && e.preventDefault) e.preventDefault(); this.setState(s => ({ flash: { id: "sec-" + k, n: ((s.flash || {}).n || 0) + 1 } })); if (!this.state.open[k]) this.toggle(k); setTimeout(() => this.goTo("sec-" + k), 0); }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded", sel = st === "selecting", opened = st === "opened", side = st === "side", col = st === "column", grouped = true, pills = false;
+    const known = !/^(loading|error)$/.test(st);
+    const list = known && !/^(empty|filtered|side)$/.test(st);
+    const PER = "route-users-id.dc.html?frame=default";
+    const T = (t) => ({ t, isText: true, isLink: false }), L = (t, href) => ({ t, href, isText: false, isLink: true });
+    const R = (x) => Object.assign({ hasBadge: false, badge: "", badgeTone: "neutral", hasSecond: false, second: "", ask: false, hasAnswer: false, answer: [], adoptOff: deg, isService: false, adoptVariant: "accent", checked: false, unchecked: true, bg: "transparent", edge: "transparent", expanded: false, evidenceLabel: "Show evidence" }, x);
+    let rows = [
+      R({ only: "z", kind: "unknown", days: 2, who: "Meera Pillai", holder: "Member", role: "Electronics bench · Operator", key: "electronics.operator", hasBadge: true, badge: "Safety-gated", badgeTone: "dangerSoft", edge: "var(--danger)",
+        reason: [T("Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra gives it: no direct access, no bundle, no automatic rule.")],
+        hasSecond: true, second: "Zitadel usually tells Syndra about a change like this on its own. This time nothing arrived, which is worth a look.",
+        ask: !opened, hasAnswer: opened, answer: [T("Made by "), L("Rohan Mehta", PER), T(" in the Zitadel console, 2 Oct 18:40.")],
+        found: "2 days", expanded: opened, evidenceLabel: opened ? "Hide evidence" : "Show evidence" }),
+      R({ only: "s", kind: "removed", days: 3, who: "Arjun Das", holder: "Member", role: "3D printers · Member", key: "printers.member",
+        reason: [T("Given by "), L("Kanishk Singh", PER), T(" for the capstone print run. Syndra applied it on 12 Sept and Zitadel accepted it. Zitadel still held it on 30 Sept and does not now, so somebody removed it there.")],
+        found: "3 days" }),
+      R({ only: "z", kind: "self", days: 4, who: "Unifi sync", holder: "Service account", role: "Laser bay · Door", key: "laserbay.door", hasBadge: true, badge: "Role unknown to Syndra",
+        reason: [T("Created in Zitadel on 1 Oct by this account itself. Nothing in Syndra gives it.")],
+        adoptOff: true, isService: !deg, adoptVariant: "ghost", found: "4 days" }),
+      R({ only: "z", kind: "person", days: 6, who: "Tomas Weber", holder: "No longer active", role: "Wood shop · Member", key: "wood.member",
+        reason: [T("Created in Zitadel on 28 Sept by "), L("Sai Khurana", PER), T(". Nothing in Syndra gives it.")],
+        found: "6 days" }),
+    ];
+    const PEND = "route-pending.dc.html?frame=default";
+    const many = /^many/.test(st), nav = "jump";
+    const MO = ["Jan","Feb","Mar","Apr","May","June","July","Aug","Sept","Oct","Nov","Dec"];
+    const dt = (d) => { const x = new Date(2026, 9, 5 - d); return x.getDate() + " " + MO[x.getMonth()]; };
+    const KIND = { unknown: "Maker not known", person: "Made in Zitadel by a person", self: "Made by the account itself", removed: "Removed from Zitadel", never: "Never reached Zitadel" };
+    if (many) {
+      const fn = ["Kavya","Daniel","Rhea","Nikhil","Zara","Ishaan","Ana","Vikram","Leela","Farhan","Sara","Dev","Tara","Yusuf","Neha","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ahmed","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
+      const RL = [["Wood shop · Member","wood.member"],["3D printers · Member","printers.member"],["Laser cutter · Operator","laser.operator"],["Studio · Booking","studio.booking"],["Bandsaw · Member","bandsaw.member"]];
+      const mk = ["Sai Khurana","Rohan Mehta","Lena Brandt"];
+      for (let i = 0; i < 109; i++) {
+        const k = i % 7 === 3 ? "unknown" : i % 23 === 5 ? "self" : "person", d = 7 + Math.floor(i * 31 / 109), r = RL[(i * 3) % RL.length], svc = k === "self";
+        rows.push(R({ only: "z", kind: k, days: d, who: svc ? ["Printer queue","Door sync","Kiosk bot"][i % 3] : fn[i % 16] + " " + ln[(i * 7) % 15], holder: svc ? "Service account" : "Member", role: r[0], key: r[1],
+          reason: k === "unknown" ? [T("Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra gives it: no direct access, no bundle, no automatic rule.")] : svc ? [T("Created in Zitadel on " + dt(d) + " by this account itself. Nothing in Syndra gives it.")] : [T("Created in Zitadel on " + dt(d) + " by "), L(mk[i % 3], PER), T(". Nothing in Syndra gives it.")],
+          ask: k === "unknown", adoptOff: svc || deg, isService: svc && !deg, adoptVariant: svc ? "ghost" : "accent", found: d + " days" }));
+      }
+      for (let i = 0; i < 8; i++) {
+        const k = i % 3 === 0 ? "never" : "removed", d = 4 + i * 3, r = RL[i % RL.length];
+        rows.push(R({ only: "s", kind: k, days: d, who: fn[15 - i] + " " + ln[(i * 4) % 15], holder: "Member", role: r[0], key: r[1],
+          reason: k === "never" ? [T("Given by "), L("Kanishk Singh", PER), T(" on " + dt(d + 2) + ". Zitadel has never been seen holding it, so the change most likely never went through. Check "), L("Pending changes", PEND), T(".")] : [T("Given by "), L("Kanishk Singh", PER), T(". Syndra applied it and Zitadel accepted it. Zitadel held it on " + dt(d) + " and does not now, so somebody removed it there.")],
+          found: d + " days" }));
+      }
+    }
+    const CAP = 10, so = this.state.sort, dir = this.state.dir;
+    const keyOf = { who: r => r.who, what: r => r.role, why: r => KIND[r.kind] };
+    const sorter = (x, y) => { let c = so === "found" ? x.days - y.days : keyOf[so](x).localeCompare(keyOf[so](y)); if (dir < 0) c = -c; return c || x.days - y.days; };
+    const runs = so === "what" || so === "why";
+    const chev = (open) => h("span", { "aria-hidden": true, style: { width: 28, height: 28, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", color: "var(--muted)" } }, h("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", style: { transition: "transform var(--duration-settle) var(--ease-settle)", transform: open ? "none" : "rotate(-90deg)" } }, h("path", { d: "M6 9l6 6 6-6" })));
+    const SEC = { z: { tone: "danger", title: "In Zitadel, not given by Syndra", hint: "They keep it until you decide" }, s: { tone: "warn", title: "Given by Syndra, gone from Zitadel", hint: "They no longer have it" } };
+    const groups = ["z", "s"].map(k => {
+      let rs = rows.filter(r => r.only === k).slice().sort(sorter);
+      if (sel && k === "z") rs = rs.map((r, i) => Object.assign({}, r, { checked: i === 1 || i === 2, unchecked: !(i === 1 || i === 2), bg: i === 1 || i === 2 ? "var(--accent-soft)" : "transparent" }));
+      const cnt = {}; if (runs) rs.forEach(r => { const v = keyOf[so](r); cnt[v] = (cnt[v] || 0) + 1; });
+      let prev = null; rs = rs.map(r => { const v = runs ? keyOf[so](r) : null; const o = Object.assign({}, r, { hasRun: runs && v !== prev, run: v, runCount: runs ? cnt[v] : 0 }); prev = v; return o; });
+      const fr = (this.state.fresh || {})[k], fl = this.state.flash || {};
+      const g = SEC[k], id = "sec-" + k, open = this.state.open[k], count = rs.length, shown = Math.min(this.state.shown[k], count), left = count - shown;
+      return Object.assign({}, g, { k, id, count, open, someChosen: sel && k === "z", noneChosen: !(sel && k === "z"), rows: rs.slice(0, shown).map((r, j) => Object.assign({}, r, { anim: fr != null && j >= fr ? "arrive var(--duration-arrive) var(--ease-settle) " + Math.min(j - fr, 5) * 40 + "ms both" : "none" })), fold: this.foldS(open), sortAnim: this.state.sortTick ? (this.state.sortTick % 2 ? "sy-resort-a" : "sy-resort-b") + " var(--duration-settle) var(--ease-settle) both" : "none", flashAnim: this.flashA(fl.id === id, fl.n || 0), oldest: Math.max.apply(null, rs.map(r => r.days)),
+        titleEl: h("button", { type: "button", "aria-expanded": open, "aria-controls": id, onClick: () => this.toggle(k), style: { display: "inline-flex", alignItems: "center", gap: 12, padding: 0, border: 0, background: "none", cursor: "pointer", font: "inherit", color: "inherit", textAlign: "left" } }, chev(open), g.title),
+        footText: left > 0 ? "Showing " + shown + " of " + count : "Showing all " + count,
+        canMore: left > 0, moreLabel: "Show " + Math.min(25, left) + " more", more: () => this.more(k, 25),
+        canAll: left > 25, all: () => this.more(k, count), canReset: shown > CAP, reset: () => this.reset(k),
+        jump: (e) => this.jump(e, k), _over: count > CAP });
+    }).filter(g => g.count);
+    groups.forEach((g, i) => { const o = groups[i === 0 ? 1 : 0]; const inl = nav === "inline" && !!o && o !== g;
+      g.hasNext = inl && i === 0 && g.open; g.nextId = o ? o.id : ""; g.nextLabel = o ? o.title + " · " + o.count + " ↓" : ""; g.nextJump = (e) => o && this.jump(e, o.k);
+      g.actionEl = inl && S ? h(S.CardHeaderLink, { href: "#" + o.id, onClick: (e) => this.jump(e, o.k) }, (i === 0 ? "" : "↑ ") + o.title + (i === 0 ? " ↓" : "")) : null;
+      g.hasFoot = g.open && (g._over || g.hasNext); });
+    const SH = (k) => ({ ["sort" + k]: () => this.setSort(k.toLowerCase()), ["rot" + k]: so === k.toLowerCase() && dir < 0 ? "rotate(180deg)" : "none", ["op" + k]: so === k.toLowerCase() ? 1 : 0, ["col" + k]: so === k.toLowerCase() ? "var(--ink)" : "inherit" });
+    const oldest = groups.length ? Math.max.apply(null, groups.map(g => g.oldest)) : 0;
+    const metaLink = (g) => h("a", { key: g.id, href: "#" + g.id, onClick: g.jump, style: { color: "var(--accent-text)", fontWeight: 600, textDecoration: "none" } }, g.count + " " + g.title.charAt(0).toLowerCase() + g.title.slice(1) + " ↓");
+    const metaEl = !S || !known || !groups.length || !list ? undefined : h(S.MetaRow, null, [rows.length + " to decide", "oldest found " + oldest + " days ago"]);
+    this.navIds = groups.map(g => g.id);
+    const SHORT = { z: "Not given by Syndra", s: "Gone from Zitadel" };
+    const jn = this.jumpNav(list && !sel ? groups.map(g => ({ id: g.id, label: SHORT[g.k], count: g.count, tone: g.tone, go: () => this.jump(null, g.k) })) : [], "Sections of drift", this.chips !== "right" ? "start" : undefined);
+    const sortKeys = Object.assign({}, SH("Who"), SH("What"), SH("Why"), SH("Found"));
+    const f = (frame, label, note, phone) => phone ? { src: "route-drift.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-drift.dc.html?frame=" + frame, label, note, w: 1440, h: 1150, boxW: 720, boxH: 575, scale: 0.5 };
+    const lap = (frame, label, note) => ({ src: "route-drift.dc.html?frame=" + frame, label, note, w: 920, h: 1000, boxW: 690, boxH: 750, scale: 0.75 });
+    const count = st === "empty" ? 0 : 4;
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stFiltered: st === "filtered", stDegraded: deg, stUnread: st === "unread", stSide: side, stChecked: st === "checked",
+      stList: list, showQueue: /^(loading|empty|filtered)$/.test(st), showBar: known && !side, selecting: sel,
+      colLayout: col, belowLayout: !col, groups, navRow: !!jn.float, navEl: jn.float, ...sortKeys, searchEl: S && known ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search drift by person or role" }) : null, itemNoun: ["row", "rows"],
+      meta: metaEl,
+      checkEl: S ? h(S.Button, { variant: "outline", disabled: deg || !known }, "Check Zitadel again") : null,
+      checkedOutcome: { kind: "no_change", message: "Checked again", detail: "The list below is what the check found just now." },
+      hasfreshEl: known && !side,
+      freshEl: S && known ? (() => { const rf = h(S.ReadFreshness, { state: deg ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 6 * 60000).toISOString(), current: true }, subject: "What Zitadel held" }); const lead = this.chips !== "right"; return h("span", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", width: "100%" } }, lead ? jn.rest : rf, lead ? h("span", { style: { marginLeft: "auto" } }, rf) : jn.rest); })() : null,
+      filtersEl: S && known ? h(S.FilterPanel, { activeCount: st === "filtered" ? 1 : 0, onClear: () => {} }, h(S.FilterField, { label: "Project" }, h(S.Select, { value: "", onChange: () => {}, "aria-label": "Filter by project" }, h("option", { value: "" }, "All projects")))) : null,
+      selectEl: S && list ? h(S.SelectModeToggle, { active: sel, onToggle: () => {} }) : null,
+      clearAction: { label: "Clear filters", onClick: () => {} },
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("default", "Default", "Four rows, a safety-gated one first with the danger edge. The reason gets the width; Adopt · Revoke · Owned elsewhere sit beneath it in the same order on every row (settled). Arjun's row tells the history of a grant somebody removed (#55). Meera's carries the two sentences of #59 and Who made it? (#58)."),
+          f("opened", "A row opened", "Who made it? answered for this row only, and Show evidence open: what a revoke costs her, what adopting records, and the Zitadel evidence. The name links to Meera's page, so it no longer doubles as the toggle."),
+          f("selecting", "Selecting", "Select turns on checkboxes. The bar counts rows and people, states the 500 ceiling, and says revoking is one row at a time where somebody would look for it (#61, #103)."),
+                    f("unread", "A system nobody could read", "The amber notice above the list says what is missing from it and why (#55). The rows below are still current."),
+          f("checked", "After Check Zitadel again", "A check is a read, so it reports No change and the list below is the new answer."),
+          f("filtered", "Filtered to nothing", "Nothing matching is not the same as nothing at all; Clear filters is the way back."),
+          f("empty", "Empty", "Everything is explained: the healthy dot, no count."),
+          f("loading", "Loading", "The title and tabs are known; no count, meta or freshness until the list is read."),
+          f("error", "Error", "The red notice in the list's place. Nothing was changed."),
+          f("degraded", "Zitadel not answering", "Last known rows with their age. Every answer pauses; the reasons stay readable."),
+        ] },
+        { title: "Long sections · 112 and 9 rows", frames: [
+          f("many", "Default: open, 10 a section", "Both sections open with 10 rows each. The page header names each section with its count; each is a link that takes you there. Click a section's heading to fold it; the chevron turns."),
+          f("many-more", "After Show 25 more", "Showing 35 of 112, with Show 25 more, Show all 112 and Back to 10. Back to 10 also brings you back to the section's heading, so the next section is just below it."),
+          f("many-fold", "First section folded", "Folded to its heading and count. The second section moves up beneath it. A link in the header opens a folded section on its way there."),
+          f("many-sort-why", "Sorted by why", "Clicking Why Syndra can't explain it groups the rows by reason, A to Z, each group with its count; within a group the newest is first. Clicking again reverses."),
+          f("many-sort-what", "Sorted by what they can get into", "The same for the role: every Wood shop · Member row together, newest first."),
+        ] },
+        { title: "Getting to a section", frames: [
+          f("many", "At rest: chips on the read line", "Beside the freshness strip, one chip per section: its dot, a short name, the count, and ↓, which says the chip takes you down the page. A folded section opens on the way."),
+          f("many-scrolled", "Scrolled: the floating pill", "Once the read line scrolls away, the same sections fade in as a pill at the top centre. The one you are in is filled; the others point ↑ or ↓ to where they are, so every item reads as a place to go."),
+        ] },
+        { title: "Laptop · 920", frames: [lap("default", "At laptop width", "Who, the role and Found keep their seats on one line; the reason and the three answers take the full width beneath. Nothing truncates.")] },
+        { title: "Phone · 390", frames: [f("default", "Phone", "Each row stacks: who, what, when found, then the reason in full and the three answers. Nothing folds away on this list (#88).", true)] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

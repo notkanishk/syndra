@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="TrueNAS board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /system/targets/[target]</span>
+    <h1 class="type-page-title" style="margin:0">A connected system</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">One connected system, drawn as TrueNAS. Four regions in a fixed order: whether changes can land, what is waiting on you, who has an account there, and what runs against it. The regions never move and keep their seat at zero; only their contents and one sentence under the title change. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#8</strong> the mappings line counts mappings, never people: nothing returns distinct people across roles · <strong style="color:var(--ink)">#23</strong> reached from Connected systems · <strong style="color:var(--ink)">#30</strong> each reading is a sentence that says which machine to look at · <strong style="color:var(--ink)">#56</strong> an unusable read is refused, never shown as an empty list · the manifest's "Stops and asks" is shown on every operation (board audit) · maintenance stays live in an outage, because Syndra sends it outside the pause.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Phase 2 · area 1</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">Owner, 8 Oct:</strong> one Zitadel project per system, chosen first (3a: violet panel, grey outline around what waits); a project serves one system; draining and read-only work before it. <strong style="color:var(--ink)">#11</strong> drawn: <em>paused after failures</em> is an amber Notice, worded as on Connected systems and Holds due, sending the reader to the Syndra server. Beside it, <em>not answering</em> sends them to TrueNAS. The two differ only in their Notice and the first reading; everything else shows last known data with its age. Amber, not red as the reply said: nothing is lost, and Syndra tries again by itself.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The touch-only region index goes: the read line's chips and the floating pill already do that job on every page with sections, at every width · maintenance buttons name their verb (Start draining…, Set read-only…, Make active) and the state reads as dot and word · the two health cards say who to look at in one closing clause, not a code · the request paths under each heading go · the decided finding uses the accent dot.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/system/targets/truenas" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ hasWarn }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+    <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+      <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">{{ warnTitle }}</span>
+      <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">{{ warnBody }}</p>
+    </div>
+  </div></sc-if>
+
+  
+
+  <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:12px">
+    <a href="route-systems.dc.html?frame=default" class="inline-flex min-h-11 items-center desktop:min-h-6" style="font-size:13.5px;font-weight:600"><span aria-hidden="true">←&nbsp;</span>Connected systems</a>
+    <x-import component-from-global-scope="Syndra.PageHeader" title="TrueNAS" meta="{{ meta }}" lede="{{ lede }}" hint-size="100%,120px"></x-import>
+  </div>
+
+
+  <sc-if value="{{ g3 }}" hint-placeholder-val="{{ false }}"><section id="project" aria-labelledby="p3-title" style="margin-bottom:12px;display:flex;flex-direction:column;gap:14px;padding:22px 24px 24px;border-radius:var(--radius-panel);border:1px solid var(--accent-line);background:var(--accent-soft);scroll-margin-top:16px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 20px">
+      <h2 id="p3-title" style="margin:0;display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--accent-text)"><x-import component-from-global-scope="Syndra.StatusDot" tone="accent" hint-size="8px,8px"></x-import>Choose TrueNAS's Zitadel project</h2>
+      <span aria-hidden="false" style="display:inline-flex;align-items:center;gap:10px;font-size:12.5px;font-weight:600;color:var(--accent-text)">Step 1 of 2<span aria-hidden="true" style="width:72px;display:flex;gap:4px"><span style="flex:1;height:4px;border-radius:var(--radius-pill);background:var(--accent)"></span><span style="flex:1;height:4px;border-radius:var(--radius-pill);background:var(--accent-line)"></span></span></span>
+    </div>
+    <div style="padding-left:18px;display:flex;flex-direction:column;gap:16px">
+      <p style="margin:0;max-width:72ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">Its roles decide who gets an account on TrueNAS, so nothing below can give anyone access until it is set. Next, you map those roles to TrueNAS groups.</p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px">
+        <div style="flex:0 1 360px;min-width:220px"><x-import component-from-global-scope="Syndra.Select" aria-label="Zitadel project" hint-size="100%,46px"><option>Choose a project…</option><option>Network storage · 4 roles</option><option>Fabrication · 6 roles</option><option>Wood shop · no roles yet</option><option disabled="{{ true }}">Laser Lab · used by Door controller</option></x-import></div>
+        <span style="flex:none;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="150px,46px">Use this project</x-import></span>
+      </div>
+      <span style="margin-top:-6px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">A project serves one system, so one already in use can't be picked. Changing it later means removing its mappings first.</span>
+    </div>
+  </section></sc-if>
+
+  <sc-if value="{{ g3set }}" hint-placeholder-val="{{ false }}"><section role="status" style="margin-bottom:12px;display:flex;flex-direction:column;gap:14px;padding:22px 24px 24px;border-radius:var(--radius-panel);border:1px solid var(--accent-line);background:var(--accent-soft)">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 20px">
+      <h2 style="margin:0;display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--ink)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="8px,8px"></x-import>TrueNAS uses Network storage.</h2>
+      <span aria-hidden="false" style="display:inline-flex;align-items:center;gap:10px;font-size:12.5px;font-weight:600;color:var(--accent-text)">Step 2 of 2<span aria-hidden="true" style="width:72px;display:flex;gap:4px"><span style="flex:1;height:4px;border-radius:var(--radius-pill);background:var(--accent)"></span><span style="flex:1;height:4px;border-radius:var(--radius-pill);background:var(--accent)"></span></span></span>
+    </div>
+    <div style="padding-left:18px;display:flex;flex-direction:column;gap:16px">
+      <p style="margin:0;max-width:72ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">Nobody's access changed: no role reaches TrueNAS yet. Map Network storage's roles to TrueNAS groups to give people accounts there.</p>
+      <a href="route-system-targets-id-mappings.dc.html?frame=none" style="align-self:flex-start;font-size:15px;font-weight:600;white-space:nowrap">Map its roles to TrueNAS groups →</a>
+    </div>
+  </section></sc-if>
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  <sc-if value="{{ showStrip }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,64px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 28px;padding:14px 20px">
+      <span style="flex:none;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Zitadel project</span><a href="route-projects-id.dc.html?frame=default" style="font-size:15px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Network storage</a></span>
+      <span style="flex:none;display:flex;flex-direction:column;gap:2px"><span class="type-label" style="color:var(--label)">Role mappings</span><span style="font-size:15px;color:var(--ink);white-space:nowrap">{{ stripMap }}</span></span>
+      <a href="route-system-targets-id-mappings.dc.html?frame={{ mapFrame }}" style="margin-left:auto;font-size:14.5px;font-weight:600;white-space:nowrap">{{ stripLink }}</a>
+    </div>
+  </x-import></sc-if>
+
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+    <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+      <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">This page for TrueNAS could not be read.</span>
+      <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. This says nothing about TrueNAS itself. Nothing was changed.</p>
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_8c21e4a7</span> · quote this if you ask for help</span></div>
+    </div>
+  </div></sc-if>
+
+  <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:16px">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 3 }}" avatar="{{ false }}" label="Loading whether changes can land" hint-size="100%,200px"></x-import></x-import>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,260px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" label="Loading accounts on TrueNAS" hint-size="100%,260px"></x-import></x-import>
+  </div></sc-if>
+
+  <sc-if value="{{ showPage }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:36px">
+    <div style="margin-top:{{ readTop }};display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding-left:20px">
+      <div style="flex:1 1 260px;min-width:260px"><x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ healthRead }}" subject="TrueNAS" hint-size="260px,24px"></x-import></div>
+      <sc-if value="{{ hasChips }}" hint-placeholder-val="{{ true }}"><nav aria-label="Regions of this page" style="margin-left:auto;display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ chips }}" as="c" hint-placeholder-count="3"><a href="#{{ c.id }}" style="flex:none;white-space:nowrap;text-decoration:none;color:inherit;border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Chip" class-name="gap-2" hint-size="130px,32px"><sc-if value="{{ c.dot }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import></sc-if>{{ c.label }}<span style="color:var(--faint)">{{ c.count }}</span><span aria-hidden="true" style="color:var(--faint);font-size:12px">↓</span></x-import></a></sc-for>
+      </nav></sc-if>
+    </div>
+
+    <section id="land" style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:4px;padding:0 4px"><h2 class="type-section-title" style="margin:0">Whether changes can land</h2><p style="margin:0;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted)">Two machines, kept apart: what Syndra can reach, and what TrueNAS says about itself. Each reading ends by saying which one to look at.</p></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,240px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Syndra's reach" hint-size="100%,56px"></x-import>
+          <sc-for list="{{ reach }}" as="r" hint-placeholder-count="3"><div class="row-divider" style="display:flex;gap:12px;padding:13px 20px;opacity:{{ r.op }}"><span style="padding-top:7px"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="7px,7px"></x-import></span><span style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:14.5px;font-weight:600">{{ r.word }}</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ r.text }} <span style="color:var(--ink)">{{ r.look }}</span></span></span></div></sc-for>
+        </x-import>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,240px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="What TrueNAS reports" note="{{ nasNote }}" hint-size="100%,56px"></x-import>
+          <sc-for list="{{ nas }}" as="r" hint-placeholder-count="4"><div class="row-divider" style="display:flex;gap:12px;padding:13px 20px;opacity:{{ r.op }}"><span style="padding-top:7px"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="7px,7px"></x-import></span><span style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-size:14.5px;font-weight:600">{{ r.word }}</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ r.text }} <span style="color:var(--ink)">{{ r.look }}</span></span></span></div></sc-for>
+        </x-import>
+      </div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:16px 20px 14px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Active</span><span style="font-size:14px;color:var(--muted)">TrueNAS takes reads and changes. Two states you can put it in instead:</span></div>
+        <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 20px"><span style="width:150px;flex:none"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="130px,34px">Start draining</x-import></span><span style="flex:1 1 320px;min-width:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><span style="color:var(--ink);font-weight:600">Lets calls already sent finish, and refuses new ones.</span> Use it before replacing TrueNAS's key or restarting it: once nothing is in flight, nothing can be cut off halfway.</span></div>
+        <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 20px"><span style="width:150px;flex:none"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="130px,34px">Set read-only</x-import></span><span style="flex:1 1 320px;min-width:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><span style="color:var(--ink);font-weight:600">Keeps answering reads and refuses every change.</span> This page stays current. Use it while you work on the NAS itself; members setting a password are told to try later.</span></div>
+        <div class="row-divider" style="padding:12px 20px;font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ maintNote }}</div>
+      </x-import>
+    </section>
+
+    
+
+    <div style="display:flex;flex-direction:column;gap:22px;border:{{ fBorder }};border-radius:var(--radius-card);padding:{{ fPad }}">
+    <sc-if value="{{ fenced }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;padding:2px 4px 4px">
+      <span style="display:inline-flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--ink)"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="8px,8px"></x-import>Waits for TrueNAS's Zitadel project</span>
+      <span style="font-size:15px;color:var(--muted)">Waiting on you, accounts and reconciliation open once it is set.</span>
+      <a href="#project" style="margin-left:auto;font-size:14.5px;font-weight:600;white-space:nowrap">Choose it above ↑</a>
+    </div></sc-if>
+    <div aria-disabled="{{ fenced }}" style="display:flex;flex-direction:column;gap:36px;opacity:{{ fOp }};pointer-events:{{ fPe }}">
+    <section id="waiting" style="display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px">
+      <div style="display:flex;flex-direction:column;gap:4px;padding:0 4px"><h2 class="type-section-title" style="margin:0">Waiting on you</h2><p style="margin:0;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted)">Differences Syndra will not settle by itself, an edited change record, or two of Syndra's own records disagreeing about who owns an account. Each needs a person to decide.</p></div>
+      <div style="">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px">
+        <sc-if value="{{ hasFinding }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 18px;padding:16px 20px;opacity:{{ staleOp }}">
+          <span style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:4px">
+            <span style="font-size:15px;font-weight:600;text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Aanya Rao</a>'s home folder moved on TrueNAS</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Syndra wants <span class="type-mono" style="color:var(--ink)">/mnt/tank/home/aanya.rao</span>. TrueNAS holds <span class="type-mono" style="color:var(--warn-text)">/mnt/tank/staff/aanya</span>. Pointing Syndra at the new folder and moving her files back are different decisions, so a reason is required either way.</span>
+            <span class="type-mono" style="font-size:12.5px;color:var(--faint)">f_2211 · found 40 min ago</span>
+          </span>
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="96px,34px">Decide</x-import>
+        </div></sc-if>
+        <sc-if value="{{ noFinding }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:16px 20px;font-size:14px;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ noFindingTone }}" hint-size="7px,7px"></x-import>{{ noFindingText }}</div></sc-if>
+      </x-import></div>
+    </section>
+
+    <section id="accounts" style="display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px">
+      <div style="display:flex;flex-direction:column;gap:6px;padding:0 4px"><h2 class="type-section-title" style="margin:0">Accounts on TrueNAS</h2><p style="margin:0;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted)">{{ census }}</p></div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+      <div style="padding-left:20px"><x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ invRead }}" subject="The account list" hint-size="260px,24px"></x-import></div>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Accounts Syndra manages" count="{{ boundCount }}" hint-size="100%,56px"></x-import>
+        <sc-if value="{{ hasBound }}" hint-placeholder-val="{{ true }}">
+          <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:220px;flex:none"><button type="button" aria-label="Sort by person" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink)">Person<span aria-hidden="true" style="font-size:11px">↑</span></button></span><span class="hidden tablet:block" style="flex:1 1 0;min-width:0">Account on TrueNAS</span><span class="hidden tablet:block" style="width:110px;flex:none;text-align:right"><button type="button" aria-label="Sort by since" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit">Since</button></span><span class="hidden desktop:block" style="width:260px;flex:none"></span></x-import>
+          <sc-for list="{{ bound }}" as="b" hint-placeholder-count="10"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:11px 20px;opacity:{{ staleOp }}">
+            <span style="width:220px;flex:none;display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Avatar" name="{{ b.who }}" hint-size="28px,28px"></x-import><a href="route-users-id.dc.html?frame=default" style="font-size:14.5px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ b.who }}</a></span>
+            <span style="flex:1 1 200px;min-width:0;font-size:13.5px;color:var(--muted)"><span class="type-mono" style="color:var(--ink)">{{ b.acct }}</span> · group {{ b.group }}</span>
+            <span style="width:110px;flex:none;text-align:right;font-size:13.5px;color:var(--muted)">{{ b.since }}</span>
+            <span style="width:260px;flex:none;display:flex;justify-content:flex-end;gap:8px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Place a hold</x-import><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="90px,34px">Revoke</x-import></span>
+          </div></sc-for>
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 20px"><span style="font-size:13.5px;color:var(--muted)">Showing 10 of 48</span><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Show 25 more</x-import><button type="button" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Show all 48</button></div>
+        </sc-if>
+        <sc-if value="{{ noBound }}" hint-placeholder-val="{{ false }}"><div style="padding:16px 20px;font-size:14px;line-height:1.55;color:var(--muted)">Nobody has an account here that Syndra manages. One appears for everyone who holds a mapped role, once a mapping exists.</div></sc-if>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Not made by Syndra" count="{{ 3 }}" note="Found on TrueNAS. Nothing is wrong until somebody decides." hint-size="100%,56px"></x-import>
+        <sc-for list="{{ unmanaged }}" as="u" hint-placeholder-count="3"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:12px 20px;opacity:{{ staleOp }}">
+          <span style="width:220px;flex:none" class="type-mono">{{ u.acct }}</span>
+          <span style="flex:1 1 260px;min-width:0;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ u.text }}</span>
+          <sc-if value="{{ u.canAdopt }}" hint-placeholder-val="{{ true }}"><span style="flex:none"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ actOff }}" hint-size="160px,34px">Assign to a person</x-import></span></sc-if>
+        </div></sc-for>
+        <div class="row-divider" style="padding:12px 20px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ adoptNote }}</div>
+      </x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,110px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Lost their reason" count="{{ 0 }}" hint-size="100%,56px"></x-import>
+        <div style="padding:0 20px 16px;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">None. When a role stops giving someone an account here, the account shows here, grouped by why: someone who left is housekeeping; someone whose role was deleted is locked out.</div>
+      </x-import></div>
+    </section>
+
+    <section id="runs" style="display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px">
+      <div style="display:flex;flex-direction:column;gap:4px;padding:0 4px"><h2 class="type-section-title" style="margin:0">What runs here</h2><p style="margin:0;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted)">What the TrueNAS add-on says it can do, and the reconciliation that calls it on a schedule.</p></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="What it can do" count="{{ 6 }}" hint-size="100%,56px"></x-import>
+          <sc-for list="{{ ops }}" as="o" hint-placeholder-count="6"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:11px 20px"><span style="flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px">{{ o.text }}</span><span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ o.key }}</span></span><span style="font-size:13px;font-weight:600;color:{{ o.ink }}">{{ o.mode }}</span></div></sc-for>
+        </x-import>
+        <div style=""><x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="Reconciliation" hint-size="100%,56px"></x-import>
+          <div style="padding:0 20px 18px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+            <p style="margin:0;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ recText }}</p>
+            <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ actOff }}" hint-size="130px,34px">Reconcile now</x-import>
+            <span style="font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ recHint }}</span>
+          </div>
+        </x-import></div>
+      </div>
+    </section>
+    </div></div>
+  </div></sc-if>
+</div>
+
+<sc-if value="{{ stAdopt }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="adopt-title" hint-size="560px,760px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Assign kiosk to a person" title-id="adopt-title" lede="kiosk becomes the account of the person you choose. Everything it already holds on TrueNAS is theirs from that moment. There is no undo, and none that gives the data back." hint-size="100%,110px"></x-import>
+  <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <x-import component-from-global-scope="Syndra.FieldLabel" html-for="adopt-q" hint-size="60px,18px">Person</x-import>
+      <x-import component-from-global-scope="Syndra.Input" id="adopt-q" default-value="aan" placeholder="Search by name or email" aria-label="Search people by name or email" hint-size="100%,46px"></x-import>
+      <div role="radiogroup" aria-label="People matching aan" style="display:flex;flex-direction:column;gap:6px">
+        <sc-for list="{{ adoptPeople }}" as="p" hint-placeholder-count="3">
+          <div role="radio" aria-checked="{{ p.on }}" aria-disabled="{{ p.disabled }}" style="display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 12px;border-radius:12px;border:1px solid {{ p.edge }};background:{{ p.bg }};cursor:{{ p.cursor }};opacity:{{ p.op }}">
+            <span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid {{ p.seatEdge }};background:{{ p.seatBg }}"><span style="width:8px;height:8px;border-radius:var(--radius-pill);background:{{ p.dot }}"></span></span>
+            <x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="34px,34px"></x-import>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600">{{ p.name }}</span><span style="font-size:12.5px;color:var(--muted)">{{ p.sub }}</span><span style="font-size:12.5px;color:var(--faint)">{{ p.email }}</span></span>
+            <span style="font-size:12.5px;color:var(--faint);text-align:right">{{ p.note }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;border-radius:var(--radius-inner);border:1px solid var(--line-strong)">
+      <div style="display:flex;gap:14px;padding:12px 16px"><span style="width:72px;flex:none;font-size:12.5px;font-weight:600;color:var(--label)">Changes</span><span style="font-size:14px;line-height:1.5">kiosk belongs to <strong style="font-weight:600">Aanya Rao</strong>, for good.</span></div>
+      <div class="row-divider" style="display:flex;gap:14px;padding:12px 16px"><span style="width:72px;flex:none;font-size:12.5px;font-weight:600;color:var(--label)">Stays</span><span style="font-size:14px;line-height:1.5;color:var(--muted);text-wrap:pretty">Its home folder, its shares and its group memberships, as they are. The next time Syndra brings accounts in line, it adds what Aanya's roles give her on top.</span></div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ConfirmByTyping" expected="kiosk" noun="account name" value="kiosk" on-change="{{ noop }}" hint-size="100%,90px"></x-import>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="220px,40px">Assign kiosk to Aanya Rao</x-import></x-import>
+</x-import>
+</sc-if>
+
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: 2, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const st = this.st, ago = (m) => new Date(Date.now() - m * 60000).toISOString();
+    const g3 = st === "noproject", g3set = st === "projectset", preSet = g3;
+    const paused = st === "paused", quiet = st === "quiet", fresh = st === "fresh" || g3 || g3set, stale = paused || quiet;
+    const known = !/^(loading|error)$/.test(st);
+    const lastAt = paused ? "09:02, 12 minutes ago" : "08:33, 41 minutes ago";
+    const first = paused ? { tone: "warn", word: "Paused after failures", text: "Since 09:02. Changes for TrueNAS wait until calls resume.", look: "Look at the Syndra server." }
+      : quiet ? { tone: "warn", word: "Not answering", text: "Since 08:33. Changes for TrueNAS wait until it answers.", look: "Look at TrueNAS." }
+      : { tone: "healthy", word: "Answering", text: "Accepting changes. Nothing is in flight." };
+    const so = stale ? 0.62 : 1;
+    const reach = [first,
+      { tone: "warn", word: "Key expiry not recorded", text: "The key Syndra uses to reach TrueNAS can expire without Syndra knowing. The day it does, TrueNAS looks like an outage.", look: "Look at the Syndra server.", op: so },
+      { tone: "warn", word: "Two shares not audited", text: "An activity report for someone on scratch or archive can only come back empty.", look: "Look at TrueNAS.", op: so },
+    ].map((r, i) => Object.assign({ look: "", op: 1 }, r, i === 0 ? { op: 1 } : {}));
+    const nas = [
+      { tone: "warn", word: "Uncorrectable error on /dev/sde", text: "TrueNAS raised this on 14 Sept and has not cleared it. These are its words, not Syndra's.", look: "Look at TrueNAS." },
+      { tone: "healthy", word: "Pool tank", text: "Online. 2.1 TB free of 7.3 TB." },
+      { tone: "healthy", word: "File sharing", text: "Running." },
+      { tone: "neutral", word: "nas-01.makerspace.lan", text: "Up 41 days." },
+    ].map(r => Object.assign({ look: "", op: so }, r));
+    const people = ["Aanya Rao", "Arjun Kapoor", "Diya Menon", "Ishita Banerjee", "Kabir Sethi", "Meera Pillai", "Priya Nair", "Rohan Mehta", "Sai Khurana", "Vikram Rao"];
+    const since = ["12 Aug", "3 Sept", "12 Aug", "21 July", "30 Sept", "12 Aug", "4 June", "18 Sept", "4 June", "1 Oct"];
+    const bound = fresh ? [] : people.map((who, i) => ({ who, acct: who.toLowerCase().replace(" ", "."), group: i % 3 === 2 ? "archive-admins" : "fabrication", since: since[i] }));
+    const f = (frame, label, note, phone) => phone ? { src: "route-system-targets-id.dc.html?frame=" + frame, label, note, w: 390, h: 2600, boxW: 390, boxH: 1300, scale: 1 } : { src: "route-system-targets-id.dc.html?frame=" + frame, label, note, w: 1440, h: 2560, boxW: 720, boxH: 1280, scale: 0.5 };
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData,
+      stLoading: st === "loading", stError: st === "error", known, stale, noop: () => {}, stAdopt: st === "adopt",
+      adoptPeople: [["Aanya Rao", "Research assistant · Mechanical Engineering", "aanya.rao@makerspace.edu", "", true], ["Aanand Iyer", "Student staff", "aanand.iyer@makerspace.edu", "", false], ["Saanvi Shah", "Lab technician · Design", "saanvi.shah@makerspace.edu", "Already has saanvi on TrueNAS", false, true]].map(([name, sub, email, note, on, blocked]) => ({ name, sub, email, note, on, op: blocked ? 0.55 : 1, cursor: blocked ? "default" : "pointer", disabled: blocked ? "true" : "false", edge: on ? "var(--accent-line)" : "transparent", bg: on ? "var(--accent-soft)" : "transparent", seatEdge: on ? "var(--accent)" : "var(--line-strong)", seatBg: on ? "var(--accent)" : "transparent", dot: on ? "var(--accent-ink)" : "transparent" })),
+      showPage: known, g3, g3set, fenced: g3, fBorder: g3 ? "1.5px solid var(--line-strong)" : "0", fPad: g3 ? "22px 22px 26px" : "0", fOp: g3 ? 0.4 : 1, fPe: g3 ? "none" : "auto",
+      hasChips: !g3, showStrip: known && !g3 && !g3set, readTop: known && !g3 && !g3set ? "2px" : "-8px", stripMap: fresh ? "None yet" : "2 roles to TrueNAS groups · version 4", stripLink: fresh ? "Add the first mapping →" : "Mappings →", noFindingTone: "healthy", actOff: stale || g3, hasCensusLink: !g3,
+      hasWarn: stale,
+      warnTitle: paused ? "Syndra has paused calls to TrueNAS." : "TrueNAS isn't answering.",
+      warnBody: paused ? "It stopped after repeated failures and will try again by itself. This does not mean TrueNAS is down: look at the Syndra server. Changes for TrueNAS wait until calls resume, and nothing is lost. Below is what TrueNAS held at " + lastAt + "." : "Syndra last heard from it at " + lastAt + " and keeps trying by itself. Look at TrueNAS, not at Syndra. Changes for TrueNAS wait until it answers, and nothing is lost. Below is what it held then.",
+      meta: !known ? "truenas" : preSet ? "TrueNAS SCALE 24.10 · network storage · no Zitadel project yet" : window.Syndra ? React.createElement(window.Syndra.MetaRow, null, [React.createElement("span", { key: "v", style: { whiteSpace: "nowrap" } }, "TrueNAS SCALE 24.10"), React.createElement("span", { key: "n", style: { whiteSpace: "nowrap" } }, "network storage"), React.createElement("span", { key: "i", style: { whiteSpace: "nowrap" } }, "truenas")]) : "",
+      lede: st === "loading" || st === "error" ? "Network storage members keep their files on, joined to Syndra by an add-on." : preSet ? "Network storage members keep their files on, joined to Syndra by an add-on. It answers, and needs its Zitadel project before anything else." : fresh ? "Network storage members keep their files on, joined to Syndra by an add-on. It answers, and no role reaches it yet." : stale ? "Network storage members keep their files on, joined to Syndra by an add-on. One thing is waiting on you, as last read." : "Network storage members keep their files on, joined to Syndra by an add-on. It answers and accepts changes. One thing is waiting on you.",
+      healthRead: { readAt: stale ? ago(paused ? 12 : 41) : ago(0.05), current: !stale },
+      invRead: { readAt: stale ? ago(paused ? 12 : 41) : ago(2), current: !stale },
+      chips: [{ id: "waiting", label: "Waiting on you", count: fresh ? 0 : 1, dot: !fresh }, { id: "accounts", label: "Accounts", count: fresh ? 3 : 51, dot: false }, { id: "runs", label: "What runs here", count: 6, dot: false }],
+      reach, nas, nasNote: stale ? "Last known, " + (paused ? "09:02" : "08:33") : "All read",
+      maintNote: preSet ? "Both work before a project is set: they act on the add-on, not on anyone's access. Each asks why, and Make active undoes it." : paused ? "Both still work while calls are paused: Syndra sends them outside the pause, so a refusal is never mistaken for TrueNAS going quiet. Each asks why." : quiet ? "Both still work. If TrueNAS refuses, the state stays Active and this says so. Each asks why." : "Neither takes anyone's access away. Each asks why, since the next person to read it is not you, and Make active undoes it.",
+      hasFinding: known && !fresh, noFinding: fresh, noFindingText: "Nothing is waiting on you.", staleOp: stale ? 0.62 : 1,
+      census: g3 ? "Accounts wait for a Zitadel project, then for a mapping from one of its roles to a TrueNAS group." : fresh ? "No role in Network storage reaches TrueNAS yet, so Syndra gives nobody an account here." : "Two roles in Network storage reach TrueNAS through mappings: everyone who holds one gets an account here. Changing a mapping moves access for all of them, so mappings have their own page, linked above.",
+      censusLink: fresh ? "Add the first mapping →" : "Mappings →", mapFrame: fresh ? "none" : "default",
+      bound, hasBound: !fresh, noBound: fresh, boundCount: fresh ? 0 : 48,
+      unmanaged: [
+        { acct: "root", text: "Built in. Syndra will not take charge of the administrator account it needs to manage the others.", canAdopt: false },
+        { acct: "kiosk", text: "Made by hand on TrueNAS · last signed in 5 weeks ago", canAdopt: true },
+        { acct: "svc-backup", text: "Made by hand on TrueNAS · last signed in 3 days ago", canAdopt: true },
+      ],
+      adoptNote: g3 ? "Assigning waits for a Zitadel project: an assigned account takes its person's access from that project's roles." : stale ? "Assigning waits for a current read of TrueNAS: it ties an account and its files to a person, and there is no undo." : "Assigning ties an account and its files to a person, and there is no undo. Nothing on the account changes now; Syndra adds that person's access to it the next time it brings accounts in line.",
+      ops: [
+        { key: "account.provision", text: "Creates an account", mode: "Runs by itself" },
+        { key: "account.converge", text: "Brings an account in line", mode: "Runs by itself" },
+        { key: "account.release", text: "Lets go of an account, keeping it", mode: "Runs by itself" },
+        { key: "account.purge", text: "Deletes an account and its files", mode: "Stops and asks" },
+        { key: "credential.set", text: "Sets a member's password, never logged", mode: "Runs by itself" },
+        { key: "activity.get", text: "Reads a share's activity", mode: "Runs by itself" },
+      ].map(o => Object.assign(o, { ink: o.mode === "Stops and asks" ? "var(--warn-text)" : "var(--muted)" })),
+      recText: fresh ? "Reconciliation compares TrueNAS with what Syndra says it should hold, every six hours. There is nothing to compare yet." : paused ? "Reconciliation compares TrueNAS with what Syndra says it should hold, every six hours. The last pass, at 05:10, found 48 accounts in line. The next waits until calls resume." : quiet ? "Reconciliation compares TrueNAS with what Syndra says it should hold, every six hours. The last pass, at 05:10, found 48 accounts in line. The next waits until TrueNAS answers." : "Reconciliation compares TrueNAS with what Syndra says it should hold, every six hours. The last pass, 4 hours ago, found 48 accounts in line and left one difference for you.",
+      recHint: g3 ? "Reconcile now waits for a Zitadel project too." : stale ? "Reconcile now waits too: it reads TrueNAS first." : "Reads TrueNAS now and sends anything already owed, instead of waiting for the next pass. Another pass will not settle what is waiting on you.",
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("adopt", "Assign an account to a person (#57)", "Rung 3: typing the account name arms the button. The button is violet, not red: it gives an account to someone, and red is kept for taking access away. The built panel asked for the person's Syndra ID, a long code; here the person is found by name or email and chosen with the selection seat, with their email and team to tell namesakes apart. Two lines say what changes and what stays. Each match shows title and team, then email, so namesakes can be told apart; an empty team is left out. Someone who already has an account on TrueNAS can't be chosen, and says which."),
+          f("default", "Default — answering", "Under the title, a thin grey card holds the system's setup: its Zitadel project, its role mappings, and Mappings →, the one way to that page. The read line says when TrueNAS last answered, with a chip per region. Two readings are amber on a healthy system: each is an assumption that will cost an afternoon the day it breaks, and each says which machine to look at. One finding waits on you; 48 accounts are managed, 3 were made by hand, none lost their reason."),
+          f("paused", "Paused after failures (#11)", "Syndra's breaker is open. One amber Notice, worded as on Connected systems: Syndra stopped, tries again by itself, look at the Syndra server, nothing lost. Every region shows what it last held, dimmed and dated. Maintenance stays live and says why. Adopt and Reconcile now wait, each with its reason in place."),
+          f("quiet", "Not answering", "The same page when TrueNAS is the one gone quiet. Only the Notice and the first reading change, and both send the reader to TrueNAS. Telling these two apart is the whole of what this pair of frames is for."),
+          f("fresh", "Nothing reaches it yet", "Registered and answering, no mapping. Every region keeps its seat at zero. The only way on is Add the first mapping →. The three accounts made by hand are still listed: they exist whether or not a role does."),
+          f("loading", "Loading", "Title and lede are known from the link; no reading, count or age until each read answers."),
+          f("error", "Error", "Syndra's own server failed, not TrueNAS: the Notice says so, and that nothing was changed."),
+        ] },
+        { title: "Before a project is set · 3a, picked 8 Oct · shown until the project is set, then never again", frames: [
+          f("noproject", "No project yet", "The violet panel is the one thing to do: dot, title, Step 1 of 2, the reason, the picker and the page's only filled button. What TrueNAS reports, draining and read-only stay live. Everything that waits is greyed whole inside one grey outline, and one line at its top says what it waits for and links up. The chips go: there is nowhere to go yet."),
+          f("projectset", "Project chosen", "Seen once, right after Use this project. The panel becomes its result in place, step 2 of 2, with the next step as its one link. The outline and its line fade; the regions come up to full strength without moving. On every later visit the panel's seat holds a thin grey card: the project, how many roles are mapped, and Mappings →."),
+        ] },
+        { title: "Phone · 390", frames: [
+          f("noproject", "Phone — no project yet", "The panel stacks: title, step, reason, the picker full width, then Use this project. The outline's line wraps under its heading.", true),
+          f("default", "Phone", "The two health cards stack; rows wrap to name, then account, then actions. The read line's chips are the way to each region, as on every page with sections, so no separate index.", true),
+          f("paused", "Phone — paused", "The Notice comes first, then the same last-known page.", true),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

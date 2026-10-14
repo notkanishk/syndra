@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Shell board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Shell · every route · rows 17 and 18</span>
+    <h1 class="type-page-title" style="margin:0">The account, and the member's rail</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">The header holds two controls at every width: the view switch for operators, and the account. Everything about you and this device sits behind the account, so it is reached the same way on a phone, a tablet and a desk. Each frame is the real shell; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Phase 2 · area 2 · #17</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Kept as built. The member row is <strong style="color:var(--ink)">Network storage</strong> at <span class="type-mono">/storage</span>: a member is looking for their files, not for TrueNAS, and the row never moves as roles change. If a second storage system ever joins, it becomes a second section on that one page, not a second row. One row for one job.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Phase 2 · area 2 · #18</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Kept as built, layout and all (owner, 9 Oct): one account control at every width, with appearance, the install offer and sign-out inside it. Sign-out sits below a hairline with its consequence written under it. The install offer appears only when the browser can install, so it is found on purpose, never dismissed by reflex.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Owner, 9 Oct</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The sheet stays as built: Appearance as a row that flips, Install as a row, Sign out below the hairline. The member's storage page, which this board showed empty, is drawn in full on <a href="route-storage.dc.html">route-storage</a>.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:6px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="{{ pageTitle }}" lede="{{ pageLede }}" hint-size="100%,120px"></x-import>
+</div>
+
+<sc-if value="{{ proposed }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="acct-title" hint-size="420px,460px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Account" title-id="acct-title" hint-size="100%,72px"></x-import>
+  <div style="padding:0 24px 8px;display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:center;gap:12px"><x-import component-from-global-scope="Syndra.Avatar" name="Kanishk Singh" size="list" class-name="h-[44px] w-[44px] text-[15px]" hint-size="44px,44px"></x-import><span style="min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px;font-weight:600">Kanishk Singh</span><span style="font-size:13px;color:var(--muted)">kanishk@makerspace.edu</span></span></div>
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="90px,18px">Appearance</x-import><x-import component-from-global-scope="Syndra.Segmented" label="Appearance" value="{{ theme }}" on-change="{{ setTheme }}" options="{{ themeOpts }}" hint-size="200px,44px"></x-import></div>
+    <sc-if value="{{ canInstall }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px"><span style="flex:none;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="140px,34px">Install as an app</x-import></span><span style="font-size:13px;color:var(--muted)">Adds a home-screen icon.</span></div></sc-if>
+  </div>
+  <div style="margin-top:12px;padding:16px 24px 22px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">
+    <x-import component-from-global-scope="Syndra.Button" variant="outline" class-name="w-full" hint-size="100%,44px">Sign out</x-import>
+    <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">Signing out signs you out in every open tab. You stay signed in for weeks otherwise, so there is no need to do this at the end of each visit.</p>
+  </div>
+</x-import>
+</sc-if>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "built";
+    this.state = { theme: "dark" };
+    const member = /^member/.test(this.st);
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "basic"); } catch (e) {} }
+    this.session = member
+      ? { id: "u7", name: "Aanya Rao", email: "aanya.rao@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "AR", role: "user", sessionType: "demo" }
+      : { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: 2, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  componentDidMount() {
+    if (!/^built/.test(this.st)) return;
+    let n = 0;
+    const tick = () => {
+      const b = document.querySelector('button[aria-haspopup="dialog"]');
+      if (b) { b.click(); return; }
+      if (n++ < 100) setTimeout(tick, 80);
+    };
+    setTimeout(tick, 200);
+  }
+  renderVals() {
+    const st = this.st, member = /^member/.test(st);
+    const f = (frame, label, note, phone) => phone ? { src: "shell-account.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "shell-account.dc.html?frame=" + frame, label, note, w: 1440, h: 900, boxW: 720, boxH: 450, scale: 0.5 };
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      pathname: member ? "/storage" : "/",
+      pageTitle: member ? "Network storage" : "Home",
+      pageLede: member ? "Where your files live, and how to connect to them." : "What needs you today.",
+      proposed: /^proposed/.test(st), canInstall: true,
+      theme: this.state.theme, setTheme: (v) => this.setState({ theme: v }),
+      themeOpts: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }],
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("built", "As built", "The account chip, avatar and name, beside the view switch. Its sheet: who you are; Appearance as a row that flips on tap; Install as an app, only when the browser offers it; Sign out below a hairline, with what it does underneath."),
+          Object.assign(f("member", "Member · #17", "The member rail: My access, Requests, Network storage. Named for what it holds, present for every member whatever they can reach; the page answers whether they have storage. Its states are on route-storage."), { src: "route-storage.dc.html?frame=ready", h: 900 }),
+        ] },
+        { title: "Phone · 390", frames: [
+          f("built-phone", "Phone · as built", "The avatar alone in the header; the same sheet from the bottom. Sign-out never stands in the header or the tab bar, one mis-tap from a destination.", true),
+          Object.assign(f("member-phone", "Phone · member", "Three tabs, Network storage last.", true), { src: "route-storage.dc.html?frame=ready" }),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

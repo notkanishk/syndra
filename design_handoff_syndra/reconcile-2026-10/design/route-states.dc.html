@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="States board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Area 14 · Cross-cutting · #96–111</span>
+    <h1 class="type-page-title" style="margin:0">States and language</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">What every screen shares: how a result is reported, the Notices for a lost network and for sample data, the pages for when the app itself fails, and the words that carry their own meaning. Most rows are settled and already followed on every board. This board draws the five nobody drew, and the owner's two rulings of 13 Oct. Open a frame alone with <span class="type-mono">?frame=</span>.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Picked · owner, 13 Oct</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#96</strong> the way out of a dialog reads Close, <a href="#96b">96b</a> · <strong style="color:var(--ink)">N23</strong> Zitadel down shows the last known state, never sample data; with nothing read yet, nothing is shown.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Drawn here, by settled rules</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#97</strong> sample data as an amber Notice · <strong style="color:var(--ink)">#98</strong> no network as the neutral Notice · <strong style="color:var(--ink)">#101</strong> the app's own error and 404 · <strong style="color:var(--ink)">#106</strong> a Term, open · <strong style="color:var(--ink)">#107</strong> nothing readable under 12.5px.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled, followed on every board</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#99</strong> a failed read is never zero · <strong style="color:var(--ink)">#100</strong> the rehearsal's steps · <strong style="color:var(--ink)">#102</strong> describeFailure · <strong style="color:var(--ink)">#103</strong> the 500 ceiling · <strong style="color:var(--ink)">#104</strong> dialogs become their result · <strong style="color:var(--ink)">#105</strong> the copy guide · <strong style="color:var(--ink)">#108</strong> one type scale · <strong style="color:var(--ink)">#109</strong> button roles · <strong style="color:var(--ink)">#110</strong> one FilterBar · <strong style="color:var(--ink)">#111</strong> one date style.</p></div>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+  <section data-screen-label="{{ g.title }}" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:960px">
+      <h2 class="type-section-title" style="margin:0">{{ g.title }}</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ g.note }}</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="2">
+        <figure id="{{ f.id }}" data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-card);border:{{ f.border }};background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" loading="lazy" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:5px;max-width:{{ f.boxW }}px">
+            <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><sc-if value="{{ f.hasBadge }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:{{ f.badgeBg }};color:{{ f.badgeInk }};font-size:12.5px">{{ f.badge }}</span></sc-if><span style="font-size:15px;font-weight:600">{{ f.label }}</span><sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 13 Oct</span></sc-if></span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span>
+          </figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+
+  <sc-if value="{{ showOffline }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--line-strong);background:var(--surface-2)">
+      <span aria-hidden="true" style="margin-top:7px;width:8px;height:8px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--ink)">No network connection.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">What you see is the last thing Syndra loaded, and it may be out of date. You can't make changes until the connection is back. Anything you try is stopped before it is sent, so nothing is sent twice.</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">Everyone below is real, read 14 minutes ago, and may have changed since. Giving and revoking access is paused until Zitadel answers.</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showNever }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering, and Syndra hasn't read it yet.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">There is nothing to show until it answers. This page tries again every minute on its own, and giving and revoking access waits until then.</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showSample }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span aria-hidden="true" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0;flex:1">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">38 things on these screens are sample data.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">People and projects are real. Some bundles, rules, access and history are sample data, and nothing else on screen tells them apart, so treat anything you can't confirm as sample until it's cleared.</p>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;max-width:86ch">
+          <button type="button" aria-expanded="{{ cmdOpen }}" onClick="{{ toggleCmd }}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:8px;padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:14px;font-weight:600;color:var(--accent-text);min-height:32px">For whoever runs the Syndra server<span aria-hidden="true">{{ cmdArrow }}</span></button>
+          <sc-if value="{{ cmdOpen }}" hint-placeholder-val="{{ false }}">
+            <p style="margin:0;max-width:74ch;font-size:13.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">Sample data is switched off, so what remains is left over from an earlier run. Switching it off never removes what was already written.</p>
+            <x-import component-from-global-scope="Syndra.CommandBlock" tone="warn" command="make reset-demo-data" caption="Run this on the server that hosts Syndra. It prints what it would delete and stops. Add APPLY=1 to delete." steps="{{ cmdSteps }}" hint-size="100%,200px"></x-import>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ fNeverPage }}" hint-placeholder-val="{{ false }}">
+    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="People" lede="Everyone Syndra knows, and what each can use. Open a person to see and change their access; select several to change them together." hint-size="100%,96px"></x-import></div>
+    <x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" hint-size="100%,48px"></x-import>
+  </sc-if>
+
+  <sc-if value="{{ fPeople }}" hint-placeholder-val="{{ false }}">
+    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="People" meta="248 people · 12 with access expiring inside 30 days" lede="Everyone Syndra knows, and what each can use. Open a person to see and change their access; select several to change them together." hint-size="100%,110px"></x-import></div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" hint-size="100%,48px"></x-import>
+        <x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ readState }}" subject="The people list" hint-size="100%,24px"></x-import>
+      </div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+        <sc-for list="{{ people }}" as="p" hint-placeholder-count="4">
+          <div class="row-divider" style="display:flex;align-items:center;gap:18px;min-height:60px;padding:14px 20px;flex-wrap:wrap">
+            <span style="display:flex;align-items:center;gap:12px;width:250px;min-width:180px"><x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="34px,34px"></x-import><span style="display:flex;flex-direction:column;min-width:0"><a href="route-users-id.dc.html?frame=default" style="font-size:15px;font-weight:600;color:var(--ink)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.name }}</a><span style="font-size:12.5px;color:var(--faint)">{{ p.sub }}</span></span></span>
+            <span style="flex:1;min-width:170px;font-size:14px;color:var(--muted)">{{ p.access }}</span>
+          </div>
+        </sc-for>
+      </x-import>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ fDialog }}" hint-placeholder-val="{{ false }}">
+    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Rohan Mehta" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
+    <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="m-give" hint-size="100%,420px">
+      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-give" title="Give Rohan Mehta a role" hint-size="100%,60px"></x-import>
+      <div style="padding:0 24px 4px;display:flex;flex-direction:column;gap:10px">
+        <x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ outcome }}" hint-size="100%,90px"></x-import>
+        <a href="route-pending.dc.html?frame=default" style="font-size:14px;font-weight:600;min-height:32px;display:inline-flex;align-items:center;align-self:flex-start">Waiting for you to send →</a>
+      </div>
+      <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,80px">
+        <x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="100px,44px">{{ closeLabel }}</x-import>
+      </x-import>
+    </x-import>
+  </sc-if>
+
+  <sc-if value="{{ fError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft);max-width:760px">
+      <span aria-hidden="true" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0;flex:1">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">This page couldn't be shown.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">Something in the page itself failed, not something you did. It happened while showing you a screen, not while saving anything. Nothing was changed.</p>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;max-width:420px">
+          <span class="type-label" style="color:var(--label)">Reference · quote this if you ask for help</span>
+          <x-import component-from-global-scope="Syndra.CopyableValue" label="Reference" value="3141592653" hint-size="100%,52px"></x-import>
+        </div>
+        <a href="route-home.dc.html?frame=default" style="margin-top:8px;font-size:14px;font-weight:600;min-height:32px;display:inline-flex;align-items:center;align-self:flex-start">Go to the home page →</a>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ fMissing }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+      <x-import component-from-global-scope="Syndra.EmptyState" title="There's nothing at this address." guidance="No page in Syndra has this address. If you followed a link, the link itself is wrong; nothing has been deleted. A person or a bundle that was removed says so on its own page." action="{{ homeAction }}" hint-size="100%,180px"></x-import>
+    </x-import>
+  </sc-if>
+
+  <sc-if value="{{ fTerm }}" hint-placeholder-val="{{ false }}">
+    <div style="padding-bottom:12px;display:flex;flex-direction:column;gap:14px">
+      <x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Changes" title="Pending changes" meta="12 changes for 9 people" hint-size="100%,80px"></x-import>
+      <p style="margin:0;max-width:78ch;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Changes Syndra has decided but not yet sent to Zitadel. They wait in the <x-import component-from-global-scope="Syndra.Term" name="outbox" hint-size="56px,20px">outbox</x-import> in the order they were made, and go when you send them.</p>
+    </div>
+  </sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.state = { cmdOpen: this.frame === "sample-open" };
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false, seed_residue: 0 } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  componentDidMount() {
+    if (this.frame !== "term") return;
+    let n = 0; const tick = () => { const b = [...document.querySelectorAll("main button")].find(x => x.textContent.trim() === "outbox"); if (b) { b.click(); return; } if (n++ < 100) setTimeout(tick, 60); };
+    tick();
+  }
+  renderVals() {
+    const S = window.Syndra, h = React.createElement, f = this.frame || "";
+    const me = (fr) => "route-states.dc.html?frame=" + fr;
+    const fr = (src, label, note, x) => Object.assign({ src: me(src), label, note, w: 1440, h: 900, boxW: 720, boxH: 450, scale: 0.5, border: "1px solid var(--line-strong)", hasBadge: false, rec: false, id: undefined, badge: "", badgeBg: "var(--surface-2)", badgeInk: "var(--ink)" }, x || {});
+    const ph = (src, label, note) => fr(src, label, note, { w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 });
+    const opt = (id, rec) => ({ id, badge: id, hasBadge: true, rec: !!rec, badgeBg: rec ? "var(--accent-soft)" : "var(--surface-2)", badgeInk: rec ? "var(--accent-text)" : "var(--ink)", border: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+    const groups = [
+      { title: "#96 · The button, once a dialog has its result", note: "Settled (#104): a dialog stays open on its result, the action retires, and Cancel becomes the way out. The old board's rule (§23) was that the word done never appears after an action. The code's way out reads Done. Most of the time that's harmless, but when a change is waiting, the outcome says it hasn't happened and the button says Done.",
+        frames: [
+          fr("done-a", "As built: Done", "Under a queued outcome, the button contradicts the sentence above it.", opt("96a")),
+          fr("done-b", "Close", "The button names what it does, which is true whatever the outcome: applied, waiting, refused or failed. One word in every dialog. The FilterPanel's own Done stays: there, you're finished choosing filters, and nothing was sent.", opt("96b", true)),
+        ] },
+      { title: "N23 · Zitadel isn't answering: the last known state, never sample data", note: "Owner, 13 Oct. When Zitadel stops answering, every page shows what Syndra last read from it, labelled with its age, and giving and revoking pause. Syndra never falls back to sample data, at any point: sample data asks the operator to ignore the whole screen, and anything they act on could be invented. If there is no last read at all (a first start, or a cleared cache), the page shows nothing: the Notice, the header without its count, and no list.",
+        frames: [
+          fr("degraded", "Last known", "Real people from the 09:40 read. The header keeps its count because it was read; the read line turns provisional."),
+          fr("degraded-never", "Nothing read yet", "No counts, no rows, no sample. Search keeps its seat so the page is the same page when Zitadel answers."),
+        ] },
+      { title: "#98 · #97 · Notices for the whole app", note: "Every dysfunction is one Notice in the content column, above the page header (6a). Sample data left in a live database (#97) is a different thing from N23: it is real rows someone seeded, not a fallback, and it is named so it can be cleared. The built banners are a band pinned under the top bar; they move into the column and take the Notice's anatomy. No network is neutral: what's on screen is true, nothing answered. When both apply, No network comes first. Sample data is amber, and the server steps sit behind one disclosure, because they're for whoever runs the server and the page is for the operator.",
+        frames: [
+          fr("offline", "No network", "Hollow dot, surface-2, the built sentence. The read line underneath still says how old the list is."),
+          fr("stack", "No network, and Zitadel was already down", "Two dysfunctions, two Notices, 16px apart. No network first."),
+          fr("sample", "Sample data over a live directory", "Title with the count, one sentence for the operator, then the disclosure. Degraded wins when both apply, as built."),
+          fr("sample-open", "The same, opened", "The CommandBlock in its warn tone on the Notice's ground; the steps unchanged."),
+        ] },
+      { title: "#101 · When the app itself fails", note: "Settled: no Try again, because a render that threw throws again; a full reload of the home page is the way out. Drawn in the product's grammar: a failure is a red Notice ending Nothing was changed, the reference is a copy row, and going home is a violet link. The built cards use a filled pill for the link, which reads as an action.",
+        frames: [
+          fr("error", "The page couldn't be shown", "Inside the shell, which is still standing. global-error, for when the shell itself threw, keeps its own token-free copy of this."),
+          fr("missing", "Nothing at this address", "An empty state rather than a failure: it says what's absent, why, and the one way on."),
+        ] },
+      { title: "#106 · #107 · Words that carry their meaning", note: "A Term is a button in the sentence; its definition is one hover, tap or Tab away, and stays open until dismissed. Used only for Syndra's own words (outbox, cascade, drain, baseline, log anchor, merge finding). Every readable text on every board is 12.5px or more.",
+        frames: [
+          fr("term", "Pending changes, its lede", "Outbox, open."),
+          ph("sample", "Phone · sample data", "The Notice keeps its seat in the column; the disclosure stays closed until asked."),
+        ] },
+    ];
+    const isNotice = ["offline", "stack", "sample", "sample-open", "degraded"].includes(f);
+    return {
+      isBoard: !f, isFrame: !!f, session: this.session, rootData: this.rootData, noop: () => {}, groups,
+      pathname: f === "term" ? "/governance/pending" : f.startsWith("done") ? "/users/rohan" : "/users",
+      fPeople: isNotice, fNeverPage: f === "degraded-never", showNever: f === "degraded-never", fDialog: f === "done-a" || f === "done-b", fError: f === "error", fMissing: f === "missing", fTerm: f === "term",
+      showOffline: f === "offline" || f === "stack", showDegraded: f === "stack" || f === "degraded", showSample: f === "sample" || f === "sample-open",
+      cmdOpen: this.state.cmdOpen, cmdArrow: this.state.cmdOpen ? "↑" : "↓", toggleCmd: () => this.setState(s => ({ cmdOpen: !s.cmdOpen })),
+      cmdSteps: ["Only sample data is deleted. Real people, real projects and every decision you made stay exactly as they are.", "Zitadel is not changed. Anything left over there is reported under Drift at the next check.", "For a blank slate instead, with no bundles, rules or history, use make reset-all-data APPLY=1."],
+      closeLabel: f === "done-a" ? "Done" : "Close",
+      outcome: { kind: "queued", message: "Given in Syndra", detail: "Laser cutter · Supervisor always waits for you, so Rohan can't supervise yet." },
+      homeAction: { label: "Go to the home page", href: "route-home.dc.html?frame=default" },
+      readState: f === "stack" || f === "degraded" ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 3 * 60000).toISOString(), current: true },
+      searchEl: S ? h(S.Input, { placeholder: "Search name, email or role key", "aria-label": "Search people by name, email or role key" }) : null,
+      people: [
+        { name: "Aanya Rao", sub: "Research assistant · Mechanical Engineering", access: "3 roles across 2 projects" },
+        { name: "Priya Nair", sub: "Research assistant · Design", access: "5 roles across 3 projects" },
+        { name: "Kanishk Singh", sub: "Makerspace staff · Operations", access: "6 roles across 4 projects" },
+        { name: "Rohan Mehta", sub: "Research assistant · Mechanical Engineering", access: "2 roles across 1 project" },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Zitadel board" style="display:flex;flex-direction:column;gap:12px;max-width:1000px">
+    <span class="type-label" style="color:var(--label)">Route · /zitadel and its five pages</span>
+    <h1 class="type-page-title" style="margin:0">Zitadel, reading kept apart from writing</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Built from the picks on <a href="explore-zitadel-questions.dc.html">the questions board</a>: red doors (4a), the standing line and dashed frame (5b), a folding Projects list and a list-beside-detail People page (6b, 6a), one checks line that opens (7c), recent direct changes inside the fold (8a), and the guided key replacement (2c). Every band follows one path in order. Code notes are in <span class="type-mono">proposed/Zitadel-code-notes.md</span>.</p>
+  </header>
+  <sc-for list="{{ bands }}" as="b" hint-placeholder-count="6">
+  <section style="display:flex;flex-direction:column;gap:18px;padding-top:28px;border-top:1px solid var(--line)">
+    <div style="display:flex;flex-direction:column;gap:6px;max-width:1000px"><h2 class="type-section-title" style="margin:0">{{ b.title }}</h2><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted)">{{ b.lede }}</p></div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;width:{{ f.boxW }}px;display:flex;flex-direction:column;gap:8px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px"><span style="font-size:14.5px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/zitadel" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+
+<sc-if value="{{ vZ }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ sUnreach }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+    <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+      <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+      <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Everything below is real, read 14 minutes ago, and may have changed since. Giving and revoking access is paused until Zitadel answers, because a decision made on an old read can be wrong.</p>
+      <p style="margin:0;font-size:13px;color:var(--muted)">For the person who runs the Syndra server: Zitadel at auth.makerspace.edu did not answer within 5 seconds.</p>
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,34px">Check again</x-import></span><span style="font-size:12.5px;color:var(--muted)">Syndra also tries by itself every minute.</span></div>
+    </div>
+  </div></sc-if>
+  <sc-if value="{{ sDue }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+    <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">The action signing key is 104 days old.</span><p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">It is past the 90-day limit and still works. Replace it when nobody is working: How to replace it, below, walks through it.</p></div>
+  </div></sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Zitadel" meta="{{ meta }}" lede="Whether Syndra can reach Zitadel, and what it holds right now. Nothing on this page changes anyone's access." hint-size="100%,120px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-if value="{{ notLoading }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:12px">
+      <div style="padding:0 20px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13.5px">
+        <span style="flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ readTone }}" hint-size="7px,7px"></x-import>{{ readWord }}</span>
+        <span style="color:var(--muted)">{{ readA }}<span style="font-weight:600;color:{{ readBInk }}">{{ readB }}</span>{{ readC }}</span>
+        <span style="flex:1"></span>
+        <sc-if value="{{ canToggle }}" hint-placeholder-val="{{ true }}"><button type="button" aria-expanded="{{ checksOpen }}" onClick="{{ toggleChecks }}" class="inline-flex min-h-11 items-center desktop:min-h-6" style="flex:none;white-space:nowrap;gap:8px;padding:0;border:0;background:none;cursor:pointer;font:inherit;font-weight:600;color:var(--muted)" style-hover="color:var(--ink)">{{ checksVerb }}<span aria-hidden="true" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:12.5px;transition:transform var(--duration-settle) var(--ease-settle);transform:{{ checksChev }}">⌄</span></button></sc-if>
+      </div>
+      <sc-if value="{{ checksOpen }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+        <sc-for list="{{ checks }}" as="c" hint-placeholder-count="4">
+          <div class="row-divider flex flex-col gap-1 px-5 py-3.5 tablet:flex-row tablet:items-baseline tablet:gap-[18px]">
+            <span class="tablet:w-[180px] tablet:shrink-0" style="font-size:14px;font-weight:600">{{ c.name }}</span>
+            <span style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:{{ c.ink }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ c.tone }}" hint-size="7px,7px"></x-import>{{ c.word }}</span><span style="max-width:80ch;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ c.long }}</span></span>
+            <sc-if value="{{ c.hasLink }}" hint-placeholder-val="{{ false }}"><a href="route-events.dc.html" style="font-size:13.5px;font-weight:600">{{ c.link }} →</a></sc-if>
+          </div>
+        </sc-for>
+      </x-import></sc-if>
+    </div></sc-if>
+    <sc-if value="{{ sLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 2 }}" avatar="{{ false }}" label="Checking whether Syndra can reach Zitadel" hint-size="100%,100px"></x-import></x-import></sc-if>
+
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,96px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;padding:18px 20px">
+        <div style="flex:1 1 360px;min-width:0;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px"><span class="type-card-title">Action signing key</span><span style="flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ keyInk }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ keyTone }}" hint-size="7px,7px"></x-import>{{ keyWord }}</span></div>
+          <p style="margin:0;max-width:80ch;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ keyText }} Zitadel signs every sign-in request with it, so Syndra can tell they are genuine.</p>
+        </div>
+        <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="{{ keyBtn }}" size="sm" hint-size="150px,34px">How to replace it</x-import></span>
+      </div>
+    </x-import>
+
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="Look inside Zitadel" note="What Zitadel holds, read straight from it. These pages only read: nothing on them changes anything." hint-size="100%,70px"></x-import>
+      <sc-for list="{{ looks }}" as="l" hint-placeholder-count="3">
+        <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:14px 20px">
+          <span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ l.label }}</span><span style="font-size:13px;line-height:1.5;color:var(--muted)">{{ l.sub }}</span></span>
+          <sc-if value="{{ live }}" hint-placeholder-val="{{ true }}"><a href="{{ l.href }}" class="inline-flex min-h-11 items-center desktop:min-h-6" style="font-size:13.5px;font-weight:600">{{ l.open }} →</a></sc-if>
+          <sc-if value="{{ sUnreach }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;font-weight:600;color:var(--faint)">{{ l.open }}</span></sc-if>
+        </div>
+      </sc-for>
+      <sc-if value="{{ sUnreach }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="padding:12px 20px;font-size:13.5px;color:var(--muted)">Unavailable while Zitadel isn't answering: these read it live, and there is nothing to read.</div></sc-if>
+    </x-import>
+
+    <div style="border-radius:var(--radius-card);border:1px dashed var(--danger-line)">
+      <button type="button" aria-expanded="{{ foldOpen }}" onClick="{{ toggleFold }}" style="width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:16px 20px;border:0;background:none;cursor:pointer;text-align:left;font:inherit;color:inherit">
+        <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line-strong);color:var(--muted);font-size:13px;transition:transform var(--duration-settle) var(--ease-settle);transform:{{ foldChev }}">⌄</span>
+        <span class="type-card-title" style="color:var(--danger-text)">Change Zitadel directly</span>
+        <span style="font-size:13.5px;color:var(--faint)">last resort</span>
+      </button>
+      <sc-if value="{{ foldOpen }}" hint-placeholder-val="{{ false }}">
+        <div class="danger-note" style="margin:0 20px 16px;padding:14px 16px;display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:14.5px;font-weight:600;color:var(--danger-text)">Do not use these unless nothing else will do.</span>
+          <p style="margin:0;max-width:86ch;font-size:14px;line-height:1.55;color:var(--ink)">They write straight to Zitadel. Syndra records one line in Audit and nothing else: no reason, no plan, no Change history, and the next drift check lists the change for somebody to explain. Everything here can be done inside Syndra, with all of that kept.</p>
+        </div>
+        <sc-for list="{{ doors }}" as="d" hint-placeholder-count="2">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 20px">
+            <span style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:4px"><span style="font-size:14.5px;font-weight:600">{{ d.label }}</span><span style="max-width:80ch;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ d.instead }} <a href="{{ d.syndraHref }}" style="font-weight:600">{{ d.syndra }} →</a></span></span>
+            <span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.ButtonLink" href="{{ d.href }}" variant="danger" size="sm" hint-size="210px,34px">{{ d.door }} →</x-import></span>
+          </div>
+        </sc-for>
+        <div class="row-divider" style="padding:14px 20px 4px;display:flex;align-items:baseline;gap:12px"><span class="type-label">Recent direct changes</span><span style="flex:1"></span><a href="#" style="font-size:13.5px;font-weight:600">All in Audit →</a></div>
+        <div style="padding:0 0 12px">
+          <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+            <div class="flex flex-col gap-0.5 px-5 py-2 tablet:flex-row tablet:items-baseline tablet:gap-[18px]">
+              <span style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px;line-height:1.5;text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);font-weight:600;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.who }}</a> {{ r.what }}</span><span style="font-size:13px;color:{{ r.ink }}">{{ r.after }}</span></span>
+              <span class="tablet:w-[110px] tablet:text-right" style="flex:none;font-size:13px;color:var(--faint)">{{ r.when }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,120px"><div style="padding:16px 20px;display:flex;flex-direction:column;gap:8px"><p class="type-card-title" style="margin:0">Syn keeps the door. Syndra keeps the list.</p><p style="margin:0;max-width:68ch;font-size:14px;line-height:1.6;color:var(--muted)">Syn keeps the door of Frigg's hall and bars it against those who should not enter. Zitadel is that door: it decides whether you are who you say you are. Syndra decides what that gets you, and keeps the record of why.</p></div></x-import>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ vSub }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:12px">
+    <a href="route-zitadel.dc.html?v=z" class="inline-flex min-h-11 items-center desktop:min-h-6" style="font-size:13.5px;font-weight:600"><span aria-hidden="true">←&nbsp;</span>Zitadel</a>
+    <x-import component-from-global-scope="Syndra.PageHeader" title="{{ subTitle }}" meta="{{ subMeta }}" lede="{{ subLede }}" hint-size="100%,110px"></x-import>
+    <sc-if value="{{ isChange }}" hint-placeholder-val="{{ false }}"><p style="margin:2px 0 0;font-size:13.5px;font-weight:600;color:var(--danger-text)">Changes here go straight to Zitadel. Syndra records one line in Audit, nothing else.</p></sc-if>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-if value="{{ hasSearch }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:10px">{{ filterEl }}<div style="padding:0 20px"><div style="display:inline-block;white-space:nowrap">{{ readEl }}</div></div></div></sc-if>
+    <sc-if value="{{ noSearch }}" hint-placeholder-val="{{ true }}"><div style="padding:0 20px"><div style="display:inline-block;white-space:nowrap">{{ readEl }}</div></div></sc-if>
+
+    <div style="{{ frameStyle }}">
+    <div style="display:flex;flex-direction:column;gap:16px">
+
+    <sc-if value="{{ showProjects }}" hint-placeholder-val="{{ false }}">
+      <sc-for list="{{ projects }}" as="p" hint-placeholder-count="5">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,72px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:14px 20px">
+          <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line-strong);color:var(--muted);font-size:13px;transform:{{ p.chev }}">⌄</span>
+          <span class="type-card-title"><sc-if value="{{ p.known }}" hint-placeholder-val="{{ true }}"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.name }}</a></sc-if><sc-if value="{{ p.unknown }}" hint-placeholder-val="{{ false }}">{{ p.name }}</sc-if></span>
+          <span style="flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ p.ink }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ p.tone }}" hint-size="7px,7px"></x-import>{{ p.word }}</span>
+          <span style="margin-left:auto;display:flex;align-items:center;gap:14px;flex:none"><span style="white-space:nowrap;font-size:13.5px;color:var(--faint)">{{ p.counts }}</span><sc-if value="{{ isChange }}" hint-placeholder-val="{{ false }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,34px">New role</x-import></span></sc-if></span>
+        </div>
+        <sc-if value="{{ p.unknown }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="padding:12px 20px 14px 62px;font-size:13.5px;line-height:1.55;color:var(--muted)">No Syndra record explains this project or its roles. <a href="route-drift.dc.html?frame=default" style="font-weight:600">See it in Drift →</a></div></sc-if>
+        <sc-if value="{{ p.open }}" hint-placeholder-val="{{ false }}">
+          <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:42px;flex:none"></span><span style="flex:1 1 0;min-width:0">Role</span><span style="width:170px;flex:none">In Syndra</span><span style="width:110px;flex:none;text-align:right">People</span><sc-if value="{{ isChange }}" hint-placeholder-val="{{ false }}"><span style="width:170px;flex:none"></span></sc-if></x-import>
+          <sc-for list="{{ p.roles }}" as="r" hint-placeholder-count="3">
+            <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:12px 20px">
+              <span style="width:42px;flex:none"></span>
+              <span style="flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ r.name }}</span><span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span>
+              <span style="width:170px;flex:none;display:flex;flex-direction:column;gap:2px"><span style="flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ r.ink }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="7px,7px"></x-import>{{ r.word }}</span><sc-if value="{{ r.drift }}" hint-placeholder-val="{{ false }}"><a href="route-drift.dc.html?frame=default" style="font-size:12.5px;font-weight:600">In Drift →</a></sc-if></span>
+              <span style="width:110px;flex:none;text-align:right;font-size:14.5px;font-weight:600;color:var(--muted)">{{ r.people }}</span>
+              <sc-if value="{{ isChange }}" hint-placeholder-val="{{ false }}"><span style="width:170px;flex:none;display:flex;justify-content:flex-end;gap:8px"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="70px,34px">Edit</x-import></span><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="80px,34px">Delete</x-import></span></span></sc-if>
+            </div>
+          </sc-for>
+        </sc-if>
+      </x-import>
+      </sc-for>
+    </sc-if>
+
+    <sc-if value="{{ showPeople }}" hint-placeholder-val="{{ false }}">
+      <div class="flex flex-col items-stretch gap-5 tablet:flex-row tablet:items-start">
+        <x-import component-from-global-scope="Syndra.Card" class-name="w-full tablet:w-[300px] tablet:flex-none" hint-size="300px,420px">
+          <sc-for list="{{ people }}" as="u" hint-placeholder-count="7">
+            <div class="row-divider" style="padding:11px 16px;display:flex;align-items:center;gap:12px;background:{{ u.bg }}">
+              <x-import component-from-global-scope="Syndra.Avatar" name="{{ u.name }}" hint-size="30px,30px"></x-import>
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600">{{ u.name }}</span><span style="font-size:12.5px;color:var(--faint)">{{ u.email }}</span><sc-if value="{{ u.hasFlag }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:{{ u.flagInk }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ u.flagTone }}" hint-size="6px,6px"></x-import>{{ u.flag }}</span></sc-if></span>
+            </div>
+          </sc-for>
+          <div class="row-divider" style="padding:11px 16px;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px"><span style="color:var(--faint)">Showing 7 of 212</span><a href="#" style="font-weight:600">Show 25 more</a></div>
+        </x-import>
+        <div class="w-full tablet:min-w-0 tablet:flex-1" style="display:flex;flex-direction:column;gap:14px">
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,360px">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:18px 20px">
+              <x-import component-from-global-scope="Syndra.Avatar" name="Priya Nair" hint-size="44px,44px"></x-import>
+              <span style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:3px"><span class="type-card-title">Priya Nair</span><span style="font-size:13px;color:var(--faint)"><span class="type-mono">priya.nair</span> · priya.nair@makerspace.edu · Active · signed in 2 hours ago</span></span>
+              <sc-if value="{{ notChange }}" hint-placeholder-val="{{ true }}"><a href="route-users-id.dc.html?frame=default" style="font-size:13.5px;font-weight:600">Her access in Syndra →</a></sc-if>
+              <sc-if value="{{ isChange }}" hint-placeholder-val="{{ false }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="180px,34px">Give roles in Zitadel</x-import></span></sc-if>
+            </div>
+            <sc-if value="{{ isChange }}" hint-placeholder-val="{{ false }}"><div class="accent-note" style="margin:0 20px 16px;padding:14px 16px;display:flex;flex-direction:column;gap:6px"><span style="font-size:14.5px;font-weight:600">Priya's page in Syndra does this better.</span><span style="max-width:76ch;font-size:14px;line-height:1.55;color:var(--muted)">It asks for a reason, shows a plan before anything is sent, keeps the change in her history, and nothing turns up in Drift afterwards.</span><a href="route-users-id.dc.html?frame=default" style="margin-top:2px;font-size:14px;font-weight:600">Change it on Priya Nair's page →</a></div></sc-if>
+            <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="flex:1 1 0;min-width:0">Her roles, as Zitadel holds them</span><span style="width:170px;flex:none">In Syndra</span><sc-if value="{{ isChange }}" hint-placeholder-val="{{ false }}"><span style="width:200px;flex:none"></span></sc-if></x-import>
+            <sc-for list="{{ grants }}" as="g" hint-placeholder-count="2">
+              <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 18px;padding:14px 20px">
+                <span style="flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:6px"><a href="route-projects-id.dc.html?frame=default" style="align-self:flex-start;font-size:14.5px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ g.project }}</a><sc-for list="{{ g.roles }}" as="r" hint-placeholder-count="2"><span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:14px"><span>{{ r.name }}</span><span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span></sc-for></span>
+                <span style="width:170px;flex:none;display:flex;flex-direction:column;gap:2px;padding-top:2px"><span style="flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ g.ink }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ g.tone }}" hint-size="7px,7px"></x-import>{{ g.word }}</span><sc-if value="{{ g.drift }}" hint-placeholder-val="{{ false }}"><a href="route-drift.dc.html?frame=default" style="font-size:12.5px;font-weight:600">In Drift →</a></sc-if></span>
+                <sc-if value="{{ isChange }}" hint-placeholder-val="{{ false }}"><span style="width:200px;flex:none;display:flex;justify-content:flex-end;gap:8px"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,34px">Change roles</x-import></span><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="80px,34px">Revoke</x-import></span></span></sc-if>
+              </div>
+            </sc-for>
+          </x-import>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showHeld }}" hint-placeholder-val="{{ false }}">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,520px">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:230px;flex:none;display:inline-flex;align-items:center;gap:5px;color:var(--ink)">Person<span aria-hidden="true" style="font-size:11px">↑</span></span><span style="flex:1 1 0;min-width:0">Role</span><span style="width:170px;flex:none">In Syndra</span><span style="width:110px;flex:none;text-align:right">Given</span></x-import>
+        <sc-for list="{{ held }}" as="h" hint-placeholder-count="10">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:12px 20px">
+            <span style="width:230px;flex:none;display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Avatar" name="{{ h.who }}" hint-size="28px,28px"></x-import><a href="route-zitadel.dc.html?v=people" style="font-size:14.5px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ h.who }}</a></span>
+            <span style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14px"><a href="route-projects-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ h.project }}</a> · {{ h.role }}</span><span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ h.key }}</span></span>
+            <span style="width:170px;flex:none;display:flex;flex-direction:column;gap:2px"><span style="flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ h.ink }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ h.tone }}" hint-size="7px,7px"></x-import>{{ h.word }}</span><sc-if value="{{ h.drift }}" hint-placeholder-val="{{ false }}"><a href="route-drift.dc.html?frame=default" style="font-size:12.5px;font-weight:600">In Drift →</a></sc-if></span>
+            <span style="width:110px;flex:none;text-align:right;font-size:13.5px;color:var(--muted)">{{ h.given }}</span>
+          </div>
+        </sc-for>
+        <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 20px;font-size:13.5px"><span style="color:var(--faint)">Showing 10 of 214</span><a href="#" style="font-weight:600">Show 25 more</a><a href="#" style="font-weight:600">Show all 214</a></div>
+      </x-import>
+    </sc-if>
+
+    </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ mGuide }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="w-title" hint-size="580px,560px">
+  <div style="padding:22px 24px 0;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;gap:12px"><span style="font-size:12.5px;font-weight:600;color:var(--muted)">{{ gLabel }}</span><span style="flex:1;display:flex;gap:4px"><sc-for list="{{ gBars }}" as="b" hint-placeholder-count="4"><span style="flex:1;height:4px;border-radius:var(--radius-pill);background:{{ b.bg }}"></span></sc-for></span></div>
+    <h2 id="w-title" style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">{{ gTitle }}</h2>
+    <p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ gLede }}</p>
+  </div>
+  <div style="padding:16px 24px 4px;display:flex;flex-direction:column;gap:12px">
+    <sc-if value="{{ gCmd }}" hint-placeholder-val="{{ false }}">{{ gCmdEl }}</sc-if>
+    <sc-if value="{{ g2 }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.CopyableValue" label="Key setting" value="ZITADEL_ACTION_SIGNING_KEY" hint-size="100%,56px"></x-import><x-import component-from-global-scope="Syndra.CopyableValue" label="Time setting" value="ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT" hint-size="100%,56px"></x-import></sc-if>
+    <sc-if value="{{ gHasNote }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">{{ gNote }}</p></sc-if>
+    <sc-if value="{{ g4 }}" hint-placeholder-val="{{ false }}"><div role="status" class="panel" style="padding:14px 16px;display:flex;flex-direction:column;gap:4px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Syndra reads the new key.</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">Replaced at 10:12 today. The next one is due by 4 Jan.</span></div></sc-if>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><sc-if value="{{ g4 }}" hint-placeholder-val="{{ false }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></span></sc-if><sc-if value="{{ gMid }}" hint-placeholder-val="{{ true }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="90px,40px">{{ gNext }}</x-import></span><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">{{ gBack }}</x-import></span></sc-if></x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ mDialog }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="d-title" hint-size="580px,600px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="{{ dTitle }}" title-id="d-title" lede="{{ dLede }}" hint-size="100%,90px"></x-import>
+  <div style="padding:0 24px;display:flex;flex-direction:column;gap:14px">
+    <sc-if value="{{ dNew }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="n-key" hint-size="80px,18px">Role key</x-import><x-import component-from-global-scope="Syndra.Input" id="n-key" default-value="laser.supervisor" hint-size="100%,44px"></x-import><x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,20px">The short name other systems see. Lowercase, no spaces.</x-import></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="n-name" hint-size="100px,18px">Display name</x-import><x-import component-from-global-scope="Syndra.Input" id="n-name" default-value="Laser cutter · Supervisor" hint-size="100%,44px"></x-import></div>
+    </div></sc-if>
+    <sc-if value="{{ dHasList }}" hint-placeholder-val="{{ false }}"><div role="group" aria-labelledby="d-list" style="display:flex;flex-direction:column;gap:8px"><span id="d-list" style="font-size:12.5px;font-weight:600;color:var(--muted)">{{ dListTitle }}</span>
+      <sc-for list="{{ dList }}" as="x" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border-radius:var(--radius-inner);border:1px solid {{ x.line }};background:{{ x.bg }}"><sc-if value="{{ x.box }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid {{ x.seatEdge }};background:{{ x.seatBg }};color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">{{ x.seatGlyph }}</span></sc-if><sc-if value="{{ x.person }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Avatar" name="{{ x.name }}" hint-size="26px,26px"></x-import></sc-if><span style="flex:1;display:flex;flex-direction:column;gap:1px"><span style="font-size:14px;font-weight:600">{{ x.name }}</span><span style="font-size:12.5px;color:var(--faint)">{{ x.sub }}</span></span><span style="font-size:13px;font-weight:600;color:{{ x.tagInk }}">{{ x.tag }}</span></div></sc-for>
+    </div></sc-if>
+    <sc-if value="{{ dAsk }}" hint-placeholder-val="{{ true }}">
+      <div class="danger-note" style="padding:12px 14px;font-size:14px;line-height:1.55;color:var(--ink)"><span style="font-weight:600;color:var(--danger-text)">{{ dLoss }}</span> {{ dTruth }}</div>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">{{ dInstead }} <a href="{{ dInsteadHref }}" style="font-weight:600">{{ dInsteadLink }} →</a></p>
+      <label style="display:flex;gap:12px;align-items:flex-start;cursor:pointer"><input type="checkbox" checked="{{ true }}" readOnly="{{ true }}" style="margin-top:3px;accent-color:var(--danger)"></input><span style="font-size:14px">I understand this changes Zitadel now, with no preview, and no record in Syndra beyond one line in Audit.</span></label>
+    </sc-if>
+    <sc-if value="{{ dDone }}" hint-placeholder-val="{{ false }}"><div role="status" class="panel" style="padding:14px 16px;display:flex;flex-direction:column;gap:4px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>{{ dDoneTitle }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ dDoneBody }}</span></div></sc-if>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><sc-if value="{{ dAsk }}" hint-placeholder-val="{{ true }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="{{ dVariant }}" hint-size="200px,40px">{{ dVerb }}</x-import></span><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">{{ dCancel }}</x-import></span></sc-if><sc-if value="{{ dDone }}" hint-placeholder-val="{{ false }}"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></span></sc-if></x-import>
+</x-import>
+</sc-if>
+
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.Q = { v: q.get("v"), s: q.get("s") || "ok", c: q.get("c") === "1", o: q.get("o") === "1", m: q.get("m"), g: +(q.get("g") || 1) };
+    this.state = { checksOpen: this.Q.c || this.Q.s === "events", foldOpen: this.Q.o };
+    if (this.Q.v) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: 2, holds_due: 4, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra, h = React.createElement, Q = this.Q, st = Q.s, v = Q.v || "z";
+    const unreach = st === "unreach", due = st === "due", events = st === "events", loading = st === "loading";
+    const isChange = v === "cprojects" || v === "cpeople";
+    const OK = (t) => ({ tone: "healthy", word: t || "In Syndra", ink: "var(--ink)", drift: false });
+    const ZO = { tone: "warn", word: "Only in Zitadel", ink: "var(--warn-text)", drift: true };
+    const R = (name, key, people, s) => Object.assign({ name, key, people }, s || OK());
+    const P = (name, s, counts, open, roles) => Object.assign({ name, counts, open: !!open, chev: open ? "none" : "rotate(-90deg)", roles: roles || [], known: s !== "none", unknown: s === "none" },
+      s === "ok" ? { tone: "healthy", word: "Matches Syndra", ink: "var(--ink)" } : s === "none" ? { tone: "warn", word: "Not in Syndra", ink: "var(--warn-text)" } : { tone: "warn", word: "1 role Syndra lacks", ink: "var(--warn-text)" });
+    const projects = [
+      P("3D printing", "ok", "4 roles · 31 people"),
+      P("Electronics bench", "ok", "5 roles · 12 people"),
+      P("Laser Lab", "ok", "4 roles · 25 people", true, [R("Laser cutter · Member", "laser.member", "18"), R("Laser cutter · Operator", "laser.operator", "7"), R("Laser cutter · Trainee", "laser.trainee", "3"), R("Laser bay · Door", "laserbay.door", "25")]),
+      P("Paint booth", "none", "2 roles · 4 people"),
+      P("Wood shop", "lack", "2 roles · 13 people", true, [R("Bandsaw · Member", "wood.bandsaw", "11"), R("Lathe · Member", "wood.lathe", "2", ZO)]),
+    ];
+    const U = (name, email, flag, sel) => ({ name, email, hasFlag: !!flag, flag: flag || "", flagTone: flag === "Inactive" ? "neutral" : "warn", flagInk: flag === "Inactive" ? "var(--muted)" : "var(--warn-text)", bg: sel ? "var(--accent-soft)" : "transparent" });
+    const people = [U("Aanya Rao", "aanya.rao@makerspace.edu"), U("Arjun Das", "arjun.das@makerspace.edu", "Inactive"), U("Lena Brandt", "lena.brandt@makerspace.edu"), U("Meera Pillai", "meera.pillai@makerspace.edu"), U("Priya Nair", "priya.nair@makerspace.edu", "", true), U("Rohan Ghosh", "r.ghosh@makerspace.edu", "Not in Syndra"), U("Tomas Weber", "tomas.weber@makerspace.edu")];
+    const grants = [
+      Object.assign({ project: "Laser Lab", roles: [{ name: "Laser cutter · Operator", key: "laser.operator" }, { name: "Laser cutter · Member", key: "laser.member" }] }, OK("Matches Syndra")),
+      Object.assign({ project: "Wood shop", roles: [{ name: "Lathe · Member", key: "wood.lathe" }] }, ZO),
+    ];
+    const HH = (who, project, role, key, given, s) => Object.assign({ who, project, role, key, given }, s || OK("Matches Syndra"));
+    const held = [HH("Aanya Rao", "Laser Lab", "Laser cutter · Member", "laser.member", "12 Feb"), HH("Aanya Rao", "3D printing", "Printer · Member", "print.member", "3 Mar"), HH("Arjun Das", "Wood shop", "Bandsaw · Member", "wood.bandsaw", "9 Jan"), HH("Lena Brandt", "Laser Lab", "Laser cutter · Operator", "laser.operator", "2 Sept 2025"), HH("Meera Pillai", "Electronics bench", "Soldering · Member", "elec.solder", "21 Aug"), HH("Priya Nair", "Laser Lab", "Laser cutter · Operator", "laser.operator", "12 Sept"), HH("Priya Nair", "Laser Lab", "Laser cutter · Member", "laser.member", "12 Sept"), HH("Priya Nair", "Wood shop", "Lathe · Member", "wood.lathe", "30 Sept", ZO), HH("Rohan Ghosh", "Paint booth", "Sprayer", "paint.sprayer", "4 Oct", ZO), HH("Tomas Weber", "Wood shop", "Bandsaw · Member", "wood.bandsaw", "16 May")];
+    const pass = { tone: "healthy", ink: "var(--ink)" };
+    const checks = unreach ? [
+      Object.assign({ name: "Reachable", word: "Not answering", long: "Last answered at 09:40. Syndra tried again just now.", hasLink: false }, { tone: "warn", ink: "var(--warn-text)" }),
+    ] : [
+      Object.assign({ name: "Reachable", word: "Answering", long: "Replied in 42 ms, checked just now.", hasLink: false }, pass),
+      Object.assign({ name: "Allowed to change", word: "Can read and change", long: "Syndra's own Zitadel account may read and change projects, roles and people's roles, so what you send will land.", hasLink: false }, pass),
+      events ? Object.assign({ name: "Events", word: "14 events behind", long: "Zitadel holds 14 events Syndra hasn't received, the oldest from 22 minutes ago, so a new person may not have been noticed yet. Syndra compares with Zitadel's own log, so a quiet night never reads as this.", hasLink: true, link: "Incoming events" }, { tone: "warn", ink: "var(--warn-text)" })
+        : Object.assign({ name: "Events", word: "Up to date", long: "Last event 3 minutes ago. Zitadel has none that Syndra hasn't received.", hasLink: true, link: "Incoming events" }, pass),
+      Object.assign({ name: "Sign-in details", word: "Given every time", long: "212 sign-ins today, each given its access details by Syndra.", hasLink: false }, pass),
+    ];
+    const M = (t) => S ? h(S.Mono, null, t) : t;
+    const CB = (command, caption) => S ? h(S.CommandBlock, { command, caption }) : null;
+    const GS = {
+      1: ["Make a new key", "On the server Syndra runs on. It writes the new key to a file and backs up the old one beside it.", CB("make zitadel-actions-rotate-key", "Keep the terminal open: step 2 needs what it prints."), ""],
+      2: ["Put the new key in Syndra's settings", "In .env beside the backend, set these two to what the command printed.", null, "Without the time, this page can't tell the key's age."],
+      3: ["Restart the backend", "Syndra picks up the new key when it starts.", CB("docker compose restart backend"), "Between steps 1 and 3, people can still sign in, but without the access details Syndra adds. Keep the gap short."],
+      4: ["Confirm it took", "Run the check on the server; Syndra has read the key again from here.", CB("make zitadel-actions-verify"), ""],
+    };
+    const g = Math.min(4, Math.max(1, Q.g)), G = GS[g];
+    const subs = {
+      projects: ["Projects in Zitadel", ["5 projects", "17 roles", "2 differ from Syndra"], "Every project and role Zitadel holds, including ones Syndra never made, and how each compares with Syndra's record. This page only reads.", "This list"],
+      people: ["People in Zitadel", ["212 people", "1 not in Syndra"], "Everyone Zitadel knows and the roles it holds for them, beside what Syndra's record says. This page only reads.", "This list"],
+      held: ["Roles held in Zitadel", ["214 roles held", "2 only in Zitadel"], "Every role Zitadel has given anyone, whether Syndra gave it or not. This page only reads.", "This list"],
+      cprojects: ["Change projects and roles", null, "Create, rename or delete a role in Zitadel itself. To make a role Syndra keeps track of, add it on the project's page in Syndra instead.", "This list"],
+      cpeople: ["Change people's roles", null, "Give, change or revoke a person's roles in Zitadel itself. A person's page in Syndra does the same with a reason, a plan and a record.", "This list"],
+    };
+    const sub = subs[v] || subs.projects;
+    const m = Q.m;
+    const DLG = {
+      del: { t: "Delete Laser cutter · Trainee in Zitadel?", l: "On Laser Lab. 3 people hold it.", list: "Who loses it", items: [["Aanya Rao", "Given 12 Feb"], ["Rohan Ghosh", "Given 4 Oct"], ["Tomas Weber", "Given 16 May"]].map(a => ({ name: a[0], sub: a[1], person: true, box: false, tag: "Loses it", tagInk: "var(--danger-text)", line: "var(--line)", bg: "transparent" })), loss: "All 3 lose it at once.", truth: "The next drift check lists it under Drift, with nobody's name on it.", instead: "If Syndra should stop granting it too, retire it on Laser Lab's page: it shows who is affected and records why.", ih: "route-projects-id.dc.html?frame=default", il: "Laser Lab in Syndra", verb: "Delete it in Zitadel", variant: "dangerConfirm", cancel: "Keep it", doneT: "Deleted in Zitadel.", doneB: "Aanya Rao, Rohan Ghosh and Tomas Weber no longer hold it. Syndra recorded one line in Audit; the removals show in Incoming events within a minute, and the next drift check lists the role under Drift.", doneH: "Laser cutter · Trainee deleted in Zitadel" },
+      newrole: { t: "New role on Laser Lab in Zitadel", l: "Syndra won't know about this role until somebody adds it on the project's page.", list: "", items: [], loss: "Nobody gets it yet.", truth: "It exists only in Zitadel until Syndra's record has it, so the next drift check lists it.", instead: "Adding it on Laser Lab's page creates it in both, and Syndra keeps track of it.", ih: "route-projects-id.dc.html?frame=default", il: "Laser Lab in Syndra", verb: "Create it in Zitadel", variant: "accent", cancel: "Cancel", doneT: "Created in Zitadel.", doneB: "It exists on Laser Lab, held by nobody yet. Syndra recorded one line in Audit; the next drift check lists it until it is added on Laser Lab's page.", doneH: "Laser cutter · Supervisor created in Zitadel" },
+      change: { t: "Change Priya Nair's roles on Laser Lab in Zitadel", l: "Her roles on Laser Lab, as Zitadel holds them now.", list: "Tick the roles she should keep", items: [{ name: "Laser cutter · Operator", sub: "laser.operator · matches Syndra", on: true, tag: "Keeps", tagInk: "var(--muted)" }, { name: "Laser cutter · Member", sub: "laser.member · matches Syndra", on: false, tag: "Removing", tagInk: "var(--danger-text)" }, { name: "Laser cutter · Trainee", sub: "laser.trainee", on: false, tag: "", tagInk: "var(--muted)" }].map(x => Object.assign(x, { box: true, person: false, seatEdge: x.on ? "var(--accent)" : "var(--line-strong)", seatBg: x.on ? "var(--accent)" : "transparent", seatGlyph: x.on ? "\u2713" : "", line: x.tag === "Removing" ? "var(--danger-line)" : "var(--line)", bg: x.tag === "Removing" ? "var(--danger-soft)" : "transparent" })), loss: "Priya loses Laser cutter · Member at once.", truth: "Syndra's record still gives it to her, so it is listed under Drift for somebody to decide: give it back, or end it in Syndra too. Any role Syndra gives automatically because she holds it ends with it.", instead: "Removing it on her page ends it for good, records why, and shows a plan first.", ih: "route-users-id.dc.html?frame=default", il: "Change it on Priya Nair's page", verb: "Remove 1 role in Zitadel", variant: "dangerConfirm", cancel: "Cancel", doneT: "Changed in Zitadel.", doneB: "Priya no longer holds Laser cutter · Member. Syndra recorded one line in Audit. The removal shows in Incoming events within a minute, and under Drift until somebody decides on it.", doneH: "Priya Nair's roles changed in Zitadel" },
+    };
+    const key = m ? m.replace(/-done$/, "") : "", D = DLG[key], done = !!(m && /-done$/.test(m));
+    const fr = (qs, label, note, hh, w, sc) => ({ src: "route-zitadel.dc.html?" + qs, label, note, w: w || 1440, h: hh || 1400, boxW: (w || 1440) * (sc || 0.5), boxH: (hh || 1400) * (sc || 0.5), scale: sc || 0.5 });
+    return {
+      isBoard: !Q.v, isFrame: !!Q.v, session: this.session, rootData: this.rootData, noop: () => {},
+      vZ: v === "z", vSub: v !== "z", isChange, notChange: !isChange,
+      sUnreach: unreach, sDue: due, sLoading: loading, notLoading: !loading, live: !unreach,
+      meta: S ? h(S.MetaRow, null, loading ? [h(S.Mono, { key: "d" }, "auth.makerspace.edu")] : [h(S.Mono, { key: "d" }, "auth.makerspace.edu"), "5 projects", "212 people"]) : undefined,
+      readTone: unreach ? "warn" : "healthy", readWord: unreach ? "Not answering" : "Answering",
+      readA: unreach ? "last answered at 09:40, 14 minutes ago · " : "replied in 42 ms · ",
+      readB: unreach ? "the other checks wait for it" : events ? "1 of 4 checks needs a look" : "all four checks pass",
+      readBInk: events ? "var(--warn-text)" : "var(--muted)", readC: unreach ? "" : " · checked just now",
+      canToggle: !unreach, checksOpen: this.state.checksOpen && !unreach, checksVerb: this.state.checksOpen ? "Hide checks" : "Show checks", checksChev: this.state.checksOpen ? "none" : "rotate(-90deg)",
+      toggleChecks: () => this.setState(s => ({ checksOpen: !s.checksOpen })), checks,
+      keyWord: due ? "Past its limit" : "Within its limit", keyTone: due ? "warn" : "healthy", keyInk: due ? "var(--warn-text)" : "var(--ink)",
+      keyText: due ? "104 days old, over the 90-day limit; last replaced on 24 June." : "41 days old; replace by 24 Nov, nothing to do now.", keyBtn: due ? "accent" : "outline",
+      looks: [
+        { label: "Projects and their roles", sub: "Each with how it compares with Syndra's record", open: "Open projects", href: "route-zitadel.dc.html?v=projects" },
+        { label: "People", sub: "Everyone Zitadel knows, and the roles it holds for each", open: "Open people", href: "route-zitadel.dc.html?v=people" },
+        { label: "Roles held", sub: "Every role on every person, in one list", open: "Open roles held", href: "route-zitadel.dc.html?v=held" },
+      ],
+      foldOpen: this.state.foldOpen, foldChev: this.state.foldOpen ? "none" : "rotate(-90deg)", toggleFold: () => this.setState(s => ({ foldOpen: !s.foldOpen })),
+      doors: [
+        { label: "People's roles", instead: "Inside Syndra: a person's page, with a reason and a plan.", syndra: "People", syndraHref: "route-users.dc.html?frame=default", door: "Change people's roles", href: "route-zitadel.dc.html?v=cpeople" },
+        { label: "Projects and roles", instead: "Inside Syndra: a project's page, which keeps track of every role.", syndra: "Projects", syndraHref: "route-projects.dc.html?frame=default", door: "Change projects and roles", href: "route-zitadel.dc.html?v=cprojects" },
+      ],
+      recent: [
+        { who: "Kanishk Singh", what: "deleted Laser cutter · Trainee on Laser Lab", when: "2 days ago", after: "Listed under Drift for somebody to explain.", ink: "var(--warn-text)" },
+        { who: "Lena Brandt", what: "removed Bandsaw · Member from Tomas Weber", when: "5 days ago", after: "Listed under Drift: Syndra's record still gives it to him.", ink: "var(--warn-text)" },
+        { who: "Kanishk Singh", what: "created Sprayer on Paint booth", when: "12 Sept", after: "Explained since: added to Syndra by Sai Khurana.", ink: "var(--faint)" },
+      ],
+      subTitle: sub[0], subLede: sub[2], subMeta: S && sub[1] ? h(S.MetaRow, null, sub[1]) : undefined,
+      hasSearch: v === "people" || v === "held" || v === "cpeople", noSearch: !(v === "people" || v === "held" || v === "cpeople"),
+      filterEl: S ? h(S.FilterBar, { search: h(S.Input, { placeholder: v === "held" ? "Person, project or role" : "Name, username or email", "aria-label": "Search", defaultValue: "" }) }) : null,
+      readEl: S ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 20000).toISOString(), current: true }, subject: "Zitadel" }) : null,
+      frameStyle: isChange ? "padding:16px;border-radius:var(--radius-card);border:1px dashed var(--danger-line)" : "",
+      showProjects: v === "projects" || v === "cprojects", showPeople: v === "people" || v === "cpeople", showHeld: v === "held",
+      projects, people, grants, held,
+      mGuide: m === "guide", gLabel: "Step " + g + " of 4", gBars: [1, 2, 3, 4].map(i => ({ bg: i <= g ? "var(--accent)" : "var(--line-strong)" })),
+      gTitle: G[0], gLede: G[1], gCmd: !!G[2], gCmdEl: G[2], g2: g === 2, g4: g === 4, gHasNote: !!G[3], gNote: G[3], gMid: g < 4,
+      gNext: g === 3 ? "I've restarted it" : "Next", gBack: g === 1 ? "Close" : "Back",
+      mDialog: !!D, dTitle: D ? (done ? D.doneH : D.t) : "", dLede: D ? D.l : "", dNew: key === "newrole" && !done,
+      dHasList: !!(D && D.items.length && !done), dListTitle: D ? D.list : "", dList: D ? D.items : [],
+      dAsk: !!D && !done, dDone: done, dLoss: D ? D.loss : "", dTruth: D ? D.truth : "", dInstead: D ? D.instead : "", dInsteadHref: D ? D.ih : "#", dInsteadLink: D ? D.il : "",
+      dVerb: D ? D.verb : "", dVariant: D ? D.variant : "accent", dCancel: D ? D.cancel : "Cancel", dDoneTitle: D ? D.doneT : "", dDoneBody: D ? D.doneB : "",
+      bands: [
+        { title: "1 · The Zitadel page", lede: "Health first, as one line that opens; then the key as one row; then the three read-only pages; then the folded way to write.", frames: [
+          fr("v=z", "Default", "Answering in 42 ms, all four checks pass. The key is one row. Look inside is links only. Change Zitadel directly stays folded.", 1200),
+          fr("v=z&c=1", "Checks opened", "Show checks opens four rows: reachable, allowed to change, events (with Incoming events →), sign-in details.", 1300),
+          fr("v=z&s=events", "A check needs a look", "Events are behind Zitadel's own log: the line says 1 of 4, and the checks open by themselves on arrival.", 1300),
+          fr("v=z&o=1", "Change Zitadel directly, opened", "One warning, then two red doors, each with its Syndra route beside it. Below, the last three direct changes and what became of each, then All in Audit.", 1700),
+          fr("v=z&s=unreach", "Zitadel not answering", "The amber Notice with Check again. The line says when it last answered; the other checks wait; the read-only links go quiet.", 1300),
+          fr("v=z&s=loading", "Loading", "The address is known; no counts, no checks, until Zitadel answers.", 1100),
+        ] },
+        { title: "2 · Replacing the signing key", lede: "Past its limit the row turns amber and How to replace it turns accent. Four steps, one thing each; every command and setting in a copy row; the last step reads the key again and the dialog becomes its result.", frames: [
+          fr("v=z&s=due", "Key past its limit", "Amber Notice at the top, amber row, accent button.", 1200),
+          fr("v=z&s=due&m=guide&g=1", "Step 1 · Make a new key", "", 1000),
+          fr("v=z&s=due&m=guide&g=2", "Step 2 · Settings", "Two CopyableValues, each with its Copy button.", 1000),
+          fr("v=z&s=due&m=guide&g=3", "Step 3 · Restart", "Next reads I've restarted it, so moving on is a statement.", 1000),
+          fr("v=z&m=guide&g=4", "Step 4 · Checked", "Syndra reads the new key and says when the next one is due.", 1000),
+        ] },
+        { title: "3 · Look inside: three read-only pages", lede: "No verb anywhere. Each says how what Zitadel holds compares with Syndra's record, and every difference links to Drift, where it is dealt with inside Syndra.", frames: [
+          fr("v=projects", "Projects in Zitadel", "One folding list (6b), A to Z. Each project: whether it matches Syndra, roles and people. A project Syndra lacks stays folded and says so; a role only Zitadel has links to Drift.", 1500),
+          fr("v=people", "People in Zitadel", "Search, then the list beside the person (6a). Their roles as Zitadel holds them, each compared with Syndra, and a link to their access in Syndra.", 1100),
+          fr("v=held", "Roles held in Zitadel", "One table with search, person A to Z, 10 at a time. Every name links: the person to People in Zitadel, the project to its page.", 1300),
+        ] },
+        { title: "4 · Change projects and roles", lede: "The same folding list as the read-only page, inside the dashed red frame (5b), with the standing line under the title. Every verb opens a dialog that names who is affected, offers the Syndra route in one line, asks for the tick, and becomes its result.", frames: [
+          fr("v=cprojects", "The change page", "New role… on each project heading; Edit… and Delete… on each role.", 1500),
+          fr("v=cprojects&m=del", "Delete", "Who loses it, by name. The Syndra alternative sits just above the tick.", 1000),
+          fr("v=cprojects&m=del-done", "Deleted", "The dialog becomes its result; Done is the only button.", 1000),
+          fr("v=cprojects&m=newrole", "New role", "Accent, not red: creating takes nothing away.", 1000),
+        ] },
+        { title: "5 · Change people's roles", lede: "Now the same kind of page as projects and roles: it writes straight to Zitadel. Because a person's page in Syndra does exactly this with a reason, a plan and a record, the page nudges there three times, each in its own place: the lede, an accent note on the person, and one line in every dialog.", frames: [
+          fr("v=cpeople", "The change page", "Search and the list beside the person, inside the dashed frame. The accent note opens the person's card with the link to their page.", 1100),
+          fr("v=cpeople&m=change", "Change roles", "Tick what she keeps; the one being removed is marked. The consequence says it will be listed under Drift, and that roles given automatically because of it end too.", 1000),
+          fr("v=cpeople&m=change-done", "Changed", "Says what happened and where it shows next: Incoming events, then Drift.", 1000),
+        ] },
+        { title: "6 · Phone", lede: "Everything stacks; the checks line wraps under the reply time.", frames: [
+          fr("v=z&o=1", "Zitadel on a phone", "", 844, 390, 1),
+          fr("v=projects", "Projects on a phone", "", 844, 390, 1),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="My access board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · / for a member · My access · newest turn first</span>
+    <h1 class="type-page-title" style="margin:0">My access</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">A member's landing page: what they can use and why, then everything else the makerspace offers, each with a way to ask. No board drew it until now. Frames open alone with <span class="type-mono">?frame=</span> and their name.</p>
+  </header>
+
+  <section data-screen-label="Turn 2" style="display:flex;flex-direction:column;gap:24px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <span class="type-label" style="color:var(--label)">Turn 2 · 10 Oct</span>
+      <h2 class="type-section-title" style="margin:0">The first half: what you have, and what just changed</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty"><a href="#52b">52b</a> is picked for the catalogue. Above it, the page now answers the two things a member opens it for: can I use this, and what happened to my ask.</p>
+    </div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:10px;max-width:1480px"><span class="type-label" style="color:var(--label)">Changes in both options</span>
+      <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">
+        <li><strong style="color:var(--ink)">"Ready to use" goes.</strong> A role that works says nothing more. Only the exceptions speak, in the row's second line: "Not there yet" (amber) after a complete read that lacks it, and "Couldn't check" (grey) when Zitadel didn't answer. Healthy is silence, as everywhere else.</li>
+        <li><strong style="color:var(--ink)">The expiry moves onto its role.</strong> The separate amber box becomes the row itself: tinted, "Given to you until 20 Oct · 10 days left", and "Ask to keep it longer →" on the row. The role that runs out leads its card. One place for one fact.</li>
+        <li><strong style="color:var(--ink)">The summary says it plainly.</strong> "Four roles across two rooms. One runs out on 20 Oct." It counts what Zitadel holds and names the date.</li>
+        <li><strong style="color:var(--ink)">Recent changes, new.</strong> The last 30 days in the member's words, newest first. Each change is a dot and a word (Approved, Not approved, Given, Taken away, Withdrawn), the sentence with the role in bold, and the decider's note quoted with their name. Not approved offers "Ask again →". The card links to all your requests.</li>
+      </ul>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+      <div id="52c" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:2px solid var(--accent-line)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">52c</span><span style="font-size:16px;font-weight:600">What changed, then what you have</span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 10 Oct</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-me.dc.html?frame=default" title="Recent first" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Recent first.</strong> Recent changes leads, full width, then the cards. When nothing changed in 30 days the card gives up its seat and the page opens on your access, as Home does with a clear block.</figcaption></figure><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-me.dc.html?frame=quiet" title="Nothing recent" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Nothing recent.</strong> The same page on a quiet month: the greeting, then straight to the cards.</figcaption></figure></div><p style="margin:0;max-width:1464px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Why I recommend it.</strong> A member usually opens Syndra because something happened, often a notification about their request. The answer is the first thing they see, and when there is no news the page is just their access.</p></div>
+      <div id="52d" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">52d</span><span style="font-size:16px;font-weight:600">What you have, with changes beside it</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-me.dc.html?frame=side" title="Side column" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Side column.</strong> The cards keep the main column; Recent changes sits in a 400px column on the right and is always there, saying "Nothing has changed in the last 30 days" on a quiet month. Stable, but news is read second, and the column is furniture when empty.</figcaption></figure></div></div>
+    </div>
+  </section>
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Drawn as built</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">#52</strong> the catalogue lists every project, marks what you have as "You have this", and "Ask for this →" opens Ask for access already filled in · why you have each role is a sentence, never a chip · each role says whether it is ready to use, from Zitadel's own answer · having nothing shows the empty state with the way to ask.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Changed here</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The expiry note's "Request an extension" was a violet button that went to another page. It becomes "Ask to keep it longer →", opening Ask for access with that role chosen, because going somewhere is a link. The headline counts roles, not "permissions", so members and operators use one word for one thing. The error says "Your access hasn't changed", which is the member's version of "Nothing was changed".</p></div>
+  </section>
+
+  <section data-screen-label="Catalogue options" style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <h2 class="type-section-title" style="margin:0">What else is here</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">As built, every project is an open card under the member's own access. With eight rooms that is already three screens of roles before anything can be asked for.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+      <div id="52a" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)">
+        <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">52a</span><span style="font-size:16px;font-weight:600">As built: a card per project</span></div>
+        <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-me.dc.html?frame=cards" title="52a" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Everything is visible at once, which works for three or four rooms. Each card says when you already have all of it.</figcaption></figure>
+      </div>
+      <div id="52b" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:2px solid var(--accent-line)">
+        <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">52b</span><span style="font-size:16px;font-weight:600">Projects fold, with one search</span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 10 Oct</span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+          <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-me.dc.html?frame=default" title="52b" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Browsing.</strong> The bundle picker's folds (2a), in a member's words. Each room is one row saying "You have 3 of 4" or "3 you can ask for". Open, it lists its roles with what each lets you do, then "Ask for this →" or "You have this".</figcaption></figure>
+          <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-me.dc.html?frame=search" title="52b search" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Searching.</strong> "weld" opens Metal shop at the welder and folds the rest. A search that finds nothing says so, and points at Ask for access, where Why can describe what you need.</figcaption></figure>
+        </div>
+        <p style="margin:0;max-width:1464px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Why I recommend it.</strong> A member arrives knowing what they want ("the welder"), and search finds it in one step. The page stays about their own access, with the catalogue a short list below it however many rooms there are. Operators and members choose from the same shape.</p>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">States, in 52b</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ stateFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:8px">
+          <div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Phone" style="margin:0;display:flex;flex-direction:column;gap:8px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-me.dc.html?frame=phone" title="Phone" style="width:390px;height:844px;border:0"></iframe></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">Cards stack; each role wraps to its name, then why you have it and whether it's ready. The folds keep 52px rows.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h1 class="type-page-title" style="margin:0">Hi Priya. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+    <sc-if value="{{ showSummary }}" hint-placeholder-val="{{ true }}"><span style="font-size:14.5px;color:var(--faint)">Four roles across two rooms. One runs out on 20 Oct.</span></sc-if>
+  </div>
+
+  <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,240px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" avatar="{{ false }}" label="Loading your access" hint-size="100%,220px"></x-import></x-import></sc-if>
+
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load your access.</span><p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Your access hasn't changed.</p><div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span></div></div>
+    </div>
+  </sc-if>
+
+
+  <sc-if value="{{ showTop }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
+    <sc-if value="{{ showRecent }}" hint-placeholder-val="{{ true }}">
+    <div style="order:{{ recentOrder }};flex:{{ recentFlex }};min-width:0">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Recent changes" note="Last 30 days" action="{{ recentLink }}" hint-size="100%,56px"></x-import>
+        <sc-for list="{{ recent }}" as="e" hint-placeholder-count="4">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;padding:14px 20px">
+            <span style="width:118px;flex:none;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ e.wordColor }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ e.tone }}" hint-size="7px,7px"></x-import>{{ e.word }}</span>
+            <span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:5px">
+              <span style="font-size:14.5px;line-height:1.5;text-wrap:pretty">{{ e.pre }}<strong style="font-weight:600">{{ e.role }}</strong>{{ e.post }}</span>
+              <sc-if value="{{ e.hasQuote }}" hint-placeholder-val="{{ false }}"><span style="font-size:14px;line-height:1.55;color:var(--ink);text-wrap:pretty">“{{ e.quote }}” <span style="color:var(--muted)">— {{ e.by }}</span></span></sc-if>
+              <sc-if value="{{ e.hasLink }}" hint-placeholder-val="{{ false }}"><a href="route-requests.dc.html?frame=ask" style="align-self:flex-start;display:inline-flex;min-height:28px;align-items:center;font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration:none">{{ e.link }}</a></sc-if>
+            </span>
+            <span style="width:110px;flex:none;text-align:right;font-size:13px;color:var(--faint)">{{ e.when }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ recentQuietLine }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="padding:14px 20px;font-size:14px;color:var(--muted)">Nothing has changed in the last 30 days.</div></sc-if>
+      </x-import>
+    </div>
+    </sc-if>
+    <div style="order:1;flex:1 1 560px;min-width:0;display:flex;flex-wrap:wrap;gap:18px">
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><div style="flex:1 1 100%;min-width:0"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,180px"><x-import component-from-global-scope="Syndra.EmptyState" title="You don't have access to anything yet." guidance="If there's a machine or a space you need, ask for it and makerspace staff will decide. Everything the makerspace offers is listed below." action="{{ emptyAction }}" hint-size="100%,160px"></x-import></x-import></div></sc-if>
+      <sc-for list="{{ held }}" as="p" hint-placeholder-count="2">
+        <div style="flex:1 1 420px;min-width:0"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+          <div class="type-card-title" style="padding:16px 20px">{{ p.project }}</div>
+          <sc-for list="{{ p.roles }}" as="r" hint-placeholder-count="2">
+            <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;padding:12px 20px;background:{{ r.bg }}">
+              <span style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">{{ r.label }}</span><span style="font-size:13.5px;font-weight:{{ r.whyWeight }};color:{{ r.whyColor }}">{{ r.why }}</span></span>
+              <sc-if value="{{ r.hasAsk }}" hint-placeholder-val="{{ false }}"><a href="route-requests.dc.html?frame=ask" style="display:inline-flex;min-height:44px;align-items:center;font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration:none">Ask to keep it longer →</a></sc-if>
+            </div>
+          </sc-for>
+        </x-import></div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ showCatalog }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;flex-direction:column;gap:12px;margin-top:6px">
+    <div style="display:flex;flex-direction:column;gap:4px"><h2 class="type-section-title" style="margin:0">What else is here</h2><span style="font-size:13.5px;color:var(--faint)">Everything the makerspace offers. Ask for anything you need; makerspace staff decide.</span></div>
+
+    <sc-if value="{{ isFolds }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="max-width:560px"><x-import component-from-global-scope="Syndra.Input" default-value="{{ query }}" placeholder="Search everything on offer: a machine, a room, a door" aria-label="Search everything on offer" hint-size="100%,46px"></x-import></div>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,360px">
+          <sc-for list="{{ folds }}" as="g" hint-placeholder-count="8">
+            <div class="{{ g.divider }}">
+              <button type="button" aria-expanded="{{ g.open }}" style="width:100%;display:flex;align-items:center;gap:12px;min-height:52px;padding:10px 20px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer" style-hover="background:var(--hover)">
+                <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line);color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform:{{ g.rot }}"><path d="M6 9l6 6 6-6"></path></svg></span>
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:15px;font-weight:600">{{ g.project }}</span><span style="font-size:13px;color:var(--muted)">{{ g.about }}</span></span>
+                <span style="font-size:13px;font-weight:600;color:{{ g.countColor }};text-align:right">{{ g.count }}</span>
+              </button>
+              <sc-if value="{{ g.open }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:0 20px 8px 60px">
+                  <sc-for list="{{ g.roles }}" as="r" hint-placeholder-count="3">
+                    <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;min-height:48px;padding:10px 0;background:{{ r.bg }}">
+                      <span style="flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ r.label }}</span><span style="font-size:13px;color:var(--muted)">{{ r.desc }}</span></span>
+                      <sc-if value="{{ r.mine }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--faint)">You have this</span></sc-if>
+                      <sc-if value="{{ r.ask }}" hint-placeholder-val="{{ true }}"><a href="route-requests.dc.html?frame=ask" style="display:inline-flex;min-height:44px;align-items:center;font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration:none">Ask for this →</a></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </x-import>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCards }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-wrap:wrap;gap:18px">
+        <sc-for list="{{ cards }}" as="g" hint-placeholder-count="4">
+          <div style="flex:1 1 420px;min-width:0"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+            <x-import component-from-global-scope="Syndra.CardHeader" title="{{ g.project }}" note="{{ g.note }}" hint-size="100%,56px"></x-import>
+            <sc-for list="{{ g.roles }}" as="r" hint-placeholder-count="3">
+              <div class="row-divider" style="display:flex;align-items:center;gap:14px;padding:12px 20px">
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ r.label }}</span><span style="font-size:13px;color:var(--muted)">{{ r.desc }}</span></span>
+                <sc-if value="{{ r.mine }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--faint)">You have this</span></sc-if>
+                <sc-if value="{{ r.ask }}" hint-placeholder-val="{{ true }}"><a href="route-requests.dc.html?frame=ask" style="font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration:none">Ask for this →</a></sc-if>
+              </div>
+            </sc-for>
+          </x-import></div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    this.session = { id: "u2", name: "Priya Nair", email: "priya.nair@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "", role: "user", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+    ];
+    const R = (label, desc) => ({ label, desc });
+    this.catalog = [
+      { p: "3D printing", about: "The print room on the ground floor", roles: [R("Printer · Member", "Use the FDM printers"), R("Printer · Operator", "Run long jobs and change filament"), R("Resin printer · Operator", "Use the resin printer and the wash station")] },
+      { p: "Electronics bench", about: "Soldering, scopes and bench power", roles: [R("Soldering station · Operator", "Use the soldering stations and fume extractor"), R("Oscilloscope · Member", "Borrow the bench scopes")] },
+      { p: "Laser Lab", about: "Two laser cutters in the laser bay", roles: [R("Laser cutter · Member", "Book time on the laser cutter"), R("Laser cutter · Operator", "Run the laser cutter without a supervisor"), R("Laser cutter · Supervisor", "Sign others off on the laser cutter"), R("Laser bay · Door", "Badge entry to the laser bay")] },
+      { p: "Main lab", about: "The makerspace itself", roles: [R("Front door", "Badge entry to the makerspace"), R("Lockers", "A locker for the term")] },
+      { p: "Metal shop", about: "Welding and the metal lathe", roles: [R("Welding · Operator", "Use the MIG welder"), R("Lathe · Operator", "Use the metal lathe"), R("Metal shop · Door", "Badge entry to the metal shop")] },
+      { p: "Network storage", about: "Files on TrueNAS", roles: [R("Member", "A home folder on TrueNAS"), R("Archive · Write", "Add to the shared project archive")] },
+      { p: "Textiles", about: "Sewing and embroidery", roles: [R("Sewing machine · Member", "Use the sewing machines"), R("Embroidery · Operator", "Run the embroidery machine")] },
+      { p: "Wood shop", about: "Bandsaw, table saw and the CNC router", roles: [R("Bandsaw · Member", "Use the bandsaw"), R("Table saw · Operator", "Use the table saw"), R("CNC router · Operator", "Run the CNC router"), R("Wood shop · Door", "Badge entry to the wood shop")] },
+    ];
+    this.mine = new Set(["Laser cutter · Member", "Laser cutter · Operator", "Laser bay · Door", "Bandsaw · Member"]);
+  }
+  renderVals() {
+    const st = this.st;
+    const empty = st === "empty", loading = st === "loading", error = st === "error", search = st === "search";
+    const quietFrame = st === "quiet";
+    const mine = empty ? new Set() : this.mine;
+    const W = (label, why, tone) => ({ label, why, whyColor: tone ? "var(--warn-text)" : "var(--muted)", whyWeight: tone ? 600 : 400, hasAsk: tone === true, bg: tone === true ? "var(--warn-soft)" : "transparent" });
+    const waitFrame = st === "waiting";
+    const held = [
+      { project: "Laser Lab", roles: (waitFrame ? [W("Laser cutter · Supervisor", "Not there yet · approved today, and makerspace staff check this role before it reaches you", "wait")] : []).concat([W("Laser cutter · Operator", "Given to you until 20 Oct · 10 days left", true), W("Laser cutter · Member", "Because you're in Lab Tech"), W("Laser bay · Door", "Comes with Laser cutter · Operator, automatically")]) },
+      { project: "Wood shop", roles: [W("Bandsaw · Member", "Because you're in Lab Tech")] },
+    ];
+    const rows = (g, hit) => g.roles.map(r => ({ ...r, mine: mine.has(r.label), ask: !mine.has(r.label), bg: hit && hit(r) ? "var(--accent-soft)" : "transparent" }));
+    const weld = (r) => /weld/i.test(r.label + " " + r.desc);
+    const folds = this.catalog.filter(g => !search || g.roles.some(weld) || true).map((g, i) => {
+      const have = g.roles.filter(r => mine.has(r.label)).length, n = g.roles.length;
+      const open = search ? g.roles.some(weld) : g.p === "Laser Lab" && !empty;
+      const list = search && open ? rows({ roles: g.roles.filter(weld) }, weld) : rows(g);
+      return { project: g.p, about: g.about, divider: i ? "row-divider" : "", open, rot: open ? "none" : "rotate(-90deg)",
+        count: search ? (g.roles.some(weld) ? "1 match" : "No match") : have === n ? "You have all of it" : have ? "You have " + have + " of " + n : n + " you can ask for",
+        countColor: search ? (g.roles.some(weld) ? "var(--accent-text)" : "var(--faint)") : have ? "var(--ink)" : "var(--faint)", roles: list };
+    });
+    const cards = this.catalog.map(g => ({ project: g.p, note: g.roles.every(r => mine.has(r.label)) ? "You have everything here" : g.about, roles: rows(g) }));
+    const side = st === "side", quiet = st === "quiet";
+    const E = (word, tone, pre, role, post, when, x) => Object.assign({ word, tone, wordColor: tone === "danger" ? "var(--danger-text)" : "var(--ink)", pre, role, post, when, hasQuote: false, quote: "", by: "", hasLink: false, link: "" }, x || {});
+    const declined = E("Not approved", "neutral", "Your request for ", "Laser cutter · Member", " was not approved.", "8 Oct", { hasQuote: true, quote: "Book the laser induction first. The next one is Thursday at 5, and it opens Member straight after.", by: "Kanishk Singh", hasLink: true, link: "Ask again \u2192" });
+    const waitingE = E("Approved", "warn", "Your request for ", "Laser cutter · Supervisor", " was approved. It isn't on your account yet: makerspace staff check this role before it reaches you, and nothing more is needed from you.", "Today", { hasQuote: true, quote: "Congratulations on finishing the training. You can sign off evening sessions once it lands.", by: "Kanishk Singh" });
+    const recent = quiet ? [] : empty ? [declined] : (waitFrame ? [waitingE] : []).concat([
+      E("Taken away", "danger", "", "Studio · Booking", " was taken away.", "5 Oct", { hasQuote: true, quote: "Studio bookings close for the term. They open again in January.", by: "Kanishk Singh" }),
+      E("Approved", "healthy", "Your request for ", "Laser cutter · Operator", " was approved, until 20 Oct.", "2 Oct", { hasQuote: true, quote: "Approved for the capstone build. Book the evening slots.", by: "Kanishk Singh" }),
+      E("Given", "healthy", "", "Laser bay · Door", " came with it, automatically.", "2 Oct"),
+      E("Not approved", "neutral", "Your request for ", "Soldering station · Operator", " was not approved.", "30 Sept", { hasQuote: true, quote: "Do the electronics induction first. It runs every Tuesday at 4.", by: "Sai Khurana", hasLink: true, link: "Ask again →" }),
+    ]);
+    const f = (frame, label, note) => ({ src: "route-me.dc.html?frame=" + frame, label, note });
+    return {
+      recent, showTop: !loading && !error, showRecent: !quiet || side, recentQuietLine: quiet && side, recentOrder: side ? 2 : 0, recentFlex: side ? "0 1 400px" : "1 1 100%",
+      recentLink: window.Syndra ? React.createElement(window.Syndra.CardHeaderLink, { href: "route-requests.dc.html?frame=mine" }, "All your requests →") : null,
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData,
+      stLoading: loading, stError: error, stEmpty: empty,
+      showSummary: !loading && !error && !empty, showHeld: !loading && !error && !empty, showCatalog: !loading && !error,
+      isFolds: st !== "cards", isCards: st === "cards", query: search ? "weld" : "",
+      held: empty ? [] : held, folds, cards,
+      emptyAction: { label: "Ask for access", onClick: () => {} },
+      stateFrames: [
+        f("empty", "Nothing yet, one ask declined", "Recent changes still leads: the declined request, the note saying why, and Ask again. Then the empty state and the catalogue, every room folded with what you can ask for. A member with nothing and no news sees only the empty state."),
+        f("waiting", "Approved, not there yet", "The member's side of a step left (N15, N16). The approval leads Recent changes with an amber dot and says, in their words, that it isn't on their account yet and that nothing more is needed from them. The role sits in its room with \u201cNot there yet\u201d and why. Never \u201cWaiting for you to send\u201d: the member can't send. It clears when staff send it."),
+        f("loading", "Loading", "Skeleton rows only. No summary and no catalogue until the read lands."),
+        f("error", "Error", "The red notice in the content's place. Your access hasn't changed; Try again; a reference to quote."),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

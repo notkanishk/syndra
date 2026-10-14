@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Connected systems board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /system/targets</span>
+    <h1 class="type-page-title" style="margin:0">Connected systems</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">The systems outside Syndra it creates and manages accounts on, each joined by an add-on. A short list, usually one row: it exists so a deployment with none still says so, and so each system's state is one look away. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#4</strong> named Connected systems · <strong style="color:var(--ink)">#23</strong> a fixed row on every operator deployment; with none registered it says "No system is connected." and what would connect one; registered, answering and a broken signing key are three separate states · <strong style="color:var(--ink)">#30</strong> each reason is a sentence · a system that has not answered shows dashes, never 0.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Standing rules applied</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">A short list, so no search, Filters or Select, and no sections · System and People sort from their headings; System carries the arrow, A to Z · status is dot and word · numbers last, 110px · a fault is one Notice in the content column: red for a key Syndra cannot read, amber for paused · each row says when its system last answered: systems are read one by one, so there is no single read line over the table.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The fault sentence moves from under the row into the Notice, so it is said once and above the page, and the row keeps its dot and word · Not answered yet keeps its sentence under the row: it is not a fault and clears by itself · the add-on id stays faint under the name · Things it can do goes: a count of add-on operations tells the operator nothing they act on · Needs you and People come from the system's own health, inventory and findings reads, so the index makes one more call per system · the lede says "network storage" for what TrueNAS is.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/system/targets" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stKey }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Syndra can't connect to TrueNAS.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra cannot read the key it signs requests with, so nothing is reaching TrueNAS: no new accounts, and no revocations. Look at the Syndra server, not at TrueNAS.</p>
+      </div>
+    </div></sc-if>
+  <sc-if value="{{ stPaused }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Syndra has paused calls to TrueNAS.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">It stopped after repeated failures and will try again by itself. This does not mean TrueNAS is down: look at the Syndra server. Changes for TrueNAS wait until calls resume.</p>
+      </div>
+    </div></sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Connected systems" meta="{{ meta }}" lede="{{ lede }}" hint-size="100%,120px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">The list of connected systems could not be read.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_3b9f62d0</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,160px">
+      <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="flex:1 1 0;min-width:0"><button type="button" aria-label="Sort by system" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;color:var(--ink)" style-hover="color:var(--ink)">System<span aria-hidden="true" style="font-size:11px">↑</span></button></span><span class="hidden tablet:block" style="width:180px;flex:none">Status</span><span class="hidden desktop:block" style="width:250px;flex:none">Needs you</span><span style="width:110px;flex:none;display:flex;justify-content:flex-end"><button type="button" aria-label="Sort by people" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit" style-hover="color:var(--ink)">People</button></span></x-import></sc-if>
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 2 }}" avatar="{{ false }}" label="Loading connected systems" hint-size="100%,140px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No system is connected." guidance="Syndra manages accounts on a system outside itself — network storage, a door controller — through an add-on running in its own container. For whoever runs the Syndra server: one appears here after the deployment names it in ADDON_TARGETS and starts its container; see DEPLOY.md, “Bringing up the TrueNAS add-on”. Until then Syndra manages sign-in only, and no outside system is being kept in step." hint-size="100%,180px"></x-import></sc-if>
+      <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><sc-for list="{{ rows }}" as="r" hint-placeholder-count="1">
+        <div class="row-divider flex flex-col items-start gap-2 px-5 py-4 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
+          <span style="flex:1 1 0;min-width:220px;display:flex;flex-direction:column;gap:2px">
+            <a href="{{ r.href }}" style="font-size:15.5px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.name }}</a>
+            <span style="font-size:13px;color:var(--muted)">{{ r.product }}</span>
+            <sc-if value="{{ r.hasProject }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:var(--muted)">Zitadel project <a href="route-projects-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.project }}</a></span></sc-if><sc-if value="{{ r.noProject }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--faint)">No Zitadel project yet</span></sc-if>
+            <span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ r.id }}</span>
+          </span>
+          <span class="tablet:w-[180px] tablet:shrink-0" style="display:flex;flex-direction:column;gap:3px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ r.ink }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="7px,7px"></x-import>{{ r.label }}</span><span style="padding-left:15px;font-size:12.5px;color:var(--faint)">{{ r.read }}</span></span>
+          <span class="hidden desktop:block" style="width:250px;flex:none;padding-top:1px"><span style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;font-size:13.5px;line-height:1.45"><sc-for list="{{ r.needs }}" as="n" hint-placeholder-count="1"><a href="{{ r.href }}" style="color:var(--accent-text);font-weight:600;text-decoration:none" style-hover="text-decoration:underline;text-underline-offset:3px">{{ n.t }}</a></sc-for><sc-if value="{{ r.calm }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Nothing waiting</span></sc-if><sc-if value="{{ r.unknown }}" hint-placeholder-val="{{ false }}"><span style="color:var(--faint)">{{ r.unknownText }}</span></sc-if></span></span>
+          <span class="tablet:w-[110px] tablet:shrink-0 tablet:text-right" style="display:flex;flex-direction:column;gap:2px;padding-top:1px"><span style="font-size:15px;color:{{ r.numInk }}">{{ r.people }}<span class="tablet:hidden" style="font-size:13px;color:var(--muted)">{{ r.peopleNoun }}</span></span><sc-if value="{{ r.hasPeopleNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--faint)">{{ r.peopleNote }}</span></sc-if></span>
+          <sc-if value="{{ r.needsBelow }}" hint-placeholder-val="{{ true }}"><span class="desktop:hidden" style="flex-basis:100%;width:100%"><span style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font-size:13.5px;line-height:1.45"><sc-for list="{{ r.needs }}" as="n" hint-placeholder-count="1"><a href="{{ r.href }}" style="color:var(--accent-text);font-weight:600;text-decoration:none" style-hover="text-decoration:underline;text-underline-offset:3px">{{ n.t }}</a></sc-for><sc-if value="{{ r.calm }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Nothing waiting</span></sc-if><sc-if value="{{ r.unknown }}" hint-placeholder-val="{{ false }}"><span style="color:var(--faint)">{{ r.unknownText }}</span></sc-if></span></span></sc-if>
+          <sc-if value="{{ r.hasDetail }}" hint-placeholder-val="{{ false }}"><span style="flex-basis:100%;width:100%"><span style="display:block;max-width:80ch;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ r.detail }}</span></span></sc-if>
+        </div>
+      </sc-for></sc-if>
+    </x-import>
+    </sc-if>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: 2, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: this.st === "empty" ? [] : [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const st = this.st;
+    const known = !/^(loading|error)$/.test(st), list = known && st !== "empty";
+    const T = (name, x, id, state) => {
+      const S = {
+        ok: { tone: "healthy", label: "Answering", ink: "var(--ink)", read: "Answered just now" },
+        wait: { tone: "neutral", label: "Not answered yet", ink: "var(--muted)", read: "Configured 3 min ago", detail: "The add-on is configured and has not answered yet. This usually clears by itself within a minute or two." },
+        paused: { tone: "warn", label: "Paused after failures", ink: "var(--warn-text)", read: "Last answered 09:02, 12 min ago" },
+        key: { tone: "danger", label: "Cannot connect", ink: "var(--danger-text)", read: "Last answered 08:40, 34 min ago" },
+      }[state];
+      const ok = state === "ok", known = state !== "wait";
+      return { name, product: x.product || "Not read yet", id, href: x.project ? "route-system-targets-id.dc.html?frame=default" : "route-system-targets-id.dc.html?frame=noproject", project: x.project || "", hasProject: !!x.project, noProject: !x.project, read: S.read, tone: S.tone, label: S.label, ink: S.ink, hasDetail: !!S.detail, detail: S.detail || "",
+        people: known ? String(x.people) : "—", peopleNoun: known ? " people" : "", numInk: ok ? "var(--ink)" : known ? "var(--muted)" : "var(--faint)", hasPeopleNote: known && !ok, peopleNote: "last known",
+        needs: ok ? (x.needs || []).map(t => ({ t })) : [], calm: ok && !(x.needs || []).length, needsBelow: known, unknown: !ok, unknownText: known ? "Unknown until it answers" : "—" };
+    };
+    const np = st === "noproject";
+    let rows = [T("TrueNAS", { product: "TrueNAS SCALE 24.10 · network storage", project: np ? "" : "Network storage", people: np ? 0 : 48, needs: np ? ["Choose its Zitadel project →"] : st === "calm" ? [] : ["3 accounts Syndra doesn't manage →", "1 value somebody changed there →"] }, "truenas", st === "paused" ? "paused" : st === "key" ? "key" : st === "waiting" ? "wait" : "ok")];
+    if (st === "two") rows = [T("Door controller", {}, "unifi-access", "wait")].concat(rows).sort((a, b) => a.name.localeCompare(b.name));
+    const n = rows.length;
+    const f = (frame, label, note, phone) => phone ? { src: "route-systems.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-systems.dc.html?frame=" + frame, label, note, w: 1440, h: 800, boxW: 720, boxH: 400, scale: 0.5 };
+    const lap = (frame, label, note) => ({ src: "route-systems.dc.html?frame=" + frame, label, note, w: 920, h: 800, boxW: 690, boxH: 600, scale: 0.75 });
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData,
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stKey: st === "key", stPaused: st === "paused",
+      stList: list, showCard: st !== "error", hasRead: list, rows,
+      readState: { readAt: new Date(Date.now() - 40000).toISOString(), current: true },
+      meta: list ? n + (n === 1 ? " system connected" : " systems connected") : undefined,
+      lede: st === "empty" ? "The systems outside Syndra it creates and manages accounts on, each joined to Syndra by an add-on." : "The systems outside Syndra it creates and manages accounts on, each joined by an add-on. Open a system to see who has an account there and anything waiting on you.",
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("default", "Default", "One system, answering: its name links to its page; beneath it, the product and version the system reports, then its Zitadel project (read only), then the add-on id, faint. Status is dot and word, with when it last answered beneath. Needs you links to what is waiting on that system's page: accounts Syndra does not manage, and values somebody changed there. People is how many have an account Syndra manages there."),
+          f("two", "Two systems", "A second add-on adds a row; the list stays A to Z. The door controller has not answered yet: neutral, with its sentence under the row. Its product, what it needs and its people are dashes, never 0: Syndra has not read it."),
+          f("noproject", "No Zitadel project yet", "Each system has exactly one Zitadel project, shown under its name and linking to it; it is chosen on the system's own page, never here. Until it is, Needs you says so, and that is the only way on."),
+          f("calm", "Nothing waiting", "Needs you says so with the healthy dot, so an empty cell never reads as unknown."),
+          f("waiting", "Not answered yet", "Where every add-on starts. Not a fault, so no Notice: the row says it usually clears by itself."),
+          f("paused", "Paused after failures", "An amber Notice above the page says Syndra stopped calling, will try again by itself, and where to look. The row keeps its dot and word. People shows the last known count, labelled; Needs you says it is unknown until TrueNAS answers."),
+          f("key", "Cannot connect", "A red Notice: Syndra cannot read its signing key, so nothing is reaching TrueNAS. It sends the reader to the Syndra server, not to TrueNAS. The row says when TrueNAS last answered."),
+          f("empty", "None connected", "Says no system is connected, and what would connect one (#23). No count and no read line."),
+          f("loading", "Loading", "The title and lede are known; no count or read line until the list is read."),
+          f("error", "Error", "The red notice in the list's place. Nothing was changed."),
+        ] },
+        { title: "Laptop · 920", frames: [lap("two", "At laptop width", "Needs you moves under the row, full width; System, Status and People keep one line.")] },
+        { title: "Phone · 390", frames: [f("two", "Phone", "Each row stacks: name and product, status, people with its own noun, then what it needs.", true)] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
