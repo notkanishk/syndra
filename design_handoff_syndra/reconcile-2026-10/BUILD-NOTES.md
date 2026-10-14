@@ -66,8 +66,9 @@ Written 14 Oct 2026, after reading the repo at `8c46586`. **Where this file and 
   - `ponytail:` in memory. A restart during an outage shows "TrueNAS hasn't listed its groups yet" until it answers.
 
 **Built-in groups never reach the picker.** `group.query` returns TrueNAS's built-in groups (`builtin_administrators`, `wheel` …) alongside the makerspace's (`addons/truenas/subjects.go:213`). Mapping a role to one would hand NAS administration to everyone holding it.
-- The values list and the write-path check now exclude `builtin: true`.
-- The convergence index keeps them, because every TrueNAS account sits in `builtin_users`, and a full-replace that couldn't see it would strip it.
+- Built-in groups are now outside what Syndra manages: never offered, never added, never removed.
+- The values list and the write-path check exclude them, and a subject's reported groups omit them.
+- Convergence carries an account's current built-in memberships through its full replace. Today it writes exactly the mapped set, which strips `builtin_users` (SMB's BUILTIN\Users) from any account in it. That is fixed too.
 
 **A truncated read is now an error.** `groupIndex` asks for `subjectReadCap + 1` rows and never checks the count, so a NAS with more than 5,000 groups gets a silently partial index. Both the values list and convergence now refuse a short read, rather than act on half a list.
 
@@ -89,9 +90,9 @@ Written 14 Oct 2026, after reading the repo at `8c46586`. **Where this file and 
 
 - `to-design/Q-01-truenas-states.md`
 
-## Questions for the owner (asked in chat)
+## Owner's answers (14 Oct 2026)
 
-1. Existing mappings when the project moves onto the target.
-2. Which TrueNAS groups the picker offers: every non-built-in group, or only Syndra's `mk-` groups.
-3. Whether the role and group hierarchy designed earlier (composed roles; resource groups `mk-<resource>-<ro|rw>`) is part of finishing the add-on.
-4. Whether every SMB dataset is `acltype=nfsv4` with inheritance (the "what this group can open" line needs `filesystem.getacl`).
+1. **Existing mappings are inferred.** A system whose mappings all sit in one project gets that project. A system whose mappings span several stops migration 000051 with a list of them, to be fixed by hand. Nothing is guessed or deleted.
+2. **The picker offers every group made on the NAS**, minus the built-in ones. It assumes no naming convention.
+3. **Composed roles come later.** Today TrueNAS has only the wide base groups. An administrator-facing way to compose roles is owed, with details still to settle (`openspec/NEXT.md`, "TrueNAS add-on — owed after the October reconcile"). It is blocked on the untraced `EnforceMappingRules` path, because the first composed role is the first mapping rule in production.
+4. **ACL mode is unknown.** It is being read from the dev NAS, read-only. The "what this group can open" line waits on that.
