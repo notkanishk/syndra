@@ -97,6 +97,20 @@
 - [ ] 7.4 Fold in A-01 from design (operator intermediate state, "paused" wording, NAS with no groups of its own)
 - [ ] 7.5 Codebase-memory re-index (`detect_changes`)
 
+## 8. Where to connect, from the NAS (WALKTHROUGH Part 3)
+
+- [ ] 8.1 Add-on: `reach` read. It covers SMB shares, plus ACLs at each share root and first-level folder. For a set of groups it returns `{share, path, access: read|modify, dataset, addresses}`, cached per share and refreshed on reconcile. Tests: traverse-only isn't reach; Community resolves to `main/waddle_share` on the production-shaped fixture
+- [ ] 8.2 Manifest: declare the operation. Backend: `GET /me/targets` items carry `reach` from the member's own groups, never from the group names. Tests
+- [ ] 8.3 Operator: `GET /targets/{t}/groups/{group}/reach` for the mappings page's "what this group opens" line. Test
+- [ ] 8.4 `storage.status` reports usage per reachable path from its dataset, with 0 rather than absent. Test
+- [ ] 8.5 UI: share blocks render from `reach`, and the `smb://host/group` derivation is deleted
+
+## 9. Every way of giving a role reaches TrueNAS (WALKTHROUGH G1, G4, G5)
+
+- [ ] 9.1 Request approval, direct grant and a webhook `grant_added` queue the same target convergence the cascade does. Test: an approved request yields a TrueNAS outbox row
+- [ ] 9.2 Creating or lifting a hold queues a convergence for its subject. Test
+- [ ] 9.3 `user_deactivated` queues a convergence that disables the account. Test
+
 ## Found in production, 14 Oct 2026 (read-only audit of drive.makerspace.tools)
 
 The only Syndra writes in 60 days were prod's 3 `user.create` and 1 `user.update`, all on 14 Oct. No group was stripped and no account was locked. Dev made no writes.
