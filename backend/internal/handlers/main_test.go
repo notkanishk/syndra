@@ -12,6 +12,8 @@ import (
 func TestMain(m *testing.M) {
 	dbRequireTargetProject = func(context.Context, string) error { return nil }
 	resolveMappingProject = func(_ context.Context, _ string, requested string) (string, error) { return requested, nil }
+	svcConvergeProjectChange = func(context.Context, string, string, string) error { return nil }
+	svcConvergeSubjectOn = func(context.Context, string, string, string) error { return nil }
 	dbTargetProjects = func(context.Context) (map[string]string, error) { return map[string]string{}, nil }
 	os.Exit(m.Run())
 }

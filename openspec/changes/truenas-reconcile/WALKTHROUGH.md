@@ -44,11 +44,11 @@ There are four ways to give a role. Each must lead to the NAS account.
 | Path | Reaches TrueNAS today |
 |---|---|
 | Bundle assigned or published, rule change, role members (`services/cascade.go:262`) | **ok**: queues a convergence |
-| A request approved (`handlers/access.go:353`) | **owed**: grants in Zitadel and never queues a convergence |
-| A direct grant (`POST /users/{id}/grants`) | **owed**: same |
-| A grant made in Zitadel's console (webhook `grant_added`) | **owed**: same |
+| A request approved (`handlers/access.go:353`) | **fixed**: converges the system its project serves |
+| A direct grant: add, replace or revoke | **fixed**: same, through `grantDirect` |
+| A grant made in Zitadel's console (webhook `grant_added`) | **by design, no**: a Zitadel change with no Syndra trace is drift. It reaches TrueNAS once an operator accepts it in drift triage |
 
-In the three owed cases the account is created only when an operator runs "apply entitlements" on the system. The periodic reconcile walks only people who already have an account.
+Behind all of them, the periodic reconcile now also creates the account for anyone who holds a mapped role and has none. It skips anyone with a change already waiting (**fixed**).
 
 ### 1.5 Send
 
@@ -73,7 +73,7 @@ The system page shows:
 - merge findings and dormant accounts
 - the mutation log anchor
 
-**Owed:** a hold, or lifting one, queues nothing. It reaches the NAS at the next reconcile, up to 6h later.
+A hold, or lifting one, now queues that person's convergence at once (**fixed**). So does Zitadel deactivating someone.
 
 ### 1.7 Taking access away
 
@@ -144,11 +144,11 @@ The usage panel has the same root cause. It lists every share where the member o
 
 | # | Gap | Where | Task |
 |---|---|---|---|
-| G1 | Request approval, direct grant and Zitadel-side grants don't queue a TrueNAS convergence | `handlers/access.go:353`, direct grant, webhook `processGrantAdded` | 9.1 |
+| G1 | ~~Request approval and direct grants don't queue a TrueNAS convergence~~ fixed | | 9.1 |
 | G2 | Mount addresses assume share = group | `MyStorage.tsx:437`, add-on manifest | 8.x |
 | G3 | Usage lists shares by file ownership, not by access | `addons/truenas/storage_status.go:117` | 8.4 |
-| G4 | A hold, or lifting one, queues nothing | `handlers/allowances.go` | 9.2 |
-| G5 | Deactivation in Zitadel lands only at the next resolution | webhook `user_deactivated` | 9.3 |
+| G4 | ~~A hold, or lifting one, queues nothing~~ fixed | | 9.2 |
+| G5 | ~~Deactivation in Zitadel lands only at the next resolution~~ fixed | | 9.3 |
 | G6 | The paused copy still promises the password is applied later | `MyStorage.tsx:400,584` | 5.2 |
 | G7 | The withheld list can print `true` for an SMB denial | `MyStorage.tsx` withheld list | 5.2 |
 | G8 | No home directory is set, though comments assume one | `addons/truenas/apply.go` | owner: is a personal home share wanted? |

@@ -255,6 +255,7 @@ var addonsPlan = addons.Plan
 var (
 	dbTargetsMappedToRole     = db.TargetsMappedToRole
 	dbRecordSystemConvergence = db.RecordSystemConvergence
+	dbTargetServingProject    = db.TargetServingProject
 	svcResolveEntitlements    = ResolveEntitlements
 )
 

@@ -606,7 +606,7 @@ func jsonErrorResponse(w http.ResponseWriter, status int, errStr, msg string) {
 		// operator's mistake when it is Syndra's. They get a sentence and a
 		// reference that finds the log line; the cause stays one grep away.
 		ref := supportReference()
-		log.Printf("[ERROR] ref=%s code=%s: %s", ref, errStr, msg)
+		log.Printf("[HTTP] internal error ref=%s code=%s: %s", ref, errStr, msg)
 		jsonResponse(w, status, ErrorResponse{
 			Error:   errStr,
 			Message: "Something went wrong inside Syndra.",

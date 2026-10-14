@@ -112,7 +112,7 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// operator-triggered drain. This is the B4/D3 single-mutation-authority
 	// path — no direct Zitadel call from the handler.
 	payload, _ := json.Marshal(req)
-	res, err := dbEnqueueDirectGrantPropagation(r.Context(), db.EnqueueParams{
+	res, err := grantDirect(r.Context(), db.EnqueueParams{
 		UserID:      userID,
 		ProjectID:   req.ProjectID,
 		RoleKeys:    []string{req.RoleKey},
@@ -373,6 +373,7 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		// drain below, and on a context detached from the request so a client
 		// disconnect after commit cannot leave access ineffective.
 		rebuildUserCacheDetached(ctx, request.RequesterID)
+		convergeAfterGrant(ctx, reviewer, request.RequesterID, request.ProjectID)
 
 		// Apply inline: the approval is the operator's confirmation, so project the
 		// grant to Zitadel now rather than waiting for a separate resume. Targeted
