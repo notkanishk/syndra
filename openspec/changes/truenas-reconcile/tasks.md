@@ -13,18 +13,18 @@
 
 ## 2. Backend: health monitor (D1) and the paused refusal (D2)
 
-- [ ] 2.1 `addons.HealthMonitor`:
+- [x] 2.1 `addons.HealthMonitor`:
   - per-target `checked_at`, `consecutive_failures`, `first_failed_at`
   - `State(target)` returns `online | offline(since) | unknown`
   - a `periodic.Runner` probes every active add-on target every 30s
-- [ ] 2.2 Tests:
+- [x] 2.2 Tests:
   - one failure stays online
   - three failures are offline since the first
   - recovery clears the run
   - no probe yet is unknown
-- [ ] 2.3 `GET /me/targets` items gain `checked_at` and `reachable_since`. `reachable` comes from the monitor (unknown leaves `reachable` absent). Handler tests
-- [ ] 2.4 `handleSetMyCredential` refuses `draining` / `read_only` with `409 TARGET_PAUSED` before dispatch. Test that nothing is dispatched
-- [ ] 2.5 The operator health read and `GET /api/v1/targets` expose the monitor's state beside the live read. Tests
+- [x] 2.3 `GET /me/targets` items gain `checked_at` and `reachable_since`. `reachable` comes from the monitor (as `health`: `online | offline | unknown`, with `reachable` true only when online). Handler tests
+- [x] 2.4 `handleSetMyCredential` refuses `draining` / `read_only` with `409 TARGET_PAUSED` before dispatch. Test that nothing is dispatched
+- [x] 2.5 The operator health read and `GET /api/v1/targets` expose the monitor's state beside the live read. Tests
 
 ## 3. Backend: one project per target (D3–D5)
 

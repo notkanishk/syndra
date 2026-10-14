@@ -380,7 +380,19 @@ type TargetHealth struct {
 // health endpoint that fails whole because one of five reads failed tells an
 // operator nothing about the other four, which are the ones that would have
 // explained it.
+//
+// Every read is also counted by the health monitor (HealthOf), so whoever made
+// it — a member's page, an operator's, the periodic probe — moves one count.
 func Health(ctx context.Context, target string) TargetHealth {
+	if _, err := Get(target); err != nil {
+		return TargetHealth{Outcome: OutcomeUnreached, Err: err}
+	}
+	h := readHealth(ctx, target)
+	observeHealth(target, h)
+	return h
+}
+
+func readHealth(ctx context.Context, target string) TargetHealth {
 	a, err := Get(target)
 	if err != nil {
 		return TargetHealth{Outcome: OutcomeUnreached, Err: err}

@@ -450,6 +450,7 @@ var (
 	addonsTransportCredentials = addons.TransportCredentials
 	addonsGet                  = addons.Get
 	addonsHealth               = addons.Health
+	addonsHealthOf             = addons.HealthOf
 	// How a member reaches a target, for the instructions on their own page.
 	addonsConnection = addons.ConnectionFor
 	// The backend's memory of an add-on's mutation log, read beside that add-on's

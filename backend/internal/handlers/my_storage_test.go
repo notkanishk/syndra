@@ -38,6 +38,8 @@ type storageHarness struct {
 	// it answers perfectly — the state that decides whether this member is
 	// offered a form at all.
 	unreachable bool
+	// lifecycle is the add-on's own state; empty reads as active.
+	lifecycle string
 	// recordedAt dates the middle state. Zero means nothing has been recorded,
 	// which is a different sentence from "recorded a moment ago".
 	recordedAt time.Time
@@ -49,11 +51,13 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 		svcResolveEntitlementSet, dbGetTargetBinding, dbHasShadowCredential,
 		svcDispatchOperation, svcRecordCredentialSet, addonsCallable, addonsHealth,
 		dbEntitlementRecordedAt
+	healthOf := addonsHealthOf
 	t.Cleanup(func() {
 		svcResolveEntitlementSet, dbGetTargetBinding, dbHasShadowCredential,
 			svcDispatchOperation, svcRecordCredentialSet, addonsCallable, addonsHealth,
 			dbEntitlementRecordedAt =
 			resolve, binding, cred, dispatch, record, callable, health, recorded
+		addonsHealthOf = healthOf
 	})
 
 	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
@@ -88,7 +92,16 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 	}
 	addonsCallable = func(string) bool { return true }
 	addonsHealth = func(context.Context, string) addons.TargetHealth {
-		return addons.TargetHealth{Reachable: !h.unreachable}
+		return addons.TargetHealth{Reachable: !h.unreachable, Lifecycle: h.lifecycle}
+	}
+	// unreachable means CONFIRMED offline: the monitor's three misses, not one.
+	addonsHealthOf = func(string) addons.HealthState {
+		checked := time.Date(2026, 10, 14, 9, 41, 0, 0, time.UTC)
+		if h.unreachable {
+			since := checked.Add(-time.Minute)
+			return addons.HealthState{Status: addons.HealthOffline, CheckedAt: checked, ReachableSince: &since}
+		}
+		return addons.HealthState{Status: addons.HealthOnline, CheckedAt: checked}
 	}
 	dbEntitlementRecordedAt = func(context.Context, string, string) (time.Time, bool, error) {
 		return h.recordedAt, !h.recordedAt.IsZero(), nil
@@ -301,5 +314,40 @@ func TestNoHostMeansNoInstructionsRatherThanAGuess(t *testing.T) {
 	view, _ := describeMyTarget(r, "truenas", "u1")
 	if view.Connection != nil {
 		t.Errorf("nothing was configured, so nothing may be rendered: %+v", view.Connection)
+	}
+}
+
+// A paused system is refused before anything is sent. The add-on would decline
+// it anyway, and Syndra keeps no copy of the password to apply later, so the
+// only honest answer is "not now".
+func TestAPasswordIsRefusedWhileChangesArePaused(t *testing.T) {
+	for _, lifecycle := range []string{"draining", "read_only"} {
+		h := &storageHarness{entitled: true, bound: true, lifecycle: lifecycle}
+		stubMyStorage(t, h)
+		rr, _ := setCredential(t, `{"password":"`+memberSecret+`"}`)
+		if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "TARGET_PAUSED") {
+			t.Fatalf("%s: want 409 TARGET_PAUSED, got %d (%s)", lifecycle, rr.Code, rr.Body.String())
+		}
+		if len(h.dispatched) != 0 {
+			t.Fatalf("%s: nothing may be dispatched while paused", lifecycle)
+		}
+	}
+}
+
+// The page says what the monitor can stand behind: offline only once
+// confirmed, with when it began.
+func TestTheMemberViewCarriesConfirmedHealth(t *testing.T) {
+	h := &storageHarness{entitled: true, bound: true, unreachable: true}
+	stubMyStorage(t, h)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
+	view, err := describeMyTarget(r, "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Health != addons.HealthOffline || view.Reachable {
+		t.Fatalf("want confirmed offline, got health=%s reachable=%v", view.Health, view.Reachable)
+	}
+	if view.ReachableSince == nil || view.CheckedAt == nil {
+		t.Fatalf("an outage carries when it began and when it was last checked: %+v", view)
 	}
 }

@@ -72,6 +72,9 @@ type targetSummary struct {
 	CircuitOpen bool `json:"circuit_open"`
 	// LastError is why the last manifest read failed, when one did.
 	LastError string `json:"last_error,omitempty"`
+	// Health is the confirmed reachability (addons.HealthOf): offline only
+	// after three failed reads in a row, unknown until Syndra can tell.
+	Health addons.HealthState `json:"health"`
 }
 
 type operationSummary struct {
@@ -133,6 +136,7 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 			"target":    target,
 			"reachable": false,
 			"detail":    errText(health.Err),
+			"health":    addonsHealthOf(target),
 		}
 		if anchored && anchor.Compromised() {
 			body["log_anchor"] = anchor
@@ -148,14 +152,9 @@ func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conflicts := bindingConflicts(r, target)
-	if !anchored && len(conflicts) == 0 {
-		jsonResponse(w, http.StatusOK, health)
-		return
-	}
 	// Merged rather than nested under a second request, because the operator's
 	// question is one question: is this target all right.
-	merged := targetHealthWithAnchor{TargetHealth: health, BindingConflicts: conflicts}
+	merged := targetHealthWithAnchor{TargetHealth: health, BindingConflicts: bindingConflicts(r, target), Health: addonsHealthOf(target)}
 	if anchored {
 		merged.LogAnchor = &anchor
 	}
@@ -191,10 +190,13 @@ type targetHealthWithAnchor struct {
 	// written by this system, and neither is authoritative, which is why it
 	// needs a person rather than a reconcile.
 	BindingConflicts []db.BindingConflict `json:"binding_conflicts,omitempty"`
+	// Health is the confirmed answer beside this live one: one failed read is
+	// not an outage, three in a row are, and this says which (addons.HealthOf).
+	Health addons.HealthState `json:"health"`
 }
 
 func describeTarget(reg addons.Registration, transport addons.TransportCredential) targetSummary {
-	s := targetSummary{Target: reg.Target, Registered: true, AuthMode: reg.AuthMode()}
+	s := targetSummary{Target: reg.Target, Registered: true, AuthMode: reg.AuthMode(), Health: addonsHealthOf(reg.Target)}
 	s.TransportStatus, s.TransportError = transport.Status, transport.Error
 
 	a, err := addonsGet(reg.Target)
