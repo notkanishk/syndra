@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Roles board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /roles</span>
+    <h1 class="type-page-title" style="margin:0">Roles</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Every role in every project, and how many people Zitadel shows holding each. Each frame is the real shell and components at true width; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#45</strong> on a phone the project stays as an eyebrow above the role and never collapses; group folds away · <strong style="color:var(--ink)">#47</strong> the number is what Zitadel shows, with its note (unexplained, not in Zitadel) and one freshness line for the page; "Unused" needs a complete, current read · <strong style="color:var(--ink)">#89</strong> on a phone the number carries its noun · <strong style="color:var(--ink)">#110</strong> filters behind "Filters · N".</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · applied from the walkthrough</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Column reads <strong style="color:var(--ink)">People</strong>, not Holders (code owed, #47). The "This list may be partial" note sits as one sentence with the freshness line instead of an "i" box (choice 7 on <a href="Cohesion.dc.html">Cohesion</a>). Failed read is the red notice. Between tablet and desktop Group and Used by fold into a line under the role, so Role keeps at least 200px (code owed: the shipped fixed widths squeeze Role to 0 at ~920px).</p></div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ desktopFrames }}" as="f" hint-placeholder-count="5">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1120px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Laptop · 920</h2>
+    <figure data-screen-label="Laptop 920" style="margin:0;display:flex;flex-direction:column;gap:10px">
+      <div style="width:690px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-roles.dc.html?frame=default" title="Laptop 920" style="width:920px;height:800px;border:0;transform:scale(0.75);transform-origin:0 0"></iframe></div>
+      <figcaption style="max-width:690px;font-size:13.5px;line-height:1.55;color:var(--muted)">Rail open, ~640px of content. The page's own column keeps its minimum; secondary columns fold into the line under it.</figcaption>
+    </figure>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="1">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:390px;height:844px;border:0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/roles" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Every role and number below is real, read 14 minutes ago, and may have changed since. Creating roles is paused until Zitadel answers.</p>
+      </div>
+    </div>
+  </sc-if>
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Roles" lede="Every role in every project — one named kind of access each. Open a role to see who holds it." actions="{{ actions }}" hint-size="100%,110px"></x-import></div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+  <x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" hint-size="100%,48px"></x-import><sc-if value="{{ hasreadHead }}" hint-placeholder-val="{{ false }}"><div style="margin-top:-4px">{{ readHead }}</div></sc-if>
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load the role index.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
+          <span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="Syndra.Card"  hint-size="100%,400px">
+    <x-import component-from-global-scope="Syndra.CardColumns"  hint-size="100%,40px"><span style="width:180px;flex:none"><button type="button" aria-label="Sort by project" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink)" style-hover="color:var(--ink)">Project<span aria-hidden="true" style="font-size:11px">↑</span></button></span><span class="flex-1" style="min-width:200px"><button type="button" aria-label="Sort by role" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit" style-hover="color:var(--ink)">Role</button></span><span class="hidden desktop:block" style="width:130px;flex:none"><button type="button" aria-label="Sort by group" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;color:inherit" style-hover="color:var(--ink)">Group</button></span><span class="hidden desktop:block" style="width:150px;flex:none">Used by</span><span class="text-right" style="width:110px;flex:none"><button type="button" aria-label="Sort by people" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit" style-hover="color:var(--ink)">People</button></span></x-import>
+    <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 6 }}" avatar="{{ false }}" label="Loading roles" hint-size="100%,260px"></x-import></sc-if>
+    <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No roles yet." guidance="Create one here, or check Zitadel for roles Syndra didn't create." action="{{ emptyAction }}" hint-size="100%,160px"></x-import></sc-if>
+    <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}">
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="w-full truncate text-[12.5px] text-muted tablet:w-[180px] tablet:text-[14.5px] tablet:shrink-0"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser Lab</a></span>
+        <span class="w-full min-w-0 tablet:flex-1" style="min-width:200px"><span class="block text-[15px] font-semibold" style="text-wrap:pretty">Laser cutter · Operator<span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span> <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.operator</span></span><span class="block truncate text-[12.5px] text-faint desktop:hidden">Machines · 2 bundles · 1 rule</span></span>
+        <span class="hidden w-[130px] truncate text-[13.5px] text-muted desktop:block">Machines</span>
+        <span class="hidden truncate text-[13.5px] text-muted desktop:block" style="width:150px;flex:none">2 bundles · 1 rule</span>
+        <span class="w-full text-[15px] tablet:w-[110px] tablet:text-right tablet:shrink-0">14<span class="text-[13px] text-faint tablet:hidden"> people</span><span class="block text-[12.5px] text-warn-text">2 not in Zitadel</span></span>
+      </div>
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="w-full truncate text-[12.5px] text-muted tablet:w-[180px] tablet:text-[14.5px] tablet:shrink-0"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser Lab</a></span>
+        <span class="w-full min-w-0 tablet:flex-1" style="min-width:200px"><span class="block text-[15px] font-semibold" style="text-wrap:pretty">Laser cutter · Member <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.member</span></span><span class="block truncate text-[12.5px] text-faint desktop:hidden">Machines · 1 bundle</span></span>
+        <span class="hidden w-[130px] truncate text-[13.5px] text-muted desktop:block">Machines</span>
+        <span class="hidden truncate text-[13.5px] text-muted desktop:block" style="width:150px;flex:none">1 bundle</span>
+        <span class="w-full text-[15px] tablet:w-[110px] tablet:text-right tablet:shrink-0">38<span class="text-[13px] text-faint tablet:hidden"> people</span></span>
+      </div>
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="w-full truncate text-[12.5px] text-muted tablet:w-[180px] tablet:text-[14.5px] tablet:shrink-0"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser Lab</a></span>
+        <span class="w-full min-w-0 tablet:flex-1" style="min-width:200px"><span class="block text-[15px] font-semibold" style="text-wrap:pretty">Laser cutter · Supervisor<span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span> <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.supervisor</span></span><span class="block truncate text-[12.5px] text-faint desktop:hidden">Machines · Used by nothing</span></span>
+        <span class="hidden w-[130px] truncate text-[13.5px] text-muted desktop:block">Machines</span>
+        <span class="hidden truncate text-[13.5px] text-muted desktop:block" style="width:150px;flex:none">—</span>
+        <span class="w-full text-[15px] tablet:w-[110px] tablet:text-right tablet:shrink-0">3<span class="text-[13px] text-faint tablet:hidden"> people</span><span class="block text-[12.5px] text-danger-text">1 unexplained</span></span>
+      </div>
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="w-full truncate text-[12.5px] text-muted tablet:w-[180px] tablet:text-[14.5px] tablet:shrink-0"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Wood shop</a></span>
+        <span class="w-full min-w-0 tablet:flex-1" style="min-width:200px"><span class="block text-[15px] font-semibold" style="text-wrap:pretty">Bandsaw · Member <span class="type-mono" style="font-weight:400;color:var(--faint)">wood.bandsaw</span></span><span class="block truncate text-[12.5px] text-faint desktop:hidden">Machines · 1 rule</span></span>
+        <span class="hidden w-[130px] truncate text-[13.5px] text-muted desktop:block">Machines</span>
+        <span class="hidden truncate text-[13.5px] text-muted desktop:block" style="width:150px;flex:none">1 rule</span>
+        <span class="w-full text-[15px] tablet:w-[110px] tablet:text-right tablet:shrink-0">22<span class="text-[13px] text-faint tablet:hidden"> people</span></span>
+      </div>
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="w-full truncate text-[12.5px] text-muted tablet:w-[180px] tablet:text-[14.5px] tablet:shrink-0"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Studio</a></span>
+        <span class="w-full min-w-0 tablet:flex-1" style="min-width:200px"><span class="block text-[15px] font-semibold" style="text-wrap:pretty">Studio · Booking <span class="type-mono" style="font-weight:400;color:var(--faint)">studio.booking</span></span><span class="block truncate text-[12.5px] text-faint">cloned from <a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser Lab</a> / laser.member</span><span class="block truncate text-[12.5px] text-faint desktop:hidden">Spaces · Unused</span></span>
+        <span class="hidden w-[130px] truncate text-[13.5px] text-muted desktop:block">Spaces</span>
+        <span class="hidden truncate text-[13.5px] text-muted desktop:block" style="width:150px;flex:none"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="70px,24px">Unused</x-import></span>
+        <span class="w-full text-[15px] tablet:w-[110px] tablet:text-right tablet:shrink-0">0<span class="text-[13px] text-faint tablet:hidden"> people</span></span>
+      </div>
+    </sc-if>
+  </x-import>
+  </sc-if>
+  </div>
+  <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><p style="margin:0;max-width:900px;font-size:14px;line-height:1.55;color:var(--faint)">Same key, two projects, two different things — which is why the project column is first and never collapses.</p></sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded";
+    const f = (frame, label, note) => ({ src: "route-roles.dc.html?frame=" + frame, label, note });
+    const list = st === "default" || deg || st === "phone" || [].indexOf(st) >= 0;
+    const base = {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg, stList: list, showCard: st !== "error",
+      readState: deg ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 40000).toISOString(), current: true },
+    };
+    return { ...base,
+      actions: S ? h(S.Button, { variant: "accent", disabled: deg }, "New role") : null,
+      emptyAction: { label: "Create a role", onClick: () => {} },
+      searchEl: S && base.stList ? h(S.Input, { placeholder: "Search role, key or project…", "aria-label": "Search roles by name, key or project" }) : null,
+      hasreadHead: !!base.stList,
+      readHead: S && base.stList ? h("div", { style: { display: "flex", flexDirection: "column", gap: 4, flex: "1 1 420px", minWidth: 0 } }, h(S.ReadFreshness, { state: base.readState, subject: "What Zitadel confirmed" }), h("p", { style: { margin: 0, fontSize: 13.5, lineHeight: 1.55, color: "var(--muted)" } }, "Roles made straight in Zitadel, on a project Syndra cannot read, are not listed. ", h("span", { className: "font-semibold text-accent-text", style: { whiteSpace: "nowrap" } }, "Check a project's roles in Zitadel →"))) : null,
+      filtersEl: S ? h(S.FilterPanel, { activeCount: 0, onClear: () => {} }, h(S.FilterField, { label: "Project" }, h(S.Select, { defaultValue: "", "aria-label": "Filter by project" }, h("option", { value: "" }, "All projects"))), h(S.FilterField, { label: "Group" }, h(S.Select, { defaultValue: "", "aria-label": "Filter by group" }, h("option", { value: "" }, "All groups"))), h(S.FilterField, { label: "Usage" }, h(S.Select, { defaultValue: "", "aria-label": "Filter by usage" }, h("option", { value: "" }, "All roles"), h("option", { value: "u" }, "Unused only (4)")))) : null,
+      desktopFrames: [
+        f("default", "Default", "Project first, always. The number is what Zitadel shows; a note says how much is unexplained or not in Zitadel. Used by says what breaks if the role goes, so Unused is never read as merely quiet."),
+        f("empty", "Empty", "Says where roles come from and offers to create one."),
+        f("loading", "Loading", "Skeleton rows; the freshness line waits for the read."),
+        f("error", "Error", "The red notice takes the list's place."),
+        f("degraded", "Degraded — last known data", "The same roles from the last good read; the freshness line turns provisional. New role pauses."),
+      ],
+      phoneFrames: [f("phone", "Phone — default", "Project as an eyebrow above the role (#45), then what uses it, then '14 people' with its note.")] };
+  }
+}
+</script>
+</body>
+</html>

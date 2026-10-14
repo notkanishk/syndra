@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-halo{0%,100%{box-shadow:0 0 0 3px var(--accent-soft)}50%{box-shadow:0 0 0 7px var(--accent-soft)}} @keyframes sy-drop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}} @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Insights board" style="display:flex;flex-direction:column;gap:12px;max-width:1000px">
+    <span class="type-label" style="color:var(--label)">Route · /insights · replaces /graph · Option B</span>
+    <h1 class="type-page-title" style="margin:0">Insights: the map, and how access is changing</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">One nav item, two tabs. <strong style="color:var(--ink)">Map</strong> opens first and answers questions about how access is shaped today, or on any past date. <strong style="color:var(--ink)">Trends</strong> covers what a map cannot draw: how long things take, what is ending, what is held but never used, and how delivery has behaved. Every number on Trends opens the map or a filtered list in the matching state. The map is one click from the sidebar, as it is now. Every frame is live; open one alone with <span class="type-mono">?frame=</span>.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2fr);gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+      <span class="type-label" style="color:var(--label)">The name in the nav</span>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:12px;align-items:baseline"><span style="width:96px;flex:none;font-weight:600">Insights</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Plain, and covers both tabs. <span style="color:var(--accent-text);font-weight:600">Recommended.</span></span></div>
+        <div style="display:flex;gap:12px;align-items:baseline"><span style="width:96px;flex:none;font-weight:600">Atlas</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">A map with its tables. Warmer, but a word people have to learn.</span></div>
+        <div style="display:flex;gap:12px;align-items:baseline"><span style="width:96px;flex:none;font-weight:600">Access map</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Keep it. Trends then hides behind a name that doesn't promise it.</span></div>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:var(--faint);text-wrap:pretty">The frames still mark the old nav item, because the label lives in the nav itself; the rename is on the build list.</p>
+    </div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+      <span class="type-label" style="color:var(--label)">Four places on the Map tab, and nothing else</span>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px">
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">The question, in the search seat.</strong> One field. Type a name and it offers sentences: Follow, Path from … to …, Compare … with …, What if …, Who has … without …. A plain question becomes one of those sentences, and every part of the sentence can be edited.</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Lens, in the pill seat.</strong> People · Recent use · Ending soon · A group. Only one lens at a time, and the lens decides what a line's weight means. Only the colours already in use appear.</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">The read line.</strong> Left: how current the map is, and the way back in time. Right: findings, shown only when there are any. A finding chip lights its spots; it is not a setting.</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">The panel.</strong> Answers the current question in sentences, and links to the page where the change is made. Its footer keeps up to three pins and copies the answer as sentences.</p>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:var(--faint);text-wrap:pretty">No chrome at all: the link always holds the current state; the keys sit behind <span class="type-mono">?</span>; the TrueNAS lane folds out of its own node; drift and waiting-to-send are marks on the lines at all times, because they are facts, not modes.</p>
+    </div>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+    <section style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:4px;max-width:900px"><h2 class="type-section-title" style="margin:0">{{ g.title }}</h2><p style="margin:0;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ g.note }}</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+        <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="3">
+          <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:8px">
+            <div style="width:720px;height:{{ f.h }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" loading="lazy" style="width:1440px;height:{{ f.ih }}px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+            <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span></figcaption>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+
+  <section style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-direction:column;gap:4px;max-width:900px"><h2 class="type-section-title" style="margin:0">Where it lives: A, B, C</h2><p style="margin:0;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">B is drawn above. A and C, small, for comparison.</p></div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1500px">
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+        <div style="height:150px;border-radius:12px;border:1px solid var(--line);background:var(--surface-0);padding:12px;display:flex;flex-direction:column;gap:8px;box-sizing:border-box">
+          <div style="height:10px;width:40%;border-radius:4px;background:var(--line-strong)"></div>
+          <div style="flex:1;border-radius:8px;border:1px dashed var(--line-strong)"></div>
+        </div>
+        <span style="font-weight:600">A · The map is the page</span>
+        <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Simplest. Trends go to Home as stat cards that open the map. Nowhere to see how long things take or what is ending by space.</span>
+      </div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;border-color:var(--accent-line)">
+        <div style="height:150px;border-radius:12px;border:1px solid var(--accent-line);background:var(--surface-0);padding:12px;display:flex;flex-direction:column;gap:8px;box-sizing:border-box">
+          <div style="display:flex;gap:8px"><div style="height:10px;width:48px;border-radius:4px;background:var(--accent)"></div><div style="height:10px;width:48px;border-radius:4px;background:var(--line-strong)"></div></div>
+          <div style="flex:1;border-radius:8px;border:1px dashed var(--accent-line)"></div>
+        </div>
+        <span style="font-weight:600">B · Insights: Map, then Trends <span style="color:var(--accent-text)">· chosen</span></span>
+        <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The map stays one click away and opens first. Trends holds change over time, and every number leads back to the map or a list.</span>
+      </div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+        <div style="height:150px;border-radius:12px;border:1px solid var(--line);background:var(--surface-0);padding:12px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:6px;box-sizing:border-box">
+          <div style="border-radius:6px;background:var(--line)"></div><div style="border-radius:6px;background:var(--line)"></div><div style="border-radius:6px;background:var(--line)"></div>
+          <div style="grid-column:span 2;grid-row:span 2;border-radius:6px;border:1px dashed var(--line-strong)"></div><div style="border-radius:6px;background:var(--line)"></div><div style="border-radius:6px;background:var(--line)"></div>
+        </div>
+        <span style="font-weight:600">C · Home carries everything</span>
+        <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Crowds Home, whose job is what needs you today. The map shrinks to a tile.</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Keys</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">/ asks. ← → move along a line and follow as they go; ↑ ↓ move within a lane; P pins; T opens the date; L cycles the lens; ? shows the keys; Esc steps back one question. Keyboard moves get the same draw-in as a click.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Colour, kept to its meaning</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Violet is what you are asking about, in up to three shades when threads are pinned or compared. Amber is a deadline or a broken assumption: waiting for you to send, a single route, a removal preview. Red is drift only. Lenses never add colour; they change weight and fade.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Left out</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">3D or free-floating layouts, which give up direction for spectacle. Editing by dragging lines, a second unreviewed way to change access. A "riskiest" ranking, a health score or leaderboards of people: Syndra can count, not guess. Nothing on Insights writes; every change happens on the thing's own page.</p></div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/graph" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;flex-direction:column;gap:14px;padding-bottom:12px">
+    <x-import component-from-global-scope="Syndra.PageHeader" title="Insights" lede="How access travels through the makerspace, and how that is changing. Ask about anything to follow its thread." hint-size="100%,100px"></x-import>
+    <x-import component-from-global-scope="Syndra.Tabs" options="{{ tabOpts }}" value="{{ tab }}" on-select="{{ setTab }}" label="Views of the makerspace's access" hint-size="100%,40px"></x-import>
+  </div>
+
+  <sc-if value="{{ isMap }}" hint-placeholder-val="{{ true }}">
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px">
+      <div style="position:relative;flex:1 1 520px;min-width:0">{{ qEl }}{{ askEl }}</div>
+      <div style="display:flex;align-items:center;gap:12px;white-space:nowrap">{{ lensEl }}{{ viewEl }}</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px">{{ readEl }}<span style="flex:1"></span>{{ findingsEl }}</div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px 24px;padding:18px 20px;border-radius:var(--radius-panel);border:1px solid {{ panel.edge }};background:{{ panel.bg }};transition:background-color var(--duration-tint) var(--ease-tint),border-color var(--duration-tint) var(--ease-tint)">
+    <div style="flex:0 1 320px;min-width:240px;display:flex;flex-direction:column;gap:6px">
+      <span class="type-label" style="color:var(--label)">{{ panel.eyebrow }}</span>
+      <span style="display:flex;align-items:center;gap:10px"><sc-if value="{{ panel.hasPerson }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Avatar" name="{{ panel.person }}" hint-size="34px,34px"></x-import></sc-if><span style="font-family:var(--font-display);font-size:24px;font-weight:600;line-height:1.15;text-wrap:pretty">{{ panel.title }}</span></span>
+      <span style="font-size:13.5px;color:var(--muted)">{{ panel.meta }}</span>
+    </div>
+    <div style="flex:1 1 380px;min-width:0;display:flex;flex-direction:column;gap:7px">
+      <sc-for list="{{ panel.lines }}" as="l" hint-placeholder-count="3">
+        <span style="display:flex;gap:10px;align-items:baseline;font-size:14px;line-height:1.55;text-wrap:pretty"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:{{ l.dot }};transform:translateY(-1px)"></span><span><span style="color:var(--muted)">{{ l.lead }}</span> {{ l.text }}</span></span>
+      </sc-for>
+    </div>
+    <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end">{{ panelActions }}</div>
+      <sc-if value="{{ panel.hasOpen }}" hint-placeholder-val="{{ false }}"><a href="{{ panel.href }}" style="font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration:none">{{ panel.open }}</a></sc-if>
+    </div>
+    <sc-if value="{{ panel.hasFooter }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--divider)">{{ pinsEl }}<span style="flex:1"></span>{{ footerActions }}</div>
+    </sc-if>
+  </div>
+
+  {{ mapEl }}
+  {{ scrubEl }}
+  </sc-if>
+
+  <sc-if value="{{ isTrends }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px">{{ trendsReadEl }}<span style="flex:1"></span>{{ periodEl }}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+      <x-import component-from-global-scope="Syndra.StatCard" label="Time to decide a request" value="9 h" detail="Median this term, down from 1.4 days last term" hint-size="100%,120px"></x-import>
+      <x-import component-from-global-scope="Syndra.StatCard" label="Approved, then sent" value="3 h" detail="Median time a change waits for you to send" hint-size="100%,120px"></x-import>
+      <x-import component-from-global-scope="Syndra.StatCard" label="Drift, found to cleared" value="2 days" detail="Median across 11 found this term, down from 5" hint-size="100%,120px"></x-import>
+    </div>
+
+    <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px"><h2 class="type-card-title" style="margin:0">Access given and taken away, by week</h2><span style="font-size:13px;color:var(--muted)">This term · 296 given · 37 taken away</span><span style="flex:1"></span><a href="route-events.dc.html">Open the audit log →</a></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12.5px;color:var(--muted)">
+        <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--ink)"></span>Through a bundle</span>
+        <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--muted)"></span>By request</span>
+        <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--faint)"></span>By hand</span>
+        <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--danger)"></span>Taken away</span>
+      </div>
+      <div style="display:flex;flex-direction:column">
+        <div style="display:flex;align-items:flex-end;gap:14px;height:190px">
+          <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="10">
+            <div title="{{ w.tip }}" style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;gap:4px;height:100%">
+              <span style="font-size:12.5px;color:var(--faint);text-align:center;font-variant-numeric:tabular-nums">{{ w.given }}</span>
+              <div style="display:flex;flex-direction:column;gap:1px;border-radius:4px 4px 0 0;overflow:hidden">
+                <div style="height:{{ w.hH }}px;background:var(--faint)"></div>
+                <div style="height:{{ w.hR }}px;background:var(--muted)"></div>
+                <div style="height:{{ w.hB }}px;background:var(--ink)"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="height:1px;background:var(--line-strong)"></div>
+        <div style="display:flex;align-items:flex-start;gap:14px;height:44px">
+          <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="10">
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+              <div style="height:{{ w.hX }}px;border-radius:0 0 4px 4px;background:var(--danger);opacity:0.75"></div>
+              <span style="font-size:12.5px;color:var(--faint);text-align:center;font-variant-numeric:tabular-nums">{{ w.taken }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:14px">
+          <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="10"><span style="flex:1;min-width:0;font-size:12.5px;color:var(--muted);text-align:center">{{ w.d }}</span></sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.55;color:var(--muted)">
+        <span style="text-wrap:pretty"><strong style="color:var(--ink);font-weight:600">3 Aug.</strong> 40 people joined through New members at the start of term. Half of them tapped in at the front door the same day.</span>
+        <span style="text-wrap:pretty"><strong style="color:var(--ink);font-weight:600">14 Sept.</strong> Lab Tech v3 added Laser cutter · Operator for 11 people.</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px">
+      <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:baseline;gap:12px"><h2 class="type-card-title" style="margin:0">Requests</h2><span style="font-size:13px;color:var(--muted)">This term</span><span style="flex:1"></span><a href="route-requests.dc.html">Open Requests →</a></div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px 32px">
+          <span style="display:flex;flex-direction:column;gap:2px"><span style="font-family:var(--font-display);font-size:28px;font-weight:600;font-variant-numeric:tabular-nums">38</span><span style="font-size:13px;color:var(--muted)">came in</span></span>
+          <span style="display:flex;flex-direction:column;gap:2px"><span style="font-family:var(--font-display);font-size:28px;font-weight:600;font-variant-numeric:tabular-nums">31</span><span style="font-size:13px;color:var(--muted)">approved</span></span>
+          <span style="display:flex;flex-direction:column;gap:2px"><span style="font-family:var(--font-display);font-size:28px;font-weight:600;font-variant-numeric:tabular-nums">7</span><span style="font-size:13px;color:var(--muted)">declined</span></span>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <span class="type-label" style="color:var(--label);padding-bottom:6px">Declined, by reason</span>
+          <div class="row-divider" style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--divider)"><span style="flex:1;text-wrap:pretty">Induction not done yet</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">5</span></div>
+          <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--divider)"><span style="flex:1;text-wrap:pretty">Not offered this term</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">2</span></div>
+        </div>
+        <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><span style="color:var(--ink);font-weight:600">Asked for most outside a bundle:</span> Welder · Member, 7 times. Only the Metal shop bundle gives it. <a href="route-bundles-v2.dc.html">Open Bundles →</a></p>
+      </div>
+
+      <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:baseline;gap:12px"><h2 class="type-card-title" style="margin:0">Ending soon</h2><span style="font-size:13px;color:var(--muted)">People, by project</span><span style="flex:1"></span><a href="route-expiring.dc.html">Open Expiring access →</a></div>
+        <div style="display:flex;flex-direction:column">
+          <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:6px"><span class="type-label" style="flex:1;color:var(--label)">Project</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">30 days</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">60 days</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">90 days ↓</span></div>
+          <sc-for list="{{ ending }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--divider)"><a href="route-projects-id.dc.html?frame=default" style="flex:1;color:var(--ink);font-weight:600" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.p }}</a><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.a }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.b }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.c }}</span></div>
+          </sc-for>
+        </div>
+        <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Most of the 90-day number is the end of term on 30 Nov, when term bundles end together.</p>
+      </div>
+
+      <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:baseline;gap:12px"><h2 class="type-card-title" style="margin:0">Held but not used</h2><span style="font-size:13px;color:var(--muted)">No tap or sign-in in 90 days</span><span style="flex:1"></span><a href="#" onClick="{{ toUse }}">Show on the map →</a></div>
+        <div style="display:flex;flex-direction:column">
+          <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:6px"><span class="type-label" style="flex:1;color:var(--label)">Role</span><span class="type-label" style="width:150px;color:var(--label)">Last used</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">People ↓</span></div>
+          <sc-for list="{{ idle }}" as="r" hint-placeholder-count="3">
+            <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--divider)"><span style="flex:1;text-wrap:pretty"><span style="font-weight:600">{{ r.role }}</span> <span style="color:var(--muted)">·</span> <a href="route-projects-id.dc.html?frame=default" style="color:var(--ink)" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.p }}</a></span><span style="width:150px;color:var(--muted)">{{ r.last }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span></div>
+          </sc-for>
+        </div>
+        <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Read from Badge reader taps and app sign-ins. Holding access you don't use is not wrong; it is a place to tidy.</p>
+      </div>
+
+      <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:baseline;gap:12px"><h2 class="type-card-title" style="margin:0">Upkeep</h2><span style="font-size:13px;color:var(--muted)">Today</span></div>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ upkeep }}" as="r" hint-placeholder-count="5">
+            <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--divider)"><a href="{{ r.href }}" onClick="{{ r.go }}" style="flex:1;font-weight:600;text-wrap:pretty">{{ r.label }} →</a><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span></div>
+          </sc-for>
+        </div>
+        <span style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted)"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--healthy)"></span>Drift is cleared faster than last term: 2 days, down from 5.</span>
+      </div>
+
+      <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:baseline;gap:12px"><h2 class="type-card-title" style="margin:0">Single routes</h2><span style="font-size:13px;color:var(--muted)">Access that depends on one thing</span><span style="flex:1"></span><a href="#" onClick="{{ toSingle }}">Show on the map →</a></div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:1.55">
+          <span style="display:flex;gap:10px;align-items:baseline;text-wrap:pretty"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--warn);transform:translateY(-1px)"></span><span>Front door reaches 48 of its 53 people through <a href="route-bundles-v2.dc.html" style="color:var(--ink)" style-hover="color:var(--accent-text);text-decoration:underline">Safety basics</a> alone.</span></span>
+          <span style="display:flex;gap:10px;align-items:baseline;text-wrap:pretty"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--line-strong);transform:translateY(-1px)"></span><span>Wood shop · Door reaches all 22 of its people by rule from Bandsaw · Member, in <a href="route-projects-id.dc.html?frame=default" style="color:var(--ink)" style-hover="color:var(--accent-text);text-decoration:underline">Wood shop</a>.</span></span>
+        </div>
+        <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">A change to either reaches everyone who depends on it. That is often intended; this is where it shows.</p>
+      </div>
+
+      <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:baseline;gap:12px"><h2 class="type-card-title" style="margin:0">Delivery</h2><span style="font-size:13px;color:var(--muted)">Sends to Zitadel and TrueNAS, by week</span><span style="flex:1"></span><a href="route-system-targets-id.dc.html">Open Connected systems →</a></div>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ delivery }}" as="d" hint-placeholder-count="10">
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 0;border-radius:10px;background:var(--surface-1);border:1px solid var(--line)"><span aria-hidden="true" style="width:8px;height:8px;border-radius:var(--radius-pill);background:{{ d.dot }}"></span><span style="font-size:12.5px;color:var(--muted)">{{ d.d }}</span></div>
+          </sc-for>
+        </div>
+        <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">TrueNAS paused twice, 5 hours in total. 2 sends failed on 29 Sept; both went through on retry the same day. Every other week went through cleanly.</p>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    const base = { tab: "map", mode: "rest", focus: null, finding: null, lens: "people", group: "left", asof: false, accounts: false, pins: [], ask: false, keys: false, copied: false, hover: null, drawn: null, ready: false };
+    const P = { follow: { mode: "follow", focus: "op" }, path: { mode: "path" }, compare: { mode: "compare" }, whatif: { mode: "add" }, asof: { asof: true }, drift: { finding: "drift" }, overlap: { finding: "overlap" }, use: { lens: "use" }, ending: { lens: "ending" }, group: { lens: "group" }, pins: { mode: "pins", pins: ["op", "wdoor", "store"], accounts: true, keys: true }, ask: { ask: true }, trends: { tab: "trends" }, single: { finding: "single" }, unused: { finding: "unused" }, send: { finding: "send" } };
+    this.state = Object.assign({}, base, P[this.frame || "rest"] || {});
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 3, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 2 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+    ];
+    const N = (id, kind, label, lane, people, sub) => ({ id, kind, label, lane, people, sub });
+    this.baseNodes = [
+      N("staff", "bundle", "Staff", 0, 5), N("lab", "bundle", "Lab Tech", 0, 11), N("safety", "bundle", "Safety basics", 0, 53), N("newm", "bundle", "New members", 0, 40), N("studio", "bundle", "Studio", 0, 9), N("woodb", "bundle", "Wood shop", 0, 22), N("metalb", "bundle", "Metal shop", 0, 6), N("hand", "hand", "Given by hand", 0, 3),
+      N("op", "role", "Laser cutter · Operator", 1, 9, "Laser Lab"), N("mem", "role", "Laser cutter · Member", 1, 51, "Laser Lab"), N("sup", "role", "Laser cutter · Supervisor", 1, 4, "Laser Lab"), N("door", "role", "Laser bay · Door", 1, 9, "Laser Lab"), N("front", "role", "Front door", 1, 53, "Main lab"), N("lock", "role", "Lockers", 1, 48, "Main lab"), N("band", "role", "Bandsaw · Member", 1, 73, "Wood shop"), N("wdoor", "role", "Wood shop · Door", 1, 22, "Wood shop"), N("welder", "role", "Welder · Member", 1, 6, "Metal shop"), N("print", "role", "Printer · Member", 1, 57, "3D printing"), N("store", "role", "Storage · Member", 1, 15, "Network storage"), N("more", "more", "12 more roles", 1, null),
+      N("laser", "project", "Laser Lab", 2, 60), N("main", "project", "Main lab", 2, 53), N("wood", "project", "Wood shop", 2, 73), N("metal", "project", "Metal shop", 2, 6), N("p3d", "project", "3D printing", 2, 57), N("nas", "project", "Network storage", 2, 15), N("elec", "project", "Electronics bench", 2, 4), N("tex", "project", "Textiles", 2, 0),
+      N("badge", "app", "Badge reader", 3, 151), N("booking", "app", "Laser booking", 3, 60), N("pq", "app", "Print queue", 3, 57), N("truenas", "system", "TrueNAS", 3, 15),
+    ];
+    this.accountNodes = [N("gm", "account", "makers", 4, 15, "group"), N("gs", "account", "staff", 4, 5, "group")];
+    const E = (s, t, people, kind) => ({ id: s + ">" + t, s, t, people, kind: kind || "give" });
+    this.baseEdges = [
+      E("staff", "op", 5), E("staff", "front", 5), E("staff", "store", 5), E("staff", "sup", 2),
+      E("lab", "op", 8), E("lab", "mem", 11), E("lab", "band", 11),
+      E("safety", "front", 48), E("safety", "lock", 48), E("safety", "print", 48), E("safety", "store", 10),
+      E("newm", "mem", 40), E("newm", "band", 40), E("studio", "print", 9), E("woodb", "band", 22), E("woodb", "wdoor", 22), E("metalb", "welder", 6),
+      E("hand", "op", 1), E("hand", "sup", 2),
+      E("sup", "op", 4, "rule"), E("op", "door", 9, "rule"), E("band", "wdoor", 22, "rule"),
+      E("op", "laser", 9), E("mem", "laser", 51), E("sup", "laser", 4), E("door", "laser", 9), E("front", "main", 53), E("lock", "main", 48), E("band", "wood", 73), E("wdoor", "wood", 22), E("welder", "metal", 6), E("print", "p3d", 57), E("store", "nas", 15),
+      E("laser", "badge", 60), E("laser", "booking", 60), E("main", "badge", 53), E("wood", "badge", 73), E("metal", "badge", 6), E("p3d", "pq", 57), E("nas", "truenas", 15),
+    ];
+    this.accountEdges = [E("truenas", "gm", 15), E("truenas", "gs", 5)];
+    this.previewEdge = E("lab", "sup", 9, "preview");
+    this.idle90 = new Set(["safety>lock", "lock>main"]);
+    this.someUse = new Set(["safety>store", "staff>store", "store>nas", "nas>truenas", "staff>sup", "hand>sup", "sup>laser", "sup>op", "truenas>gm", "truenas>gs"]);
+    this.endingSet = new Set(["hand>op", "hand>sup", "studio>print"]);
+    this.groupE = { "safety>front": 4, "safety>lock": 4, "front>main": 4, "lock>main": 4, "main>badge": 4, "lab>mem": 2, "lab>band": 2, "mem>laser": 2, "band>wood": 2, "band>wdoor": 2, "wdoor>wood": 2, "laser>badge": 2, "wood>badge": 2, "hand>sup": 1, "sup>laser": 1, "sup>op": 1, "op>laser": 1, "op>door": 1, "door>laser": 1 };
+    this.groupN = { safety: 4, lab: 2, hand: 1, front: 4, lock: 4, mem: 2, band: 2, wdoor: 2, sup: 1, op: 1, door: 1, main: 4, laser: 2, wood: 2, badge: 6, booking: 2 };
+    this.pastN = { band: 58, mem: 36, newm: 25, op: 6, wdoor: 22, laser: 45 };
+    this.addedSince = new Set(["lab>op", "op>door"]);
+    const aanya = ["metalb>welder", "welder>metal", "metal>badge", "lab>mem", "lab>band", "band>wdoor", "band>wood", "wdoor>wood", "mem>laser", "laser>badge", "laser>booking", "wood>badge", "safety>front", "front>main", "main>badge"];
+    const priya = ["hand>op", "op>door", "op>laser", "door>laser", "lab>mem", "lab>band", "band>wdoor", "band>wood", "wdoor>wood", "mem>laser", "laser>badge", "laser>booking", "wood>badge"];
+    this.cmp = { a: new Set(aanya), p: new Set(priya) };
+  }
+  componentDidMount() { this._t = setTimeout(() => this.setState({ ready: true, drawn: this.key() }), 60); this._k = (e) => this.onKey(e); if (this.frame) window.addEventListener("keydown", this._k); }
+  componentWillUnmount() { clearTimeout(this._t); clearTimeout(this._d); clearTimeout(this._c); window.removeEventListener("keydown", this._k); }
+  onKey(e) {
+    const s = this.state; if (s.tab !== "map") return;
+    const tag = (e.target && e.target.tagName || "").toLowerCase(), typing = tag === "input" || tag === "textarea" || tag === "select";
+    if (e.key === "Escape") { if (s.ask) this.setState({ ask: false }); else if (s.keys) this.setState({ keys: false }); else if (s.mode !== "rest" || s.finding) this.reset(); else if (s.asof) this.setState({ asof: false }); return; }
+    if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (k === "/") { e.preventDefault(); this.setState({ ask: true }, () => { const el = document.querySelector('[aria-label="Ask the map"]'); if (el) el.focus(); }); return; }
+    if (k === "?") { this.setState({ keys: !s.keys }); return; }
+    if (k === "l" || k === "L") { const o = ["people", "use", "ending", "group"]; this.setState({ lens: o[(o.indexOf(s.lens) + 1) % o.length] }); return; }
+    if (k === "t" || k === "T") { this.setState({ asof: !s.asof, mode: "rest", finding: null }); return; }
+    if ((k === "p" || k === "P") && s.mode === "follow") { this.pin(); return; }
+    if (!k.startsWith("Arrow")) return;
+    e.preventDefault();
+    const nodes = this.nodes().filter(n => n.kind !== "more"), by = {}; nodes.forEach(n => by[n.id] = n);
+    const cur = s.mode === "follow" && by[s.focus];
+    if (!cur) { this.setState({ mode: "follow", focus: nodes[0].id, finding: null, ask: false, drawn: null }); return; }
+    const E = this.edges(); let next = null;
+    if (k === "ArrowRight") { const o = E.find(x => x.s === cur.id && by[x.t] && by[x.t].lane > cur.lane); next = o && o.t; }
+    else if (k === "ArrowLeft") { const o = E.find(x => x.t === cur.id && by[x.s] && by[x.s].lane < cur.lane); next = o && o.s; }
+    else { const lane = nodes.filter(n => n.lane === cur.lane), i = lane.indexOf(cur), m = lane[i + (k === "ArrowDown" ? 1 : -1)]; next = m && m.id; }
+    if (next) this.setState({ mode: "follow", focus: next, finding: null, ask: false, drawn: null });
+  }
+  pin() { this.setState(st => st.focus && !st.pins.includes(st.focus) && st.pins.length < 3 ? { pins: st.pins.concat([st.focus]) } : null); }
+  copy(panel) {
+    const text = panel.eyebrow + ": " + panel.title + "\n" + panel.lines.map(l => "· " + l.lead + " " + l.text).join("\n");
+    try { navigator.clipboard && navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {}
+    clearTimeout(this._c); this.setState({ copied: true }); this._c = setTimeout(() => this.setState({ copied: false }), 1600);
+  }
+  key() { const s = this.state; return [s.mode, s.focus, s.finding, s.pins.join(","), s.accounts ? "a" : ""].join("|"); }
+  componentDidUpdate() { const k = this.key(); if (this.state.ready && this.state.drawn !== k && this._pending !== k) { this._pending = k; clearTimeout(this._d); this._d = setTimeout(() => { this._pending = null; this.setState({ drawn: k }); }, 30); } }
+  nodes() { return this.state.accounts ? this.baseNodes.concat(this.accountNodes) : this.baseNodes; }
+  edges() { let e = this.baseEdges; if (this.state.accounts) e = e.concat(this.accountEdges); if (this.state.mode === "add") e = e.concat([this.previewEdge]); return e; }
+  reset() { this.setState({ mode: "rest", focus: null, finding: null, pins: [], ask: false, drawn: null }); }
+  pick(id) {
+    if (id === "more") return;
+    if (id === "truenas") { this.setState(s => ({ accounts: !s.accounts, mode: "follow", focus: "truenas", finding: null, ask: false, drawn: null })); return; }
+    this.setState(s => ({ focus: s.mode === "follow" && s.focus === id ? null : id, mode: s.mode === "follow" && s.focus === id ? "rest" : "follow", finding: null, ask: false, drawn: null }));
+  }
+  related(focus) {
+    const edges = this.edges(), up = new Map(), down = new Map();
+    const walk = (start, map, dir) => { const q = [[start, 0]]; while (q.length) { const [n, d] = q.shift(); for (const e of edges) { const nxt = dir > 0 ? (e.s === n ? e.t : null) : (e.t === n ? e.s : null); if (nxt && !map.has(nxt)) { map.set(nxt, d + 1); q.push([nxt, d + 1]); } } } };
+    walk(focus, up, -1); walk(focus, down, 1);
+    const nodes = new Map([[focus, 0]]); up.forEach((d, k) => nodes.set(k, d)); down.forEach((d, k) => { if (!nodes.has(k)) nodes.set(k, d); });
+    const em = new Map();
+    for (const e of edges) {
+      if ((e.t === focus || up.has(e.t)) && up.has(e.s)) em.set(e.id, up.get(e.s) - 1);
+      else if ((e.s === focus || down.has(e.s)) && down.has(e.t)) em.set(e.id, down.get(e.t) - 1);
+    }
+    return { nodes, edges: em };
+  }
+  highlight() {
+    const s = this.state, H = { nodes: new Map(), edges: new Map(), lights: false };
+    const tone = (r, t) => { r.nodes.forEach((d, k) => { if (!H.nodes.has(k)) H.nodes.set(k, t); }); r.edges.forEach((hop, k) => { if (!H.edges.has(k)) H.edges.set(k, { tone: t, hop }); }); };
+    const set = (ns, es, t) => { ns.forEach(n => { if (!H.nodes.has(n)) H.nodes.set(n, t); }); es.forEach((e, i) => { if (!H.edges.has(e)) H.edges.set(e, { tone: t, hop: i }); }); };
+    if (s.mode === "follow" && s.focus) { tone(this.related(s.focus), "accent"); s.pins.filter(p => p !== s.focus).forEach((p, i) => tone(this.related(p), ["accent2", "accent3"][i] || "accent3")); H.lights = true; return H; }
+    if (s.mode === "remove" && s.focus) { const E = this.edges(), rules = E.filter(e => e.s === s.focus && e.kind === "rule"); set([s.focus].concat(rules.map(e => e.t)), E.filter(e => e.t === s.focus || e.s === s.focus).map(e => e.id), "warn"); tone(this.related(s.focus), "ink"); return H; }
+    if (s.mode === "path") { set(["hand", "op", "door"], ["hand>op", "op>door"], "accent"); set(["lab"], ["lab>op"], "accent2"); H.lights = true; return H; }
+    if (s.mode === "compare") {
+      this.edges().forEach(e => { const a = this.cmp.a.has(e.id), p = this.cmp.p.has(e.id); if (a || p) { const t = a && p ? "ink" : a ? "accent" : "accent2"; H.edges.set(e.id, { tone: t, hop: 0 }); [e.s, e.t].forEach(n => { const cur = H.nodes.get(n); H.nodes.set(n, !cur || cur === t ? t : "ink"); }); } });
+      return H;
+    }
+    if (s.mode === "add") { set(["lab", "sup"], ["lab>sup"], "accent"); set(["op", "laser"], ["sup>op", "sup>laser"], "ink"); H.lights = true; return H; }
+    if (s.mode === "pins") { s.pins.forEach((p, i) => tone(this.related(p), ["accent", "accent2", "accent3"][i])); return H; }
+    if (s.mode === "who") { set(["door", "op", "hand", "staff"], ["hand>op", "staff>op", "op>door"], "accent"); H.lights = true; return H; }
+    if (s.finding === "drift") { set(["print"], ["drift>print"], "danger"); set(["p3d", "pq"], ["print>p3d", "p3d>pq"], "ink"); return H; }
+    if (s.finding === "send") { set(["lab", "op"], ["lab>op"], "warn"); return H; }
+    if (s.finding === "single") { set(["safety", "front"], ["safety>front"], "warn"); set(["staff", "main"], ["staff>front", "front>main"], "ink"); return H; }
+    if (s.finding === "unused") { set(["tex", "studio", "more"], ["studio>print"], "ink"); return H; }
+    if (s.finding === "overlap") { set(["lab", "newm"], [], "accent"); set(["mem", "band"], ["lab>mem", "lab>band", "newm>mem", "newm>band"], "ink"); set(["op"], ["lab>op"], "accent2"); return H; }
+    if (s.hover && s.hover !== "more") { tone(this.related(s.hover), "hover"); return H; }
+    return null;
+  }
+  col(t) { return { accent: "var(--accent)", accent2: "color-mix(in oklch, var(--accent) 50%, var(--ink))", accent3: "color-mix(in oklch, var(--accent) 55%, var(--canvas))", ink: "var(--ink)", warn: "var(--warn)", danger: "var(--danger)", hover: "var(--accent-text)" }[t] || "var(--line-strong)"; }
+  mapEl() {
+    const h = React.createElement, s = this.state;
+    const nodes = this.nodes(), edges = this.edges();
+    const nl = s.accounts ? 5 : 4, laneW = nl === 5 ? 15.6 : 19.2, step = (98.4 - laneW) / (nl - 1);
+    const laneLeft = Array.from({ length: nl }, (_, i) => 0.8 + i * step);
+    const ROW = 46, TOP = 56, NODE_H = 38, maxRows = 12, MAPH = TOP + maxRows * ROW + 18, H = MAPH + 40;
+    const pos = {};
+    for (let l = 0; l < nl; l++) { const list = nodes.filter(n => n.lane === l); const off = (maxRows - list.length) * ROW / 2; list.forEach((n, i) => { pos[n.id] = { l, y: TOP + off + i * ROW + NODE_H / 2 }; }); }
+    const xr = (l) => (laneLeft[l] + laneW) * 10, xl = (l) => laneLeft[l] * 10;
+    const pathOf = (e) => { const a = pos[e.s], b = pos[e.t]; if (e.kind === "rule") { const x = xr(a.l); return `M ${x} ${a.y} C ${x + 30} ${a.y}, ${x + 30} ${b.y}, ${x} ${b.y}`; } if (a.l === b.l) { const x = xr(a.l); return `M ${x} ${a.y} C ${x + 44} ${a.y}, ${x + 44} ${b.y}, ${x} ${b.y}`; } const x1 = xr(a.l), x2 = xl(b.l), c = (x2 - x1) * 0.55; return `M ${x1} ${a.y} C ${x1 + c} ${a.y}, ${x2 - c} ${b.y}, ${x2} ${b.y}`; };
+    const hl = this.highlight();
+    const lit = hl && [...hl.edges.values()].some(v => v.tone !== "hover");
+    const drawnOk = s.drawn === this.key();
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const defs = [], paths = [], lights = [];
+    const live = !s.asof;
+    edges.forEach((e, i) => {
+      const hit = hl ? hl.edges.get(e.id) : null, on = !!hit;
+      const rule = e.kind === "rule", preview = e.kind === "preview";
+      const g = this.groupE[e.id] || 0;
+      let w = s.lens === "group" ? (g ? 1 + g * 0.9 : 0.6) : 0.8 + Math.min(e.people, 60) / 20;
+      let op = 0.55;
+      if (s.lens === "use") op = this.idle90.has(e.id) ? 0.1 : this.someUse.has(e.id) ? 0.3 : 0.75;
+      if (s.lens === "ending") op = this.endingSet.has(e.id) ? 0.95 : 0.28;
+      if (s.lens === "group") op = g ? 0.8 : 0.07;
+      if (s.asof && this.addedSince.has(e.id)) op = 0.12;
+      let colour = s.lens === "group" && g ? "var(--ink)" : "var(--line-strong)";
+      const d = pathOf(e);
+      if (s.lens === "ending" && this.endingSet.has(e.id) && !on) {
+        const a = pos[e.s], b = pos[e.t], gid = "end-" + e.id.replace(">", "_");
+        defs.push(h("linearGradient", { key: gid, id: gid, gradientUnits: "userSpaceOnUse", x1: xr(a.l), y1: 0, x2: xl(b.l), y2: 0 }, h("stop", { offset: "0", stopColor: "var(--ink)", stopOpacity: 1 }), h("stop", { offset: "1", stopColor: "var(--ink)", stopOpacity: 0.04 })));
+        colour = `url(#${gid})`;
+      }
+      if (hl) { op = on ? (hit.tone === "hover" ? 0.7 : 0.95) : 0.1; if (on) { colour = this.col(hit.tone); w += 0.6; } }
+      const drawIn = on && lit && !rule && !reduce && hl.lights;
+      paths.push(h("path", { key: e.id + (drawIn ? "|" + this.key() : ""), d, fill: "none", stroke: colour, strokeWidth: w, strokeLinecap: "round", vectorEffect: "non-scaling-stroke", opacity: s.ready ? op : 0, pathLength: drawIn ? 1 : undefined, strokeDasharray: rule ? "4 5" : drawIn ? "1" : undefined, strokeDashoffset: drawIn ? (drawnOk ? 0 : 1) : undefined, style: { transition: `opacity var(--duration-tint) var(--ease-tint)${drawIn ? `, stroke-dashoffset 520ms var(--ease-settle) ${hit.hop * 140}ms` : ""}` } }));
+      if (preview && on && s.ready) { const b = pos[e.t]; paths.push(h("text", { key: "pv", x: xl(b.l) - 34, y: b.y - 8, fill: "var(--accent-text)", fontSize: 12.5, fontWeight: 600, fontFamily: "var(--font-sans)" }, "+9")); }
+      if (drawIn && drawnOk) lights.push(h("circle", { key: "p" + e.id + this.key(), r: 2.2, fill: this.col(hit.tone), opacity: 0.9 }, h("animateMotion", { dur: (2.6 + (i % 5) * 0.35) + "s", begin: (0.5 + hit.hop * 0.14 + (i % 3) * 0.6) + "s", repeatCount: "indefinite", path: d })));
+      if (live && e.id === "lab>op") {
+        const sendOn = !hl || s.finding === "send";
+        paths.push(h("path", { key: "send", d, fill: "none", stroke: "var(--warn)", strokeWidth: w + 1.2, strokeLinecap: "butt", vectorEffect: "non-scaling-stroke", pathLength: 100, strokeDasharray: "0 66 4 3 4 3 4 3 4 3 4 3 2 0", opacity: s.ready ? (sendOn ? 0.95 : 0.15) : 0, style: { transition: "opacity var(--duration-tint) var(--ease-tint)" } }));
+      }
+    });
+    if (live) {
+      const b = pos.print, x2 = xl(b.l), x1 = x2 - 90;
+      defs.push(h("linearGradient", { key: "drift-g", id: "drift-g", gradientUnits: "userSpaceOnUse", x1, y1: 0, x2, y2: 0 }, h("stop", { offset: "0", stopColor: "var(--danger)", stopOpacity: 0 }), h("stop", { offset: "1", stopColor: "var(--danger)", stopOpacity: 1 })));
+      const dOn = !hl || s.finding === "drift";
+      paths.push(h("path", { key: "drift", d: `M ${x1} ${b.y - 26} C ${x1 + 50} ${b.y - 26}, ${x2 - 40} ${b.y}, ${x2} ${b.y}`, fill: "none", stroke: "url(#drift-g)", strokeWidth: s.finding === "drift" ? 2.6 : 1.8, strokeLinecap: "round", vectorEffect: "non-scaling-stroke", opacity: s.ready ? (dOn ? 1 : 0.15) : 0, style: { transition: "opacity var(--duration-tint) var(--ease-tint)" } }));
+    }
+    const glyph = (k) => { const base = { width: 10, height: 10, flex: "none", display: "inline-block", boxSizing: "border-box" }; const m = { project: { borderRadius: 3, background: "var(--ink)" }, role: { borderRadius: 999, background: "var(--ink)" }, bundle: { borderRadius: 3, border: "1.5px solid var(--ink)" }, hand: { borderRadius: 3, border: "1.5px dashed var(--muted)" }, system: { borderRadius: 999, border: "1.5px solid var(--ink)", boxShadow: "inset 0 0 0 2px var(--surface-1), inset 0 0 0 5px var(--ink)" }, more: { borderRadius: 999, border: "1.5px dotted var(--faint)" }, account: { borderRadius: 2, border: "1.5px solid var(--muted)", transform: "rotate(45deg) scale(0.85)" } }; return h("span", { "aria-hidden": true, style: Object.assign(base, m[k] || { borderRadius: 999, border: "1.5px solid var(--ink)" }) }); };
+    const unused = new Set(["tex", "studio"]);
+    const nodeEls = nodes.map(n => {
+      const p = pos[n.id]; const t = hl ? hl.nodes.get(n.id) : null; const on = !hl || !!t;
+      const isF = (s.mode === "follow" || s.mode === "remove") && s.focus === n.id;
+      const soft = { accent: "var(--accent-soft)", warn: "var(--warn-soft)", danger: "var(--danger-soft)" }[t] || "var(--surface-1)";
+      const edge = isF ? "var(--accent)" : t === "accent" ? "var(--accent-line)" : t === "accent2" || t === "accent3" ? this.col(t) : t === "warn" ? "var(--warn)" : t === "danger" ? "var(--danger)" : t === "ink" ? "var(--line-strong)" : "var(--line)";
+      const dotted = unused.has(n.id) && !t;
+      let count = n.people, countCol = "var(--faint)";
+      if (s.lens === "group") { count = this.groupN[n.id] || 0; countCol = count ? "var(--ink)" : "var(--faint)"; }
+      if (s.asof && this.pastN[n.id] != null) { count = this.pastN[n.id]; countCol = "var(--accent-text)"; }
+      if (s.mode === "add" && n.id === "sup") { count = "4 → 13"; countCol = "var(--accent-text)"; }
+      if (n.id === "studio" && !s.asof) count = "nothing new";
+      const kids = [glyph(n.kind), h("span", { key: "l", style: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: n.kind === "more" ? 500 : 600, lineHeight: 1.25, color: n.kind === "more" || dotted ? "var(--muted)" : "var(--ink)" } }, n.label)];
+      if (n.id === "safety" && live) kids.push(h("span", { key: "c", title: "A single route: most front door access depends on it", "aria-label": "Single route", style: { width: 7, height: 7, borderRadius: 999, background: "var(--warn)", flex: "none" } }));
+      if (count != null) kids.push(h("span", { key: "n", style: { fontSize: 12.5, color: countCol, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" } }, count));
+      if (n.id === "truenas") kids.push(h("span", { key: "x", "aria-hidden": true, style: { fontSize: 13, color: "var(--muted)" } }, s.accounts ? "‹" : "›"));
+      return h("button", { key: n.id, type: "button", onClick: () => this.pick(n.id), onMouseEnter: () => this.setState({ hover: n.id }), onMouseLeave: () => this.setState({ hover: null }), "aria-pressed": isF, "aria-label": n.label + (n.people != null ? ", " + n.people + " people" : ""),
+        style: { position: "absolute", left: laneLeft[p.l] + "%", width: laneW + "%", top: p.y - NODE_H / 2, minHeight: NODE_H, boxSizing: "border-box", display: "flex", alignItems: "center", gap: 9, padding: "6px 12px", borderRadius: 12, border: "1px " + (dotted ? "dashed var(--line-strong)" : "solid " + edge), background: dotted ? "transparent" : soft, color: "var(--ink)", font: "inherit", textAlign: "left", cursor: n.kind === "more" ? "default" : "pointer",
+          opacity: !s.ready ? 0 : on ? 1 : 0.28, transform: s.ready ? "none" : "translateY(6px)", animation: isF && !reduce ? "sy-halo 2.8s var(--ease-tint) infinite" : "none",
+          transition: `opacity var(--duration-tint) var(--ease-tint) ${s.ready && !hl ? p.l * 70 : 0}ms, transform var(--duration-settle) var(--ease-settle) ${p.l * 70}ms, background-color var(--duration-tint) var(--ease-tint), border-color var(--duration-tint) var(--ease-tint)` } }, kids);
+    });
+    const laneNames = [["Given through", "8"], ["Roles", "23"], ["Projects", "8"], ["Read by", "4"], ["TrueNAS groups", "2"]];
+    const heads = laneLeft.map((x, l) => h("div", { key: "h" + l, style: { position: "absolute", top: 16, left: x + "%", width: laneW + "%", display: "flex", alignItems: "center", gap: 8, opacity: s.ready ? 1 : 0, transition: `opacity var(--duration-settle) var(--ease-settle) ${l * 70}ms` } }, h("span", { className: "type-label" }, laneNames[l][0]), h("span", { style: { fontSize: 12.5, color: "var(--faint)" } }, laneNames[l][1]), l === 4 ? h("span", { "aria-label": "Connected", title: "Connected", style: { width: 7, height: 7, borderRadius: 999, background: "var(--healthy)" } }) : null, l < nl - 1 ? h("span", { "aria-hidden": true, style: { marginLeft: "auto", color: "var(--faint)", fontSize: 12 } }, "→") : null));
+    const seams = laneLeft.slice(1).map((x, i) => h("span", { key: "s" + i, "aria-hidden": true, style: { position: "absolute", top: 44, bottom: 54, left: (x - (step - laneW) / 2) + "%", width: 1, background: "linear-gradient(var(--line), transparent)", opacity: 0.6 } }));
+    const sw = (style, label) => h("span", { key: label, style: { display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--muted)" } }, h("span", { "aria-hidden": true, style: Object.assign({ width: 22, flex: "none" }, style) }), label);
+    const legend = [];
+    if (s.lens === "people") legend.push(sw({ height: 2, background: "var(--line-strong)" }, "Given"), sw({ borderTop: "2px dashed var(--line-strong)" }, "Automatic"), sw({ height: 3, background: "linear-gradient(90deg, var(--line-strong), var(--line-strong))", borderRadius: 2 }, "Weight is people"));
+    if (s.lens === "use") legend.push(sw({ height: 3, background: "var(--line-strong)" }, "Used this week"), sw({ height: 3, background: "var(--line-strong)", opacity: 0.45 }, "Used this term"), sw({ height: 3, background: "var(--line-strong)", opacity: 0.15 }, "Not in 90 days"));
+    if (s.lens === "ending") legend.push(sw({ height: 3, background: "linear-gradient(90deg, var(--ink), transparent)" }, "Ends within 30 days"), sw({ height: 2, background: "var(--line-strong)", opacity: 0.5 }, "Continues"));
+    if (s.lens === "group") legend.push(sw({ height: 3, background: "var(--ink)" }, "Weight is their share"));
+    if (s.asof) legend.push(sw({ height: 2, background: "var(--line-strong)", opacity: 0.2 }, "Added since 3 Sept"), sw({ height: 8, width: 8, borderRadius: 999, background: "var(--accent-text)" }, "Count then"));
+    else legend.push(sw({ height: 2, background: "linear-gradient(90deg, transparent, var(--danger))" }, "Not explained by Syndra"), sw({ borderTop: "2px dashed var(--warn)" }, "Waiting for you to send"), sw({ height: 7, width: 7, borderRadius: 999, background: "var(--warn)" }, "Single route"));
+    const S = window.Syndra;
+    const keysBtn = h("button", { key: "kb", type: "button", onClick: () => this.setState(st => ({ keys: !st.keys })), "aria-expanded": s.keys, style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, height: 28, padding: "0 10px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--surface-1)", color: "var(--muted)", font: "inherit", fontSize: 12.5, cursor: "pointer" } }, "Keys", h("span", { className: "type-mono", style: { fontSize: 12.5, color: "var(--ink)" } }, "?"));
+    const foot = h("div", { key: "foot", style: { position: "absolute", left: 20, right: 16, bottom: 12, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 18px" } }, legend, keysBtn);
+    const keyRow = (k, t) => h("div", { key: k, style: { display: "flex", alignItems: "baseline", gap: 12, fontSize: 13 } }, h("span", { className: "type-mono", style: { width: 54, flex: "none", color: "var(--ink)" } }, k), h("span", { style: { color: "var(--muted)" } }, t));
+    const keys = s.keys ? h("div", { key: "keys", role: "dialog", "aria-label": "Keys", style: { position: "absolute", right: 16, bottom: 52, width: 290, padding: "14px 16px", borderRadius: 16, border: "1px solid var(--line-strong)", background: "var(--surface-2)", boxShadow: "var(--shadow-dialog)", display: "flex", flexDirection: "column", gap: 7, animation: reduce ? "none" : "sy-drop 220ms var(--ease-settle)" } }, h("span", { className: "type-label", style: { paddingBottom: 2 } }, "Keys"), keyRow("/", "Ask, or find anything"), keyRow("← →", "Along a line, following"), keyRow("↑ ↓", "Up and down a lane"), keyRow("P", "Pin what you follow"), keyRow("?", "Show or hide these"), keyRow("T", "Choose a date"), keyRow("L", "Next lens"), keyRow("Esc", "Back one question")) : null;
+    return h("div", { style: { overflowX: "auto", borderRadius: "var(--radius-card)" } }, h("div", { role: "group", "aria-label": "Access map", onClick: (ev) => { if (ev.target === ev.currentTarget) this.reset(); },
+      style: { position: "relative", minWidth: nl === 5 ? 1180 : 1040, height: H, borderRadius: "var(--radius-card)", border: "1px solid var(--line)", background: "var(--surface-0)", backgroundImage: "radial-gradient(color-mix(in oklch, var(--line-strong) 70%, transparent) 1px, transparent 1.3px)", backgroundSize: "22px 22px", backgroundPosition: "11px 11px", overflow: "hidden" } },
+      seams, heads,
+      h("svg", { "aria-hidden": true, viewBox: `0 0 1000 ${H}`, preserveAspectRatio: "none", style: { position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" } }, h("defs", null, defs), paths, lights),
+      nodeEls, foot, keys));
+  }
+  scrubEl() {
+    const h = React.createElement, s = this.state; if (!s.asof) return null;
+    const marks = [3, 6, 11, 14, 21, 27, 31, 38, 44, 47, 52, 58, 61, 70, 71, 76, 79, 84, 88, 93, 97];
+    const at = 62;
+    return h("div", { style: { display: "flex", alignItems: "center", gap: 18, padding: "14px 20px", borderRadius: "var(--radius-card)", border: "1px solid var(--line)", background: "var(--surface-1)" } },
+      h("span", { className: "type-label", style: { flex: "none" } }, "Date"),
+      h("div", { style: { position: "relative", flex: 1, height: 34 } },
+        h("div", { style: { position: "absolute", left: 0, right: 0, top: 12, height: 2, borderRadius: 2, background: "var(--line-strong)" } }),
+        h("div", { style: { position: "absolute", left: at + "%", right: 0, top: 12, height: 2, background: "var(--accent-line)" } }),
+        marks.map(m => h("span", { key: m, "aria-hidden": true, style: { position: "absolute", left: m + "%", top: 9, width: 2, height: 8, borderRadius: 1, background: m > at ? "var(--accent-text)" : "var(--faint)" } })),
+        h("span", { role: "slider", "aria-label": "Date shown", "aria-valuetext": "3 September", tabIndex: 0, style: { position: "absolute", left: `calc(${at}% - 8px)`, top: 5, width: 16, height: 16, borderRadius: 999, background: "var(--accent)", boxShadow: "0 0 0 4px var(--accent-soft)", cursor: "grab" } }),
+        h("span", { style: { position: "absolute", left: `calc(${at}% - 20px)`, top: 22, fontSize: 12.5, fontWeight: 600, color: "var(--accent-text)" } }, "3 Sept"),
+        [["Jul", 0], ["Aug", 30], ["Sep", 60], ["Oct", 90]].map(([m, x]) => h("span", { key: m, style: { position: "absolute", left: x + "%", top: 22, fontSize: 12.5, color: "var(--faint)" } }, m)),
+        h("span", { style: { position: "absolute", right: 0, top: 22, fontSize: 12.5, color: "var(--faint)" } }, "Today")),
+      h("span", { style: { flex: "none", fontSize: 13, color: "var(--muted)" } }, "14 changes since, marked in violet"));
+  }
+  renderVals() {
+    const S = window.Syndra, h = React.createElement, s = this.state;
+    const node = (id) => this.nodes().find(n => n.id === id);
+    const L = (dot, lead, text) => ({ dot, lead, text });
+    const A = "var(--accent)", A2 = this.col("accent2"), A3 = this.col("accent3"), W = "var(--warn)", D = "var(--danger)", Q = "var(--line-strong)", I = "var(--ink)";
+    const pv = (o) => Object.assign({ person: "", hasPerson: false, edge: "var(--line)", bg: "var(--surface-1)", hasOpen: false, open: "", href: "#", hasFooter: false, lines: [] }, o);
+    const tint = (t) => t === "accent" ? { edge: "var(--accent-line)", bg: "var(--accent-soft)" } : t === "warn" ? { edge: "var(--warn-line)", bg: "var(--warn-soft)" } : t === "danger" ? { edge: "var(--danger-line)", bg: "var(--danger-soft)" } : {};
+    let panel;
+    const lab = (x) => (node(x) || { label: x }).label;
+    const list = (a) => a.length <= 1 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+    const readers = (id) => [...this.related(id).nodes.keys()].filter(k => k !== id && node(k) && (node(k).kind === "app" || node(k).kind === "system")).map(lab);
+    const kindMeta = (n) => ({ role: "Role · " + n.sub, bundle: "Bundle", project: "Project", app: "App", system: "Connected system", hand: "Given by hand", account: "TrueNAS group" }[n.kind] || "") + (n.people != null ? " · " + n.people + " people" : "");
+    const openOf = (n) => ({ role: ["Open " + n.sub + " →", "route-projects-id.dc.html?frame=default"], bundle: ["Open " + n.label + " →", "route-bundles-v2.dc.html"], project: ["Open " + n.label + " →", "route-projects-id.dc.html?frame=default"], app: ["Open " + n.label + " →", "route-applications-id.dc.html"], system: ["Open " + n.label + " →", "route-system-targets-id.dc.html"], account: ["Open the mappings →", "route-system-targets-id-mappings.dc.html"] }[n.kind] || null);
+    const describe = (id) => {
+      const E = this.edges(), inc = E.filter(e => e.t === id), out = E.filter(e => e.s === id), given = inc.filter(e => e.kind !== "rule"), rules = inc.filter(e => e.kind === "rule"), lines = [], n = node(id);
+      if (inc.length) lines.push(L(A, "Reached through", list(given.map(e => (e.s === "hand" ? "by hand" : lab(e.s)) + " (" + e.people + ")")) + (rules.length ? (given.length ? ", and " : "") + "automatically for anyone with " + list(rules.map(e => lab(e.s))) : "") + "."));
+      if (out.length) lines.push(L(A, "Leads to", list(out.map(e => lab(e.t) + (e.kind === "rule" ? " (automatically)" : ""))) + "."));
+      const r = readers(id); if (r.length && n.kind !== "app" && n.kind !== "system" && n.kind !== "account") lines.push(L(A, "Read by", list(r) + "."));
+      return lines.length ? lines : [L(Q, "Nothing", "reaches it or leads from it yet.")];
+    };
+    if (s.mode === "follow" && s.focus) {
+      const n = node(s.focus), o = openOf(n);
+      panel = pv(Object.assign(tint("accent"), { eyebrow: s.pins.length ? "Following · " + s.pins.length + " pinned" : "Following", title: n.label, meta: kindMeta(n), hasOpen: !!o, open: o ? o[0] : "", href: o ? o[1] : "#", hasFooter: true, lines: describe(s.focus) }));
+    } else if (s.mode === "remove" && s.focus) {
+      const n = node(s.focus), rules = this.edges().filter(e => e.s === s.focus && e.kind === "rule"), o = openOf(n);
+      const lines = [L(W, n.people + " people", "would lose " + n.label + ".")];
+      rules.forEach(e => lines.push(L(W, "With it,", lab(e.t) + " goes for anyone who gets it only by rule from this role.")));
+      if (s.focus === "op") lines.push(L(Q, "Laser booking:", "6 of the 9 could still book, through Laser cutter · Member."));
+      panel = pv(Object.assign(tint("warn"), { eyebrow: "What if it went · a preview, nothing changes", title: n.label, meta: kindMeta(n), hasOpen: !!o, open: o ? o[0].replace("Open ", "Change it on ") : "", href: o ? o[1] : "#", hasFooter: true, lines }));
+    } else if (s.mode === "path") {
+      panel = pv(Object.assign(tint("accent"), { eyebrow: "Path · two routes", title: "Priya Nair to Laser bay · Door", person: "Priya Nair", hasPerson: true, meta: "Research assistant · Design", hasOpen: true, open: "Open Priya Nair →", href: "route-users.dc.html", hasFooter: true, lines: [L(A, "By hand:", "Kanishk Singh gave her Laser cutter · Operator until 20 Oct. It opens Laser bay · Door by rule."), L(A2, "Through Lab Tech:", "v3 gives her Laser cutter · Operator as well, which opens the door the same way."), L(Q, "Two routes.", "Removing one of these won't stop her. When the by-hand grant ends on 20 Oct she keeps the door through Lab Tech.")] }));
+    } else if (s.mode === "compare") {
+      panel = pv(Object.assign(tint("accent"), { eyebrow: "Compare · on Welder · Member", title: "Aanya Rao and Priya Nair", meta: "Why can Aanya use the welder and Priya can't?", hasOpen: true, open: "Open the Metal shop bundle →", href: "route-bundles-v2.dc.html", hasFooter: true, lines: [L(A, "Only Aanya:", "Welder · Member, because she is in Metal shop. Priya isn't."), L(A2, "Only Priya:", "Laser cutter · Operator, by hand, and the laser bay door with it."), L(I, "Both:", "Lab Tech, so Laser cutter · Member and the wood shop.")] }));
+    } else if (s.mode === "add") {
+      panel = pv(Object.assign(tint("accent"), { eyebrow: "What if · a preview, nothing changes", title: "Lab Tech also gave Laser cutter · Supervisor", meta: "Bundle · 11 people · on v3", hasOpen: true, open: "Change it on Lab Tech →", href: "route-bundles-v2.dc.html", hasFooter: true, lines: [L(A, "9 people", "would gain Laser cutter · Supervisor. The other 2 already have it through Staff."), L(Q, "Nothing else moves.", "Supervisor opens Laser cutter · Operator by rule, and all 11 already have it."), L(Q, "Laser cutter · Supervisor", "would go from 4 people to 13.")] }));
+    } else if (s.mode === "pins") {
+      const shades = [A, A2, A3], lines = s.pins.map((p, i) => { const n = node(p), r = readers(p); return L(shades[i], n.label + ":", (n.people != null ? n.people + " people" : "") + (r.length ? ", read by " + list(r) : "") + "."); });
+      const sets = s.pins.map(p => new Set(readers(p))), common = s.pins.length > 1 ? [...new Set(sets.flatMap(x => [...x]))].filter(x => sets.filter(z => z.has(x)).length >= 2) : [];
+      if (common.length) lines.push(L(Q, "Where they cross:", list(common) + " reads " + (s.pins.length > 2 ? "more than one of them" : "both") + "."));
+      panel = pv(Object.assign(tint("accent"), { eyebrow: "Pinned · " + s.pins.length, title: ["", "One thread", "Two threads, side by side", "Three threads, side by side"][s.pins.length], meta: "Each keeps its own shade", hasFooter: true, lines }));
+    } else if (s.mode === "who") {
+      panel = pv(Object.assign(tint("accent"), { eyebrow: "Who has Laser bay · Door without Safety basics", title: "2 people", meta: "Read 'the induction' as Safety basics", hasOpen: true, open: "See them in People →", href: "route-users.dc.html", hasFooter: true, lines: [L(A, "Rohan Mehta:", "by hand, Laser cutter · Operator, which opens the door by rule."), L(A, "Ishaan Kapoor:", "through Staff, the same way.")] }));
+    } else if (s.asof) {
+      panel = pv({ eyebrow: "As of 3 Sept", title: "14 changes since", meta: "Read from the audit log", hasOpen: true, open: "Open the audit log from 3 Sept →", href: "route-events.dc.html", lines: [L(A, "Lab Tech v3,", "published 14 Sept, added Laser cutter · Operator. On 3 Sept only Staff and by hand gave it."), L(A, "Bandsaw · Member", "reached 58 people. It reaches 73 now, after New members grew at the start of term."), L(A, "Laser bay · Door", "was given by hand. Since 24 Sept it comes by rule from Laser cutter · Operator.")] });
+    } else if (s.finding === "drift") {
+      panel = pv(Object.assign(tint("danger"), { eyebrow: "Drift", title: "Held in Zitadel, not given by Syndra", meta: "Printer · Member · 3 people · found 30 Sept", hasOpen: true, open: "Open on Drift →", href: "route-drift.dc.html", lines: [L(D, "Nothing on the map", "explains it: no bundle, request or grant by hand gives it to them."), L(Q, "They keep it", "until you decide.")] }));
+    } else if (s.finding === "send") {
+      panel = pv(Object.assign(tint("warn"), { eyebrow: "Approved, not yet in Zitadel", title: "2 changes", meta: "Lab Tech v3 · Storage · Member", hasOpen: true, open: "Waiting for you to send →", href: "route-pending.dc.html", lines: [L(W, "Lab Tech v3", "gives Laser cutter · Operator to 3 more people once sent."), L(W, "Rohan Mehta", "loses Storage · Member once sent, approved yesterday.")] }));
+    } else if (s.finding === "single") {
+      panel = pv(Object.assign(tint("warn"), { eyebrow: "Single route", title: "Front door depends on Safety basics", meta: "48 of 53 people get it only that way", hasOpen: true, open: "Open Safety basics →", href: "route-bundles-v2.dc.html", lines: [L(W, "A change to Safety basics", "reaches the front door for 48 people."), L(Q, "The other 5", "get it through Staff.")] }));
+    } else if (s.finding === "unused") {
+      panel = pv({ eyebrow: "Unused", title: "4 things give nothing", meta: "Dotted on the map", hasOpen: true, open: "Open Textiles →", href: "route-projects-id.dc.html?frame=default", lines: [L(Q, "Textiles:", "2 roles, and nobody has either."), L(Q, "Studio:", "its 9 people already get Printer · Member from Safety basics."), L(Q, "2 roles", "in Laser Lab and Electronics bench that nobody has.")] });
+    } else if (s.finding === "overlap") {
+      panel = pv(Object.assign(tint("accent"), { eyebrow: "Overlap", title: "Lab Tech and New members", meta: "2 roles in common · Lab Tech adds 1", hasOpen: true, open: "Open Lab Tech →", href: "route-bundles-v2.dc.html", lines: [L(I, "Both give", "Laser cutter · Member and Bandsaw · Member."), L(A2, "Only Lab Tech gives", "Laser cutter · Operator."), L(A, "You could include", "New members inside Lab Tech, so a change to the shared two is made once.")] }));
+    } else if (s.lens === "use") {
+      panel = pv({ eyebrow: "Recent use · badge taps and sign-ins, 90 days", title: "48 people hold a locker they haven't used", meta: "Lockers · Main lab · last tap 2 Jun", hasOpen: true, open: "Open Main lab →", href: "route-projects-id.dc.html?frame=default", lines: [L(Q, "Not used in 90 days:", "Lockers. Everyone who holds it got it through Safety basics."), L(Q, "Used by a few:", "Storage · Member, 4 of 15 this term."), L(Q, "Used every day:", "Front door and Bandsaw · Member.")] });
+    } else if (s.lens === "ending") {
+      panel = pv({ eyebrow: "Ending soon · next 30 days", title: "12 people lose something by 11 Nov", meta: "Lines fade toward where they end", hasOpen: true, open: "Open Expiring access →", href: "route-expiring.dc.html", lines: [L(Q, "Studio", "ends on 31 Oct for its 9 people, with the half-term."), L(Q, "By hand:", "Priya Nair's Laser cutter · Operator ends 20 Oct. Lab Tech still gives it to her."), L(Q, "Laser cutter · Supervisor", "ends for 2 people on 1 Nov.")] });
+    } else if (s.lens === "group") {
+      panel = pv({ eyebrow: "A group", title: "People who left the makerspace", meta: "6 people · still holding 9 roles", hasOpen: true, open: "See them in People →", href: "route-users.dc.html", lines: [L(I, "4 of them", "can still badge into the Main lab, through Safety basics."), L(I, "2", "still hold Laser cutter · Member and the wood shop, through Lab Tech."), L(I, "1", "holds Laser cutter · Supervisor, given by hand.")] });
+    } else {
+      panel = pv({ eyebrow: "The makerspace at a glance", title: "How access travels today", meta: "Three things worth knowing", lines: [L(Q, "Widest reach:", "Bandsaw · Member, 73 people, through Lab Tech, New members and Wood shop."), L(Q, "Nothing reaches:", "Textiles. It has 2 roles and nobody has either."), L(Q, "Most given automatically:", "Wood shop · Door, 22 people, by rule from Bandsaw · Member.")] });
+    }
+    const btn = (label, onClick, variant) => S ? h("span", { key: label, style: { whiteSpace: "nowrap", display: "inline-flex" } }, h(S.Button, { variant: variant || "outline", size: "sm", onClick }, label)) : null;
+    let panelActions = [];
+    if (s.mode === "follow") { const fn = node(s.focus); panelActions = [btn("Path from a person", () => this.setState({ mode: "path", focus: null })), fn && fn.kind === "role" ? btn("What if it went", () => this.setState({ mode: "remove" })) : null]; }
+    else if (s.mode !== "rest") panelActions = [btn("Back", () => this.reset(), "ghost")];
+    else if (s.finding) panelActions = [btn("Back", () => this.setState({ finding: null }), "ghost")];
+    if (s.lens === "group" && s.mode === "rest" && !s.finding && S) panelActions = [h(S.Select, { key: "g", defaultValue: "left", "aria-label": "Which group" }, h("option", { value: "left" }, "People who left the makerspace"), h("option", { value: "new" }, "New this term"), h("option", { value: "design" }, "Design"), h("option", { value: "mech" }, "Mechanical Engineering"))];
+    const pinLabels = { op: "Laser cutter · Operator", wdoor: "Wood shop · Door", store: "Storage · Member" };
+    const shadeOf = (p) => { if (s.mode !== "follow") return [A, A2, A3][s.pins.indexOf(p)]; if (p === s.focus) return A; return [A2, A3][s.pins.filter(x => x !== s.focus).indexOf(p)] || A3; };
+    const pinsEl = s.pins.length ? [h("span", { key: "lbl", className: "type-label", style: { color: "var(--label)" } }, "Pinned")].concat(s.pins.map((p, i) => h("span", { key: p, style: { display: "inline-flex", alignItems: "center", gap: 8, height: 30, padding: "0 6px 0 12px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--surface-1)", fontSize: 13 } }, h("span", { "aria-hidden": true, style: { width: 8, height: 8, borderRadius: 999, background: shadeOf(p) } }), (node(p) || {}).label || p, h("button", { type: "button", "aria-label": "Unpin " + ((node(p) || {}).label || p), onClick: () => this.setState(st => { const pins = st.pins.filter(x => x !== p); return { pins, mode: st.mode === "pins" ? (pins.length ? "pins" : "rest") : st.mode }; }), style: { width: 22, height: 22, borderRadius: 999, border: 0, background: "transparent", color: "var(--muted)", cursor: "pointer" } }, "×")))) : null;
+    const footerActions = [s.mode === "follow" && !s.pins.includes(s.focus) && s.pins.length < 3 ? btn("Pin", () => this.pin(), "ghost") : null, s.mode === "follow" && s.pins.length >= 2 ? btn("Show pinned only", () => this.setState({ mode: "pins", focus: null }), "ghost") : null, btn(s.copied ? "Copied" : "Copy as sentences", () => this.copy(panel), "ghost")];
+
+    const tok = (t, k) => S ? h("span", { key: k, style: { whiteSpace: "nowrap", display: "inline-flex" } }, h(S.Chip, null, t)) : null;
+    const word = (w, k) => h("span", { key: k, style: { color: "var(--muted)", fontSize: 14, whiteSpace: "nowrap" } }, w);
+    const sentence = {
+      follow: () => [word("Follow", 0), tok(node(s.focus || "op").label, 1)],
+      remove: () => [word("What if", 0), tok(node(s.focus || "op").label, 1), word("went", 2)],
+      path: () => [word("Path from", 0), tok("Priya Nair", 1), word("to", 2), tok("Laser bay · Door", 3)],
+      compare: () => [word("Compare", 0), tok("Aanya Rao", 1), word("with", 2), tok("Priya Nair", 3), word("on", 4), tok("Welder · Member", 5)],
+      add: () => [word("What if", 0), tok("Lab Tech", 1), word("also gave", 2), tok("Laser cutter · Supervisor", 3)],
+      pins: () => [word("Pinned", 0), tok("3 threads", 1)],
+      who: () => [word("Who has", 0), tok("Laser bay · Door", 1), word("without", 2), tok("Safety basics", 3)],
+    }[s.mode];
+    const askText = "who can open the laser bay but hasn't done the induction";
+    const qEl = !S ? null : sentence ? h("div", { role: "group", "aria-label": "The question the map is answering", style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minHeight: 40, width: "100%", minWidth: 0, boxSizing: "border-box", padding: "4px 5px 4px 14px", borderRadius: 14, border: "1px solid var(--accent-line)", background: "var(--surface-1)" } }, sentence(), h("button", { key: "x", type: "button", "aria-label": "Clear the question", onClick: () => this.reset(), style: { marginLeft: "auto", width: 30, height: 30, borderRadius: 999, border: 0, background: "transparent", color: "var(--muted)", cursor: "pointer", fontSize: 16 } }, "×"))
+      : h(S.Input, { key: s.ask ? "ask" : "q", defaultValue: s.ask ? askText : undefined, placeholder: "Ask about a person, a door, a role, or find anything", "aria-label": "Ask the map", onFocus: () => this.setState({ ask: true }), onBlur: () => setTimeout(() => this.setState({ ask: false }), 180) });
+    const sugg = (parts, k, onClick) => h("button", { key: k, type: "button", onClick, style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 7, width: "100%", padding: "8px 10px", borderRadius: 10, border: 0, background: "transparent", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer" } }, parts);
+    const askEl = s.ask && S ? h("div", { role: "listbox", "aria-label": "Questions", style: { position: "absolute", top: 50, left: 0, width: 600, maxWidth: "100%", zIndex: 5, padding: 10, borderRadius: 18, border: "1px solid var(--line-strong)", background: "var(--surface-2)", boxShadow: "var(--shadow-dialog)", display: "flex", flexDirection: "column", gap: 4, animation: "sy-drop 220ms var(--ease-settle)" } },
+      h("span", { className: "type-label", style: { padding: "4px 10px" } }, "Asking"),
+      h("button", { type: "button", onClick: () => this.setState({ mode: "who", ask: false, finding: null }), style: { display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", borderRadius: 12, border: "1px solid var(--accent-line)", background: "var(--accent-soft)", color: "var(--ink)", font: "inherit", textAlign: "left", cursor: "pointer" } },
+        h("span", { style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 7 } }, word("Who has", 0), tok("Laser bay · Door", 1), word("without", 2), tok("Safety basics", 3), h("span", { style: { marginLeft: "auto", fontSize: 13, fontWeight: 600 } }, "2 people")),
+        h("span", { style: { fontSize: 12.5, color: "var(--muted)" } }, "Read “the induction” as Safety basics, the bundle given at induction. Enter shows it; each part can be changed after.")),
+      h("span", { className: "type-label", style: { padding: "10px 10px 2px" } }, "Or ask"),
+      sugg([word("Follow", 0), tok("Laser bay · Door", 1)], "f", () => this.setState({ mode: "follow", focus: "door", ask: false })),
+      sugg([word("Path from", 0), h("span", { key: 1, style: { color: "var(--faint)" } }, "someone"), word("to", 2), tok("Laser bay · Door", 3)], "p", () => this.setState({ mode: "path", ask: false })),
+      sugg([word("What if", 0), tok("Laser bay · Door", 1), word("went", 2)], "w", () => this.setState({ mode: "remove", focus: "op", ask: false }))) : null;
+    const lensEl = S ? h(S.FilterPills, { label: "Lens", value: s.lens, onChange: (v) => this.setState({ lens: v }), options: [{ value: "people", label: "People" }, { value: "use", label: "Recent use" }, { value: "ending", label: "Ending soon" }, { value: "group", label: "A group" }] }) : null;
+    const viewEl = S ? h(S.Segmented, { size: "sm", label: "View", value: "map", onChange: () => {}, options: [{ value: "map", label: "Map" }, { value: "list", label: "List" }] }) : null;
+    const fresh = S ? h(S.ReadFreshness, { key: "rf", state: { readAt: new Date(Date.now() - 30000).toISOString(), current: true }, subject: "The access map" }) : null;
+    const readEl = !S ? null : s.asof ? [fresh, h(S.Chip, { key: "asof", style: { borderColor: "var(--accent-line)", background: "var(--accent-soft)" } }, "Showing 3 Sept"), btn("Back to now", () => this.setState({ asof: false }), "ghost")] : [fresh, btn("Earlier date", () => this.setState({ asof: true, mode: "rest", finding: null }), "ghost")];
+    const fchip = (id, dot, text) => h("button", { key: id, type: "button", "aria-pressed": s.finding === id, onClick: () => this.setState(st => ({ finding: st.finding === id ? null : id, mode: "rest", focus: null, pins: [], drawn: null })), style: { padding: 0, border: 0, background: "transparent", font: "inherit", color: "inherit", cursor: "pointer", borderRadius: 999 } }, h(S.Chip, { style: s.finding === id ? { background: "var(--surface-2)", borderColor: "var(--line-strong)" } : undefined }, h("span", { style: { display: "inline-flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" } }, h("span", { "aria-hidden": true, style: { width: 7, height: 7, borderRadius: 999, background: dot } }), text)));
+    const findingsEl = !S || s.asof ? null : [fchip("drift", D, "3 drift"), fchip("send", W, "2 waiting for you to send"), fchip("single", W, "1 single route"), fchip("unused", "var(--faint)", "4 unused"), fchip("overlap", "var(--faint)", "1 overlap")];
+
+    const weeks = [["3 Aug", 41, 3, 1, 2], ["10 Aug", 18, 6, 2, 4], ["17 Aug", 9, 5, 1, 3], ["24 Aug", 6, 4, 0, 6], ["31 Aug", 4, 3, 1, 2], ["7 Sept", 5, 2, 0, 3], ["14 Sept", 11, 4, 1, 5], ["21 Sept", 3, 3, 2, 2], ["28 Sept", 2, 2, 0, 7], ["5 Oct", 4, 3, 1, 3]].map(([d, b, r, hh, x]) => { const k = 3.3; return { d, tip: d + " · " + (b + r + hh) + " given: " + b + " through a bundle, " + r + " by request, " + hh + " by hand · " + x + " taken away", given: b + r + hh, taken: x, hB: Math.round(b * k), hR: Math.round(r * k), hH: Math.round(hh * k), hX: Math.round(x * 3.3) }; });
+    const go = (patch) => (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState(Object.assign({ tab: "map", mode: "rest", focus: null, finding: null, asof: false, lens: "people", drawn: null }, patch)); };
+    const f = (frame, label, note, tall) => ({ src: "route-insights.dc.html?frame=" + frame, label, note, h: tall ? 1000 : 720, ih: tall ? 2000 : 1440 });
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData,
+      tab: s.tab, isMap: s.tab === "map", isTrends: s.tab === "trends", setTab: (v) => this.setState({ tab: v }),
+      tabOpts: [{ value: "map", label: "Map" }, { value: "trends", label: "Trends" }],
+      panel, panelActions, pinsEl, footerActions, qEl, askEl, lensEl, viewEl, readEl, findingsEl,
+      mapEl: this.frame && s.tab === "map" ? this.mapEl() : null, scrubEl: this.frame && s.tab === "map" ? this.scrubEl() : null,
+      trendsReadEl: S ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 30000).toISOString(), current: true }, subject: "Trends" }) : null,
+      periodEl: S ? h(S.Segmented, { size: "sm", label: "Period", value: "term", onChange: () => {}, options: [{ value: "30", label: "30 days" }, { value: "term", label: "This term" }, { value: "year", label: "This year" }] }) : null,
+      weeks,
+      ending: [{ p: "Main lab", a: 0, b: 4, c: 40 }, { p: "Wood shop", a: 0, b: 2, c: 22 }, { p: "3D printing", a: 9, b: 9, c: 12 }, { p: "Laser Lab", a: 3, b: 5, c: 9 }],
+      idle: [{ role: "Lockers", p: "Main lab", last: "2 Jun", n: 48 }, { role: "Storage · Member", p: "Network storage", last: "4 of 15 this term", n: 11 }, { role: "Laser cutter · Supervisor", p: "Laser Lab", last: "18 Jun", n: 2 }],
+      upkeep: [{ label: "People who left, still holding roles", n: 6, href: "#", go: go({ lens: "group" }) }, { label: "Drift still open", n: 3, href: "route-drift.dc.html" }, { label: "Roles nobody has", n: 2, href: "#", go: go({ finding: "unused" }) }, { label: "Bundles that give nothing new", n: 1, href: "#", go: go({ finding: "unused" }) }, { label: "Bundles that overlap", n: 1, href: "#", go: go({ finding: "overlap" }) }],
+      toUse: go({ lens: "use" }), toSingle: go({ finding: "single" }),
+      delivery: ["3 Aug", "10 Aug", "17 Aug", "24 Aug", "31 Aug", "7 Sept", "14 Sept", "21 Sept", "28 Sept", "5 Oct"].map(d => ({ d, dot: d === "24 Aug" || d === "21 Sept" ? "var(--warn)" : d === "28 Sept" ? "var(--danger)" : "var(--healthy)" })),
+      groups: [
+        { title: "Asking the map", note: "One field holds the question. Each answer is lines on the map and sentences in the panel, with a link to where the change is made.", frames: [
+          f("rest", "At rest", "The map as it is now, plus marks that are always true: a red thread with no start (drift), an amber dashed end (waiting for you to send), an amber dot on Safety basics (a single route), Studio and Textiles dotted (unused). Findings chips at the right of the read line light each one."),
+          f("ask", "Asking in plain words", "Typing a question offers sentences built from real names. The plain question becomes Who has Laser bay · Door without Safety basics, and says how it read “the induction”. Enter lights the 2 people; every part stays editable."),
+          f("follow", "Follow", "Click anything, or Follow it from the field. The thread draws outward hop by hop. The panel offers the next questions: Path from a person, What if it went. Pin keeps it."),
+          f("path", "Path between two things", "Priya Nair to Laser bay · Door. Only the routes between them light, each in its own shade. Two routes means redundancy, and the panel says what that means for her on 20 Oct."),
+          f("compare", "Compare two people", "Why can Aanya use the welder and Priya can't? Shared parts in ink, each person's own parts in a shade of violet, and one sentence that answers it."),
+          f("whatif", "What if, for any change", "Lab Tech also gave Laser cutter · Supervisor: the new line draws in violet with +9, and the panel counts who gains it. The same review the bundle's publish shows; the change itself happens on Lab Tech."),
+        ] },
+        { title: "Time and findings", note: "The past is a date, not a mode. Findings are facts the map already holds, lit on request.", frames: [
+          f("asof", "As of 3 Sept", "Earlier date opens a thin timeline under the map; ticks are days with changes. The map redraws as it was: counts that changed read in violet, lines added since go faint, and the panel lists what changed with a link to the audit log for that day. Findings hide, because they are about today."),
+          f("drift", "Drift, lit", "3 drift: Printer · Member held in Zitadel that nothing in Syndra explains. The thread starts from nowhere. The panel uses Drift's own words and links to that row."),
+          f("overlap", "Overlap", "Lab Tech and New members share two roles. The panel shows what is shared and what differs, and suggests including one inside the other, the nesting designed for Bundles."),
+        ] },
+        { title: "Lenses", note: "One lens at a time changes what a line's weight means. No new colours.", frames: [
+          f("use", "Recent use", "Lines fade by how recently anyone used them. Lockers is held by 48 people and nobody has tapped it since 2 Jun. Needs usage events from Badge reader and app sign-ins."),
+          f("ending", "Ending soon", "Lines that end within 30 days fade toward their end. Studio, Priya's by-hand Operator, and two Supervisors. Links to Expiring access."),
+          f("group", "A group", "Pick a group and the weight becomes their share. People who left the makerspace still reach the Main lab through Safety basics. Groups: people who left, new this term, or a team."),
+        ] },
+        { title: "Many threads, and beyond Zitadel", note: "Pins hold up to three threads in three shades. TrueNAS folds out into its own lane from its node, so the lane is there only when you want it.", frames: [
+          f("pins", "Pinned, with TrueNAS groups and keys", "Three pins, each its own shade; the panel says where they cross. Clicking TrueNAS opens a fifth lane of its groups, with the connection's state on the lane heading (amber when paused, neutral when offline). Keys sit behind ?."),
+        ] },
+        { title: "Trends", note: "What a map can't draw. Every count leads to the map or a list in the matching state.", frames: [
+          f("trends", "Trends tab", "Three medians first (deciding, sending, clearing drift). Then access given and taken away by week, with the two weeks that explain the shape. Then Requests, Ending soon by project, Held but not used, Upkeep, Single routes and Delivery. No scores, no rankings of people.", true),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

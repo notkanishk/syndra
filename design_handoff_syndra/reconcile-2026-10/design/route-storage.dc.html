@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Network storage board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /storage · member</span>
+    <h1 class="type-page-title" style="margin:0">Network storage</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">A member's own page for their files: whether they have an account, how to sign in, and how to connect. One card per storage system, today only TrueNAS. A three-step line opens every state, so a member can always see where they are: a role gives you access, your account is created, you set a password. A step-by-step connection guide sits one tap away, in a dialog (4b). Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · as built</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Three states, never collapsed: no role, on its way, ready (§20) · the password form is replaced, never disabled, when TrueNAS cannot take it · a withheld share is named with its reason, never silently dropped · no estimates: an age and who is waited on · the pause leads with "your access has not changed" and never says maintenance · a quota of zero is no limit, not a full bar · the password is kept nowhere (§30).</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Synthesis · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Each state opens with one display line saying where you are, under the step line · when a password is the next step, its form moves to the top in the violet step panel, the same panel as a system's project step; when it is not, it is a quiet outline at the end · <strong style="color:var(--ink)">Your shares</strong>, <strong style="color:var(--ink)">You are using</strong> and <strong style="color:var(--ink)">Connecting</strong> listed the same shares three times; now one row per share holds its use and both addresses · the usage bar is neutral, amber from 90%: violet is for what you can act on · at most one Notice per card · beside the system's name, a status: green "Online and accepting sign-ins" with when it was checked, amber "Offline since" a time. Amber only when Syndra is sure; it needs <span class="type-mono">reachable_since</span> and <span class="type-mono">checked_at</span> on <span class="type-mono">GET /me/targets</span>.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Owner, 9 Oct · no password while paused or offline</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">While changes are paused, the button reads <em>Save it for when changes start again</em> and the notice promises the password will be applied later. The code's own comment says the add-on refuses it, and Syndra keeps the password nowhere, so it cannot hold it for later either. Ruled: the form is not offered while paused or offline, first password included. One sentence takes its place and the current password keeps working. Build list: <span class="type-mono">handoff/2026-10-reconcile/BUILD-LIST.md</span>.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="3">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/storage" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Network storage" lede="Your account on the makerspace's shared storage, and how to connect to it. Your access follows the roles you hold." hint-size="100%,110px"></x-import>
+
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+    <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+      <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Your storage access could not be read.</span>
+      <p style="margin:0;max-width:70ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer. This says nothing about your files or your access, which are unchanged.</p>
+      <div style="margin-top:6px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import></div>
+    </div>
+  </div></sc-if>
+
+  <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,260px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" avatar="{{ false }}" label="Loading your storage" hint-size="100%,260px"></x-import></x-import></sc-if>
+
+  <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,150px"><x-import component-from-global-scope="Syndra.EmptyState" title="No shared storage yet." guidance="This makerspace has not connected any storage to Syndra. When it does, your account and how to reach it appear here." hint-size="100%,150px"></x-import></x-import></sc-if>
+
+  <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,600px">
+    <div style="padding:20px 20px 0;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 20px">
+      <span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px"><span class="type-card-title">TrueNAS</span><sc-if value="{{ hasStatus }}" hint-placeholder-val="{{ true }}"><span role="status" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;line-height:1.4;color:{{ statusInk }}"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:{{ statusDot }}"></span>{{ statusText }}</span></sc-if></span>
+      <ol aria-label="Your progress" class="hidden tablet:flex" style="margin:0;padding:0;list-style:none;flex-wrap:wrap;align-items:center;gap:6px 10px">
+        <sc-for list="{{ spine }}" as="s" hint-placeholder-count="3"><li style="display:flex;align-items:center;gap:10px"><sc-if value="{{ s.notFirst }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:18px;height:1px;background:var(--line-strong)"></span></sc-if><span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:{{ s.weight }};color:{{ s.ink }};white-space:nowrap"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:{{ s.dot }}"></span>{{ s.label }}</span></li></sc-for>
+      </ol>
+      <sc-if value="{{ hasStepBar }}" hint-placeholder-val="{{ true }}"><div class="tablet:hidden" aria-hidden="true" style="width:100%"><span style="display:flex;gap:4px;margin-bottom:7px"><sc-for list="{{ spine }}" as="s" hint-placeholder-count="3"><span style="flex:1;height:4px;border-radius:var(--radius-pill);background:{{ s.bar }}"></span></sc-for></span><span style="font-size:13px;color:var(--muted)">{{ stepWord }}</span></div></sc-if>
+    </div>
+
+    <sc-if value="{{ isDown }}" hint-placeholder-val="{{ false }}"><div role="alert" style="margin:18px 20px 0;display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">TrueNAS is offline</span>
+        <p style="margin:0;max-width:72ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">It stopped answering at 09:40, so your shares won't open until it's back. Your account and files are safe, and your access hasn't changed. Makerspace staff can see this too, and this page updates on its own when TrueNAS returns.</p>
+      </div>
+    </div></sc-if>
+    <div style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:8px">
+      <h2 style="margin:0;font-family:var(--font-display);font-size:24px;font-weight:600;letter-spacing:-.01em;line-height:1.25;text-wrap:pretty">{{ headline }}</h2>
+      <p style="margin:0;max-width:66ch;font-size:15px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ body }}</p>
+      <sc-if value="{{ hasAside }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;color:var(--faint)">{{ aside }}</span></sc-if>
+      <sc-if value="{{ isNone }}" hint-placeholder-val="{{ false }}"><a href="route-requests.dc.html?frame=default" style="margin-top:4px;align-self:flex-start;font-size:15px;font-weight:600;white-space:nowrap">Ask for access in Requests →</a></sc-if>
+    </div>
+
+    <sc-if value="{{ pwPanel }}" hint-placeholder-val="{{ false }}"><div style="margin:0 20px 22px;padding:20px 22px 22px;border-radius:var(--radius-panel);border:1px solid var(--accent-line);background:var(--accent-soft);display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:6px;max-width:460px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="pw" hint-size="140px,18px">Storage password</x-import>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><div style="flex:1 1 220px;min-width:0"><x-import component-from-global-scope="Syndra.Input" id="pw" type="password" auto-complete="new-password" hint-size="100%,46px"></x-import></div><span style="flex:none;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="130px,46px">Set password</x-import></span></div>
+      </div>
+      <p style="margin:0;max-width:62ch;font-size:14px;line-height:1.55;color:var(--ink);text-wrap:pretty">Only for TrueNAS: not your Syndra sign-in or your Google account. Syndra passes it to TrueNAS and doesn't keep a copy.</p>
+    </div></sc-if>
+
+    <sc-if value="{{ noticeEarly }}" hint-placeholder-val="{{ false }}"><div role="status" style="margin:0 20px 22px;display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--warn-text);text-wrap:pretty">{{ nTitle }}</span>
+        <p style="margin:0;max-width:68ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">{{ nBody }}</p>
+        <sc-if value="{{ nHasPerson }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:68ch;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">Need it today? Ask makerspace staff: they can see this pause and how long it should last.</p></sc-if>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ hasAccount }}" hint-placeholder-val="{{ true }}">
+      <div class="row-divider" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+        <span class="type-label" style="color:var(--label)">Sign in as</span>
+        <div style="max-width:460px"><x-import component-from-global-scope="Syndra.CopyableValue" value="aanya.rao" label="Your account name" hint-size="100%,46px"></x-import></div>
+      </div>
+
+      <div class="row-divider" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px"><span class="type-label" style="color:var(--label)">Your shares</span><sc-if value="{{ notLocked }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;color:var(--faint)">{{ sharesNote }}</span></sc-if><sc-if value="{{ entryB }}" hint-placeholder-val="{{ true }}"><span class="hidden tablet:flex" style="margin-left:auto;flex:none;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" on-click="{{ openGuide }}" hint-size="190px,34px">First time? How to connect</x-import></span></sc-if></div>
+        <sc-if value="{{ sharesLocked }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:12px 16px;border-radius:var(--radius-inner);border:1px solid var(--accent-line)"><span style="display:inline-flex;align-items:center;gap:9px;font-size:15px;font-weight:600;color:var(--ink)"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--accent)"></span>Set your password to open these</span><span style="font-size:14px;color:var(--muted)">Until then, TrueNAS turns every sign-in away.</span><a href="#pw" style="font-size:14px;font-weight:600;white-space:nowrap">Set it above ↑</a></div></sc-if>
+        <sc-for list="{{ shares }}" as="sh" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)">
+          <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px"><span style="font-size:15.5px;font-weight:600">{{ sh.name }}</span><span style="margin-left:auto;font-size:13.5px;color:{{ sh.useInk }}">{{ sh.use }}</span></div>
+          <sc-if value="{{ sh.limited }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="height:5px;border-radius:var(--radius-pill);background:var(--line);overflow:hidden"><div style="height:100%;width:{{ sh.pct }};border-radius:var(--radius-pill);background:{{ sh.bar }}"></div></div></sc-if>
+          <sc-if value="{{ sh.hasAddr }}" hint-placeholder-val="{{ true }}"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px 14px">
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-size:12.5px;color:var(--muted)">Mac and Linux · Connect to Server</span><x-import component-from-global-scope="Syndra.CopyableValue" value="{{ sh.smb }}" label="Address for Mac and Linux" hint-size="100%,46px"></x-import></div>
+            <div style="display:flex;flex-direction:column;gap:5px;min-width:0"><span style="font-size:12.5px;color:var(--muted)">Windows · File Explorer address bar</span><x-import component-from-global-scope="Syndra.CopyableValue" value="{{ sh.unc }}" label="Address for Windows" hint-size="100%,46px"></x-import></div>
+          </div></sc-if>
+        </div></sc-for>
+        <sc-if value="{{ entryB }}" hint-placeholder-val="{{ true }}"><div class="tablet:hidden"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" class-name="w-full" on-click="{{ openGuide }}" hint-size="100%,44px">First time? How to connect</x-import></div></sc-if>
+        <sc-if value="{{ hasWithheld }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Withheld" items="{{ withheld }}" audience="member" hint-size="100%,90px"></x-import></sc-if>
+      </div>
+
+      <sc-if value="{{ noticeLate }}" hint-placeholder-val="{{ false }}"><div role="status" style="margin:0 20px 20px;display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--warn-text);text-wrap:pretty">{{ nTitle }}</span>
+        <p style="margin:0;max-width:68ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">{{ nBody }}</p>
+        <sc-if value="{{ nHasPerson }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:68ch;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">Need it today? Ask makerspace staff: they can see this pause and how long it should last.</p></sc-if>
+      </div>
+    </div></sc-if>
+      <sc-if value="{{ pwLate }}" hint-placeholder-val="{{ true }}"><div class="row-divider" style="padding:18px 20px 22px;display:flex;flex-direction:column;gap:8px">
+        <span class="type-label" style="color:var(--label)">Storage password</span>
+        <sc-if value="{{ pwOpen }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;max-width:460px"><div style="flex:1 1 220px;min-width:0"><x-import component-from-global-scope="Syndra.Input" id="pw2" type="password" auto-complete="new-password" aria-label="New storage password" hint-size="100%,46px"></x-import></div><span style="flex:none;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="150px,46px">Change password</x-import></span></div>
+          <span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">Last changed 3 weeks ago. Only for TrueNAS: not your Syndra sign-in or your Google account.</span>
+        </div></sc-if>
+        <sc-if value="{{ pwBlocked }}" hint-placeholder-val="{{ false }}"><span style="max-width:66ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">{{ pwBlockedText }}</span></sc-if>
+      </div></sc-if>
+    </sc-if>
+  </x-import></sc-if>
+</div>
+<sc-if value="{{ guideOpen }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ closeGuide }}" size="lg" labelled-by="g-title" hint-size="640px,720px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Connect to TrueNAS, step by step" title-id="g-title" lede="Four steps, done once per device. After that your share is a folder on your computer." hint-size="100%,100px"></x-import>
+  <div style="padding:0 24px 8px"><div style="display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 24px">
+    <div style="flex:1 1 200px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="80px,18px">Your device</x-import><span class="hidden tablet:flex" style="white-space:nowrap"><x-import component-from-global-scope="Syndra.Segmented" label="Your device" value="{{ os }}" on-change="{{ setOs }}" options="{{ osOpts }}" hint-size="440px,44px"></x-import></span><span class="tablet:hidden" style="width:100%;min-width:200px"><x-import component-from-global-scope="Syndra.Select" aria-label="Your device" value="{{ os }}" on-change="{{ setOsEv }}" hint-size="100%,46px"><option value="mac">Mac</option><option value="windows">Windows</option><option value="linux">Linux</option><option value="ios">iPhone/iPad</option><option value="android">Android</option></x-import></span></div>
+    <div style="flex:0 1 200px;display:flex;flex-direction:column;gap:6px;min-width:160px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="g-share" hint-size="60px,18px">Share</x-import><x-import component-from-global-scope="Syndra.Select" id="g-share" value="{{ gShare }}" on-change="{{ setShare }}" hint-size="100%,46px"><option value="fabrication">fabrication</option><option value="home">home</option></x-import></div>
+  </div>
+  <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:18px">
+    <sc-for list="{{ gSteps }}" as="g" hint-placeholder-count="4"><li style="display:flex;gap:14px;align-items:flex-start">
+      <span aria-hidden="true" style="width:26px;height:26px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:13px;font-weight:600;color:var(--muted)">{{ g.n }}</span>
+      <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:9px;padding-top:2px">
+        <span style="font-size:15px;line-height:1.6;color:var(--ink);text-wrap:pretty">{{ g.lead }}<sc-if value="{{ g.hasKeys }}" hint-placeholder-val="{{ false }}"> <span style="display:inline-flex;gap:4px;vertical-align:1px"><sc-for list="{{ g.keys }}" as="k" hint-placeholder-count="2"><kbd style="display:inline-flex;align-items:center;min-width:22px;height:22px;justify-content:center;padding:0 6px;border-radius:6px;border:1px solid var(--line-strong);border-bottom-width:2px;background:var(--surface-1);font-family:var(--font-mono);font-size:12.5px;color:var(--ink)">{{ k }}</kbd></sc-for></span>{{ g.tail }}</sc-if></span>
+        <sc-if value="{{ g.hasCopy }}" hint-placeholder-val="{{ false }}"><div style="max-width:520px"><x-import component-from-global-scope="Syndra.CopyableValue" value="{{ g.copy }}" label="Address to paste" hint-size="100%,46px"></x-import></div></sc-if>
+        <sc-if value="{{ g.creds }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;align-items:baseline;max-width:520px;padding:12px 14px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)"><span style="font-size:13px;color:var(--muted)">Name</span><span class="type-mono" style="font-size:14px">aanya.rao</span><span style="font-size:13px;color:var(--muted)">Password</span><span style="font-size:14px">Your storage password, not your Syndra or Google one</span></div></sc-if>
+        <sc-if value="{{ g.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ g.note }}</span></sc-if>
+      </div>
+    </li></sc-for>
+  </ol>
+  <div style="padding-top:16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
+    <span class="type-label" style="color:var(--label)">If it doesn't connect</span>
+    <ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:5px;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty"><li>Look at the status beside TrueNAS on this page. If it says offline, wait for it to come back.</li><li>If your sign-in is refused, check you used your storage password. You can change it at the end of this page.</li><li>Still stuck? Ask makerspace staff, and mention your account name, <span class="type-mono" style="color:var(--ink)">aanya.rao</span>.</li></ul>
+  </div>
+</div></div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ closeGuide }}" hint-size="90px,40px">Close</x-import></x-import>
+</x-import>
+</sc-if>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "ready";
+    const gs = { "guide-b-win": "windows", "guide-b-phone": "ios", "guide-b-android": "android" }[this.st];
+    const ua = (navigator.userAgent || "");
+    this.state = { os: gs || (/iPhone|iPad/.test(ua) ? "ios" : /Android/.test(ua) ? "android" : /Windows/.test(ua) ? "windows" : /Linux/.test(ua) ? "linux" : "mac"), share: "fabrication", guide: /^guide-b/.test(this.st) };
+    this.session = { id: "u7", name: "Aanya Rao", email: "aanya.rao@makerspace.edu", title: "Student", team: "Design", status: "active", avatar: "AR", role: "user", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: {} },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const st0 = this.st;
+    const st = /^guide-/.test(st0) ? "ready" : st0;
+    const held = st === "held", nohost = st === "nohost";
+    const known = !/^(loading|error|empty)$/.test(st);
+    const none = st === "none", waiting = /^waiting/.test(st);
+    const needsPw = st === "needs-password" || st === "reenrol";
+    const paused = st === "draining" || st === "readonly" || st === "waiting-paused";
+    const quiet = st === "quiet";
+    const hasAccount = known && !none && !waiting;
+    const reached = none ? -1 : waiting ? 0 : needsPw ? 1 : 2;
+    const labels = ["A role gives you access", "Your account is created", "You set a password"];
+    const spine = labels.map((label, i) => {
+      const done = i <= reached, now = i === reached + 1 && !none;
+      return { label, notFirst: i > 0, bar: done ? "var(--healthy)" : now ? "var(--accent)" : "var(--line-strong)", dot: done ? "var(--healthy)" : now ? "var(--accent)" : "var(--line-strong)", ink: done ? "var(--muted)" : now ? "var(--ink)" : "var(--faint)", weight: now ? 600 : 400 };
+    });
+    const H = {
+      ready: ["Your account is ready", "Copy an address below into your computer, then sign in with your account name and storage password.", ""],
+      held: ["Your account is switched off for now", "Makerspace staff have put your TrueNAS account on hold, so it turns sign-ins away. Your files are kept and your access is unchanged. It switches back on when the hold is lifted; there's nothing to do on your side.", "On hold since 9 Oct"],
+      nohost: ["Your account is ready", "Sign in with your account name and storage password. The address to connect to isn't set up in Syndra yet, so ask makerspace staff for it.", ""],
+      withheld: ["Your account is ready", "Copy an address below into your computer, then sign in with your account name and storage password. One share is held back for now, with the reason beside it.", ""],
+      "needs-password": ["Set a password to switch your account on", "Your account on TrueNAS is ready, but it turns every sign-in away until it has a password. This is the last step.", ""],
+      reenrol: ["Your old storage password no longer works", "TrueNAS was rebuilt since you set it, and passwords didn't carry over. Set a new one below. Nothing else about your access has changed.", ""],
+      draining: ["Your account is ready", "Copy an address below into your computer, then sign in with your account name and storage password.", ""],
+      readonly: ["Your account is ready", "Copy an address below into your computer, then sign in with your account name and storage password.", ""],
+      quiet: ["Your account is ready", "Once TrueNAS is back, sign in as usual. Nothing needs doing on your side.", ""],
+      waiting: ["Your account is on its way", "Your access is recorded. Makerspace staff create the account itself, and nothing is needed from you in the meantime.", "Recorded 2 days ago · there's no set time, it waits on staff"],
+      "waiting-paused": ["Your account is on its way", "Your access is recorded. Makerspace staff create the account itself, and nothing is needed from you in the meantime.", "Recorded 2 days ago"],
+      none: ["None of your roles reaches TrueNAS", "So there's no account here for you yet. Access comes with a role: ask for one, and your account follows on its own.", ""],
+    }[st] || ["", "", ""];
+    const N = st === "draining" ? ["Account changes are paused for a few minutes", "TrueNAS is online and your access hasn't changed, so you can connect and use your files now. Syndra is only holding off on account changes while the last few finish.", false]
+      : st === "readonly" ? ["Account changes are paused while staff work on TrueNAS", "TrueNAS is online and your access hasn't changed, so you can connect and use your files now. Syndra has stopped changing accounts until staff are done.", true]
+      : st === "waiting-paused" ? ["Your account is waiting on staff, not on you", "Staff are working on TrueNAS, so Syndra has paused creating accounts, yours included. TrueNAS itself is online. Your account is first in line, and nothing has been lost.", true]
+      : null;
+    const sh = (name, used, quota) => {
+      const limited = quota > 0, pct = limited ? Math.min(100, used / quota * 100) : 0;
+      return { name, limited, pct: Math.max(pct, 1).toFixed(0) + "%", bar: pct >= 90 ? "var(--warn)" : "var(--muted)",
+        use: quiet ? "Usage unavailable while offline" : limited ? used + " GB of " + quota + " GB" + (pct >= 90 ? " · nearly full" : "") : used + " GB used · no limit set",
+        useInk: !quiet && pct >= 90 ? "var(--warn-text)" : "var(--muted)",
+        smb: "smb://nas-01.makerspace.lan/" + name, unc: "\\\\nas-01.makerspace.lan\\" + name };
+    };
+    const shares = [sh("fabrication", 12.4, 50), sh("home", st === "ready" ? 46.1 : 8.2, st === "ready" ? 50 : 0)].map(s => quiet ? Object.assign(s, { limited: false }) : s).map(x => Object.assign(x, { hasAddr: !nohost && !held }));
+    const pwHeld = held;
+    const pwBlocked = paused || quiet;
+    const os = this.state.os, share = this.state.share, host = "nas-01.makerspace.lan";
+    const smb = "smb://" + host + "/" + share, unc = "\\\\" + host + "\\" + share;
+    const S = (lead, o) => Object.assign({ lead, keys: [], tail: "", copy: "", note: "", creds: false }, o || {});
+    const steps = {
+      mac: [S("Open Finder, then choose Go › Connect to Server in the menu bar, or press", { keys: ["⌘", "K"], tail: "." }), S("Paste this address and click Connect.", { copy: smb }), S("When asked, choose Registered User and sign in.", { creds: true, note: "On your own Mac, tick Remember this password in my keychain so you are not asked again." }), S("The share opens in Finder and stays in the sidebar under Locations. To come back to it later, press", { keys: ["⌘", "K"], tail: " again." })],
+      windows: [S("Open File Explorer, or press", { keys: ["Win", "E"], tail: "." }), S("Click the address bar at the top, paste this address and press Enter.", { copy: unc }), S("When Windows asks for a user name and password, sign in. If it offers your usual account, choose More choices, then Use a different account.", { creds: true, note: "On your own computer, tick Remember my credentials." }), S("To keep it one click away, right-click This PC, choose Map network drive, and paste the same address.")],
+      linux: [S("Open Files and choose Other Locations at the bottom of the sidebar, or press", { keys: ["Ctrl", "L"], tail: " to type an address." }), S("Paste this address into Connect to Server and click Connect.", { copy: smb }), S("Choose Registered User and sign in. Leave Domain as it is.", { creds: true }), S("The share appears in the sidebar. Press", { keys: ["Ctrl", "D"], tail: " to bookmark it." })],
+      ios: [S("Open the Files app, tap the ⋯ button at the top, then Connect to Server."), S("Paste this address and tap Connect.", { copy: smb }), S("Choose Registered User and sign in.", { creds: true }), S("The share stays under Shared in the Browse tab.")],
+      android: [S("Android has no built-in way to open a network share, so install a file manager that can. In the Play Store, look for one that mentions SMB or LAN."), S("In that app, add a network or LAN location using SMB. Most ask for the server and the share separately.", { copy: host, note: "Server above; share: " + share + "." }), S("Sign in with your account.", { creds: true }), S("The share stays in the app's list of locations.")],
+    }[os].map((s, i) => Object.assign(s, { n: i + 1, hasKeys: s.keys.length > 0, hasCopy: !!s.copy, hasNote: !!s.note }));
+    const f = (frame, label, note, phone) => phone ? { src: "route-storage.dc.html?frame=" + frame, label, note, w: 390, h: 1700, boxW: 390, boxH: 1100, scale: 1 } : { src: "route-storage.dc.html?frame=" + frame, label, note, w: 1440, h: 1500, boxW: 720, boxH: 750, scale: 0.5 };
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame,
+      os, setOs: (v) => this.setState({ os: v }), setOsEv: (e) => this.setState({ os: e && e.target ? e.target.value : e }), gShare: share, setShare: (e) => this.setState({ share: e && e.target ? e.target.value : e }),
+      osOpts: [{ value: "mac", label: "Mac" }, { value: "windows", label: "Windows" }, { value: "linux", label: "Linux" }, { value: "ios", label: "iPhone/iPad" }, { value: "android", label: "Android" }],
+      gSteps: steps, guideOpen: this.state.guide, openGuide: () => this.setState({ guide: true }), closeGuide: () => this.setState({ guide: false }),
+      entryB: !quiet && !nohost && !held, session: this.session, rootData: this.rootData,
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", showCard: known,
+      spine, hasStepBar: !none, stepWord: waiting ? "Step 2 of 3 · your account is being created" : needsPw ? "Step 3 of 3 · you set a password" : "All three steps done", headline: H[0], body: H[1], aside: H[2], hasAside: !!H[2], isNone: none,
+      pwPanel: needsPw, isDown: quiet, sharesLocked: needsPw, notLocked: !needsPw,
+      hasStatus: known && !none, statusDot: quiet ? "var(--warn)" : held ? "var(--line-strong)" : "var(--healthy)", statusInk: quiet ? "var(--warn-text)" : "var(--muted)", statusText: quiet ? "Offline since 09:40" : held ? "Online · your account is on hold" : (waiting || needsPw) ? "Online · checked a minute ago" : "Online and accepting sign-ins · checked a minute ago", noticeEarly: !!N && !hasAccount, noticeLate: !!N && hasAccount, nTitle: N ? N[0] : "", nBody: N ? N[1] : "", nHasPerson: N ? N[2] : false,
+      hasAccount, shares, sharesNote: quiet ? "As last known · they open again when TrueNAS is back" : "",
+      hasWithheld: st === "withheld", withheld: [{ field: "share", value: "archive", reason: "Held while your archive folder is moved to the new pool. Back by 20 Oct.", target: "TrueNAS", actorId: "u1" }],
+      pwLate: hasAccount && !needsPw, pwOpen: !pwBlocked && !held, pwBlocked: pwBlocked || held,
+      pwBlockedText: held ? "Your password can't be changed while the account is on hold. The one you have works again when the hold is lifted." : quiet ? "You can't change your password while TrueNAS is offline. Your current one works again as soon as it's back." : "You can't change your password while account changes are paused. Your current one keeps working, and you can change it once the pause lifts.",
+      boardGroups: [
+        { title: "Connection guide · 4b, picked 9 Oct", frames: [
+          f("guide-b", "Guide · Mac", "One quiet ghost button where the shares begin: First time? How to connect. It opens a dialog in place. The device is preselected from the browser, one tap from the others: Mac, Windows, Linux, iPhone/iPad, Android. Four numbered steps with the device's own menu names and key presses, the address to paste for the chosen share, and exactly what to type when asked to sign in. Done closes it."),
+          f("guide-b-win", "Guide · Windows", "Same four steps; the keys, menu names and address form change with the device."),
+          f("guide-b-android", "Guide · Android", "Said plainly: Android can't do this on its own, so step 1 is getting an app that can. The server is the thing to copy, because most apps ask for server and share separately."),
+          f("guide-b-phone", "Phone · iPhone/iPad", "The dialog is a full-height sheet. Five devices don't fit a pill row at 390, so below tablet the switch is a Select with the same five.", true),
+        ] },
+        { title: "The three states · desktop 1440", frames: [
+          f("none", "No role reaches it", "The step line is inert: nothing lit, nothing promised. One sentence on why, and the way to a role. No account name, no form, no addresses."),
+          f("waiting", "On its way", "Step one lit, step two the one in progress. An age and who it waits on, never an estimate or a spinner. Nothing to do, and it says so."),
+          f("needs-password", "Set a password", "The account exists and refuses sign-ins until it has a password, the ordinary first visit. The form moves to the top in the violet step panel, the page's one filled button. The shares are already listed, under one violet-edged line: they won't open until the password is set, with the way back up to the form."),
+          f("ready", "Ready", "Beside the name, a small green status: online and accepting sign-ins, and when it was last checked, so a member who can't connect knows to look at their own end first. Every step lit. Sign in as, then one row per share holding its use and both addresses, then the password as a quiet outline at the end. A share at 90% turns amber and says nearly full; a share with no quota says no limit set."),
+        ] },
+        { title: "Variations", frames: [
+          f("withheld", "A share held back", "The Withheld panel, member voice, names the share and why, under the shares it is missing from."),
+          f("reenrol", "Old password gone", "Same panel as Set a password, with the reason it is back: TrueNAS was rebuilt."),
+          f("held", "Account on hold (#79)", "A held account gets its own sentence, not \u201cready\u201d: switched off for now, files kept, nothing to do. No addresses and no guide, because every sign-in would be refused; the password row says why it can't change. The status beside the name stays neutral: TrueNAS is fine."),
+          f("nohost", "No address set up (#80)", "The add-on registered no host, so the addresses and the guide are left out rather than guessed. The headline still says the account is ready, and one sentence says who to ask for the address."),
+        ] },
+        { title: "When changes can't happen · degraded", frames: [
+          f("draining", "Paused for a few minutes", "Your account first, at full strength, then the pause, as the target-plane board ruled. One Notice in the card; the password row becomes a sentence. No estimate beyond what a drain earns."),
+          f("readonly", "Paused while staff work", "Open-ended, so no estimate: a person instead."),
+          f("waiting-paused", "On its way, and paused", "The pause is what the member is waiting on, so it sits inside the state, not below it."),
+          f("quiet", "TrueNAS offline", "Only when Syndra is sure: its checks keep failing, not one slow answer. The status beside the name turns amber with the time it stopped, and one amber Notice comes first in the card, because this time the files really are out of reach. Account and addresses stay as last known; use reads couldn't be read, never zero; the password waits."),
+        ] },
+        { title: "Loading · empty · error", frames: [
+          f("loading", "Loading", "Title and lede are fixed copy; nothing about the member until it is read."),
+          f("empty", "No storage connected", "The makerspace has none. Said as such, and what will appear."),
+          f("error", "Error", "Syndra's server, not the files. Says so first."),
+        ] },
+        { title: "Phone · 390", frames: [
+          f("needs-password", "Phone · set a password", "The step line wraps; the field and button share a row; shares stack their two addresses.", true),
+          f("ready", "Phone · ready", "Each share is one block: name, use, bar, then the two addresses.", true),
+          f("draining", "Phone · paused", "The Notice follows Sign in as and the shares come after it.", true),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
