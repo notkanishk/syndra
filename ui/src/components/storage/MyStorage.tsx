@@ -1,45 +1,44 @@
 "use client";
 
-import { describeFailure, sentence } from "@/lib/outcome";
-import { formatBytes } from "@/lib/format";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { Mono } from "@/components/ui/Badge";
 import { EmptyState, ListStates } from "@/components/states";
+import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
-import { Input } from "@/components/ui/Input";
+import { FieldLabel, Input } from "@/components/ui/Input";
+import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
+import { ConnectionGuide, deviceFrom, type Device, type GuideFolder } from "@/components/storage/ConnectionGuide";
+import { describeFailure, sentence } from "@/lib/outcome";
+import { formatBytes, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
+import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
+import {
+  useMyStorage,
+  useSetStorageCredential,
+  type MyTargetView,
+  type RoleSource,
+  type StoragePlace,
+} from "@/lib/queries/useMyStorage";
 import { oneShot } from "@/lib/secret";
-import { useMyStorage, useSetStorageCredential, type MyTargetView } from "@/lib/queries/useMyStorage";
 
 /**
- * A member's own storage view (group 10; design §20).
+ * A member's own storage page (route-storage; A-01, A-02).
  *
- * Three states, rendered as three. They are what a member actually experiences,
- * and collapsing any two produces a screen that lies:
+ * One card per system. A three-step line opens every state, so a member can
+ * always see where they are: a role gives you access, your account is
+ * created, you set a password. Then one display line saying where they are,
+ * and the one thing to do, if there is one.
  *
- *   no entitlement       — no role of theirs reaches this system. No credential
- *                          form, no account name, no connection instructions,
- *                          and an explanation instead of an empty panel.
- *   entitled, no account — the change is recorded and has not been applied yet.
- *                          The credential affordance is WITHHELD: setting one
- *                          would be dispatched at an account that does not
- *                          exist, and they would be told their password was set.
- *   account present      — everything.
- *
- * The middle state is the one a two-state design gets wrong, and it is not an
- * edge case: these changes wait for an operator, so it is the ordinary
- * experience of every new member until that happens.
- *
- * One three-step spine opens all three, so they read as a progression rather
- * than as three unrelated panels — and in the first state the spine is inert,
- * explaining the mechanism without promising an outcome.
+ * Only what was read: places come from the target's own folder permissions
+ * for the groups the account is actually in, addresses are built once by the
+ * backend from the registered host, and usage that couldn't be read is never
+ * drawn as zero.
  */
 export function MyStorage() {
   const targets = useMyStorage();
@@ -48,7 +47,7 @@ export function MyStorage() {
     <>
       <PageHeader
         title="Network storage"
-        lede="Shared storage for makerspace work. This page shows which shares you can open and how to connect; your access follows the roles you hold."
+        lede="Your account on the makerspace's shared storage, and how to connect to it. Your access follows the roles you hold."
       />
       <ListStates
         isLoading={targets.isLoading}
@@ -58,14 +57,14 @@ export function MyStorage() {
         errorTitle="Your storage access could not be read"
         empty={
           <EmptyState
-            title="No shared storage"
-            guidance="This makerspace has no shared storage connected to Syndra."
+            title="No shared storage yet."
+            guidance="This makerspace has not connected any storage to Syndra. When it does, your account and how to reach it appear here."
           />
         }
       >
         <div className="grid gap-4">
           {(targets.data ?? []).map((view) => (
-            <TargetPanel key={view.target} view={view} />
+            <TargetCard key={view.target} view={view} />
           ))}
         </div>
       </ListStates>
@@ -73,520 +72,657 @@ export function MyStorage() {
   );
 }
 
-/**
- * The spine: role → account → password.
- *
- * Three nodes, always all three, and the reached ones are lit. A member in the
- * middle state can see that the thing they are waiting for is the second node
- * and that a third exists — which is the difference between waiting and
- * wondering whether they have missed a step.
- *
- * `reached` of -1 is the inert form: nothing lit, nothing promised.
- */
-function Spine({ reached }: { reached: -1 | 0 | 1 | 2 }) {
-  const steps = ["A role gives you access", "Your account is created", "You set a password"];
-  return (
-    <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
-      {steps.map((step, i) => (
-        <li key={step} className="flex items-center gap-2">
-          {i > 0 && (
-            <span aria-hidden className="text-faint">
-              ›
-            </span>
-          )}
-          <span className="flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className={`size-1.5 rounded-pill ${i <= reached ? "bg-healthy" : "bg-tint-3"}`}
-            />
-            <span className={i <= reached ? "text-muted" : "text-faint"}>{step}</span>
-          </span>
-        </li>
-      ))}
-    </ol>
-  );
+type State =
+  | "none"
+  | "held"
+  | "waiting"
+  | "needs-password"
+  | "reenrol"
+  | "restored"
+  | "ready"
+  | "opens-nothing"
+  | "nohost";
+
+/** Where this member is, as one of the board's states. */
+function stateOf(view: MyTargetView): State {
+  const suspended = view.suspended ?? [];
+  if (!view.entitled) {
+    return suspended.some((s) => s.field === "enabled") ? "held" : "none";
+  }
+  if (!view.account) return "waiting";
+  const storage = view.storage;
+  if (storage?.needs_new_password) return "restored";
+  if (view.credential.needs_re_enrolment) return "reenrol";
+  if (storage?.needs_password || (!storage && !view.credential.set)) return "needs-password";
+  if (storage?.places_readable && (storage.places ?? []).length === 0) return "opens-nothing";
+  if (!view.connection) return "nohost";
+  return "ready";
 }
 
-function TargetPanel({ view }: { view: MyTargetView }) {
+const PASSWORD_STEP = new Set<State>(["needs-password", "reenrol", "restored"]);
+
+function paused(view: MyTargetView) {
+  return view.lifecycle === "draining" || view.lifecycle === "read_only";
+}
+
+/** A role named the way the member's own page names it: its label. */
+function useRoleName() {
+  const catalog = useCatalogProjects();
+  return (role: RoleSource) => {
+    const project = catalog.data.find((p) => p.id === role.project_id);
+    const found = project?.roles.find((r) => r.key === role.role_key);
+    return found?.label || humanizeKey(role.role_key);
+  };
+}
+
+/** "Fabrication lead", "Fabrication lead and Lab tech". */
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function TargetCard({ view }: { view: MyTargetView }) {
   const label = targetLabel(view.target);
-  const held = view.suspended ?? [];
+  const state = stateOf(view);
+  const roleName = useRoleName();
+  const offline = view.health === "offline";
+  const isPaused = paused(view);
+  const passwordStep = PASSWORD_STEP.has(state);
+  const hasAccount = state !== "none" && state !== "held" && state !== "waiting";
+  // The password can't be taken while the system can't take it. The form is
+  // replaced by a sentence, never disabled (owner, 9 Oct).
+  const passwordBlocked = offline || isPaused;
 
-  if (!view.entitled) {
-    return (
-      <Card>
-        <CardHeader title={label} />
-        <div className="grid gap-3 px-5 pb-5">
-          <Spine reached={-1} />
-          <p className="text-[14px] text-muted">
-            None of your roles gives you access to {label}, so there is no account to set up.
-            Access comes with a role — ask for one from{" "}
-            <Link href="/requests" className="text-accent-text underline">
-              Requests
-            </Link>{" "}
-            and this follows on its own.
-          </p>
-          {held.length > 0 && <Withheld items={held} />}
-        </div>
-      </Card>
-    );
-  }
-
-  if (!view.account) {
-    return (
-      <Card>
-        <CardHeader title={label} />
-        <div className="grid gap-3 px-5 pb-5">
-          <Spine reached={0} />
-          <p className="text-[14px] text-muted">
-            Your access is recorded and your account here has not been created yet.
-            Nothing is needed from you.
-          </p>
-          {/* An age, never an estimate, and nothing that spins. The wait is on a
-              person resuming the queue, not on a timer — a spinner would say
-              "still happening" about something that is not currently happening,
-              and "usually within a day" is a guess about somebody's week. */}
-          <p className="text-[13px] text-faint">
-            {view.recorded_at ? (
-              <>
-                Recorded <Relative iso={view.recorded_at} /> · waiting for makerspace staff
-                to send it, not on a timer
-              </>
-            ) : (
-              <>Waiting for makerspace staff to send it, not on a timer</>
-            )}
-          </p>
-          {/* Design C3, and the one place the pause sits INSIDE the state card
-              rather than below it: the thing they are waiting for is exactly the
-              thing that cannot happen, so the two facts are one fact and
-              separating them would let somebody read the first half and miss
-              it. */}
-          <Paused lifecycle={view.lifecycle} label={label} creating />
-          {held.length > 0 && <Withheld items={held} />}
-        </div>
-      </Card>
-    );
-  }
+  const reached = state === "none" || state === "held" ? -1 : state === "waiting" ? 0 : passwordStep ? 1 : 2;
+  const roles = (view.roles ?? []).map(roleName);
+  const [headline, body, aside] = copyFor(state, label, view);
+  const notice = pausedNotice(view, label);
 
   return (
     <Card>
-      <CardHeader title={label} />
-      <div className="grid gap-4 px-5 pb-5">
-        <Spine reached={view.credential.set ? 2 : 1} />
-
-        <div className="grid gap-1.5">
-          <p className="text-[13px] text-label">Sign in as</p>
-          <CopyableValue value={view.account.username} label="Your account name" />
-        </div>
-
-        {view.resources && Object.keys(view.resources).length > 0 && (
-          <div className="grid gap-1.5">
-            <p className="text-[13px] text-label">Your shares</p>
-            <ul className="grid gap-1 text-[14px] text-muted">
-              {Object.entries(view.resources).map(([field, values]) => (
-                <li key={field}>{values.join(", ")}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {held.length > 0 && <Withheld items={held} />}
-        <NotYetUsable view={view} />
-        {/* Their account first, at full contrast, then the pause. Reversing
-            those two would be the whole failure of this page — and the notice
-            leads with the sentence a member cannot infer, that the server is
-            fine and their access has not changed, because that clause is what
-            stops them going to mount the share to check. */}
-        <Paused lifecycle={view.lifecycle} label={label} />
-        <CredentialForm view={view} />
-        <StorageUsage view={view} />
-        <ConnectionInstructions view={view} />
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2.5 px-5 pt-5">
+        <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
+          <span className="type-card-title">{label}</span>
+          <SystemStatus view={view} state={state} />
+        </span>
+        <Steps reached={reached} state={state} />
       </div>
+
+      {offline && (
+        <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]">
+          It stopped answering{view.reachable_since ? ` at ${formatClock(view.reachable_since)}` : ""}, so your
+          folders won&apos;t open until it&apos;s back. Your account and files are safe, and your access
+          hasn&apos;t changed. Makerspace staff can see this too, and this page updates on its own when{" "}
+          {label} returns.
+        </Notice>
+      )}
+
+      <div className="flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">
+        <h2 className="font-display text-[24px] font-semibold leading-[1.25] tracking-[-0.01em] [text-wrap:pretty]">
+          {headline}
+        </h2>
+        <p className="max-w-[66ch] text-[15px] leading-[1.55] text-muted [text-wrap:pretty]">{body}</p>
+        {aside && <span className="text-[13.5px] text-faint">{aside}</span>}
+        {state === "none" && (
+          <Link
+            href="/requests"
+            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[15px] font-semibold text-accent-text motion-tint hover:brightness-110 desktop:min-h-0"
+          >
+            Ask for access in Requests →
+          </Link>
+        )}
+      </div>
+
+      {passwordStep && (
+        <div className="mx-5 mb-[22px] flex flex-col gap-3 rounded-panel border border-accent-line bg-accent-soft px-[22px] pb-[22px] pt-5">
+          {passwordBlocked ? (
+            <span className="max-w-[66ch] text-[14.5px] leading-[1.55] text-ink">{blockedSentence(view, label)}</span>
+          ) : (
+            <PasswordForm view={view} label={label} accent submitLabel={state === "restored" ? "Set new password" : "Set password"} />
+          )}
+        </div>
+      )}
+
+      {notice && !hasAccount && (
+        <Notice tone="warn" title={notice.title} className="mx-5 mb-[22px]">
+          {notice.body}
+          {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
+        </Notice>
+      )}
+
+      {hasAccount && view.account && (
+        <>
+          <div className="row-divider flex flex-col gap-2 px-5 py-[18px]">
+            <span className="type-label text-label">Sign in as</span>
+            <div className="max-w-[460px]">
+              <CopyableValue value={view.account.username} label="Your account name" />
+            </div>
+          </div>
+
+          <Folders view={view} state={state} label={label} roleName={roleName} roles={roles} />
+
+          {notice && (
+            <Notice tone="warn" title={notice.title} className="mx-5 mb-5">
+              {notice.body}
+              {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
+            </Notice>
+          )}
+
+          {!passwordStep && (
+            <div className="row-divider flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">
+              <span className="type-label text-label">Storage password</span>
+              {passwordBlocked ? (
+                <span className="max-w-[66ch] text-[14.5px] leading-[1.55] text-ink">{blockedSentence(view, label)}</span>
+              ) : (
+                <PasswordForm view={view} label={label} submitLabel="Change password" />
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {!hasAccount && (view.suspended ?? []).filter((s) => s.field !== "enabled").length > 0 && (
+        <div className="px-5 pb-5">
+          <Withheld items={(view.suspended ?? []).filter((s) => s.field !== "enabled")} />
+        </div>
+      )}
     </Card>
   );
 }
 
-/**
- * The account exists and will not let them in yet.
- *
- * Syndra creates the account before any password exists — it has none to set —
- * and the target disables password authentication until the member sets one. So
- * this page could show an account name, working mount instructions and a green
- * spine to somebody whose every connection attempt is refused, and nothing on
- * it said why.
- *
- * Read from the TARGET, not from Syndra's record that a password was set: the
- * record cannot say whether the target still accepts it.
- *
- * Framed as an unfinished step rather than a fault, because that is what it is,
- * and the action is directly below.
- */
-function NotYetUsable({ view }: { view: MyTargetView }) {
-  const storage = view.storage;
-  if (!storage || storage.usable) return null;
-  // While changes are paused (`Paused` below), setting a password is REFUSED,
-  // not deferred: `draining` and `read_only` reject every new mutation in the
-  // add-on (`addons/truenas/lifecycle.go`), so nothing is held and replayed.
-  //
-  // This banner and the one below it used to disagree — one said the password
-  // activates the account now, the next said changes were paused — and the
-  // first attempt to reconcile them replaced one false sentence with another,
-  // promising that a password set now would apply when changes resume. It
-  // would not; the member would be told the system is not answering. Somebody
-  // told to try is worse off than somebody told to wait, because they read the
-  // refusal as their own mistake and try again.
-  const paused = view.lifecycle === "draining" || view.lifecycle === "read_only";
+const PERSON = "Need it today? Ask makerspace staff: they can see this pause and how long it should last.";
 
-  return (
-    <div className="rounded-card border border-warn-line bg-warn-soft px-4 py-3">
-      <p className="text-[14px] text-warn-text">
-        {storage.needs_password ? (
-          paused ? (
-            <>
-              <strong className="font-semibold">Your account is ready, but not switched on yet.</strong>{" "}
-              Setting a password is what switches it on, and changes to{" "}
-              {targetLabel(view.target)} are paused right now, so it would be refused. Nothing is
-              wrong with your account — come back once the pause below has lifted.
-            </>
-          ) : (
-            <>
-              <strong className="font-semibold">Your account is ready, but not switched on yet.</strong>{" "}
-              It will refuse you until you set a password below — that is what activates it.
-            </>
-          )
-        ) : (
+function copyFor(state: State, label: string, view: MyTargetView): [string, string, React.ReactNode] {
+  const hold = (view.suspended ?? []).find((s) => s.field === "enabled");
+  const ready = "Copy an address below into your computer, then sign in with your account name and storage password.";
+  switch (state) {
+    case "none":
+      return [
+        `None of your roles reaches ${label}`,
+        "So there's no account here for you yet. Access comes with a role: ask for one, and your account follows on its own.",
+        "",
+      ];
+    case "held":
+      return [
+        "Your account is switched off for now",
+        `Makerspace staff have put your ${label} account on hold, so it turns sign-ins away. Your files are kept and your access is unchanged. It switches back on when the hold is lifted; there's nothing to do on your side.`,
+        hold?.since ? `On hold since ${formatShortDate(hold.since)}` : "",
+      ];
+    case "waiting":
+      return [
+        "Your account is on its way",
+        "Your access is recorded. Makerspace staff create the account itself, and nothing is needed from you in the meantime.",
+        view.recorded_at ? (
           <>
-            <strong className="font-semibold">Your account is paused.</strong> It exists, and{" "}
-            {targetLabel(view.target)} is not accepting it right now. Setting a password will
-            not change that; makerspace staff have to.
+            Recorded <Relative iso={view.recorded_at} /> · there&apos;s no set time, it waits on staff
           </>
-        )}
-      </p>
-    </div>
+        ) : (
+          "There's no set time, it waits on staff"
+        ),
+      ];
+    case "needs-password":
+      return [
+        "Set a password to switch your account on",
+        `Your account on ${label} is ready, but it turns every sign-in away until it has a password. This is the last step.`,
+        "",
+      ];
+    case "reenrol":
+      return [
+        "Your old storage password no longer works",
+        `${label} was rebuilt since you set it, and passwords didn't carry over. Set a new one below. Nothing else about your access has changed.`,
+        "",
+      ];
+    case "restored":
+      return [
+        "Set a new password to open your folders again",
+        `Your access was given back${view.restored_at ? ` on ${formatShortDate(view.restored_at)}` : ""}. ${label} opens your folders again only with a new password, so the one you had before no longer works. Your files are as you left them.`,
+        "",
+      ];
+    case "opens-nothing":
+      return [
+        "Your account is ready, but no folder is open to you yet",
+        "Your account exists and your password is set. There's just nowhere to connect to yet, and nothing for you to do.",
+        "",
+      ];
+    case "nohost":
+      return [
+        "Your account is ready",
+        "Sign in with your account name and storage password. The address to connect to isn't set up in Syndra yet, so ask makerspace staff for it.",
+        "",
+      ];
+    case "ready":
+      return [
+        "Your account is ready",
+        view.health === "offline"
+          ? `Once ${label} is back, sign in as usual. Nothing needs doing on your side.`
+          : (view.suspended ?? []).length > 0
+            ? `${ready} Some of your access is held back for now, with the reason beside it.`
+            : ready,
+        "",
+      ];
+  }
+}
+
+function pausedNotice(view: MyTargetView, label: string): { title: string; body: string; person: boolean } | null {
+  if (!view.account && paused(view) && view.entitled) {
+    return {
+      title: "Your account is waiting on staff, not on you",
+      body: `Staff are working on ${label}, so Syndra has paused creating accounts, yours included. ${label} itself is online. Your account is first in line, and nothing has been lost.`,
+      person: true,
+    };
+  }
+  if (!view.account) return null;
+  if (view.lifecycle === "draining") {
+    return {
+      title: "Account changes are paused for a few minutes",
+      body: `${label} is online and your access hasn't changed, so you can connect and use your files now. Syndra is only holding off on account changes while the last few finish.`,
+      person: false,
+    };
+  }
+  if (view.lifecycle === "read_only") {
+    return {
+      title: `Account changes are paused while staff work on ${label}`,
+      body: `${label} is online and your access hasn't changed, so you can connect and use your files now. Syndra has stopped changing accounts until staff are done.`,
+      person: true,
+    };
+  }
+  return null;
+}
+
+function blockedSentence(view: MyTargetView, label: string) {
+  if (view.health === "offline") {
+    return `You can't change your password while ${label} is offline. Your current one works again as soon as it's back.`;
+  }
+  return "You can't change your password while account changes are paused. Your current one keeps working, and you can change it once the pause lifts.";
+}
+
+/** The status beside the system's name: what the monitor can stand behind, and nothing when it can't tell. */
+function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
+  if (state === "none" || !view.health || view.health === "unknown") return null;
+  const offline = view.health === "offline";
+  const held = state === "held";
+  const checked = view.checked_at ? (
+    <>
+      {" "}
+      · checked <Relative iso={view.checked_at} />
+    </>
+  ) : null;
+  return (
+    <span role="status" className={`inline-flex items-center gap-[7px] text-[13px] leading-[1.4] ${offline ? "text-warn-text" : "text-muted"}`}>
+      <span aria-hidden className={`h-[7px] w-[7px] flex-none rounded-pill ${offline ? "bg-warn" : held ? "bg-line-strong" : "bg-healthy"}`} />
+      {offline ? (
+        <>Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
+      ) : held ? (
+        <>Online · your account is on hold</>
+      ) : state === "waiting" || PASSWORD_STEP.has(state) ? (
+        <>Online{checked}</>
+      ) : (
+        <>Online and accepting sign-ins{checked}</>
+      )}
+    </span>
   );
 }
 
-/**
- * How much room they are using.
- *
- * The most-asked question a member has about storage, and until now Syndra
- * could not answer it at all — the number lives on the target and nothing read
- * it.
- *
- * A quota of zero is NOT a full bar: TrueNAS reports no quota field at all when
- * none is set, which is the common case, and drawing 100% for "no limit" would
- * be the most alarming possible way to say "you are fine".
- */
-function StorageUsage({ view }: { view: MyTargetView }) {
+const STEPS = ["A role gives you access", "Your account is created", "You set a password"];
+
+/** The three-step line; a segmented bar with one line under it on a phone. */
+function Steps({ reached, state }: { reached: number; state: State }) {
+  const inert = state === "none" || state === "held";
+  const tone = (i: number) => (i <= reached ? "done" : i === reached + 1 && !inert ? "now" : "later");
+  const word =
+    state === "waiting"
+      ? "Step 2 of 3 · your account is being created"
+      : state === "restored"
+        ? "Step 3 of 3 · you set a new password"
+        : PASSWORD_STEP.has(state)
+          ? "Step 3 of 3 · you set a password"
+          : "All three steps done";
+  return (
+    <>
+      <ol aria-label="Your progress" className="m-0 hidden list-none flex-wrap items-center gap-x-2.5 gap-y-1.5 p-0 tablet:flex">
+        {STEPS.map((step, i) => {
+          const t = tone(i);
+          return (
+            <li key={step} className="flex items-center gap-2.5">
+              {i > 0 && <span aria-hidden className="h-px w-[18px] bg-line-strong" />}
+              <span
+                className={`inline-flex items-center gap-[7px] whitespace-nowrap text-[13px] ${
+                  t === "now" ? "font-semibold text-ink" : t === "done" ? "text-muted" : "text-faint"
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className={`h-[7px] w-[7px] rounded-pill ${t === "done" ? "bg-healthy" : t === "now" ? "bg-accent" : "bg-line-strong"}`}
+                />
+                {step}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      {!inert && (
+        <div aria-hidden className="w-full tablet:hidden">
+          <span className="mb-[7px] flex gap-1">
+            {STEPS.map((step, i) => {
+              const t = tone(i);
+              return (
+                <span
+                  key={step}
+                  className={`h-1 flex-1 rounded-pill ${t === "done" ? "bg-healthy" : t === "now" ? "bg-accent" : "bg-line-strong"}`}
+                />
+              );
+            })}
+          </span>
+          <span className="text-[13px] text-muted">{word}</span>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** "Your folders": one block per place, home first. */
+function Folders({
+  view,
+  state,
+  label,
+  roleName,
+  roles,
+}: {
+  view: MyTargetView;
+  state: State;
+  label: string;
+  roleName: (r: RoleSource) => string;
+  roles: string[];
+}) {
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [device, setDevice] = useState<Device>("mac");
+  useEffect(() => setDevice(deviceFrom(navigator.userAgent)), []);
+
   const storage = view.storage;
-  if (!storage?.usage_readable || !storage.shares?.length) return null;
+  const places = storage?.places ?? [];
+  const offline = view.health === "offline";
+  const locked = PASSWORD_STEP.has(state);
+  const withheld = (view.suspended ?? []).filter((s) => s.field !== "enabled");
+  const host = view.connection?.host;
+  const guideFolders: GuideFolder[] = places
+    .filter((p) => p.smb_address && p.unc_address)
+    .map((p) => ({
+      label: p.home ? "Your home folder" : nameOf(p),
+      share: p.share,
+      folder: p.folder ?? "",
+      smb: p.smb_address!,
+      unc: p.unc_address!,
+    }));
+  const guide = !offline && !!host && guideFolders.length > 0;
 
   return (
-    <div className="grid gap-2">
-      <p className="text-[13px] text-label">You are using</p>
-      {storage.shares.map((share) => {
-        const limited = (share.quota_bytes ?? 0) > 0;
-        const pct = limited ? Math.min(100, (share.used_bytes / share.quota_bytes!) * 100) : 0;
-        return (
-          <div key={share.share} className="grid gap-1">
-            <div className="flex items-baseline gap-2 text-[14px]">
-              <span className="text-muted">{share.share}</span>
-              <span className="flex-1" />
-              <span className="font-mono text-[13.5px]">
-                {formatBytes(share.used_bytes)}
-                {limited ? ` of ${formatBytes(share.quota_bytes!)}` : ""}
-              </span>
-            </div>
-            {limited ? (
-              <div className="h-1.5 w-full overflow-hidden rounded-pill bg-line">
-                <div
-                  className={pct >= 90 ? "h-full bg-warn" : "h-full bg-accent"}
-                  style={{ width: `${Math.max(pct, 1)}%` }}
-                />
-              </div>
-            ) : (
-              <p className="text-[12.5px] text-faint">No limit set on this share.</p>
-            )}
-          </div>
-        );
-      })}
+    <div className="row-divider flex flex-col gap-3.5 px-5 pb-5 pt-[18px]">
+      <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
+        <span className="type-label text-label">Your folders</span>
+        {!locked && offline && (
+          <span className="text-[13px] text-faint">As last known · they open again when {label} is back</span>
+        )}
+        {guide && (
+          <span className="ml-auto hidden flex-none whitespace-nowrap tablet:flex">
+            <Button variant="ghost" size="sm" onClick={() => setGuideOpen(true)}>
+              First time? How to connect
+            </Button>
+          </span>
+        )}
+      </div>
+
+      {storage && !storage.places_readable ? (
+        <p className="text-[14px] text-muted">
+          {label} couldn&apos;t say which folders are open to you just now. Your access hasn&apos;t changed; this
+          page reads it again on your next visit.
+        </p>
+      ) : state === "opens-nothing" ? (
+        <div className="flex items-start gap-2.5 rounded-inner border border-dashed border-line-strong px-4 py-3.5 text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
+          <span aria-hidden className="mt-[7px] h-[7px] w-[7px] flex-none rounded-pill border-[1.5px] border-line-strong" />
+          <span>
+            None yet.{" "}
+            {roles.length > 0
+              ? `Your ${joinNames(roles)} ${roles.length === 1 ? "role reaches" : "roles reach"} ${label}, but no folder there is open to ${roles.length === 1 ? "it" : "them"}.`
+              : `Your access reaches ${label}, but no folder there is open to it.`}{" "}
+            Makerspace staff open folders on {label} itself; this list fills in by itself when they do.
+          </span>
+        </div>
+      ) : (
+        <NotOpenYet
+          locked={locked}
+          title={state === "restored" ? "Set a new password to open these" : "Set your password to open these"}
+          why={`Until then, ${label} turns every sign-in away.`}
+          step={{ label: "Set it above ↑", href: "#storage-password" }}
+        >
+          {places.map((place) => (
+            <PlaceBlock
+              key={place.path}
+              place={place}
+              offline={offline}
+              showAddresses={!!host}
+              homeKept={!!place.home && !!view.home_kept}
+              roleName={roleName}
+            />
+          ))}
+        </NotOpenYet>
+      )}
+
+      {guide && (
+        <div className="tablet:hidden">
+          <Button variant="outline" size="sm" className="w-full" onClick={() => setGuideOpen(true)}>
+            First time? How to connect
+          </Button>
+        </div>
+      )}
+      {withheld.length > 0 && <Withheld items={withheld} />}
+
+      {guide && host && view.account && (
+        <ConnectionGuide
+          open={guideOpen}
+          onClose={() => setGuideOpen(false)}
+          host={host}
+          folders={guideFolders}
+          username={view.account.username}
+          system={label}
+          defaultDevice={device}
+        />
+      )}
     </div>
   );
 }
 
-/** Bytes as a person reads them. Binary units, because that is what a file
- *  manager will show them beside it. */
 /**
- * Setting the storage password.
- *
- * The scope sentence is body copy, not a hint, and it is load-bearing: members
- * reasonably assume one password, and this one is neither their Syndra sign-in
- * nor their Google account.
- *
- * The value is sent and kept nowhere — not in the response, not in the query
- * cache, and not in Syndra's database.
+ * A section someone can't use yet (proposed/NotOpenYet.md): dashed, a
+ * full-strength lead line saying what opens it, and the contents previewed at
+ * 0.45, inert, so they see what they're about to get.
  */
-function CredentialForm({ view }: { view: MyTargetView }) {
-  const [password, setPassword] = useState("");
-  const set = useSetStorageCredential(view.target);
-  const paused = view.lifecycle === "draining" || view.lifecycle === "read_only";
-
-  if (!view.reachable) {
-    // Replaced, never disabled. A credential set against a target that never
-    // answered must not be reported as done, so the field does not exist to be
-    // submitted in the first place.
-    return (
-      <div className="rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
-        <p className="text-[13.5px] font-semibold text-warn-text">
-          {targetLabel(view.target)} is not answering
-        </p>
-        <p className="mt-1 text-[13.5px] text-muted">
-          A password set now would not reach it, so the form is not here. Nothing about
-          your access has changed — come back shortly.
-        </p>
+function NotOpenYet({
+  locked,
+  title,
+  why,
+  step,
+  children,
+}: {
+  locked: boolean;
+  title: string;
+  why: string;
+  step: { label: string; href: string };
+  children: React.ReactNode;
+}) {
+  if (!locked) return <div className="flex flex-col gap-3.5">{children}</div>;
+  return (
+    <div className="flex flex-col gap-3.5 rounded-inner border border-dashed border-line-strong px-4 pb-4 pt-3.5">
+      <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
+        <span className="inline-flex items-center gap-2.5 text-[15px] font-semibold text-ink">
+          <StatusDot tone="neutral" />
+          {title}
+        </span>
+        <span className="text-[14px] text-muted [text-wrap:pretty]">{why}</span>
+        <a href={step.href} className="ml-auto whitespace-nowrap text-[14px] font-semibold text-accent-text">
+          {step.label}
+        </a>
       </div>
-    );
+      <div aria-disabled="true" inert className="flex select-none flex-col gap-3.5 opacity-45">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** The folder's own name, the word people use for it. */
+function nameOf(place: StoragePlace) {
+  if (!place.folder) return place.share;
+  const parts = place.folder.split("/");
+  return parts[parts.length - 1];
+}
+
+function PlaceBlock({
+  place,
+  offline,
+  showAddresses,
+  homeKept,
+  roleName,
+}: {
+  place: StoragePlace;
+  offline: boolean;
+  showAddresses: boolean;
+  homeKept: boolean;
+  roleName: (r: RoleSource) => string;
+}) {
+  const can = place.access === "change";
+  const roles = (place.roles ?? []).map(roleName);
+  const where = place.home
+    ? `In ${[place.share, ...(place.folder ?? "").split("/").slice(0, -1)].join(" › ")} · private to you`
+    : place.folder
+      ? `In ${[place.share, ...place.folder.split("/").slice(0, -1)].join(" › ")}${roles.length ? ` · from your ${joinNames(roles)} ${roles.length === 1 ? "role" : "roles"}` : ""}`
+      : roles.length
+        ? `From your ${joinNames(roles)} ${roles.length === 1 ? "role" : "roles"}`
+        : "";
+
+  const usage = place.usage;
+  const quota = usage?.quota_bytes ?? 0;
+  const pct = usage && quota > 0 ? Math.min(100, (usage.used_bytes / quota) * 100) : 0;
+  const full = pct >= 90;
+  let use: string | null = null;
+  if (can) {
+    if (offline) use = "Usage unavailable while offline";
+    else if (usage) {
+      use = !usage.used_bytes
+        ? "Nothing saved here yet"
+        : quota > 0
+          ? `${formatBytes(usage.used_bytes)} of ${formatBytes(quota)}${full ? " · nearly full" : ""}`
+          : `${formatBytes(usage.used_bytes)} used · no limit set`;
+    }
   }
 
+  return (
+    <div className="flex flex-col gap-2.5 rounded-inner border border-line bg-surface-0 px-4 py-3.5">
+      <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
+        <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
+          <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+            <span className="text-[15.5px] font-semibold [overflow-wrap:anywhere]">
+              {place.home ? "Your home folder" : nameOf(place)}
+            </span>
+            <span className="whitespace-nowrap text-[13px] text-muted">{can ? "Can change files" : "Read only"}</span>
+          </span>
+          {where && <span className="text-[13px] text-faint [text-wrap:pretty]">{where}</span>}
+        </span>
+        {use && <span className={`ml-auto text-[13.5px] ${!offline && full ? "text-warn-text" : "text-muted"}`}>{use}</span>}
+      </div>
+      {homeKept && (
+        <span className="max-w-[70ch] text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
+          None of the roles you hold gives a home folder any more. It stays, with your files in it, and only you can
+          open it. Syndra never moves or deletes a home folder.
+        </span>
+      )}
+      {can && usage && quota > 0 && !offline && (
+        <div aria-hidden className="h-[5px] overflow-hidden rounded-pill bg-line">
+          <div className={`h-full rounded-pill ${full ? "bg-warn" : "bg-muted"}`} style={{ width: `${Math.max(pct, 1)}%` }} />
+        </div>
+      )}
+      {showAddresses && place.smb_address && place.unc_address && (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-x-3.5 gap-y-2.5">
+          <div className="flex min-w-0 flex-col gap-[5px]">
+            <span className="text-[12.5px] text-muted">Mac and Linux · Connect to Server</span>
+            <CopyableValue value={place.smb_address} label="Address for Mac and Linux" />
+          </div>
+          <div className="flex min-w-0 flex-col gap-[5px]">
+            <span className="text-[12.5px] text-muted">Windows · File Explorer address bar</span>
+            <CopyableValue value={place.unc_address} label="Address for Windows" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Setting the storage password. The value goes to the target and is kept
+ * nowhere: not in the response, not in the query cache, not in Syndra's
+ * database.
+ */
+function PasswordForm({
+  view,
+  label,
+  submitLabel,
+  accent = false,
+}: {
+  view: MyTargetView;
+  label: string;
+  submitLabel: string;
+  accent?: boolean;
+}) {
+  const [password, setPassword] = useState("");
+  const set = useSetStorageCredential(view.target);
   const unconfirmed = Boolean(set.data?.status && set.data.status !== "set");
+  const scope = `Only for ${label}: not your Syndra sign-in or your Google account.`;
 
   return (
     <form
-      className="grid gap-2"
+      className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         set.mutate(oneShot(password), { onSuccess: () => setPassword("") });
       }}
     >
-      {view.credential.needs_re_enrolment && (
-        <div className="rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
-          <p className="text-[13.5px] font-semibold text-warn-text">
-            Your old storage password no longer works
-          </p>
-          <p className="mt-1 text-[13.5px] text-muted">
-            {targetLabel(view.target)} was rebuilt since you set it, and passwords did not
-            carry over. Set a new one below — nothing else about your access changed.
-          </p>
+      <div className="flex max-w-[460px] flex-col gap-1.5">
+        {accent && <FieldLabel htmlFor="storage-password">Storage password</FieldLabel>}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="min-w-0 flex-[1_1_220px]">
+            <Input
+              id="storage-password"
+              type="password"
+              autoComplete="new-password"
+              aria-label={accent ? undefined : "New storage password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <span className="flex-none whitespace-nowrap">
+            <Button type="submit" variant={accent ? "accent" : "outline"} disabled={!password || set.isPending}>
+              {set.isPending ? "Setting…" : submitLabel}
+            </Button>
+          </span>
         </div>
-      )}
-      <label className="text-[14px]" htmlFor="storage-password">
-        {view.credential.set ? "Change your storage password" : "Set a storage password"}
-      </label>
-      <Input
-        id="storage-password"
-        type="password"
-        autoComplete="new-password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      <p className="text-[15px] text-muted">
-        This password is used only for {targetLabel(view.target)}. It is not your Syndra
-        sign-in, and not your Google account.
-      </p>
-      {view.credential.set && view.credential.last_changed_at && (
-        <p className="text-[13px] text-faint">
-          Last changed <Relative iso={view.credential.last_changed_at} />.
-        </p>
-      )}
-      <div>
-        {/* The label carries the whole promise while changes are paused, so a
-            member who reads nothing else on the page cannot mistake this for
-            taking effect now. The field stays live and the button stays
-            enabled: the moment either dims, the page has said their access is
-            affected, which is false. */}
-        <Button type="submit" variant="accent" disabled={!password || set.isPending}>
-          {set.isPending
-            ? "Setting…"
-            : paused
-              ? "Save it for when changes start again"
-              : "Set password"}
-        </Button>
       </div>
+      <p className={`max-w-[62ch] leading-[1.55] [text-wrap:pretty] ${accent ? "text-[14px] text-ink" : "text-[13.5px] text-muted"}`}>
+        {accent ? (
+          <>{scope} Syndra passes it to {label} and doesn&apos;t keep a copy.</>
+        ) : view.credential.last_changed_at ? (
+          <>
+            Last changed <Relative iso={view.credential.last_changed_at} />. {scope}
+          </>
+        ) : (
+          scope
+        )}
+      </p>
       {set.data && (
-        // An outcome the target did not confirm is not success, and it does not
-        // get the calm voice. Retrying blind is the wrong reflex on a path that
-        // may have landed.
+        // An outcome the target didn't confirm is not success, and doesn't get the calm voice.
         <p role="status" className={`text-[13.5px] ${unconfirmed ? "text-warn-text" : "text-muted"}`}>
           {set.data.detail}
         </p>
       )}
-      {set.error && (
-        <p className="text-[13.5px] text-danger-text">
-          {sentence(describeFailure(set.error))}
-        </p>
-      )}
+      {set.error && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error))}</p>}
     </form>
-  );
-}
-
-/**
- * How to actually connect (10.8; design §30).
- *
- * The only screen in the product where somebody retypes a string into another
- * application, so every one of them is copyable rather than selectable prose.
- *
- * Three rules it must not break, all of them the same rule: only describe what
- * is real. The host comes from the add-on's registration, so moving the NAS is
- * a deployment change; the resources come from what their entitlements actually
- * resolve to, never from a template; and a withheld resource is named as
- * excluded rather than silently dropped, because a member who knows their
- * folder is missing on purpose does not spend twenty minutes hunting a typo.
- */
-function ConnectionInstructions({ view }: { view: MyTargetView }) {
-  if (!view.connection || !view.account) return null;
-
-  const shares = Object.values(view.resources ?? {}).flat();
-  if (shares.length === 0) return null;
-
-  const host = view.connection.host;
-  const held = view.suspended ?? [];
-
-  return (
-    <div className="grid gap-3 border-t border-line pt-4">
-      <p className="text-[13px] text-label">Connecting</p>
-
-      {shares.map((share) => (
-        <div key={share} className="grid gap-2">
-          <p className="text-[13.5px] text-muted">{share}</p>
-          {/* Two rows, not three. macOS and Linux take the same string, and
-              rendering it twice under two headings asks a member to compare
-              two identical lines to find out they are identical. */}
-          <div className="grid gap-1.5">
-            <Platform
-              label="macOS (Finder › Go › Connect to Server) and Linux (Files › Other Locations)"
-              value={`smb://${host}/${share}`}
-            />
-            <Platform label="Windows — File Explorer address bar" value={`\\\\${host}\\${share}`} />
-          </div>
-        </div>
-      ))}
-
-      <p className="text-[13px] text-faint">
-        Sign in as <Mono className="text-muted">{view.account.username}</Mono> with
-        the password you set above.
-      </p>
-
-      {held.length > 0 && (
-        // Named as excluded, never silently dropped.
-        <p className="text-[13px] text-warn-text">
-          {held.map((item) => item.value).join(", ")}{" "}
-          {held.length === 1 ? "is" : "are"} not in this list on purpose — see the notice above.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function Platform({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid gap-1">
-      <p className="text-[12.5px] text-faint">{label}</p>
-      <CopyableValue value={value} label={label} />
-    </div>
-  );
-}
-
-/**
- * Changes to this account are paused (designs C1, C2, C3).
- *
- * An operator sets a target draining or read-only, and the member was told
- * nothing at all. Under either state their ACCESS is unchanged — the file
- * server works and their files are where they left them — and what stops is
- * Syndra making changes to their account, of which the one they can start from
- * this page is setting a password. So a member set one, watched it not work,
- * and had no way to learn why.
- *
- * Three things this copy will not do.
- *
- * It does not say `maintenance`, `draining` or `read-only`. Those are operator
- * words for a thing a member experiences as a pause, and naming a state nobody
- * outside the operator's head can interpret is not an explanation.
- *
- * It leads with the sentence they cannot infer — the server is fine, your
- * access has not changed, connect right now — before it says what is paused.
- * That clause is what stops somebody going to mount the share to check.
- *
- * And it gives an estimate to exactly one of the two states. A drain is minutes
- * and ends by itself; read-only is somebody working on the server and ends when
- * they say so. "Shortly" attached to an open-ended pause is the small lie that
- * makes the rest of a page untrustworthy — so in its place, read-only offers a
- * person, which is an honest escalation and costs nothing Syndra cannot keep.
- */
-function Paused({
-  lifecycle,
-  label,
-  creating = false,
-}: {
-  lifecycle?: string;
-  label: string;
-  /** The account does not exist yet, so the pause is what is stopping it. */
-  creating?: boolean;
-}) {
-  if (lifecycle !== "draining" && lifecycle !== "read_only") return null;
-  const draining = lifecycle === "draining";
-
-  return (
-    <div className="grid gap-2 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
-      <p className="text-[14px] font-semibold text-warn-text">
-        {creating
-          ? "Right now it is waiting on makerspace staff, not on your account"
-          : draining
-            ? "Changes to this account are paused for a few minutes"
-            : `Changes to this account are paused while we work on ${label}`}
-      </p>
-
-      <p className="text-[13.5px] leading-[1.55] text-muted">
-        {creating ? (
-          <>
-            Somebody is working on {label}, so we have{" "}
-            <span className="font-semibold text-ink">deliberately stopped</span> making
-            changes to accounts on it — which includes creating yours. The server itself is
-            working normally; this is a pause we chose, not a fault. Your account will be
-            created as soon as changes start again. It is first in line and nothing has been lost
-            or missed.
-          </>
-        ) : (
-          <>
-            <span className="font-semibold text-ink">
-              {label} is working normally and your access to it has not changed
-            </span>{" "}
-            — you can connect and use your files right now, exactly as above.{" "}
-            {draining ? (
-              <>
-                What is paused is us making changes to your account on it, while the last few
-                in-flight changes finish.
-              </>
-            ) : (
-              <>
-                Somebody is working on the server, so we have{" "}
-                <span className="font-semibold text-ink">deliberately stopped</span> making
-                changes to accounts on it until they are finished.
-              </>
-            )}
-          </>
-        )}
-      </p>
-
-      {!draining && (
-        // No estimate. A person instead — they can see the pause, they know how
-        // long they expect it to last, and they can lift it. That is a faster
-        // answer than this page can give, and it is one Syndra can keep.
-        <p className="text-[13.5px] leading-[1.55] text-muted">
-          <span className="font-semibold text-ink">
-            If you need {creating ? "it" : "the new password to work"} today
-          </span>
-          , ask makerspace staff — they can see this pause and how long they expect it to
-          last, and we would rather you asked a person than waited on a page.
-        </p>
-      )}
-
-      {!creating && (
-        <p className="text-[13px] text-faint">
-          You can set a new password now and we will apply it as soon as changes start again. Your
-          current password keeps working until then, and you do not need to come back and do
-          it again. Nothing else on this page is affected — your access, your share and your
-          folder are unchanged.
-        </p>
-      )}
-    </div>
   );
 }

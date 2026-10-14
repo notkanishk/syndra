@@ -418,3 +418,47 @@ func TestAccessGivenBackCarriesWhenItWasGivenBack(t *testing.T) {
 		t.Fatalf("restored_at = %v, want %v", view.RestoredAt, lapsed)
 	}
 }
+
+// "from your Fabrication lead role": each place names the member's own roles
+// whose groups open it, and a home no role gives any more is said to be kept.
+func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
+	storage, reach := addonsMyStorage, addonsReadReach
+	t.Cleanup(func() { addonsMyStorage, addonsReadReach = storage, reach })
+	addonsMyStorage = func(context.Context, string, string) addons.StorageStatus {
+		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
+			{Share: "main", Folder: "home_dir/ada", Path: "/mnt/p/main/home_dir/ada", Access: "change", Home: true},
+			{Share: "main", Folder: "waddle_share", Path: "/mnt/p/main/waddle_share", Access: "change"},
+			{Share: "main", Folder: "quack_share", Path: "/mnt/p/main/quack_share", Access: "read"},
+		}}
+	}
+	addonsReadReach = func(context.Context, string) addons.Reach {
+		return addons.Reach{Read: true, Groups: map[string][]addons.Place{
+			"community": {{Path: "/mnt/p/main/waddle_share"}},
+			"staff":     {{Path: "/mnt/p/main/waddle_share"}, {Path: "/mnt/p/main/quack_share"}},
+		}}
+	}
+	stubMyStorage(t, &storageHarness{entitled: true, bound: true})
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{
+			Fields:    map[string][]string{"group": {"community"}},
+			Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true},
+			Given:     map[string][]services.RoleSource{"group\x00community": {{ProjectID: "p1", RoleKey: "fab_lead"}}},
+		}, nil
+	}
+
+	view, err := describeMyTarget(httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil), "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	places := view.Storage.Places
+	if r := places[1].Roles; len(r) != 1 || r[0].RoleKey != "fab_lead" {
+		t.Errorf("waddle_share roles = %+v", r)
+	}
+	// quack_share opens to staff, which this member isn't in through a role.
+	if len(places[2].Roles) != 0 || len(places[0].Roles) != 0 {
+		t.Errorf("roles where none gives it: %+v / %+v", places[2].Roles, places[0].Roles)
+	}
+	if !view.HomeKept {
+		t.Error("a home no role gives any more must be said to be kept")
+	}
+}
