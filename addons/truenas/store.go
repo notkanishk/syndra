@@ -268,6 +268,13 @@ type Binding struct {
 	// apply created one. Adoption hands somebody else's account to a subject if
 	// it is wrong, so who decided it survives.
 	BoundBy string `json:"bound_by"`
+	// WantsSMB is the SMB state the last apply asked for, nil before any did.
+	//
+	// Desire, not observation. The member's first password is the only call
+	// TrueNAS accepts `smb: true` on, so that call needs what Syndra WANTS; the
+	// snapshot says what the NAS HAS, which for a new account is "off" because
+	// nothing could turn it on yet.
+	WantsSMB *bool `json:"wants_smb,omitempty"`
 }
 
 func (s *Store) PutBinding(b Binding) error {

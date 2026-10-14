@@ -396,9 +396,32 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 				Consequence: "Nothing was changed.",
 			}, http.StatusConflict, nil
 		}
-		return s.createAndConverge(req, desired, binding)
+		out, status, err := s.createAndConverge(req, desired, binding)
+		s.rememberWantedSMB(req.Subject, desired, err)
+		return out, status, err
 	}
-	return s.converge(req, desired, current)
+	out, status, err := s.converge(req, desired, current)
+	s.rememberWantedSMB(req.Subject, desired, err)
+	return out, status, err
+}
+
+// rememberWantedSMB keeps what this apply asked for SMB on the subject's
+// binding, so the member's first password can turn it on (see Binding.WantsSMB).
+// Best-effort: the apply already happened, and failing it over this record
+// would report a mutation as not made.
+func (s *server) rememberWantedSMB(subject string, desired desiredState, applyErr error) {
+	if applyErr != nil || !desired.managed[FieldSMBEnabled] {
+		return
+	}
+	b, found, err := s.store.GetBinding(subject)
+	if err != nil || !found {
+		return
+	}
+	want := desired.smbEnabled
+	b.WantsSMB = &want
+	if err := s.store.PutBinding(b); err != nil {
+		logStoreFailure("binding", subject, err)
+	}
 }
 
 // locate finds the subject's account, by binding first and derivation second.
@@ -504,18 +527,24 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	if desired.managed[FieldEnabled] && current.Enabled != desired.enabled {
 		update["locked"] = !desired.enabled
 	}
-	// Turning SMB ON requires a credential to hash, and TrueNAS says so by
-	// refusing the call — not by ignoring the field. Attempting it against an
-	// account whose member has not set a password yet fails the whole apply,
-	// on every pass, for a state the target considers normal. Turning it OFF is
-	// always allowed, and is the half that matters for revocation.
+	// Turning SMB ON is never sent here. TrueNAS needs a credential to hash
+	// and accepts `smb: true` only in the call that sets a password ("Password
+	// must be reset in order to enable SMB authentication"), whether or not the
+	// account already has one. Sent alone it refuses the WHOLE update, so every
+	// other change in it — the groups — failed with it, on every pass. The
+	// member's next password carries it (password.set reads Binding.WantsSMB).
+	// Turning it OFF is always allowed, and is the half revocation needs.
 	smbPending := false
 	if desired.managed[FieldSMBEnabled] && current.SMBEnabled != desired.smbEnabled {
-		if desired.smbEnabled && !current.PasswordSet {
+		if desired.smbEnabled {
 			smbPending = true
 		} else {
-			update["smb"] = desired.smbEnabled
+			update["smb"] = false
 		}
+	}
+	smbWait := "Waiting for " + current.Username + " to set a password before SMB can be enabled."
+	if current.PasswordSet {
+		smbWait = "Waiting for " + current.Username + " to set their password again: TrueNAS switches SMB on only together with a new password."
 	}
 
 	if len(update) == 0 && smbPending {
@@ -524,9 +553,9 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// false, and reporting it would leave an operator believing SMB is on.
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
-			Detail: "Waiting for " + current.Username + " to set a password before SMB can be enabled.",
-			Consequence: "The account exists and is otherwise converged. TrueNAS refuses SMB " +
-				"on an account with no password, so this completes itself when the member sets one.",
+			Detail: smbWait,
+			Consequence: "The account exists and is otherwise converged. TrueNAS switches SMB on " +
+				"only in the call that sets a password, so this completes itself when the member sets one.",
 			Username:    current.Username,
 			UID:         current.UID,
 			Fingerprint: fingerprintSubject(current),
@@ -598,9 +627,15 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	}
 
 	s.record("apply", req.Subject, req.Actor, req.CallID, "succeeded")
+	detail := describeChange(update, desired.groups)
+	if smbPending {
+		// The rest landed; SMB did not, and saying only what landed would read
+		// as fully converged.
+		detail += " " + smbWait
+	}
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApplied,
-		Detail:      describeChange(update, desired.groups),
+		Detail:      detail,
 		Consequence: describeHolding(*applied),
 		Username:    applied.Username,
 		UID:         applied.UID,
