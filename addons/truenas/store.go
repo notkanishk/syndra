@@ -1,10 +1,10 @@
 package main
 
 import (
-	"strconv"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -192,14 +192,14 @@ type Subject struct {
 	// ID is the middleware's record key, which is what a write takes as its
 	// first argument. Distinct from UID, which is the unix identity a binding
 	// recognises an account by across a rename.
-	ID         apiID    `json:"id"`
-	Username   string   `json:"username"`
-	UID        int64    `json:"uid"`
-	Groups     []string `json:"groups"`
+	ID       apiID    `json:"id"`
+	Username string   `json:"username"`
+	UID      int64    `json:"uid"`
+	Groups   []string `json:"groups"`
 	// Home is where the account's home folder is, empty when it has none.
-	Home string `json:"home,omitempty"`
-	Enabled    bool     `json:"enabled"`
-	SMBEnabled bool     `json:"smb_enabled"`
+	Home       string `json:"home,omitempty"`
+	Enabled    bool   `json:"enabled"`
+	SMBEnabled bool   `json:"smb_enabled"`
 	// PasswordSet is whether the account has a usable credential.
 	//
 	// Not an entitlement and never mapped to one: it is a fact about the target
