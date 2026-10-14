@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-resort-a{from{opacity:.35}to{opacity:1}}@keyframes sy-resort-b{from{opacity:.35}to{opacity:1}}@keyframes sy-flash-a{from{background-color:var(--accent-soft)}to{background-color:transparent}}@keyframes sy-flash-b{from{background-color:var(--accent-soft)}to{background-color:transparent}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Person board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /users/[id]</span>
+    <h1 class="type-page-title" style="margin:0">A person</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">What one person can use, where each piece comes from, and whether Zitadel actually holds it. Frames open alone with <span class="type-mono">?frame=default</span>, <span class="type-mono">activity</span>, <span class="type-mono">empty</span>, <span class="type-mono">loading</span>, <span class="type-mono">error</span>, <span class="type-mono">degraded</span> or <span class="type-mono">phone</span>.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Carried · settled</span>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#37</strong> Activity is operator-only, grouped by day, says when it hits 200 · <strong style="color:var(--ink)">#38</strong> each role gives Zitadel's verdict; the project heading says "In Zitadel · read 09:40" once; "Given", grant id as a suffix, the grantor as a name · <strong style="color:var(--ink)">#39</strong> a project nothing explains shows its roles and links to Drift; the two counts are never added · <strong style="color:var(--ink)">#40</strong> a role waiting for you to send is withdrawn, not revoked — no red · <strong style="color:var(--ink)">#41</strong> things done to the person read in the passive.</p>
+    </div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Drawn as built · settled in Phase 2</span>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#34</strong> the bundle shows its pinned version · <strong style="color:var(--ink)">#96</strong> outcomes as ActionOutcome; motion <a href="Motion.dc.html#2a">2a</a> for the row, <a href="Motion.dc.html#1b">1b</a> for its dialog.</p>
+    </div>
+  </section>
+  
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ desktopFrames }}" as="f" hint-placeholder-count="6">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1200px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="1">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:390px;height:844px;border:0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u2" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Priya's access below is real, read 14 minutes ago, and may have changed since. Giving and revoking access is paused until Zitadel answers.</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <div class="flex flex-col items-start gap-4 sm:flex-row sm:gap-[22px]" style="padding-bottom:12px">
+    <x-import component-from-global-scope="Syndra.Avatar" name="Priya Nair" size="header" hint-size="62px,62px"></x-import>
+    <div class="w-full flex-1"><x-import component-from-global-scope="Syndra.PageHeader" title="Priya Nair" meta="{{ metaRow }}" lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why." actions="{{ headerActions }}" hint-size="100%,140px"></x-import></div>
+  </div>
+
+  <x-import component-from-global-scope="Syndra.Tabs" label="Views of this person's access" value="{{ tab }}" options="{{ tabs }}" on-select="{{ noop }}" hint-size="100%,44px"></x-import>
+
+  <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 5 }}" label="Loading this person's access" hint-size="100%,280px"></x-import></x-import></sc-if>
+
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load this person's access.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
+          <span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}">
+    <div class="panel flex flex-wrap items-center gap-3 px-5 py-4"><span class="type-label">Bundles</span><span class="text-[14px] text-faint">None assigned</span><span class="flex-1"></span><span class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6">Manage bundles →</span></div>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,180px"><x-import component-from-global-scope="Syndra.EmptyState" title="Priya holds no access yet" guidance="Access appears here once Priya is given a bundle or direct access, or when a request of hers is approved. No welcome bundle is set, so joining gave her nothing." hint-size="100%,160px"></x-import></x-import>
+  </sc-if>
+
+  <sc-if value="{{ stAccess }}" hint-placeholder-val="{{ true }}">
+    <div class="flex flex-col gap-[18px]">
+      <sc-if value="{{ hasJump }}" hint-placeholder-val="{{ false }}">{{ jumpFloat }}</sc-if>
+      <div class="panel flex flex-wrap items-center gap-3 px-5 py-4">
+        <span class="type-label">Bundles</span>
+        <a href="route-bundles.dc.html?frame=default" style="text-decoration:none;color:inherit"><x-import component-from-global-scope="Syndra.Chip" class-name="gap-[5px]" hint-size="160px,32px">Lab Tech<span class="text-faint">v2 · v3 available</span></x-import></a>
+        <span class="flex-1"></span>
+        <span class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6">Manage bundles →</span>
+      </div>
+      <sc-if value="{{ chipsLeft }}" hint-placeholder-val="{{ false }}"><sc-if value="{{ hasJump }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px"><span class="type-label">Projects</span>{{ jumpRest }}</div></sc-if></sc-if><sc-if value="{{ chipsRight }}" hint-placeholder-val="{{ true }}"><div style="margin:0 0 -4px;padding:0 20px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px">{{ readEl }}<sc-if value="{{ hasJump }}" hint-placeholder-val="{{ false }}">{{ jumpRest }}</sc-if></div></sc-if>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,320px">
+        <div id="proj-1" class="flex flex-wrap items-center gap-3 px-5 py-4" style="border-radius:var(--radius-card) var(--radius-card) 0 0;animation:{{ flash1 }}">{{ chev1 }}<span class="type-card-title"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser Lab</a></span><span class="text-[13.5px] text-faint">3 roles</span><sc-if value="{{ chipsLeft }}" hint-placeholder-val="{{ false }}"><span class="text-[13px] text-faint">{{ readNote }}</span></sc-if></div><div style="display:grid;grid-template-rows:{{ fold1.fr }};visibility:{{ fold1.vis }};transition:{{ fold1.trans }}"><div style="min-height:0;overflow:hidden;opacity:{{ fold1.op }};transition:{{ fold1.opTrans }}">
+        <div class="row-divider px-5 pb-2 pt-1.5"><span class="type-label">Given</span></div>
+        
+        <div class="flex flex-wrap items-center gap-[18px] px-5 py-3">
+          <div class="w-[230px] shrink-0 text-[15px] font-semibold">Laser cutter · Operator<span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span> <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.operator</span></div>
+          <div class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-[9px]"><span class="inline-flex items-center gap-1.5 rounded-pill py-[5px] pl-[9px] pr-[11px] text-[12.5px] font-semibold leading-none whitespace-nowrap bg-accent-soft text-accent-text"><i aria-hidden="true" class="block h-2 w-2 flex-none rounded-pill bg-accent"></i>Direct</span></span></div>
+          <span class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]"><span class="inline-flex items-center gap-2 font-semibold"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>In Zitadel</span><span class="font-semibold text-warn-text">Expires 20 Oct · 18 days</span></span>
+          <span class="flex w-[104px] shrink-0 justify-end"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" disabled="{{ stDegraded }}" hint-size="96px,34px">Revoke</x-import></span>
+        </div>
+        
+        <div class="flex flex-wrap items-center gap-[18px] px-5 py-3">
+          <div class="w-[230px] shrink-0 text-[15px] font-semibold">Laser cutter · Member <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.member</span></div>
+          <div class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-[9px]"><span class="inline-flex items-center gap-1.5 rounded-pill py-[5px] pl-[9px] pr-[11px] text-[12.5px] font-semibold leading-none whitespace-nowrap bg-tint-2 text-ink/80"><i aria-hidden="true" class="block h-2 w-2 flex-none rounded-pill border-2 border-ink/80"></i>Via bundle</span><span class="text-[13.5px] text-muted"><a href="route-bundles.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Lab Tech</a></span></span></div>
+          <span class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]"><span class="inline-flex items-center gap-2 font-semibold"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>In Zitadel</span><span class="text-faint">No expiry</span></span>
+          <span class="flex w-[104px] shrink-0 justify-end"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="96px,34px">Remove</x-import></span>
+        </div>
+        
+        <div class="flex flex-wrap items-center gap-[18px] px-5 py-3">
+          <div class="w-[230px] shrink-0 text-[15px] font-semibold">Laser cutter · Supervisor<span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span> <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.supervisor</span></div>
+          <div class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-[9px]"><span class="inline-flex items-center gap-1.5 rounded-pill py-[5px] pl-[9px] pr-[11px] text-[12.5px] font-semibold leading-none whitespace-nowrap bg-accent-soft text-accent-text"><i aria-hidden="true" class="block h-2 w-2 flex-none rounded-pill bg-accent"></i>Direct</span></span></div>
+          <span class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]"><span class="inline-flex items-center gap-2 font-semibold"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-pending.dc.html?frame=person" style="color:var(--accent-text);text-decoration:none" style-hover="text-decoration:underline;text-underline-offset:3px">Waiting for you to send →</a></span><span class="w-full text-[12.5px] text-faint" style="padding-left:15px">Supervisor always waits for you, so she can't supervise yet.</span></span>
+          <span class="flex w-[104px] shrink-0 justify-end"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="96px,34px">Withdraw</x-import></span>
+        </div>
+        <div class="row-divider px-5 pb-2 pt-1.5"><span class="type-label">Automatic</span></div>
+        
+        <div class="flex flex-wrap items-center gap-[18px] px-5 py-3">
+          <div class="w-[230px] shrink-0 text-[15px] font-semibold">Laser bay · Door <span class="type-mono" style="font-weight:400;color:var(--faint)">laserbay.door</span></div>
+          <div class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-[9px]"><span class="inline-flex items-center gap-1.5 rounded-pill py-[5px] pl-[9px] pr-[11px] text-[12.5px] font-semibold leading-none whitespace-nowrap border border-dashed border-ink/35 text-ink/70"><i aria-hidden="true" class="block h-2 w-2 flex-none rounded-pill border border-dashed border-ink/70"></i>Automatic</span><span class="text-[13.5px] text-muted">Laser Lab / laser.operator</span></span></div>
+          <span class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]"><span class="inline-flex items-center gap-2 font-semibold"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>In Zitadel</span><span class="text-faint">Nobody clicked this</span></span>
+          <span class="flex w-[104px] shrink-0 justify-end"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="96px,34px">Remove</x-import></span>
+        </div>
+      </div></div></x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+        <div id="proj-2" class="flex flex-wrap items-center gap-3 px-5 py-4" style="border-radius:var(--radius-card) var(--radius-card) 0 0;animation:{{ flash2 }}">{{ chev2 }}<span class="type-card-title"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Wood shop</a></span><span class="text-[13.5px] text-faint">1 role</span><sc-if value="{{ chipsLeft }}" hint-placeholder-val="{{ false }}"><span class="text-[13px] text-faint">{{ readNote }}</span></sc-if></div><div style="display:grid;grid-template-rows:{{ fold2.fr }};visibility:{{ fold2.vis }};transition:{{ fold2.trans }}"><div style="min-height:0;overflow:hidden;opacity:{{ fold2.op }};transition:{{ fold2.opTrans }}">
+        <div class="row-divider px-5 pb-2 pt-1.5"><span class="type-label">Given</span></div>
+        
+        <div class="flex flex-wrap items-center gap-[18px] px-5 py-3">
+          <div class="w-[230px] shrink-0 text-[15px] font-semibold">Bandsaw · Member <span class="type-mono" style="font-weight:400;color:var(--faint)">wood.bandsaw</span></div>
+          <div class="min-w-0 flex-1"><span class="flex flex-wrap items-center gap-[9px]"><span class="inline-flex items-center gap-1.5 rounded-pill py-[5px] pl-[9px] pr-[11px] text-[12.5px] font-semibold leading-none whitespace-nowrap bg-accent-soft text-accent-text"><i aria-hidden="true" class="block h-2 w-2 flex-none rounded-pill bg-accent"></i>Direct</span></span></div>
+          <span class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]"><span class="inline-flex items-center gap-2 font-semibold text-danger-text"><x-import component-from-global-scope="Syndra.StatusDot" tone="danger" hint-size="7px,7px"></x-import>Not in Zitadel</span></span>
+          <span class="flex w-[104px] shrink-0 justify-end"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" disabled="{{ stDegraded }}" hint-size="96px,34px">Revoke</x-import></span>
+        </div>
+      </div></div></x-import>
+
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+        <div id="proj-3" class="flex flex-wrap items-center gap-3 px-5 py-4" style="border-radius:var(--radius-card) var(--radius-card) 0 0;animation:{{ flash3 }}">{{ chev3 }}<span class="type-card-title"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Electronics bench</a></span><span class="text-[13.5px] font-semibold text-warn-text">1 role Syndra never gave</span><sc-if value="{{ chipsLeft }}" hint-placeholder-val="{{ false }}"><span class="text-[13px] text-faint">{{ readNote }}</span></sc-if></div><div style="display:grid;grid-template-rows:{{ fold3.fr }};visibility:{{ fold3.vis }};transition:{{ fold3.trans }}"><div style="min-height:0;overflow:hidden;opacity:{{ fold3.op }};transition:{{ fold3.opTrans }}">
+        <div class="row-divider px-5 py-3.5">
+          <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1"><span class="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-warn-text">Nothing explains this</span><span class="text-[13.5px] text-muted">In Zitadel, with no bundle, rule or grant behind it.</span></div>
+          <div class="mt-2.5 flex flex-wrap items-center gap-2"><span class="rounded-pill border border-line-strong px-2.5 py-1 text-[13.5px] font-semibold">Soldering station · Operator</span><span class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6">Decide on Drift →</span></div>
+        </div>
+      </div></div></x-import>
+
+      
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ stActivity }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <sc-for list="{{ days }}" as="d" hint-placeholder-count="2">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,180px">
+          <x-import component-from-global-scope="Syndra.CardHeader" title="{{ d.day }}" hint-size="100%,60px"></x-import>
+          <sc-for list="{{ d.events }}" as="e" hint-placeholder-count="2">
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,56px"><span style="flex:1;min-width:0;font-size:14.5px;text-wrap:pretty">{{ e.pre }}<sc-if value="{{ e.hasRole }}" hint-placeholder-val="{{ false }}"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ e.role }}</a></sc-if>{{ e.post }} <span style="color:var(--muted)">— {{ e.by }} <sc-if value="{{ e.byLinks }}" hint-placeholder-val="{{ false }}"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ e.name }}</a></sc-if><sc-if value="{{ e.byPlain }}" hint-placeholder-val="{{ true }}">{{ e.name }}</sc-if></span></span><span style="font-size:13.5px;color:var(--faint)">{{ e.at }}</span></x-import>
+          </sc-for>
+        </x-import>
+      </sc-for>
+      <div class="card" style="padding:14px 20px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px"><span style="flex:1;min-width:220px;font-size:13.5px;color:var(--faint)">Every event about Priya since she first signed in on 3 Sept. Past 200, only the latest 200 are listed here.</span><span class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6">Full audit trail →</span></div>
+    </div>
+  </sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  static ev(pre, role, post, by, name, link, at) { return { pre, role, hasRole: !!role, post, by, name, byLinks: link, byPlain: !link, at }; }
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    this.jnGap = 18;
+    this.chips = q.get("chips") || "right";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+    this.readError = Object.assign(new Error("Access could not be read"), { status: 503 });
+    this.days = [
+      { day: "2 Oct", events: [Component.ev("Given ", "Laser cutter · Supervisor", "", "by", "Kanishk Singh", true, "09:30"), Component.ev("Signed in", "", "", "through", "Zitadel", false, "09:12")] },
+      { day: "20 Sept", events: [Component.ev("Request for ", "Bandsaw · Member", " approved", "by", "Kanishk Singh", true, "11:00"), Component.ev("Asked for ", "Bandsaw · Member", ", for 30 days", "by", "Priya", false, "10:41")] },
+    ];
+  }
+  scroller() { if (this._sc && this._sc.isConnected) return this._sc; let p = document.getElementById((this.navIds || [])[0]); while (p && p !== document.body) { const o = getComputedStyle(p).overflowY; if (o === "auto" || o === "scroll") break; p = p.parentElement; } this._sc = p && p !== document.body ? p : null; return this._sc; }
+  spy() { const ids = this.navIds; if (!ids || ids.length < 2 || !document.getElementById(ids[0])) return; const sc = this.scroller(); const top = sc ? sc.getBoundingClientRect().top : 0; let active = ids[0]; ids.forEach(id => { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top - top < 120) active = id; }); const rest = document.getElementById("jump-rest"); const scrolled = rest ? rest.getBoundingClientRect().bottom - top < 0 : false; if (active !== this.state.active || scrolled !== this.state.scrolled) this.setState({ active, scrolled }); }
+  componentDidMount() { this._spy = () => this.spy(); document.addEventListener("scroll", this._spy, true); setTimeout(this._spy, 300); if (this.preScroll) setTimeout(() => this.goTo(this.preScroll, true), 1200); }
+  componentWillUnmount() { document.removeEventListener("scroll", this._spy, true); }
+  goTo(id, instant) { const el = document.getElementById(id); if (!el) return; const sc = this.scroller(); const off = el.getBoundingClientRect().top - (sc ? sc.getBoundingClientRect().top : 0) - 64; const rm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; const behavior = instant || rm ? "auto" : "smooth"; if (sc) sc.scrollTo({ top: sc.scrollTop + off, behavior }); else window.scrollTo({ top: window.scrollY + off, behavior }); }
+  jumpNav(items, label, align) { const S = window.Syndra, h = React.createElement; if (!S || items.length < 2) return { rest: null, float: null };
+    const act = items.some(i => i.id === this.state.active) ? this.state.active : items[0].id, idx = items.findIndex(i => i.id === act), up = !!this.state.scrolled;
+    const go = (it) => (e) => { if (e) e.preventDefault(); this.setState(s => ({ flash: { id: it.id, n: ((s.flash || {}).n || 0) + 1 } })); it.go(); };
+    const dot = (it) => it.tone ? h(S.StatusDot, { tone: it.tone }) : null;
+    const rest = h("nav", { id: "jump-rest", "aria-label": label, style: { display: "flex", flexWrap: "wrap", gap: 8, marginLeft: align === "start" ? 0 : "auto" } }, items.map(it => h("a", { key: it.id, href: "#" + it.id, onClick: go(it), style: { textDecoration: "none", color: "inherit", borderRadius: "var(--radius-pill)" } }, h(S.Chip, { className: "gap-2" }, dot(it), it.label, h("span", { className: "text-faint" }, it.count), h("span", { "aria-hidden": true, style: { color: "var(--faint)", fontSize: 12 } }, "↓")))));
+    const float = h("div", { "aria-hidden": !up, style: { position: "sticky", top: 0, zIndex: 5, height: 0, marginBottom: -(this.jnGap || 16) } }, h("nav", { "aria-label": label + " (while scrolling)", "aria-hidden": !up, style: { position: "absolute", top: 12, left: "50%", transform: "translate(-50%, " + (up ? "0" : "-8px") + ")", opacity: up ? 1 : 0, pointerEvents: up ? "auto" : "none", transition: up ? "opacity var(--duration-tint) var(--ease-tint), transform var(--duration-settle) var(--ease-settle)" : "opacity var(--duration-tint) var(--ease-tint), transform 0s linear var(--duration-tint)", display: "flex", gap: 2, padding: 4, borderRadius: "var(--radius-pill)", border: "1px solid var(--line-strong)", background: "var(--surface-1)", boxShadow: "var(--shadow-dialog)", whiteSpace: "nowrap", maxWidth: "calc(100% - 24px)", overflowX: "auto" } },
+      items.map((it, i) => { const on = it.id === act; return h("a", { key: it.id, href: "#" + it.id, tabIndex: up ? 0 : -1, "aria-current": on ? "location" : undefined, onClick: go(it), style: { display: "inline-flex", alignItems: "center", gap: 8, minHeight: 36, padding: "0 14px", borderRadius: "var(--radius-pill)", textDecoration: "none", fontSize: 13, fontWeight: 600, color: on ? "var(--ink)" : "var(--muted)", background: on ? "var(--surface-2)" : "transparent", transition: "background-color var(--duration-tint) var(--ease-tint), color var(--duration-tint) var(--ease-tint)" } }, dot(it), it.label, h("span", { style: { color: "var(--faint)", fontWeight: 500 } }, it.count), on ? null : h("span", { "aria-hidden": true, style: { color: "var(--faint)", fontSize: 12 } }, i < idx ? "↑" : "↓")); })));
+    return { rest, float }; }
+  foldS(open) { return open ? { fr: "1fr", op: 1, vis: "visible", trans: "grid-template-rows var(--duration-settle) var(--ease-settle), visibility 0s", opTrans: "opacity var(--duration-tint) var(--ease-tint) 140ms" } : { fr: "0fr", op: 0, vis: "hidden", trans: "grid-template-rows var(--duration-settle) var(--ease-settle) 120ms, visibility 0s linear 380ms", opTrans: "opacity var(--duration-tint) var(--ease-tint)" }; }
+  flashA(on, n) { return on ? (n % 2 ? "sy-flash-a" : "sy-flash-b") + " var(--duration-flash) ease-out 280ms both" : "none"; }
+  chev(open, label, onClick) { const h = React.createElement; return h("button", { type: "button", "aria-expanded": open, "aria-label": label, onClick, style: { width: 28, height: 28, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", background: "none", color: "var(--muted)", cursor: "pointer" } }, h("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, style: { transition: "transform var(--duration-settle) var(--ease-settle)", transform: open ? "none" : "rotate(-90deg)" } }, h("path", { d: "M6 9l6 6 6-6" }))); }
+  fold(k) { this.setState(s => ({ folded: Object.assign({}, s.folded, { [k]: !(s.folded || {})[k] }) })); }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded";
+    const f = (frame, label, note) => ({ src: "route-users-id.dc.html?frame=" + frame, label, note });
+    if (!this.state) this.state = {};
+    const fdp = this.state.folded || {};
+    this.navIds = ["proj-1", "proj-2", "proj-3"];
+    const P3 = [["Laser Lab", 3], ["Wood shop", 1], ["Electronics bench", 1, "warn"]];
+    const jnp = this.jumpNav(P3.map((p, i) => ({ id: "proj-" + (i + 1), label: p[0], count: p[1], tone: p[2], go: () => { if (fdp["p" + (i + 1)]) this.fold("p" + (i + 1)); setTimeout(() => this.goTo("proj-" + (i + 1)), 0); } })), "Projects on this page", this.chips === "left" ? "start" : undefined);
+    const pc = {}; [1, 2, 3].forEach(i => { const o = !fdp["p" + i]; pc["open" + i] = o; pc["fold" + i] = this.foldS(o); pc["flash" + i] = this.flashA((this.state.flash || {}).id === "proj-" + i, (this.state.flash || {}).n || 0); pc["chev" + i] = this.chev(o, (o ? "Fold" : "Open") + " this project", () => this.fold("p" + i)); });
+    return { ...pc, chipsLeft: this.chips === "left", chipsRight: this.chips !== "left", readEl: S ? h(S.ReadFreshness, { state: deg ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 60000).toISOString(), current: true }, subject: "What Zitadel confirmed" }) : null, hasJump: !!jnp.rest, jumpRest: jnp.rest, jumpFloat: jnp.float,
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, readError: this.readError, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg, stActivity: st === "activity",
+      stAccess: st === "default" || deg || st === "phone",
+      tab: st === "activity" ? "activity" : "access",
+      tabs: [{ value: "access", label: "Access" }, { value: "requests", label: "Requests" }, { value: "activity", label: "Activity" }],
+      readNote: deg ? "Read from Zitadel 09:40 — 14 minutes ago" : "Read from Zitadel 09:54",
+      lastKnown: { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false },
+      days: this.days,
+      headerActions: S ? h(React.Fragment, null, h(S.Button, { disabled: deg }, "Manage bundles"), h(S.Button, { variant: "accent", disabled: deg }, "Grant direct access")) : null,
+      metaRow: S ? h(S.MetaRow, null, ["priya.nair@makerspace.edu", "Research assistant", "Design"]) : null,
+      desktopFrames: [
+        f("default", "Access", "Bundles first, with their version. Then the read line every list with sections has: when Zitadel was read on the left, once, instead of in each project's heading; a chip per project on the right. One card per project. Each role: name, source, Zitadel's verdict as dot and word, and the verb that removes it — Revoke (danger) for direct access, Withdraw for something waiting for you to send (its verdict opens Pending changes), Remove for access from a bundle or rule."),
+        f("activity", "Activity (operator only)", "Grouped by day, in the passive, naming who did it (#41). The way to the full audit trail sits at the foot, where history is read."),
+        f("empty", "Empty", "Says what would put access here, and why joining gave her nothing."),
+        f("loading", "Loading", "Skeleton rows; the tabs and header stay."),
+        f("error", "Error", "A red notice in the content's place, built like the amber one."),
+        f("degraded", "Degraded — last known data", "The read line says last known and how old, once, for every project. Every change control pauses."),
+      ],
+      chipFrames: [
+        f("default&chips=left", "A · As built: chips lead, under a label", "Projects, then a chip each, on their own line; every project heading repeats when Zitadel was read."),
+        f("default", "B · The read line, as on every list (my pick)", "Freshness left, said once for the whole page; chips at the right end, as on Drift and Expiring access. The label goes: the chips already name projects, and the cards beneath are the projects."),
+      ],
+      phoneFrames: [f("phone", "Phone — Access", "The avatar stacks above the title; each role wraps to name, source, then verdict and verb.")],
+    };
+  }
+}
+</script>
+</body>
+</html>

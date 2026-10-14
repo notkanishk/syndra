@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="An app board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /applications/[id]</span>
+    <h1 class="type-page-title" style="margin:0">An app</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">What one app is told about a person when they sign in: the token format, and a preview of the token for anyone. Each frame is the real shell and components at true width; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#49</strong> a token with no roles is a full sentence that rules out the misreading; while the format has unsaved edits a dashed amber rule says the preview shows the saved format · <strong style="color:var(--ink)">#50</strong> when nobody set the project's claim name the field says so, rather than printing the built-in name as a value · <strong style="color:var(--ink)">#85</strong> Copy reads Select where the browser cannot copy.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · applied from the walkthrough</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Every explanation in the preview is a sentence under the code, never a faint <span class="type-mono">//</span> comment inside it — the token block shows only the token. "Show the role list" pairs with Copy as quiet outline buttons. Not found is an EmptyState with a way back, not an error: nothing failed.</p></div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ desktopFrames }}" as="f" hint-placeholder-count="5">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:580px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1160px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="1">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:390px;height:844px;border:0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/applications/a1" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">The format below is real, read 14 minutes ago. Previews and saving are paused until Zitadel answers.</p>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ stHeader }}" hint-placeholder-val="{{ true }}"><div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Apps" title="Laser bookings" lede="When someone signs in to Laser bookings, Zitadel hands it a token — a short list of facts about that person, including their roles. Token format sets what goes in it; Preview token shows exactly what Laser bookings would receive for a given person." meta="{{ meta }}" hint-size="100%,150px"></x-import></div></sc-if>
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load this app.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
+          <span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card"  hint-size="100%,260px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" avatar="{{ false }}" label="Loading app" hint-size="100%,240px"></x-import></x-import></sc-if>
+  <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Card"  hint-size="100%,180px"><x-import component-from-global-scope="Syndra.EmptyState" title="That app doesn't exist." guidance="It may have been removed in Zitadel." action="{{ backAction }}" hint-size="100%,160px"></x-import></x-import></sc-if>
+  <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}">
+  <div class="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap">
+    <div class="w-full tablet:min-w-[420px] tablet:flex-1"><x-import component-from-global-scope="Syndra.Card" class-name="h-full" hint-size="100%,520px">
+      <div class="px-[22px] pb-4 pt-5"><h2 class="type-card-title" style="margin:0">Token format</h2><p class="mt-1 text-[14px] leading-[1.5] text-faint">What Laser bookings is told about a person when they sign in, and how it is laid out. A change takes effect the next time someone signs in.</p></div>
+      <div class="flex flex-wrap items-center gap-2.5 px-[22px] pb-4"><x-import component-from-global-scope="Syndra.Segmented" label="What to edit" size="sm" value="project" options="{{ scopeOptions }}" on-change="{{ noop }}" hint-size="260px,36px"></x-import></div>
+      <div class="flex flex-col gap-4 px-[22px] pb-5">
+        <p class="text-[13.5px] leading-[1.5] text-faint" style="margin:0">Shared by both apps on Laser Lab — a change here changes what each of them receives.</p>
+        <div class="rounded-block bg-tint-1 px-4 py-3.5" style="display:flex;flex-direction:column;gap:8px">
+          <x-import component-from-global-scope="Syndra.FieldLabel"  hint-size="120px,18px">Roles claim</x-import>
+          <div class="flex flex-wrap items-center gap-2.5"><x-import component-from-global-scope="Syndra.Input" class-name="min-w-[240px] flex-1 font-mono text-[13.5px]" placeholder="syndra.laser.roles" value="{{ claimValue }}" read-only="{{ true }}" aria-label="Roles claim name" hint-size="260px,40px"></x-import><x-import component-from-global-scope="Syndra.Segmented" label="Sent as" size="sm" value="array" options="{{ formatOptions }}" on-change="{{ noop }}" hint-size="220px,36px"></x-import></div>
+          <sc-if value="{{ stEditing }}" hint-placeholder-val="{{ false }}"><p class="text-[12.5px] text-faint" style="margin:0">Sent as "trained,maintainer".</p></sc-if>
+          <sc-if value="{{ stNotEditing }}" hint-placeholder-val="{{ true }}"><p class="text-[12.5px] text-faint" style="margin:0">Nobody has named this claim yet, so Zitadel uses its own default. Type a name to choose one.</p></sc-if>
+        </div>
+        <div class="flex flex-wrap items-center gap-2.5"><x-import component-from-global-scope="Syndra.Button" variant="accent" disabled="{{ saveDisabled }}" hint-size="170px,40px">Save token format</x-import><span class="text-[13px] text-faint">{{ saveNote }}</span></div>
+      </div>
+      <div class="row-divider px-[22px] py-4"><div class="mb-2.5 type-label">Claims in this project's token</div>
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center gap-2.5"><span class="type-mono">syndra.laser.roles</span><span class="text-[12.5px] text-faint">project default, used by this app</span></div>
+          <div class="flex items-center gap-2.5"><span class="type-mono">laser.badge.roles</span><span class="text-[12.5px] text-faint">Laser badge reader's own</span></div>
+        </div>
+      </div>
+    </x-import></div>
+    <div class="w-full tablet:min-w-[420px] tablet:flex-1"><x-import component-from-global-scope="Syndra.Card" class-name="flex h-full flex-col" hint-size="100%,520px">
+      <div class="px-[22px] pb-3.5 pt-5"><h2 class="type-card-title" style="margin:0">Preview token</h2><p class="mt-1 text-[14px] leading-[1.5] text-faint">{{ previewLede }}</p></div>
+      <div class="flex flex-wrap items-center gap-2.5 px-[22px] pb-3.5"><span class="text-[13.5px] text-faint">for</span><span class="flex items-center gap-2 rounded-pill border border-line-strong py-1 pl-1.5 pr-3"><x-import component-from-global-scope="Syndra.Avatar" name="{{ previewName }}" size="row" hint-size="28px,28px"></x-import><span class="text-[14px]">{{ previewName }}</span></span><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" disabled="{{ stDegraded }}" hint-size="110px,34px">Run preview</x-import></div>
+      <sc-if value="{{ stEditing }}" hint-placeholder-val="{{ false }}"><div class="mx-[22px] mb-3 border-t border-dashed border-warn-line pt-3 text-[13.5px] leading-[1.5] text-warn-text">You have unsaved changes in Token format. This preview shows the saved format; save to preview your changes.</div></sc-if>
+      <div class="flex-1 px-[22px] pb-5" style="display:flex;flex-direction:column;gap:12px">
+        <sc-if value="{{ stNothing }}" hint-placeholder-val="{{ false }}">
+          <p class="max-w-[60ch] text-[14px] leading-[1.5] text-muted" style="margin:0">Lena Brandt would sign in to Laser bookings with no roles. That is not an error: none of the roles she holds belong to Laser Lab.</p>
+          <div class="rounded-inner border border-line bg-surface-0 px-[18px] py-4 font-mono text-[13px] leading-[1.85]"><div class="text-ink/70">{}</div></div>
+        </sc-if>
+        <sc-if value="{{ stHasToken }}" hint-placeholder-val="{{ true }}">
+          <div class="rounded-inner border border-line bg-surface-0 px-[18px] py-4 font-mono text-[13px] leading-[1.85]"><div><span class="text-accent-text">"syndra.laser.roles"</span><span class="text-ink/70">: </span><span>["trained", "maintainer"]</span><span class="text-ink/70">,</span></div><div style="opacity:.6"><span class="text-accent-text">"laser.badge.roles"</span><span class="text-ink/70">: </span><span>"trained,maintainer"</span></div></div>
+          <p class="text-[13.5px] leading-[1.55] text-muted" style="margin:0;max-width:62ch">The faded line is Laser badge reader's claim. Every app on Laser Lab receives the same token and reads its own claim.</p>
+        </sc-if>
+        <div class="flex flex-wrap gap-2.5"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Copy preview</x-import><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="150px,34px">Show the role list</x-import></div>
+      </div>
+    </x-import></div>
+  </div>
+  </sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded";
+    const f = (frame, label, note) => ({ src: "route-applications-id.dc.html?frame=" + frame, label, note });
+    const list = st === "default" || deg || st === "phone" || ["nothing","editing"].indexOf(st) >= 0;
+    const base = {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg, stList: list, showCard: st !== "error",
+      readState: deg ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 40000).toISOString(), current: true },
+    };
+    const editing = st === "editing";
+    return { ...base,
+      stHeader: st !== "empty",
+      stEditing: editing, stNotEditing: !editing, stNothing: st === "nothing", stHasToken: st !== "nothing",
+      claimValue: editing ? "laser.roles" : "",
+      saveDisabled: !editing || deg, saveNote: editing ? "1 unsaved change" : "Nothing to save yet.",
+      previewName: st === "nothing" ? "Lena Brandt" : "Priya Nair",
+      previewLede: editing ? "The format Laser bookings receives now — not the one being edited." : "Exactly what Laser bookings would receive right now.",
+      scopeOptions: [{ value: "project", label: "Project default" }, { value: "app", label: "Laser bookings only" }],
+      formatOptions: [{ value: "array", label: "array" }, { value: "csv", label: "csv" }, { value: "space_delimited", label: "spaced" }],
+      backAction: { label: "Back to Apps", href: "#" },
+      meta: S ? h("span", { className: "flex flex-wrap items-center gap-2 text-[14px] text-faint" }, "uses roles from ", h("a", { href: "route-projects-id.dc.html?frame=default", className: "font-semibold text-accent-text", style: { textDecoration: "none" } }, "Laser Lab →")) : null,
+      desktopFrames: [
+        f("default", "Default", "Nobody named the claim, so the field says Zitadel's default is in use instead of showing it as a value (#50). The token block holds only the token; the sentence under it explains the faded line."),
+        f("nothing", "No roles for this person", "A full sentence says she would get no roles, and that this is not an error (#49)."),
+        f("editing", "Unsaved edits", "The dashed amber rule says the preview shows the saved format (#49)."),
+        f("empty", "Not found", "Nothing failed, so it is an EmptyState with a way back."),
+        f("loading", "Loading", "One skeleton card."),
+        f("error", "Error", "The red notice."),
+        f("degraded", "Degraded — last known data", "Saving and previews pause."),
+      ],
+      phoneFrames: [f("phone", "Phone — default", "Editor first, preview under it (#90).")] };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+/* What the Next host supplies outside globals.css: next/font's --font-* variables (src/app/layout.tsx). */
+:root {
+  --font-bricolage: 'Bricolage Grotesque';
+  --font-figtree: 'Figtree';
+  --font-jetbrains: 'JetBrains Mono';
+}
+
+/* The app's own body surface (globals.css @layer base), restated unlayered so a
+   host page's plain `body { background }` (preview cards, design canvases)
+   cannot paint over the theme. */
+html body {
+  background-color: var(--ground);
+  color: var(--ink);
+}

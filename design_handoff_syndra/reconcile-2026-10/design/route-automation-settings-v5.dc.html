@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-land{0%{background-color:var(--accent-soft)}100%{background-color:transparent}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:80px 72px 120px;display:flex;flex-direction:column;gap:72px;background:var(--ground);min-height:100vh">
+
+  <header data-screen-label="Waits for you board" style="display:flex;flex-direction:column;gap:16px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Changes · Roles that wait · N14 to N18 · replaces route-automation-settings-v4</span>
+    <h1 class="type-page-title" style="margin:0;font-size:44px;line-height:1.1">Some access should wait for you</h1>
+    <p style="margin:0;font-size:17px;line-height:1.65;color:var(--muted);text-wrap:pretty">Most changes to access can go straight through: a front door, a print queue, the bandsaw. A few deserve a look every time someone gains or loses them, like supervising the laser cutter. You mark those roles in one place. Everywhere else you choose a role, Syndra shows whether it waits, using the same picker, the same rows and the same words. And when something you did isn't finished yet, the thing you changed says so until it is.</p>
+  </header>
+
+  <section data-screen-label="Turn 2 · naming and the marker" style="display:flex;flex-direction:column;gap:32px;padding:32px;border-radius:var(--radius-card);border:1px solid var(--accent-line);background:var(--surface-0);max-width:1560px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:960px"><span class="type-label" style="color:var(--label)">Turn 2 · 13 Oct · picked: 3a and 2c</span><h2 class="type-section-title" style="margin:0">Where this lives, what the group is called, and whether a waiting role gets a symbol</h2><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">"Automation" no longer describes its group. Once Access map becomes Insights (N12), the group holds rules, the queue of changes waiting to be sent, their history, a map, and a setting about which changes wait. Only the first is automation. Picked on 13 Oct: <a href="#3a">3a</a> and <a href="#2c">2c</a>, with the meaning on hover, and the words beside it where a row has room. Both are applied to every frame below.</p></div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+      <sc-for list="{{ navOpts }}" as="o" hint-placeholder-count="3">
+        <div id="{{ o.id }}" style="display:flex;flex-direction:column;gap:14px;width:470px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 8px;box-sizing:border-box;border-radius:var(--radius-pill);border:1px solid {{ o.badgeEdge }};background:{{ o.badgeBg }};font-size:12.5px;font-weight:700">{{ o.id }}</span><span style="font-size:15.5px;font-weight:600">{{ o.name }}</span><sc-if value="{{ o.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Recommended</span></sc-if></div>
+          <div style="display:flex;gap:16px;align-items:flex-start">
+            <div aria-label="{{ o.name }} navigation, drawn" style="width:220px;flex:none;padding:16px 10px;box-sizing:border-box;border-radius:18px;border:1px solid var(--line);background:var(--rail);display:flex;flex-direction:column;gap:2px">
+              <span style="padding:4px 10px 8px;font-size:12.5px;line-height:1.45;color:var(--faint)">Home, People, Access (Projects, Roles, Apps), Requests</span>
+              <sc-for list="{{ o.items }}" as="it" hint-placeholder-count="12">
+                <span style="display:flex;align-items:center;gap:8px;min-height:{{ it.h }}px;padding:{{ it.pad }};border-radius:10px;background:{{ it.bg }};font-size:{{ it.fs }}px;font-weight:{{ it.fw }};color:{{ it.ink }};letter-spacing:{{ it.ls }};text-transform:{{ it.tt }}"><span style="flex:1;min-width:0">{{ it.label }}</span><sc-if value="{{ it.hasCount }}" hint-placeholder-val="{{ false }}"><span style="min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);background:{{ it.countBg }};color:{{ it.countInk }};font-size:12.5px;font-weight:700">{{ it.count }}</span></sc-if><sc-if value="{{ it.moved }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">{{ it.movedWord }}</span></sc-if></span>
+              </sc-for>
+            </div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;padding-top:6px">
+              <sc-for list="{{ o.notes }}" as="n" hint-placeholder-count="3"><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink);font-weight:600">{{ n.k }}</strong> {{ n.v }}</span></sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="card" style="padding:20px 22px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <span class="type-label" style="color:var(--label)">The page, under 3a</span>
+        <div style="display:flex;flex-direction:column;gap:6px;padding:18px 20px;border-radius:var(--radius-panel);border:1px solid var(--line);background:var(--canvas)">
+          <span style="font-size:13px;color:var(--muted)">Changes</span>
+          <span style="font-family:var(--font-display);font-size:30px;font-weight:600;line-height:1.15">Roles that wait for you</span>
+          <span style="font-size:14.5px;line-height:1.55;color:var(--muted);max-width:60ch;text-wrap:pretty">When someone would gain or lose one of these roles, however it happens, the change waits in Pending changes until you send it. Every other role goes straight to Zitadel.</span>
+        </div>
+        <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The page is the list itself, so its title is the list's name and the card above the table goes. "Settings" and "Automation settings" go from the product: every "Set in Automation settings →" becomes <a href="#">Set in Roles that wait →</a>.</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <span class="type-label" style="color:var(--label)">The drift sound, out of this page</span>
+        <div role="img" aria-label="The Account sheet, with the proposed row" style="display:flex;flex-direction:column;max-width:400px;border-radius:24px;border:1px solid var(--line-strong);background:var(--surface-2);box-shadow:var(--shadow-dialog);overflow:hidden">
+          <span style="padding:22px 24px 14px;font-family:var(--font-display);font-size:22px;font-weight:600">Account</span>
+          <div style="display:flex;flex-direction:column;gap:14px;padding:0 24px 8px">
+            <div style="display:flex;align-items:center;gap:12px"><x-import component-from-global-scope="Syndra.Avatar" name="Kanishk Singh" hint-size="44px,44px"></x-import><span style="min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:600">Kanishk</span><span style="font-size:13px;color:var(--muted)">kanishk@makerspace.edu</span></span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;min-height:44px;padding:0 16px;border-radius:var(--radius-inner);border:1px solid var(--line);font-size:14.5px"><span>Appearance</span><span style="color:var(--muted)">Dark</span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:6px 6px 6px 16px;border-radius:var(--radius-inner);border:1px solid var(--accent-line);background:var(--accent-soft);font-size:14.5px"><span style="display:flex;flex-direction:column;gap:1px"><span>Sound when drift is found</span><span style="font-size:12.5px;color:var(--muted)">In this browser only</span></span><x-import component-from-global-scope="Syndra.Segmented" size="sm" label="Sound when drift is found" value="on" options="{{ onOff }}" hint-size="110px,32px"></x-import></div>
+          </div>
+          <div style="margin-top:12px;padding:16px 24px 22px;border-top:1px solid var(--line)">
+            <div style="display:flex;align-items:center;justify-content:center;min-height:44px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:14.5px;font-weight:600;color:var(--muted)">Sign out</div>
+            <p style="margin:10px 0 0;font-size:12.5px;line-height:1.5;color:var(--faint)">Signing out signs you out in every open tab. You stay signed in for weeks otherwise, so there is no need to do this at the end of each visit.</p>
+          </div>
+        </div>
+        <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Drawn from the real Account sheet: name, Appearance, then Sign out and its note. The violet row is the only addition. The sound belongs to this browser, as Appearance does, so it sits beside it in the same row shape, and it is still one write place. Install as an app appears between them when the browser offers it.</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:6px;max-width:960px"><h3 style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">A symbol for a role that waits?</h3><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The same three places in each option: choosing in the picker, a project's roles, and a person's role row beside its source chip. The ring is already taken: the Via bundle chip uses a hollow ring, so <a href="#2b">2b</a> would say "bundle" to anyone who has learned the chips.</p></div>
+    <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+      <sc-for list="{{ markOpts }}" as="o" hint-placeholder-count="3">
+        <div id="{{ o.id }}" style="display:flex;flex-direction:column;gap:12px;width:470px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 8px;box-sizing:border-box;border-radius:var(--radius-pill);border:1px solid {{ o.badgeEdge }};background:{{ o.badgeBg }};font-size:12.5px;font-weight:700">{{ o.id }}</span><span style="font-size:15.5px;font-weight:600">{{ o.name }}</span><sc-if value="{{ o.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Recommended</span></sc-if></div>
+          <div class="card" style="display:flex;flex-direction:column;overflow:hidden">
+            <span class="type-label" style="padding:12px 18px 6px">In the picker</span>
+            <div style="display:flex;align-items:center;gap:12px;margin:0 10px 8px;padding:8px 10px;border-radius:12px">
+              <span aria-hidden="true" style="width:24px;height:24px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span>
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600">Laser cutter · Supervisor<sc-if value="{{ o.ring }}" hint-placeholder-val="{{ false }}"><span aria-label="Waits for you" style="width:9px;height:9px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted)"></span></sc-if><sc-if value="{{ o.half }}" hint-placeholder-val="{{ false }}"><span aria-label="Waits for you" style="width:9px;height:9px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%)"></span></sc-if></span><span style="font-size:13px;color:var(--muted)">Signs off inductions and evening sessions</span></span>
+              <sc-if value="{{ o.words }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;white-space:nowrap"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--line-strong)"></span>Waits for you</span></sc-if>
+              <span style="font-size:12.5px;color:var(--faint)">4 people</span>
+            </div>
+            <span class="type-label row-divider" style="padding:12px 18px 6px">A project's roles</span>
+            <div style="display:flex;align-items:baseline;gap:14px;padding:4px 18px 12px">
+              <span style="flex:1;min-width:0;display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600">Laser cutter · Supervisor<sc-if value="{{ o.ring }}" hint-placeholder-val="{{ false }}"><span style="width:9px;height:9px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted)"></span></sc-if><sc-if value="{{ o.half }}" hint-placeholder-val="{{ false }}"><span style="width:9px;height:9px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%)"></span></sc-if></span>
+              <sc-if value="{{ o.words }}" hint-placeholder-val="{{ false }}"><span style="width:120px;flex:none;display:inline-flex;align-items:center;gap:8px;font-size:13.5px"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--line-strong)"></span>Waits for you</span></sc-if>
+              <span style="width:60px;flex:none;text-align:right;font-variant-numeric:tabular-nums">4</span>
+            </div>
+            <span class="type-label row-divider" style="padding:12px 18px 6px">A person's role row</span>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:4px 18px 14px">
+              <span style="display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600">Laser cutter · Supervisor<sc-if value="{{ o.ring }}" hint-placeholder-val="{{ false }}"><span style="width:9px;height:9px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted)"></span></sc-if><sc-if value="{{ o.half }}" hint-placeholder-val="{{ false }}"><span style="width:9px;height:9px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%)"></span></sc-if></span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px 5px 9px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:600;line-height:1;background:var(--surface-2)"><i aria-hidden="true" style="display:block;width:8px;height:8px;box-sizing:border-box;border-radius:var(--radius-pill);border:2px solid var(--ink)"></i>Via bundle</span>
+              <span style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="#">Waiting for you to send →</a></span><span style="padding-left:15px;font-size:12.5px;color:var(--faint)">Supervisor always waits for you</span></span>
+            </div>
+          </div>
+          <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ o.note }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Today" style="display:flex;flex-direction:column;gap:24px;max-width:1240px">
+    <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label" style="color:var(--label)">1 · Today</span><h2 class="type-section-title" style="margin:0">Four ways in, three behaviours, one of them visible</h2></div>
+    <div class="card" style="padding:28px 28px 24px;display:flex;flex-direction:column">
+      <div style="display:grid;grid-template-columns:220px 56px minmax(0,1fr) 150px;align-items:center;padding:0 0 10px"><span class="type-label" style="color:var(--label)">A change made by</span><span></span><span class="type-label" style="color:var(--label)">What decides whether it waits</span><span class="type-label" style="color:var(--label);text-align:right">You can see it</span></div>
+      <sc-for list="{{ todayRows }}" as="r" hint-placeholder-count="4">
+        <div style="display:grid;grid-template-columns:220px 56px minmax(0,1fr) 150px;align-items:center;padding:14px 0;border-top:1px solid var(--divider)">
+          <span style="display:inline-flex;align-items:center;gap:10px;font-weight:600;font-size:15px"><span aria-hidden="true" style="width:10px;height:10px;flex:none;box-sizing:border-box;border-radius:{{ r.glyphRadius }};border:1.5px {{ r.glyphLine }} var(--ink)"></span>{{ r.path }}</span>
+          <span aria-hidden="true" style="height:1px;background:var(--line-strong);margin-right:14px;position:relative"><span style="position:absolute;right:-4px;top:-5px;font-size:12.5px;color:var(--faint)">▸</span></span>
+          <span style="display:flex;flex-direction:column;gap:2px;padding-left:4px"><span style="font-size:15px;font-weight:600">{{ r.what }}</span><span style="font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ r.detail }}</span></span>
+          <span style="display:inline-flex;justify-content:flex-end;align-items:center;gap:8px;font-size:13.5px;color:{{ r.seenInk }}"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:{{ r.seenDot }}"></span>{{ r.seen }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="The rule" style="display:flex;flex-direction:column;gap:24px;max-width:1240px">
+    <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label" style="color:var(--label)">2 · The proposal</span><h2 class="type-section-title" style="margin:0">Mark the roles that matter. Everything else goes straight through.</h2></div>
+    <div class="card" style="padding:32px 28px;display:grid;grid-template-columns:200px 64px 250px 64px minmax(0,1fr);align-items:center">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ paths }}" as="p" hint-placeholder-count="4">
+          <span style="display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface-1);font-size:14px;font-weight:600"><span aria-hidden="true" style="width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:{{ p.r }};border:1.5px {{ p.l }} var(--ink)"></span>{{ p.name }}</span>
+        </sc-for>
+      </div>
+      <div aria-hidden="true" style="align-self:stretch;display:flex;align-items:center"><div style="width:22px;height:calc(100% - 40px);border:1px solid var(--line-strong);border-left:0;border-radius:0 14px 14px 0"></div><div style="flex:1;height:1px;background:var(--line-strong)"></div></div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding:20px;border-radius:18px;border:1px solid var(--accent-line);background:var(--accent-soft);text-align:center">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;line-height:1.25">Does this role always wait for you?</span>
+        <span style="font-size:13px;color:var(--muted)">One question, asked of the role, on every path</span>
+      </div>
+      <div aria-hidden="true" style="align-self:stretch;display:flex;align-items:center"><div style="flex:1;height:1px;background:var(--line-strong)"></div><div style="width:22px;height:58%;border:1px solid var(--line-strong);border-right:0;border-radius:14px 0 0 14px"></div></div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:6px;padding:16px 18px;border-radius:16px;border:1px solid var(--line);background:var(--surface-1)">
+          <span style="display:flex;align-items:center;gap:10px"><span style="font-size:12.5px;font-weight:700;color:var(--muted)">NO</span><span style="font-size:15px;font-weight:600">Straight to Zitadel</span></span>
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>In Zitadel</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;padding:16px 18px;border-radius:16px;border:1px solid var(--line);background:var(--surface-1)">
+          <span style="display:flex;align-items:center;gap:10px"><span style="font-size:12.5px;font-weight:700;color:var(--muted)">YES</span><span style="font-size:15px;font-weight:600">Until you send it</span></span>
+          <span style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="#">Waiting for you to send →</a></span><span style="padding-left:15px;font-size:12.5px;color:var(--faint)">Supervisor always waits for you</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="Parts" style="display:flex;flex-direction:column;gap:24px;max-width:1480px">
+    <div style="display:flex;flex-direction:column;gap:6px;max-width:940px"><span class="type-label" style="color:var(--label)">3 · Built from what's already decided</span><h2 class="type-section-title" style="margin:0">One part per job, the same on every screen</h2><p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">v4 drew a different role chooser on each screen: a native select to give a role, a search list to mark one, two selects in the rule editor. Every frame below uses the parts already settled on their own boards. Only one part is new: the quiet "Waits for you" marker.</p></div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
+      <sc-for list="{{ parts }}" as="p" hint-placeholder-count="9">
+        <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;border-color:{{ p.edge }}">
+          <span style="display:flex;align-items:baseline;gap:10px"><span style="flex:1;font-size:15px;font-weight:600">{{ p.name }}</span><span style="font-size:12.5px;color:{{ p.tagInk }};font-weight:600">{{ p.tag }}</span></span>
+          <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ p.what }}</span>
+          <a href="{{ p.href }}" style="font-size:13px;font-weight:600">{{ p.from }}</a>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Two promises" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1480px">
+    <div class="card" style="padding:22px 24px;display:flex;flex-direction:column;gap:10px">
+      <span class="type-label" style="color:var(--label)">One place to change it</span>
+      <span style="font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Whether a role waits is changed only on Roles that wait. The role picker, a project's roles, the rule editor and Requests show it, read-only, with the same marker. Where there is room for one line, it ends with the way to change it: <a href="#">Set in Roles that wait →</a></span>
+    </div>
+    <div class="card" style="padding:22px 24px;display:flex;flex-direction:column;gap:10px">
+      <span class="type-label" style="color:var(--label)">A step left is said where you started</span>
+      <span style="font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Before: the dialog's footer note says whether this will finish now or wait. After: the outcome says what happened. The thing you changed keeps the Waiting for you to send → status, with one line saying why, until it's sent. That is the status a person's role row already uses. It is no new box and no new colour. Nothing is sent for you, and you stay where you are.</span>
+    </div>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+    <section data-screen-label="{{ g.title }}" style="display:flex;flex-direction:column;gap:28px">
+      <div style="display:flex;flex-direction:column;gap:6px;max-width:900px"><span class="type-label" style="color:var(--label)">{{ g.eyebrow }}</span><h2 class="type-section-title" style="margin:0">{{ g.title }}</h2><p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ g.note }}</p></div>
+      <div style="display:grid;grid-template-columns:repeat(2,720px);gap:44px 36px">
+        <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="4">
+          <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:baseline;gap:12px"><span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:none;border-radius:var(--radius-pill);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700">{{ f.n }}</span><span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:16px;font-weight:600">{{ f.label }}</span><span style="font-size:12.5px;color:var(--faint)">{{ f.where }}</span></span></div>
+            <div style="width:720px;height:{{ f.bh }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" loading="lazy" style="width:1440px;height:{{ f.h }}px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+            <figcaption style="font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty;max-width:700px">{{ f.note }}</figcaption>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+
+  <section style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px;max-width:1480px">
+    <div class="card" style="padding:22px 24px;display:flex;flex-direction:column;gap:10px">
+      <span class="type-label" style="color:var(--label)">Considered and set aside · a mode on each bundle and rule</span>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty">It would make the hidden bundle mode visible, but the choice would still sit on the container: all of a bundle's roles wait or none do, a waiting rule becomes a reminder, and three places decide one thing. Drawn in full on <a href="route-automation-settings-v2.dc.html#A">route-automation-settings-v2 →</a></p>
+    </div>
+    <div class="card" style="padding:22px 24px;display:flex;flex-direction:column;gap:10px;border-color:var(--accent-line)">
+      <span class="type-label" style="color:var(--label)">Your call · N15</span>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty">Drawn here: a marked role waits on every path, including a grant by hand and an approved request. The alternative treats your decision as the look, so those two go straight through. I recommend every path, so the sentence has no exceptions.</p>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px;max-width:1040px">
+
+<sc-if value="{{ fSettings }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Changes" title="Roles that wait for you" lede="When someone would gain or lose one of these roles, however it happens, the change waits in Pending changes until you send it. Every other role goes straight to Zitadel. For the whole makerspace." actions="{{ addRolesHeaderBtn }}" hint-size="100%,110px"></x-import></div>
+  <sc-if value="{{ showMove }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Bundles and rules no longer have their own modes" note="Once, after the update" hint-size="100%,60px"></x-import>
+    <p style="margin:0;padding:0 20px 14px;font-size:14.5px;line-height:1.6;max-width:84ch;text-wrap:pretty">Until today, 6 bundles and 2 rules waited for you and the rest went straight through. From now on, the role decides. These roles were given by something that waited. Choose the ones that should keep waiting.</p>
+    <sc-for list="{{ moveRows }}" as="r" hint-placeholder-count="4">
+      <div role="checkbox" aria-checked="{{ r.on }}" tabIndex="0" onClick="{{ r.toggle }}" style="display:flex;align-items:center;gap:14px;padding:12px 20px;border-top:1px solid var(--divider);background:{{ r.bg }};cursor:pointer;transition:background-color var(--duration-tint) var(--ease-tint)">
+        <span aria-hidden="true" style="width:24px;height:24px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid {{ r.seatEdge }};background:{{ r.seatBg }};display:inline-flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:13px;font-weight:700;transition:background-color var(--duration-tint) var(--ease-tint),border-color var(--duration-tint) var(--ease-tint)">{{ r.seatMark }}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ r.label }} <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span><span style="font-size:13px;color:var(--muted);text-wrap:pretty">{{ r.why }}</span></span>
+        <span style="width:110px;flex:none;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span>
+      </div>
+    </sc-for>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:16px 20px;border-top:1px solid var(--divider)">
+      <x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" on-click="{{ finishMove }}" hint-size="200px,34px">{{ moveLabel }}</x-import>
+      <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" on-click="{{ finishMove }}" hint-size="120px,34px">Mark none</x-import>
+      <span style="flex:1 1 260px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Nothing is sent while you choose. Changes already waiting stay waiting.</span>
+    </div>
+  </x-import>
+  </sc-if>
+  <sc-if value="{{ showMain }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,520px">
+    <sc-if value="{{ hasMarkOutcome }}" hint-placeholder-val="{{ false }}"><div style="padding:16px 20px 4px"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ markOutcome }}" placement="inline" hint-size="100%,40px"></x-import></div></sc-if>
+    <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="flex:1 1 0;min-width:0">Role ↑</span><span style="width:150px;flex:none">Marked</span><span style="width:110px;flex:none;text-align:right">People</span><span style="width:132px;flex:none"></span></x-import>
+    <sc-for list="{{ runs }}" as="run" hint-placeholder-count="3">
+      <div style="display:flex;flex-direction:column">
+        <span class="row-divider" style="display:flex;align-items:baseline;gap:6px;padding:14px 20px 4px;font-size:12.5px;font-weight:600;color:var(--label)"><a href="route-automation-settings-v5.dc.html?frame=project" style="color:var(--label)" style-hover="color:var(--accent-text);text-decoration:underline">{{ run.project }}</a><span>· {{ run.count }}</span></span>
+        <sc-for list="{{ run.rows }}" as="r" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:18px;padding:12px 20px;animation:{{ r.land }}">
+            <span style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">{{ r.label }} <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span><span style="font-size:13.5px;color:var(--muted);text-wrap:pretty">{{ r.via }}</span></span>
+            <span style="width:150px;flex:none;font-size:13.5px;color:var(--muted);text-wrap:pretty">{{ r.marked }}</span>
+            <span style="width:110px;flex:none;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span>
+            <span style="width:132px;flex:none;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" on-click="{{ r.unmark }}" hint-size="124px,34px">Stop waiting</x-import></span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+    <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px 20px">
+      <span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span><span style="font-size:13.5px;color:var(--muted)">13 changes to these roles</span>
+    </div>
+  </x-import>
+  <span style="padding:0 20px;font-size:13.5px;color:var(--muted)">The sound when drift is found is set for each browser, in your Account.</span>
+  </sc-if>
+</sc-if>
+
+<sc-if value="{{ fProject }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Projects" title="Laser Lab" lede="The roles this project offers, the apps that check them, and who has each." actions="{{ newRoleBtn }}" hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+    <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="flex:1 1 0;min-width:200px">Role ↑</span><span style="width:130px;flex:none">Group</span><span style="width:130px;flex:none">When given</span><span style="width:110px;flex:none;text-align:right">People</span></x-import>
+    <sc-for list="{{ projectRoles }}" as="r" hint-placeholder-count="4">
+      <div class="row-divider" style="display:flex;align-items:flex-start;gap:18px;padding:14px 20px;animation:{{ r.land }}">
+        <div style="flex:1 1 0;min-width:200px"><div style="font-size:15px;font-weight:600">{{ r.label }} <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></div><p style="margin:4px 0 0;max-width:80ch;font-size:13.5px;line-height:1.5;color:var(--muted)">{{ r.desc }}</p></div>
+        <span style="width:130px;flex:none;font-size:13.5px;color:var(--muted)">{{ r.group }}</span>
+        <span style="width:130px;flex:none;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:{{ r.whenInk }}"><sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if>{{ r.when }}</span>
+        <span style="width:110px;flex:none;text-align:right;font-size:15px;font-variant-numeric:tabular-nums">{{ r.n }}</span>
+      </div>
+    </sc-for>
+  </x-import>
+  <span style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;padding:0 20px;font-size:13.5px;color:var(--muted)"><span>2 of Laser Lab's roles always wait for you.</span><a href="route-automation-settings-v5.dc.html?frame=settings" style="font-weight:600">Set in Roles that wait →</a></span>
+  <sc-if value="{{ newRoleOpen }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ closeNewRole }}" size="md" labelled-by="nr-t" hint-size="560px,520px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="New role in Laser Lab" title-id="nr-t" lede="Name it after what it lets someone do. It's created in Zitadel too, so apps can check it." hint-size="100%,96px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:14px">
+      <sc-if value="{{ newRoleNotAdded }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="nr-name" hint-size="60px,18px">Name</x-import><x-import component-from-global-scope="Syndra.Input" id="nr-name" default-value="Laser cutter · Trainer" hint-size="100%,46px"></x-import></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="nr-key" hint-size="60px,18px">Key</x-import><x-import component-from-global-scope="Syndra.Input" id="nr-key" default-value="laser.trainer" hint-size="100%,46px"></x-import><x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,18px">How apps and Zitadel refer to it. It can't be changed later.</x-import></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="nr-desc" hint-size="120px,18px">What it lets someone do</x-import><x-import component-from-global-scope="Syndra.Textarea" id="nr-desc" default-value="Runs the operator induction." hint-size="100%,64px"></x-import></div>
+      </sc-if>
+      <sc-if value="{{ newRoleAdded }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ newRoleOutcome }}" placement="block" hint-size="100%,80px"></x-import>
+        <span style="font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">Should a trainer be checked every time? <a href="route-automation-settings-v5.dc.html?frame=add" style="font-weight:600">Make it wait for you →</a></span>
+      </sc-if>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ newRoleNote }}" hint-size="100%,72px">
+      <sc-if value="{{ newRoleNotAdded }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="ghost" on-click="{{ closeNewRole }}" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" on-click="{{ addNewRole }}" hint-size="140px,40px">Create the role</x-import></sc-if>
+      <sc-if value="{{ newRoleAdded }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ closeNewRole }}" hint-size="80px,40px">Close</x-import></sc-if>
+    </x-import>
+  </x-import>
+  </sc-if>
+</sc-if>
+
+<sc-if value="{{ fRulesPage }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Automatic rules" lede="Each rule is a sentence: anyone who has the first role also gets the second, now and whenever someone is given the first." actions="{{ newRuleBtn }}" hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,320px">
+    <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="flex:1 1 0;min-width:0">Rule</span><span style="width:110px;flex:none;text-align:right">People ↓</span></x-import>
+    <sc-for list="{{ rules }}" as="r" hint-placeholder-count="3">
+      <div class="row-divider" style="display:flex;align-items:flex-start;gap:18px;padding:14px 20px;animation:{{ r.land }}">
+        <span style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:14.5px;line-height:1.5;text-wrap:pretty"><span style="color:var(--muted)">Anyone with</span> <a href="route-automation-settings-v5.dc.html?frame=project" style="color:var(--ink)" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.a }}</a> <span style="color:var(--muted)">also gets</span> <strong style="font-weight:600">{{ r.b }}</strong></span>
+          <sc-if value="{{ r.pending }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span><span style="padding-left:15px;font-size:12.5px;color:var(--faint);text-wrap:pretty">Kabir Mehta and Meera Iyer don't have Operator yet · Operator always waits for you</span></span></sc-if>
+        </span>
+        <span style="width:110px;flex:none;text-align:right;font-size:15px;font-variant-numeric:tabular-nums">{{ r.n }}</span>
+      </div>
+    </sc-for>
+  </x-import>
+
+  <sc-if value="{{ ruleEditorOpen }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="ru-t" hint-size="600px,620px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="New automatic rule" title-id="ru-t" lede="Anyone who has the first role also gets the second, now and whenever someone is given the first." hint-size="100%,96px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+      <sc-if value="{{ ruleNotSaved }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100px,18px">Anyone with</x-import>
+          <button type="button" onClick="{{ openFirstPick }}" style="display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 8px 8px 16px;border-radius:14px;border:1px solid var(--line-strong);background:var(--surface-1);color:var(--ink);font:inherit;text-align:left;cursor:pointer"><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600">{{ ruleFirst.label }}</span><span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)"><span>{{ ruleFirst.project }} · {{ ruleFirst.n }} people</span><sc-if value="{{ ruleFirst.waits }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;color:var(--ink)"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span>Waits for you</span></sc-if></span></span><span style="padding:0 10px;font-size:13.5px;font-weight:600;color:var(--accent-text)">Change</span></button></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100px,18px">Also gets</x-import>
+          <button type="button" onClick="{{ openRulePick }}" style="display:flex;align-items:center;gap:12px;min-height:52px;padding:8px 8px 8px 16px;border-radius:14px;border:1px solid var(--line-strong);background:var(--surface-1);color:var(--ink);font:inherit;text-align:left;cursor:pointer"><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:14.5px;font-weight:600">{{ ruleTarget.label }}</span><span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)"><span>{{ ruleTarget.project }} · {{ ruleTarget.n }} people</span><sc-if value="{{ ruleTarget.waits }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;color:var(--ink)"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span>Waits for you</span></sc-if></span></span><span style="padding:0 10px;font-size:13.5px;font-weight:600;color:var(--accent-text)">Change</span></button></div>
+        <div style="display:flex;flex-direction:column;gap:4px;padding-top:2px"><span class="type-label" style="color:var(--label)">Who it reaches today</span><span style="font-size:14.5px;line-height:1.55;text-wrap:pretty">{{ ruleReach }}</span></div>
+      </sc-if>
+      <sc-if value="{{ ruleSaved }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ ruleOutcome }}" placement="block" hint-size="100%,80px"></x-import></sc-if>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ ruleNote }}" hint-size="100%,72px">
+      <sc-if value="{{ ruleNotSaved }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="ghost" on-click="{{ noop }}" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" on-click="{{ saveRule }}" hint-size="130px,40px">Save the rule</x-import></sc-if>
+      <sc-if value="{{ ruleSaved }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ closeRule }}" hint-size="80px,40px">Close</x-import></sc-if>
+    </x-import>
+  </x-import>
+  </sc-if>
+</sc-if>
+
+<sc-if value="{{ fBundlesPage }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Bundles" lede="Sets of roles handed out together. Give a bundle to someone and they get every role in it." actions="{{ newBundleBtn }}" hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,240px">
+    <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="flex:1 1 0;min-width:0">Bundle ↑</span><span style="width:110px;flex:none;text-align:right">People</span></x-import>
+    <sc-for list="{{ bundleList }}" as="b" hint-placeholder-count="4"><div class="row-divider" style="display:flex;align-items:flex-start;gap:18px;padding:14px 20px"><span style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">{{ b.name }} <span style="font-weight:500;font-size:12.5px;color:var(--faint)">{{ b.meta }}</span></span><span style="font-size:13.5px;color:var(--muted)">{{ b.desc }}</span></span><span style="width:110px;flex:none;text-align:right;font-size:15px;font-variant-numeric:tabular-nums">{{ b.n }}</span></div></sc-for>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ fBundle }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px">
+    <x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Bundles" title="Lab Tech" lede="Student staff who run the fabrication lab." meta="{{ labMeta }}" hint-size="100%,120px"></x-import>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px">
+    <span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span>
+    <span style="font-size:13.5px;color:var(--muted);text-wrap:pretty">v4 is published, but 9 people can't supervise the laser cutter until you send it. Supervisor always waits for you.</span>
+  </div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,340px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="What v4 gives" count="{{ five }}" hint-size="100%,60px"></x-import>
+    <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="flex:1 1 0;min-width:0">Role</span><span style="width:300px;flex:none">For the 11 people on v4</span></x-import>
+    <sc-for list="{{ labRoles }}" as="r" hint-placeholder-count="5">
+      <div class="row-divider" style="display:flex;align-items:flex-start;gap:18px;padding:13px 20px">
+        <span style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:15px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if><span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span><a href="route-automation-settings-v5.dc.html?frame=project" style="font-size:13.5px;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.project }}</a></span>
+        <span style="width:300px;flex:none;display:flex;flex-direction:column;gap:2px">
+          <sc-if value="{{ r.isIn }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>In Zitadel</span><sc-if value="{{ r.isNew }}" hint-placeholder-val="{{ false }}"><span style="padding-left:15px;font-size:12.5px;color:var(--faint)">New in v4, sent at 10:38</span></sc-if></sc-if>
+          <sc-if value="{{ r.isWaiting }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span><span style="padding-left:15px;font-size:12.5px;color:var(--faint)">New in v4 for 9 people · always waits for you</span></sc-if>
+        </span>
+      </div>
+    </sc-for>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ fPerson }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:4px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Rohan Mehta" meta="{{ rohanMeta }}" actions="{{ giveBtn }}" hint-size="100%,110px"></x-import></div>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 20px;border-radius:var(--radius-panel);border:1px solid var(--line);background:var(--surface-0)"><span class="type-label">Bundles</span><x-import component-from-global-scope="Syndra.Chip" hint-size="120px,30px">Lab Tech v3</x-import><span style="flex:1"></span><a href="route-automation-settings-v5.dc.html?frame=bundle" style="font-size:13.5px;font-weight:600">Manage bundles →</a></div>
+  <div style="padding:2px 20px 0">{{ personRead }}</div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,320px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:16px 20px"><span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line);color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span><span class="type-card-title"><a href="route-automation-settings-v5.dc.html?frame=project" style="color:inherit" style-hover="color:var(--accent-text);text-decoration:underline">Laser Lab</a></span><span style="font-size:13.5px;color:var(--faint)">{{ personRoleCount }} roles</span></div>
+    <div class="row-divider" style="padding:6px 20px 8px"><span class="type-label">Given</span></div>
+    <sc-for list="{{ personRoles }}" as="r" hint-placeholder-count="3">
+      <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:18px;padding:12px 20px;animation:{{ r.land }}">
+        <div style="width:230px;flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:15px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if><span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></div>
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:9px"><span style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px 5px 9px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:600;line-height:1;white-space:nowrap;background:{{ r.srcBg }};color:{{ r.srcInk }}"><i aria-hidden="true" style="display:block;width:8px;height:8px;box-sizing:border-box;border-radius:var(--radius-pill);background:{{ r.srcDot }};border:{{ r.srcRing }}"></i>{{ r.src }}</span><sc-if value="{{ r.viaBundle }}" hint-placeholder-val="{{ false }}"><a href="route-automation-settings-v5.dc.html?frame=bundle" style="font-size:13.5px;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline">Lab Tech</a></sc-if></div>
+        <span style="width:280px;flex:none;display:flex;flex-direction:column;gap:2px">
+          <sc-if value="{{ r.isIn }}" hint-placeholder-val="{{ true }}"><span style="display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>In Zitadel</span><span style="color:{{ r.endInk }};font-weight:{{ r.endWeight }}">{{ r.ends }}</span></span></sc-if>
+          <sc-if value="{{ r.isWaiting }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span><span style="padding-left:15px;font-size:12.5px;line-height:1.45;color:var(--faint);text-wrap:pretty">He can't supervise yet · Supervisor always waits for you</span></sc-if>
+        </span>
+        <span style="width:104px;flex:none;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Button" variant="{{ r.verbTone }}" size="sm" hint-size="96px,34px">{{ r.verb }}</x-import></span>
+      </div>
+    </sc-for>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ fRequests }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Requests" lede="What members have asked for. Approving gives it to them." hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.FilterBar" search="{{ reqSearch }}" filters="{{ reqPills }}" trailing="{{ reqSelect }}" hint-size="100%,44px"></x-import>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,520px">
+    <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:180px;flex:none">Person</span><span style="width:230px;flex:none">Asked for</span><span style="flex:1 1 0;min-width:0">Why</span><span style="width:56px;flex:none;text-align:right">Asked</span><span style="width:240px;flex:none">Decision</span></x-import>
+    <sc-for list="{{ requests }}" as="r" hint-placeholder-count="4">
+      <div class="row-divider" style="display:flex;align-items:flex-start;gap:18px;padding:14px 20px">
+        <span style="width:180px;flex:none;display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Avatar" name="{{ r.who }}" hint-size="28px,28px"></x-import><a href="route-automation-settings-v5.dc.html?frame=rohan" style="color:var(--ink);font-weight:600" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.who }}</a></span>
+        <span style="width:230px;flex:none;display:flex;flex-direction:column;gap:3px"><span style="display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 8px"><a href="route-automation-settings-v5.dc.html?frame=project" style="font-size:14.5px;color:var(--ink);text-wrap:pretty" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.role }}</a><sc-if value="{{ r.marked }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if></span><span style="font-size:12.5px;color:var(--faint)">{{ r.howLong }}</span></span>
+        <span style="flex:1 1 0;min-width:0;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ r.why }}</span>
+        <span style="width:56px;flex:none;text-align:right;font-size:13px;color:var(--faint)">{{ r.when }}</span>
+        <span style="width:240px;flex:none">
+          <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}"><span style="display:flex;gap:8px"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" on-click="{{ r.approve }}" hint-size="96px,34px">Approve</x-import><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Decline</x-import></span></sc-if>
+          <sc-if value="{{ r.done }}" hint-placeholder-val="{{ false }}"><span role="status" style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="7px,7px"></x-import>Approved</span><span style="padding-left:15px;font-size:12.5px;line-height:1.4;color:var(--muted);text-wrap:pretty">{{ r.note }}</span><sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span style="padding-left:15px;font-size:12.5px;font-weight:600"><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span></sc-if></span></sc-if>
+        </span>
+      </div>
+    </sc-for>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ fPending }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Changes" title="Pending changes" lede="Changes that have not reached Zitadel or a connected system yet. They wait for you to send them, in this order." actions="{{ sendBtn }}" hint-size="100%,100px"></x-import></div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <sc-if value="{{ sent }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ sentOutcome }}" placement="block" hint-size="100%,90px"></x-import></sc-if>
+    <sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.FilterBar" search="{{ pendingSearch }}" hint-size="100%,44px"></x-import><span style="font-size:13px;color:var(--muted)">They are sent in this order.</span></sc-if>
+  </div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,520px">
+    <sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:130px;flex:none">Who</span><span style="flex:1 1 0;min-width:0">Change</span><span style="width:150px;flex:none">Caused by</span><span style="width:110px;flex:none;text-align:right">Waiting</span></x-import>
+    <sc-for list="{{ pendingGroups }}" as="g" hint-placeholder-count="4">
+      <div>
+        <sc-if value="{{ g.multi }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--surface-0)"><button type="button" aria-expanded="{{ g.open }}" aria-label="{{ g.foldLabel }}" onClick="{{ g.toggle }}" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:var(--radius-pill);border:1px solid var(--line);background:none;color:var(--muted);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform:{{ g.rot }};transition:transform var(--duration-settle) var(--ease-settle)"><path d="M6 9l6 6 6-6"></path></svg></button><p style="margin:0;flex:1 1 0;min-width:0;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ g.lead }} <span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ g.handle }}</span></p></div></sc-if>
+        <sc-if value="{{ g.open }}" hint-placeholder-val="{{ true }}">
+        <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+          <div class="row-divider" style="display:flex;align-items:flex-start;gap:18px;padding:12px 20px">
+            <span style="width:130px;flex:none;font-size:14.5px;font-weight:600;text-wrap:pretty"><a href="{{ r.whoHref }}" style="color:inherit" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.who }}</a></span>
+            <span style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:14px;line-height:1.45;text-wrap:pretty"><span style="color:var(--muted)">Give</span> <a href="route-automation-settings-v5.dc.html?frame=project" style="color:inherit" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.role }}</a></span><sc-if value="{{ r.hasWhy }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:baseline;gap:8px;font-size:12.5px;line-height:1.45;color:{{ r.whyInk }};text-wrap:pretty"><sc-if value="{{ r.whyWarn }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import></sc-if>{{ r.why }}</span></sc-if></span>
+            <span style="width:150px;flex:none;display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.45"><a href="{{ r.causeHref }}" style="color:inherit;text-wrap:pretty" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.cause }}</a><span style="font-size:12.5px;color:var(--faint)">by Kanishk Singh</span></span>
+            <span style="width:110px;flex:none;text-align:right;font-size:13px;color:var(--faint)">{{ r.waiting }}</span>
+          </div>
+        </sc-for>
+        </sc-if>
+      </div>
+    </sc-for>
+    </sc-if>
+    <sc-if value="{{ sent }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Nothing is waiting for you to send." guidance="Every change Syndra has decided on has reached the system it was for." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ pickerOpen }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ pk.close }}" size="lg" labelled-by="pk-t" hint-size="880px,820px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="{{ pk.title }}" title-id="pk-t" lede="{{ pk.lede }}" hint-size="100%,96px"></x-import>
+  <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+    <sc-if value="{{ pk.notDone }}" hint-placeholder-val="{{ true }}">
+    <sc-if value="{{ pk.hasTop }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="pk-name" hint-size="60px,18px">Name</x-import><x-import component-from-global-scope="Syndra.Input" id="pk-name" default-value="Evening supervisors" placeholder="Who is this for?" hint-size="100%,46px"></x-import></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="pk-for" hint-size="120px,18px">What it's for</x-import><x-import component-from-global-scope="Syndra.Input" id="pk-for" default-value="Staff who sign off evening sessions" hint-size="100%,46px"></x-import></div>
+      </div>
+    </sc-if>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <x-import component-from-global-scope="Syndra.FieldLabel" html-for="pk-q" hint-size="100px,18px">{{ pk.fieldLabel }}</x-import>
+      <x-import component-from-global-scope="Syndra.Input" id="pk-q" placeholder="Search roles in every project" aria-label="Search roles" hint-size="100%,46px"></x-import>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-height:32px;padding:2px 0">
+        <span style="font-size:12.5px;font-weight:600;color:var(--label);margin-right:2px">Chosen</span>
+        <sc-if value="{{ pk.noneChosen }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--faint)">Nothing yet</span></sc-if>
+        <sc-for list="{{ pk.chips }}" as="c" hint-placeholder-count="2">
+          <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;border-radius:var(--radius-pill);border:1px solid var(--accent-line);background:var(--accent-soft);font-size:13px;font-weight:600">{{ c.label }}<button type="button" aria-label="{{ c.removeLabel }}" onClick="{{ c.remove }}" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:var(--radius-pill);background:none;color:var(--muted);font:inherit;font-size:14px;cursor:pointer" style-hover="background:var(--hover);color:var(--ink)">×</button></span>
+        </sc-for>
+      </div>
+      <div style="max-height:{{ pk.listH }}px;overflow-y:auto;border-radius:var(--radius-inner);border:1px solid var(--line)">
+        <sc-for list="{{ pk.groups }}" as="g" hint-placeholder-count="6">
+          <div class="{{ g.divider }}">
+            <button type="button" aria-expanded="{{ g.open }}" onClick="{{ g.toggle }}" style="width:100%;display:flex;align-items:center;gap:12px;min-height:48px;padding:8px 14px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer" style-hover="background:var(--hover)">
+              <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line);color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform:{{ g.rot }};transition:transform var(--duration-settle) var(--ease-settle)"><path d="M6 9l6 6 6-6"></path></svg></span>
+              <span style="flex:1;min-width:0;font-size:14.5px;font-weight:600">{{ g.name }}</span>
+              <span style="font-size:12.5px;font-weight:600;color:{{ g.countColor }}">{{ g.count }}</span>
+            </button>
+            <sc-if value="{{ g.open }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:4px;padding:0 12px 10px 52px">
+                <sc-for list="{{ g.items }}" as="r" hint-placeholder-count="3">
+                  <div role="{{ r.ariaRole }}" aria-checked="{{ r.aria }}" aria-disabled="{{ r.locked }}" tabIndex="0" onClick="{{ r.toggle }}" style="display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 10px;border-radius:12px;border:1px solid {{ r.edge }};background:{{ r.bg }};cursor:{{ r.cursor }};transition:background-color var(--duration-tint) var(--ease-tint),border-color var(--duration-tint) var(--ease-tint)">
+                    <span aria-hidden="true" style="line-height:1;width:24px;height:24px;flex:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid {{ r.seatEdge }};background:{{ r.seatBg }};color:{{ r.seatInk }};font-size:13px;font-weight:700;transition:background-color var(--duration-tint) var(--ease-tint),border-color var(--duration-tint) var(--ease-tint)">{{ r.seatMark }}</span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:14.5px;font-weight:600">{{ r.label }}<sc-if value="{{ r.showWaits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if><span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span><span style="font-size:13px;color:var(--muted)">{{ r.desc }}</span></span>
+                    
+                    <span style="min-width:96px;text-align:right;font-size:12.5px;color:var(--faint);white-space:nowrap">{{ r.note }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ pk.hasLegend }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:12.5px;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:6px;color:var(--ink)"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span>Waits for you</span><span>means a change to who has it waits for you to send.</span><a href="route-automation-settings-v5.dc.html?frame=settings" style="font-weight:600">Set in Roles that wait →</a></span></sc-if>
+    </div>
+    <sc-if value="{{ pk.hasGive }}" hint-placeholder-val="{{ false }}">
+      <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px 24px;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="120px,18px">For how long?</x-import><x-import component-from-global-scope="Syndra.Segmented" size="sm" label="For how long?" value="term" options="{{ howLongOpts }}" hint-size="340px,36px"></x-import><x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,18px">Until 30 November, then it stops.</x-import></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="pk-why" hint-size="60px,18px">Why?</x-import><x-import component-from-global-scope="Syndra.Textarea" id="pk-why" default-value="Finished supervisor training on Friday." hint-size="100%,64px"></x-import></div>
+      </div>
+    </sc-if>
+    </sc-if>
+    <sc-if value="{{ pk.done }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ pk.outcome }}" placement="block" hint-size="100%,90px"></x-import></sc-if>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ pk.note }}" hint-size="100%,72px">
+    <sc-if value="{{ pk.notDone }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="ghost" on-click="{{ pk.close }}" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" disabled="{{ pk.cantAct }}" on-click="{{ pk.act }}" hint-size="170px,40px">{{ pk.verb }}</x-import></sc-if>
+    <sc-if value="{{ pk.done }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ pk.finish }}" hint-size="80px,40px">Close</x-import></sc-if>
+  </x-import>
+</x-import>
+</sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.frame = new URLSearchParams(window.location.search).get("frame");
+    const f = this.frame || "";
+    try { if (f) window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {}
+    const R = (id, label, key, desc, n, waits, group) => ({ id, label, key, desc, n, waits, group });
+    this.cat = [
+      { p: "3D printing", roles: [R("print", "Printer · Member", "print.member", "Send jobs to the print queue", 57, false, "Machines")] },
+      { p: "Laser Lab", roles: [R("mem", "Laser cutter · Member", "laser.member", "Can book the laser bay", 51, false, "Machines"), R("op", "Laser cutter · Operator", "laser.operator", "Can start a cut without staff in the room", 9, true, "Machines"), R("sup", "Laser cutter · Supervisor", "laser.supervisor", "Signs off inductions and evening sessions", 4, true, "Machines"), R("door", "Laser bay · Door", "laserbay.door", "Badge entry to the laser bay", 9, false, "Doors")] },
+      { p: "Main lab", roles: [R("front", "Front door", "main.door", "Badge entry to the makerspace", 53, false, "Doors"), R("lockers", "Lockers", "main.lockers", "A locker for the term", 48, false, "Spaces")] },
+      { p: "Metal shop", roles: [R("weld", "Welder · Member", "metal.weld", "Use the MIG welder", 6, true, "Machines")] },
+      { p: "Network storage", roles: [R("store", "Storage · Member", "storage.member", "A home folder on TrueNAS", 15, true, "Storage")] },
+      { p: "Wood shop", roles: [R("band", "Bandsaw · Member", "wood.bandsaw", "Use the bandsaw", 73, false, "Machines"), R("wdoor", "Wood shop · Door", "wood.door", "Badge entry to the wood shop", 22, false, "Doors")] },
+    ];
+    const pickerFor = { add: "wait", newbundle: "bundle", rulepick: "rule", give: "give" };
+    this.state = {
+      moveDone: f !== "move", move: { sup: true, store: true, wdoor: false, door: false },
+      unmarked: [], added: [], land: null, markOutcome: null,
+      picker: pickerFor[f] || null, pickDone: false,
+      chosen: { wait: ["door"], bundle: ["sup", "door", "front"], give: ["sup"] },
+      ruleTarget: "op", ruleFirst: "sup", open: {},
+      newRoleOpen: f === "newrole", newRoleAdded: false, roleAdded: false,
+      ruleEditorOpen: f === "newrule" || f === "rulepick", ruleSaved: false, ruleListed: f === "rules",
+      handGiven: f === "rohan" ? ["sup"] : [],
+      approved: { aanya: true, rohan: true, priya: true, ishaan: false },
+      folded: {}, sent: false,
+    };
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 1, expiring_grants: 2, drift: 3, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 13 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+    ];
+  }
+  componentWillUnmount() { clearTimeout(this._l); }
+  landOn(ids) { this.setState({ land: ids }); clearTimeout(this._l); this._l = setTimeout(() => this.setState({ land: null }), 1600); }
+  roles() { const out = []; this.cat.forEach(g => g.roles.forEach(r => out.push(Object.assign({ project: g.p }, r)))); return out; }
+  waitSet() { const s = this.state; const set = new Set(this.roles().filter(r => r.waits).map(r => r.id)); s.added.forEach(a => set.add(a)); s.unmarked.forEach(u => set.delete(u)); return set; }
+  list(a) { return a.length <= 1 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]; }
+  renderVals() {
+    const s = this.state, f = this.frame || "", S = window.Syndra, h = React.createElement, P = "route-automation-settings-v5.dc.html?frame=";
+    const all = this.roles(), byId = {}; all.forEach(r => byId[r.id] = r);
+    const waits = this.waitSet();
+    const land = (id) => s.land && s.land.includes(id) ? "sy-land 1.6s var(--ease-tint) both" : "none";
+    const seat = (on, lk) => ({ seatEdge: on ? "var(--accent)" : "var(--line-strong)", seatBg: on ? "var(--accent)" : lk ? "var(--surface-2)" : "transparent", seatInk: on ? "var(--accent-ink)" : "var(--faint)", seatMark: on || lk ? "✓" : "" });
+    const btn = (label, onClick, variant) => S ? h(S.Button, { variant: variant || "outline", size: "sm", onClick }, label) : null;
+    const hbtn = (label, onClick) => S ? h(S.Button, { variant: "accent", onClick }, label) : null;
+
+    // picker
+    const mode = s.picker;
+    const has = { mem: "through Lab Tech", op: "by hand", band: "through Lab Tech" };
+    const chosenIds = mode === "rule" ? [s.ruleTarget] : mode === "first" ? [s.ruleFirst] : mode ? (s.chosen[mode] || []) : [];
+    const lockedOf = (r) => mode === "wait" ? (waits.has(r.id) ? "On your list" : null) : mode === "give" ? (has[r.id] ? "He has it · " + has[r.id] : null) : mode === "rule" ? (r.id === s.ruleFirst ? "The first role" : null) : mode === "first" ? (r.id === s.ruleTarget ? "The role they get" : null) : null;
+    const defaultOpen = { wait: ["Laser Lab"], bundle: ["Laser Lab", "Main lab"], rule: ["Laser Lab"], first: ["Laser Lab"], give: ["Laser Lab"] };
+    const toggleChoice = (id) => {
+      if (mode === "rule") { this.setState({ ruleTarget: id, picker: null }); return; }
+      if (mode === "first") { this.setState({ ruleFirst: id, picker: null }); return; }
+      this.setState(st => { const cur = st.chosen[mode] || []; const next = cur.includes(id) ? cur.filter(x => x !== id) : cur.concat([id]); return { chosen: Object.assign({}, st.chosen, { [mode]: next }) }; });
+    };
+    const groups = !mode ? [] : this.cat.map((g, gi) => {
+      const k = mode + "|" + g.p, open = s.open[k] != null ? s.open[k] : (defaultOpen[mode] || []).includes(g.p);
+      const items = g.roles.map(r => { const lk = lockedOf(r), on = chosenIds.includes(r.id);
+        return Object.assign({}, r, seat(on, !!lk), { locked: !!lk, ariaRole: lk ? undefined : mode === "rule" || mode === "first" ? "radio" : "checkbox", aria: String(on), cursor: lk ? "default" : "pointer",
+          edge: on ? "var(--accent-line)" : "transparent", bg: on ? "var(--accent-soft)" : lk ? "var(--surface-0)" : "transparent",
+          showWaits: mode !== "wait" && waits.has(r.id), note: lk || (r.n ? r.n + " people" : "Nobody yet"), toggle: () => { if (!lk) toggleChoice(r.id); } }); });
+      const c = g.roles.filter(r => chosenIds.includes(r.id)).length;
+      return { name: g.p, open, rot: open ? "none" : "rotate(-90deg)", divider: gi ? "row-divider" : "", items,
+        count: c ? c + " of " + g.roles.length + " chosen" : g.roles.length + (g.roles.length === 1 ? " role" : " roles"), countColor: c ? "var(--accent-text)" : "var(--faint)",
+        toggle: () => this.setState(st => ({ open: Object.assign({}, st.open, { [k]: !open }) })) };
+    });
+    const ch = chosenIds.map(id => byId[id]).filter(Boolean);
+    const names = (a) => this.list(a.map(r => r.label));
+    const sumN = (a) => a.reduce((x, r) => x + r.n, 0);
+    let pk = { title: "", lede: "", fieldLabel: "", note: "", verb: "", hasTop: false, hasGive: false, hasLegend: true, listH: 330 };
+    const close = () => this.setState({ picker: null, pickDone: false });
+    if (mode === "wait") {
+      pk = Object.assign(pk, { title: "Roles that always wait for you", lede: "Choose roles whose changes should wait for you to send. It applies to every way someone gains or loses them.", fieldLabel: "Roles", hasLegend: false, listH: 420,
+        note: ch.length ? "From now on, " + names(ch) + (ch.length > 1 ? " wait" : " waits") + " for you. " + sumN(ch) + " people have " + (ch.length > 1 ? "them" : "it") + " today, and nothing changes for them now." : "Choose the roles that should always wait for you.",
+        verb: ch.length ? "Mark " + ch.length + (ch.length > 1 ? " roles" : " role") : "Mark roles",
+        act: () => { const ids = ch.map(r => r.id); this.setState(st => ({ added: st.added.concat(ids.filter(i => !st.added.includes(i))), unmarked: st.unmarked.filter(u => !ids.includes(u)), picker: null, markOutcome: { kind: "applied", message: names(ch) + (ch.length > 1 ? " now wait" : " now waits") + " for you", detail: "Nothing changed for the " + sumN(ch) + " people who have " + (ch.length > 1 ? "them" : "it") + "." }, chosen: Object.assign({}, st.chosen, { wait: [] }) })); this.landOn(ids); } });
+    } else if (mode === "bundle") {
+      const w = ch.filter(r => waits.has(r.id)), g = ch.filter(r => !waits.has(r.id));
+      pk = Object.assign(pk, { title: "New bundle", lede: "Name it after who it's for. The roles you choose become version 1, so it can be given straight away.", fieldLabel: "What it gives", hasTop: true, listH: 300,
+        note: !ch.length ? "Choose the roles it gives." : "When someone joins, " + (g.length ? names(g) + (g.length > 1 ? " reach" : " reaches") + " them straight away" : "nothing reaches them straight away") + (w.length ? ". " + names(w) + (w.length > 1 ? " wait" : " waits") + " for you to send." : "."),
+        verb: "Create with " + ch.length + (ch.length === 1 ? " role" : " roles"),
+        act: () => this.setState({ pickDone: true }), outcome: { kind: "applied", message: "Evening supervisors is ready, on version 1", detail: "Nobody is on it yet, so nothing is waiting. Give it from someone's page or from People." } });
+    } else if (mode === "rule") {
+      const t = byId[s.ruleTarget];
+      pk = Object.assign(pk, { title: "What anyone with Supervisor also gets", lede: "Choose one role. You'll see who it reaches before you save the rule.", fieldLabel: "The role they get", listH: 440,
+        note: t ? t.label + (waits.has(t.id) ? " always waits for you, so what this rule gives will wait for you to send." : " goes straight to Zitadel.") : "", verb: "Use this role", act: () => this.setState({ picker: null }) });
+      pk.close = () => this.setState({ picker: null });
+    } else if (mode === "first") {
+      const fr0 = byId[s.ruleFirst];
+      pk = Object.assign(pk, { title: "Anyone with", lede: "Choose the role that sets the rule off. You'll see who it reaches before you save.", fieldLabel: "The first role", listH: 440,
+        note: fr0 ? fr0.n + " people have " + fr0.label + " today." : "", verb: "Use this role", act: () => this.setState({ picker: null }) });
+      pk.close = () => this.setState({ picker: null });
+    } else if (mode === "give") {
+      const w = ch.filter(r => waits.has(r.id)), g = ch.filter(r => !waits.has(r.id));
+      pk = Object.assign(pk, { title: "Give Rohan Mehta a role", lede: "Roles he already has are ticked and say how he has them.", fieldLabel: "Roles", hasGive: true, listH: 280,
+        note: !ch.length ? "Choose a role to give Rohan." : !w.length ? "Rohan can use " + (g.length > 1 ? "them" : "it") + " as soon as you give " + (g.length > 1 ? "them" : "it") + "." : !g.length ? names(w) + (w.length > 1 ? " always wait" : " always waits") + " for you, so Rohan gets " + (w.length > 1 ? "them" : "it") + " once you send " + (w.length > 1 ? "them" : "it") + "." : names(g) + " reaches him straight away. " + names(w) + " waits for you to send.",
+        verb: "Give " + ch.length + (ch.length === 1 ? " role" : " roles"),
+        act: () => this.setState({ pickDone: true }),
+        outcome: w.length ? { kind: "queued", message: "Given in Syndra. Not in Zitadel yet", detail: "Rohan gets " + names(w) + " once you send " + (w.length > 1 ? "them" : "it") + " from Pending changes. His page says so until then." + (g.length ? " " + names(g) + " reached Zitadel." : "") } : { kind: "applied", message: "Rohan can use " + names(g) + " now" },
+        finish: () => { const ids = ch.map(r => r.id); this.setState(st => ({ picker: null, pickDone: false, handGiven: st.handGiven.concat(ids.filter(i => !st.handGiven.includes(i))) })); this.landOn(ids); } });
+    }
+    pk = Object.assign({ close, finish: close, act: close, outcome: null }, pk, { groups, chips: mode === "rule" || mode === "first" ? [] : ch.map(r => ({ label: r.label, removeLabel: "Remove " + r.label, remove: () => toggleChoice(r.id) })), noneChosen: mode !== "rule" && mode !== "first" && !ch.length, cantAct: !ch.length, done: s.pickDone, notDone: !s.pickDone });
+
+    // settings list
+    const viaOf = { op: "Through Lab Tech, Staff, by hand and a rule", sup: "Through Staff and by hand", weld: "Through Metal shop", store: "Through Safety basics and Staff", door: "By a rule from Laser cutter · Operator", front: "Through Safety basics and Staff", print: "Through Safety basics and Studio", mem: "Through Lab Tech and New members", band: "Through Lab Tech, New members and Wood shop", wdoor: "By a rule from Bandsaw · Member", lockers: "Through Safety basics" };
+    const markedOf = { op: "Kanishk Singh, 2 Oct", sup: "Kanishk Singh, 2 Oct", weld: "Kanishk Singh, 14 Sept", store: "Kanishk Singh, 14 Sept" };
+    const runs = [];
+    this.cat.forEach(g => { const rows = g.roles.filter(r => waits.has(r.id)).map(r => Object.assign({}, r, { via: viaOf[r.id], marked: markedOf[r.id] && !s.added.includes(r.id) ? markedOf[r.id] : "Kanishk Singh, just now", land: land(r.id), unmark: () => this.setState(st => ({ unmarked: st.unmarked.concat([r.id]), added: st.added.filter(a => a !== r.id), markOutcome: { kind: "applied", message: r.label + " goes straight to Zitadel now", detail: "Changes already waiting stay in Pending changes." } })) })); if (rows.length) runs.push({ project: g.p, rows, count: rows.length }); });
+    const moveDefs = [["sup", "Given by Staff, which waited"], ["store", "Given by Staff, which waited"], ["wdoor", "Given by the rule from Bandsaw · Member, which waited"], ["door", "Given by the rule from Laser cutter · Operator, which waited"]];
+    const moveRows = moveDefs.map(([id, why]) => { const r = byId[id], on = !!s.move[id]; return Object.assign({}, r, seat(on, false), { why, on, bg: on ? "var(--accent-soft)" : "transparent", toggle: () => this.setState(st => ({ move: Object.assign({}, st.move, { [id]: !st.move[id] }) })) }); });
+    const chosenMove = moveDefs.filter(([id]) => s.move[id]).length;
+
+    // project
+    const lab = this.cat.find(g => g.p === "Laser Lab").roles.concat(s.roleAdded ? [R0()] : []);
+    function R0() { return { id: "trainer", label: "Laser cutter · Trainer", key: "laser.trainer", desc: "Runs the operator induction.", n: 0, group: "Machines" }; }
+    const projectRoles = lab.map(r => { const w = waits.has(r.id); return Object.assign({}, r, { waits: w, when: w ? "Waits for you" : "Straight away", whenInk: w ? "var(--ink)" : "var(--faint)", land: land(r.id), n: r.n || "0" }); });
+
+    // rules
+    const t = byId[s.ruleTarget], tWaits = waits.has(s.ruleTarget);
+    const reachOf = { op: "4 people have Laser cutter · Supervisor. 2 already have Operator; Kabir Mehta and Meera Iyer would get it.", door: "4 people have Laser cutter · Supervisor. 3 already have Laser bay · Door; Meera Iyer would get it.", front: "All 4 people with Supervisor already have Front door, so nobody gets anything today." };
+    const reach = reachOf[s.ruleTarget] || "4 people have Laser cutter · Supervisor. Some would get " + t.label + ".";
+    const rulesList = [
+      { a: "Bandsaw · Member", b: "Wood shop · Door", n: 22, pending: false, land: "none" },
+      { a: "Laser cutter · Operator", b: "Laser bay · Door", n: 9, pending: false, land: "none" },
+    ].concat(s.ruleListed ? [{ a: "Laser cutter · Supervisor", b: t.label, n: 4, pending: tWaits && !s.sent, land: land("rule") }] : []);
+
+    // person
+    const personBase = [
+      { id: "mem", label: "Laser cutter · Member", key: "laser.member", src: "Via bundle", viaBundle: true, isIn: true, ends: "No expiry", verb: "Remove", verbTone: "outline" },
+      { id: "op", label: "Laser cutter · Operator", key: "laser.operator", src: "Direct", viaBundle: false, isIn: true, ends: "Ends 30 Nov", verb: "Revoke", verbTone: "danger" },
+    ];
+    const personAdded = s.handGiven.filter(id => !has[id]).map(id => { const r = byId[id], w = waits.has(id); return { id, label: r.label, key: r.key, src: "Direct", viaBundle: false, isIn: !w, isWaiting: w, ends: "Ends 30 Nov", verb: w ? "Withdraw" : "Revoke", verbTone: w ? "outline" : "danger" }; });
+    const personRoles = personBase.concat(personAdded).map(r => Object.assign({ isWaiting: false }, r, { waits: waits.has(r.id), land: land(r.id), srcBg: r.src === "Direct" ? "var(--accent-soft)" : "var(--surface-2)", srcInk: r.src === "Direct" ? "var(--accent-text)" : "var(--ink)", srcDot: r.src === "Direct" ? "var(--accent)" : "transparent", srcRing: r.src === "Direct" ? "0" : "2px solid var(--ink)", endInk: r.ends === "No expiry" ? "var(--faint)" : "var(--muted)", endWeight: 400 }));
+
+    // requests
+    const reqDefs = [
+      { id: "aanya", who: "Aanya Rao", role: "Laser cutter · Member", rid: "mem", howLong: "Until the end of term · 30 Nov", why: "“Finished the induction on Friday.”", when: "1d", kind: "go" },
+      { id: "rohan", who: "Rohan Mehta", role: "Laser cutter · Supervisor", rid: "sup", howLong: "Until the end of term · 30 Nov", why: "“Supervisor training done, so I can sign off evening sessions.”", when: "3h", kind: "wait" },
+      { id: "priya", who: "Priya Nair", role: "Printer · Member", rid: "print", howLong: "For a month · until 13 Nov", why: "“Prints for my thesis models.”", when: "2h", kind: "fail" },
+      { id: "ishaan", who: "Ishaan Kapoor", role: "Bandsaw · Member", rid: "band", howLong: "Until the end of term · 30 Nov", why: "“Building the robotics team's chassis this term.”", when: "20m", kind: "go" },
+    ];
+    const requests = reqDefs.map(r => { const done = !!s.approved[r.id];
+      const o = r.kind === "wait" ? { tone: "warn", note: "Supervisor always waits for you, so Rohan can't supervise yet", waits: !s.sent } : r.kind === "fail" ? { tone: "warn", note: "Zitadel didn't answer at 10:42, so Priya can't print yet", waits: !s.sent } : { tone: "healthy", note: r.who.split(" ")[0] + " can use it now", waits: false };
+      return Object.assign({}, r, o, { marked: waits.has(r.rid), open: !done, done, approve: () => this.setState(st => ({ approved: Object.assign({}, st.approved, { [r.id]: true }) })) }); });
+
+    // pending
+    const fd = s.folded;
+    const pg = (key, lead, handle, rows) => { const open = !fd[key]; return { multi: !!lead, lead, handle, rows, open, rot: open ? "none" : "rotate(-90deg)", foldLabel: (open ? "Fold " : "Open ") + "these " + rows.length + " changes", toggle: () => this.setState(st => ({ folded: Object.assign({}, st.folded, { [key]: !st.folded[key] }) })) }; };
+    const prow = (who, role, cause, causeHref, waiting, why, warn) => ({ who, whoHref: P + "rohan", role, cause, causeHref, waiting, hasWhy: !!why, why, whyWarn: !!warn, whyInk: warn ? "var(--warn-text)" : "var(--faint)" });
+    const nine = ["Aanya Rao", "Ishaan Kapoor", "Kabir Mehta", "Meera Iyer", "Omar Haddad", "Lena Brandt", "Wei Chen", "Jules Fontaine", "Tara Bose"];
+    const pendingGroups = [
+      pg("rohan", "", "", [prow("Rohan Mehta", "Laser cutter · Supervisor", "Given by hand", P + "rohan", "14m", "Waits because Supervisor always waits for you")]),
+      pg("lab", "These 9 changes come from one edit: Kanishk Singh published Lab Tech v4. They wait because Supervisor always waits for you, and are sent together or not at all.", "c_8e21f0", nine.map(n => prow(n, "Laser cutter · Supervisor", "Lab Tech v4", P + "bundle", "7m", ""))),
+      pg("priya", "", "", [prow("Priya Nair", "Printer · Member", "Her request, approved", P + "requests", "3m", "Tried when it was approved at 10:42. Zitadel didn't answer.", true)]),
+      pg("rule", "These 2 changes come from one rule: anyone with Laser cutter · Supervisor also gets Laser cutter · Operator. They wait because Operator always waits for you.", "c_19bd04", [prow("Kabir Mehta", "Laser cutter · Operator", "The new rule", P + "rules", "1m", ""), prow("Meera Iyer", "Laser cutter · Operator", "The new rule", P + "rules", "1m", "")]),
+    ];
+
+    const fr = (n, id, label, where, note, hh) => ({ n, src: P + id, label, where, note, h: hh || 1000, bh: (hh || 1000) / 2 });
+    const todayRow = (path, gr, gl, what, detail, seen, seenDot, seenInk) => ({ path, glyphRadius: gr, glyphLine: gl, what, detail, seen, seenDot, seenInk });
+    const part = (name, what, from, href, isNew) => ({ name, what, from, href, tag: isNew ? "New" : "Settled", tagInk: isNew ? "var(--accent-text)" : "var(--faint)", edge: isNew ? "var(--accent-line)" : "var(--line)" });
+
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      pathname: { project: "/projects/laser", newrole: "/projects/laser", newrule: "/policies", rulepick: "/policies", rules: "/policies", newbundle: "/bundles", bundle: "/bundles", give: "/users/rohan", rohan: "/users/rohan", requests: "/requests", pending: "/governance/pending" }[f] || "/automation/settings",
+      fSettings: ["settings", "add", "move"].includes(f), fProject: ["project", "newrole"].includes(f), fRulesPage: ["newrule", "rulepick", "rules"].includes(f), fBundlesPage: f === "newbundle", fBundle: f === "bundle", fPerson: ["give", "rohan"].includes(f), fRequests: f === "requests", fPending: f === "pending",
+      pickerOpen: !!mode, pk,
+      howLongOpts: [{ value: "7", label: "A week" }, { value: "30", label: "A month" }, { value: "term", label: "Until the end of term" }],
+      onOff: [{ value: "off", label: "Off" }, { value: "on", label: "On" }],
+      showMove: !s.moveDone, showMain: s.moveDone, moveRows, moveLabel: chosenMove ? "Mark " + chosenMove + " and finish" : "Finish with none marked", finishMove: () => this.setState({ moveDone: true }),
+      runs, waitCount: waits.size, openWaitPicker: () => this.setState({ picker: "wait", pickDone: false }),
+      addRolesBtn: btn("Add roles", () => this.setState({ picker: "wait", pickDone: false })),
+      addRolesHeaderBtn: hbtn("Add roles", () => this.setState({ picker: "wait", pickDone: false })),
+      hasMarkOutcome: !!s.markOutcome, markOutcome: s.markOutcome || { kind: "applied", message: "" },
+      newRoleBtn: hbtn("New role", () => this.setState({ newRoleOpen: true, newRoleAdded: false })), projectRoles,
+      newRoleOpen: s.newRoleOpen, newRoleNotAdded: !s.newRoleAdded, newRoleAdded: s.newRoleAdded,
+      newRoleNote: s.newRoleAdded ? "" : "When it's given, it goes straight to Zitadel, like most roles.",
+      addNewRole: () => this.setState({ newRoleAdded: true, roleAdded: true }),
+      closeNewRole: () => { const a = s.newRoleAdded; this.setState({ newRoleOpen: false }); if (a) this.landOn(["trainer"]); },
+      newRoleOutcome: { kind: "applied", message: "Laser cutter · Trainer is in Laser Lab", detail: "Nobody has it yet. When it's given, it goes straight to Zitadel." },
+      newRuleBtn: hbtn("New rule", () => this.setState({ ruleEditorOpen: true, ruleSaved: false })),
+      rules: rulesList, ruleEditorOpen: s.ruleEditorOpen && mode !== "rule" && mode !== "first",
+      ruleTarget: { label: t.label, project: t.project, n: t.n, waits: tWaits }, ruleReach: s.ruleFirst === "sup" ? reach : byId[s.ruleFirst].n + " people have " + byId[s.ruleFirst].label + ". Those without " + t.label + " would get it.",
+      ruleFirst: { label: byId[s.ruleFirst].label, project: byId[s.ruleFirst].project, n: byId[s.ruleFirst].n, waits: waits.has(s.ruleFirst) }, openFirstPick: () => this.setState({ picker: "first" }),
+      ruleNote: s.ruleSaved ? "" : tWaits ? "Kabir and Meera, and anyone this rule reaches later, will wait for you to send." : "What this rule gives goes straight to Zitadel.",
+      openRulePick: () => this.setState({ picker: "rule" }),
+      ruleNotSaved: !s.ruleSaved, ruleSaved: s.ruleSaved, saveRule: () => this.setState({ ruleSaved: true }),
+      ruleOutcome: tWaits ? { kind: "queued", message: "Rule saved. Not in Zitadel yet for Kabir and Meera", detail: "They get Laser cutter · Operator once you send it from Pending changes. The rule's row says so until then." } : { kind: "applied", message: "Rule saved. Meera can open the laser bay now" },
+      closeRule: () => { this.setState({ ruleEditorOpen: false, ruleListed: true }); this.landOn(["rule"]); },
+      newBundleBtn: hbtn("New bundle", () => this.setState({ picker: "bundle", pickDone: false })),
+      bundleList: [{ name: "Lab Tech", meta: "v4", desc: "Student staff who run the fabrication lab", n: 11 }, { name: "New members", meta: "v2", desc: "Everyone in their first term", n: 40 }, { name: "Safety basics", meta: "v3", desc: "Everyone who has done the safety induction", n: 53 }, { name: "Staff", meta: "v2", desc: "Makerspace staff", n: 5 }],
+      labMeta: S ? h(S.MetaRow, null, ["v4", "11 people", "published 10:38 by Kanishk Singh"]) : null, five: 5,
+      labRoles: [
+        { waits: true, label: "Laser cutter · Supervisor", key: "laser.supervisor", project: "Laser Lab", isIn: s.sent, isNew: s.sent, isWaiting: !s.sent },
+        { label: "Printer · Member", key: "print.member", project: "3D printing", isIn: true, isNew: true, isWaiting: false },
+        { label: "Laser cutter · Member", key: "laser.member", project: "Laser Lab", isIn: true, isNew: false, isWaiting: false },
+        { waits: true, label: "Laser cutter · Operator", key: "laser.operator", project: "Laser Lab", isIn: true, isNew: false, isWaiting: false },
+        { label: "Bandsaw · Member", key: "wood.bandsaw", project: "Wood shop", isIn: true, isNew: false, isWaiting: false },
+      ],
+      rohanMeta: S ? h(S.MetaRow, null, ["rohan.mehta@makerspace.edu", "Research assistant", "Mechanical Engineering"]) : null,
+      giveBtn: hbtn("Give a role", () => this.setState({ picker: "give", pickDone: false })),
+      personRoles, personRoleCount: personRoles.length,
+      requests,
+      sendBtn: S && !s.sent ? h(S.Button, { variant: "accent", onClick: () => this.setState({ sent: true }) }, "Send 13 changes") : null,
+      sent: s.sent, notSent: !s.sent, pendingGroups,
+      pendingSearch: S ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search pending changes by person or role" }) : null,
+      reqSearch: S ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search requests by person or role" }) : null,
+      reqPills: S ? h(S.FilterPills, { label: "Filter by status", value: "pending", onChange: () => {}, options: [{ value: "pending", label: "Open" }, { value: "approved", label: "Approved" }, { value: "declined", label: "Declined" }] }) : null,
+      reqSelect: S ? h(S.SelectModeToggle, { active: false, onToggle: () => {} }) : null,
+      personRead: S ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 30000).toISOString(), current: true }, subject: "Rohan's access" }) : null,
+      sentOutcome: { kind: "applied", message: "13 changes reached Zitadel", detail: "Rohan can supervise, Lab Tech v4 is in place for all 11, Priya can print, and Kabir and Meera can operate. Each of those pages has stopped saying a step is left." },
+      todayRows: [
+        todayRow("A bundle", "3px", "solid", "Its own mode", "Picked from the default when the bundle was made. No screen shows it or changes it.", "Nowhere", "var(--danger)", "var(--danger-text)"),
+        todayRow("An automatic rule", "999px", "dashed", "Its own mode", "Set in the rule editor, shown as a badge on Automatic rules.", "On Rules", "var(--healthy)", "var(--muted)"),
+        todayRow("A grant by hand", "3px", "dashed", "Always waits", "The form never asks to send, so every grant by hand goes to Pending changes.", "Only after", "var(--warn)", "var(--warn-text)"),
+        todayRow("An approved request", "999px", "solid", "Straight away, unless Zitadel doesn't answer", "Then it waits, and the decision says nothing about it.", "Only after", "var(--warn)", "var(--warn-text)"),
+      ],
+      paths: [{ name: "A bundle", r: "3px", l: "solid" }, { name: "An automatic rule", r: "999px", l: "dashed" }, { name: "A grant by hand", r: "3px", l: "dashed" }, { name: "An approved request", r: "999px", l: "solid" }],
+      navOpts: (() => {
+        const G = (label) => ({ label, h: 30, pad: "12px 10px 4px", bg: "transparent", fs: 11.5, fw: 600, ink: "var(--label)", ls: "0.08em", tt: "uppercase", hasCount: false, moved: false });
+        const L = (label, o) => Object.assign({ label, h: 34, pad: "0 10px", bg: "transparent", fs: 14, fw: 500, ink: "var(--ink)", ls: "0", tt: "none", hasCount: false, count: "", countBg: "var(--accent-soft)", countInk: "var(--accent-text)", moved: false, movedWord: "" }, o || {});
+        const on = { bg: "var(--accent-soft)", fw: 600 };
+        const cnt = (n, tone) => ({ hasCount: true, count: n, countBg: tone === "danger" ? "var(--danger-soft)" : tone === "warn" ? "var(--warn-soft)" : "var(--accent-soft)", countInk: tone === "danger" ? "var(--danger-text)" : tone === "warn" ? "var(--warn-text)" : "var(--accent-text)" });
+        const mv = (w) => ({ moved: true, movedWord: w });
+        const review = [G("Review"), L("Drift", cnt(3, "danger")), L("Unfinished revocations", cnt(1, "danger")), L("Expiring access", cnt(2, "warn")), L("Holds due"), L("Audit"), G("System"), L("Zitadel"), L("Connected systems"), L("TrueNAS"), L("Incoming events")];
+        const changes = (head, last) => [L("Bundles"), L("Automatic rules", mv("moved up")), L("Insights", mv("renamed")), G(head), L("Pending changes", cnt(13)), L("Change history"), L(last, Object.assign({}, on, mv("renamed")))].concat(review);
+        return [
+          { id: "3a", name: "Changes", rec: true, badgeEdge: "var(--accent-line)", badgeBg: "var(--accent-soft)", items: changes("Changes", "Roles that wait"),
+            notes: [{ k: "Changes", v: "is what the three have in common: what's waiting, what happened, and which changes wait for you. It matches Pending changes and Change history. Not \"Access\": the Basic view already has an Access group for Projects, Roles and Apps." }, { k: "Automatic rules", v: "moves up beside Bundles. Both are ways access is given, and neither is a change." }, { k: "Insights", v: "stands alone, because it reads everything and changes nothing." }] },
+          { id: "3b", name: "Sending", rec: false, badgeEdge: "var(--line-strong)", badgeBg: "var(--surface-1)", items: changes("Sending", "Roles that wait"),
+            notes: [{ k: "Sending", v: "matches the words on every status, Waiting for you to send →, and says what the group is for." }, { k: "But", v: "Change history also holds what was sent automatically, and a heading that's a verb reads oddly above nouns." }] },
+          { id: "3c", name: "As built: Automation", rec: false, badgeEdge: "var(--line-strong)", badgeBg: "var(--surface-1)", items: [L("Bundles"), G("Automation"), L("Automatic rules"), L("Pending changes", cnt(13)), L("Change history"), L("Access map"), L("Settings", on)].concat(review),
+            notes: [{ k: "Five things", v: "under a word that fits one of them. Read from the app's ADVANCED_NAV; the frames on these boards show exactly this." }, { k: "Access map", v: "is already Insights by decision (N12). The rename is on the build list, not yet in the app." }] },
+        ];
+      })(),
+      markOpts: [
+        { id: "2a", name: "The two words, where roles are chosen", rec: false, words: true, ring: false, half: false, badgeEdge: "var(--accent-line)", badgeBg: "var(--accent-soft)", note: "Readable with no legend, and nothing to confuse with a source chip. On a person's row it is absent: the status seat already says when something is actually waiting." },
+        { id: "2b", name: "A hollow ring after the name", rec: false, words: false, ring: true, half: false, badgeEdge: "var(--line-strong)", badgeBg: "var(--surface-1)", note: "Quiet and compact, but it repeats the Via bundle ring two lines away and needs a legend everywhere. A symbol nobody can read without learning it." },
+        { id: "2c", name: "A half-filled dot after the name · picked", rec: true, words: false, ring: false, half: true, badgeEdge: "var(--line-strong)", badgeBg: "var(--surface-1)", note: "Its own shape, but a new glyph in a product with no icons, and still a legend to learn. It also shows on every row of a person, where it only repeats the status." },
+      ],
+      parts: [
+        part("The role picker", "One dialog wherever roles are chosen: one search, what's chosen at the top, projects that fold, the seat leading each row. Roles you can't choose stay visible, ticked grey, saying why.", "Bundles 2a and 3a →", "route-bundles-v2.dc.html#2a"),
+        part("The selection seat", "Round, at the start of the row. Chosen fills violet with a check and the row takes the violet tint. Used in the picker and the one-time move.", "proposed/SelectionSeat.md →", "route-bundles-v2.dc.html"),
+        part("Dialog and its footer note", "Modal, ModalHeader with a lede, ModalFooter. The footer note is where a dialog says, before you act, whether this will finish now or wait.", "Bundles · New bundle →", "route-bundles-v2.dc.html"),
+        part("A person's role row", "Name and key, where it comes from, the Zitadel status, and the row's verb. The status seat is where a step left shows.", "A person →", "route-users-id.dc.html"),
+        part("A project's roles table", "Name with key and description, a group, numbers last in the 110 seat. Gains one quiet column, When given.", "A project · Cohesion 8b →", "route-projects-id.dc.html"),
+        part("The decision seat", "Approve and Decline, then the decision as dot and word with one note under it, and Waiting for you to send → when a step is left.", "Requests · Cohesion 10 →", "route-requests.dc.html"),
+        part("Pending changes", "Who, Change, Caused by, Waiting. Changes from one edit gather under one sentence and fold. Send counts what it sends.", "Pending changes →", "route-pending.dc.html"),
+        part("Waiting for you to send →", "Amber dot and violet link to Pending changes, with one faint line saying why. The same on a role, a request, a rule and a bundle.", "CLAUDE.md · standing rule →", "route-pending.dc.html"),
+        part("Waits for you", "A half-filled dot after a role's name; hover or focus says what it means. Where a row has room (a project's When given column, the rule editor's fields, the picker's legend) the two words sit beside it. Not a source chip: Direct, Via bundle and Automatic say how someone has a role; this says how its changes travel. On a person's row the status seat already says when one is actually waiting.", "This board", "#", true),
+        part("Row verbs", "An outline sm button in the row's last seat, naming its verb: Remove, Withdraw, Stop waiting. Danger outline when it takes access away (Revoke). Ghost only for Cancel in a dialog footer.", "Cohesion 3b →", "Cohesion.dc.html"),
+        part("Page actions", "One per page, accent, in the PageHeader's actions seat: New role, New rule, New bundle, Give a role, Send. A card's own action is outline sm in its CardHeader.", "Cohesion · one primary per region", "Cohesion.dc.html"),
+      ],
+      groups: [
+        { eyebrow: "4 · Where it's set", title: "Only on Roles that wait", note: "The list of roles that always wait is the only control. Adding to it uses the same role picker as everywhere else.", frames: [
+          fr(1, "move", "First visit after the update", "Roles that wait", "Syndra suggests which roles should keep waiting: every role that something set to wait used to give, each with the reason. You choose with the selection seat. Nothing is sent while you choose."),
+          fr(2, "settings", "The roles that wait", "Roles that wait", "A short table, gathered by project. Name and key, how people get it, who marked it, people, and the row's verb. The last line leads to the 13 changes to these roles that are waiting.", 1200),
+          fr(3, "add", "Adding roles", "Roles that wait · Add roles", "The role picker. Roles already on the list are ticked grey, saying On your list. The footer note says what marking means before you mark: from now on, and nothing changes for anyone today. Marked rows land with one tint."),
+        ] },
+        { eyebrow: "5 · Where it's read", title: "Choosing a role shows whether it waits", note: "The same marker in the picker, a project's roles, the rule editor and Requests. Every dialog's footer note says what will happen before you act.", frames: [
+          fr(4, "project", "A project's roles", "Laser Lab", "One quiet column, When given, and one line under the table with the way to change it. New role opens the next frame."),
+          fr(5, "newrole", "A new role", "Laser Lab · New role", "The footer note says a new role goes straight to Zitadel when given. Once it's created, the outcome asks the question and offers Make it wait for you →."),
+          fr(6, "newbundle", "A new bundle", "Bundles · New bundle", "The settled bundle picker, now marking roles that wait. The footer note sums up what joining will do: two roles straight away, Supervisor waits. Untick Supervisor and the note changes."),
+          fr(7, "newrule", "A new rule", "Automatic rules · New rule", "The editor's old mode switch is gone. Each role field shows the role and its project, and Waits for you if it does. The footer note says who will wait. Change opens the picker."),
+          fr(8, "rulepick", "Choosing the role a rule gives", "New rule · the role they get", "The same picker, choosing one. The first role is ticked grey. Picking a role returns to the editor with it filled in. Try Laser bay · Door."),
+        ] },
+        { eyebrow: "6 · When a step is left", title: "The thing you changed says it isn't done", note: "After you act, the outcome says what happened. Then the role, the request, the rule or the bundle keeps Waiting for you to send →, with why, until it's sent.", frames: [
+          fr(9, "give", "Giving Rohan Supervisor", "Rohan Mehta · Give a role", "The same picker. What Rohan has is ticked grey and says how. For how long and Why are the request form's own fields. The footer note says Supervisor will wait. Add Printer · Member and it says which goes when."),
+          fr(10, "rohan", "Rohan's page, after", "Rohan Mehta", "The role sits in his Laser Lab card with the status every role row has. Waiting for you to send →, and under it: he can't supervise yet, and why. Withdraw is its verb until it's sent."),
+          fr(11, "requests", "Approving requests", "Requests", "Asked for marks a role that waits, so you know before you approve. The decision seat: approved and usable now, approved and waiting because the role waits, or because Zitadel didn't answer. Approve Ishaan to see the first."),
+          fr(12, "bundle", "Lab Tech, after publishing v4", "Lab Tech", "The read line says what isn't true yet. Each role's status says where it stands for the 11 people on v4."),
+          fr(13, "rules", "The rule, after saving", "Automatic rules", "No mode column. The new rule's row carries the step left, naming the two people, until it's sent."),
+          fr(14, "pending", "Sending, with why", "Pending changes", "The settled list. Each change, or each batch's sentence, says why it waited. Lab Tech v4 and the rule fold as batches. Send 13 changes and every page above stops saying a step is left.", 1600),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

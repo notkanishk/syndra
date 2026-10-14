@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Login board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Area 13 · Login · #93–95 · /login</span>
+    <h1 class="type-page-title" style="margin:0">The door</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">One arch, one orb, one action. All three rows are settled; this board draws what the old board never did: the three things the shut door says, and what happens when a session ends in the middle of a change. The door frames use the stylesheet's own login classes, shown at the end of each scene's movement. Open one alone with <span class="type-mono">?frame=</span>.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#93</strong> ten error codes, three sentences, the code never shown · <strong style="color:var(--ink)">#94</strong> signing in returns you where you were; a write that meets a 401 is answered in place, with no redirect · <strong style="color:var(--ink)">#95</strong> the door is authored copy and isn't swept; its error lines end "ask makerspace staff".</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Picked · owner, 13 Oct</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">N21</strong> signing in again without losing the dialog, <a href="#21b">21b</a> · <strong style="color:var(--ink)">N22</strong> the shipped Syn line stays.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Exempt, by #95</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">"Opening…" keeps its ellipsis: the no-ellipsis rule (N4) is for buttons that lead to a dialog, and the door isn't swept. The door's amber is its own token, the same hue as warn.</p></div>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+  <section data-screen-label="{{ g.title }}" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:960px">
+      <h2 class="type-section-title" style="margin:0">{{ g.title }}</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ g.note }}</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="3">
+        <figure id="{{ f.id }}" data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-card);border:{{ f.border }};background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" loading="lazy" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:5px;max-width:{{ f.boxW }}px">
+            <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><sc-if value="{{ f.hasBadge }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:{{ f.badgeBg }};color:{{ f.badgeInk }};font-size:12.5px">{{ f.badge }}</span></sc-if><span style="font-size:15px;font-weight:600">{{ f.label }}</span><sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 13 Oct</span></sc-if></span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span>
+          </figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+
+  <section data-screen-label="N22 Syn line" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:960px">
+      <h2 class="type-section-title" style="margin:0">N22 · The Syn line</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The code's comment: the gloss earns its place because "keeps the door" is the screen you are looking at, and what follows has to be Syndra's job rather than more of Syn's story. The door is the owner's copy (#95); kept on 13 Oct.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1100px">
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">The board (LOGIN.md)</span><p style="margin:0;font-size:15px;line-height:1.6">Syn — the goddess who keeps the door, and the defence called upon at trial.</p></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;border-color:var(--accent-line)"><span class="type-label" style="color:var(--accent-text)">Shipped · kept, owner 13 Oct</span><p style="margin:0;font-size:15px;line-height:1.6">Syn — the goddess who keeps the door. Syndra keeps the list, and the reason for every name on it.</p></div>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDoor }}" hint-placeholder-val="{{ false }}">
+<main class="login-stage" data-scene="{{ d.scene }}">
+  <div class="login-floor" aria-hidden="true"></div>
+  <div class="login-pool" aria-hidden="true" style="opacity:{{ d.pool }};filter:{{ d.poolFilter }}"></div>
+  <div class="login-pool-amber" aria-hidden="true" style="opacity:{{ d.amber }}"></div>
+  <div class="login-grain" aria-hidden="true"></div>
+  <p class="login-eyebrow">Makerspace Syndra</p>
+  <div class="login-group">
+    <span class="login-arch-clip" aria-hidden="true" style="height:{{ d.clip }}"><span class="login-arch" style="opacity:{{ d.arch }}"></span></span>
+    <span class="login-wash" aria-hidden="true" style="opacity:{{ d.wash }}"></span>
+    <span class="login-orb-slot" aria-hidden="true"><span class="login-orb" style="opacity:{{ d.orb }}"><span class="login-orb-base"></span><span class="login-orb-lit"></span><span class="login-orb-bloom" style="opacity:{{ d.bloom }}"></span><span class="login-orb-dot"></span></span></span>
+    <h1 class="login-wordmark">Syndra</h1>
+    <a class="login-action" href="#" style="transform:translateY(calc(50% + 14px));opacity:{{ d.act }};background:{{ d.actBg }};color:{{ d.actInk }};box-shadow:{{ d.actShadow }}"><span>{{ d.label }}</span><span class="login-action-arrow" aria-hidden="true">→</span></a>
+  </div>
+  <div class="login-base">
+    <p class="login-syn" style="opacity:{{ d.syn }}">Syn — the goddess who keeps the door. Syndra keeps the list, and the reason for every name on it.</p>
+    <p class="login-credit"><span>Built in the lab it runs.</span><span class="login-credit-dot" aria-hidden="true"></span><span>Powered by Zitadel</span></p>
+  </div>
+  <div class="login-message" role="status" style="opacity:{{ d.handoff }}"><p class="login-message-head">{{ d.hHead }}</p><p class="login-message-sub">{{ d.hSub }}</p></div>
+  <div class="login-message login-error" role="alert" style="opacity:{{ d.err }}"><p class="login-message-head">{{ d.eHead }}</p><p class="login-message-sub">{{ d.eSub }}</p></div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isShell }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Aanya Rao" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Laser Lab" count="{{ 2 }}" hint-size="100%,56px"></x-import>
+    <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:14px 20px"><span style="font-size:15px;font-weight:600">Laser cutter · Operator</span><span style="font-size:13px;color:var(--muted)">Given by Kanishk Singh · until 20 Oct</span></div>
+    <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:14px 20px"><span style="font-size:15px;font-weight:600">Laser cutter · Member</span><span style="font-size:13px;color:var(--muted)">Through Lab Tech</span></div>
+  </x-import>
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="m-rm" hint-size="100%,520px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-rm" title="Remove Operator from Aanya Rao?" lede="Aanya keeps her Member role. She can no longer start a cut job on her own." hint-size="100%,120px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;flex-direction:column;gap:8px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100%,20px">Why</x-import><x-import component-from-global-scope="Syndra.Textarea" default-value="Her induction lapsed; she rebooks next week." aria-label="Why" hint-size="100%,72px"></x-import></div>
+      <x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ ended }}" hint-size="100%,90px"></x-import>
+      <sc-if value="{{ withLink }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:-6px"><a href="route-login.dc.html?frame=returned" target="_blank" style="font-size:14px;font-weight:600;min-height:32px;display:inline-flex;align-items:center">Sign in again in a new tab →</a><span style="font-size:12.5px;line-height:1.5;color:var(--faint)">This tab stays as it is. Come back here when you're signed in.</span></div>
+      </sc-if>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="This finishes now: it goes straight to Zitadel." hint-size="100%,100px">
+      <x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="120px,44px">Keep access</x-import>
+      <x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" hint-size="160px,44px">Remove Operator</x-import>
+    </x-import>
+  </x-import>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  door(st) {
+    const base = { scene: "idle", pool: 1, poolFilter: "blur(48px)", amber: 0, clip: "100%", arch: 1, wash: 1, orb: 1, bloom: 0, act: 1, actBg: "var(--door-fill)", actInk: "var(--on-violet)", actShadow: "var(--door-shadow-rest)", label: "Sign in with Zitadel", syn: 1, handoff: 0, err: 0, hHead: "", hSub: "", eHead: "", eSub: "" };
+    const open = { clip: "50%", arch: 0, wash: 0, poolFilter: "blur(48px) brightness(1.75)", bloom: 1, syn: 0, handoff: 1 };
+    const shut = (eHead, eSub) => ({ scene: "unreachable", pool: 0.15, amber: 1, orb: 0.35, syn: 0, err: 1, label: "Try again", eHead, eSub });
+    const S = {
+      idle: {}, "idle-phone": {},
+      opening: Object.assign({}, open, { scene: "opening", actBg: "var(--door-fill-quiet)", actInk: "var(--door-label-quiet)", actShadow: "var(--door-shadow-quiet)", label: "Opening…", hHead: "Handing you to Zitadel.", hSub: "You’ll come back here signed in." }),
+      refused: shut("Zitadel didn't let you through.", "Nothing was signed in. Check you used your makerspace account, or ask makerspace staff."),
+      handshake: shut("The sign-in didn't complete.", "Nothing was signed in. Try again. If it keeps happening, ask makerspace staff."),
+      unreachable: shut("Zitadel didn't answer.", "Nothing was signed in. Try again in a minute, or ask makerspace staff."),
+      returned: Object.assign({}, open, { act: 0, hHead: "You're signed in again.", hSub: "Go back to the tab you were working in and press the same button. You can close this one." }),
+    };
+    S["unreachable-phone"] = S.unreachable;
+    return Object.assign({}, base, S[st] || {});
+  }
+  renderVals() {
+    const f = this.frame || "";
+    const doorFrames = ["idle", "idle-phone", "opening", "refused", "handshake", "unreachable", "unreachable-phone", "returned"];
+    const me = (fr) => "route-login.dc.html?frame=" + fr;
+    const desk = (fr, label, note, x) => Object.assign({ src: me(fr), label, note, w: 1240, h: 800, boxW: 620, boxH: 400, scale: 0.5, border: "1px solid var(--line-strong)", hasBadge: false, rec: false, id: undefined, badge: "", badgeBg: "var(--surface-2)", badgeInk: "var(--ink)" }, x || {});
+    const phone = (fr, label, note, x) => desk(fr, label, note, Object.assign({ w: 390, h: 844, boxW: 293, boxH: 633, scale: 0.75 }, x || {}));
+    const opt = (id, rec) => ({ id, badge: id, hasBadge: true, rec: !!rec, badgeBg: rec ? "var(--accent-soft)" : "var(--surface-2)", badgeInk: rec ? "var(--accent-text)" : "var(--ink)", border: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+    const groups = [
+      { title: "#93 · Open, and three ways to stay shut", note: "The failure is the state the page arrives in, so the arch is never open before it shuts. Each shut door turns the arch into one amber line, dims the orb, and puts its sentence where the Syn line was. The action becomes Try again, which clears the error from the address so a reload doesn't raise it again.",
+        frames: [
+          desk("idle", "Resting", "The arch drawn top-down, the orb lit toward the cursor, one action."),
+          desk("opening", "Opening", "The arch retracts and fades; the button goes quiet. Cover for the redirect, not a gate in front of it."),
+          desk("refused", "Refused", "Zitadel answered, and the answer was no: access_denied, consent, interaction or login required."),
+          desk("handshake", "The round trip broke", "Both sides are up; state, PKCE or the token didn't survive the trip."),
+          desk("unreachable", "Nobody answered", "Misconfigured, the token exchange failed, or anything the provider invents."),
+          phone("idle-phone", "Phone · resting", "The arch drops to 320 wide; the wordmark to 40px."),
+          phone("unreachable-phone", "Phone · nobody answered", "The sentence wraps under the shut arch."),
+        ] },
+      { title: "#94 · N21 · Signed out in the middle of a change", note: "Settled: a read that meets a 401 sends you to the door and back to where you were; a write is answered in place, because redirecting then destroys the dialog, the plan and any reason typed. The outcome says to sign in again, but nothing on the page lets you do that without leaving it.",
+        frames: [
+          desk("session", "As built: the sentence alone", "Refused, with both halves: nothing was changed, and what you were doing is still here. To sign in, you open a tab and find the door yourself.", Object.assign(opt("21a"), { w: 1440, h: 900, boxW: 720, boxH: 450 })),
+          desk("session-b", "A way to sign in, beside the sentence", "One violet link under the outcome opens the door in a new tab with ?then=close. This tab, its dialog and the typed reason stay where they are.", Object.assign(opt("21b", true), { w: 1440, h: 900, boxW: 720, boxH: 450 })),
+          desk("returned", "The new tab, signed in", "The door, open, says so in its own message slot and sends you back. No new page: the same stage, the handoff message, no action.", { id: "21b2", badge: "21b", hasBadge: true, badgeBg: "var(--accent-soft)", badgeInk: "var(--accent-text)", border: "2px solid var(--accent-line)" }),
+        ] },
+    ];
+    return {
+      isBoard: !f, isDoor: doorFrames.includes(f), isShell: f === "session" || f === "session-b", withLink: f === "session-b",
+      d: this.door(f), groups, session: this.session, rootData: this.rootData, noop: () => {},
+      ended: { kind: "refused", message: "Your session ended before this ran.", detail: "What you were doing is still here. Sign in again, then press the same button once more." },
+    };
+  }
+}
+</script>
+</body>
+</html>

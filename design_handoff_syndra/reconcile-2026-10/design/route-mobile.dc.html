@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Mobile board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Area 12 · Mobile · #84–92</span>
+    <h1 class="type-page-title" style="margin:0">Syndra at 390</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">Three choices the owner settled on 13 Oct, then what is kept as built. Every list already has its phone frame on its own board (#89); this board draws what no board did: sheets at each size, the busy sheet, the type-the-name gate sideways, filters on a phone, and Insights on a phone. Frames are the real shell and components; open one alone with <span class="type-mono">?frame=</span>.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Picked · owner, 13 Oct</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#86</strong> the freshness dot, <a href="#86c">86c</a> · <strong style="color:var(--ink)">#87</strong> filters on a phone, <a href="#87c">87c</a> · <strong style="color:var(--ink)">N20</strong> Insights on a phone, <a href="#20a">20a</a>.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Kept as built, drawn here</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#84</strong> three sheet sizes and the busy grabber · <strong style="color:var(--ink)">#91</strong> the name gate refuses sideways.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Kept as built, drawn elsewhere</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#85</strong> Select on http (route-storage) · <strong style="color:var(--ink)">#88</strong> drift keeps everything (route-drift) · <strong style="color:var(--ink)">#89</strong> lists keep what they're scanned for · <strong style="color:var(--ink)">#90</strong> the token editor first (route-applications-id) · <strong style="color:var(--ink)">#92</strong> the iOS icon, nothing to draw.</p></div>
+  </section>
+
+  <section data-screen-label="#86 freshness" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:960px">
+      <h2 class="type-section-title" style="margin:0">#86 · One dot for every reading</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The read line has four readings. Live and ageing can be acted on; stale and provisional block anything that can't be undone. The board gave ageing no colour and provisional an amber fill. The code gives every reading a dot, with live and ageing both lime, and provisional a grey ring under an amber sentence. On a degraded page that grey ring sits under an amber Notice.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+      <sc-for list="{{ freshOpts }}" as="o" hint-placeholder-count="3">
+        <figure id="{{ o.id }}" style="margin:0;display:flex;flex-direction:column;gap:12px;width:470px">
+          <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px;border-color:{{ o.frame }}">
+            <sc-for list="{{ o.rows }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <span class="type-label" style="color:var(--label)">{{ r.reading }}</span>
+                <div style="display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.45">
+                  <span aria-hidden="true" style="width:6px;height:6px;flex:none;border-radius:var(--radius-pill);box-sizing:border-box;background:{{ r.bg }};border:{{ r.bd }}"></span>
+                  <span style="color:{{ r.ink }}">{{ r.text }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <figcaption style="display:flex;flex-direction:column;gap:6px">
+            <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:{{ o.badgeBg }};color:{{ o.badgeInk }};font-size:12.5px">{{ o.id }}</span><span style="font-size:15px;font-weight:600">{{ o.title }}</span><sc-if value="{{ o.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 13 Oct</span></sc-if></span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ o.note }}</span>
+          </figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="4">
+  <section data-screen-label="{{ bg.title }}" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:960px">
+      <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ bg.note }}</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="3">
+        <figure id="{{ f.id }}" data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-card);border:{{ f.border }};background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" loading="lazy" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:5px;max-width:{{ f.boxW }}px">
+            <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><sc-if value="{{ f.hasBadge }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:{{ f.badgeBg }};color:{{ f.badgeInk }};font-size:12.5px">{{ f.badge }}</span></sc-if><span style="font-size:15px;font-weight:600">{{ f.label }}</span><sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 13 Oct</span></sc-if></span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span>
+          </figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+
+  <section data-screen-label="Phone frames index" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:960px">
+      <h2 class="type-section-title" style="margin:0">#88 #89 #90 · Every list's phone frame, where it lives</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Each list keeps on a phone what it is scanned for: a number carries its noun ("12 people"), a reason wraps in full, the answers sit under it. Kept as built; each board below has its frame.</p>
+    </div>
+    <div class="card" style="max-width:960px">
+      <sc-for list="{{ index }}" as="x" hint-placeholder-count="10">
+        <div class="row-divider" style="display:flex;align-items:baseline;gap:18px;padding:12px 20px;flex-wrap:wrap">
+          <span style="width:190px;flex:none;font-weight:600"><a href="{{ x.href }}" style="color:var(--ink)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ x.name }}</a></span>
+          <span style="flex:1;min-width:260px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ x.note }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+
+  <sc-if value="{{ fPeople }}" hint-placeholder-val="{{ false }}">
+    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="People" meta="248 people · 12 with access expiring inside 30 days" hint-size="100%,80px"></x-import></div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" trailing="{{ selectEl }}" hint-size="100%,96px"></x-import>
+        <x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ freshRead }}" subject="The people list" hint-size="100%,24px"></x-import>
+      </div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+        <sc-for list="{{ people }}" as="p" hint-placeholder-count="5">
+          <div class="row-divider" style="display:flex;flex-direction:column;gap:6px;padding:14px 20px;opacity:{{ p.opacity }}">
+            <span style="display:flex;align-items:center;gap:12px;min-width:0">
+              <x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="34px,34px"></x-import>
+              <span style="display:flex;flex-direction:column;min-width:0"><a href="route-users-id.dc.html?frame=phone" style="font-size:15px;font-weight:600;color:var(--ink)">{{ p.name }}</a><span style="font-size:12.5px;color:var(--faint)">{{ p.sub }}</span></span>
+            </span>
+            <span style="font-size:13px;color:var(--muted)">{{ p.access }}</span>
+            <sc-if value="{{ p.hasAttn }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;font-weight:600;color:{{ p.attnColor }}">{{ p.attn }}</span></sc-if>
+          </div>
+        </sc-for>
+      </x-import>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ fOverlay }}" hint-placeholder-val="{{ false }}">
+    <div role="dialog" aria-label="Search people" style="position:fixed;inset:0;z-index:60;background:var(--ground);display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)">
+        <div style="flex:1;min-width:0"><x-import component-from-global-scope="Syndra.Input" value="pri" aria-label="Search people by name, email or role key" read-only="{{ true }}" hint-size="100%,44px"></x-import></div>
+        <x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="80px,40px">Cancel</x-import>
+      </div>
+      <div style="padding:16px 20px 8px"><span class="type-label" style="color:var(--label)">3 people</span></div>
+      <sc-for list="{{ overlayHits }}" as="p" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;min-height:44px;border-bottom:1px solid var(--line)">
+          <x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="34px,34px"></x-import>
+          <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px;font-weight:600">{{ p.name }}</span><span style="font-size:12.5px;color:var(--faint)">{{ p.sub }}</span></span>
+        </div>
+      </sc-for>
+      <p style="margin:0;padding:16px 20px;font-size:13px;line-height:1.5;color:var(--faint)">The list behind it is hidden until you leave search.</p>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ fSheet }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="flt" hint-size="100%,420px">
+      <x-import component-from-global-scope="Syndra.ModalHeader" title="Filters" title-id="flt" hint-size="100%,60px"></x-import>
+      <div style="padding:0 24px 4px;display:flex;flex-direction:column;gap:14px">
+        <x-import component-from-global-scope="Syndra.FilterField" label="Project" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Select" default-value="laser" aria-label="Filter by project" hint-size="100%,44px"><option value="">Any project</option><option value="laser">Laser Lab</option><option value="wood">Wood shop</option></x-import></x-import>
+        <x-import component-from-global-scope="Syndra.FilterField" label="Needs attention" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Select" default-value="" aria-label="Filter by what needs attention" hint-size="100%,44px"><option value="">Anything</option><option value="exp">Access expiring soon</option><option value="unx">Access with no record</option></x-import></x-import>
+        <x-import component-from-global-scope="Syndra.FilterField" label="Account" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.FilterPills" label="Filter by account" value="active" on-change="{{ noop }}" options="{{ accountOpts }}" hint-size="100%,40px"></x-import></x-import>
+      </div>
+      <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,80px">
+        <x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="100px,44px">Clear all</x-import>
+        <x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="160px,44px">Show 12 people</x-import>
+      </x-import>
+    </x-import>
+  </sc-if>
+
+  <sc-if value="{{ fIns }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:14px;padding-bottom:12px">
+      <x-import component-from-global-scope="Syndra.PageHeader" title="Insights" lede="How access travels through the makerspace, and how that is changing." hint-size="100%,96px"></x-import>
+      <x-import component-from-global-scope="Syndra.Tabs" options="{{ tabOpts }}" value="map" on-select="{{ noop }}" label="Views of the makerspace's access" hint-size="100%,40px"></x-import>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <x-import component-from-global-scope="Syndra.Input" value="{{ insQ }}" placeholder="Ask about a person, role, bundle or door" aria-label="Ask the map" read-only="{{ true }}" hint-size="100%,44px"></x-import>
+      <x-import component-from-global-scope="Syndra.Select" default-value="people" aria-label="Lens" hint-size="100%,44px"><option value="people">Lens: People</option><option value="use">Lens: Recent use</option><option value="ending">Lens: Ending soon</option><option value="group">Lens: A group</option></x-import>
+      <x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ freshRead }}" subject="The access map" hint-size="100%,24px"></x-import>
+    </div>
+    <sc-if value="{{ insRest }}" hint-placeholder-val="{{ false }}">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,360px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Worth a look" count="{{ 4 }}" hint-size="100%,56px"></x-import>
+        <sc-for list="{{ findings }}" as="x" hint-placeholder-count="4">
+          <div class="row-divider" style="display:flex;flex-direction:column;gap:5px;padding:14px 20px">
+            <span style="display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:{{ x.dot }}"></span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">{{ x.kind }}</span></span>
+            <span style="font-size:15px;font-weight:600;text-wrap:pretty">{{ x.title }}</span>
+            <span style="font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ x.line }}</span>
+            <a href="{{ x.href }}" style="font-size:13.5px;font-weight:600;min-height:32px;display:inline-flex;align-items:center">{{ x.open }}</a>
+          </div>
+        </sc-for>
+      </x-import>
+    </sc-if>
+    <sc-if value="{{ insPath }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:14px;padding:18px 20px;border-radius:var(--radius-card);border:1px solid var(--accent-line);background:var(--accent-soft)">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span class="type-label" style="color:var(--accent-text)">Path · two routes</span>
+          <span style="font-family:var(--font-display);font-size:20px;font-weight:600;line-height:1.25;text-wrap:pretty">Priya Nair to Laser bay · Door</span>
+          <span style="font-size:13px;color:var(--muted)">Research assistant · Design</span>
+        </div>
+        <sc-for list="{{ pathLines }}" as="l" hint-placeholder-count="3">
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <span aria-hidden="true" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:{{ l.dot }}"></span>
+            <p style="margin:0;font-size:14px;line-height:1.55;text-wrap:pretty"><strong>{{ l.lead }}</strong> {{ l.text }}</p>
+          </div>
+        </sc-for>
+        <a href="route-users-id.dc.html?frame=phone" style="font-size:14px;font-weight:600">Open Priya Nair →</a>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;padding-top:12px;border-top:1px solid var(--accent-line)">
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,36px">Pin this</x-import>
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="160px,36px">Copy as sentences</x-import>
+        </div>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">The map draws this on a wider screen. The link keeps the question, so it opens there as you left it.</p>
+    </sc-if>
+  </sc-if>
+
+  <sc-if value="{{ fPerson }}" hint-placeholder-val="{{ false }}">
+    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="People" title="Aanya Rao" meta="Research assistant · Mechanical Engineering" hint-size="100%,96px"></x-import></div>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="Laser Lab" count="{{ 2 }}" hint-size="100%,56px"></x-import>
+      <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:14px 20px"><span style="font-size:15px;font-weight:600">Laser cutter · Operator</span><span style="font-size:13px;color:var(--muted)">Given by Kanishk Singh · until 20 Oct</span></div>
+      <div class="row-divider" style="display:flex;flex-direction:column;gap:4px;padding:14px 20px"><span style="font-size:15px;font-weight:600">Laser cutter · Member</span><span style="font-size:13px;color:var(--muted)">Through Lab Tech</span></div>
+    </x-import>
+  </sc-if>
+
+  <sc-if value="{{ fSm }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="m-sm" hint-size="100%,300px">
+      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-sm" title="Remove Operator from Aanya Rao?" lede="Aanya keeps her Member role. She can no longer start a cut job on her own." hint-size="100%,120px"></x-import>
+      <x-import component-from-global-scope="Syndra.ModalFooter" note="This finishes now: it goes straight to Zitadel." hint-size="100%,100px">
+        <x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="120px,44px">Keep access</x-import>
+        <x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" hint-size="160px,44px">Remove Operator</x-import>
+      </x-import>
+    </x-import>
+  </sc-if>
+
+  <sc-if value="{{ fMd }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" busy="{{ busy }}" labelled-by="m-md" hint-size="100%,520px">
+      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-md" title="Extend Aanya Rao's Operator role" lede="It ends on 20 Oct. Choose how much longer, and say why." hint-size="100%,120px"></x-import>
+      <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:8px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100%,20px">For how long</x-import><x-import component-from-global-scope="Syndra.Segmented" options="{{ howLongOpts }}" value="30" on-change="{{ noop }}" label="For how long" hint-size="100%,44px"></x-import></div>
+        <div style="display:flex;flex-direction:column;gap:8px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100%,20px">Why</x-import><x-import component-from-global-scope="Syndra.Textarea" default-value="Finishing her capstone enclosure." aria-label="Why" disabled="{{ busy }}" hint-size="100%,72px"></x-import></div>
+      </div>
+      <x-import component-from-global-scope="Syndra.ModalFooter" note="This finishes now: it goes straight to Zitadel." hint-size="100%,100px">
+        <sc-if value="{{ notBusy }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="100px,44px">Cancel</x-import></sc-if>
+        <x-import component-from-global-scope="Syndra.Button" variant="accent" is-pending="{{ busy }}" hint-size="160px,44px">{{ extendLabel }}</x-import>
+      </x-import>
+    </x-import>
+  </sc-if>
+
+  <sc-if value="{{ fLand }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="m-l" hint-size="100%,300px">
+      <x-import component-from-global-scope="Syndra.ModalHeader" title-id="m-l" title="Revoke Operator from Aanya Rao?" lede="She loses badge entry to the laser bay at once." hint-size="100%,100px"></x-import>
+      <div style="padding:0 24px"><x-import component-from-global-scope="Syndra.ConfirmByTyping" expected="Aanya Rao" value="" on-change="{{ noop }}" noun="person's name" hint-size="100%,70px"></x-import></div>
+      <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,80px">
+        <x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="120px,44px">Keep access</x-import>
+        <x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" disabled="{{ true }}" reason="Type her name to confirm." hint-size="160px,44px">Revoke Operator</x-import>
+      </x-import>
+    </x-import>
+  </sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  componentDidMount() {
+    if (this.st !== "pop") return;
+    let n = 0; const tick = () => { const b = [...document.querySelectorAll("button[aria-expanded][aria-controls]")].find(x => x.textContent.trim().startsWith("Filters")); if (b) { if (b.getAttribute("aria-expanded") !== "true") b.click(); return; } if (n++ < 100) setTimeout(tick, 60); };
+    tick();
+  }
+  renderVals() {
+    const S = window.Syndra, h = React.createElement, st = this.st;
+    const opt = (v, l) => h("option", { key: v, value: v }, l);
+    const people = [
+      { name: "Aanya Rao", sub: "Research assistant · Mechanical Engineering", access: "3 roles across 2 projects", attn: "Expires in 2 days", attnColor: "var(--warn-text)" },
+      { name: "Priya Nair", sub: "Research assistant · Design", access: "5 roles across 3 projects", attn: "Unexplained role", attnColor: "var(--danger-text)" },
+      { name: "Kanishk Singh", sub: "Makerspace staff · Operations", access: "6 roles across 4 projects", attn: "" },
+      { name: "Lena Brandt", sub: "lena.brandt@makerspace.edu", access: "Nothing yet", attn: "Open request", attnColor: "var(--accent-text)" },
+      { name: "Omar Haddad", sub: "Left 12 Sept · Architecture", access: "1 role", attn: "", opacity: 0.6 },
+    ].map(p => Object.assign({ opacity: 1 }, p, { hasAttn: !!p.attn }));
+    const fresh = (bg, bd, ink, text, reading) => ({ bg, bd, ink, text, reading });
+    const L = "var(--healthy)", W = "var(--warn)", none = "0", faint = "var(--faint)", wt = "var(--warn-text)";
+    const T = { live: "The people list was read just now", age: "The people list was read 4 minutes ago", stale: "The people list was read 14 minutes ago, too old to act on. Refresh", prov: "Could not reach the connected system. This is the last state seen, 22 minutes ago" };
+    const freshOpts = [
+      { id: "86a", title: "As built", rec: false, frame: "var(--line)", badgeBg: "var(--surface-2)", badgeInk: "var(--ink)", note: "Every reading has a dot, which fixes the board's gap. Live and ageing share lime because both can be acted on. The grey ring under an amber sentence is the one place colour and words disagree.",
+        rows: [fresh(L, none, faint, T.live, "Live"), fresh(L, none, faint, T.age, "Ageing"), fresh(W, none, wt, T.stale, "Stale"), fresh("transparent", "1px solid var(--muted)", wt, T.prov, "Provisional")] },
+      { id: "86b", title: "The board", rec: false, frame: "var(--line)", badgeBg: "var(--surface-2)", badgeInk: "var(--ink)", note: "Ageing goes grey and provisional fills amber. Stale and provisional then look the same, though one is cured by Refresh and the other only by the system answering.",
+        rows: [fresh(L, none, faint, T.live, "Live"), fresh("var(--muted)", none, faint, T.age, "Ageing"), fresh(W, none, wt, T.stale, "Stale"), fresh(W, none, wt, T.prov, "Provisional")] },
+      { id: "86c", title: "As built, the ring amber", rec: true, frame: "var(--accent-line)", badgeBg: "var(--accent-soft)", badgeInk: "var(--accent-text)", note: "One change to the code: the provisional ring takes the warn colour. Colour says whether you can act (lime yes, amber no); the ring says this isn't a fresh read from the source, so Refresh won't help. It matches the amber Notice above every degraded page.",
+        rows: [fresh(L, none, faint, T.live, "Live"), fresh(L, none, faint, T.age, "Ageing"), fresh(W, none, wt, T.stale, "Stale"), fresh("transparent", "1px solid var(--warn)", wt, T.prov, "Provisional")] },
+    ];
+    const ph = (src, label, note, x) => Object.assign({ src, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1, border: "1px solid var(--line-strong)", hasBadge: false, rec: false, id: undefined, badge: "", badgeBg: "var(--surface-2)", badgeInk: "var(--ink)" }, x || {});
+    const opt2 = (id, rec) => ({ id, badge: id, hasBadge: true, rec: !!rec, badgeBg: rec ? "var(--accent-soft)" : "var(--surface-2)", badgeInk: rec ? "var(--accent-text)" : "var(--ink)", border: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+    const me = (fr) => "route-mobile.dc.html?frame=" + fr;
+    const boardGroups = [
+      { title: "#87 · Search and filters on a phone", note: "People stacks and a tap opens the person, as built. What was never built is the board's search overlay and filter sheet. As built, Filters opens the desktop popover: 352px wide, anchored to a button that wraps onto its own row, with its Done at the bottom of a panel the keyboard can cover. Every list uses the same FilterBar, so whatever is picked here applies to all of them.",
+        frames: [
+          ph(me("pop"), "As built: the popover", "Search keeps its seat and filters as you type. Filters opens the same panel as on desktop. It works, but it floats over the list it narrows and doesn't say what it will leave.", opt2("87a")),
+          ph(me("overlay"), "The board: search takes the screen", "Tapping search replaces the page. Results only; the list and its read line are out of sight until Cancel. Filters as in 87c.", opt2("87b")),
+          ph(me("sheet"), "Search stays, filters in a sheet", "Search stays on the page, so the list it narrows stays under your thumb. Below tablet the same FilterPanel opens as a small sheet (Modal sm): the fields, Clear all, and one button that says what you'll see, \u201cShow 12 people\u201d. On a tablet and up it stays the popover.", opt2("87c", true)),
+        ] },
+      { title: "N20 · Insights on a phone", note: "Nothing about the map has a phone form yet. The map draws lines between five lanes at 1040px or more; at 390 it can only scroll sideways. The panel already answers every question in sentences, and the view switch already offers a List.",
+        frames: [
+          ph(me("ins-rest"), "Below tablet, the answer is the page: at rest", "Map and List collapse to the list; the lens becomes a Select. With no question, Map lists what is worth a look, each with its link, as the findings chips do on desktop.", opt2("20a", true)),
+          ph(me("ins-path"), "The same, asked a question", "The panel's sentences in full, its link, Pin and Copy. The link keeps the question, so a desktop opens the map in the same state. Trends is unchanged: its cards already stack.", { id: "20a2", badge: "20a", hasBadge: true, badgeBg: "var(--accent-soft)", badgeInk: "var(--accent-text)", border: "2px solid var(--accent-line)" }),
+          ph("route-insights.dc.html?frame=path", "The map as drawn, at 390", "The map in a sideways scroll, the panel below it. Everything is there, but the lines and the answer are never on screen together.", opt2("20b")),
+        ] },
+      { title: "#84 · Sheets, at three sizes", note: "Kept as built. sm takes its content's height, md stops 96px short of the top, lg is full height with a sticky footer. The grabber is a real control. While a change is in flight the grabber gives way to a line saying the sheet can't be closed yet, and only the working button remains.",
+        frames: [
+          ph(me("sm"), "sm · a single confirmation", "Its content's height, nothing more."),
+          ph(me("md"), "md · a short form", "Stops 96px short, so the page behind still shows."),
+          ph("route-automation-settings-v5.dc.html?frame=give", "lg · the role picker", "Full height with a sticky footer. The settled picker (N17), unchanged at 390."),
+          ph(me("busy"), "md · busy", "The grabber becomes its sentence; Cancel goes; the button works. Esc and tapping outside do nothing until it finishes."),
+        ] },
+      { title: "#91 · The name gate, sideways", note: "Kept as built. With the keyboard up in landscape there is about 190px left, and the warning, the field and the button can't all show. Rather than let the consequence scroll away, the field isn't drawn and the sheet asks for the phone upright.",
+        frames: [ ph(me("landscape"), "Landscape · 844 × 390", "The button stays visibly locked, and its reason reads as before.", { w: 844, h: 390, boxW: 844, boxH: 390 }) ] },
+    ];
+    const index = [
+      { name: "People", href: "route-users.dc.html", note: "Rows stack and open the person; team and bundles fold away (#87)." },
+      { name: "A person", href: "route-users-id.dc.html", note: "Each role wraps to name, source, then verdict and verb." },
+      { name: "Drift", href: "route-drift.dc.html", note: "Nothing folds away: who, what, found, the reason in full, the three answers 12px apart (#88). The direction is the group heading, so no kind badge." },
+      { name: "Requests", href: "route-requests.dc.html", note: "The why wraps in full; Approve fills the width with Decline 12px away (#89)." },
+      { name: "Pending changes", href: "route-pending.dc.html", note: "Who, the change, the cause, how long it has waited. Send stays in the header." },
+      { name: "Expiring access", href: "route-expiring.dc.html", note: "Who, the role, how long is left and the date, then the two answers." },
+      { name: "Change history", href: "route-events.dc.html", note: "Rows stack: the event, the sentence, then the outcome with its time." },
+      { name: "Projects · Roles · Apps", href: "route-projects.dc.html", note: "Each number carries its noun: \u201c41 people \u00b7 3 roles\u201d. Never \u201cholders\u201d." },
+      { name: "An app", href: "route-applications-id.dc.html", note: "The token editor first, the preview under it (#90). It composes rather than answers, so the board's explanation-first rule doesn't apply." },
+      { name: "Connected systems", href: "route-systems.dc.html", note: "Name and product, status, people with its noun, then what it needs." },
+      { name: "Network storage", href: "route-storage.dc.html", note: "Each address is a CopyableValue; over http it reads Select and says the browser is the limit (#85)." },
+    ];
+    const sheet = st === "sheet", isIns = st === "ins-rest" || st === "ins-path", person = ["sm", "md", "busy", "landscape"].includes(st);
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      pathname: isIns ? "/graph" : "/users",
+      fPeople: ["pop", "overlay", "sheet"].includes(st), fOverlay: st === "overlay", fSheet: sheet, fIns: isIns, insRest: st === "ins-rest", insPath: st === "ins-path",
+      fPerson: person, fSm: st === "sm", fMd: st === "md" || st === "busy", busy: st === "busy", notBusy: st !== "busy", extendLabel: st === "busy" ? "Extending" : "Extend to 20 Nov", fLand: st === "landscape",
+      freshOpts, boardGroups, index, people,
+      overlayHits: [{ name: "Priya Nair", sub: "Research assistant · Design" }, { name: "Prisha Menon", sub: "Student · Architecture" }, { name: "Pritam Das", sub: "Lab technician · Operations" }],
+      freshRead: { readAt: new Date(Date.now() - 20000).toISOString(), current: true },
+      searchEl: S ? h(S.Input, { placeholder: "Search name, email or role key", "aria-label": "Search people by name, email or role key", defaultValue: sheet ? "" : "" }) : null,
+      filtersEl: S ? h(S.FilterPanel, { activeCount: sheet ? 1 : 0, onClear: () => {} },
+        h(S.FilterField, { label: "Project" }, h(S.Select, { defaultValue: "", "aria-label": "Filter by project" }, opt("", "Any project"), opt("laser", "Laser Lab"))),
+        h(S.FilterField, { label: "Needs attention" }, h(S.Select, { defaultValue: "", "aria-label": "Filter by what needs attention" }, opt("", "Anything"))),
+        h(S.FilterField, { label: "Account" }, h(S.FilterPills, { label: "Filter by account", value: "active", onChange: () => {}, options: [{ value: "active", label: "Active" }, { value: "departed", label: "Left" }, { value: "all", label: "All" }] }))) : null,
+      selectEl: S ? h(S.SelectModeToggle, { active: false, onToggle: () => {} }) : null,
+      projectOpts: { children: [opt("", "Any project"), opt("laser", "Laser Lab"), opt("wood", "Wood shop")] },
+      attnOpts: { children: [opt("", "Anything"), opt("exp", "Access expiring soon"), opt("unx", "Access with no record")] },
+      accountOpts: [{ value: "active", label: "Active" }, { value: "departed", label: "Left" }, { value: "all", label: "All" }],
+      tabOpts: [{ value: "map", label: "Map" }, { value: "trends", label: "Trends" }],
+      lensOpts: { children: [opt("people", "Lens: People"), opt("use", "Lens: Recent use"), opt("ending", "Lens: Ending soon"), opt("group", "Lens: A group")] },
+      insQ: st === "ins-path" ? "Path from Priya Nair to Laser bay · Door" : "",
+      findings: [
+        { kind: "Drift", dot: "var(--danger)", title: "Printer · Member is held in Zitadel, not given by Syndra", line: "3 people · found 30 Sept. They keep it until you decide.", open: "Open on Drift →", href: "route-drift.dc.html" },
+        { kind: "Waiting for you to send", dot: "var(--warn)", title: "2 changes are approved, not yet in Zitadel", line: "Lab Tech v3 and Rohan Mehta's Storage · Member.", open: "Waiting for you to send →", href: "route-pending.dc.html" },
+        { kind: "Single route", dot: "var(--warn)", title: "Front door depends on Safety basics", line: "48 of 53 people get it only that way.", open: "Open Safety basics →", href: "route-bundles-v2.dc.html" },
+        { kind: "Unused", dot: "var(--muted)", title: "4 things give nothing", line: "Textiles, Studio and 2 roles nobody has.", open: "Open Textiles →", href: "route-projects-id.dc.html?frame=default" },
+      ],
+      pathLines: [
+        { dot: "var(--accent)", lead: "By hand:", text: "Kanishk Singh gave her Laser cutter · Operator until 20 Oct. It opens Laser bay · Door by rule." },
+        { dot: "var(--accent-text)", lead: "Through Lab Tech:", text: "v3 gives her Laser cutter · Operator as well, which opens the door the same way." },
+        { dot: "var(--muted)", lead: "Two routes.", text: "Removing one of these won't stop her. When the by-hand grant ends on 20 Oct she keeps the door through Lab Tech." },
+      ],
+      howLongOpts: [{ value: "7", label: "A week" }, { value: "30", label: "A month" }, { value: "term", label: "End of term" }],
+    };
+  }
+}
+</script>
+</body>
+</html>
