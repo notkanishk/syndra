@@ -76,6 +76,15 @@ type EntitlementField struct {
 	// mapping binding a role to a disabled account would contradict the derived
 	// lifecycle state on every resolution, and the two rules would fight.
 	Lifecycle bool `json:"lifecycle"`
+	// Label is the field's name for a person ("Home folder"); the mapping
+	// screen shows it, and no frontend names a field itself.
+	Label string `json:"label,omitempty"`
+	// Single means a person has one value whatever their roles say; the
+	// add-on decides what several mean.
+	Single bool `json:"single,omitempty"`
+	// PerPerson means an operator may set this field for one person, over
+	// what their roles give (an allowance with direction "set").
+	PerPerson bool `json:"per_person,omitempty"`
 }
 
 // Operation is one entry in the manifest's operation set — the one-shot,

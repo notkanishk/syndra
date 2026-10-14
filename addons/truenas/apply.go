@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -143,10 +144,19 @@ func entitlementState(s *Subject) map[string]any {
 	}
 	groups := append([]string(nil), s.Groups...)
 	sort.Strings(groups)
+	// The home in the mapping's own vocabulary: the place, not the folder in
+	// it, so a home the role made reads as agreeing with the role. The limit is
+	// not reported: a failed quota read would then read as drift, and the limit
+	// is set on every apply instead.
+	home := []string{}
+	if s.Home != "" {
+		home = []string{path.Dir(s.Home)}
+	}
 	return map[string]any{
 		FieldGroup:      groups,
 		FieldEnabled:    s.Enabled,
 		FieldSMBEnabled: s.SMBEnabled,
+		FieldHome:       home,
 	}
 }
 
@@ -187,6 +197,12 @@ type desiredState struct {
 	groups     []string
 	enabled    bool
 	smbEnabled bool
+	// homes are the places the subject's roles put a home folder. One is the
+	// instruction; several disagree, and the home is left as it is.
+	homes []string
+	// homeQuota is the largest limit any of their roles (or an operator, for
+	// this one person) gives, in bytes. Zero when none was given.
+	homeQuota int64
 	// managed records which fields the request named at all. A field the
 	// backend did not send is one this target does not manage for that subject,
 	// and converging it to a zero value would be inventing an instruction.
@@ -210,6 +226,26 @@ func decodeDesired(raw map[string]json.RawMessage) (desiredState, error) {
 		case FieldSMBEnabled:
 			if err := json.Unmarshal(value, &d.smbEnabled); err != nil {
 				return desiredState{}, fmt.Errorf("field %q must be a boolean", field)
+			}
+		case FieldHome:
+			var places []string
+			if err := json.Unmarshal(value, &places); err != nil {
+				return desiredState{}, fmt.Errorf("field %q must be a list of places", field)
+			}
+			d.homes = uniqueSorted(places)
+		case FieldHomeQuota:
+			var limits []string
+			if err := json.Unmarshal(value, &limits); err != nil {
+				return desiredState{}, fmt.Errorf("field %q must be a list of byte counts", field)
+			}
+			for _, l := range limits {
+				n, err := strconv.ParseInt(strings.TrimSpace(l), 10, 64)
+				if err != nil || n < 0 {
+					return desiredState{}, fmt.Errorf("field %q: %q is not a byte count", field, l)
+				}
+				if n > d.homeQuota {
+					d.homeQuota = n
+				}
 			}
 		default:
 			// A field this add-on does not understand is refused rather than
@@ -396,9 +432,32 @@ func (s *server) applyOne(req ApplyRequest) (ApplyOutcome, int, error) {
 				Consequence: "Nothing was changed.",
 			}, http.StatusConflict, nil
 		}
-		return s.createAndConverge(req, desired, binding)
+		out, status, err := s.createAndConverge(req, desired, binding)
+		s.rememberWantedSMB(req.Subject, desired, err)
+		return out, status, err
 	}
-	return s.converge(req, desired, current)
+	out, status, err := s.converge(req, desired, current)
+	s.rememberWantedSMB(req.Subject, desired, err)
+	return out, status, err
+}
+
+// rememberWantedSMB keeps what this apply asked for SMB on the subject's
+// binding, so the member's first password can turn it on (see Binding.WantsSMB).
+// Best-effort: the apply already happened, and failing it over this record
+// would report a mutation as not made.
+func (s *server) rememberWantedSMB(subject string, desired desiredState, applyErr error) {
+	if applyErr != nil || !desired.managed[FieldSMBEnabled] {
+		return
+	}
+	b, found, err := s.store.GetBinding(subject)
+	if err != nil || !found {
+		return
+	}
+	want := desired.smbEnabled
+	b.WantsSMB = &want
+	if err := s.store.PutBinding(b); err != nil {
+		logStoreFailure("binding", subject, err)
+	}
 }
 
 // locate finds the subject's account, by binding first and derivation second.
@@ -497,22 +556,78 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		if err != nil {
 			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
 		}
-		update["groups"] = ids
+		// Plus the built-in memberships, which current.Groups never listed:
+		// the replace is of the groups Syndra manages, not of the account's.
+		update["groups"] = append(ids, current.builtinGroups...)
 	}
 	if desired.managed[FieldEnabled] && current.Enabled != desired.enabled {
 		update["locked"] = !desired.enabled
 	}
-	// Turning SMB ON requires a credential to hash, and TrueNAS says so by
-	// refusing the call — not by ignoring the field. Attempting it against an
-	// account whose member has not set a password yet fails the whole apply,
-	// on every pass, for a state the target considers normal. Turning it OFF is
-	// always allowed, and is the half that matters for revocation.
+	// Turning SMB ON is never sent here. TrueNAS needs a credential to hash
+	// and accepts `smb: true` only in the call that sets a password ("Password
+	// must be reset in order to enable SMB authentication"), whether or not the
+	// account already has one. Sent alone it refuses the WHOLE update, so every
+	// other change in it — the groups — failed with it, on every pass. The
+	// member's next password carries it (password.set reads Binding.WantsSMB).
+	// Turning it OFF is always allowed, and is the half revocation needs.
 	smbPending := false
 	if desired.managed[FieldSMBEnabled] && current.SMBEnabled != desired.smbEnabled {
-		if desired.smbEnabled && !current.PasswordSet {
+		if desired.smbEnabled {
 			smbPending = true
 		} else {
-			update["smb"] = desired.smbEnabled
+			update["smb"] = false
+		}
+	}
+	smbWait := "Waiting for " + current.Username + " to set a password before SMB can be enabled."
+	if current.PasswordSet {
+		smbWait = "Waiting for " + current.Username + " to set their password again: TrueNAS switches SMB on only together with a new password."
+	}
+
+	// The home folder rides in the same update, so one write and one read-back
+	// verify it. The rules (never moved, never removed, never someone else's)
+	// are home.go's; what is not done is said in the outcome.
+	home, err := s.decideHome(desired, current.Username, current.Home, current.UID)
+	if err != nil {
+		return ApplyOutcome{}, statusFor(err), err
+	}
+	if home.path != "" {
+		for k, v := range homeFields(home.path) {
+			update[k] = v
+		}
+	}
+	homeAfter := current.Home
+	if home.path != "" {
+		homeAfter = home.path
+	}
+	notes := func(base string, extra ...string) string {
+		for _, e := range append([]string{home.note}, extra...) {
+			if e != "" {
+				base += " " + e
+			}
+		}
+		return strings.TrimSpace(base)
+	}
+
+	if len(update) == 0 {
+		// Nothing for user.update. The limit is its own call, and may still be
+		// owed.
+		quota, err := s.convergeQuota(desired, homeAfter, current.UID)
+		if err != nil {
+			return ApplyOutcome{}, statusFor(err), err
+		}
+		if quota != "" {
+			s.record("apply", req.Subject, req.Actor, req.CallID, "succeeded")
+			detail := quota
+			if smbPending {
+				detail = notes(quota, smbWait)
+			} else {
+				detail = notes(quota)
+			}
+			return ApplyOutcome{
+				Subject: req.Subject, Effect: EffectApplied, Detail: detail,
+				Username: current.Username, UID: current.UID,
+				Fingerprint: fingerprintSubject(current),
+			}, http.StatusOK, nil
 		}
 	}
 
@@ -522,9 +637,9 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// false, and reporting it would leave an operator believing SMB is on.
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
-			Detail: "Waiting for " + current.Username + " to set a password before SMB can be enabled.",
-			Consequence: "The account exists and is otherwise converged. TrueNAS refuses SMB " +
-				"on an account with no password, so this completes itself when the member sets one.",
+			Detail: notes(smbWait),
+			Consequence: "The account exists and is otherwise converged. TrueNAS switches SMB on " +
+				"only in the call that sets a password, so this completes itself when the member sets one.",
 			Username:    current.Username,
 			UID:         current.UID,
 			Fingerprint: fingerprintSubject(current),
@@ -537,7 +652,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// log with events that changed nothing.
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
-			Detail:      "Already in the requested state.",
+			Detail:      notes("Already in the requested state."),
 			Username:    current.Username,
 			UID:         current.UID,
 			Fingerprint: fingerprintSubject(current),
@@ -595,10 +710,27 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		}, http.StatusOK, nil
 	}
 
+	quota, err := s.convergeQuota(desired, homeAfter, current.UID)
+	if err != nil {
+		// The account update landed; the limit did not. Said, not swallowed:
+		// the next pass sets it.
+		quota = "The home folder limit could not be set yet: " + err.Error() + "."
+	}
 	s.record("apply", req.Subject, req.Actor, req.CallID, "succeeded")
+	detail := describeChange(update, desired.groups)
+	if home.path != "" {
+		detail = notes(detail, "Home folder created at "+home.path+".", quota)
+	} else {
+		detail = notes(detail, quota)
+	}
+	if smbPending {
+		// The rest landed; SMB did not, and saying only what landed would read
+		// as fully converged.
+		detail += " " + smbWait
+	}
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApplied,
-		Detail:      describeChange(update, desired.groups),
+		Detail:      detail,
 		Consequence: describeHolding(*applied),
 		Username:    applied.Username,
 		UID:         applied.UID,
@@ -627,8 +759,12 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// subject id rather than a name from the directory: this add-on is not
 		// a copy of the identity provider, and a stale display name here would
 		// be one more thing that disagrees with Zitadel.
-		"full_name":    binding.Username,
-		"group_create": true,
+		"full_name": binding.Username,
+		// SMB only, never a login. Left unset, TrueNAS gives the account zsh,
+		// and one SSH key added later is a working shell on the NAS. The path
+		// is a key of `user.shell_choices` on 25.10, and the one every account
+		// the makerspace made by hand already uses.
+		"shell": "/usr/sbin/nologin",
 		// A credential decision is REQUIRED at creation: TrueNAS refuses
 		// `user.create` with neither `password` nor `password_disabled`
 		// (`user_create.password: Password is required`). Syndra has no
@@ -650,8 +786,39 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		create["groups"] = groupIDs
 	}
 
+	// One number, from this add-on's own range, for the account and its
+	// personal group (identity.go). The group is made first so the account
+	// can be created in it; if the account is refused, the group goes too.
+	id, err := s.nextIdentity()
+	if err != nil {
+		return ApplyOutcome{}, statusFor(err), err
+	}
+	var groupID apiID
+	if err := s.nas.call("group.create", []any{map[string]any{
+		"name": binding.Username, "gid": id, "smb": false,
+	}}, &groupID); err != nil {
+		return ApplyOutcome{}, statusFor(err), fmt.Errorf("make %s's personal group: %w", binding.Username, err)
+	}
+	create["uid"] = id
+	create["group"] = groupID
+	create["group_create"] = false
+
+	// The home, when one role gives one and its folder is free. Decided before
+	// the account exists, so a folder that is there at all is someone else's.
+	home, err := s.decideHome(desired, binding.Username, "", -1)
+	if err != nil {
+		s.undoGroup(groupID)
+		return ApplyOutcome{}, statusFor(err), err
+	}
+	if home.path != "" {
+		for k, v := range homeFields(home.path) {
+			create[k] = v
+		}
+	}
+
 	var recordID apiID
 	if err := s.nas.call("user.create", []any{create}, &recordID); err != nil {
+		s.undoGroup(groupID)
 		return ApplyOutcome{}, statusFor(err), err
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
@@ -675,10 +842,23 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 			fmt.Errorf("account %s was created and its binding could not be recorded: %w", binding.Username, err)
 	}
 
+	detail := fmt.Sprintf("Created %s.", binding.Username)
+	if home.path != "" {
+		detail += " Home folder created at " + home.path + "."
+	}
+	if quota, err := s.convergeQuota(desired, home.path, created.UID); err != nil {
+		detail += " The home folder limit could not be set yet: " + err.Error() + "."
+	} else if quota != "" {
+		detail += " " + quota
+	}
+	if home.note != "" {
+		detail += " " + home.note
+	}
+
 	s.record("apply.create", req.Subject, req.Actor, req.CallID, "succeeded")
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApplied,
-		Detail:      fmt.Sprintf("Created %s.", binding.Username),
+		Detail:      detail,
 		Consequence: describeHolding(*created),
 		Username:    binding.Username,
 		UID:         created.UID,
@@ -762,6 +942,9 @@ func describeChange(update map[string]any, groupNames []string) string {
 		} else {
 			parts = append(parts, "SMB disabled")
 		}
+	}
+	if len(parts) == 0 {
+		return ""
 	}
 	return strings.Join(parts, "; ") + "."
 }

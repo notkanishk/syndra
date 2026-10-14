@@ -27,6 +27,10 @@ type mutatingRPC struct {
 	updates []map[string]any
 	creates []map[string]any
 	nextUID int64
+	// Personal groups made and undone, and a switch to refuse the account
+	// create that follows one.
+	groupCreates, groupDeletes int
+	refuseUserCreate           bool
 	// nextID is deliberately not nextUID. The record key and the unix uid are
 	// different numbers on a real target, and a fake that used one for both
 	// would agree with the bug where a write lands on the wrong account.
@@ -57,11 +61,17 @@ func (m *mutatingRPC) remember(params any) {
 	if err := json.Unmarshal([]byte(orEmptyList(m.fakeRPC.users)), &rows); err != nil {
 		return
 	}
+	if uid, ok := create["uid"].(int64); ok {
+		m.nextUID = uid
+	}
 	locked, _ := create["locked"].(bool)
 	smb, _ := create["smb"].(bool)
 	row := map[string]any{
 		"id": m.nextID, "username": create["username"], "uid": m.nextUID,
 		"locked": locked, "smb": smb, "groups": create["groups"],
+	}
+	if home, ok := create["home"]; ok {
+		row["home"] = home
 	}
 	if row["groups"] == nil {
 		row["groups"] = []apiID{}
@@ -99,7 +109,20 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 			}
 		}
 		return envelope(`null`), nil
+	case "group.create":
+		// A personal group, as the create path makes one before the account.
+		m.groupCreates++
+		if m.refuseUserCreate {
+			return envelope(`93`), nil
+		}
+		return envelope(`92`), nil
+	case "group.delete":
+		m.groupDeletes++
+		return envelope(`null`), nil
 	case "user.create":
+		if m.refuseUserCreate {
+			return errorEnvelope("user_create.username: refused"), nil
+		}
 		args, _ := params.([]any)
 		if len(args) == 1 {
 			if c, ok := args[0].(map[string]any); ok {
@@ -149,7 +172,7 @@ func (m *mutatingRPC) applyUpdate(id any, update map[string]any) {
 				}
 			}
 			switch k {
-			case "locked", "smb", "groups":
+			case "locked", "smb", "groups", "home":
 				rows[i][k] = v
 			}
 		}
@@ -317,9 +340,10 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 	}
 	u := m.updates[0]
 	// An empty list is an instruction, not an omission: it means "in no managed
-	// group", which is different from the field being absent.
-	if groups, ok := u["groups"].([]apiID); !ok || len(groups) != 0 {
-		t.Errorf("groups must be set to empty, got %v", u["groups"])
+	// group", which is different from the field being absent. builtin_users
+	// (41) is not a managed group, so it is carried through, not removed.
+	if groups, ok := u["groups"].([]apiID); !ok || len(groups) != 1 || groups[0].String() != "41" {
+		t.Errorf("managed groups must be emptied and builtin_users kept, got %v", u["groups"])
 	}
 	if u["locked"] != true || u["smb"] != false {
 		t.Errorf("disabling must lock and clear SMB: %v", u)
@@ -338,8 +362,17 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 	if len(m2.creates) != 0 {
 		t.Fatal("restoring must not create a second account")
 	}
-	if m2.updates[0]["locked"] != false || m2.updates[0]["smb"] != true {
-		t.Errorf("want unlocked with SMB back: %v", m2.updates[0])
+	// Unlocked and back in its groups in one write. SMB is not in it: TrueNAS
+	// switches SMB on only together with a new password, so a restored member
+	// sets theirs again, and the outcome says so.
+	if m2.updates[0]["locked"] != false {
+		t.Errorf("want unlocked: %v", m2.updates[0])
+	}
+	if _, sent := m2.updates[0]["smb"]; sent {
+		t.Errorf("smb: true alone is refused by TrueNAS and takes the whole update down: %v", m2.updates[0])
+	}
+	if d := decodeOutcome(t, on).Detail; !strings.Contains(d, "set their password again") {
+		t.Errorf("the restoration must say SMB waits for a new password, got %q", d)
 	}
 }
 
@@ -766,8 +799,9 @@ func TestGroupsAreWrittenAsTheIdsTheReadResolves(t *testing.T) {
 	if len(m.updates) != 1 {
 		t.Fatalf("want one update, got %d", len(m.updates))
 	}
+	// lab_makers' record id, then builtin_users' (41), carried through.
 	groups, ok := m.updates[0]["groups"].([]apiID)
-	if !ok || len(groups) != 1 || groups[0].String() != "42" {
+	if !ok || len(groups) != 2 || groups[0].String() != "42" || groups[1].String() != "41" {
 		t.Fatalf("want the record id of lab_makers, got %#v", m.updates[0]["groups"])
 	}
 

@@ -480,15 +480,23 @@ func TestTheLifecycleExceptionRestsOnEverySchemaFieldBeingSMBMediated(t *testing
 	}
 	schema := body[start : start+strings.Index(body[start:], "\n}")]
 
-	// Every non-lifecycle field the target declares. `group` is SMB-mediated,
-	// so an SMB denial genuinely withholds it.
-	const smbMediated = "FieldGroup"
+	// Every non-lifecycle field the target declares, decided one by one.
+	//   - `group` and `home` are SMB-mediated: a member reaches a group's
+	//     folders and their home folder only over SMB, so an SMB denial
+	//     genuinely withholds them (decided 14 Oct 2026, home folders by role).
+	//   - `home_quota` is a limit, not access. There is nothing for a denial to
+	//     withhold, so it never appears as withheld.
+	decided := []string{"{Name: FieldGroup,", "{Name: FieldHome,", "{Name: FieldHomeQuota,"}
 	for _, line := range strings.Split(schema, "\n") {
 		name := strings.TrimSpace(line)
 		if !strings.HasPrefix(name, "{Name: Field") {
 			continue
 		}
-		if strings.Contains(name, "Lifecycle: true") || strings.Contains(name, smbMediated) {
+		known := strings.Contains(name, "Lifecycle: true")
+		for _, d := range decided {
+			known = known || strings.HasPrefix(name, d)
+		}
+		if known {
 			continue
 		}
 		t.Errorf("the add-on declares a new entitlement field (%s), and `smb_enabled` may no longer withhold "+

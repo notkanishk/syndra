@@ -79,6 +79,10 @@ var (
 	// ErrRateLimited is the NAS pushing back. Its own error because the right
 	// response is to stop, not to retry harder into a lockout.
 	ErrRateLimited = errors.New("the target is rate-limiting")
+	// ErrNoSuchPath is a refusal whose errname is ENOENT: the path asked about
+	// does not exist. Still a refusal (errors.Is ErrTargetRefused), told apart
+	// because "this folder is free" is a decision a home folder rests on.
+	ErrNoSuchPath = fmt.Errorf("%w: no such path", ErrTargetRefused)
 )
 
 // rpc is the narrow slice of the TrueNAS client this add-on uses.
@@ -437,6 +441,9 @@ func (n *NAS) classifyRefusal(e *rpcError) error {
 		n.drop()
 		return ErrRateLimited
 	}
+	if e.Data.Errname == "ENOENT" {
+		return ErrNoSuchPath
+	}
 	return ErrTargetRefused
 }
 
@@ -457,6 +464,10 @@ type rpcError struct {
 		// on a validation refusal, and something else entirely on anything else,
 		// which is why it is decoded loosely and read defensively.
 		Extra []json.RawMessage `json:"extra"`
+		// Errname is the errno's symbolic name ("ENOENT"). An identifier the
+		// middleware sets from a fixed table, never free text, so it may be
+		// read where the message may not.
+		Errname string `json:"errname"`
 	} `json:"data"`
 }
 

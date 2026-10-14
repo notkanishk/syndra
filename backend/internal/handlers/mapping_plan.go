@@ -161,11 +161,21 @@ func rehearseMapping(ctx context.Context, m db.RoleMapping, surface, newValue st
 
 func mappingChangeWording(m db.RoleMapping, surface, newValue string) (detail, consequence string) {
 	if surface == planSurfaceMappingDelete {
-		return fmt.Sprintf("%s stops conferring %s = %s on %s.", m.RoleKey, m.Field, m.Value, m.Target),
-			"They keep the role and lose what it reached."
+		return fmt.Sprintf("Leaves %s.", mappedTo(m.Field, m.Value)),
+			"They keep the role. It just no longer puts them there."
 	}
-	return fmt.Sprintf("%s confers %s = %s on %s instead of %s.", m.RoleKey, m.Field, newValue, m.Target, m.Value),
-		fmt.Sprintf("They gain %s and lose %s.", newValue, m.Value)
+	return fmt.Sprintf("Moves from %s to %s.", mappedTo(m.Field, m.Value), mappedTo(m.Field, newValue)),
+		fmt.Sprintf("They gain what %s opens and lose what %s opened.", newValue, m.Value)
+}
+
+// mappedTo says what a mapping puts someone in, in words a person reads: "the
+// Staff group", not "group = Staff". The dialog's title already names the
+// system, and the person's name heads the row, so neither is repeated here.
+func mappedTo(field, value string) string {
+	if field == "group" {
+		return "the " + value + " group"
+	}
+	return field + " " + value
 }
 
 // issueMappingPlan records the rehearsal, under the same blast-radius guard
@@ -616,6 +626,15 @@ func handleRehearseMappingCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The target's project, never the caller's: the fingerprint below covers
+	// it, so a create must rehearse with the same one it writes.
+	project, err := resolveMappingProject(r.Context(), req.Target, req.ProjectID)
+	if err != nil {
+		writeMappingError(w, err)
+		return
+	}
+	req.ProjectID = project
+
 	// Validated before the rehearsal, for the reason the edit path gives: a
 	// plan for a value the target cannot resolve is a diff an operator would
 	// approve and the write would then refuse.
@@ -632,11 +651,11 @@ func handleRehearseMappingCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	plan := services.BulkPlan{Op: "create_mapping"}
-	detail := fmt.Sprintf("%s starts conferring %s = %s on %s.", req.RoleKey, field, value, req.Target)
+	detail := fmt.Sprintf("Joins %s.", mappedTo(field, value))
 	for _, id := range holders {
 		plan.Outcomes = append(plan.Outcomes, services.BulkOutcome{
 			UserID: id, Effect: services.EffectApply, Detail: detail,
-			Consequence: "They get an account here if they have none, at the next convergence.",
+			Consequence: "Anyone without an account here gets one when you send this change.",
 			Fingerprint: services.Fingerprint("mapping_create", req.Target, req.ProjectID, req.RoleKey, field, value, id),
 		})
 	}

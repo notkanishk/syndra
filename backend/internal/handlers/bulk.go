@@ -332,7 +332,7 @@ func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, re
 		"bulk":          true,
 	})
 
-	res, err := dbEnqueueDirectGrantPropagation(ctx, db.EnqueueParams{
+	res, err := grantDirect(ctx, db.EnqueueParams{
 		UserID:      userID,
 		ProjectID:   projectID,
 		RoleKeys:    []string{roleKey},

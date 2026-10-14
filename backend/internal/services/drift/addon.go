@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"syndra/internal/addons"
@@ -198,6 +199,15 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	unrecorded := 0
 	queued, findings, convergeErr := convergeBound(ctx, target, live, read.Accounts, &unrecorded)
 	res.Queued = queued
+	// And the people this pass would otherwise never see: they hold a mapped
+	// role and have no account here yet. A path that skipped the cascade — or
+	// one that failed to queue after its grant committed — is healed here
+	// within one pass, rather than waiting for an operator to apply by hand.
+	if convergeErr == nil {
+		created, err := convergeUnbound(ctx, target, bindings)
+		res.Queued += created
+		convergeErr = err
+	}
 	// The absent accounts are findings of the same kind, reached by a different
 	// route: `deleted_upstream` is one of the outcomes, and reporting it beside
 	// the field-level ones is what stops it being a special case with its own
@@ -637,4 +647,72 @@ func anchorLog(ctx context.Context, target string) string {
 			target, verdict)
 	}
 	return verdict
+}
+
+// convergeUnbound queues the first convergence for everyone who holds a role
+// mapped to this target and has no binding on it. The apply creates the account.
+//
+// Not someone with an unsent convergence already waiting: one row in Pending
+// changes per person, not a new one every pass. Not someone whose resolved
+// access is disabled (held, but suspended): an account made only to be switched
+// off is a stranger's name on the NAS for nothing.
+func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBinding) (int, error) {
+	mappings, err := listMappings(ctx, target)
+	if err != nil {
+		return 0, fmt.Errorf("read mappings for %s: %w", target, err)
+	}
+	bound := make(map[string]bool, len(bindings))
+	for _, b := range bindings {
+		bound[b.SubjectID] = true
+	}
+	seenRole := map[string]bool{}
+	candidates := map[string]bool{}
+	for _, m := range mappings {
+		key := m.ProjectID + "\x00" + m.RoleKey
+		if seenRole[key] {
+			continue
+		}
+		seenRole[key] = true
+		holders, err := mappingHolders(ctx, m.ProjectID, m.RoleKey)
+		if err != nil {
+			return 0, fmt.Errorf("read holders of %s/%s: %w", m.ProjectID, m.RoleKey, err)
+		}
+		for _, h := range holders {
+			if !bound[h] {
+				candidates[h] = true
+			}
+		}
+	}
+
+	ids := make([]string, 0, len(candidates))
+	for id := range candidates {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	queued := 0
+	for _, id := range ids {
+		waiting, err := pendingApply(ctx, target, id)
+		if err != nil {
+			return queued, err
+		}
+		if waiting {
+			continue
+		}
+		set, err := resolveIntent(ctx, id, target)
+		if err != nil {
+			return queued, fmt.Errorf("resolve %s: %w", id, err)
+		}
+		if string(set["enabled"]) != "true" {
+			continue
+		}
+		if _, _, err := recordConvergence(ctx, db.SystemConvergence{
+			Target: target, SubjectID: id, Actor: reconcileActor,
+			Reason:  "Holds a mapped role and has no account here yet",
+			Desired: set,
+		}); err != nil {
+			return queued, fmt.Errorf("queue convergence for %s: %w", id, err)
+		}
+		queued++
+	}
+	return queued, nil
 }

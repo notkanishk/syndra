@@ -26,6 +26,10 @@ import (
 const (
 	AllowanceDeny  = "deny"
 	AllowanceAllow = "allow"
+	// AllowanceSet sets one field to one value for one person, over what their
+	// roles give: an operator's exception, like a larger home folder limit.
+	// Only fields the add-on declares per-person (checked by the handler).
+	AllowanceSet = "set"
 )
 
 var (
@@ -96,13 +100,18 @@ func (a Allowance) validate() error {
 	}
 	switch a.Direction {
 	case AllowanceDeny:
+	case AllowanceSet:
+		if a.ExpiresAt == nil && a.ReviewDate == nil {
+			return fmt.Errorf("%w: give it an expiry, or a review date if the exception is open-ended", ErrAllowanceUnbounded)
+		}
+		return nil
 	case AllowanceAllow:
 		// The refusal names the phase rather than the field, because there is
 		// nothing the caller can correct about the request — the arm does not
 		// exist yet.
 		return ErrAllowanceAdditiveUnsupported
 	default:
-		return fmt.Errorf("%w: direction must be %s or %s", ErrAllowanceInvalid, AllowanceDeny, AllowanceAllow)
+		return fmt.Errorf("%w: direction must be %s, %s or %s", ErrAllowanceInvalid, AllowanceDeny, AllowanceSet, AllowanceAllow)
 	}
 	if a.ExpiresAt == nil && a.ReviewDate == nil {
 		// The error offers both valid forms and names the per-person permanent
@@ -136,19 +145,23 @@ func CreateAllowance(ctx context.Context, a Allowance) (Allowance, error) {
 // Never a delete. An allowance is a decision somebody took, and removing the
 // row erases the only record that the suspension ever happened — which is the
 // history the whole layer exists to keep attached to the person.
-func LiftAllowance(ctx context.Context, id, actor string) error {
+//
+// It returns whose allowance it was and on which target, so the caller can
+// converge that person now rather than at the next reconcile.
+func LiftAllowance(ctx context.Context, id, actor string) (subjectID, target string, err error) {
 	if !looksLikeUUID(id) {
-		return fmt.Errorf("%w: %s", ErrAllowanceNotFound, id)
+		return "", "", fmt.Errorf("%w: %s", ErrAllowanceNotFound, id)
 	}
-	const q = `UPDATE allowances SET lifted_at = NOW(), lifted_by = $2 WHERE id = $1 AND lifted_at IS NULL`
-	tag, err := querier(ctx).Exec(ctx, q, id, actor)
+	const q = `UPDATE allowances SET lifted_at = NOW(), lifted_by = $2 WHERE id = $1 AND lifted_at IS NULL
+		RETURNING subject_id, target`
+	err = querier(ctx).QueryRow(ctx, q, id, actor).Scan(&subjectID, &target)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", fmt.Errorf("%w: %s (or it was already lifted)", ErrAllowanceNotFound, id)
+	}
 	if err != nil {
-		return fmt.Errorf("lift allowance: %w", err)
+		return "", "", fmt.Errorf("lift allowance: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("%w: %s (or it was already lifted)", ErrAllowanceNotFound, id)
-	}
-	return nil
+	return subjectID, target, nil
 }
 
 // AllowancesInForce returns the allowances currently applying to a subject on a

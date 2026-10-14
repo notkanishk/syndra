@@ -76,6 +76,15 @@ func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *test
 		return nil
 	}
 
+	// An approval reaches the system its project serves, as a cascade does.
+	origConverge := svcConvergeProjectChange
+	t.Cleanup(func() { svcConvergeProjectChange = origConverge })
+	converged := ""
+	svcConvergeProjectChange = func(_ context.Context, _, user, project string) error {
+		converged = user + "|" + project
+		return nil
+	}
+
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/req-1/decision", strings.NewReader(`{"status":"approved","reviewer_id":"reviewer-1","review_note":"ok"}`))
 	req.SetPathValue("id", "req-1")
 	rr := httptest.NewRecorder()
@@ -95,6 +104,9 @@ func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *test
 	}
 	if rebuiltFor != "u1" {
 		t.Fatalf("expected cache rebuild for u1, got %s", rebuiltFor)
+	}
+	if converged != "u1|p1" {
+		t.Fatalf("an approval must converge its project's system, got %q", converged)
 	}
 	if auditAction != "access_request.approved" {
 		t.Fatalf("unexpected audit action %s", auditAction)

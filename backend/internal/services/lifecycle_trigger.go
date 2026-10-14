@@ -136,25 +136,31 @@ func triggerTargetConvergence(ctx context.Context, actor, userID string, changed
 		return err
 	}
 	for _, target := range targets {
-		// Resolved fresh, inside the lock, after the source write — which is
-		// what the deferral above buys, and the whole reason the flush is not
-		// at the chokepoint. The delta
-		// being enqueued beside this is the role change itself; what the target
-		// needs is the state that follows from it, which is the whole resolved
-		// set and not the delta. A set computed from the delta alone would carry
-		// only what moved and the apply is level-triggered, so it would remove
-		// everything that did not.
-		set, err := svcResolveEntitlements(ctx, userID, target)
-		if err != nil {
-			return fmt.Errorf("resolve %s on %s: %w", userID, target, err)
+		if err := convergeOn(ctx, actor, userID, target); err != nil {
+			return err
 		}
-		if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
-			Target: target, SubjectID: userID, Actor: actor,
-			Reason:  "Role change reached a mapped target",
-			Desired: set.Desired(),
-		}); err != nil {
-			return fmt.Errorf("queue convergence for %s on %s: %w", userID, target, err)
-		}
+	}
+	return nil
+}
+
+// convergeOn queues one subject's convergence on one target.
+func convergeOn(ctx context.Context, actor, userID, target string) error {
+	// Resolved fresh, inside the lock, after the source write — which is what
+	// the deferral above buys, and the whole reason the flush is not at the
+	// chokepoint. What the target needs is the state that follows from the
+	// change, which is the whole resolved set and not the delta: the apply is
+	// level-triggered, so a set built from the delta would remove everything
+	// that did not move.
+	set, err := svcResolveEntitlements(ctx, userID, target)
+	if err != nil {
+		return fmt.Errorf("resolve %s on %s: %w", userID, target, err)
+	}
+	if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
+		Target: target, SubjectID: userID, Actor: actor,
+		Reason:  "Role change reached a mapped target",
+		Desired: set.Desired(),
+	}); err != nil {
+		return fmt.Errorf("queue convergence for %s on %s: %w", userID, target, err)
 	}
 	return nil
 }
@@ -186,4 +192,35 @@ func targetsReachedBy(ctx context.Context, changed []roleKey) ([]string, error) 
 	// than in map order, which makes a failure reproducible.
 	sort.Strings(out)
 	return out, nil
+}
+
+// ConvergeProjectChange queues the convergence a role change outside a cascade
+// needs: a request approved, a direct grant added, replaced or revoked. Those
+// write through the ledger and the outbox and never pass `deltaParams`, so a
+// member whose first storage role came from an approved request got no account
+// until an operator ran "apply entitlements" by hand.
+//
+// Keyed on the project rather than the roles, because a project serves exactly
+// one target (migration 000051): whatever moved in it — a role gained, one
+// replaced, one revoked — the one target it serves is the one to re-resolve,
+// and a project serving none costs one indexed read and queues nothing.
+//
+// A grant made in Zitadel's own console never comes here. A Zitadel change with
+// no Syndra trace is drift to triage, never a decision to act on, and the
+// resolver does not count it as held.
+func ConvergeProjectChange(ctx context.Context, actor, userID, projectID string) error {
+	target, ok, err := dbTargetServingProject(ctx, projectID)
+	if err != nil || !ok {
+		return err
+	}
+	return ConvergeSubjectOn(ctx, actor, userID, target)
+}
+
+// ConvergeSubjectOn queues one person's convergence on one target, under the
+// access lock: a hold created or lifted takes effect on the next send rather
+// than at the next reconcile, up to six hours later.
+func ConvergeSubjectOn(ctx context.Context, actor, userID, target string) error {
+	return withLockedAccess(ctx, func(ctx context.Context) error {
+		return convergeOn(ctx, actor, userID, target)
+	})
 }
