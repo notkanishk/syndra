@@ -41,6 +41,19 @@ type StorageStatus struct {
 	// UsageReadable distinguishes "nothing used" from "could not look". Zero
 	// bytes and an unread quota table are the same number otherwise.
 	UsageReadable bool `json:"usage_readable"`
+	// NeedsNewPassword is an account that has had a password and is kept off
+	// SMB until it gets a new one: access was taken away, which rotated the
+	// password, and has since been given back. TrueNAS turns SMB on only in
+	// the call that sets a password, so the member's next password is what
+	// opens their folders again. Distinct from a first password
+	// (NeedsPassword).
+	NeedsNewPassword bool `json:"needs_new_password"`
+	// Places is everywhere this account can connect, read from the folder
+	// ACLs for the groups it is actually in, home folder first (reach.go).
+	// PlacesReadable is false when the ACLs have never been read; an empty
+	// list that was read is "no folder is open to you yet".
+	Places         []Place `json:"places"`
+	PlacesReadable bool    `json:"places_readable"`
 }
 
 // ShareUsage is one share and what this member is holding in it.
@@ -62,20 +75,22 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
 
-	status := StorageStatus{Username: binding.Username, Shares: []ShareUsage{}}
+	status := StorageStatus{Username: binding.Username, Shares: []ShareUsage{}, Places: []Place{}}
 
 	// Account state from a live read, not the mirror. This is the field a
 	// member is about to act on, and a mirror could be six hours old — telling
 	// somebody to set a password they set this morning.
 	var accounts []struct {
-		UID              int64 `json:"uid"`
-		SMB              bool  `json:"smb"`
-		Locked           bool  `json:"locked"`
-		PasswordDisabled bool  `json:"password_disabled"`
+		UID              int64   `json:"uid"`
+		SMB              bool    `json:"smb"`
+		Locked           bool    `json:"locked"`
+		PasswordDisabled bool    `json:"password_disabled"`
+		Groups           []apiID `json:"groups"`
+		Home             string  `json:"home"`
 	}
 	if err := s.nas.call("user.query",
 		[]any{[]any{[]any{"username", "=", binding.Username}},
-			map[string]any{"select": []string{"uid", "smb", "locked", "password_disabled"}}},
+			map[string]any{"select": []string{"uid", "smb", "locked", "password_disabled", "groups", "home"}}},
 		&accounts); err != nil {
 		return OperationResult{}, statusFor(err), fmt.Errorf("your account could not be read")
 	}
@@ -88,7 +103,14 @@ func (s *server) storageStatus(req OperationRequest) (OperationResult, int, erro
 	account := accounts[0]
 	status.SMBEnabled = account.SMB
 	status.NeedsPassword = account.PasswordDisabled
-	status.Usable = !account.PasswordDisabled && !account.Locked
+	status.NeedsNewPassword = !account.PasswordDisabled && !account.SMB &&
+		binding.WantsSMB != nil && *binding.WantsSMB
+	status.Usable = !account.PasswordDisabled && !account.Locked && !status.NeedsNewPassword
+
+	// Best-effort like usage: whether the account works is the urgent half.
+	if places, err := s.memberPlaces(account.UID, account.Groups, account.Home); err == nil {
+		status.Places, status.PlacesReadable = places, true
+	}
 
 	// Usage is best-effort: a member who cannot be told their usage can still
 	// be told whether their account works, and that is the more urgent half.

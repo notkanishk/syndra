@@ -213,6 +213,9 @@ type ValuesResponse struct {
 	// which the backend must read as "structure only", never as "no value is
 	// valid".
 	Enumerable bool `json:"enumerable"`
+	// Labels names a value the way a person says it, where that differs from
+	// the value itself: a home folder's path reads as `main › home_dir`.
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // handleValues answers what a field's values may be.
@@ -241,12 +244,12 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 		sort.Strings(names)
 		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: names, Enumerable: true})
 	case FieldHome:
-		places, err := s.homePlaces()
+		places, labels, err := s.homePlaces()
 		if err != nil {
 			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
 			return
 		}
-		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: places, Enumerable: true})
+		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: places, Enumerable: true, Labels: labels})
 	case FieldHomeQuota:
 		// A byte count, not a list: structure only, which the backend reads as
 		// "any value of the declared type", never as "no value is valid".

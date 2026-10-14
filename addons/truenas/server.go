@@ -54,6 +54,9 @@ type server struct {
 	// idFloor and idCeiling bound the uids and gids this add-on hands out
 	// (identity.go). Zero means the defaults.
 	idFloor, idCeiling int64
+
+	// reach is the last read of the shares' folder permissions (reach.go).
+	reach reachCache
 }
 
 func (s *server) routes() http.Handler {
@@ -66,6 +69,8 @@ func (s *server) routes() http.Handler {
 	// membership is runtime state, and a cached manifest would refuse a group
 	// created five minutes ago.
 	mux.HandleFunc("GET /values/{field}", s.auth.authenticated(s.handleValues))
+	// What each group opens, read from the folder ACLs (reach.go).
+	mux.HandleFunc("GET /reach", s.auth.authenticated(s.handleReach))
 	mux.HandleFunc("POST /apply", s.auth.authenticated(s.handleApply))
 	mux.HandleFunc("POST /plan", s.auth.authenticated(s.handlePlan))
 	// The runtime setter §18 says the three states need. Without it the only
