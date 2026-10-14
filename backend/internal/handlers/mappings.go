@@ -329,6 +329,15 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 	if err := services.ValidateMappingField(declared, field); err != nil {
 		return "", "", addons.Resolution{}, err
 	}
+	// A whole-number field (a home folder limit, in bytes) is checked here: the
+	// add-on cannot enumerate it, so nothing downstream would.
+	for _, f := range schema {
+		if f.Name == field && f.Type == "int" {
+			if n, err := strconv.ParseInt(value, 10, 64); err != nil || n < 0 {
+				return "", "", addons.Resolution{}, fmt.Errorf("%w: %s takes a whole number, and %q is not one", db.ErrMappingInvalid, fieldLabel(f), value)
+			}
+		}
+	}
 
 	// Reference, last, and only once structure holds. This is the network call,
 	// and spending it to be told a field is misspelled would make an outage
@@ -446,4 +455,12 @@ func commonPrefix(a, b string) int {
 		n++
 	}
 	return n
+}
+
+// fieldLabel names a field for a person: the add-on's label when it gave one.
+func fieldLabel(f addons.EntitlementField) string {
+	if f.Label != "" {
+		return f.Label
+	}
+	return f.Name
 }

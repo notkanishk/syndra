@@ -26,6 +26,10 @@ import (
 const (
 	AllowanceDeny  = "deny"
 	AllowanceAllow = "allow"
+	// AllowanceSet sets one field to one value for one person, over what their
+	// roles give: an operator's exception, like a larger home folder limit.
+	// Only fields the add-on declares per-person (checked by the handler).
+	AllowanceSet = "set"
 )
 
 var (
@@ -96,13 +100,18 @@ func (a Allowance) validate() error {
 	}
 	switch a.Direction {
 	case AllowanceDeny:
+	case AllowanceSet:
+		if a.ExpiresAt == nil && a.ReviewDate == nil {
+			return fmt.Errorf("%w: give it an expiry, or a review date if the exception is open-ended", ErrAllowanceUnbounded)
+		}
+		return nil
 	case AllowanceAllow:
 		// The refusal names the phase rather than the field, because there is
 		// nothing the caller can correct about the request — the arm does not
 		// exist yet.
 		return ErrAllowanceAdditiveUnsupported
 	default:
-		return fmt.Errorf("%w: direction must be %s or %s", ErrAllowanceInvalid, AllowanceDeny, AllowanceAllow)
+		return fmt.Errorf("%w: direction must be %s, %s or %s", ErrAllowanceInvalid, AllowanceDeny, AllowanceSet, AllowanceAllow)
 	}
 	if a.ExpiresAt == nil && a.ReviewDate == nil {
 		// The error offers both valid forms and names the per-person permanent

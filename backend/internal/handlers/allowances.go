@@ -49,6 +49,11 @@ func handleCreateAllowance(w http.ResponseWriter, r *http.Request) {
 	if req.Direction == "allow" && !requireProject(w, r, req.Target) {
 		return
 	}
+	if req.Direction == db.AllowanceSet && !fieldIsPerPerson(req.Target, req.Field) {
+		jsonValidationErrorResponse(w, "That setting can't be set for one person. Only settings the system marks as per-person can.",
+			map[string]string{"field": "not_per_person"})
+		return
+	}
 	field, value, err := validateAllowanceAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
 	if err != nil {
 		writeAllowanceError(w, err)
@@ -182,4 +187,19 @@ func writeAllowanceError(w http.ResponseWriter, err error) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR",
 			"The allowance could not be written. The failure is in the server log.")
 	}
+}
+
+// fieldIsPerPerson reports whether the target's add-on declares this field as
+// one an operator may set for one person.
+func fieldIsPerPerson(target, field string) bool {
+	schema, err := addonsEntitlementSchema(target)
+	if err != nil {
+		return false
+	}
+	for _, f := range schema {
+		if f.Name == field {
+			return f.PerPerson
+		}
+	}
+	return false
 }

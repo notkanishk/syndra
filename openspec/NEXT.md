@@ -115,6 +115,7 @@ The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built 
 
 - **Composed roles, created by administrators** (owner, 2026-10-14; details to be settled with the owner before building). Today TrueNAS maps one role to the wide base groups. The goal is an operator flow that composes a role from others: a tier role carries resource roles, and those resource roles map to resource groups (`mk-<resource>-<ro|rw>`, AGDLP). The model already exists as `mapping_rules`, kept depth-1 so `effectiveClosure` (`services/cascade.go:108`) and `EnforceMappingRules` agree.
   - **Blocked on the untraced rule propagation below.** Production has zero mapping rules. The first composed role an operator creates is the rule that springs that trap, so the enqueue fix lands first.
+- **What happens to a home folder after someone leaves** (owner, 2026-10-14). Today it is kept, always: Syndra never moves or deletes a home (truenas-reconcile D10). The choice to build: keep it (today), archive it (owner becomes root, private, the shape the 14 Oct cleanup of old folders used), or delete it after N days. It should be settable per system, with the date the person left shown beside each kept folder.
 - **Role kind (core / extra)**: designed, not owed until a screen needs it. The only SQL touch points are `backend/internal/db/roles.go:31,62,81`.
 
 ### Phase 5 — Automation & Governance
