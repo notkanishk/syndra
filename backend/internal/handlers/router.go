@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"log"
@@ -598,7 +600,30 @@ type ErrorResponse struct {
 }
 
 func jsonErrorResponse(w http.ResponseWriter, status int, errStr, msg string) {
+	if status == http.StatusInternalServerError {
+		// An internal failure's own text — a constraint name, a scanner
+		// mismatch — is for the log, never for the screen: it reads as the
+		// operator's mistake when it is Syndra's. They get a sentence and a
+		// reference that finds the log line; the cause stays one grep away.
+		ref := supportReference()
+		log.Printf("[ERROR] ref=%s code=%s: %s", ref, errStr, msg)
+		jsonResponse(w, status, ErrorResponse{
+			Error:   errStr,
+			Message: "Something went wrong inside Syndra.",
+			Details: map[string]string{"request_id": ref},
+		})
+		return
+	}
 	jsonResponse(w, status, ErrorResponse{Error: errStr, Message: msg})
+}
+
+// supportReference is a short id an operator can read out and grep for.
+func supportReference() string {
+	b := make([]byte, 5)
+	if _, err := rand.Read(b); err != nil {
+		return "unavailable"
+	}
+	return strings.ToUpper(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
 }
 
 func jsonValidationErrorResponse(w http.ResponseWriter, msg string, details map[string]string) {
