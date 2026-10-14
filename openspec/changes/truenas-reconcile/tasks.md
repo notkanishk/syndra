@@ -107,6 +107,8 @@
   - Tests for each
 - [ ] 10.3 Refuse to point a home at a folder that already exists and is owned by another uid. The outcome names the folder. Test
 - [ ] 10.4 Two roles naming different places: everything else lands, the home is left as it is, and the outcome says which two. Test
+- [x] 10.6 Home folder limit: `home_quota`, a per-role value in bytes, where the largest of a person's roles wins. It is set as a user quota on the home's dataset. A limit nobody gives any more is left as it is, never removed into "unlimited". The add-on key needs TrueNAS's DATASET_WRITE role to set it (owner decision).
+- [x] 10.7 Per-person limit: an allowance with direction `set` (migration 000052). It is allowed only on fields the add-on marks per-person, bounded by an expiry or a review date, and applied by the resolver over the roles' value, only for someone the target reaches.
 - [ ] 10.5 UI (after A-02): the home setting on the mapping screen, and "Your home folder" first among the member's places
 
 ## 11. Identity numbers never reused (found 14 Oct, read-only audit)

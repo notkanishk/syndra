@@ -97,3 +97,40 @@ func TestADeactivatedPersonIsConvergedWhereTheyHaveAnAccount(t *testing.T) {
 		t.Fatalf("want one convergence on truenas only, got %v", asked)
 	}
 }
+
+// Only a field the add-on marks per-person can be set for one person.
+func TestOnlyPerPersonFieldsCanBeSetForOnePerson(t *testing.T) {
+	stubMappingDeps(t, []addons.EntitlementField{
+		{Name: "group", Type: "string[]"},
+		{Name: "home_quota", Type: "int", PerPerson: true},
+	})
+	create := dbCreateAllowance
+	t.Cleanup(func() { dbCreateAllowance = create })
+	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) { a.ID = "a1"; return a, nil }
+
+	post := func(field, value string) int {
+		rr := httptest.NewRecorder()
+		handleCreateAllowance(rr, httptest.NewRequest(http.MethodPost, "/api/v1/allowances", strings.NewReader(
+			`{"subject_id":"u1","target":"truenas","field":"`+field+`","value":"`+value+`","direction":"set","reason":"thesis data","review_date":"2027-01-01T00:00:00Z"}`)))
+		return rr.Code
+	}
+	if code := post("group", "Staff"); code != http.StatusBadRequest {
+		t.Fatalf("setting a group for one person must be refused, got %d", code)
+	}
+	if code := post("home_quota", "53687091200"); code != http.StatusCreated {
+		t.Fatalf("a per-person limit must be accepted, got %d", code)
+	}
+}
+
+// A home folder limit is a whole number of bytes; anything else is refused
+// before the add-on is asked.
+func TestALimitMustBeAWholeNumber(t *testing.T) {
+	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "home_quota", Type: "int", Label: "Home folder limit", Single: true}})
+	rr := postMapping(`{"target":"truenas","project_id":"p","role_key":"maker","field":"home_quota","value":"lots"}`)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "Home folder limit takes a whole number") {
+		t.Fatalf("want a refusal naming the field, got %d %s", rr.Code, rr.Body.String())
+	}
+	if len(h.resolved) != 0 {
+		t.Fatal("the add-on must not be asked about a value that is not a number")
+	}
+}
