@@ -324,3 +324,24 @@ func TestAccessGivenBackNeedsANewPassword(t *testing.T) {
 		t.Fatal("SMB that isn't wanted was reported as waiting for a password")
 	}
 }
+
+// TRUENAS_SHARES narrows what Syndra considers: a share outside it is not
+// read, offered or counted, even where everyone@ opens it.
+func TestAShareOutsideTheScopeIsNotConsidered(t *testing.T) {
+	fake := reachFake()
+	s := testServer(t, fake)
+	s.shares = shareScope(splitList(" main , "))
+
+	_, out := getReach(t, s)
+	if got := describe(out.Everyone); got != "" {
+		t.Fatalf("everyone opens %q; the open share is outside the scope", got)
+	}
+	for _, p := range fake.params {
+		if args, ok := p.([]any); ok && len(args) > 0 && args[0] == "/mnt/tank/open" {
+			t.Fatalf("a share outside the scope was read: %v", args)
+		}
+	}
+	if describe(out.Groups["staff"]) != "main/quack:change,main/waddle:change" {
+		t.Errorf("staff = %q", describe(out.Groups["staff"]))
+	}
+}

@@ -81,9 +81,12 @@ type config struct {
 	// idFloor and idCeiling are the uid/gid range new accounts are given
 	// (TRUENAS_ID_FLOOR / TRUENAS_ID_CEILING; identity.go explains the default).
 	idFloor, idCeiling int64
-	nasAPIKey          string
-	nasVerify          bool
-	keyExpiry          time.Time
+	// shares are the SMB shares Syndra considers, by name; empty is every
+	// enabled one. Owner, 15 Oct: only `main` for now.
+	shares    []string
+	nasAPIKey string
+	nasVerify bool
+	keyExpiry time.Time
 	// keyNeverExpires is TRUENAS_API_KEY_EXPIRES_AT=never — an operator stating
 	// that the key was issued without one. Distinct from unset, which means
 	// nobody has said either way.
@@ -104,6 +107,7 @@ func loadConfig() (config, error) {
 		shareHost:  strings.TrimSpace(os.Getenv("TRUENAS_SHARE_HOST")),
 		idFloor:    int64(envInt("TRUENAS_ID_FLOOR", defaultIDFloor)),
 		idCeiling:  int64(envInt("TRUENAS_ID_CEILING", defaultIDCeiling)),
+		shares:     splitList(os.Getenv("TRUENAS_SHARES")),
 		statePath:  envOr("STATE_PATH", "/var/lib/syndra-truenas/state.db"),
 		logDir:     envOr("MUTATION_LOG_DIR", "/var/lib/syndra-truenas"),
 		lifecycle:  envOr("LIFECYCLE_STATE", LifecycleActive),
@@ -236,6 +240,7 @@ func run() error {
 		// block, and the member's page omits the instructions with it.
 		connection: shareConnection(cfg.shareHost),
 		idFloor:    cfg.idFloor,
+		shares:     shareScope(cfg.shares),
 		idCeiling:  cfg.idCeiling,
 		// A fresh session per purge, under the injected key, closed immediately
 		// after. Never the shared one: an elevated credential must not outlive
