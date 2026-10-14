@@ -339,8 +339,17 @@ func TestConvergenceIsLevelTriggeredInBothDirections(t *testing.T) {
 	if len(m2.creates) != 0 {
 		t.Fatal("restoring must not create a second account")
 	}
-	if m2.updates[0]["locked"] != false || m2.updates[0]["smb"] != true {
-		t.Errorf("want unlocked with SMB back: %v", m2.updates[0])
+	// Unlocked and back in its groups in one write. SMB is not in it: TrueNAS
+	// switches SMB on only together with a new password, so a restored member
+	// sets theirs again, and the outcome says so.
+	if m2.updates[0]["locked"] != false {
+		t.Errorf("want unlocked: %v", m2.updates[0])
+	}
+	if _, sent := m2.updates[0]["smb"]; sent {
+		t.Errorf("smb: true alone is refused by TrueNAS and takes the whole update down: %v", m2.updates[0])
+	}
+	if d := decodeOutcome(t, on).Detail; !strings.Contains(d, "set their password again") {
+		t.Errorf("the restoration must say SMB waits for a new password, got %q", d)
 	}
 }
 

@@ -268,28 +268,24 @@ func (s *server) setPassword(req OperationRequest) (OperationResult, int, error)
 	}, http.StatusOK, nil
 }
 
-// desiredSMB reports the SMB state last applied for a subject, and whether
-// anything is known about it at all.
+// desiredSMB reports the SMB state the last apply asked for, and whether any
+// apply has asked.
 //
-// Read from the mirror rather than taken as a parameter: `password.set` is a
+// Read from the binding rather than taken as a parameter: `password.set` is a
 // member-scoped call carrying a credential and nothing else, and letting a
 // caller pass an entitlement alongside it would make a password change a way to
-// grant share access. The mirror is what the last convergence decided.
+// grant share access.
+//
+// Never from the snapshot. The snapshot is what the NAS HAS, and for an account
+// waiting on its first password that is "SMB off", because TrueNAS refuses SMB
+// until this very call. Reading it here meant no account Syndra created ever
+// got SMB.
 func (s *server) desiredSMB(subject string) (bool, bool) {
-	snap, ok, err := s.store.GetSnapshot()
-	if err != nil || !ok {
+	b, found, err := s.store.GetBinding(subject)
+	if err != nil || !found || b.WantsSMB == nil {
 		return false, false
 	}
-	binding, err := s.boundAccount(subject)
-	if err != nil {
-		return false, false
-	}
-	for _, sub := range snap.Subjects {
-		if sub.UID == binding.UID {
-			return sub.SMBEnabled, true
-		}
-	}
-	return false, false
+	return *b.WantsSMB, true
 }
 
 // refuseSelfAccount rejects an operation aimed at the add-on's own target
