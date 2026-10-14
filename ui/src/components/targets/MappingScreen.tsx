@@ -1,5 +1,10 @@
 "use client";
 
+import Link from "next/link";
+
+import { EmptyState } from "@/components/states";
+import { Card } from "@/components/ui/Card";
+import { ApiError } from "@/lib/api-client";
 import { MappingManagement } from "@/components/targets/MappingManagement";
 import { VersionBand } from "@/components/targets/VersionBand";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -30,6 +35,7 @@ export function MappingScreen({ target }: { target: string }) {
 
   const reach = mappings.data?.length;
   const name = targetLabel(target);
+  const noProject = mappings.error instanceof ApiError && mappings.error.code === "PROJECT_REQUIRED";
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -57,9 +63,29 @@ export function MappingScreen({ target }: { target: string }) {
         }
       />
 
-      <VersionBand target={target} history={history.data} />
-
-      <MappingManagement target={target} />
+      {noProject ? (
+        // Reached by a link before the system has a project: why the project
+        // comes first, and the way to choose it. Nothing else renders.
+        <Card>
+          <EmptyState
+            title={`${name} has no Zitadel project yet.`}
+            guidance={`A mapping ties one of that project's roles to a ${name} group, so the project comes first. It is chosen on ${name}'s own page.`}
+          />
+          <div className="px-5 pb-[18px]">
+            <Link
+              href={`/system/targets/${target}`}
+              className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-0"
+            >
+              Choose it on {name}&apos;s page →
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <>
+          <VersionBand target={target} history={history.data} />
+          <MappingManagement target={target} />
+        </>
+      )}
     </div>
   );
 }
