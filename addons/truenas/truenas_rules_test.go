@@ -255,3 +255,17 @@ func after(t *testing.T, src, marker string) string {
 	}
 	return rest
 }
+
+// A member account is for SMB, never a login. TrueNAS gives an account with no
+// shell named zsh, so one SSH key added later is a working shell on the NAS.
+// Every account the makerspace made by hand uses nologin.
+func TestCreateGivesNoLoginShell(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-9","email":"zoe@example.edu","desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}`)
+	if len(m.creates) != 1 {
+		t.Fatalf("want one create, got %d (%s)", len(m.creates), rr.Body.String())
+	}
+	if m.creates[0]["shell"] != "/usr/sbin/nologin" {
+		t.Fatalf("want shell /usr/sbin/nologin (a value from user.shell_choices), got %v", m.creates[0]["shell"])
+	}
+}

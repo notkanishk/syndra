@@ -666,6 +666,11 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// be one more thing that disagrees with Zitadel.
 		"full_name":    binding.Username,
 		"group_create": true,
+		// SMB only, never a login. Left unset, TrueNAS gives the account zsh,
+		// and one SSH key added later is a working shell on the NAS. The path
+		// is a key of `user.shell_choices` on 25.10, and the one every account
+		// the makerspace made by hand already uses.
+		"shell": "/usr/sbin/nologin",
 		// A credential decision is REQUIRED at creation: TrueNAS refuses
 		// `user.create` with neither `password` nor `password_disabled`
 		// (`user_create.password: Password is required`). Syndra has no
