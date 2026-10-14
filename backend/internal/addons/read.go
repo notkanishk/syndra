@@ -742,6 +742,15 @@ type Place struct {
 	// Linux, \\host\share\folder for Windows.
 	SMBAddress string `json:"smb_address,omitempty"`
 	UNCAddress string `json:"unc_address,omitempty"`
+	// Roles are the member's own roles whose groups open this place, filled
+	// by Syndra: "from your Fabrication lead role". Empty for a home folder.
+	Roles []PlaceRole `json:"roles,omitempty"`
+}
+
+// PlaceRole is one role, as a project and key.
+type PlaceRole struct {
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
 }
 
 // Address fills both addresses for a host.
