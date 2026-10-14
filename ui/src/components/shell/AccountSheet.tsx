@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { Modal, ModalHeader } from "@/components/ui/Modal";
+import { ACCOUNT_NAV } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
 import { useInstallPrompt } from "@/lib/useInstallPrompt";
@@ -68,6 +70,21 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               )}
             </span>
           </div>
+
+          {/* An operator's own pages: their storage password and where to
+              connect. A member has these in their rail already. */}
+          {session.role !== "user" &&
+            ACCOUNT_NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className="flex min-h-[44px] items-center justify-between rounded-inner border border-line px-4 text-[14.5px] motion-press"
+              >
+                <span>{item.label}</span>
+                <span className="text-muted">Your password and folders</span>
+              </Link>
+            ))}
 
           {/* A setting about this device, in a sheet about this device. The
               header keeps its own toggle where there is room for one. */}
