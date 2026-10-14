@@ -31,7 +31,7 @@
 - [x] 2b.1 Monitor keeps the last three results, `missed_since` (the first miss of the current run) and `started_at`. Tests
 - [x] 2b.2 One backend `status` with A-01's precedence: `cannot_connect` > `offline` > `waiting_to_retry` > `checking` > `answering`. It goes on the targets list and the health read. Test for each pairing
 - [x] 2b.3 Values answer carries `builtin_count` and two built-in example names, for "TrueNAS has no groups of its own yet". Test
-- [ ] 2b.4 UI renames at the A-01 call sites, with their tests. Check pips (aria-label) on Connected systems and the system page
+- [x] 2b.4 UI renames at the A-01 call sites, with their tests. Check pips (aria-label) on Connected systems and the system page
 
 ## 3. Backend: one project per target (D3–D5)
 
@@ -56,45 +56,45 @@
 
 - [x] 4.1 Superseded with 1.6: mappable = not lifecycle, so there is no second declaration to fall back from
 - [x] 4.2 `GET /targets/{t}/mappable-values?field=`, with the last-known cache, `read_at` and `current`, and `409 VALUES_NEVER_READ`. Tests: fresh, stale and never read
-- [ ] 4.3 Drop `near` from the unresolvable refusal, together with 6.3: until the picker ships the dialog is free text, and `near` is what answers a typo. Update the handler test
+- [x] 4.3 Drop `near` from the unresolvable refusal, together with 6.3: until the picker ships the dialog is free text, and `near` is what answers a typo. Update the handler test
 
 ## 5. UI: Notice and member storage (D9, BUILD-LIST "/storage")
 
-- [ ] 5.1 `components/ui/Notice.tsx` per `proposed/Notice.md` (amber, red, neutral; `role="alert"` when it blocks). Unit test
-- [ ] 5.2 Rebuild `MyStorage` to `route-storage`:
+- [x] 5.1 `components/ui/Notice.tsx` per `proposed/Notice.md` (amber, red, neutral; `role="alert"` when it blocks). Unit test
+- [x] 5.2 Rebuild `MyStorage` to `route-storage`:
   - the state line, and one display line per state
   - one block per share with `CopyableValue` addresses
   - the neutral usage bar, "nearly full" from 90%, "no limit set", and offline unavailable
   - the password as a next step, and the quiet "Change password"
   - one Notice per card
   - the paused and offline refusals, the held state (#79) and the no-host state (#80)
-- [ ] 5.3 `useMyStorage` refetches every 30s while a Notice shows
-- [ ] 5.4 `ConnectionGuide` Modal, with device from the user agent, hidden while offline
-- [ ] 5.5 Phone notes: three-segment step bar, full-width guide button, password field ≥ 220px
-- [ ] 5.6 Tests: each state's copy and controls, never 0 usage offline, no password field when paused or offline
+- [x] 5.3 `useMyStorage` refetches every 30s while a Notice shows
+- [x] 5.4 `ConnectionGuide` Modal, with device from the user agent, hidden while offline
+- [x] 5.5 Phone notes: three-segment step bar, full-width guide button, password field ≥ 220px
+- [x] 5.6 Tests: each state's copy and controls, never 0 usage offline, no password field when paused or offline
 
 ## 6. UI: Connected systems (D9, B3, #57)
 
-- [ ] 6.1 Project gate (3a, frame `noproject`):
+- [x] 6.1 Project gate (3a, frame `noproject`):
   - violet Step 1 of 2 panel with the picker
   - taken projects disabled and named
   - role counts
   - waiting regions inert at 40%
   - result frame `projectset`
-- [ ] 6.2 Setup strip: Zitadel project link, mapping summary, and "Mappings →" / "Add the first mapping →". The census line drops its link and names the project
-- [ ] 6.3 `AddMappingDialog`:
+- [x] 6.2 Setup strip: Zitadel project link, mapping summary, and "Mappings →" / "Add the first mapping →". The census line drops its link and names the project
+- [x] 6.3 `AddMappingDialog`:
   - role picker scoped to the project, unmapped roles only
   - field label from the manifest, with a Select only for two or more fields
   - value Select from `mappable-values`, with the stale label, "TrueNAS hasn't listed its groups yet", and the re-read on unresolvable
-- [ ] 6.4 Mapping rows drop the project prefix
-- [ ] 6.5 Connected systems shows the project read-only. A null project shows "Choose its Zitadel project →" under Needs you
-- [ ] 6.6 #57 Assign Modal:
+- [x] 6.4 Mapping rows drop the project prefix
+- [x] 6.5 Connected systems shows the project read-only. A null project shows "Choose its Zitadel project →" under Needs you
+- [x] 6.6 #57 Assign Modal:
   - people search with single-choice rows
   - "Already has {username} on {target}"
   - the Changes / Stays box
   - `ConfirmByTyping`
   - "Assign {account} to {name}"
-- [ ] 6.7 Tests for the gate, the strip, the dialog states and the assign Modal
+- [x] 6.7 Tests for the gate, the strip, the dialog states and the assign Modal
 
 ## 10. Home folders by role (owner, 14 Oct)
 
@@ -121,6 +121,7 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 - [ ] 11.3 Remediation, on the NAS:
   - [x] the 25 orphaned home folders are owned by root and private to the Admin group (14 Oct, with the owner's approval; the state before is kept for undo)
   - [x] the three Syndra-created accounts and their personal groups are deleted on TrueNAS (15 Oct, owner's approval); Syndra makes them again in the new range once the add-on and UI are complete
+  - [ ] files under `main` owned by a number no account or group holds are given to root, ACLs untouched, with the owners recorded for undo (owner runs it on the NAS, 15 Oct)
   - [ ] their three bindings are released in Syndra ("Check for differences" on the system page lists them as pointing at nothing; owner, signed in)
 
 ## 7a. Mapping dialog (owner, 14 Oct)
@@ -132,10 +133,10 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 
 ## 7. Close the loop
 
-- [ ] 7.1 Full verification: backend, add-on and UI suites, plus lint and build
-- [ ] 7.2 `design_handoff_syndra/reconcile-2026-10/SHIPPED.md` for this slice
+- [x] 7.1 Full verification: backend, add-on and UI suites, plus lint and build
+- [x] 7.2 `design_handoff_syndra/reconcile-2026-10/SHIPPED.md` for this slice
 - [ ] 7.3 Owner reruns `/design-sync` so `Notice` and `ConnectionGuide` reach the design system
-- [ ] 7.4 Fold in A-01 from design (operator intermediate state, "paused" wording, NAS with no groups of its own)
+- [x] 7.4 Fold in A-01 from design (operator intermediate state, "paused" wording, NAS with no groups of its own)
 - [ ] 7.5 Codebase-memory re-index (`detect_changes`)
 
 ## 8. Where to connect, from the NAS (WALKTHROUGH Part 3)
@@ -144,12 +145,13 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 - [x] 8.2 `storage.status` carries `places` from the groups the account is actually in, home folder first. `/me/targets` passes them through with both addresses built once from the connection host. No manifest operation: it is part of the member's own status read. Tests
 - [x] 8.3 Operator: `GET /targets/{t}/reach`, every group at once, so the card header says the read's age once (A-02 §3). Always 200, with `read: false` for "not read from TrueNAS yet". Tests
 - [x] 8.4 Usage per place from its dataset's user quota table, only where the member can change files. No row is 0 ("Nothing saved here yet"); an unreadable table is no usage, never 0. Test
-- [ ] 8.6 "from your Fabrication lead role" (A-02 §1): name the mapping that put the member in the group that opens each place
-- [ ] 8.7 Preview counts homes it will make ("Makes 34 home folders in main › home_dir; 2 people already have one there"). The places offered for the location are the dataset folders at the top of each share, not hidden, labelled `share › folder` [x]
+- [x] 8.6 "from your Fabrication lead role" (A-02 §1): the resolver records which held roles gave each value; `/me/targets` names the roles whose groups open each place, from the target's last read
+- [ ] 8.7 (with A-03) Preview counts homes it will make ("Makes 34 home folders in main › home_dir; 2 people already have one there"). The places offered for the location are the dataset folders at the top of each share, not hidden, labelled `share › folder` [x]
 - [x] 8.8 Retired with 10.8: with one location, two roles can't name two home folders
-- [ ] 8.9 "You no longer hold Lab Tech, the role that gave you this folder" (A-02 §6): the account's home against what the member's roles want now
+- [x] 8.9 Built as "None of the roles you hold gives a home folder any more" (`home_kept`): which lost role gave it isn't kept, so it isn't named. "You no longer hold Lab Tech, the role that gave you this folder" (A-02 §6): the account's home against what the member's roles want now
+- [x] 8.11 `TRUENAS_SHARES`: the SMB shares Syndra considers, empty for every enabled one. Outside it a share is not read for places or home locations, counted for usage or reported for audit coverage. Owner, 15 Oct: `main` only, for now. Test
 - [x] 8.10 Access given back: `needs_new_password` from the add-on (account has a password, SMB off, SMB wanted), and `restored_at` on `/me/targets`, the latest end of a deny hold on that target, lifted or lapsed. Tests
-- [ ] 8.5 UI: share blocks render from `reach`, and the `smb://host/group` derivation is deleted
+- [x] 8.5 UI: share blocks render from `reach`, and the `smb://host/group` derivation is deleted
 
 ## 9. Every way of giving a role reaches TrueNAS (WALKTHROUGH G1, G4, G5)
 
