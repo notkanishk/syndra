@@ -69,4 +69,20 @@ describe("the account sheet", () => {
       expect(control.className, `${name} must clear the touch floor`).toContain("min-h-[44px]");
     }
   });
+
+  // An operator is a person too: their own storage password and folders sit
+  // behind the account, since the rail is about running the makerspace.
+  it("takes an operator to their own network storage", () => {
+    open();
+    const link = screen.getByRole("link", { name: /Network storage/ });
+    expect(link.getAttribute("href")).toBe("/storage");
+    expect(link.className).toContain("min-h-[44px]");
+  });
+
+  // A member has the same page in their rail; one row per job.
+  it("doesn't offer a member their storage twice", () => {
+    render(<AccountSheet session={{ ...session, role: "user" } as SessionUser} />);
+    fireEvent.click(screen.getByRole("button", { name: /Account/ }));
+    expect(screen.queryByRole("link", { name: /Network storage/ })).toBeNull();
+  });
 });
