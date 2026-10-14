@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-resort-a{from{opacity:.35}to{opacity:1}}@keyframes sy-resort-b{from{opacity:.35}to{opacity:1}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Incoming events board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /operations</span>
+    <h1 class="type-page-title" style="margin:0">Incoming events</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">What reached Syndra from outside: access changed in Zitadel, and people joining. One time-ordered stream from two sources, read every five seconds. Forensic, not a queue: nothing on it asks for a decision. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#4</strong> named Incoming events · <strong style="color:var(--ink)">#76</strong> the lede names both streams · <strong style="color:var(--ink)">#77</strong> a person who joined while no default bundle was set is Not acted on, never Failed · S11: a raw timeline with no tiles or roll-ups; only a failed row is tinted; every row opens to its raw payload; grouped by day, so a week never reads as one long minute.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Standing rules applied</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">A list that outgrows a screen: search, then Filters; no Select, since nothing here is acted on · the read line says how current it is, with filters in force beside it · Time carries the arrow and takes the 110px seat · Event and Outcome gather equal values A to Z; What happened is prose and does not sort · 10 rows, then Show 25 more · Outcome is dot and word · people, projects and bundles link · a stream that cannot be read is one Notice.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Outcome gets its own column (it trailed the sentence as "— recorded") · the event reads in words with the raw type in mono beneath · "Newest first" leaves the lede and the card header; the Timeline header and its count go, the read line replaces "loaded 09:42" · day headings use the quiet run label, with a count · one stream failing no longer blanks both: <span class="type-mono">events.error ?? triggers.error</span> becomes a Notice naming the stream · search is new · Time moves last.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/operations" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stStale }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Events haven't been read since 09:44.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server stopped answering this page. The list below is what had arrived by then; anything newer will appear when it answers again.</p>
+      </div>
+    </div></sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Incoming events" lede="Things that happened outside Syndra and reached it: access changed in Zitadel, and people joining. Nothing here needs a decision." hint-size="100%,120px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" hint-size="100%,44px"></x-import></sc-if><sc-if value="{{ showBar }}" hint-placeholder-val="{{ false }}"><div style="margin-top:-4px">{{ readEl }}</div></sc-if>
+
+    <sc-if value="{{ stPartial }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">People joining could not be read.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">The list below has only what Zitadel sent, and that part is current. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_51c0e8a4</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load the events.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for them. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7e2a19c5</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,400px">
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 6 }}" avatar="{{ false }}" label="Loading events" hint-size="100%,360px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Nothing has happened yet." guidance="An event lands here when somebody changes access in Zitadel, or when a new person joins." hint-size="100%,140px"></x-import></sc-if>
+      <sc-if value="{{ stFilteredEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No events match those filters." guidance="248 events are in the timeline." action="{{ clearAction }}" hint-size="100%,140px"></x-import></sc-if>
+      <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:200px;flex:none"><button type="button" aria-label="Sort by event" onClick="{{ sortEvent }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colEvent }}" style-hover="color:var(--ink)">Event<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotEvent }};opacity:{{ opEvent }}">↑</span></button></span><span style="flex:1 1 0;min-width:0">What happened</span><span class="hidden desktop:block" style="width:150px;flex:none"><button type="button" aria-label="Sort by outcome" onClick="{{ sortOutcome }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colOutcome }}" style-hover="color:var(--ink)">Outcome<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotOutcome }};opacity:{{ opOutcome }}">↑</span></button></span><span style="width:110px;flex:none;display:flex;justify-content:flex-end"><button type="button" aria-label="Sort by time" onClick="{{ sortTime }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;transition:color var(--duration-tint) var(--ease-tint);color:{{ colTime }}" style-hover="color:var(--ink)">Time<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotTime }};opacity:{{ opTime }}">↑</span></button></span></x-import>
+        <div id="ev-top" style="scroll-margin-top:16px;animation:{{ sortAnim }}"><sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+          <sc-if value="{{ r.hasRun }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;align-items:baseline;gap:10px;padding:12px 20px 8px;background:var(--surface-0)"><span class="type-label" style="color:var(--ink)">{{ r.run }}</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">{{ r.runCount }}</span></div></sc-if>
+          <div class="row-divider flex flex-col items-start gap-2 px-5 py-4 tablet:flex-row tablet:items-start tablet:gap-[18px]" style="background:{{ r.bg }};animation:{{ r.anim }}">
+            <span class="tablet:w-[200px] tablet:shrink-0" style="display:flex;flex-direction:column;gap:3px;min-width:0">
+              <span style="font-size:14px;font-weight:600;line-height:1.4;text-wrap:pretty">{{ r.label }}</span>
+              <span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ r.type }}</span>
+            </span>
+            <span style="flex:1 1 0;min-width:0;width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:6px">
+              <span style="font-size:13.5px;line-height:1.55;color:{{ r.ink }};text-wrap:pretty"><sc-for list="{{ r.parts }}" as="p" hint-placeholder-count="1"><sc-if value="{{ p.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ p.href }}" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.t }}</a></sc-if><sc-if value="{{ p.isMono }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="font-size:12.5px;color:var(--ink)">{{ p.t }}</span></sc-if><sc-if value="{{ p.isText }}" hint-placeholder-val="{{ true }}">{{ p.t }}</sc-if></sc-for></span>
+              <span class="desktop:hidden" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:{{ r.outInk }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="7px,7px"></x-import>{{ r.word }}<span class="tablet:hidden" style="font-weight:400;color:var(--faint)">· {{ r.when }}</span></span>
+              <button type="button" onClick="{{ r.toggle }}" aria-expanded="{{ r.open }}" class="inline-flex min-h-[44px] items-center desktop:min-h-6" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.detailLabel }}</button>
+            </span>
+            <span class="hidden desktop:block" style="width:150px;flex:none;padding-top:1px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ r.outInk }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.tone }}" hint-size="7px,7px"></x-import>{{ r.word }}</span></span>
+            <span class="hidden tablet:block type-mono" style="width:110px;flex:none;text-align:right;padding-top:2px;font-size:12.5px;color:var(--muted)">{{ r.when }}</span>
+          </div>
+          <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}"><pre class="row-divider type-mono" style="margin:0;overflow-x:auto;padding:14px 20px;background:var(--surface-0);font-size:12.5px;line-height:1.7;color:var(--muted)">{{ r.payload }}</pre></sc-if>
+        </sc-for></div>
+        <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 20px"><span style="font-size:13.5px;color:var(--muted)">{{ footText }}</span><sc-if value="{{ canMore }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" on-click="{{ more }}" hint-size="120px,34px">{{ moreLabel }}</x-import></sc-if><sc-if value="{{ canAll }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ all }}" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ allLabel }}</button></sc-if><sc-if value="{{ canReset }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ reset }}" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Back to 10</button></sc-if></div>
+      </sc-if>
+    </x-import>
+    </sc-if>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    const m = this.st;
+    this.state = { sort: m === "sort-event" ? "event" : m === "sort-outcome" ? "outcome" : "time", dir: 1, shown: m === "more" ? 35 : 10, open: m === "opened" ? "w4" : null };
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: 2, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+    this.all = this.build();
+  }
+  build() {
+    const PER = "route-users-id.dc.html?frame=default", PRJ = "route-projects-id.dc.html?frame=default", BUN = "route-bundles.dc.html?frame=default";
+    const T = (t) => ({ t, isText: true, isLink: false, isMono: false }), P = (t) => ({ t, href: PER, isLink: true, isText: false, isMono: false }), J = (t) => ({ t, href: PRJ, isLink: true, isText: false, isMono: false }), B = (t) => ({ t, href: BUN, isLink: true, isText: false, isMono: false }), M = (t) => ({ t, isMono: true, isText: false, isLink: false });
+    const LABEL = { "grant.created": "Access given in Zitadel", "grant.removed": "Access removed in Zitadel", "grant.changed": "Access changed in Zitadel", "user.created": "Person added in Zitadel", "user.deactivated": "Person deactivated in Zitadel", "onboarding.trigger": "Person joined" };
+    const now = new Date(2026, 9, 6, 9, 50, 0).getTime();
+    const E = (id, minsAgo, type, out, parts, raw) => { const src = type === "onboarding.trigger" ? "onboarding" : "provider"; return { id, at: now - minsAgo * 60000 - (id.length * 7919 % 59) * 1000, type: src === "provider" ? "zitadel." + type : type, label: LABEL[type], src, out, parts, raw: raw || {} }; };
+    const rows = [
+      E("w1", 8, "grant.created", "done", [P("Meera Pillai"), T(" was given "), J("Electronics bench · Operator"), T(". Syndra recorded it.")], { role_key: "electronics.operator", status: "processed" }),
+      E("t1", 11, "onboarding.trigger", "done", [P("Aanya Rao"), T(" joined. Syndra gave her "), B("New members"), T(", the default bundle for new members.")], { bundle_id: "b_newmembers", status: "completed" }),
+      E("w2", 19, "grant.created", "dropped", [P("Kabir Shah"), T(" was given "), J("3D printers · Member"), T(". Syndra made this change itself, so there was nothing to record.")], { role_key: "printers.member", status: "dropped_own_change" }),
+      E("w4", 35, "grant.changed", "failed", [P("Ravi Kumar"), T("'s access on "), J("Wood shop"), T(" changed. Syndra could not record it: Zitadel named a role, "), M("wood.lead"), T(", that Syndra does not know.")], { role_key: "wood.lead", status: "failed", error_message: "role wood.lead is not in the catalog" }),
+      E("t2", 53, "onboarding.trigger", "waiting", [P("Leela Nair"), T(" joined. Syndra is giving her "), B("New members"), T(", the default bundle for new members.")], { bundle_id: "b_newmembers", status: "in_flight" }),
+      E("w5", 90, "user.deactivated", "done", [P("Tomas Weber"), T(" was deactivated. Syndra recorded it.")], { status: "processed" }),
+      E("w6", 108, "grant.removed", "done", [P("Sai Khurana"), T(" no longer has "), J("Laser bay · Door"), T(". Syndra recorded it.")], { role_key: "laserbay.door", status: "processed" }),
+      E("w7", 15 * 60 + 10, "grant.created", "done", [P("Rohan Mehta"), T(" was given "), J("Studio · Booking"), T(". Syndra recorded it.")], { role_key: "studio.booking", status: "processed" }),
+      E("t3", 16 * 60 + 45, "onboarding.trigger", "dropped", [P("Dev Malhotra"), T(" joined. Nothing was given: no default bundle for new members was set.")], { bundle_id: null, status: "unconfigured" }),
+      E("w8", 17 * 60 + 38, "grant.created", "done", [T("Unknown account "), M("291803447120556"), T(" was given "), J("Bandsaw · Member"), T(". Syndra recorded it.")], { user_id: "291803447120556", role_key: "bandsaw.member", status: "processed" }),
+      E("w9", 19 * 60 + 2, "grant.created", "dropped", [P("Zara Ahmed"), T(" was given "), J("Laser cutter · Operator"), T(". Zitadel sent this twice; Syndra set the second aside.")], { role_key: "laser.operator", status: "dropped_duplicate" }),
+      E("t4", 22 * 60 + 20, "onboarding.trigger", "done", [P("Farhan Ali"), T(" joined. Syndra gave him a bundle since retired, the default for new members then.")], { bundle_id: "b_2025intake", status: "completed" }),
+    ];
+    const fn = ["Kavya","Daniel","Rhea","Nikhil","Ishaan","Ana","Vikram","Sara","Tara","Yusuf","Neha","Ben","Priya","Arjun","Lena","Omar"], ln = ["Menon","Okafor","Kapoor","Bose","Gupta","Ruiz","Shah","Nair","Lindqvist","Malhotra","Singh","Kamal","Joshi","Das","Brandt"];
+    const RL = [["Wood shop · Member","wood.member"],["3D printers · Member","printers.member"],["Laser cutter · Operator","laser.operator"],["Studio · Booking","studio.booking"],["Bandsaw · Member","bandsaw.member"],["Electronics bench · Member","electronics.member"]];
+    for (let i = 0; i < 236; i++) {
+      const who = fn[(i * 5) % 16] + " " + ln[(i * 7) % 15], r = RL[(i * 3) % RL.length], mins = 23 * 60 + i * 172 + (i * 37) % 90, k = i % 9;
+      if (i === 61 || i === 148) rows.push(E("g" + i, mins, "grant.created", "failed", [P(who), T(" was given "), J(r[0]), T(". Syndra could not record it: its database did not answer in time.")], { role_key: r[1], status: "failed", error_message: "database timeout" }));
+      else if (k === 2 || k === 6) rows.push(E("g" + i, mins, "onboarding.trigger", "done", [P(who), T(" joined. Syndra gave them "), B("New members"), T(", the default bundle for new members.")], { bundle_id: "b_newmembers", status: "completed" }));
+      else if (k === 4) rows.push(E("g" + i, mins, "grant.removed", "done", [P(who), T(" no longer has "), J(r[0]), T(". Syndra recorded it.")], { role_key: r[1], status: "processed" }));
+      else if (k === 7) rows.push(E("g" + i, mins, "grant.created", "dropped", [P(who), T(" was given "), J(r[0]), T(". Syndra made this change itself, so there was nothing to record.")], { role_key: r[1], status: "dropped_own_change" }));
+      else if (k === 8) rows.push(E("g" + i, mins, "user.created", "done", [P(who), T(" was added. Syndra recorded it.")], { status: "processed" }));
+      else rows.push(E("g" + i, mins, "grant.created", "done", [P(who), T(" was given "), J(r[0]), T(". Syndra recorded it.")], { role_key: r[1], status: "processed" }));
+    }
+    return rows;
+  }
+  setSort(key) { this.setState(s => ({ sort: key, dir: s.sort === key ? -s.dir : 1, sortTick: (s.sortTick || 0) + 1 })); }
+  more(n) { this.setState(s => ({ shown: s.shown + n, fresh: s.shown })); clearTimeout(this._fr); this._fr = setTimeout(() => this.setState({ fresh: null }), 900); }
+  reset() { const el = document.getElementById("ev-top"); if (el) { let p = el.parentElement; while (p && p !== document.body) { const o = getComputedStyle(p).overflowY; if ((o === "auto" || o === "scroll") && p.scrollHeight > p.clientHeight) break; p = p.parentElement; } const rm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; const top = el.getBoundingClientRect().top - 120; if (p && p !== document.body) p.scrollTo({ top: p.scrollTop + top - p.getBoundingClientRect().top, behavior: rm ? "auto" : "smooth" }); else window.scrollTo({ top: window.scrollY + top, behavior: rm ? "auto" : "smooth" }); } setTimeout(() => this.setState({ shown: 10 }), 480); }
+  renderVals() {
+    const S = window.Syndra, h = React.createElement, st = this.st;
+    const known = !/^(loading|error)$/.test(st), list = known && !/^(empty|filtered-empty)$/.test(st);
+    const filt = st === "filtered", fe = st === "filtered-empty", partial = st === "partial", stale = st === "stale";
+    const OUT = { done: { tone: "healthy", word: "Done", ink: "var(--ink)" }, waiting: { tone: "neutral", word: "Waiting", ink: "var(--muted)" }, failed: { tone: "danger", word: "Failed", ink: "var(--danger-text)" }, dropped: { tone: "neutral", word: "Not acted on", ink: "var(--muted)" } };
+    const MO = ["Jan","Feb","Mar","Apr","May","June","July","Aug","Sept","Oct","Nov","Dec"], WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const pad = (n) => String(n).padStart(2, "0"), clock = (d) => pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+    const today = new Date(2026, 9, 6).getTime();
+    const dayOf = (d) => { const z = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), diff = Math.round((today - z) / 864e5); return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : WD[d.getDay()] + " " + d.getDate() + " " + MO[d.getMonth()]; };
+    let rs = this.all.slice();
+    if (filt) rs = rs.filter(r => r.out === "failed");
+    if (partial) rs = rs.filter(r => r.src === "provider");
+    const so = this.state.sort, dir = this.state.dir;
+    const keyOf = { event: r => r.label, outcome: r => OUT[r.out].word, time: r => dayOf(new Date(r.at)) };
+    rs.sort((a, b) => { let c = so === "time" ? b.at - a.at : keyOf[so](a).localeCompare(keyOf[so](b)); if (dir < 0) c = -c; return c || b.at - a.at; });
+    const cnt = {}; rs.forEach(r => { const v = keyOf[so](r); cnt[v] = (cnt[v] || 0) + 1; });
+    const total = rs.length, shown = Math.min(this.state.shown, total), left = total - shown, fr = this.state.fresh;
+    let prev = null;
+    const rows = rs.slice(0, shown).map((r, j) => {
+      const d = new Date(r.at), v = keyOf[so](r), o = OUT[r.out], open = this.state.open === r.id;
+      const raw = Object.assign({ id: r.id, [r.src === "provider" ? "event_type" : "kind"]: r.type.replace("zitadel.", ""), user_id: r.raw.user_id || "30" + (r.id.charCodeAt(1) * 9157 + r.id.length * 311) + "7720" }, r.raw, { created_at: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + clock(d) + "+05:30" });
+      const row = { id: r.id, label: r.label, type: r.type, parts: r.parts, tone: o.tone, word: o.word, outInk: o.ink, ink: r.out === "failed" ? "var(--danger-text)" : "var(--muted)", bg: r.out === "failed" ? "var(--danger-soft)" : "transparent",
+        when: so === "time" ? clock(d) : d.getDate() + " " + MO[d.getMonth()] + " " + clock(d).slice(0, 5), hasRun: v !== prev, run: v, runCount: cnt[v], open, detailLabel: open ? "Hide details" : "Show details",
+        toggle: () => this.setState(s => ({ open: s.open === r.id ? null : r.id })), payload: JSON.stringify(raw, null, 2),
+        anim: fr != null && j >= fr ? "arrive var(--duration-arrive) var(--ease-settle) " + Math.min(j - fr, 5) * 40 + "ms both" : "none" };
+      prev = v; return row;
+    });
+    const SH = (k) => ({ ["sort" + k]: () => this.setSort(k.toLowerCase()), ["rot" + k]: so === k.toLowerCase() && dir < 0 ? "rotate(180deg)" : "none", ["op" + k]: so === k.toLowerCase() ? 1 : 0, ["col" + k]: so === k.toLowerCase() ? "var(--ink)" : "inherit" });
+    const chips = !S ? [] : filt ? [h(S.FilterChip, { key: "o", onClear: () => {}, clearLabel: "Show every outcome" }, "Failed")] : fe ? [h(S.FilterChip, { key: "s", onClear: () => {}, clearLabel: "Show every source" }, "New people"), h(S.FilterChip, { key: "o", onClear: () => {}, clearLabel: "Show every outcome" }, "Failed")] : [];
+    const readEl = S && known ? h("span", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" } }, h(S.ReadFreshness, { state: stale ? { readAt: new Date(Date.now() - 6 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 3000).toISOString(), current: true }, subject: "The timeline" }), chips) : null;
+    const pills = (label, opts, val) => h(S.FilterPills, { label, value: val, onChange: () => {}, options: opts });
+    const filtersEl = S && known ? h(S.FilterPanel, { activeCount: filt ? 1 : fe ? 2 : 0, onClear: () => {} },
+      h(S.FilterField, { label: "Source" }, pills("Filter by source", [{ value: "all", label: "All sources" }, { value: "provider", label: "Zitadel" }, { value: "onboarding", label: "New people" }], fe ? "onboarding" : "all")),
+      h(S.FilterField, { label: "Outcome" }, pills("Filter by outcome", [{ value: "all", label: "Any outcome" }, { value: "done", label: "Done" }, { value: "waiting", label: "Waiting" }, { value: "failed", label: "Failed" }, { value: "dropped", label: "Not acted on" }], filt || fe ? "failed" : "all"))) : null;
+    const f = (frame, label, note, phone) => phone ? { src: "route-events.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-events.dc.html?frame=" + frame, label, note, w: 1440, h: 1150, boxW: 720, boxH: 575, scale: 0.5 };
+    const lap = (frame, label, note) => ({ src: "route-events.dc.html?frame=" + frame, label, note, w: 920, h: 1000, boxW: 690, boxH: 750, scale: 0.75 });
+    return Object.assign({
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData,
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stFilteredEmpty: fe, stPartial: partial, stStale: stale,
+      stList: list, showCard: st !== "error", showBar: known, rows, readEl, filtersEl,
+      searchEl: S && known ? h(S.Input, { placeholder: "Search person, project or bundle…", "aria-label": "Search events by person, project or bundle" }) : null,
+      sortAnim: this.state.sortTick ? (this.state.sortTick % 2 ? "sy-resort-a" : "sy-resort-b") + " var(--duration-settle) var(--ease-settle) both" : "none",
+      footText: left > 0 ? "Showing " + shown + " of " + total : "Showing all " + total,
+      canMore: left > 0, moreLabel: "Show " + Math.min(25, left) + " more", more: () => this.more(25),
+      canAll: left > 25, allLabel: "Show all " + total, all: () => this.more(total), canReset: shown > 10, reset: () => this.reset(),
+      clearAction: { label: "Clear filters", onClick: () => {} },
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("default", "Default", "Newest first under day headings, each with its count. Event reads in words with the raw type beneath; What happened is one sentence naming the person, the role (linking to its project) or the bundle; Outcome is dot and word; Time is last. Only the failed row is tinted. Ten rows, then Show 25 more."),
+          f("opened", "Details open", "Show details opens the raw payload under its row, in mono, for the one row someone came to find. Hide details closes it."),
+          f("filtered", "Filtered to failures", "Outcome: Failed in force. Its chip sits on the read line beside the freshness, with the way out attached. Three rows across the month, each with what went wrong."),
+          f("sort-event", "Sorted by event", "Equal events gather under a quiet label with their count, A to Z, newest first within each. Time now carries its date, since the day headings have gone."),
+          f("sort-outcome", "Sorted by outcome", "The same for Outcome: Done, Failed, Not acted on, Waiting."),
+          f("more", "After Show 25 more", "Showing 35 of 248; only the new rows arrive. Back to 10 glides to the top of the list, then trims."),
+          f("partial", "One stream unreadable", "People joining could not be read. A red Notice says which stream is missing and that the rest is current; the Zitadel rows stay. Today a failure in either stream blanks both."),
+          f("stale", "Stopped reading", "The page read events and then stopped hearing back. An amber Notice above the header gives the time of the last read; the read line says last known; the rows are what had arrived."),
+          f("filtered-empty", "Filtered to nothing", "No events match: says how many are in the timeline, with Clear filters. Both chips on the read line."),
+          f("empty", "Empty", "Nothing has happened yet, and what would put something here."),
+          f("loading", "Loading", "The title and lede are known; no bar, read line or count until the list is read."),
+          f("error", "Error", "The red Notice in the list's place. Nothing was changed."),
+        ] },
+        { title: "Laptop · 920", frames: [lap("default", "At laptop width", "Event, What happened and Time keep their seats; Outcome moves under the sentence as its dot and word.")] },
+        { title: "Phone · 390", frames: [f("default", "Phone", "Each row stacks: the event, the sentence in full, then the outcome with its time. Show details is a 44px target.", true)] },
+      ],
+    }, SH("Event"), SH("Outcome"), SH("Time"));
+  }
+}
+</script>
+</body>
+</html>

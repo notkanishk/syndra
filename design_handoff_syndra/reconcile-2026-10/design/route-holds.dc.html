@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-resort-a{from{opacity:.35}to{opacity:1}}@keyframes sy-resort-b{from{opacity:.35}to{opacity:1}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Holds due board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /review/holds</span>
+    <h1 class="type-page-title" style="margin:0">Holds due</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Holds whose review date has passed. A hold blocks access a role still grants, on a connected system. Beside Expiring access and never inside it: there, doing nothing ends access; here, doing nothing keeps it blocked. One answer per row, Lift the hold. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#5b</strong> kept as built (Phase 2): one item, Holds due, amber, beside Expiring access; a hold in force shows where it acts, on the person's page and the system's, so no list of every hold · <strong style="color:var(--ink)">#63</strong> lifting clears the block in Syndra now and the access returns at the next pass, never "straight away" · being listed ends nothing · a review is deferred by lifting and placing a new hold, so there is no "remind me later" · lifting is rung 1, outline, no dialog · "hold" on screen, never "allowance".</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Standing rules applied</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">A short list: no search, Filters or Select, so no FilterBar, and the read line sits over the card, inset 20 · Review due carries the arrow and takes the 110px seat, longest overdue first · What is held gathers equal values; Why is prose and does not sort · the person, whoever placed it and the system link · the result reports in the action's seat · a paused system is one amber Notice.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The row becomes columns (it was one wrapped line) · the card header and its note go: the lede says it once · the per-row "To push it back…" sentence joins the lede · the button reads Lift the hold, since the row already names what is held · the result moves from a full-width pill to the seat · the system name links to its page · a meta line counts holds and gives the oldest date.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/review/holds" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stPaused }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Syndra has paused calls to TrueNAS.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">It stopped after repeated failures and will try again by itself. You can still lift a hold: the block clears in Syndra now, and the access returns once calls to TrueNAS resume.</p>
+      </div>
+    </div></sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Holds due" meta="{{ meta }}" lede="Holds whose review date has passed. Doing nothing keeps the access blocked: being listed here ends nothing. Lifting clears the block in Syndra at once, and the access returns when the connected system is next brought in line. To keep a hold with a later date, lift it and place a new one from the person's page." hint-size="100%,130px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><div style="padding:0 20px">{{ readEl }}</div></sc-if>
+
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load holds due.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for them. Nothing was changed, and every hold stays in force.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_c4a19e07</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 3 }}" label="Loading holds due" hint-size="100%,220px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No hold is due for review." guidance="A hold appears here on the review date the person who placed it chose. Until then it stays in force without asking." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
+      <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:190px;flex:none"><button type="button" aria-label="Sort by who" onClick="{{ sortWho }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWho }}" style-hover="color:var(--ink)">Who<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWho }};opacity:{{ opWho }}">↑</span></button></span><span style="width:200px;flex:none"><button type="button" aria-label="Sort by what is held" onClick="{{ sortWhat }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWhat }}" style-hover="color:var(--ink)">What is held<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWhat }};opacity:{{ opWhat }}">↑</span></button></span><span class="hidden desktop:block" style="flex:1 1 0;min-width:0">Why</span><span class="hidden tablet:block desktop:hidden" style="flex:1 1 0"></span><span style="width:110px;flex:none;display:flex;justify-content:flex-end"><button type="button" aria-label="Sort by review due" onClick="{{ sortDue }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;transition:color var(--duration-tint) var(--ease-tint);color:{{ colDue }}" style-hover="color:var(--ink)">Review due<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotDue }};opacity:{{ opDue }}">↑</span></button></span><span class="hidden desktop:block" style="width:190px;flex:none"></span></x-import>
+        <div style="animation:{{ sortAnim }}"><sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+          <sc-if value="{{ r.hasRun }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;align-items:baseline;gap:10px;padding:12px 20px 8px;background:var(--surface-0)"><span class="type-label" style="color:var(--ink)">{{ r.run }}</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">{{ r.runCount }}</span></div></sc-if>
+          <div class="row-divider flex flex-col items-start gap-2 px-5 py-4 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
+            <span class="flex w-full items-center gap-3 tablet:w-[190px] tablet:shrink-0">
+              <x-import component-from-global-scope="Syndra.Avatar" name="{{ r.who }}" hint-size="34px,34px"></x-import>
+              <span class="min-w-0 text-[15px] font-semibold" style="text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.who }}</a></span>
+            </span>
+            <span class="w-full tablet:w-[200px] tablet:shrink-0" style="display:flex;flex-direction:column;gap:3px;padding-top:2px">
+              <span style="font-size:14.5px;line-height:1.45;text-wrap:pretty">{{ r.what }}</span>
+              <span style="font-size:12.5px;color:var(--faint)">on <a href="Syndra Target Page.dc.html" style="color:var(--muted);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.system }}</a></span>
+            </span>
+            <span class="tablet:hidden" style="width:100%"><span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:13.5px;line-height:1.55;color:{{ r.whyInk }};text-wrap:pretty">{{ r.why }}</span><span style="font-size:12.5px;color:var(--faint)">Placed by <a href="route-users-id.dc.html?frame=default" style="color:var(--muted);text-decoration:none">{{ r.by }}</a> on {{ r.placed }}</span></span></span>
+            <span class="hidden desktop:block" style="flex:1 1 0;min-width:0;padding-top:2px"><span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:13.5px;line-height:1.55;color:{{ r.whyInk }};text-wrap:pretty">{{ r.why }}</span><span style="font-size:12.5px;color:var(--faint)">Placed by <a href="route-users-id.dc.html?frame=default" style="color:var(--muted);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.by }}</a> on {{ r.placed }}</span></span></span>
+            <span class="hidden tablet:block desktop:hidden" style="flex:1 1 0"></span>
+            <span class="tablet:w-[110px] tablet:shrink-0 tablet:text-right" style="display:flex;flex-direction:column;gap:2px;padding-top:2px">
+              <span style="font-size:13.5px;font-weight:600;color:var(--muted)">{{ r.ago }}</span>
+              <span style="font-size:12.5px;color:var(--faint)">{{ r.due }}</span>
+            </span>
+            <span class="hidden desktop:block" style="width:190px;flex:none"><span style="display:flex;justify-content:flex-end">
+              <sc-if value="{{ r.showLift }}" hint-placeholder-val="{{ true }}"><span class="flex w-full tablet:w-auto tablet:justify-end"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Lift the hold</x-import></span></sc-if>
+              <sc-if value="{{ r.showLifted }}" hint-placeholder-val="{{ false }}"><span role="status" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Lifted</span><span style="padding-left:15px;font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ r.returns }}</span></span></sc-if>
+              <sc-if value="{{ r.showFailed }}" hint-placeholder-val="{{ false }}"><span role="alert" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600;color:var(--danger-text)"><x-import component-from-global-scope="Syndra.StatusDot" tone="danger" hint-size="7px,7px"></x-import>Couldn't lift it</span><span style="padding-left:15px;font-size:12.5px;line-height:1.5;color:var(--muted)">Nothing was changed. Reference <span class="type-mono" style="color:var(--ink)">req_2c71f0b9</span></span><span style="margin-top:6px;padding-left:15px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import></span></span></sc-if>
+            </span></span>
+            <span class="tablet:hidden" style="width:100%"><span style="display:flex;justify-content:flex-end">
+              <sc-if value="{{ r.showLift }}" hint-placeholder-val="{{ true }}"><span class="flex w-full tablet:w-auto tablet:justify-end"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Lift the hold</x-import></span></sc-if>
+              <sc-if value="{{ r.showLifted }}" hint-placeholder-val="{{ false }}"><span role="status" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Lifted</span><span style="padding-left:15px;font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ r.returns }}</span></span></sc-if>
+              <sc-if value="{{ r.showFailed }}" hint-placeholder-val="{{ false }}"><span role="alert" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600;color:var(--danger-text)"><x-import component-from-global-scope="Syndra.StatusDot" tone="danger" hint-size="7px,7px"></x-import>Couldn't lift it</span><span style="padding-left:15px;font-size:12.5px;line-height:1.5;color:var(--muted)">Nothing was changed. Reference <span class="type-mono" style="color:var(--ink)">req_2c71f0b9</span></span><span style="margin-top:6px;padding-left:15px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import></span></span></sc-if>
+            </span></span>
+            <span class="hidden tablet:block desktop:hidden" style="flex-basis:100%;width:100%"><span style="display:flex;align-items:flex-start;gap:18px"><span style="flex:1 1 0;min-width:0;max-width:80ch"><span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:13.5px;line-height:1.55;color:{{ r.whyInk }};text-wrap:pretty">{{ r.why }}</span><span style="font-size:12.5px;color:var(--faint)">Placed by <a href="route-users-id.dc.html?frame=default" style="color:var(--muted);text-decoration:none">{{ r.by }}</a> on {{ r.placed }}</span></span></span><span style="width:190px;flex:none"><span style="display:flex;justify-content:flex-end">
+              <sc-if value="{{ r.showLift }}" hint-placeholder-val="{{ true }}"><span class="flex w-full tablet:w-auto tablet:justify-end"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,34px">Lift the hold</x-import></span></sc-if>
+              <sc-if value="{{ r.showLifted }}" hint-placeholder-val="{{ false }}"><span role="status" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Lifted</span><span style="padding-left:15px;font-size:12.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">{{ r.returns }}</span></span></sc-if>
+              <sc-if value="{{ r.showFailed }}" hint-placeholder-val="{{ false }}"><span role="alert" style="width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600;color:var(--danger-text)"><x-import component-from-global-scope="Syndra.StatusDot" tone="danger" hint-size="7px,7px"></x-import>Couldn't lift it</span><span style="padding-left:15px;font-size:12.5px;line-height:1.5;color:var(--muted)">Nothing was changed. Reference <span class="type-mono" style="color:var(--ink)">req_2c71f0b9</span></span><span style="margin-top:6px;padding-left:15px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import></span></span></sc-if>
+            </span></span></span></span>
+          </div>
+        </sc-for></div>
+      </sc-if>
+    </x-import>
+    </sc-if>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    this.state = { sort: this.st === "sort-what" ? "what" : "due", dir: 1 };
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: 2, holds_due: this.st === "empty" ? 0 : 4, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  setSort(key) { this.setState(s => ({ sort: key, dir: s.sort === key ? -s.dir : 1, sortTick: (s.sortTick || 0) + 1 })); }
+  renderVals() {
+    const S = window.Syndra, h = React.createElement, st = this.st;
+    const known = !/^(loading|error)$/.test(st), list = known && st !== "empty";
+    const MO = ["Jan","Feb","Mar","Apr","May","June","July","Aug","Sept","Oct","Nov","Dec"];
+    const D = (ago) => { const x = new Date(2026, 9, 6 - ago); return x.getDate() + " " + MO[x.getMonth()]; };
+    const H = (who, field, value, why, by, placedAgo, dueAgo) => ({ who, field, what: field === "enabled" ? "Their whole account" : field === "share" ? "The " + value + " share" : "The " + value + " group", system: "TrueNAS",
+      why: why || "No reason recorded.", whyInk: why ? "var(--muted)" : "var(--faint)", by, placed: D(placedAgo), dueAgo, due: D(dueAgo), ago: dueAgo === 1 ? "1 day ago" : dueAgo + " days ago",
+      returns: (field === "enabled" ? "The account" : field === "share" ? "The share" : "The group") + " returns when TrueNAS is next brought in line." });
+    let rs = [
+      H("Arjun Das", "enabled", "", "Left the makerspace mid-term. Keeping his files until the department confirms what happens to them.", "Lena Brandt", 65, 18),
+      H("Meera Pillai", "share", "projects", "Shared a licensed dataset outside the course. Held until the safety officer has spoken to her.", "Kanishk Singh", 27, 6),
+      H("Wei Chen", "enabled", "", "Went over the storage quota again after a written warning.", "Lena Brandt", 35, 5),
+      H("Tomas Weber", "group", "cnc", "", "Sai Khurana", 16, 2),
+    ];
+    const so = this.state.sort, dir = this.state.dir;
+    const keyOf = { who: r => r.who, what: r => r.what };
+    rs.sort((a, b) => { let c = so === "due" ? b.dueAgo - a.dueAgo : keyOf[so](a).localeCompare(keyOf[so](b)); if (dir < 0) c = -c; return c || b.dueAgo - a.dueAgo; });
+    const runs = so === "what", cnt = {}; if (runs) rs.forEach(r => { cnt[r.what] = (cnt[r.what] || 0) + 1; });
+    let prev = null;
+    const rows = rs.map(r => { const v = runs ? r.what : null; const lifted = st === "lifted" && r.who === "Meera Pillai", failed = st === "lift-failed" && r.who === "Meera Pillai";
+      const o = Object.assign({}, r, { hasRun: runs && v !== prev, run: v, runCount: runs ? cnt[v] : 0, showLift: !lifted && !failed, showLifted: lifted, showFailed: failed }); prev = v; return o; });
+    const SH = (k, key) => ({ ["sort" + k]: () => this.setSort(key), ["rot" + k]: so === key && dir < 0 ? "rotate(180deg)" : "none", ["op" + k]: so === key ? 1 : 0, ["col" + k]: so === key ? "var(--ink)" : "inherit" });
+    const oldest = Math.max.apply(null, rs.map(r => r.dueAgo));
+    const f = (frame, label, note, phone) => phone ? { src: "route-holds.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-holds.dc.html?frame=" + frame, label, note, w: 1440, h: 860, boxW: 720, boxH: 430, scale: 0.5 };
+    const lap = (frame, label, note) => ({ src: "route-holds.dc.html?frame=" + frame, label, note, w: 920, h: 1000, boxW: 690, boxH: 750, scale: 0.75 });
+    return Object.assign({
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData,
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stPaused: st === "paused",
+      stList: list, showCard: st !== "error", rows,
+      sortAnim: this.state.sortTick ? (this.state.sortTick % 2 ? "sy-resort-a" : "sy-resort-b") + " var(--duration-settle) var(--ease-settle) both" : "none",
+      readEl: S && list ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 20000).toISOString(), current: true }, subject: "This list" }) : null,
+      meta: list && S ? h(S.MetaRow, null, [rs.length + " holds", "the oldest due " + D(oldest)]) : undefined,
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("default", "Default", "Longest overdue first. Who links to the person; What is held says what is blocked, with the system it is on linking to its page; Why is the reason in full, with who placed it and when; Review due takes the 110px seat. One answer, outline: lifting is rung 1. No row is tinted: every row here is past its date, so colour would mark nothing."),
+          f("lifted", "After Lift the hold", "The seat reports: Lifted, and the access returns when TrueNAS is next brought in line (#63). The row stays until the next read; nothing moves under the hand."),
+          f("lift-failed", "Lift failed", "The seat says it could not, that nothing changed, the reference, and Try again. The hold is still in force."),
+          f("sort-what", "Sorted by what is held", "Equal values gather under a quiet label with their count, A to Z; within each, longest overdue first."),
+          f("paused", "TrueNAS paused", "An amber Notice above the header, worded as on Connected systems. Lifting still works in Syndra; the access returns once calls resume."),
+          f("empty", "Empty", "No hold is due: the healthy dot, and a reminder that a hold stays in force without asking until its date."),
+          f("loading", "Loading", "The title and lede are known; no meta or read line until the list is read."),
+          f("error", "Error", "The red Notice in the list's place. Nothing was changed, and every hold stays in force."),
+        ] },
+        { title: "Laptop · 920", frames: [lap("default", "At laptop width", "Who, What is held and Review due keep one line; beneath, Why and who placed it on the left and Lift the hold on the right. Nothing truncates.")] },
+        { title: "Phone · 390", frames: [f("default", "Phone", "Each row stacks: who, what is held and where, why with who placed it, when the review was due, then Lift the hold. The reason comes before the button.", true)] },
+      ],
+    }, SH("Who", "who"), SH("What", "what"), SH("Due", "due"));
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-resort-a{from{opacity:.35}to{opacity:1}}@keyframes sy-resort-b{from{opacity:.35}to{opacity:1}}@keyframes sy-flash-a{from{background-color:var(--accent-soft)}to{background-color:transparent}}@keyframes sy-flash-b{from{background-color:var(--accent-soft)}to{background-color:transparent}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Pending changes board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /governance/pending</span>
+    <h1 class="type-page-title" style="margin:0">Pending changes</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Where "Waiting for you to send →" leads, from a person, a request or Home. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#66</strong> what caused each change is named: a bundle and its version, "Given by hand" with who, an approved request, a rule's mapping; the handle sits beside it, faint · changes from one edit stay together and say so · <strong style="color:var(--ink)">#96</strong> the send reports under the header and stays; no toast, never the word done.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Standing rules</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Only roles that wait, and sends that didn't get through, come here (N14 B, N15); each change says which. Everything queued for the operator reads "Waiting for you to send →" and lands here, filtered to that person. The page says plainly that sending is one batch: you cannot send Priya's change alone, so the chip says how many of the twelve are hers.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The sending paragraph folds into the lede · the amber "!" strip becomes the Notice (6a) · Waiting moves to the 110px numbers seat (8b) · names link to their pages · the empty state says "Nothing is waiting for you to send." · the Handles footnote goes; each handle sits beside its name.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/governance/pending" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering, so sending is paused.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Nothing is lost. The 12 changes wait in order and none has reached any system. This list is Syndra's own, so it is current. Send them once Zitadel answers.</p>
+      </div>
+    </div></sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Pending changes" lede="Changes that have not reached Zitadel or a connected system yet. They wait for you: sending delivers all of them, in order, and each person's access changes as theirs arrives. Revocations also send on their own every few minutes." actions="{{ sendEl }}" hint-size="100%,120px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-if value="{{ stSent }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ sentOutcome }}" placement="block" hint-size="100%,90px"></x-import></sc-if>
+    <sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" hint-size="100%,44px"></x-import></sc-if><sc-if value="{{ hasleadingEl }}" hint-placeholder-val="{{ false }}"><div style="margin-top:-4px">{{ leadingEl }}</div></sc-if>
+
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load pending changes.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for them. Nothing was sent and nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_2c81e04d</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+      <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:130px;flex:none">Who</span><span style="flex:1 1 0;min-width:0">Change</span><span style="width:130px;flex:none">Caused by</span><span style="width:110px;flex:none;text-align:right">Waiting</span></x-import></sc-if>
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 5 }}" label="Loading pending changes" hint-size="100%,300px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Nothing is waiting for you to send." guidance="Every change Syndra has decided on has reached the system it was for." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
+      <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+        <div>
+          <sc-if value="{{ g.multi }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 20px;background:var(--surface-0)">{{ g.chevEl }}<p style="margin:0;flex:1 1 0;min-width:0;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty"><sc-for list="{{ g.parts }}" as="np" hint-placeholder-count="3"><sc-if value="{{ np.isLink }}" hint-placeholder-val="{{ false }}"><a href="{{ np.href }}" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ np.t }}</a></sc-if><sc-if value="{{ np.isText }}" hint-placeholder-val="{{ true }}">{{ np.t }}</sc-if></sc-for> <span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ g.handle }}</span></p></div></sc-if>
+          <div style="display:grid;grid-template-rows:{{ g.fold.fr }};visibility:{{ g.fold.vis }};transition:{{ g.fold.trans }}"><div style="min-height:0;overflow:hidden;opacity:{{ g.fold.op }};transition:{{ g.fold.opTrans }}"><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+            <div class="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:items-center tablet:gap-[18px]" style="background:{{ r.bg }}">
+              <span class="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0" style="text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.who }}</a></span>
+              <span class="w-full tablet:flex-1" style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                <span style="font-size:14px;line-height:1.45;text-wrap:pretty"><span style="color:var(--muted)">{{ r.verb }}</span> <a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.role }}</a><sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if></span>
+                <sc-if value="{{ r.hasSub }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;line-height:1.45;color:var(--faint);text-wrap:pretty">{{ r.sub }}</span></sc-if>
+                <sc-if value="{{ r.failed }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:baseline;gap:8px;font-size:13px;line-height:1.45;color:{{ r.failInk }};text-wrap:pretty"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.failTone }}" hint-size="7px,7px"></x-import>{{ r.fail }}</span></sc-if>
+              </span>
+              <span class="w-full tablet:w-[130px] tablet:shrink-0" style="display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.45">
+                <span style="text-wrap:pretty"><sc-if value="{{ r.causeLinks }}" hint-placeholder-val="{{ true }}"><a href="{{ r.causeHref }}" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.cause }}</a></sc-if><sc-if value="{{ r.causePlain }}" hint-placeholder-val="{{ false }}">{{ r.cause }}</sc-if></span>
+                <sc-if value="{{ r.hasBy }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--faint)">by <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.by }}</a></span></sc-if>
+                <sc-if value="{{ r.hasHandle }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ r.handle }}</span></sc-if>
+              </span>
+              <span class="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0 tablet:text-right">{{ r.waiting }}</span>
+            </div>
+          </sc-for></div></div>
+        </div>
+      </sc-for></sc-if>
+    </x-import>
+    </sc-if>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: this.st === "sent" ? 1 : this.st === "empty" ? 0 : 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  foldS(open) { return open ? { fr: "1fr", op: 1, vis: "visible", trans: "grid-template-rows var(--duration-settle) var(--ease-settle), visibility 0s", opTrans: "opacity var(--duration-tint) var(--ease-tint) 140ms" } : { fr: "0fr", op: 0, vis: "hidden", trans: "grid-template-rows var(--duration-settle) var(--ease-settle) 120ms, visibility 0s linear 380ms", opTrans: "opacity var(--duration-tint) var(--ease-tint)" }; }
+  flashA(on, n) { return on ? (n % 2 ? "sy-flash-a" : "sy-flash-b") + " var(--duration-flash) ease-out 280ms both" : "none"; }
+  chev(open, label, onClick) { const h = React.createElement; return h("button", { type: "button", "aria-expanded": open, "aria-label": label, onClick, style: { width: 28, height: 28, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", background: "none", color: "var(--muted)", cursor: "pointer" } }, h("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, style: { transition: "transform var(--duration-settle) var(--ease-settle)", transform: open ? "none" : "rotate(-90deg)" } }, h("path", { d: "M6 9l6 6 6-6" }))); }
+  fold(k) { this.setState(s => ({ folded: Object.assign({}, s.folded, { [k]: !(s.folded || {})[k] }) })); }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded", person = st === "person", sent = st === "sent";
+    const BUN = "route-bundles.dc.html?frame=default", REQ = "route-requests.dc.html?frame=default", PER = "route-users-id.dc.html?frame=default";
+    const T = (t) => ({ t, isText: true, isLink: false }), L = (t, href) => ({ t, href, isText: false, isLink: true });
+    const row = (who, verb, role, cause, causeHref, waiting, x) => Object.assign({ who, verb, role, cause, causeHref, causeLinks: !!causeHref, causePlain: !causeHref, waiting, hasSub: false, sub: "", failed: false, fail: "", hasBy: false, by: "", hasHandle: false, handle: "", bg: "transparent", failTone: "danger", failInk: "var(--danger-text)" }, x || {}); const WAITS = new Set(["Laser cutter · Operator", "Laser cutter · Supervisor", "Welder · Member", "Storage · Member"]);
+    const lab = (who) => row(who, "Give", "Laser cutter · Operator", "Lab Tech v3", BUN, "3h", { hasHandle: true, handle: "b_lab-tech" });
+    const all = [
+      { key: "lena", rows: [row("Lena Brandt", "Give", "Studio · Booking", "Her request, approved", REQ, "1d", { hasBy: true, by: "Kanishk Singh", failed: true, failTone: "warn", failInk: "var(--warn-text)", fail: "Tried when it was approved at 10:42. Zitadel didn't answer." })] },
+      { key: "meera", rows: [row("Meera Pillai", "Give", "Electronics bench · Operator", "Given by hand", null, "5h", { hasBy: true, by: "Kanishk Singh", failed: true, fail: "Tried twice. Zitadel says Electronics has no Operator role. Sending tries again; fix the role in Zitadel first." })] },
+      { key: "labtech", multi: true, handle: "c_7f2a91", parts: [T("These 6 changes come from one edit: "), L("Kanishk Singh", PER), T(" moved 6 people to "), L("Lab Tech v3", BUN), T(". They wait because Laser cutter · Operator always waits for you, and are sent together or not at all.")], rows: ["Mei Tanaka", "Ravi Iyer", "Sai Khurana", "Kabir Rao", "Isha Menon", "Arjun Shah"].map(lab) },
+      { key: "jules", multi: true, handle: "c_19bd04", parts: [T("These 2 changes come from one rule: anyone with Metal shop · Induction also gets Welder · Member. They wait because Welder · Member always waits for you, and are sent together or not at all.")], rows: [
+        row("Jules Fontaine", "Give", "Welder · Member", "Induction → Welder", null, "2h", { hasHandle: true, handle: "R_014" }),
+        row("Tara Bose", "Give", "Welder · Member", "Induction → Welder", null, "2h", { hasHandle: true, handle: "R_014" }),
+      ] },
+      { key: "priya", rows: [row("Priya Nair", "Give", "Laser cutter · Supervisor", "Given by hand", null, "40m", { hasSub: true, sub: "Waits because Supervisor always waits for you.", hasBy: true, by: "Kanishk Singh", bg: person ? "color-mix(in oklab, var(--accent-soft) 30%, transparent)" : "transparent" })] },
+      { key: "omar", rows: [row("Omar Haddad", "Revoke", "Wood shop · Member", "Left the makerspace", null, "4m", { hasSub: true, sub: "A revocation: it also sends on its own within a few minutes." })] },
+    ];
+    all.forEach(g => g.rows.forEach(r => { r.waits = WAITS.has(r.role); }));
+    const fd = this.state && this.state.folded || {};
+    all.forEach(g => { g.open = !g.multi || !fd[g.key]; g.fold = this.foldS(g.open); g.chevEl = g.multi ? this.chev(g.open, (g.open ? "Fold " : "Open ") + "these " + g.rows.length + " changes", () => this.fold(g.key)) : null; });
+    let groups = all;
+    if (person) groups = all.filter(g => g.key === "priya");
+    if (sent) groups = all.filter(g => g.key === "meera");
+    const count = sent ? 1 : 12;
+    const known = !/^(loading|error)$/.test(st) && st !== "empty";
+    const sendLabel = known ? "Send " + count + (count === 1 ? " change" : " changes") : "Send changes";
+    const f = (frame, label, note, phone) => phone ? { src: "route-pending.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-pending.dc.html?frame=" + frame, label, note, w: 1440, h: 1100, boxW: 720, boxH: 550, scale: 0.5 };
+    const lap = (frame, label, note) => ({ src: "route-pending.dc.html?frame=" + frame, label, note, w: 920, h: 900, boxW: 690, boxH: 675, scale: 0.75 });
+    const note = (t) => h("span", { style: { fontSize: 13.5, color: "var(--muted)" } }, t);
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg, stSent: sent,
+      stList: known, showCard: st !== "error", showBar: known,
+      groups,
+      sendEl: S ? h(S.Button, { variant: "accent", disabled: !known || deg }, sendLabel) : null,
+      searchEl: S && known ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search pending changes by person or role" }) : null,
+      hasleadingEl: known,
+      leadingEl: S ? (person
+        ? h("span", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 12px" } }, h(S.FilterChip, { onClear: () => {}, clearLabel: "Show everyone's changes" }, "Priya Nair"), note("1 of the 12 changes is hers. Sending sends all 12, in order."))
+        : note(sent ? "What is still waiting." : "They are sent in this order.")) : null,
+      sentOutcome: { kind: "applied", message: "11 changes reached Zitadel. 1 did not.", detail: "Each person's access changed as theirs arrived. Meera Pillai's is still below, with what Zitadel said." },
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("default", "Default", "Twelve changes, oldest first. Each says who, what, what caused it, by name with its handle faint beneath, and why it waited: a role that always waits (marked after its name, said once in a batch's sentence) or a send Zitadel didn't answer (amber). A failed change says what Zitadel said and what to fix. The one revocation says it also sends on its own. Nothing else is here: a bundle, a rule or a grant by hand for any other role goes straight to Zitadel (N14 B)."),
+          f("person", "Arriving from Priya's page", "Waiting for you to send → lands here filtered to Priya. The chip says one of the twelve is hers and that sending is one batch, so nobody expects to send hers alone. ✕ shows everyone's."),
+          f("sent", "After Send", "The result reports under the header and stays (#96). What is left is the one Zitadel refused; the button now counts 1."),
+          f("empty", "Empty", "Resolved work, so the healthy dot."),
+          f("loading", "Loading", "The title is known; the button names no count until the list is read."),
+          f("error", "Error", "The red notice in the list's place; nothing was sent."),
+          f("degraded", "Zitadel not answering", "The list is Syndra's own and current, so it stays. The amber notice says sending is paused and nothing is lost; Send waits."),
+        ] },
+        { title: "Laptop · 920", frames: [lap("default", "At laptop width", "All four seats fit the card: Who and Caused by hold 130px, Change takes the rest and wraps rather than truncating, and Waiting holds the 110px seat.")] },
+        { title: "Phone · 390", frames: [f("default", "Phone", "Rows stack: who, the change, what caused it, how long it has waited. Send stays in the header.", true)] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

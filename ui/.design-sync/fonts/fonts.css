@@ -1,0 +1,7 @@
+/* Self-hosted copies of the three Google Fonts the app loads through next/font
+   in src/app/layout.tsx (latin subset, OFL). The --font-* variables
+   next/font sets on <html> live in ../host.css (appended by
+   build-css.mjs, since only @font-face rules are harvested from here). */
+@font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 200 800; font-stretch: 100%; font-display: swap; src: url(./BricolageGrotesque-var.woff2) format('woff2'); }
+@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(./Figtree-400_700.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400 500; font-display: swap; src: url(./JetBrainsMono-400.woff2) format('woff2'); }

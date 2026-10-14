@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Requests board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /requests</span>
+    <h1 class="type-page-title" style="margin:0">Requests</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">One route, two readers: an operator decides the queue; a member asks and sees what happened. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#53</strong> no free-text request: the hint under the role points at Why; a place with nothing defined says so in a sentence instead of an empty menu · <strong style="color:var(--ink)">#96</strong> a decided row keeps its seat and reports its own outcome; the ask dialog becomes its own result · <strong style="color:var(--ink)">#103</strong> the selection bar states the 500 ceiling before the tap.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Drawn as built · settled in Phase 2</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#51</strong> a member withdraws their own request; it reads "You withdrew this", never Declined · <strong style="color:var(--ink)">#52</strong> how long, with the resolved date; the operator sees the duration under the ask (the catalogue's "Ask for this" lives on My access) · <strong style="color:var(--ink)">#96</strong> the word Done on the dialog · <strong style="color:var(--ink)">#32/#33</strong> bulk decide.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The avatar moves inside the Who seat (it sat outside, so every column ran 52px right of its heading) and shows the person's initials · status is dot + word (<a href="Cohesion.dc.html#10b">10b</a>), not accent and amber badges · one verb: "Review declining these", not "denying" · Withdraw is outline (#109) and sits last · how long is a Segmented, Why a Textarea · in degraded an approval says "Waiting for you to send →", not "Sent", and links to Pending changes · a decided row reports in its Decision seat (proposed: ActionOutcome placement="seat"), so columns never shift and a decline is never labelled Applied.</p></div>
+  </section>
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ g.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/requests" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Requests are Syndra's own, so this queue is current. You can still decide: an approval is recorded now, and the access joins Pending changes for you to send once Zitadel answers.</p>
+      </div>
+    </div></sc-if>
+
+  <sc-if value="{{ isOperator }}" hint-placeholder-val="{{ true }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Requests" lede="What members have asked for. Approve gives them the access for the time they asked, starting now; decline closes it, and they may ask again." hint-size="100%,110px"></x-import></div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ pillsEl }}" trailing="{{ selectEl }}" hint-size="100%,48px"></x-import>
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load requests.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for them. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+    <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.Card"  hint-size="100%,380px">
+      <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.CardColumns"  hint-size="100%,40px"><sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><span style="width:26px;flex:none"></span></sc-if><span style="flex:0 1 180px;min-width:150px"><button type="button" aria-label="Sort by who" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit" style-hover="color:var(--ink)">Who</button></span><span style="flex:1 1 0;min-width:150px"><button type="button" aria-label="Sort by what they asked for" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;color:inherit" style-hover="color:var(--ink)">What they asked for</button></span><span class="hidden desktop:block" style="flex:1.3 1 0;min-width:160px">Why</span><span class="hidden text-right desktop:block" style="width:56px;flex:none"><button type="button" aria-label="Sort by when" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink)" style-hover="color:var(--ink)">When<span aria-hidden="true" style="font-size:11px">↓</span></button></span><span style="width:196px;flex:none">Decision</span></x-import></sc-if>
+      <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><div role="checkbox" aria-checked="true" class="row-divider" style="display:flex;align-items:center;gap:14px;min-height:44px;padding:8px 20px;cursor:pointer;user-select:none"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">✓</span><span style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:600">Clear the selection</span></span></div></sc-if>
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" label="Loading requests" hint-size="100%,260px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No open requests." guidance="New requests appear here the moment someone submits one." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
+      <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><sc-for list="{{ opRows }}" as="r" hint-placeholder-count="4">
+        <div class="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]" style="background:{{ r.bg }}">
+          <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><span style="width:26px;flex:none"><sc-if value="{{ r.open }}" hint-placeholder-val="{{ true }}"><span role="checkbox" aria-checked="{{ r.checked }}" aria-label="Select this request" tabindex="0" style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:26px;cursor:pointer"><sc-if value="{{ r.checked }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">✓</span></sc-if><sc-if value="{{ r.unchecked }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span></sc-if></span></sc-if></span></sc-if>
+          <span class="flex w-full items-center gap-3" style="flex:0 1 180px;min-width:150px">
+            <x-import component-from-global-scope="Syndra.Avatar" name="{{ r.who }}" hint-size="34px,34px"></x-import>
+            <span class="block text-[15px] font-semibold" style="text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.who }}</a></span>
+          </span>
+          <span class="w-full tablet:flex-1" style="min-width:150px">
+            <span class="block text-[14.5px]" style="text-wrap:pretty"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.role }}</a><sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if></span>
+            <span class="block text-[12.5px] text-faint" style="text-wrap:pretty">{{ r.howLong }}<span class="desktop:hidden"> · {{ r.when }}</span></span>
+            <span class="block text-[13px] text-muted desktop:hidden" style="margin-top:2px;text-wrap:pretty">{{ r.whyQuoted }}</span>
+          </span>
+          <span class="hidden text-[14px] text-muted desktop:block" style="flex:1.3 1 0;min-width:160px;text-wrap:pretty">{{ r.whyQuoted }}</span>
+          <span class="hidden text-[13px] text-faint text-right desktop:block" style="width:56px;flex:none">{{ r.when }}</span>
+          <span class="w-full tablet:w-auto" style="flex:none;min-width:196px">
+            <sc-if value="{{ r.showActions }}" hint-placeholder-val="{{ true }}"><span class="flex w-full flex-row-reverse gap-3 tablet:flex-row tablet:gap-2"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" class-name="flex-1 tablet:flex-none" hint-size="96px,34px">Approve</x-import><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Decline</x-import></span></sc-if>
+            <sc-if value="{{ r.showMark }}" hint-placeholder-val="{{ false }}"><span role="status" style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;white-space:nowrap;color:{{ r.markColor }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ r.markTone }}" hint-size="7px,7px"></x-import>{{ r.mark }}</span><sc-if value="{{ r.hasNote }}" hint-placeholder-val="{{ false }}"><span style="padding-left:15px;font-size:12.5px;line-height:1.4;color:{{ r.noteColor }}">{{ r.note }}</span></sc-if><sc-if value="{{ r.notePending }}" hint-placeholder-val="{{ false }}"><span style="padding-left:15px;font-size:12.5px;line-height:1.4;font-weight:600"><a href="route-pending.dc.html?frame=default" style="color:var(--accent-text);text-decoration:none" style-hover="text-decoration:underline;text-underline-offset:3px">Waiting for you to send →</a></span></sc-if></span></sc-if>
+          </span>
+        </div>
+      </sc-for></sc-if>
+    </x-import>
+    </sc-if>
+  </div>
+  <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.SelectionBar" count="{{ 2 }}" noun="{{ requestNoun }}" ceiling="{{ 500 }}" on-take-ceiling="{{ noop }}" on-clear="{{ noop }}" hint-size="100%,64px"><x-import component-from-global-scope="Syndra.SelectionAction" on-click="{{ noop }}" hint-size="180px,36px">Review approving these</x-import><x-import component-from-global-scope="Syndra.SelectionAction" on-click="{{ noop }}" hint-size="180px,36px">Review declining these</x-import></x-import></sc-if>
+  </sc-if>
+
+  <sc-if value="{{ isMember }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Requests" lede="Ask for access, and see what happened to what you asked for. Makerspace staff decide; the answer appears here." actions="{{ askEl }}" hint-size="100%,110px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card"  hint-size="100%,320px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Your requests" count="{{ mineCount }}" hint-size="100%,56px"></x-import>
+    <sc-if value="{{ memberEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="You haven't asked for anything yet." guidance="If there's a machine you need and can't use, ask here and makerspace staff will decide." action="{{ askAction }}" hint-size="100%,160px"></x-import></sc-if>
+    <sc-if value="{{ memberList }}" hint-placeholder-val="{{ true }}"><sc-for list="{{ mine }}" as="m" hint-placeholder-count="4">
+        <div class="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]">
+          <span class="w-full min-w-0 tablet:flex-1">
+            <span class="block text-[15px] font-semibold" style="text-wrap:pretty">{{ m.role }}</span>
+            <span class="block text-[13.5px] text-faint" style="text-wrap:pretty">{{ m.sub }}</span>
+          </span>
+          <span class="text-[13px] text-faint tablet:text-right" style="width:110px;flex:none">{{ m.when }}</span>
+          <span class="w-full tablet:w-auto" style="flex:none;min-width:220px"><span role="status" style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;white-space:nowrap;color:{{ m.markColor }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ m.markTone }}" hint-size="7px,7px"></x-import>{{ m.mark }}</span><sc-if value="{{ m.hasNote }}" hint-placeholder-val="{{ false }}"><span style="padding-left:15px;font-size:12.5px;line-height:1.4;color:{{ m.noteColor }}">{{ m.note }}</span></sc-if></span></span>
+          <span class="flex tablet:justify-end" style="flex:none;min-width:96px"><sc-if value="{{ m.canWithdraw }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="96px,34px">Withdraw</x-import></sc-if></span>
+        </div>
+    </sc-for></sc-if>
+  </x-import>
+  <sc-if value="{{ dialogOpen }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="request-title" hint-size="440px,560px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="Ask for access" title-id="request-title" lede="Say what you need and why. Makerspace staff decide — you'll see the answer here." hint-size="100%,110px"></x-import>
+    <div style="display:flex;flex-direction:column;gap:14px;padding:0 24px">
+      <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel"  hint-size="200px,18px">What do you need to use?</x-import><x-import component-from-global-scope="Syndra.Select" value="{{ dProject }}" on-change="{{ noop }}" aria-label="What do you need to use?" hint-size="100%,40px"><option value="laser">Laser Lab</option><option value="front">Front desk</option></x-import></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel"  hint-size="200px,18px">What do you need to do there?</x-import>
+        <sc-if value="{{ dHasRoles }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Select" value="op" on-change="{{ noop }}" aria-label="What do you need to do there?" hint-size="100%,40px"><option value="op">Laser cutter · Operator</option></x-import><x-import component-from-global-scope="Syndra.FieldHint"  hint-size="100%,36px">Can’t find it? Pick the closest one and describe what you actually need in Why — makerspace staff read that before deciding.</x-import></sc-if>
+        <sc-if value="{{ dNoRoles }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Select" value="" disabled="{{ true }}" on-change="{{ noop }}" aria-label="What do you need to do there?" hint-size="100%,40px"><option value="">Nothing to choose here</option></x-import><x-import component-from-global-scope="Syndra.FieldHint"  hint-size="100%,36px">Nothing is defined here yet, so there is nothing to ask for. Pick another place, or ask makerspace staff to set this one up.</x-import></sc-if>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel"  hint-size="200px,18px">How long do you need it?</x-import><div><x-import component-from-global-scope="Syndra.Segmented" label="How long do you need it?" value="{{ dHowLong }}" options="{{ howLongOptions }}" on-change="{{ noop }}" hint-size="360px,40px"></x-import></div><x-import component-from-global-scope="Syndra.FieldHint"  hint-size="100%,18px">{{ dUntil }}</x-import></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel"  hint-size="200px,18px">Why?</x-import><x-import component-from-global-scope="Syndra.Textarea" value="{{ dWhy }}" on-change="{{ noop }}" placeholder="Running the Trotec for my capstone build" aria-label="Why?" hint-size="100%,64px"></x-import></div>
+      <sc-if value="{{ dAsked }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ askedOutcome }}" hint-size="100%,90px"></x-import></sc-if>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter"  hint-size="100%,80px"><sc-if value="{{ dNotAsked }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="accent" disabled="{{ dNoRoles }}" hint-size="130px,40px">Send request</x-import><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Cancel</x-import></sc-if><sc-if value="{{ dAsked }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></sc-if></x-import>
+  </x-import>
+  </sc-if>
+  </sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    this.member = /^(mine|ask|ask-nothing|asked|member-empty|member-phone)$/.test(this.st);
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = this.member
+      ? { id: "u2", name: "Priya", email: "priya.nair@makerspace.edu", title: "Student", team: "Operations", status: "active", avatar: "", role: "user", sessionType: "demo" }
+      : { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 2, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded"; const sel = st === "selecting";
+    const R = (who, role, howLong, why, when, extra) => Object.assign({ who, role, howLong, whyQuoted: why ? "\u201c" + why + "\u201d" : "No reason given", when, open: true, checked: false, unchecked: true, showActions: true, showMark: false, hasOutcome: false, bg: "transparent" }, extra || {});
+    const decided = (mark, tone, note, noteTone) => ({ open: false, showActions: false, showMark: true, mark, markTone: tone, markColor: tone === "neutral" ? "var(--muted)" : "var(--ink)", hasNote: !!note, notePending: noteTone === "pending", note, noteColor: noteTone === "warn" ? "var(--warn-text)" : "var(--faint)" });
+    const WAITS = new Set(["Laser cutter · Operator", "Laser cutter · Supervisor", "Welder · Member", "Storage · Member"]);
+    let opRows = [
+      R("Aanya Rao", "Laser cutter · Operator", "For a month · until 3 Nov", "Capstone build needs unsupervised cuts after 6pm.", "2h"),
+      R("Omar Haddad", "Bandsaw · Member", "Until the end of term · 12 Dec", "", "5h"),
+      R("Priya Nair", "Laser cutter · Supervisor", "Until the end of term · 12 Dec", "Running the evening inductions this term.", "3h", decided("Approved", "warn", "Supervisor always waits for you", "pending")),
+      R("Lena Brandt", "Studio · Booking", "For a week · until 10 Oct", "Recording a short film for class.", "1d", deg ? decided("Approved", "warn", "Zitadel didn't answer when it was approved", "pending") : decided("Approved", "healthy", "Sent · not yet seen in Zitadel")),
+      R("Wei Chen", "Soldering station · Operator", "For a month · until 3 Nov", "Repairing the badge reader boards.", "2d", decided("Declined", "neutral", "Nothing was sent")),
+    ];
+    opRows = opRows.map(r => Object.assign(r, { waits: WAITS.has(r.role) }));
+    if (sel) opRows = opRows.slice(0, 2).map(r => Object.assign({}, r, { checked: true, unchecked: false, bg: "var(--accent-soft)" }));
+    const M = (role, sub, when, mark, tone, extra) => Object.assign({ role, sub, when, mark, markTone: tone, markColor: tone === "healthy" ? "var(--ink)" : "var(--muted)", canWithdraw: false, hasNote: false, note: "", noteColor: "var(--faint)" }, extra || {});
+    const mine = [
+      M("Laser cutter · Operator", "For a month · until 3 Nov · Capstone build needs unsupervised cuts after 6pm.", "2h ago", "Waiting", "neutral", { canWithdraw: true }),
+      M("Bandsaw · Member", "For a week · Only for the stool project.", "3d ago", "You withdrew this", "neutral", { hasNote: st === "mine", note: "Nobody will be asked to decide it" }),
+      M("Studio · Booking", "Until the end of term · No reason given", "12 Sept", "Approved", "healthy"),
+      M("Soldering station · Operator", "For a month · Repairing the badge reader boards.", "2 Sept", "Not approved", "neutral"),
+    ];
+    const dialogOpen = /^(ask|ask-nothing|asked)$/.test(st);
+    const f = (frame, label, note, phone) => phone ? { src: "route-requests.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-requests.dc.html?frame=" + frame, label, note, w: 1440, h: 1000, boxW: 720, boxH: 500, scale: 0.5 };
+    const lap = (frame, label, note) => ({ src: "route-requests.dc.html?frame=" + frame, label, note, w: 920, h: 800, boxW: 690, boxH: 600, scale: 0.75 });
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      isOperator: !this.member, isMember: this.member,
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg,
+      stList: !/^(loading|error|empty)$/.test(st), showCard: st !== "error", selecting: sel,
+      opRows, requestNoun: ["request", "requests"],
+      mine, mineCount: st === "member-empty" ? 0 : 4, memberEmpty: st === "member-empty", memberList: st !== "member-empty",
+      dialogOpen, dProject: st === "ask-nothing" ? "front" : "laser", dHasRoles: st !== "ask-nothing", dNoRoles: st === "ask-nothing",
+      dHowLong: "30", dUntil: "If it’s approved, it runs to 3 November 2026 and then stops. You can ask again.",
+      dWhy: st === "ask-nothing" ? "" : "Capstone build needs unsupervised cuts after 6pm.",
+      dAsked: st === "asked", dNotAsked: st !== "asked",
+      askedOutcome: { kind: "applied", message: "Asked", detail: "You'll see the answer on this page — nothing else is needed from you." },
+      howLongOptions: [{ value: "7", label: "A week" }, { value: "30", label: "A month" }, { value: "term", label: "Until the end of term" }],
+      askAction: { label: "Ask for access", onClick: () => {} },
+      askEl: S ? h(S.Button, { variant: "accent" }, "Ask for access") : null,
+      searchEl: S && st !== "loading" && st !== "error" ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search requests by person or role" }) : null,
+      pillsEl: S ? h(S.FilterPills, { label: "Filter by status", value: "pending", onChange: () => {}, options: [{ value: "pending", label: "Open" }, { value: "approved", label: "Approved" }, { value: "rejected", label: "Declined" }, { value: "withdrawn", label: "Withdrawn" }, { value: "all", label: "All" }] }) : null,
+      selectEl: S && st !== "empty" && st !== "loading" && st !== "error" ? h(S.SelectModeToggle, { active: sel, onToggle: () => {} }) : null,
+      groups: [
+        { title: "Operator · desktop 1440", frames: [
+          f("default", "Default", "Two open requests with Approve and Decline; three just decided. Each keeps its seat until the next read and reports in the Decision seat itself: the decision as dot and word, and under it what happened to the access (#96). Aanya's and Priya's roles carry the Waits-for-you mark, so the operator knows before approving that the change will wait; Priya's approval says why and links to Pending changes (N15–N17). Duration under the ask (#52)."),
+          f("selecting", "Selecting", "Select turns on round seats for open rows only. The bar states the 500 ceiling before the tap (#103) and both verbs open a rehearsal; one verb, declining."),
+          f("empty", "Empty", "An empty open queue is resolved work, so it carries the healthy dot."),
+          f("loading", "Loading", "Skeleton rows; no headings, no Select."),
+          f("error", "Error", "The red notice in the list's place."),
+          f("degraded", "Degraded", "Requests are Syndra's own, so the queue is current. Deciding still works; an approval reads Approved with an amber dot, why it waits ("Zitadel didn't answer when it was approved"), and Waiting for you to send →, which opens Pending changes."),
+        ] },
+        { title: "Member · desktop 1440", frames: [
+          f("mine", "Your requests", "Withdraw on the waiting row, outline and last. A withdrawal reports in its own status seat, You withdrew this with Nobody will be asked to decide it under it, never Declined (#51)."),
+          f("ask", "Ask for access", "Place, then role; the hint points at Why (#53). How long resolves to a date (#52)."),
+          f("ask-nothing", "A place with nothing defined", "A sentence instead of an empty menu; Send waits (#53)."),
+          f("asked", "Asked", "The dialog becomes its own result (#96). The word Done goes to Phase 2."),
+          f("member-empty", "Nothing asked yet", "Says what this page is for and offers the ask."),
+        ] },
+        { title: "Laptop · 920", frames: [lap("default", "Operator at laptop width", "Who gives up to 30px, the decision keeps 196. Nothing truncates: the role, duration with When, and Why wrap within the ask, so every word of the request is read before deciding.")] },
+        { title: "Phone · 390", frames: [
+          f("phone", "Operator", "Rows stack; Approve fills the width with Decline beside it.", true),
+          f("member-phone", "Member", "The status and Withdraw sit under the ask.", true),
+        ] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="box-sizing:border-box;width:100%;min-height:100%;flex:none;align-self:stretch;background:#101210;border-right:1px solid rgba(255,255,255,.06);font-family:Figtree,system-ui,sans-serif;font-size:14.5px;color:#f3f5ef;padding:20px 12px 22px;display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;align-items:center;gap:10px;padding:0 8px">
+    <span style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;position:relative;flex:none"><span style="position:absolute;inset:0;border-radius:999px;border:1.4px solid rgba(155,123,255,.2);-webkit-mask-image:radial-gradient(closest-side, #000 88%, rgba(0,0,0,.5) 97%, transparent 100%);mask-image:radial-gradient(closest-side, #000 88%, rgba(0,0,0,.5) 97%, transparent 100%)"></span><span style="position:absolute;inset:0;border-radius:999px;border:1.4px solid rgba(206,188,255,.92);opacity:.62;-webkit-mask-image:conic-gradient(from 0deg, #000 0deg, rgba(0,0,0,.28) 118deg, transparent 158deg, transparent 202deg, rgba(0,0,0,.28) 242deg, #000 360deg);mask-image:conic-gradient(from 0deg, #000 0deg, rgba(0,0,0,.28) 118deg, transparent 158deg, transparent 202deg, rgba(0,0,0,.28) 242deg, #000 360deg)"></span><span style="width:8px;height:8px;border-radius:999px;background:#9b7bff;box-shadow:0 0 14px 2px rgba(155,123,255,.6)"></span></span>
+    <span style="font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:18px;letter-spacing:-.01em">Syndra</span>
+    <span style="flex:1"></span>
+    <span style="font-size:11px;color:rgba(243,245,239,.42);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:2px 8px">{{ viewLabel }}</span>
+  </div>
+  <nav style="display:flex;flex-direction:column;gap:3px">
+    <sc-for list="{{ items }}" as="it" hint-placeholder-count="6">
+      <sc-if value="{{ it.leaf }}" hint-placeholder-val="{{ true }}">
+        <sc-if value="{{ it.on }}">
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:12px;background:rgba(155,123,255,.13);color:#9b7bff;font-weight:600">
+            <span style="width:6px;height:6px;border-radius:999px;background:#7f5af0;flex:none"></span>
+            <span style="flex:1">{{ it.name }}</span>
+            <sc-if value="{{ it.badgeA }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#7f5af0;color:#f7f4ff">{{ it.badgeA }}</span></sc-if>
+            <sc-if value="{{ it.badgeW }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#f5a524;color:#231703">{{ it.badgeW }}</span></sc-if>
+            <sc-if value="{{ it.badgeD }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#ff5c4d;color:#2a0c08">{{ it.badgeD }}</span></sc-if>
+          </div>
+        </sc-if>
+        <sc-if value="{{ it.off }}">
+          <div style="display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:12px;color:rgba(243,245,239,.74)">
+            <span style="width:6px;height:6px;border-radius:999px;background:rgba(243,245,239,.2);flex:none"></span>
+            <span style="flex:1">{{ it.name }}</span>
+            <sc-if value="{{ it.badgeA }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#7f5af0;color:#f7f4ff">{{ it.badgeA }}</span></sc-if>
+            <sc-if value="{{ it.badgeW }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#f5a524;color:#231703">{{ it.badgeW }}</span></sc-if>
+            <sc-if value="{{ it.badgeD }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#ff5c4d;color:#2a0c08">{{ it.badgeD }}</span></sc-if>
+            <sc-if value="{{ it.zero }}"><span style="font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);color:rgba(243,245,239,.34)">0</span></sc-if>
+          </div>
+        </sc-if>
+      </sc-if>
+      <sc-if value="{{ it.group }}">
+        <div style="padding:16px 12px 5px">
+          <span style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:rgba(243,245,239,.36);font-weight:600">{{ it.name }}</span>
+        </div>
+        <sc-for list="{{ it.children }}" as="kid" hint-placeholder-count="3">
+          <sc-if value="{{ kid.on }}">
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 12px 8px 21px;border-radius:12px;background:rgba(155,123,255,.13);color:#9b7bff;font-weight:600">
+              <span style="flex:1">{{ kid.name }}</span>
+              <sc-if value="{{ kid.badgeA }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#7f5af0;color:#f7f4ff">{{ kid.badgeA }}</span></sc-if>
+              <sc-if value="{{ kid.badgeW }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#f5a524;color:#231703">{{ kid.badgeW }}</span></sc-if>
+              <sc-if value="{{ kid.badgeD }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#ff5c4d;color:#2a0c08">{{ kid.badgeD }}</span></sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ kid.off }}">
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 12px 8px 21px;border-radius:12px;color:rgba(243,245,239,.66)">
+              <span style="flex:1">{{ kid.name }}</span>
+              <sc-if value="{{ kid.badgeA }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#7f5af0;color:#f7f4ff">{{ kid.badgeA }}</span></sc-if>
+              <sc-if value="{{ kid.badgeW }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#f5a524;color:#231703">{{ kid.badgeW }}</span></sc-if>
+              <sc-if value="{{ kid.badgeD }}"><span style="font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:#ff5c4d;color:#2a0c08">{{ kid.badgeD }}</span></sc-if>
+              <sc-if value="{{ kid.zero }}"><span style="font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);color:rgba(243,245,239,.34)">0</span></sc-if>
+            </div>
+          </sc-if>
+        </sc-for>
+      </sc-if>
+    </sc-for>
+  </nav>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:252,&quot;height&quot;:560},&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;basic&quot;,&quot;advanced&quot;,&quot;member&quot;],&quot;default&quot;:&quot;basic&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;active&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Today&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const view = this.props.view || "basic";
+    const active = this.props.active || "";
+    const leaf = (name, badge, tone) => {
+      const v = badge ? String(badge) : null;
+      return {
+        name, leaf: true, group: false,
+        badgeA: tone === "warn" || tone === "danger" ? null : v,
+        badgeW: tone === "warn" ? v : null,
+        badgeD: tone === "danger" ? v : null,
+        zero: badge === 0,
+        on: name === active, off: name !== active
+      };
+    };
+    const grp = (name, children) => ({ name, leaf: false, group: true, children });
+
+    const core = [
+      leaf("Today"), leaf("People"),
+      grp("Access", [leaf("Projects"), leaf("Roles"), leaf("Apps")]),
+      leaf("Requests", 3)
+    ];
+    let items;
+    if (view === "member") items = [leaf("My access"), leaf("Requests", 1), leaf("TrueNAS")];
+    else if (view === "advanced" || view === "system") items = core.concat([
+      leaf("Bundles"),
+      grp("Automation", [leaf("Automatic rules"), leaf("Pending changes", 2), leaf("Change history"), leaf("Access map"), leaf("Settings")]),
+      grp("Review", [leaf("Unexplained access", 12, "danger"), leaf("Withdrawn access", 3, "danger"), leaf("Holds"), leaf("Review due", 2, "warn"), leaf("Expiring access", 1, "warn"), leaf("Audit")]),
+      grp("System", [leaf("Identity provider"), leaf("TrueNAS"), leaf("Unifi Access"), leaf("Event activity")])
+    ]);
+    else items = core;
+
+    return { items, viewLabel: view === "member" ? "Member" : (view === "advanced" || view === "system") ? "Advanced" : "Basic" };
+  }
+}
+
+</script>
+</body>
+</html>

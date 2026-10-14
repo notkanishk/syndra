@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="People board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /users</span>
+    <h1 class="type-page-title" style="margin:0">People</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Everyone Syndra knows, and what each can use. Each frame is the real shell and components at true width. Open one alone with <span class="type-mono">?frame=default</span>, <span class="type-mono">empty</span>, <span class="type-mono">loading</span>, <span class="type-mono">error</span>, <span class="type-mono">degraded</span> or <span class="type-mono">phone</span>.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Carried · settled</span>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#35</strong> an id nothing can name reads "Unknown account" with the id beside it · <strong style="color:var(--ink)">#36</strong> the header counts people, never accounts · <strong style="color:var(--ink)">#89</strong> on a phone every number carries its noun · <strong style="color:var(--ink)">#102</strong> errors go through describeFailure and end "Nothing was changed." · <strong style="color:var(--ink)">#109</strong> a row's own action is outline · <strong style="color:var(--ink)">#111</strong> one date style. Degraded shows last known data, as on Home.</p>
+    </div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+      <span class="type-label" style="color:var(--label)">Drawn as built · settled in Phase 2</span>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#32</strong> bulk mode, never on yourself (<a href="#32a">32a</a>) · <strong style="color:var(--ink)">#33</strong> the selection model · <strong style="color:var(--ink)">#34</strong> bundle chips with their pinned version · <strong style="color:var(--ink)">#87</strong> phone rows stack and open the person; search keeps its seat, and below tablet Filters opens as a sheet ending "Show 12 people" (<a href="route-mobile.dc.html#87c">87c</a>) · <strong style="color:var(--ink)">#110</strong> one FilterBar, filters behind "Filters · N".</p>
+    </div>
+  </section>
+  <section data-screen-label="#32 for the owner" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:960px">
+      <h2 class="type-section-title" style="margin:0">#32 · Taking access away from several people at once</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The board ruled out bulk revoke: every revoke takes real access from a real person, so each was to be read on its own. The shipped People page has a Select mode whose bar can give and take away, each through a review that lists every person before anything happens. It also lets the operator select themselves and revoke their own role. Both options close that gap: you are never in a plan that takes access away.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <figure id="32a" style="margin:0;display:flex;flex-direction:column;gap:12px;max-width:720px">
+        <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:2px solid var(--accent-line);background:var(--canvas)"><iframe src="route-users.dc.html?frame=bulk-a" title="32a" style="width:1440px;height:1120px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+        <figcaption style="display:flex;flex-direction:column;gap:6px">
+          <span style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">32a</span><span style="font-size:15px;font-weight:600">Keep bulk revoke, never on yourself</span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 9 Oct</span></span>
+          <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">All five verbs stay. The two that take access away are danger outlines and open the shared review, which names each person and what they lose, so nobody is guessed at. The bar says when the selection includes you, and the review leaves you out. The job this serves is real: "Departed but still holding roles" is a cohort that only ends with a revoke, often a dozen people after term.</span>
+        </figcaption>
+      </figure>
+      <figure id="32b" style="margin:0;display:flex;flex-direction:column;gap:12px;max-width:720px">
+        <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-users.dc.html?frame=bulk-b" title="32b" style="width:1440px;height:1120px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+        <figcaption style="display:flex;flex-direction:column;gap:6px">
+          <span style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">32b</span><span style="font-size:15px;font-weight:600">Bulk gives; taking away is one person at a time</span></span>
+          <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The board's rule, kept. The bar offers Give a role, Add to a bundle and Extend what expires, and says on the bar why revoking is not there. Twelve leavers mean twelve visits to twelve pages. Dormant accounts stay the one bulk removal, as §29 has it.</span>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ desktopFrames }}" as="f" hint-placeholder-count="5">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1120px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Laptop · 920</h2>
+    <figure data-screen-label="Laptop 920" style="margin:0;display:flex;flex-direction:column;gap:10px">
+      <div style="width:690px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-users.dc.html?frame=default" title="Laptop 920" style="width:920px;height:800px;border:0;transform:scale(0.75);transform-origin:0 0"></iframe></div>
+      <figcaption style="max-width:690px;font-size:13.5px;line-height:1.55;color:var(--muted)">Rail open, ~620px of content. Bundles fold into a line under the person ("Lab Tech v3"); Person can give up to 70px so Access keeps at least 170px.</figcaption>
+    </figure>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="1">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:390px;height:844px;border:0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Everyone below is real, read 14 minutes ago, and may have changed since. Giving and revoking access is paused until Zitadel answers.</p>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="People" meta="{{ meta }}" lede="Everyone Syndra knows, and what each can use. Open a person to see and change their access; select several to change them together." hint-size="100%,110px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;flex-direction:column;gap:10px">
+  <x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" trailing="{{ selectEl }}" hint-size="100%,48px"></x-import>
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ lastKnown }}" subject="The people list" hint-size="100%,24px"></x-import></sc-if>
+  <sc-if value="{{ stFresh }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ freshRead }}" subject="The people list" hint-size="100%,24px"></x-import></sc-if>
+  </div>
+
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load people.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
+          <span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+    <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><sc-if value="{{ bulk }}" hint-placeholder-val="{{ false }}"><span style="width:26px;flex:none"></span></sc-if><span class="w-[250px]" style="min-width:180px"><button type="button" aria-label="Sort by person" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink)" style-hover="color:var(--ink)">Person<span aria-hidden="true" style="font-size:11px">↑</span></button></span><span class="hidden desktop:block" style="width:180px;flex:none"><button type="button" aria-label="Sort by bundles" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;color:inherit" style-hover="color:var(--ink)">Bundles</button></span><span class="flex-1" style="min-width:170px">Access</span><span class="text-right" style="width:110px;flex:none"><button type="button" aria-label="Sort by attention" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit" style-hover="color:var(--ink)">Attention</button></span></x-import>
+    <sc-if value="{{ bulk }}" hint-placeholder-val="{{ false }}">{{ selectAllEl }}</sc-if>
+
+    <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 6 }}" label="Loading people" hint-size="100%,300px"></x-import></sc-if>
+
+
+    <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="There's nobody here yet." guidance="People appear here once they exist in Zitadel." hint-size="100%,160px"></x-import></sc-if>
+
+    <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}">
+      <sc-for list="{{ people }}" as="p" hint-placeholder-count="6">
+        <div class="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer;opacity:{{ p.opacity }};background:{{ p.bg }}">
+          <sc-if value="{{ bulk }}" hint-placeholder-val="{{ false }}"><span style="width:26px;flex:none;display:flex">{{ p.checkEl }}</span></sc-if>
+          <span class="flex w-full items-center gap-3 tablet:w-[250px]" style="min-width:180px">
+            <x-import component-from-global-scope="Syndra.Avatar" name="{{ p.avatarName }}" hint-size="34px,34px"></x-import>
+            <span class="min-w-0">
+              <span class="block truncate text-[15px] font-semibold" style="color:{{ p.nameColor }}"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.name }}</a></span>
+              <span class="block truncate text-[12.5px] text-faint">{{ p.subLine }}</span>
+              <span class="block truncate text-[12.5px] text-faint desktop:hidden">{{ p.bundleLine }}</span>
+            </span>
+          </span>
+          <span class="hidden desktop:block" style="width:180px;flex:none"><span style="display:flex;flex-wrap:wrap;gap:6px">
+            <sc-for list="{{ p.bundles }}" as="b" hint-placeholder-count="1"><a href="route-bundles.dc.html?frame=default" style="text-decoration:none;color:inherit"><x-import component-from-global-scope="Syndra.Badge" class-name="gap-[5px] whitespace-nowrap" hint-size="90px,24px">{{ b.name }}<span class="text-faint">v{{ b.v }}</span></x-import></a></sc-for>
+            <sc-if value="{{ p.noBundles }}" hint-placeholder-val="{{ false }}"><span class="text-[13px] text-faint">none</span></sc-if>
+          </span></span>
+          <span class="min-w-0 text-[13px] text-muted tablet:flex-1 tablet:truncate tablet:text-[14px]" style="min-width:170px">{{ p.access }}</span>
+          <span class="tablet:w-[110px] tablet:text-right tablet:shrink-0"><span class="text-[13.5px] font-semibold" style="color:{{ p.attnColor }}">{{ p.attn }}</span></span>
+        </div>
+      </sc-for>
+    </sc-if>
+  </x-import>
+  </sc-if>
+  </div>
+  <sc-if value="{{ bulk }}" hint-placeholder-val="{{ false }}">{{ barEl }}</sc-if>
+
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+    this.listError = Object.assign(new Error("People could not be read"), { status: 503 });
+    const P = (name, sub, team, bundles, access, attn, tone, extra) => ({ name, sub, team, subLine: team && team !== "—" ? sub + " · " + team : sub, bundles, noBundles: bundles.length === 0, access, attn, attnColor: tone ? "var(--" + tone + "-text)" : "inherit", avatarName: name, nameColor: "var(--ink)", opacity: 1, ...(extra || {}) });
+    this.people = [
+      P("Aanya Rao", "Research assistant", "Mechanical Engineering", [{ name: "Lab Tech", v: 3 }], "3 roles across 2 projects", "Expires in 2 days", "warn"),
+      P("Priya Nair", "Research assistant", "Design", [{ name: "Lab Tech", v: 2 }], "5 roles across 3 projects", "Unexplained role", "danger"),
+      P("Kanishk Singh", "Makerspace staff", "Operations", [{ name: "Staff", v: 1 }], "6 roles across 4 projects", "", ""),
+      P("Lena Brandt", "lena.brandt@makerspace.edu", "—", [], "Nothing yet", "Open request", "accent"),
+      P("Unknown account", "a91f3c2e-7d0b-4e5a-9c11-28d6f0b4e7a3", "—", [], "Not in Zitadel", "", "", { avatarName: "", nameColor: "var(--faint)" }),
+      P("Omar Haddad", "Left 12 Sept", "Architecture", [{ name: "Wood shop", v: 1 }], "1 role", "", "", { opacity: 0.6 }),
+    ];
+  }
+  seat(on, label) { const h = React.createElement; const mixed = on === "mixed"; const s = { width: 24, height: 24, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-pill)", border: "1.5px solid " + (on ? "var(--accent)" : "var(--line-strong)"), background: on ? "var(--accent)" : "transparent", color: "var(--accent-ink)", fontSize: 13, fontWeight: 700, lineHeight: 1 };
+    const glyph = h("span", { "aria-hidden": true, style: s }, mixed ? "\u2013" : on ? "\u2713" : "");
+    return label ? h("span", { role: "checkbox", "aria-checked": !!on, "aria-label": label, tabIndex: 0, style: { display: "inline-flex", minWidth: 26, minHeight: 26, alignItems: "center", justifyContent: "center", cursor: "pointer" } }, glyph) : glyph; }
+  peopleView() {
+    const S = window.Syndra, h = React.createElement, bulk = this.st === "bulk-a" || this.st === "bulk-b";
+    const picked = ["Aanya Rao", "Priya Nair", "Kanishk Singh", "Omar Haddad"];
+    return (this.people || []).map(p => ({ ...p, bg: bulk && picked.includes(p.name) ? "var(--accent-soft)" : "transparent", checkEl: bulk ? this.seat(picked.includes(p.name), "Select " + p.name) : null, bundleLine: (p.bundles || []).length ? (p.bundles || []).map(b => b.name + " v" + b.v).join(" · ") : "" }));
+  }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded"; const bulk = st === "bulk-a" || st === "bulk-b";
+    const act = (label, tone) => h(S.SelectionAction, { key: label, tone, onClick: () => {} }, label);
+    const barEl = S && bulk ? h(S.SelectionBar, { count: 4, noun: ["person", "people"], composition: st === "bulk-a" ? "Includes you · you are left out of anything that takes access away" : undefined, onClear: () => {} },
+      st === "bulk-a" ? [act("Give a role"), act("Add to a bundle"), act("Extend what expires"), act("Remove from a bundle", "danger"), act("Revoke a role", "danger")]
+      : [h("span", { key: "n", style: { fontSize: 13, color: "var(--muted)", maxWidth: 260, lineHeight: 1.45 } }, "Taking access away is done one person at a time, from their page."), act("Give a role"), act("Add to a bundle"), act("Extend what expires")]) : null;
+    const f = (frame, label, note) => ({ src: "route-users.dc.html?frame=" + frame, label, note });
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, listError: this.listError, noop: () => {},
+      showCard: st !== "error", stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg,
+      stList: st === "default" || deg || st === "phone" || bulk, stFresh: st === "default" || st === "phone" || bulk, bulk, barEl,
+      selectAllEl: bulk ? h("div", { role: "checkbox", "aria-checked": "mixed", className: "row-divider", style: { display: "flex", alignItems: "center", gap: 14, minHeight: 44, padding: "8px 20px", cursor: "pointer", userSelect: "none" } }, this.seat("mixed"), h("span", { style: { fontSize: 14, fontWeight: 600 } }, "Select these 248 people")) : null,
+      meta: st === "empty" || st === "loading" || st === "error" ? undefined : "248 people · 12 with access expiring inside 30 days",
+      people: this.peopleView(),
+      lastKnown: { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false },
+      freshRead: { readAt: new Date(Date.now() - 20000).toISOString(), current: true },
+      searchEl: S ? h(S.Input, { placeholder: "Search name, email or role key…", "aria-label": "Search people by name, email or role key" }) : null,
+      filtersEl: S ? h(S.FilterPanel, { activeCount: 0, onClear: () => {} }, h(S.FilterField, { label: "Project" }, h(S.Select, { defaultValue: "", "aria-label": "Filter by project" }, h("option", { value: "" }, "Any project"))), h(S.FilterField, { label: "Needs attention" }, h(S.Select, { defaultValue: "", "aria-label": "Filter by what needs attention" }, h("option", { value: "" }, "Anything")))) : null,
+      selectEl: S ? h(S.SelectModeToggle, { active: bulk, onToggle: () => {} }) : null,
+      desktopFrames: [
+        f("default", "Default", "Person carries title · team under the name, so Access keeps at least 170px at every width. Attention names the most urgent thing in a few words. Someone who left reads at reduced contrast; an unnamed id shows as Unknown account with the id (#35)."),
+        f("empty", "Empty", "Says what would put someone here."),
+        f("loading", "Loading", "Skeleton rows at the real row height; the count waits for the read."),
+        f("error", "Error", "The failed read takes the list's place as a red notice, built like the amber one: what failed, Nothing was changed, Try again, a reference."),
+        f("degraded", "Degraded — last known data", "Real people from the last good read, with its age. Giving and revoking pause."),
+      ],
+      phoneFrames: [f("phone", "Phone — default", "Rows stack: who, what they hold, what needs doing. Team and bundles fold away below tablet (#87); a tap opens the person.")],
+    };
+  }
+}
+</script>
+</body>
+</html>

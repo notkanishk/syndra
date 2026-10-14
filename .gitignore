@@ -82,3 +82,10 @@ addons/*/truenas
 __pycache__/
 *.pyc
 .claude/worktrees/
+
+# design-sync (ui/) - staged scripts, build output, machine state
+ui/.ds-sync/
+ui/ds-bundle/
+ui/.design-sync/.cache/
+ui/.design-sync/learnings/
+ui/.design-sync/node_modules

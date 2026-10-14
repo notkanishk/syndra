@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Confirmation board" style="display:flex;flex-direction:column;gap:12px;max-width:1000px">
+    <span class="type-label" style="color:var(--label)">Route · /automation/settings, bundles, rules, roles · #74, N13, N14 · supersedes route-automation-settings</span>
+    <h1 class="type-page-title" style="margin:0">Where a change waits for a person</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">Every bundle and every automatic rule has its own mode: apply its changes at once, or leave them waiting for you to send. The setting on this page only decides what a new one starts with. Rules show their mode on Automatic rules and in the rule editor. Bundles store a mode but never show it: a new bundle silently takes the default and keeps it. Two ways to put this right are drawn below. <strong style="color:var(--ink)">A</strong> keeps the mode on each bundle and rule and shows it everywhere. <strong style="color:var(--ink)">B</strong> moves the pause onto the roles that deserve one. I recommend B.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Does a rule that waits make sense?</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">A rule exists so nobody has to give the second role by hand. If every firing waits, the rule becomes a reminder. Waiting earns its place in two cases. The first is a new rule being watched before it is trusted; the code's own comment describes rules watched for a term, then moved to apply at once. The second is a rule that gives something worth a look every time. That second case is about the role, not the rule. Laser cutter · Supervisor deserves a look however it arrives. Front door doesn't, even from a bundle set to wait.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What each path does today</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Read from the code, none of these read the setting directly. Bundles and rules follow their own stored mode. A grant by hand always waits in Pending changes, because the form never asks to send. An approved request tries to reach Zitadel at once, and waits only when Zitadel can't be reached or another send is running, without saying so. Four paths behave three ways, and only one of them is visible.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Does changing a mode need a new version?</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">No. A version records what a bundle gives; a mode is how its changes travel. Switching it changes nobody's access at that moment, so there is no review to read. It is saved on its own, recorded in the audit log with who and when, and shown beside the control. Changes already waiting stay waiting.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">One control for the choice</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The rule editor already asks "When this rule applies" with a Segmented control and one line explaining the chosen option. Every place that sets this choice uses that pattern, with one real example in the line. It replaces the choice cards drawn yesterday, so there is one pattern for one job.</p></div>
+  </section>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+    <section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:6px;max-width:980px">
+        <div style="display:flex;align-items:center;gap:12px"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:28px;padding:0 8px;box-sizing:border-box;border-radius:var(--radius-pill);border:1px solid {{ g.badgeEdge }};background:{{ g.badgeBg }};font-weight:700;font-size:13px">{{ g.id }}</span><h2 class="type-section-title" style="margin:0">{{ g.title }}</h2></div>
+        <p style="margin:0;font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ g.note }}</p>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+        <sc-for list="{{ g.frames }}" as="f" hint-placeholder-count="4">
+          <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:8px">
+            <div style="width:720px;height:{{ f.bh }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" loading="lazy" style="width:1440px;height:{{ f.h }}px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+            <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span></figcaption>
+          </figure>
+        </sc-for>
+      </div>
+      <div class="card" style="padding:16px 20px;display:flex;flex-direction:column;gap:6px;max-width:1480px"><span class="type-label" style="color:var(--label)">{{ g.weighLabel }}</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ g.weigh }}</p></div>
+    </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px;max-width:920px">
+
+<sc-if value="{{ isSettingsA }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Automation settings" lede="How bundles and automatic rules deliver their changes, and whether this browser plays a sound when drift is found." hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,260px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Default for new bundles and rules" note="For the whole makerspace" hint-size="100%,60px"></x-import>
+    <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 18px">
+      <p style="margin:0;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">What a new bundle or rule does with the changes it makes. Each keeps its own mode after that, which you change on its page.</p>
+      <div><x-import component-from-global-scope="Syndra.Segmented" size="sm" label="Default for new bundles and rules" value="{{ defMode }}" on-change="{{ setDef }}" options="{{ modeOpts }}" hint-size="320px,36px"></x-import></div>
+      <sc-if value="{{ defChosen }}" hint-placeholder-val="{{ true }}"><p style="margin:0;font-size:14px;line-height:1.55;text-wrap:pretty">{{ defLine }}</p></sc-if>
+      <span style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-size:13px;color:var(--muted)"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--line-strong);transform:translateY(-1px)"></span><span style="text-wrap:pretty">{{ provLine }}</span><sc-if value="{{ defChosen }}" hint-placeholder-val="{{ true }}"><a href="route-events.dc.html">See it in the audit log →</a></sc-if></span>
+    </div>
+    <sc-if value="{{ hasDefOutcome }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 18px">
+        <x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ defOutcome }}" placement="inline" hint-size="100%,60px"></x-import>
+        <sc-if value="{{ offerSwitch }}" hint-placeholder-val="{{ false }}"><div><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" on-click="{{ openSwitch }}" hint-size="200px,32px">{{ switchLabel }}</x-import></div></sc-if>
+        <sc-if value="{{ switchOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:12px;padding:16px 18px;border-radius:var(--radius-panel);border:1px solid var(--line-strong);background:var(--surface-1)">
+            <span style="font-size:15px;font-weight:600">Switch these 2 to wait for you to send</span>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ otherRows }}" as="r" hint-placeholder-count="2">
+                <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--divider)"><a href="{{ r.href }}" style="flex:1;color:var(--ink);font-weight:600;text-wrap:pretty" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.name }}</a><span style="width:140px;color:var(--muted)">{{ r.kind }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span></div>
+              </sc-for>
+            </div>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Their next changes will wait for you to send. Nobody's access changes now.</span>
+            <div style="display:flex;gap:10px;flex-wrap:wrap"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" on-click="{{ doSwitch }}" hint-size="100px,32px">Switch 2</x-import><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" on-click="{{ closeSwitch }}" hint-size="160px,32px">Keep them as they are</x-import></div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+  </x-import>
+
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,400px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="How each one delivers today" count="{{ mixTotal }}" hint-size="100%,60px"></x-import>
+    <div style="display:flex;align-items:baseline;gap:12px;padding:0 20px 8px"><span class="type-label" style="flex:1;color:var(--label)">Bundle or rule</span><span class="type-label" style="width:140px;color:var(--label)">Kind</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">People</span></div>
+    <sc-for list="{{ mix }}" as="run" hint-placeholder-count="2">
+      <div style="display:flex;flex-direction:column">
+        <span style="display:flex;align-items:center;gap:8px;padding:14px 20px 6px;font-size:12.5px;font-weight:600;color:var(--label)"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:{{ run.dot }}"></span>{{ run.label }} · {{ run.count }}</span>
+        <sc-for list="{{ run.rows }}" as="r" hint-placeholder-count="3">
+          <div style="display:flex;align-items:baseline;gap:12px;padding:10px 20px;border-top:1px solid var(--divider)"><a href="{{ r.href }}" style="flex:1;color:var(--ink);font-weight:600;text-wrap:pretty" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.name }}</a><span style="width:140px;color:var(--muted)">{{ r.kind }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span></div>
+        </sc-for>
+      </div>
+    </sc-for>
+    <div style="height:8px"></div>
+  </x-import>
+
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Sound when drift is found" note="For this browser only" hint-size="100%,60px"></x-import>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px 24px;padding:0 20px 18px">
+      <p style="flex:1 1 320px;min-width:0;margin:0;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">A short tone when Drift's count goes up while a Syndra tab is open. It stays in this browser.</p>
+      <x-import component-from-global-scope="Syndra.Segmented" size="sm" label="Sound when drift is found" value="on" options="{{ onOff }}" hint-size="120px,36px"></x-import>
+    </div>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ isBundleA }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Lab Tech" lede="Bundle · on v3 · 11 people" hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="How its changes reach people" note="This bundle only" hint-size="100%,60px"></x-import>
+    <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 18px">
+      <div><x-import component-from-global-scope="Syndra.Segmented" size="sm" label="How Lab Tech's changes reach people" value="{{ bMode }}" on-change="{{ setB }}" options="{{ modeOpts }}" hint-size="320px,36px"></x-import></div>
+      <p style="margin:0;font-size:14px;line-height:1.55;text-wrap:pretty">{{ bLine }}</p>
+      <span style="display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--muted)"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--line-strong);transform:translateY(-1px)"></span><span style="text-wrap:pretty">{{ bProv }}</span></span>
+      <sc-if value="{{ bChanged }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ bOutcome }}" placement="inline" hint-size="100%,60px"></x-import>
+        <a href="route-pending.dc.html" style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--warn)"></span>Waiting for you to send →</a>
+      </sc-if>
+    </div>
+  </x-import>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="On Bundles" note="The list, three of seven" hint-size="100%,60px"></x-import>
+    <sc-for list="{{ bundleList }}" as="r" hint-placeholder-count="3">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-top:1px solid var(--divider)"><span style="flex:1;font-weight:600">{{ r.name }}</span><sc-if value="{{ r.auto }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Badge" tone="warn" hint-size="110px,24px">Applies at once</x-import></sc-if><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span></div>
+    </sc-for>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ isSettingsB }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Automation settings" lede="Bundles and automatic rules apply their changes at once. The roles marked here wait for you instead, whichever bundle or rule would change them." hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,460px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Roles that wait for you" count="{{ waitCount }}" note="For the whole makerspace" action="{{ addRoleBtn }}" hint-size="100%,60px"></x-import>
+    <p style="margin:0;padding:0 20px 14px;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">When a bundle or an automatic rule would give someone one of these roles, or take it away, the change waits in Pending changes until you send it. A role that waits for you waits however it arrives: a bundle, a rule, a grant by hand or an approved request. Everything else reaches Zitadel at once.</p>
+    <div style="display:flex;align-items:baseline;gap:12px;padding:0 20px 8px"><span class="type-label" style="flex:1;color:var(--label)">Role</span><span class="type-label" style="width:220px;color:var(--label)">Marked</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">People</span><span style="width:120px"></span></div>
+    <sc-for list="{{ waitRuns }}" as="run" hint-placeholder-count="3">
+      <div style="display:flex;flex-direction:column">
+        <span style="display:flex;align-items:baseline;gap:6px;padding:14px 20px 6px;font-size:12.5px;font-weight:600;color:var(--label)"><a href="route-projects-id.dc.html?frame=default" style="color:var(--label)" style-hover="color:var(--accent-text);text-decoration:underline">{{ run.project }}</a><span>· {{ run.count }}</span></span>
+        <sc-for list="{{ run.rows }}" as="r" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 20px;border-top:1px solid var(--divider)"><span style="flex:1;font-weight:600;text-wrap:pretty">{{ r.role }}</span><span style="width:220px;font-size:13.5px;color:var(--muted);text-wrap:pretty">{{ r.marked }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span><span style="width:120px;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" on-click="{{ r.unmark }}" hint-size="110px,32px">Stop waiting</x-import></span></div>
+        </sc-for>
+      </div>
+    </sc-for>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px 20px;border-top:1px solid var(--divider)">
+      <a href="route-pending.dc.html" style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600"><span aria-hidden="true" style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--warn)"></span>2 changes to these roles · Waiting for you to send →</a>
+    </div>
+  </x-import>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Sound when drift is found" note="For this browser only" hint-size="100%,60px"></x-import>
+    <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px 24px;padding:0 20px 18px">
+      <p style="flex:1 1 320px;min-width:0;margin:0;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">A short tone when Drift's count goes up while a Syndra tab is open. It stays in this browser.</p>
+      <x-import component-from-global-scope="Syndra.Segmented" size="sm" label="Sound when drift is found" value="on" options="{{ onOff }}" hint-size="120px,36px"></x-import>
+    </div>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ isRoleB }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Laser Lab" lede="Project · 4 roles · 60 people" hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Roles" count="{{ four }}" hint-size="100%,60px"></x-import>
+    <sc-for list="{{ projectRoles }}" as="r" hint-placeholder-count="4">
+      <div style="display:flex;flex-direction:column;border-top:1px solid var(--divider);background:{{ r.bg }}">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 20px"><span style="flex:1;font-weight:600">{{ r.role }}</span><sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hollow="{{ true }}" hint-size="120px,24px">Waits for you</x-import></sc-if><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span></div>
+        <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:12px;padding:4px 20px 18px">
+            <x-import component-from-global-scope="Syndra.FieldLabel" hint-size="100%,20px">When a bundle or rule changes who has it</x-import>
+            <div><x-import component-from-global-scope="Syndra.Segmented" size="sm" label="When a bundle or rule changes who has Laser cutter · Supervisor" value="{{ roleMode }}" on-change="{{ setRole }}" options="{{ modeOpts }}" hint-size="320px,36px"></x-import></div>
+            <p style="margin:0;font-size:14px;line-height:1.55;text-wrap:pretty">{{ roleLine }}</p>
+            <span style="display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--muted)"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--line-strong);transform:translateY(-1px)"></span><span>{{ roleProv }}</span></span>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ isTouchB }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Publish Lab Tech v4" lede="What v4 changes for the 11 people on Lab Tech, before anything moves." hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="What v4 changes" hint-size="100%,60px"></x-import>
+    <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 18px">
+      <span style="display:flex;gap:10px;align-items:baseline;font-size:14.5px;line-height:1.55;text-wrap:pretty"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--accent);transform:translateY(-1px)"></span><span><strong style="font-weight:600">Printer · Member:</strong> 11 people gain it, the moment you publish.</span></span>
+      <span style="display:flex;gap:10px;align-items:baseline;font-size:14.5px;line-height:1.55;text-wrap:pretty"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--warn);transform:translateY(-1px)"></span><span><strong style="font-weight:600">Laser cutter · Supervisor:</strong> 9 people gain it once you send it. It is a role that waits for you, so it goes to Pending changes; the other 2 already have it through Staff.</span></span>
+      <span style="display:flex;gap:10px;align-items:baseline;font-size:14.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:var(--line-strong);transform:translateY(-1px)"></span><span>Everything else on Lab Tech stays as it is.</span></span>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:4px"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" hint-size="120px,32px">Publish v4</x-import><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="80px,32px">Cancel</x-import></div>
+    </div>
+  </x-import>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="On Automatic rules" note="Two of three" hint-size="100%,60px"></x-import>
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-top:1px solid var(--divider)"><span style="flex:1;text-wrap:pretty"><span style="color:var(--muted)">Anyone with</span> Laser cutter · Operator <span style="color:var(--muted)">also gets</span> <strong style="font-weight:600">Laser bay · Door</strong></span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">9</span></div>
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-top:1px solid var(--divider)"><span style="flex:1;text-wrap:pretty"><span style="color:var(--muted)">Anyone with</span> Laser cutter · Supervisor <span style="color:var(--muted)">also gets</span> <strong style="font-weight:600">Laser cutter · Operator</strong></span><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hollow="{{ true }}" hint-size="190px,24px">Gives a role that waits for you</x-import><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">4</span></div>
+  </x-import>
+</sc-if>
+
+<sc-if value="{{ isMoveB }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Automation settings" lede="Bundles and automatic rules apply their changes at once. The roles marked here wait for you instead, whichever bundle or rule would change them." hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,420px">
+    <x-import component-from-global-scope="Syndra.CardHeader" title="Moving to roles that wait for you" note="Once" hint-size="100%,60px"></x-import>
+    <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 14px">
+      <p style="margin:0;font-size:14px;line-height:1.55;text-wrap:pretty">Today 6 bundles and 2 rules wait for you to send. After this they apply at once, except for the roles you mark.</p>
+      <p style="margin:0;font-size:14px;line-height:1.55;color:var(--muted);text-wrap:pretty">These roles are given by bundles or rules that wait today. Choose the ones that should keep waiting.</p>
+    </div>
+    <sc-for list="{{ moveRows }}" as="r" hint-placeholder-count="4">
+      <div role="checkbox" aria-checked="{{ r.on }}" tabIndex="0" onClick="{{ r.toggle }}" style="display:flex;align-items:center;gap:14px;padding:12px 20px;border-top:1px solid var(--divider);background:{{ r.bg }};cursor:pointer;transition:background-color var(--duration-tint) var(--ease-tint)">
+        <span aria-hidden="true" style="width:24px;height:24px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid {{ r.seatEdge }};background:{{ r.seatFill }};display:inline-flex;align-items:center;justify-content:center;color:var(--accent-ink);font-size:13px;font-weight:700;transition:background-color var(--duration-tint) var(--ease-tint),border-color var(--duration-tint) var(--ease-tint)">{{ r.tick }}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-weight:600">{{ r.role }}</span><span style="font-size:13.5px;color:var(--muted);text-wrap:pretty">{{ r.why }}</span></span>
+        <span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span>
+      </div>
+    </sc-for>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:16px 20px;border-top:1px solid var(--divider)">
+      <x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" hint-size="220px,32px">{{ moveLabel }}</x-import>
+      <x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="80px,32px">Not now</x-import>
+      <span style="flex:1 1 260px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">Nothing reaches Zitadel while switching. The 2 changes waiting now stay waiting.</span>
+    </div>
+  </x-import>
+</sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.frame = new URLSearchParams(window.location.search).get("frame");
+    const f = this.frame || "";
+    try { if (f) window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {}
+    this.state = {
+      defMode: f === "a-never" ? null : "manual",
+      defChanged: f === "a-switch",
+      switchOpen: f === "a-switch",
+      switched: false,
+      bMode: f === "a-bundle" ? "auto" : "manual",
+      bChanged: f === "a-bundle",
+      roleMode: "manual",
+      unmarked: [],
+      move: { wdoor: true, door: false, sup: true, store: true },
+    };
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 3, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 2 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+    ];
+  }
+  renderVals() {
+    const s = this.state, f = this.frame || "";
+    const B = "route-bundles-v2.dc.html", R = "#automatic-rules";
+    const row = (name, kind, n, href, mode) => ({ name, kind, n, href, mode });
+    let all = [
+      row("Safety basics", "Bundle", 53, B, "auto"),
+      row("Laser cutter · Supervisor gives Laser cutter · Operator", "Automatic rule", 4, R, "auto"),
+      row("Lab Tech", "Bundle", 11, B, "manual"), row("Metal shop", "Bundle", 6, B, "manual"), row("New members", "Bundle", 40, B, "manual"),
+      row("Staff", "Bundle", 5, B, "manual"), row("Studio", "Bundle", 9, B, "manual"), row("Wood shop", "Bundle", 22, B, "manual"),
+      row("Bandsaw · Member gives Wood shop · Door", "Automatic rule", 22, R, "manual"),
+      row("Laser cutter · Operator gives Laser bay · Door", "Automatic rule", 9, R, "manual"),
+    ];
+    if (f === "a-never") all = all.map(r => Object.assign({}, r, { mode: "auto" }));
+    if (s.switched) all = all.map(r => Object.assign({}, r, { mode: "manual" }));
+    const runs = [["auto", "Apply at once", "var(--warn)"], ["manual", "Wait for you to send", "var(--line-strong)"]]
+      .map(([m, label, dot]) => ({ label, dot, rows: all.filter(r => r.mode === m), count: all.filter(r => r.mode === m).length })).filter(r => r.count);
+    const others = all.filter(r => r.mode !== (s.defMode || "auto"));
+    const ex = { manual: "Its changes wait in Pending changes until you send them. When someone is given Bandsaw · Member, their Wood shop · Door waits for you.", auto: "Its changes reach Zitadel the moment they happen. When someone is given Bandsaw · Member, Wood shop · Door opens for them straight away." };
+    const roleRuns = [
+      { project: "Laser Lab", rows: [{ id: "sup", role: "Laser cutter · Supervisor", marked: "Kanishk Singh, 2 Oct", n: 4 }, { id: "op", role: "Laser cutter · Operator", marked: "Kanishk Singh, 2 Oct", n: 9 }] },
+      { project: "Metal shop", rows: [{ id: "weld", role: "Welder · Member", marked: "Kanishk Singh, 14 Sep", n: 6 }] },
+      { project: "Network storage", rows: [{ id: "store", role: "Storage · Member", marked: "Kanishk Singh, 14 Sep", n: 15 }] },
+    ].map(run => { const rows = run.rows.filter(r => !s.unmarked.includes(r.id)).map(r => Object.assign({}, r, { unmark: () => this.setState(st => ({ unmarked: st.unmarked.concat([r.id]) })) })); return Object.assign({}, run, { rows, count: rows.length }); }).filter(r => r.count);
+    const moveDefs = [
+      { id: "sup", role: "Laser cutter · Supervisor", why: "Given by Staff, which waits today", n: 4 },
+      { id: "store", role: "Storage · Member", why: "Given by Staff, which waits today", n: 15 },
+      { id: "wdoor", role: "Wood shop · Door", why: "Given by the rule from Bandsaw · Member, which waits today", n: 22 },
+      { id: "door", role: "Laser bay · Door", why: "Given by the rule from Laser cutter · Operator, which waits today", n: 9 },
+    ];
+    const chosen = moveDefs.filter(m => s.move[m.id]).length;
+    const fr = (id, label, note, h) => ({ src: "route-automation-settings-v2.dc.html?frame=" + id, label, note, h: h || 1000, bh: (h || 1000) / 2 });
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData,
+      pathname: f === "a-bundle" || f === "b-touch" ? "/bundles" : f === "b-role" ? "/projects/laser" : "/automation/settings",
+      isSettingsA: f === "a-settings" || f === "a-never" || f === "a-switch", isBundleA: f === "a-bundle",
+      isSettingsB: f === "b-settings", isRoleB: f === "b-role", isTouchB: f === "b-touch", isMoveB: f === "b-move",
+      modeOpts: [{ value: "manual", label: "Wait for you to send" }, { value: "auto", label: "Apply at once" }],
+      onOff: [{ value: "off", label: "Off" }, { value: "on", label: "On" }],
+      defMode: s.defMode || "", defChosen: !!s.defMode, defLine: s.defMode ? ex[s.defMode] : "",
+      setDef: (v) => this.setState({ defMode: v, defChanged: true, switchOpen: false, switched: false }),
+      provLine: !s.defMode ? "Never set. New bundles and rules apply at once until you choose." : s.defChanged ? "Set to " + (s.defMode === "auto" ? "Apply at once" : "Wait for you to send") + " by Kanishk Singh just now." : "Set to Wait for you to send by Kanishk Singh on 2 Oct.",
+      hasDefOutcome: s.defChanged && !!s.defMode,
+      defOutcome: { kind: "applied", message: s.defMode === "auto" ? "New bundles and rules will apply their changes at once" : "New bundles and rules will wait for you to send", detail: s.switched ? "The 2 that applied at once now wait for you too." : others.length ? "The " + others.length + " that " + (s.defMode === "auto" ? "wait" : "apply at once") + " today keep doing so." : "Every existing bundle and rule already does this." },
+      offerSwitch: s.defChanged && !s.switchOpen && !s.switched && others.length > 0 && others.length <= 3, switchLabel: "Also switch those " + others.length,
+      openSwitch: () => this.setState({ switchOpen: true }), closeSwitch: () => this.setState({ switchOpen: false }), switchOpen: s.switchOpen && !s.switched,
+      doSwitch: () => this.setState({ switched: true, switchOpen: false }),
+      otherRows: others, mix: runs, mixTotal: all.length,
+      bMode: s.bMode, setB: (v) => this.setState({ bMode: v, bChanged: true }),
+      bLine: s.bMode === "auto" ? "Changes reach Zitadel the moment they happen. When someone joins Lab Tech, their 6 roles open for them straight away." : "Changes wait in Pending changes until you send them. When someone joins Lab Tech, their 6 roles wait for you.",
+      bProv: s.bChanged ? "Set to " + (s.bMode === "auto" ? "Apply at once" : "Wait for you to send") + " by Kanishk Singh just now. Not a new version: how changes travel isn't part of what Lab Tech gives." : "Wait for you to send since it was made, from the default, on 4 Aug.",
+      bOutcome: { kind: "applied", message: "Lab Tech " + (s.bMode === "auto" ? "now applies its changes at once" : "now waits for you to send"), detail: "2 changes already waiting stay in Pending changes." },
+      bundleList: [{ name: "Lab Tech", n: 11, auto: s.bMode === "auto" }, { name: "New members", n: 40, auto: false }, { name: "Safety basics", n: 53, auto: true }],
+      waitRuns: roleRuns, waitCount: roleRuns.reduce((a, r) => a + r.count, 0),
+      addRoleBtn: window.Syndra ? React.createElement(window.Syndra.Button, { variant: "outline", size: "sm" }, "Add a role") : null,
+      four: 4, roleMode: s.roleMode, setRole: (v) => this.setState({ roleMode: v }),
+      roleLine: s.roleMode === "manual" ? "However someone would gain or lose it (Lab Tech, Staff, a rule, by hand or an approved request), the change waits in Pending changes until you send it." : "Bundles and rules give it and take it away straight away, like any other role.",
+      roleProv: s.roleMode === "manual" ? "Marked by Kanishk Singh on 2 Oct." : "Changed by Kanishk Singh just now.",
+      projectRoles: [
+        { role: "Laser cutter · Member", n: 51, waits: false, open: false, bg: "transparent" },
+        { role: "Laser cutter · Operator", n: 9, waits: true, open: false, bg: "transparent" },
+        { role: "Laser cutter · Supervisor", n: 4, waits: s.roleMode === "manual", open: true, bg: "var(--surface-1)" },
+        { role: "Laser bay · Door", n: 9, waits: false, open: false, bg: "transparent" },
+      ],
+      moveRows: moveDefs.map(m => { const on = !!s.move[m.id]; return Object.assign({}, m, { on, tick: on ? "✓" : "", bg: on ? "var(--accent-soft)" : "transparent", seatEdge: on ? "var(--accent)" : "var(--line-strong)", seatFill: on ? "var(--accent)" : "transparent", toggle: () => this.setState(st => ({ move: Object.assign({}, st.move, { [m.id]: !st.move[m.id] }) })) }); }),
+      moveLabel: chosen ? "Mark " + chosen + " and switch over" : "Switch over with none marked",
+      groups: [
+        { id: "B", title: "The pause lives on the role (recommended)", badgeEdge: "var(--accent-line)", badgeBg: "var(--accent-soft)",
+          note: "Bundles and rules always apply at once. A short list of roles, marked by the operator, wait for you whenever a bundle or a rule would change who has them. The default setting goes, and so do the modes on bundles and rules. One rule for every path: a role that waits for you waits however it arrives, including a grant by hand and an approved request; everything else reaches Zitadel at once. Today those two paths ignore the setting and behave differently from each other (N15).",
+          frames: [
+            fr("b-settings", "Roles that wait for you", "The page's one makerspace-wide setting. Roles are gathered by project, each with who marked it and when. Stop waiting is the row's verb, and Add a role opens the role search. The read line links to the changes to these roles that are waiting now.", 1100),
+            fr("b-role", "On the role", "Each role carries the same choice in its row on the project page, with the Segmented and one line, so you can mark a role where you meet it. A role that waits wears a quiet badge."),
+            fr("b-touch", "When a change touches one", "A publish review splits by role: Printer · Member arrives at once; Laser cutter · Supervisor goes to Pending changes. A rule that gives a waiting role says so on Automatic rules, so the question 'does this rule wait?' answers itself."),
+            fr("b-move", "Moving over, once", "Today's waiting bundles and rules suggest roles to keep waiting: every role they give, computed, with the reason. The operator picks with the selection seat. Nothing reaches Zitadel while switching."),
+          ],
+          weighLabel: "Why B",
+          weigh: "The pause matches what is being given. A bundle with one sensitive role no longer forces its other roles to wait, and a rule stays a rule. There is one list in one place, and a role behaves the same whichever bundle or rule carries it. The cost: the backend decides per role rather than per bundle or rule, and a one-time move. No default to set, no hidden mode, no version question.",
+        },
+        { id: "A", title: "The mode stays on each bundle and rule, shown everywhere", badgeEdge: "var(--line-strong)", badgeBg: "var(--surface-1)",
+          note: "What the backend has today, made visible. The page sets the default for new ones, says who set it, lists every bundle and rule by mode with a link to each, and offers to bring the existing ones in line. Each bundle gets the control the rule editor already has.",
+          frames: [
+            fr("a-settings", "Default, with the mix", "The Segmented with one example line, and who set it. Below it, every bundle and rule gathered by mode. Each name opens its page, where its own mode is changed. The sound card stays at the end.", 1500),
+            fr("a-never", "Never set", "Nothing chosen. The line says what happens meanwhile: new bundles and rules apply at once. The mix shows all ten applying at once, which is the fact."),
+            fr("a-switch", "Changed, then the existing ones", "Choosing saves. The outcome names what it didn't change, and offers to switch the 2 that differ, after showing which. Offered only when there are a few; past that, the mix is the place to go.", 1500),
+            fr("a-bundle", "On a bundle's page", "The same Segmented and line the rule editor uses, under the bundle's roles. Saving makes no new version and says so. On Bundles, a bundle that applies at once carries the amber badge rules already have."),
+          ],
+          weighLabel: "Weighing A",
+          weigh: "Nothing new in the backend beyond showing the bundle mode, who set the default, and counts by mode. But the choice stays on the container: one sensitive role in Lab Tech means all 6 of its roles wait, and a waiting rule is a reminder rather than a rule. The operator has three places to look (the default, each bundle, each rule) to know what will happen.",
+        },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

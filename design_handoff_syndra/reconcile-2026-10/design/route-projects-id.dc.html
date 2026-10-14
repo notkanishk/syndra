@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="A project board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /projects/[id]</span>
+    <h1 class="type-page-title" style="margin:0">A project</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">One project's roles, the app that reads it, and how many people Zitadel shows in each role. Each frame is the real shell and components at true width; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#42</strong> the meta names every app that reads this project · <strong style="color:var(--ink)">#47</strong> the numbers are what Zitadel shows, with a note and the read time · <strong style="color:var(--ink)">#48</strong> the role count counts roles that exist, the same as on the list.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Roles that wait · N16–N18</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">One write place: the When given column is read-only here, the mark with its words where the row has room, and "Set in Roles that wait →" under the card. New role's outcome offers "Make it wait for you →" (drawn on route-automation-settings-v5).</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · applied from the walkthrough</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The column reads <strong style="color:var(--ink)">People</strong>, not Members — one word for one number across Roles, Projects, Apps and here. The whole row opens the role, as on Roles, instead of a violet "14 →" inside a row that does nothing (code owed). "Token format" leaves the header: the app names in the meta are the way there.</p></div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ desktopFrames }}" as="f" hint-placeholder-count="5">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:500px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1000px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Laptop · 920</h2>
+    <figure data-screen-label="Laptop 920" style="margin:0;display:flex;flex-direction:column;gap:10px">
+      <div style="width:690px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-projects-id.dc.html?frame=default" title="Laptop 920" style="width:920px;height:800px;border:0;transform:scale(0.75);transform-origin:0 0"></iframe></div>
+      <figcaption style="max-width:690px;font-size:13.5px;line-height:1.55;color:var(--muted)">Rail open, ~640px of content. The page's own column keeps its minimum; secondary columns fold into the line under it.</figcaption>
+    </figure>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="1">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:390px;height:844px;border:0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/projects/p1" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Laser Lab's roles below are real, read 14 minutes ago, and may have changed since. Creating roles is paused until Zitadel answers.</p>
+      </div>
+    </div>
+  </sc-if>
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Projects" title="{{ title }}" lede="The roles this project offers, the apps that check them, and who holds each." meta="{{ meta }}" actions="{{ actions }}" hint-size="100%,140px"></x-import></div>
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load this project's roles.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
+          <span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="Syndra.Card"  hint-size="100%,400px">
+    <x-import component-from-global-scope="Syndra.CardColumns"  hint-size="100%,40px"><span class="flex-1" style="min-width:200px"><button type="button" aria-label="Sort by role" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;color:var(--ink)" style-hover="color:var(--ink)">Role<span aria-hidden="true" style="font-size:11px">↑</span></button></span><span class="hidden desktop:block" style="width:130px;flex:none"><button type="button" aria-label="Sort by group" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;color:inherit" style-hover="color:var(--ink)">Group</button></span><span class="hidden tablet:block" style="width:140px;flex:none">When given</span><span class="text-right" style="width:110px;flex:none"><button type="button" aria-label="Sort by people" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;color:inherit" style-hover="color:var(--ink)">People</button></span></x-import>
+    <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" avatar="{{ false }}" label="Loading roles" hint-size="100%,260px"></x-import></sc-if>
+    <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No roles listed in this project." guidance="Create one here, or check Zitadel — roles created directly there may not be listed yet." action="{{ emptyAction }}" hint-size="100%,160px"></x-import></sc-if>
+    <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}">
+      <div class="row-divider flex items-start gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)]" style="cursor:pointer">
+        <div class="flex-1" style="min-width:200px"><div class="text-[15px] font-semibold">Laser cutter · Operator<span class="tablet:hidden"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></span> <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.operator</span></div><p class="mt-1 max-w-[80ch] text-[13.5px] leading-[1.5] text-muted">Can start a cut without staff in the room. Given after the operator induction.</p></div>
+        <span class="hidden w-[130px] shrink-0 text-[13.5px] text-muted desktop:block">Machines</span><span class="hidden tablet:block" style="width:140px;flex:none;font-size:13.5px;color:var(--ink)"><span style="display:inline-flex;align-items:center;gap:8px"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span>Waits for you</span></span>
+        <span class="flex shrink-0 flex-col items-end gap-0.5 text-[15px]" style="width:110px"><span>14<span class="text-[13px] text-faint tablet:hidden"> people</span></span><span class="text-[12.5px] text-warn-text" style="text-align:right">2 not in Zitadel</span></span>
+      </div>
+      <div class="row-divider flex items-start gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)]" style="cursor:pointer">
+        <div class="flex-1" style="min-width:200px"><div class="text-[15px] font-semibold">Laser cutter · Member <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.member</span></div><p class="mt-1 max-w-[80ch] text-[13.5px] leading-[1.5] text-muted">Can book the laser bay.</p></div>
+        <span class="hidden w-[130px] shrink-0 text-[13.5px] text-muted desktop:block">Machines</span><span class="hidden tablet:block" style="width:140px;flex:none;font-size:13.5px;color:var(--muted)">Straight away</span>
+        <span class="flex shrink-0 flex-col items-end gap-0.5 text-[15px]" style="width:110px"><span>38<span class="text-[13px] text-faint tablet:hidden"> people</span></span></span>
+      </div>
+      <div class="row-divider flex items-start gap-[18px] px-5 py-3.5 motion-tint hover:bg-[var(--hover)]" style="cursor:pointer">
+        <div class="flex-1" style="min-width:200px"><div class="text-[15px] font-semibold">Laser cutter · Supervisor<span class="tablet:hidden"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></span> <span class="type-mono" style="font-weight:400;color:var(--faint)">laser.supervisor</span></div><p class="mt-1 max-w-[80ch] text-[13.5px] leading-[1.5] text-muted">Signs off inductions.</p></div>
+        <span class="hidden w-[130px] shrink-0 text-[13.5px] text-muted desktop:block">Machines</span><span class="hidden tablet:block" style="width:140px;flex:none;font-size:13.5px;color:var(--ink)"><span style="display:inline-flex;align-items:center;gap:8px"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span>Waits for you</span></span>
+        <span class="flex shrink-0 flex-col items-end gap-0.5 text-[15px]" style="width:110px"><span>3<span class="text-[13px] text-faint tablet:hidden"> people</span></span><span class="text-[12.5px] text-danger-text" style="text-align:right">1 unexplained</span></span>
+      </div>
+    </sc-if>
+  </x-import>
+  <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><p style="margin:0;padding:0 20px;font-size:13px;line-height:1.5;color:var(--faint);text-wrap:pretty">When given says whether a change to a role goes straight to Zitadel or waits for you to send it. <a href="route-automation-settings-v5.dc.html?frame=settings" style="font-weight:600">Set in Roles that wait →</a></p></sc-if>
+  </sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded";
+    const f = (frame, label, note) => ({ src: "route-projects-id.dc.html?frame=" + frame, label, note });
+    const list = st === "default" || deg || st === "phone" || [].indexOf(st) >= 0;
+    const base = {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg, stList: list, showCard: st !== "error",
+      readState: deg ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 40000).toISOString(), current: true },
+    };
+    return { ...base,
+      actions: S ? h(S.Button, { variant: "accent", disabled: deg || st === "loading" || st === "error" }, "New role") : null,
+      emptyAction: { label: "Create a role", onClick: () => {} },
+      title: "Laser Lab",
+      meta: st === "loading" || st === "error" ? undefined : S ? h("span", { className: "flex flex-wrap items-center gap-x-3 gap-y-1" }, h("span", null, st === "empty" ? "0 people · 0 roles · serves" : "41 people · 3 roles · serves"), h("span", { className: "font-semibold text-accent-text" }, "Laser bookings →"), h("span", { className: "font-semibold text-accent-text" }, "Laser badge reader →"), st === "empty" ? null : h("span", { className: "text-[13.5px] text-warn-text" }, "2 not in Zitadel"), h("span", { style: { flexBasis: "100%" } }, h(S.ReadFreshness, { state: base.readState, subject: "What Zitadel confirmed" }))) : null,
+      desktopFrames: [
+        f("default", "Default", "Each role row opens the role; its description sits under the name. When given shows, read-only, whether the role waits for you, with one line under the card linking to where that's set (N16, N18). The meta links to each app that reads Laser Lab."),
+        f("empty", "Empty", "A project with no roles: say so and offer to create one."),
+        f("loading", "Loading", "The name is known from the link that opened the page, so the title is Laser Lab from the first frame. Nothing that has not been read is claimed: no counts, notes or freshness. New role waits."),
+        f("error", "Error", "The red notice in the list's place; the title is still the name; nothing else is claimed. New role waits."),
+        f("degraded", "Degraded — last known data", "Freshness provisional in the meta; New role pauses."),
+      ],
+      phoneFrames: [f("phone", "Phone — default", "Group folds away; each row keeps its count with its noun.")] };
+  }
+}
+</script>
+</body>
+</html>

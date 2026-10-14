@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-resort-a{from{opacity:.35}to{opacity:1}}@keyframes sy-resort-b{from{opacity:.35}to{opacity:1}}@keyframes sy-flash-a{from{background-color:var(--accent-soft)}to{background-color:transparent}}@keyframes sy-flash-b{from{background-color:var(--accent-soft)}to{background-color:transparent}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Expiring access board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /review/expiring-access</span>
+    <h1 class="type-page-title" style="margin:0">Expiring access</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Direct access that ends in the next 30 days. Two answers per row: Extend, which changes the access, and Let it lapse, which changes nothing and records that somebody looked. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;max-width:2000px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#54</strong> Let it lapse is per row and never bulk; it reopens when the date changes; decided rows sit under a counted heading, keep Extend and lose the checkbox; bulk extend works on the ticked roles; on a phone, no "given by" · <strong style="color:var(--ink)">#103</strong> the 500 ceiling counts people, not roles · <strong style="color:var(--ink)">#104</strong> the dialog becomes its result.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Standing rules applied</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Two sections, so they fold, show 10 then more, and get chips at the right end of the read line, freshness at the left, and the floating pill (8a–8d) · search, Filters, Select in the bar · every heading sorts; Ends in carries the arrow, soonest first; What and Given by gather equal values, soonest first within · names link · a queued extension reads Waiting for you to send →.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--warn-text)">Backend owed · run time</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The read line says when access last ended on schedule and when it next will. The expiry sweep runs on a timer but records no run, so nothing can read this yet. Needed: the sweep stores each run (started, finished, how many it ended, any error) and the review API returns the last run and the interval. Late means a run more than one interval overdue. Until then the line says "Syndra's own list". See proposed/Expiry-sweep-run.md.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Select moves from the header into the bar · the Direct badge goes: every row is direct and the lede says so · the State column goes: "Undecided, ends 7 Oct" repeats the section and Ends in; a decision sits under its role, with who, when and why · decided rows are not dimmed · the two explainer cards go: the lede and the dialog say it once · Extend reports in its own seat.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/review/expiring-access" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">This list is Syndra's own, so it is current. You can still extend: the extension is recorded now and joins Pending changes for you to send once Zitadel answers.</p>
+      </div>
+    </div></sc-if>
+
+  <sc-if value="{{ stLate }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Access hasn't ended on schedule since 06:00.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">The hourly check that ends access on its date has missed three runs. Anything due to end since 06:00 is still in place. Nothing is lost: the next run ends it all.</p>
+      </div>
+    </div></sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Expiring access" meta="{{ meta }}" lede="Direct access that ends in the next 30 days. Syndra ends each on its date whether or not you visit this page. Extend gives 90 more days. Let it lapse changes nothing: it records that you looked, and the row asks again if the date changes." hint-size="100%,130px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" trailing="{{ selectEl }}" hint-size="100%,44px"></x-import></sc-if>
+    <sc-if value="{{ hasRead }}" hint-placeholder-val="{{ false }}"><div style="margin-top:-4px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px">{{ jumpRest }}</div></sc-if>
+
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load expiring access.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed, and access still ends on its dates.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_51ac07f2</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ showPlain }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" label="Loading expiring access" hint-size="100%,280px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Nothing expires in the next 30 days." guidance="Direct access appears here a month before it ends." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
+    </x-import>
+    </sc-if>
+
+    <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:16px">
+      <sc-if value="{{ hasJump }}" hint-placeholder-val="{{ false }}">{{ jumpFloat }}</sc-if>
+      <sc-if value="{{ allDecided }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:10px;padding:2px 4px;font-size:13.5px;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Nothing here is waiting on a decision. Every role that ends in the next 30 days has been looked at.</span></sc-if>
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+      <div id="{{ g.id }}" style="scroll-margin-top:16px">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,360px">
+        <div style="border-radius:var(--radius-card) var(--radius-card) 0 0;animation:{{ g.flashAnim }}"><x-import component-from-global-scope="Syndra.CardHeader" title="{{ g.titleEl }}" count="{{ g.count }}" tone="{{ g.tone }}" note="{{ g.hint }}" hint-size="100%,60px"></x-import></div>
+        <div style="display:grid;grid-template-rows:{{ g.fold.fr }};visibility:{{ g.fold.vis }};transition:{{ g.fold.trans }}"><div style="min-height:0;overflow:hidden;opacity:{{ g.fold.op }};transition:{{ g.fold.opTrans }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><span style="width:26px;flex:none"></span></sc-if><span style="width:190px;flex:none"><button type="button" aria-label="Sort by who" onClick="{{ sortWho }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWho }}" style-hover="color:var(--ink)">Who<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWho }};opacity:{{ opWho }}">↑</span></button></span><span style="flex:1 1 0;min-width:0"><button type="button" aria-label="Sort by what they can get into" onClick="{{ sortWhat }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWhat }}" style-hover="color:var(--ink)">What they can get into<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWhat }};opacity:{{ opWhat }}">↑</span></button></span><span class="hidden desktop:block" style="width:160px;flex:none"><button type="button" aria-label="Sort by given by" onClick="{{ sortGiven }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colGiven }}" style-hover="color:var(--ink)">Given by<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotGiven }};opacity:{{ opGiven }}">↑</span></button></span><span style="width:110px;flex:none;text-align:right"><button type="button" aria-label="Sort by ends in" onClick="{{ sortEnds }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;transition:color var(--duration-tint) var(--ease-tint);color:{{ colEnds }}" style-hover="color:var(--ink)">Ends in<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotEnds }};opacity:{{ opEnds }}">↑</span></button></span><span class="hidden desktop:block" style="width:300px;flex:none"></span></x-import>
+        <sc-if value="{{ g.selectAll }}" hint-placeholder-val="{{ false }}"><div role="checkbox" aria-checked="mixed" class="row-divider" style="display:flex;align-items:center;gap:14px;min-height:44px;padding:8px 20px;cursor:pointer;user-select:none"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">–</span><span style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:600">Select these {{ g.count }} roles</span><span style="font-size:12.5px;color:var(--faint)">{{ total }} roles in all.</span></span></div></sc-if>
+        <div style="animation:{{ g.sortAnim }}"><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+        <sc-if value="{{ r.hasRun }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;align-items:baseline;gap:10px;padding:12px 20px 8px;background:var(--surface-0)"><span class="type-label" style="color:var(--ink)">{{ r.run }}</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">{{ r.runCount }}</span></div></sc-if>
+        <div class="row-divider flex flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]" style="min-height:60px;background:{{ r.bg }};box-shadow:inset 3px 0 0 {{ r.edge }};animation:{{ r.anim }}">
+          <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><span style="width:26px;flex:none"><sc-if value="{{ r.canSelect }}" hint-placeholder-val="{{ true }}"><span role="checkbox" aria-checked="{{ r.checked }}" aria-label="Select this role" tabindex="0" style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:26px;cursor:pointer"><sc-if value="{{ r.checked }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">✓</span></sc-if><sc-if value="{{ r.unchecked }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span></sc-if></span></sc-if></span></sc-if>
+          <span class="flex w-full items-center gap-3 tablet:w-[190px] tablet:shrink-0">
+            <x-import component-from-global-scope="Syndra.Avatar" name="{{ r.who }}" hint-size="34px,34px"></x-import>
+            <span class="min-w-0 text-[15px] font-semibold" style="text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.who }}</a></span>
+          </span>
+          <span class="w-full tablet:flex-1" style="min-width:0;display:flex;flex-direction:column;gap:3px">
+            <span style="font-size:14.5px;line-height:1.45;text-wrap:pretty"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.role }}</a></span>
+            <span class="type-mono" style="font-size:12.5px;color:var(--faint)">{{ r.key }}</span>
+            <span class="hidden tablet:block desktop:hidden" style="font-size:12.5px;color:var(--faint)">Given by <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.by }}</a>, {{ r.givenOn }}</span>
+            <sc-if value="{{ r.hasAck }}" hint-placeholder-val="{{ false }}"><span style="margin-top:3px;font-size:13.5px;line-height:1.5;color:var(--muted);text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:var(--ink);font-weight:600;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.ackBy }}</a> let it lapse on {{ r.ackOn }}{{ r.ackNote }}</span></sc-if>
+          </span>
+          <span class="hidden desktop:block" style="width:160px;flex:none;font-size:13.5px;line-height:1.45;color:var(--muted)"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.by }}</a><span style="display:block;font-size:12.5px;color:var(--faint)">{{ r.givenOn }}</span></span>
+          <span class="tablet:w-[110px] tablet:shrink-0 tablet:text-right" style="display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:13.5px;font-weight:600;color:{{ r.leftInk }}">{{ r.left }}</span>
+            <span style="font-size:12.5px;color:var(--faint)">{{ r.date }}</span>
+          </span>
+          <span class="w-full desktop:w-auto" style="flex:none;min-width:300px;display:flex;justify-content:flex-end">
+            <sc-if value="{{ r.showActions }}" hint-placeholder-val="{{ true }}"><span class="flex w-full flex-wrap items-center gap-2 tablet:w-auto tablet:justify-end"><x-import component-from-global-scope="Syndra.Button" variant="{{ r.extendVariant }}" size="sm" hint-size="120px,34px">Extend 90 days</x-import><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="100px,34px">{{ r.secondLabel }}</x-import></span></sc-if>
+            <sc-if value="{{ r.showDone }}" hint-placeholder-val="{{ false }}"><span role="status" class="w-full tablet:w-auto" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>Extended to {{ r.newDate }}</span><span style="font-size:12.5px;color:var(--faint)">It leaves this list on the next read.</span></span></sc-if>
+            <sc-if value="{{ r.showQueued }}" hint-placeholder-val="{{ false }}"><span role="status" class="w-full tablet:w-auto" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;font-size:13.5px"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-pending.dc.html?frame=default" style="color:var(--accent-text);text-decoration:none" style-hover="text-decoration:underline;text-underline-offset:3px">Waiting for you to send →</a></span><span style="font-size:12.5px;color:var(--faint)">Extends to {{ r.newDate }} once sent.</span></span></sc-if>
+          </span>
+        </div>
+        </sc-for></div>
+        <sc-if value="{{ g.hasFoot }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 20px"><span style="font-size:13.5px;color:var(--muted)">{{ g.footText }}</span><sc-if value="{{ g.canMore }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" on-click="{{ g.more }}" hint-size="120px,34px">{{ g.moreLabel }}</x-import></sc-if><sc-if value="{{ g.canAll }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ g.all }}" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Show all {{ g.count }}</button></sc-if><sc-if value="{{ g.canReset }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ g.reset }}" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Back to 10</button></sc-if></div></sc-if>
+        </div></div>
+      </x-import>
+      </div>
+      </sc-for>
+    </div></sc-if>
+  </div>
+
+  <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.SelectionBar" count="{{ 3 }}" noun="{{ roleNoun }}" composition="2 people" ceiling="{{ 500 }}" ceiling-count="{{ 2 }}" ceiling-noun="{{ personNoun }}" on-take-ceiling="{{ noop }}" on-clear="{{ noop }}" hint-size="100%,64px"><span style="font-size:13px;color:var(--faint)">Letting it lapse is one row at a time.</span><x-import component-from-global-scope="Syndra.SelectionAction" on-click="{{ noop }}" hint-size="180px,36px">Preview an extension</x-import></x-import></sc-if>
+
+  <sc-if value="{{ stDialog }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="lapse-title" hint-size="560px,520px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="Let this lapse?" title-id="lapse-title" lede="Laser cutter · Operator for Aanya Rao, ending 7 Oct." hint-size="100%,90px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+      <div class="accent-note" style="padding:14px 16px;font-size:14px;line-height:1.55">
+        <div class="type-label" style="margin-bottom:4px">What this does</div>
+        <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;color:var(--muted)">
+          <li>Nothing to the access. It ends on 7 Oct, as it would have; this records that you looked.</li>
+          <li>The list stops asking, and shows your name against the decision.</li>
+          <li>If somebody extends it or gives it again, the row comes back and asks again: you agreed to this date, not a later one.</li>
+        </ul>
+      </div>
+      <sc-if value="{{ dialogOpen }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:6px">
+        <x-import component-from-global-scope="Syndra.FieldLabel" html-for="lapse-note" hint-size="120px,18px">Why (optional)</x-import>
+        <x-import component-from-global-scope="Syndra.Input" id="lapse-note" placeholder="Cohort ends this term" hint-size="100%,44px"></x-import>
+        <x-import component-from-global-scope="Syndra.FieldHint" hint-size="100%,20px">The next person reading this list sees it instead of asking you.</x-import>
+      </div></sc-if>
+      <sc-if value="{{ dialogDone }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ lapseOutcome }}" hint-size="100%,70px"></x-import></sc-if>
+    </div>
+    <sc-if value="{{ dialogOpen }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.ModalFooter" note="Extend instead if the access should continue." hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="170px,40px">Record the decision</x-import><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import></x-import></sc-if>
+    <sc-if value="{{ dialogDone }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></x-import></sc-if>
+  </x-import>
+  </sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    this.chips = q.get("chips") || "fresh";
+    const m = this.st;
+    this.preScroll = m === "many-scrolled" ? "sec-l" : null;
+    this.state = { sort: m === "many-sort-what" ? "what" : "ends", dir: 1, open: { u: m !== "many-fold", l: true }, shown: { u: m === "many-more" ? 35 : 10, l: 10 } };
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: m === "empty" ? 0 : 6, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  scroller() { if (this._sc && this._sc.isConnected) return this._sc; let p = document.getElementById((this.navIds || [])[0]); while (p && p !== document.body) { const o = getComputedStyle(p).overflowY; if (o === "auto" || o === "scroll") break; p = p.parentElement; } this._sc = p && p !== document.body ? p : null; return this._sc; }
+  spy() { const ids = this.navIds; if (!ids || ids.length < 2 || !document.getElementById(ids[0])) return; const sc = this.scroller(); const top = sc ? sc.getBoundingClientRect().top : 0; let active = ids[0]; ids.forEach(id => { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top - top < 120) active = id; }); const rest = document.getElementById("jump-rest"); const scrolled = rest ? rest.getBoundingClientRect().bottom - top < 0 : false; if (active !== this.state.active || scrolled !== this.state.scrolled) this.setState({ active, scrolled }); }
+  componentDidMount() { this._spy = () => this.spy(); document.addEventListener("scroll", this._spy, true); setTimeout(this._spy, 300); if (this.preScroll) setTimeout(() => this.goTo(this.preScroll, true), 1200); }
+  componentWillUnmount() { document.removeEventListener("scroll", this._spy, true); }
+  goTo(id, instant) { const el = document.getElementById(id); if (!el) return; const sc = this.scroller(); const off = el.getBoundingClientRect().top - (sc ? sc.getBoundingClientRect().top : 0) - 64; const rm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; const behavior = instant || rm ? "auto" : "smooth"; if (sc) sc.scrollTo({ top: sc.scrollTop + off, behavior }); else window.scrollTo({ top: window.scrollY + off, behavior }); }
+  jumpNav(items, label, align) { const S = window.Syndra, h = React.createElement; if (!S || items.length < 2) return { rest: null, float: null };
+    const act = items.some(i => i.id === this.state.active) ? this.state.active : items[0].id, idx = items.findIndex(i => i.id === act), up = !!this.state.scrolled;
+    const go = (it) => (e) => { if (e) e.preventDefault(); this.setState(s => ({ flash: { id: it.id, n: ((s.flash || {}).n || 0) + 1 } })); it.go(); };
+    const dot = (it) => it.tone ? h(S.StatusDot, { tone: it.tone }) : null;
+    const rest = h("nav", { id: "jump-rest", "aria-label": label, style: { display: "flex", flexWrap: "wrap", gap: 8, marginLeft: align === "start" ? 0 : "auto" } }, items.map(it => h("a", { key: it.id, href: "#" + it.id, onClick: go(it), style: { textDecoration: "none", color: "inherit", borderRadius: "var(--radius-pill)" } }, h(S.Chip, { className: "gap-2" }, dot(it), it.label, h("span", { className: "text-faint" }, it.count), h("span", { "aria-hidden": true, style: { color: "var(--faint)", fontSize: 12 } }, "↓")))));
+    const float = h("div", { "aria-hidden": !up, style: { position: "sticky", top: 0, zIndex: 5, height: 0, marginBottom: -(this.jnGap || 16) } }, h("nav", { "aria-label": label + " (while scrolling)", "aria-hidden": !up, style: { position: "absolute", top: 12, left: "50%", transform: "translate(-50%, " + (up ? "0" : "-8px") + ")", opacity: up ? 1 : 0, pointerEvents: up ? "auto" : "none", transition: up ? "opacity var(--duration-tint) var(--ease-tint), transform var(--duration-settle) var(--ease-settle)" : "opacity var(--duration-tint) var(--ease-tint), transform 0s linear var(--duration-tint)", display: "flex", gap: 2, padding: 4, borderRadius: "var(--radius-pill)", border: "1px solid var(--line-strong)", background: "var(--surface-1)", boxShadow: "var(--shadow-dialog)", whiteSpace: "nowrap", maxWidth: "calc(100% - 24px)", overflowX: "auto" } },
+      items.map((it, i) => { const on = it.id === act; return h("a", { key: it.id, href: "#" + it.id, tabIndex: up ? 0 : -1, "aria-current": on ? "location" : undefined, onClick: go(it), style: { display: "inline-flex", alignItems: "center", gap: 8, minHeight: 36, padding: "0 14px", borderRadius: "var(--radius-pill)", textDecoration: "none", fontSize: 13, fontWeight: 600, color: on ? "var(--ink)" : "var(--muted)", background: on ? "var(--surface-2)" : "transparent", transition: "background-color var(--duration-tint) var(--ease-tint), color var(--duration-tint) var(--ease-tint)" } }, dot(it), it.label, h("span", { style: { color: "var(--faint)", fontWeight: 500 } }, it.count), on ? null : h("span", { "aria-hidden": true, style: { color: "var(--faint)", fontSize: 12 } }, i < idx ? "↑" : "↓")); })));
+    return { rest, float }; }
+  foldS(open) { return open ? { fr: "1fr", op: 1, vis: "visible", trans: "grid-template-rows var(--duration-settle) var(--ease-settle), visibility 0s", opTrans: "opacity var(--duration-tint) var(--ease-tint) 140ms" } : { fr: "0fr", op: 0, vis: "hidden", trans: "grid-template-rows var(--duration-settle) var(--ease-settle) 120ms, visibility 0s linear 380ms", opTrans: "opacity var(--duration-tint) var(--ease-tint)" }; }
+  flashA(on, n) { return on ? (n % 2 ? "sy-flash-a" : "sy-flash-b") + " var(--duration-flash) ease-out 280ms both" : "none"; }
+  toggle(k) { this.setState(s => ({ open: Object.assign({}, s.open, { [k]: !s.open[k] }) })); }
+  more(k, n) { this.setState(s => ({ shown: Object.assign({}, s.shown, { [k]: s.shown[k] + n }), fresh: Object.assign({}, s.fresh, { [k]: s.shown[k] }) })); clearTimeout(this._fr); this._fr = setTimeout(() => this.setState({ fresh: {} }), 900); }
+  reset(k) { this.goTo("sec-" + k); setTimeout(() => this.setState(s => ({ shown: Object.assign({}, s.shown, { [k]: 10 }) })), 480); }
+  setSort(key) { this.setState(s => ({ sort: key, dir: s.sort === key ? -s.dir : 1, sortTick: (s.sortTick || 0) + 1 })); }
+  jump(e, k) { if (e && e.preventDefault) e.preventDefault(); this.setState(s => ({ flash: { id: "sec-" + k, n: ((s.flash || {}).n || 0) + 1 } })); if (!this.state.open[k]) this.toggle(k); setTimeout(() => this.goTo("sec-" + k), 0); }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const late = st === "late", deg = st === "degraded", sel = st === "selecting", many = /^many/.test(st), decided = st === "all-decided";
+    const dialog = st === "dialog" || st === "dialog-done";
+    const known = !/^(loading|error)$/.test(st), list = known && st !== "empty";
+    const MO = ["Jan","Feb","Mar","Apr","May","June","July","Aug","Sept","Oct","Nov","Dec"];
+    const D = (d) => { const x = new Date(2026, 9, 5 + d); return x.getDate() + " " + MO[x.getMonth()]; };
+    const B = (k, who, role, key, by, givenAgo, days, ack) => ({ k, who, role, key, by, givenOn: D(-givenAgo), days, ack: ack || null });
+    let rows = [
+      B("u", "Aanya Rao", "Laser cutter · Operator", "laser.operator", "Kanishk Singh", 88, 2),
+      B("u", "Mei Tanaka", "Wood shop · Supervisor", "wood.supervisor", "Kanishk Singh", 84, 6),
+      B("u", "Ravi Iyer", "3D printers · Member", "printers.member", "Lena Brandt", 46, 10),
+      B("u", "Jules Fontaine", "Studio · Booking", "studio.booking", "Kanishk Singh", 16, 14),
+      B("u", "Sai Khurana", "Laser cutter · Operator", "laser.operator", "Lena Brandt", 69, 21),
+      B("u", "Isha Menon", "Bandsaw · Member", "bandsaw.member", "Kanishk Singh", 62, 28),
+      B("l", "Kabir Rao", "Electronics bench · Operator", "electronics.operator", "Lena Brandt", 86, 4, { by: "Kanishk Singh", on: D(-2), note: ": “Capstone ends this week.”" }),
+      B("l", "Wei Chen", "Wood shop · Member", "wood.member", "Kanishk Singh", 73, 17, { by: "Lena Brandt", on: D(-4), note: "." }),
+    ];
+    if (decided) rows = rows.map(r => r.k === "u" ? Object.assign({}, r, { k: "l", ack: { by: "Kanishk Singh", on: D(-1), note: "." } }) : r).filter((r, i) => i < 3 || r.who === "Kabir Rao" || r.who === "Wei Chen");
+    if (many) {
+      const fn = ["Kavya","Daniel","Rhea","Nikhil","Zara","Ishaan","Ana","Vikram","Leela","Farhan","Sara","Dev","Tara","Yusuf","Neha","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ahmed","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
+      const RL = [["Wood shop · Member","wood.member"],["3D printers · Member","printers.member"],["Laser cutter · Operator","laser.operator"],["Studio · Booking","studio.booking"],["Bandsaw · Member","bandsaw.member"]];
+      for (let i = 0; i < 32; i++) { const r = RL[(i * 3) % 5]; rows.push(B("u", fn[i % 16] + " " + ln[(i * 7) % 15], r[0], r[1], i % 3 ? "Kanishk Singh" : "Lena Brandt", 40 + i, Math.min(30, 3 + Math.floor(i * 27 / 32)))); }
+      for (let i = 0; i < 4; i++) { const r = RL[i]; rows.push(B("l", fn[15 - i] + " " + ln[(i * 4) % 15], r[0], r[1], "Kanishk Singh", 60, 8 + i * 5, { by: "Lena Brandt", on: D(-3), note: "." })); }
+    }
+    const so = this.state.sort, dir = this.state.dir;
+    const keyOf = { who: r => r.who, what: r => r.role, given: r => r.by };
+    const runs = so === "what" || so === "given";
+    const sorter = (x, y) => { let c = so === "ends" ? x.days - y.days : keyOf[so](x).localeCompare(keyOf[so](y)); if (dir < 0) c = -c; return c || x.days - y.days; };
+    const minU = Math.min.apply(null, rows.filter(r => r.k === "u").map(r => r.days));
+    const chev = (open) => h("span", { "aria-hidden": true, style: { width: 28, height: 28, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", color: "var(--muted)" } }, h("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", style: { transition: "transform var(--duration-settle) var(--ease-settle)", transform: open ? "none" : "rotate(-90deg)" } }, h("path", { d: "M6 9l6 6 6-6" })));
+    const SEC = { u: { tone: "warn", title: "Undecided", short: "Undecided", hint: "Each ends on its date unless you extend it" }, l: { tone: undefined, title: "Let lapse", short: "Let lapse", hint: "Somebody looked and decided. Extend still works" } };
+    const CAP = 10;
+    const groups = ["u", "l"].map(k => {
+      let rs = rows.filter(r => r.k === k).slice().sort(sorter);
+      const cnt = {}; if (runs) rs.forEach(r => { const v = keyOf[so](r); cnt[v] = (cnt[v] || 0) + 1; });
+      let prev = null;
+      rs = rs.map((r, i) => {
+        const v = runs ? keyOf[so](r) : null, soon = k === "u" && r.days === minU && !rs.slice(0, i).some(x => x.days === minU);
+        const pick = sel && k === "u" && (i === 0 || i === 1 || i === 3);
+        const done = st === "extended" && r.who === "Aanya Rao", queued = st === "extended-queued" && r.who === "Aanya Rao";
+        const o = Object.assign({}, r, {
+          hasRun: runs && v !== prev, run: v, runCount: runs ? cnt[v] : 0,
+          left: r.days <= 0 ? "Ends today" : r.days === 1 ? "1 day left" : r.days + " days left", date: D(r.days), leftInk: soon ? "var(--warn-text)" : "var(--muted)",
+          edge: soon ? "var(--warn)" : "transparent", bg: pick ? "var(--accent-soft)" : soon ? "var(--warn-soft)" : "transparent",
+          canSelect: k === "u", checked: pick, unchecked: !pick, extendVariant: soon ? "accent" : "outline",
+          secondLabel: r.ack ? "Undo letting it lapse" : "Let it lapse",
+          hasAck: !!r.ack, ackBy: r.ack ? r.ack.by : "", ackOn: r.ack ? r.ack.on : "", ackNote: r.ack ? r.ack.note : "",
+          showActions: !done && !queued, showDone: done, showQueued: queued, newDate: D(r.days + 90),
+        });
+        prev = v; return o;
+      });
+      const fr = (this.state.fresh || {})[k], fl = this.state.flash || {};
+      const g = SEC[k], id = "sec-" + k, open = this.state.open[k], count = rs.length, shown = Math.min(this.state.shown[k], count), left = count - shown;
+      return Object.assign({}, g, { k, id, count, open,
+        rows: rs.slice(0, shown).map((r, j) => Object.assign({}, r, { anim: fr != null && j >= fr ? "arrive var(--duration-arrive) var(--ease-settle) " + Math.min(j - fr, 5) * 40 + "ms both" : "none" })),
+        fold: this.foldS(open), sortAnim: this.state.sortTick ? (this.state.sortTick % 2 ? "sy-resort-a" : "sy-resort-b") + " var(--duration-settle) var(--ease-settle) both" : "none", flashAnim: this.flashA(fl.id === id, fl.n || 0),
+        titleEl: h("button", { type: "button", "aria-expanded": open, "aria-controls": id, onClick: () => this.toggle(k), style: { display: "inline-flex", alignItems: "center", gap: 12, padding: 0, border: 0, background: "none", cursor: "pointer", font: "inherit", color: "inherit", textAlign: "left" } }, chev(open), g.title),
+        hasFoot: open && count > CAP, footText: left > 0 ? "Showing " + shown + " of " + count : "Showing all " + count,
+        canMore: left > 0, moreLabel: "Show " + Math.min(25, left) + " more", more: () => this.more(k, 25),
+        canAll: left > 25, all: () => this.more(k, count), canReset: shown > CAP, reset: () => this.reset(k),
+        selectAll: sel && k === "u" });
+    }).filter(g => g.count);
+    this.navIds = groups.map(g => g.id);
+    const jn = this.jumpNav(list && !sel ? groups.map(g => ({ id: g.id, label: g.short, count: g.count, tone: g.tone, go: () => this.jump(null, g.k) })) : [], "Sections of expiring access", this.chips === "left" ? "start" : undefined);
+    const SH = (k, key) => ({ ["sort" + k]: () => this.setSort(key), ["rot" + k]: so === key && dir < 0 ? "rotate(180deg)" : "none", ["op" + k]: so === key ? 1 : 0, ["col" + k]: so === key ? "var(--ink)" : "inherit" });
+    const u = groups.find(g => g.k === "u"), people = new Set(rows.map(r => r.who)).size;
+    const f = (frame, label, note, phone) => phone ? { src: "route-expiring.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-expiring.dc.html?frame=" + frame, label, note, w: 1440, h: 1100, boxW: 720, boxH: 550, scale: 0.5 };
+    const lap = (frame, label, note) => ({ src: "route-expiring.dc.html?frame=" + frame, label, note, w: 920, h: 1000, boxW: 690, boxH: 750, scale: 0.75 });
+    return Object.assign({
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg, stLate: late, stDialog: dialog, dialogOpen: st === "dialog", dialogDone: st === "dialog-done",
+      showPlain: st === "loading" || st === "empty", stList: list, showBar: known && st !== "empty", selecting: sel,
+      groups, total: rows.length, allDecided: list && !u, roleNoun: ["role", "roles"], personNoun: ["person", "people"],
+      hasRead: !!jn.rest, jumpRest: this.chips === "fresh" && S ? [h("span", { key: "sw", style: { display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13.5, color: late ? "var(--warn-text)" : "var(--muted)" } }, h(S.StatusDot, { tone: late ? "warn" : "healthy" }), late ? "Access last ended on schedule at 06:00, 3 hours ago · it was due again at 07:00" : "Access last ended on schedule at 09:00, 14 minutes ago · next at 10:00"), h(React.Fragment, { key: "jn" }, jn.rest)] : jn.rest, hasJump: !!jn.float, jumpFloat: jn.float,
+      meta: list && S ? h(S.MetaRow, null, [rows.length + (rows.length === 1 ? " role" : " roles") + " · " + people + " people", u ? "soonest ends " + D(minU) : "every one decided"]) : undefined,
+      searchEl: S && known && st !== "empty" ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search expiring access by person or role" }) : null,
+      filtersEl: S && known && st !== "empty" ? h(S.FilterPanel, { activeCount: 0, onClear: () => {} }, h(S.FilterField, { label: "Project" }, h(S.Select, { value: "", onChange: () => {}, "aria-label": "Filter by project" }, h("option", { value: "" }, "All projects")))) : null,
+      selectEl: S && list && u ? h(S.SelectModeToggle, { active: sel, onToggle: () => {} }) : null,
+      lapseOutcome: { kind: "applied", message: "Recorded. It lapses on 7 Oct.", detail: "Nothing about the access changed. The list shows your name against the decision and stops asking." },
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("default", "Default", "The read line is the same as on every list with sections: how current it is on the left, chips on the right. Here, current means the hourly run that ends access on its date: when it last ran and when it runs next. Two sections, Undecided and Let lapse, each with its count; chips under the bar go to either. Only the soonest row is amber and carries the accent Extend: one primary per region. A decision sits under its role: who, when, and why."),
+          f("extended", "After Extend", "The row reports in its own seat: Extended to 4 Jan, and it leaves the list on the next read. Nothing moves under the hand that pressed it (#96)."),
+          f("extended-queued", "After Extend, sending by hand", "Where changes wait for the operator, the seat reads Waiting for you to send → and opens Pending changes, with the new date beneath."),
+          f("dialog", "Let it lapse", "A dialog, because the note is what makes the record useful to the next person, and it says plainly that nothing changes."),
+          f("dialog-done", "Let it lapse · recorded", "The dialog becomes its result (#104): Record the decision retires, and Cancel becomes Done."),
+          f("selecting", "Selecting", "Checkboxes only on undecided rows. The bar counts roles and the people they belong to; the 500 ceiling counts people (#103). Letting it lapse is one row at a time."),
+          f("all-decided", "Everything decided", "The Undecided section goes, and one healthy line says so; the decided rows stay, with Extend."),
+          f("empty", "Empty", "Nothing ends in the next 30 days: the healthy dot."),
+          f("loading", "Loading", "The title and lede are known; no counts or chips until the list is read."),
+          f("error", "Error", "The red notice in the list's place. Access still ends on its dates."),
+          f("late", "Access not ending on schedule", "The read line turns amber when the hourly run is late, and the amber Notice says what that means: access due to end is still in place. Needs backend work: see the card above."),
+          f("degraded", "Zitadel not answering", "The list is Syndra's own and current. Extend still works and joins Pending changes for you to send."),
+        ] },
+        { title: "Long sections · 38 and 6 rows", frames: [
+          f("many", "Open, 10 a section", "Showing 10 of 38, with Show 25 more and Show all 38."),
+          f("many-more", "After Show 25 more", "Showing 35 of 38, with Show 3 more and Back to 10."),
+          f("many-fold", "Undecided folded", "Folded to its heading; Let lapse moves up beneath it."),
+          f("many-sort-what", "Sorted by what they can get into", "Equal roles gather, A to Z, each with its count; within each, soonest first."),
+          f("many-scrolled", "Scrolled: the floating pill", "The read line has scrolled away; the pill shows Let lapse filled, Undecided pointing ↑."),
+        ] },
+        { title: "Laptop · 920", frames: [lap("default", "At laptop width", "Given by moves under the role and the two answers take their own line beneath, right-aligned. Who, the role and Ends in keep one line. Nothing truncates.")] },
+        { title: "Phone · 390", frames: [f("default", "Phone", "Each row stacks: who, the role, how long is left and the date, then the two answers. No Given by on a phone (#54).", true)] },
+      ],
+    }, SH("Who", "who"), SH("What", "what"), SH("Given", "given"), SH("Ends", "ends"));
+  }
+}
+</script>
+</body>
+</html>

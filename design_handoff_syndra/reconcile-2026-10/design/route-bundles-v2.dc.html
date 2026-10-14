@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Bundles v2 board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /bundles and /bundles/[id] · v2 · newest turn first</span>
+    <h1 class="type-page-title" style="margin:0">Bundles, refined</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">Two questions, each drawn both ways with the real shell and components. First, how roles are chosen when a makerspace has dozens of them across many projects. Second, how the page is laid out. Everything after that is shared by every option. The earlier board stays at <a href="route-bundles.dc.html">route-bundles</a>.</p>
+  </header>
+
+
+
+
+  <section data-screen-label="Turn 5" style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <span class="type-label" style="color:var(--label)">Turn 5 · 13 Oct · roles that wait (N14 B – N18)</span>
+      <h2 class="type-section-title" style="margin:0">What changes on a bundle once roles wait, not bundles</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">A bundle no longer has a mode: publishing applies at once, except for roles that always wait. Turn 4 stands, with three additions drawn on <a href="route-automation-settings-v5.dc.html">route-automation-settings-v5</a>. Every role row and picker row on this board now carries the Waits-for-you mark after its name.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <figure style="margin:0;display:flex;flex-direction:column;gap:10px"><div style="width:720px;height:450px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-automation-settings-v5.dc.html?frame=newbundle" title="New bundle" loading="lazy" style="width:1440px;height:900px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">Choosing roles</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The same picker; the legend says what the mark means and links to Roles that wait. The footer note is the before-line: how many reach people straight away, and which wait.</span></figcaption></figure>
+      <figure style="margin:0;display:flex;flex-direction:column;gap:10px"><div style="width:720px;height:450px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-automation-settings-v5.dc.html?frame=bundle" title="After publishing" loading="lazy" style="width:1440px;height:900px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">After publishing</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The read line says what isn't true yet ("9 people can't supervise the laser cutter until you send it") with Waiting for you to send →. Each role's status seat says where it stands. The publish review groups Straight away · Waits for you · Unchanged.</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section data-screen-label="Turn 4" style="display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <span class="type-label" style="color:var(--label)">Turn 4 · 9 Oct · where it landed</span>
+      <h2 class="type-section-title" style="margin:0">Bundles, settled</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Picked: <a href="#1c">1c</a> a list and a page per bundle, <a href="#2a">2a</a> projects fold in the picker, <a href="#3a">3a</a> the row is the choice, <a href="#2e">2e</a> an included bundle changes when its parent publishes. Copy (<a href="#2c">2c</a>) and include (<a href="#2d">2d</a>) both stay, each in its own place. The check seat now sits at the start of the row, here and in every Select mode, so a choice looks the same everywhere.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-t1" title="New bundle" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">New bundle.</strong> The picked dialog: the seat leads each row. A chosen row is tinted with a violet edge; a locked one is grey with a grey check and says where it comes from.</figcaption></figure>
+      <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=add-roles" title="Add roles" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Add roles.</strong> The same picker from a bundle’s page, without name and Start from. What Lab Tech already gives shows locked, “In Lab Tech”, never hidden. Adding goes into v4 and the button counts it.</figcaption></figure>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:1480px">
+      <h3 style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">Select mode, everywhere</h3>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The square checkbox is gone from every list. A row in Select mode starts with the round seat. Chosen, the seat fills violet with a check and the row takes the violet tint. Select-all is the same row, with a dash while only some are chosen. Redrawn on <a href="route-users.dc.html#32a">People</a>, <a href="route-drift.dc.html">Drift</a>, <a href="route-requests.dc.html">Requests</a>, <a href="route-expiring.dc.html">Expiring access</a> and <a href="Motion.dc.html">Motion</a>. Spec: proposed/SelectionSeat.md.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-users.dc.html?frame=bulk-a" title="People" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">People.</strong> Four selected, you among them. Select-all reads “Select these 248 people” with the dash.</figcaption></figure>
+      <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-drift.dc.html?frame=selecting" title="Drift" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Drift.</strong> Two of the four chosen; the seat sits where the checkbox did, so nothing moves when Select turns on.</figcaption></figure>
+    </div>
+  </section>
+  <section data-screen-label="Turn 3" style="display:flex;flex-direction:column;gap:36px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <span class="type-label" style="color:var(--label)">Turn 3 · 9 Oct</span>
+      <h2 class="type-section-title" style="margin:0">How a choice is marked, and a bundle that others include</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty"><a href="#2a">2a</a> and <a href="#2e">2e</a> are picked. The dialog's top is 1a's again: name and purpose side by side, and Start from as one switch with its hint. Every frame below shows the same moment, so only the marking differs: Safety basics included, its roles locked in Main lab, and two roles of your own.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><h3 style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">Marking what is chosen</h3><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Three ways, each from something already in the app. In each, a role that comes with an included bundle reads as chosen but can't be changed here, and a bundle that can't be included says why.</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start"><div id="3a" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:2px solid var(--accent-line)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">3a</span><span style="font-size:16px;font-weight:600">The row is the choice</span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 9 Oct</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-t1" title="3a" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The whole row toggles. A chosen row takes the violet tint and edge of the Publish dialog's chosen answer, with a filled round seat and a check at the start. An unchosen row is plain, with an empty seat. A locked row is quiet grey with a grey check. A bundle toggles the same way.</figcaption></figure></div><p style="margin:0;max-width:1464px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Why I recommend it.</strong> It is the app's existing look for a chosen answer, the large target is easy to hit on a phone, and a column of tinted rows shows what is chosen at a glance. There is no box to aim for.</p></div><div id="3b" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">3b</span><span style="font-size:16px;font-weight:600">A verb on each row</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-t2" title="3b" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Each row ends in a quiet outline Add, or Include for a bundle. Once chosen, it reads Added in violet with Remove beside it. It matches "doing something is a button" and the Include verb from 2d, but a list of identical buttons is heavier to scan.</figcaption></figure></div></div><div id="3c" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">3c</span><span style="font-size:16px;font-weight:600">The app's own checkbox</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-t3" title="3c" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The DS RowCheckbox from Select mode, with the chosen row tinted as in People. It is the most familiar control, but it is still a box, and it borrows the look of selecting rows to act on them, which is a different job.</figcaption></figure></div></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><h3 style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">Starting from another bundle, in the picked look</h3><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Another bundle in the switch shows a bundle picker beside it and a violet line that says what happened: a copy, not a link. The line points to Include for the other case.</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-copy" title="Copy" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Lab Tech's 4 roles are chosen, and Laser Lab is open to show 3 of them. Start empty undoes it.</figcaption></figure></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><h3 style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">The included bundle's own page</h3><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Safety basics, after publishing v4. The people who have it directly and the bundles that include it are counted and moved the same way, and the bundles look different from people.</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=base-page" title="Base page" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Three stats under the header, each opening its group: directly, through bundles, and behind the latest. People are grouped by version, with Move these 3 to v4 on the older group. Below them, a dashed card holds the bundles that include it. Dashed is the app's mark for access that comes through something else. Each bundle has a square tile, never a round avatar, and says which version it includes, its people, and Update to v4 when it is behind. Updating publishes that bundle's next version and asks whether its people move, so 2e holds.</figcaption></figure><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=base-publish" title="Publish with dependants" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Publishing Safety basics asks two things: about the 8 people who have it directly, and about each bundle that includes it, in a dashed box with the same tiles. Each bundle has its own Update or Leave, with no default. The review then lists everyone who would change, direct and through bundles.</figcaption></figure></div>
+      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=nested-page" title="Dependant page" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">New members, the bundle left on v3. Its included card says v4 is out and offers Add to next version (2e).</figcaption></figure></div>
+    </div>
+  </section>
+  <section data-screen-label="Turn 2" style="display:flex;flex-direction:column;gap:36px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <span class="type-label" style="color:var(--label)">Turn 2 · 9 Oct</span>
+      <h2 class="type-section-title" style="margin:0">The picker in the app's own look, and building on other bundles</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">1c is picked. 1a's logic in 1b's look: one standard dialog, one field, what is chosen at the top, and the catalog below in patterns the app already uses. Then the two ways a new bundle can build on an existing one.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><h3 style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">Browsing without a second pane</h3><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Both keep 1b's field and the chosen roles as removable chips above everything else. They differ in how projects are browsed when you haven't typed anything.</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start"><div id="2a" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:2px solid var(--accent-line)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">2a</span><span style="font-size:16px;font-weight:600">Projects fold, as every grouped list does</span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 9 Oct</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-e" title="2a" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Each project is a row with the round chevron from Drift and a person's projects, saying "1 of 4" or "3 roles". Opening one shows its roles in place, with what each lets someone do. Typing opens every project with a match and folds the rest. Bundles are the first group, so including one works the same way (2d).</figcaption></figure></div><p style="margin:0;max-width:1464px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Why I recommend it.</strong> It is the fold the app already uses for long grouped lists, so it needs no new pattern. It fits the standard dialog, works the same on a phone, and the number on each row tells you where your choices are without opening anything.</p></div><div id="2b" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">2b</span><span style="font-size:16px;font-weight:600">Projects as pills</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-f" title="2b" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Projects become FilterPills under the field, each with its count, and "Chosen" first. A pill shows that project's roles. Quick to switch, but with twenty projects the pills take three lines, and pills elsewhere filter a list rather than navigate a catalog.</figcaption></figure></div></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><h3 style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">A bundle as a template, or a bundle inside a bundle</h3><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Two different acts, each in one place. <strong style="color:var(--ink)">Start from</strong> copies a bundle's roles once, at creation, and the new bundle is yours from then on. <strong style="color:var(--ink)">Include</strong>, in the picker, puts a bundle inside this one as a live part that changes when it changes. Keeping the two verbs in two places means nobody copies when they meant to link, or the reverse.</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start"><div id="2c" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">2c</span><span style="font-size:16px;font-weight:600">Start from a bundle: a copy</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=from-bundle" title="2c" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Choosing Lab Tech in Start from ticks its 4 roles and says so in a violet line: a copy, and later changes to Lab Tech don't reach this bundle. Untick what doesn't belong. Start empty undoes it. Start from someone's access works the same, from a person.</figcaption></figure></div></div><div id="2d" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">2d</span><span style="font-size:16px;font-weight:600">Include a bundle: a live part</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=include" title="2d" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">The Bundles group lists every bundle with Include. Included, Safety basics becomes one chip, and its 3 roles show ticked and locked in their projects, labelled "In Safety basics". Front door was already chosen, so one line says what keeping it does. Staff already includes another bundle, so it can't go inside this one: bundles nest one level deep.</figcaption></figure></div></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:980px"><h3 style="margin:0;font-family:var(--font-display);font-size:22px;font-weight:600">When the included bundle changes</h3><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Safety basics publishes v4, adding Network storage · Member. New members includes it. Does New members change too? This is the one decision the live part needs. Nesting is new: nothing like it ships today, so it needs your yes and a backend change.</p></div>
+      <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start"><div id="2e" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:2px solid var(--accent-line)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">2e</span><span style="font-size:16px;font-weight:600">New members takes it when you publish New members</span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 9 Oct</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=nested-page" title="2e" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">New members includes Safety basics at v3. When v4 appears, its card says what v4 adds and offers Add to next version. That goes into New members' working copy like any edit, and publishing New members asks whether its people move, with the usual review.</figcaption></figure></div><p style="margin:0;max-width:1464px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Why I recommend it.</strong> It keeps #43's rule that an edit and its consequence are never the same click, for every bundle. Publishing Safety basics only ever asks about Safety basics' own people. The cost is a step per bundle that includes it.</p></div><div id="2f" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)"><div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">2f</span><span style="font-size:16px;font-weight:600">New members follows along</span></div><div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start"><figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=nested-follow" title="2f" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">New members always gives the latest Safety basics. Publishing Safety basics asks about everyone it reaches, directly and through New members, in one review. Less to do, but Safety basics' publish now reaches people who never chose it, and its owner has to read another bundle's cohort.</figcaption></figure></div></div></div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;max-width:1500px"><span class="type-label" style="color:var(--label)">Rules for an included bundle, in both</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">One level deep: a bundle that includes others can't itself be included, so there is never a chain to trace. A role that comes both directly and through the included bundle is listed once, with both sources, and stays if either goes. On a person's page the source reads "Via New members, from Safety basics", each name linking to its page. Retiring a bundle that another includes is refused; the dialog names those bundles. Changing an included bundle's roles happens on its own page, linked from its card.</p></div>
+    </div>
+  </section>
+  <section data-screen-label="Q1 Choosing roles" style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <h2 class="type-section-title" style="margin:0">1 · Choosing roles</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The built picker is one long list of every role in every project. Both options keep its strengths (one search across every project, roles already in shown ticked rather than hidden) and drop the scroll. Both also let you start from something that already exists: a person who is the kind of member this bundle describes, or another bundle. The same picker is used for New bundle and for Add roles on a bundle.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+      <div id="1a" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:2px solid var(--accent-line)">
+        <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">1a</span><span style="font-size:16px;font-weight:600">Browse by project, search across all</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">Its logic carried into <a href="#2a">2a</a></span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+          <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-a" title="1a browse" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Browsing.</strong> Projects on the left, each saying how many of its roles are chosen. The right side shows one project's roles, each with what it lets someone do. "Chosen" at the top of the left side lists everything picked so far, so nothing has to be scrolled back to.</figcaption></figure>
+          <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-a-search" title="1a search" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Searching.</strong> Typing looks in every project at once. The left side narrows to projects with a match, and the right side shows every match under its project. "door" finds the four doors in one look.</figcaption></figure>
+        </div>
+        <p style="margin:0;max-width:1464px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Why I recommend it.</strong> The makerspace is organised by room, so browsing by project matches how operators think, and search covers the case where they already know the name. It needs the wide dialog.</p>
+      </div>
+      <div id="1b" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)">
+        <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">1b</span><span style="font-size:16px;font-weight:600">Type to add</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">Its look carried into <a href="#2a">2a</a></span></div>
+        <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=pick-b" title="1b" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">One field. Typing opens suggestions from every project, each under its project's name. Enter or a click adds one. What is chosen is the main thing on screen, grouped by project, and each role can be removed. It fits the standard dialog and is the fastest way in when you know what you want. Nothing shows what exists until you type.</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="Q2 The page" style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <h2 class="type-section-title" style="margin:0">2 · The page</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The built page puts a side list, the contents, the versions and the people in three columns at once. Both options give the bundle one column and three tabs: what it grants, who has it, and its history. Unpublished changes sit in one violet panel above the tabs, with what dropping a role would cost. The default-bundle and retire controls move to the end.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+      <div id="1c" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:2px solid var(--accent-line)">
+        <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">1c</span><span style="font-size:16px;font-weight:600">A list, and a page for each bundle</span><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Picked · owner, 9 Oct</span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+          <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=index" title="1c list" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">/bundles.</strong> A table like Projects: name, what it is for, then Roles and People in the 110px number seats. What needs attention is written under the name in words. The list is short, so it has no search.</figcaption></figure>
+          <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=bundle" title="1c bundle" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">/bundles/lab-tech.</strong> Laid out like a person's page: a header, tabs, then a card per project with its roles. A bundle reads like the access it gives. Every link to a bundle elsewhere lands here.</figcaption></figure>
+        </div>
+        <p style="margin:0;max-width:1464px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">Why I recommend it.</strong> People, Projects and Apps already work as a list with a page for each item, and this makes Bundles the same. The bundle gets the full width, and the phone needs nothing special.</p>
+      </div>
+      <div id="1d" style="display:flex;flex-direction:column;gap:14px;padding:20px;border-radius:var(--radius-card);border:1px solid var(--line-strong)">
+        <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">1d</span><span style="font-size:16px;font-weight:600">Side list, as built, refined</span></div>
+        <figure style="margin:0;display:flex;flex-direction:column;gap:8px"><div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=split" title="1d" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div><figcaption style="max-width:720px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">One page. The bundles stay in a 260px list that selects (it doesn't link), and the selected bundle takes the remaining width with the same header and tabs. Switching between bundles is one click. It is the only list in the app that works this way, and on a phone the side list has to become a separate screen anyway.</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="Shared frames" style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-direction:column;gap:8px;max-width:980px">
+      <h2 class="type-section-title" style="margin:0">Shared by every option</h2>
+      <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Shown in 1c's layout. In 1d the same content sits beside the list.</p>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ sharedFrames }}" as="f" hint-placeholder-count="6">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:8px">
+          <div style="width:720px;height:550px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1100px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Phone" style="margin:0;display:flex;flex-direction:column;gap:8px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-bundles-v2.dc.html?frame=phone" title="Phone" style="width:390px;height:844px;border:0"></iframe></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · a bundle</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The same page stacked: the panel's button goes full width and each role wraps to name, then what it does, then its verb.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section data-screen-label="Cohesion" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">One pattern across the app</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The picked picker becomes the one way to choose roles: New bundle and Add roles (several), Grant direct access on a person and Give a role in People's Select mode (one), and the role in Add a mapping (one, only roles not yet mapped). Choosing one is the same picker with radios. Add people on a bundle opens People in Select mode with Add to a bundle already chosen, as Add people to this role does on a role (#32).</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried from the first board</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty"><strong style="color:var(--ink)">#43</strong> edits go into a working copy that reaches nobody; Publish asks whether people come along, with no default; a dropped role is amber · <strong style="color:var(--ink)">#44</strong> a bundle can be retired · <strong style="color:var(--ink)">#68</strong> a new bundle is created with its roles as v1 · counts say people · the list's marks are words.</p></div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/bundles" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px"><span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span><p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Every bundle below is real, read 14 minutes ago. Creating, publishing, moving people and retiring are paused until Zitadel answers.</p></div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isIndex }}" hint-placeholder-val="{{ true }}">
+    <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Bundles" lede="A bundle is a set of roles given together. Give someone a bundle and they get every role in it. Publish a new version and you choose whether they move to it." actions="{{ indexActions }}" hint-size="100%,110px"></x-import></div>
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+      <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+        <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+        <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load bundles.</span><p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p><div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span></div></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ showIndexCard }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <sc-if value="{{ showIndexRead }}" hint-placeholder-val="{{ true }}"><div style="padding:0 20px">{{ indexRead }}</div></sc-if>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,360px">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:260px;flex:none"><button type="button" aria-label="Sort by bundle" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink)">Bundle<span aria-hidden="true" style="font-size:11px">↑</span></button></span><span style="flex:1;min-width:0">What it's for</span><span style="width:110px;flex:none;text-align:right">Roles</span><span style="width:110px;flex:none;text-align:right">People</span></x-import>
+        <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" avatar="{{ false }}" label="Loading bundles" hint-size="100%,220px"></x-import></sc-if>
+        <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No bundles yet." guidance="A bundle hands out a set of roles as one: everything a new member needs, or everything the wood shop induction signs off." action="{{ emptyAction }}" hint-size="100%,180px"></x-import></sc-if>
+        <sc-if value="{{ showIndexRows }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ bundles }}" as="b" hint-placeholder-count="4">
+            <div class="row-divider motion-tint" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:14px 20px;min-height:60px" style-hover="background:var(--hover)">
+              <span style="width:260px;flex:none;display:flex;flex-direction:column;gap:2px;min-width:0">
+                <a href="route-bundles-v2.dc.html?frame=bundle" style="font-size:15px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ b.name }}</a>
+                <sc-for list="{{ b.notes }}" as="n" hint-placeholder-count="1"><span style="font-size:12.5px;font-weight:600;color:{{ n.color }}">{{ n.text }}</span></sc-for>
+              </span>
+              <span style="flex:1 1 220px;min-width:0;font-size:14px;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ b.purpose }}</span>
+              <span style="width:110px;flex:none;text-align:right;font-size:14px">{{ b.roles }}</span>
+              <span style="width:110px;flex:none;text-align:right;font-size:14px">{{ b.people }}</span>
+            </div>
+          </sc-for>
+        </sc-if>
+      </x-import>
+    </div>
+    </sc-if>
+  </sc-if>
+
+  <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+  <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+    <sc-if value="{{ isSplit }}" hint-placeholder-val="{{ false }}">
+      <div style="width:260px;flex:none"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,320px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="Bundles" count="{{ 4 }}" action="{{ splitNew }}" hint-size="100%,56px"></x-import>
+        <sc-for list="{{ bundles }}" as="b" hint-placeholder-count="4">
+          <button type="button" class="row-divider motion-tint" aria-current="{{ b.current }}" style="width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;border:0;border-left:3px solid {{ b.edge }};background:{{ b.bg }};color:var(--ink);font:inherit;text-align:left;cursor:pointer" style-hover="background:var(--hover)">
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ b.name }}</span><sc-for list="{{ b.notes }}" as="n" hint-placeholder-count="1"><span style="font-size:12.5px;color:{{ n.color }}">{{ n.text }}</span></sc-for></span>
+            <span style="font-size:13.5px;color:var(--faint)">{{ b.people }}</span>
+          </button>
+        </sc-for>
+      </x-import></div>
+    </sc-if>
+
+    <div style="flex:1 1 560px;min-width:0;display:flex;flex-direction:column;gap:16px">
+      <sc-if value="{{ stCreated }}" hint-placeholder-val="{{ false }}">{{ createdEl }}</sc-if>
+      <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="{{ eyebrowEl }}" title="{{ bd.name }}" meta="{{ detailMeta }}" lede="{{ bd.purpose }}" actions="{{ detailActions }}" hint-size="100%,140px"></x-import></div>
+
+      <sc-if value="{{ bd.hasStats }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+          <sc-for list="{{ stats }}" as="s" hint-placeholder-count="3"><a href="{{ s.href }}" style="display:block;color:inherit;text-decoration:none;border-radius:var(--radius-card)" style-hover="box-shadow:0 0 0 1px var(--accent-line)"><x-import component-from-global-scope="Syndra.StatCard" label="{{ s.label }}" value="{{ s.value }}" detail="{{ s.detail }}" tone="{{ s.tone }}" hint-size="100%,120px"></x-import></a></sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ bd.hasDraft }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-wrap:wrap;gap:16px 24px;align-items:flex-start;padding:18px 20px;border-radius:var(--radius-panel);border:1px solid var(--accent-line);background:var(--accent-soft)">
+          <div style="flex:1 1 360px;min-width:0;display:flex;flex-direction:column;gap:10px">
+            <span style="font-family:var(--font-display);font-size:19px;font-weight:600">2 changes, not published yet</span>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:14.5px">
+              <span style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><span style="font-weight:700;color:var(--accent-text)">+</span><span style="font-weight:600">Laser cutter · Supervisor</span><span style="color:var(--muted)">Sign others off on the laser cutter</span></span>
+              <span style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><span style="font-weight:700;color:var(--warn-text)">−</span><span style="font-weight:600">Laser bay · Door</span><span style="color:var(--warn-text)">If people move, 9 of the 11 lose badge entry to the laser bay. 2 also have it another way.</span></span>
+            </div>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted)">Nobody's access has changed. Publishing asks whether the 11 people with Lab Tech move to v4.</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><x-import component-from-global-scope="Syndra.Button" variant="ghost" disabled="{{ stDegraded }}" hint-size="130px,40px">Discard changes</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" disabled="{{ stDegraded }}" hint-size="110px,40px">Publish v4</x-import></div>
+        </div>
+      </sc-if>
+
+      <x-import component-from-global-scope="Syndra.Tabs" label="Views of this bundle" value="{{ tab }}" options="{{ tabs }}" on-select="{{ noop }}" hint-size="100%,44px"></x-import>
+
+      <sc-if value="{{ tabGrants }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:0 20px">
+            <span style="flex:1 1 280px;font-size:13.5px;color:var(--faint)">{{ bd.grantsLine }}</span>
+            <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="100px,34px">Add roles</x-import>
+          </div>
+          <sc-if value="{{ bd.hasInc }}" hint-placeholder-val="{{ false }}">
+            <x-import component-from-global-scope="Syndra.Card" hint-size="100%,280px">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:16px 20px">
+                <span class="type-card-title"><a href="route-bundles-v2.dc.html?frame=bundle" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Safety basics</a></span>
+                <x-import component-from-global-scope="Syndra.Chip" hint-size="120px,28px">Included bundle</x-import>
+                <span style="font-size:13.5px;color:var(--faint)">v3 · 3 roles</span>
+                <span style="flex:1"></span>
+                <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="190px,34px">Remove from New members</x-import>
+              </div>
+              <sc-if value="{{ bd.incUpdate }}" hint-placeholder-val="{{ false }}">
+                <div class="accent-note row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 20px"><span style="flex:1 1 300px;font-size:14px;line-height:1.5"><strong style="font-weight:600">Safety basics v4 is out.</strong> It adds Network storage · Member. Nothing changes for New members until you add it and publish.</span><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="170px,34px">Add to next version</x-import></div>
+              </sc-if>
+              <sc-if value="{{ bd.incFollows }}" hint-placeholder-val="{{ false }}">
+                <div class="row-divider" style="padding:12px 20px;font-size:13.5px;color:var(--muted)">Follows Safety basics. When it publishes, New members gives the new version too.</div>
+              </sc-if>
+              <sc-for list="{{ bd.incRoles }}" as="r" hint-placeholder-count="3">
+                <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 20px">
+                  <span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if> <span style="font-weight:400;font-size:13.5px;color:var(--muted)">· <a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.project }}</a></span></span><span style="font-size:13.5px;color:var(--muted)">{{ r.desc }}</span></span>
+                  <span style="font-size:13px;color:var(--faint)">Comes with Safety basics</span>
+                </div>
+              </sc-for>
+              <div class="row-divider" style="padding:12px 20px"><a href="route-bundles-v2.dc.html?frame=bundle" style="font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration:none">Change what's in Safety basics →</a></div>
+            </x-import>
+          </sc-if>
+          <sc-for list="{{ bd.groups }}" as="g" hint-placeholder-count="2">
+            <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+              <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:16px 20px"><span class="type-card-title"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ g.project }}</a></span><span style="font-size:13.5px;color:var(--faint)">{{ g.count }}</span></div>
+              <sc-for list="{{ g.roles }}" as="r" hint-placeholder-count="2">
+                <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 20px;background:{{ r.bg }}">
+                  <span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if> <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span><span style="font-size:13.5px;color:var(--muted)">{{ r.desc }}</span></span>
+                  <span style="font-size:13px;font-weight:600;color:{{ r.tagColor }}">{{ r.tag }}</span>
+                  <span style="width:104px;flex:none;display:flex;justify-content:flex-end"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="90px,34px">{{ r.verb }}</x-import></span>
+                </div>
+              </sc-for>
+            </x-import>
+          </sc-for>
+          <div style="height:2px"></div>
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,150px">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:16px 20px"><span style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">Given to everyone who joins</span><span style="font-size:13.5px;color:var(--muted)">{{ bd.welcomeLine }}</span></span><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="170px,34px">{{ bd.welcomeVerb }}</x-import></div>
+            <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:16px 20px"><span style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">Retire {{ bd.name }}</span><span style="font-size:13.5px;color:var(--muted)">{{ bd.retireLine }}</span></span><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" disabled="{{ stDegraded }}" hint-size="130px,34px">Retire bundle</x-import></div>
+          </x-import>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabPeople }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:0 20px">{{ peopleRead }}<span style="flex:1"></span><sc-for list="{{ readChips }}" as="v" hint-placeholder-count="2"><x-import component-from-global-scope="Syndra.Chip" class-name="gap-2" hint-size="80px,30px"><sc-if value="{{ v.warn }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import></sc-if>{{ v.short }}<span class="text-faint">{{ v.n }}</span><span aria-hidden="true" style="color:var(--faint);font-size:12px">↓</span></x-import></sc-for></div>
+          <sc-for list="{{ versionGroups }}" as="v" hint-placeholder-count="2">
+            <x-import component-from-global-scope="Syndra.Card" id="{{ v.id }}" hint-size="100%,240px">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;padding:16px 20px">
+                <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line);color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span>
+                <span class="type-card-title">{{ v.title }}</span><span style="font-size:13.5px;color:{{ v.countColor }};font-weight:{{ v.countWeight }}">{{ v.count }}</span>
+                <span style="flex:1"></span>
+                <sc-if value="{{ v.warn }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="190px,34px">{{ v.moveLabel }}</x-import></sc-if>
+              </div>
+              <sc-for list="{{ v.people }}" as="p" hint-placeholder-count="3">
+                <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:12px 20px;opacity:{{ p.op }}">
+                  <span style="flex:1 1 240px;min-width:0;display:flex;align-items:center;gap:12px"><x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="34px,34px"></x-import><span style="display:flex;flex-direction:column;gap:1px;min-width:0"><a href="route-users-id.dc.html?frame=default" style="font-size:15px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.name }}</a><span style="font-size:12.5px;color:var(--faint)">{{ p.sub }}</span></span></span>
+                  <span style="flex:1 1 160px;font-size:13.5px;color:var(--muted)">{{ p.how }}</span>
+                  <span style="width:110px;flex:none;text-align:right;font-size:13.5px;color:var(--muted)">{{ p.since }}</span>
+                </div>
+              </sc-for>
+            </x-import>
+          </sc-for>
+          <sc-if value="{{ bd.hasDeps }}" hint-placeholder-val="{{ false }}">
+            <div id="through-bundles" class="card" style="border-style:dashed;padding:0;overflow:hidden">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:16px 20px">
+                <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line);color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span>
+                <span class="type-card-title">Through other bundles</span><span style="font-size:13.5px;color:var(--faint)">45 people in 2 bundles</span>
+              </div>
+              <div class="row-divider" style="padding:10px 20px;font-size:13.5px;line-height:1.55;color:var(--muted)">These bundles include Safety basics, so their people have it too. Each is pinned to a version. Updating one publishes its next version and asks whether its people move, with the usual review.</div>
+              <sc-for list="{{ deps }}" as="d" hint-placeholder-count="2">
+                <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 20px">
+                  <span style="flex:1 1 260px;min-width:0;display:flex;align-items:center;gap:12px">
+                    <span aria-hidden="true" style="width:34px;height:34px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px dashed var(--line-strong);background:var(--surface-2);font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--muted)">{{ d.tile }}</span>
+                    <span style="display:flex;flex-direction:column;gap:1px;min-width:0"><a href="route-bundles-v2.dc.html?frame=nested-page" style="font-size:15px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ d.name }}</a><span style="font-size:12.5px;color:var(--faint)">Bundle · {{ d.purpose }}</span></span>
+                  </span>
+                  <span style="flex:1 1 160px;font-size:13.5px;font-weight:{{ d.pinWeight }};color:{{ d.pinColor }}">{{ d.pin }}</span>
+                  <span style="width:110px;flex:none;text-align:right;font-size:13.5px;color:var(--muted)">{{ d.people }}</span>
+                  <span style="width:150px;flex:none;display:flex;justify-content:flex-end"><sc-if value="{{ d.behind }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" disabled="{{ stDegraded }}" hint-size="140px,34px">Update to v4</x-import></sc-if></span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ tabHistory }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+          <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:80px;flex:none">Version</span><span style="flex:1;min-width:0">What changed</span><span style="width:200px;flex:none">Published</span><span style="width:110px;flex:none;text-align:right">People on it</span></x-import>
+          <sc-for list="{{ history }}" as="v" hint-placeholder-count="4">
+            <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;padding:14px 20px">
+              <span style="width:80px;flex:none;font-size:15px;font-weight:600;color:{{ v.vColor }}">{{ v.v }}</span>
+              <span style="flex:1 1 240px;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:14.5px;text-wrap:pretty">{{ v.note }}</span><span style="font-size:13px;color:var(--muted)">{{ v.diff }}</span></span>
+              <span style="width:200px;flex:none;font-size:13.5px;color:var(--muted)"><sc-if value="{{ v.hasBy }}" hint-placeholder-val="{{ true }}"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ v.by }}</a> · </sc-if>{{ v.at }}</span>
+              <span style="width:110px;flex:none;text-align:right;font-size:14px;font-weight:600;color:{{ v.nColor }}">{{ v.n }}</span>
+            </div>
+          </sc-for>
+        </x-import>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ stPickA }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="lg" labelled-by="nb-a" hint-size="880px,760px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="New bundle" title-id="nb-a" lede="Name it after who it's for. The roles you choose become version 1, so it can be given straight away." hint-size="100%,96px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="a-name" hint-size="60px,18px">Name</x-import><x-import component-from-global-scope="Syndra.Input" id="a-name" default-value="New members" placeholder="Who is this for?" hint-size="100%,46px"></x-import></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="a-for" hint-size="120px,18px">What it's for</x-import><x-import component-from-global-scope="Syndra.Input" id="a-for" default-value="Everyone in their first term" placeholder="Student staff who run the fabrication lab" hint-size="100%,46px"></x-import></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="70px,18px">Start from</x-import>{{ startFromEl }}<span style="font-size:12.5px;color:var(--faint)">Ticks what they have, so you only untick what doesn't belong.</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <x-import component-from-global-scope="Syndra.FieldLabel" id="a-roles" hint-size="100px,18px">What it gives</x-import>
+        <div aria-labelledby="a-roles" style="border:1px solid var(--line-strong);border-radius:var(--radius-inner);overflow:hidden">
+          <div style="padding:12px;border-bottom:1px solid var(--line)"><x-import component-from-global-scope="Syndra.Input" default-value="{{ pickQuery }}" placeholder="Search roles in every project" aria-label="Search roles in every project" hint-size="100%,46px"></x-import></div>
+          <div style="display:flex;height:340px">
+            <div style="width:230px;flex:none;border-right:1px solid var(--line);overflow-y:auto;padding:6px">
+              <sc-for list="{{ pickProjects }}" as="pp" hint-placeholder-count="6">
+                <button type="button" aria-current="{{ pp.current }}" style="width:100%;display:flex;align-items:center;gap:8px;min-height:40px;padding:8px 10px;border:0;border-radius:10px;background:{{ pp.bg }};color:{{ pp.color }};font:inherit;font-size:14px;font-weight:{{ pp.weight }};text-align:left;cursor:pointer" style-hover="background:var(--hover)"><span style="flex:1;min-width:0">{{ pp.name }}</span><span style="font-size:12.5px;font-weight:600;color:{{ pp.countColor }}">{{ pp.count }}</span></button>
+                <sc-if value="{{ pp.rule }}" hint-placeholder-val="{{ false }}"><div style="height:1px;margin:6px 10px;background:var(--line)"></div></sc-if>
+              </sc-for>
+            </div>
+            <div style="flex:1;min-width:0;overflow-y:auto;padding:4px 16px 12px">
+              <sc-for list="{{ pickGroups }}" as="g" hint-placeholder-count="1">
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 0 6px;position:sticky;top:0;background:var(--surface-1)"><span class="type-label" style="flex:1">{{ g.project }}</span><sc-if value="{{ g.canAll }}" hint-placeholder-val="{{ false }}"><button type="button" style="padding:0;border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--accent-text);cursor:pointer">Choose all {{ g.n }}</button></sc-if></div>
+                <sc-for list="{{ g.roles }}" as="r" hint-placeholder-count="3">
+                  <label class="row-divider" style="display:flex;align-items:flex-start;gap:12px;min-height:44px;padding:10px 0;cursor:pointer"><input type="checkbox" checked="{{ r.on }}" onChange="{{ noop }}" style="width:16px;height:16px;margin-top:3px;flex:none;accent-color:var(--accent)"><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if> <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span><span style="font-size:13px;color:var(--muted)">{{ r.desc }}</span></span></label>
+                </sc-for>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="3 roles from 3 projects" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="170px,40px">Create with 3 roles</x-import></x-import>
+  </x-import>
+  </sc-if>
+
+  <sc-if value="{{ stPickB }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="nb-b" hint-size="560px,760px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="New bundle" title-id="nb-b" lede="Name it after who it's for. The roles you choose become version 1, so it can be given straight away." hint-size="100%,96px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="b-name" hint-size="60px,18px">Name</x-import><x-import component-from-global-scope="Syndra.Input" id="b-name" default-value="New members" hint-size="100%,46px"></x-import></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="b-for" hint-size="120px,18px">What it's for</x-import><x-import component-from-global-scope="Syndra.Input" id="b-for" default-value="Everyone in their first term" hint-size="100%,46px"></x-import></div>
+      <div style="display:flex;flex-direction:column;gap:6px;position:relative">
+        <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="b-add" hint-size="100px,18px">What it gives</x-import><span style="flex:1"></span><button type="button" style="padding:0;border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--accent-text);cursor:pointer">Start from a person or a bundle</button></div>
+        <x-import component-from-global-scope="Syndra.Input" id="b-add" default-value="door" placeholder="Add a role: type its name, its project or its key" aria-label="Add a role" hint-size="100%,46px"></x-import>
+        <div role="listbox" aria-label="Roles matching door" style="position:absolute;left:0;right:0;top:82px;z-index:3;display:flex;flex-direction:column;padding:6px;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--surface-1);box-shadow:var(--shadow-dialog)">
+          <sc-for list="{{ suggest }}" as="s" hint-placeholder-count="4">
+            <div role="option" aria-selected="{{ s.first }}" style="display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 12px;border-radius:10px;background:{{ s.bg }};opacity:{{ s.op }}">
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span style="font-size:12.5px;color:var(--faint)">{{ s.project }}</span><span style="font-size:14.5px;font-weight:600">{{ s.label }} <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ s.key }}</span></span></span>
+              <span style="font-size:12.5px;font-weight:600;color:{{ s.hintColor }}">{{ s.hint }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:8px;display:flex;flex-direction:column;border-radius:var(--radius-inner);border:1px solid var(--line)">
+          <sc-for list="{{ chosenGroups }}" as="g" hint-placeholder-count="3">
+            <div class="row-divider" style="padding:8px 14px 0"><span class="type-label">{{ g.project }}</span></div>
+            <sc-for list="{{ g.roles }}" as="r" hint-placeholder-count="1"><div style="display:flex;align-items:center;gap:12px;padding:6px 14px 10px"><span style="flex:1;min-width:0;font-size:14.5px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if></span><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="80px,34px">Remove</x-import></div></sc-for>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="3 roles from 3 projects" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="170px,40px">Create with 3 roles</x-import></x-import>
+  </x-import>
+  </sc-if>
+
+  <sc-if value="{{ stPickE }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="md" labelled-by="nb-e" hint-size="560px,780px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="New bundle" title-id="nb-e" lede="Name it after who it's for. What it gives becomes version 1, so it can be given straight away." hint-size="100%,96px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="e-name" hint-size="60px,18px">Name</x-import><x-import component-from-global-scope="Syndra.Input" id="e-name" default-value="New members" placeholder="Who is this for?" hint-size="100%,46px"></x-import></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="e-from" hint-size="80px,18px">Start from</x-import><x-import component-from-global-scope="Syndra.Select" id="e-from" default-value="{{ pe.startVal }}" hint-size="100%,46px"><option value="none">Nothing, choose below</option><optgroup label="Copy a bundle"><option value="lab">Lab Tech · 4 roles</option><option value="staff">Staff · 9 roles</option><option value="studio">Studio · 5 roles</option></optgroup><optgroup label="Copy someone's access"><option value="person">Choose a person</option></optgroup></x-import></div>
+      </div>
+      <sc-if value="{{ pe.copied }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 14px;border-radius:var(--radius-inner);border:1px solid var(--accent-line);background:var(--accent-soft)"><span style="flex:1 1 280px;font-size:13.5px;line-height:1.5"><strong style="font-weight:600">Copied Lab Tech v3: its 4 roles are ticked below.</strong> This is a copy. Later changes to Lab Tech don't reach New members.</span><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="100px,34px">Start empty</x-import></div>
+      </sc-if>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <x-import component-from-global-scope="Syndra.FieldLabel" html-for="e-q" hint-size="100px,18px">What it gives</x-import>
+        <x-import component-from-global-scope="Syndra.Input" id="e-q" placeholder="Search roles and bundles in every project" aria-label="Search roles and bundles" hint-size="100%,46px"></x-import>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:2px 0">
+          <span style="font-size:12.5px;font-weight:600;color:var(--label);margin-right:2px">Chosen</span>
+          <sc-for list="{{ pe.chips }}" as="c" hint-placeholder-count="3">
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;border-radius:var(--radius-pill);border:1px solid {{ c.border }};background:{{ c.bg }};font-size:13px;font-weight:600">{{ c.label }}<sc-if value="{{ c.hasSub }}" hint-placeholder-val="{{ false }}"><span style="font-weight:500;color:var(--muted)">{{ c.sub }}</span></sc-if><button type="button" aria-label="Remove {{ c.label }}" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:var(--radius-pill);background:none;color:var(--muted);font:inherit;font-size:14px;cursor:pointer" style-hover="background:var(--hover);color:var(--ink)">×</button></span>
+          </sc-for>
+        </div>
+        <sc-if value="{{ pe.overlap }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:13px;line-height:1.5;color:var(--muted)">Front door is also in Safety basics. Kept here too, New members still gives it if Safety basics ever drops it. <button type="button" style="padding:0;border:0;background:none;font:inherit;font-weight:600;color:var(--accent-text);cursor:pointer">Remove it here</button></p></sc-if>
+
+        <sc-if value="{{ pe.folds }}" hint-placeholder-val="{{ true }}">
+        <div style="max-height:330px;overflow-y:auto;border-radius:var(--radius-inner);border:1px solid var(--line)">
+          <sc-for list="{{ pe.groups }}" as="g" hint-placeholder-count="6">
+            <div class="{{ g.divider }}">
+              <button type="button" aria-expanded="{{ g.open }}" style="width:100%;display:flex;align-items:center;gap:12px;min-height:48px;padding:8px 14px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer" style-hover="background:var(--hover)">
+                <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line);color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform:{{ g.rot }}"><path d="M6 9l6 6 6-6"></path></svg></span>
+                <span style="flex:1;min-width:0;font-size:14.5px;font-weight:600">{{ g.name }}</span>
+                <span style="font-size:12.5px;font-weight:600;color:{{ g.countColor }}">{{ g.count }}</span>
+              </button>
+              <sc-if value="{{ g.showRoles }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:0 14px 6px 54px">
+                  <sc-for list="{{ g.roles }}" as="r" hint-placeholder-count="3">
+                    <label class="row-divider" style="display:flex;align-items:flex-start;gap:12px;min-height:44px;padding:10px 0;cursor:{{ r.cursor }}"><input type="checkbox" checked="{{ r.on }}" disabled="{{ r.locked }}" onChange="{{ noop }}" style="width:16px;height:16px;margin-top:3px;flex:none;accent-color:var(--accent)"><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if> <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span><span style="font-size:13px;color:var(--muted)">{{ r.desc }}</span></span><span style="font-size:12.5px;color:var(--faint);padding-top:2px">{{ r.note }}</span></label>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ g.showBundles }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:0 14px 6px 54px">
+                  <sc-for list="{{ g.bundles }}" as="b" hint-placeholder-count="3">
+                    <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-height:44px;padding:10px 0;opacity:{{ b.op }}">
+                      <span style="flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ b.name }} <span style="font-weight:500;font-size:12.5px;color:var(--faint)">{{ b.meta }}</span></span><span style="font-size:13px;color:var(--muted)">{{ b.note }}</span></span>
+                      <sc-if value="{{ b.canInclude }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Include</x-import></sc-if>
+                      <sc-if value="{{ b.included }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:600;color:var(--accent-text)">Included</span><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="80px,34px">Remove</x-import></span></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ pe.pills }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:6px">{{ pillsEl }}
+            <div style="max-height:280px;overflow-y:auto;border-radius:var(--radius-inner);border:1px solid var(--line);padding:0 14px">
+              <sc-for list="{{ pillRoles }}" as="r" hint-placeholder-count="4">
+                <label class="row-divider" style="display:flex;align-items:flex-start;gap:12px;min-height:44px;padding:10px 0;cursor:pointer"><input type="checkbox" checked="{{ r.on }}" onChange="{{ noop }}" style="width:16px;height:16px;margin-top:3px;flex:none;accent-color:var(--accent)"><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if> <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span></span><span style="font-size:13px;color:var(--muted)">{{ r.desc }}</span></span></label>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ pe.footNote }}" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="170px,40px">{{ pe.createLabel }}</x-import></x-import>
+  </x-import>
+  </sc-if>
+
+  <sc-if value="{{ stPickT }}" hint-placeholder-val="{{ false }}">
+  <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="lg" labelled-by="nb-t" hint-size="880px,800px">
+    <x-import component-from-global-scope="Syndra.ModalHeader" title="{{ pt.title }}" title-id="nb-t" lede="{{ pt.lede }}" hint-size="100%,96px"></x-import>
+    <div style="padding:0 24px;display:flex;flex-direction:column;gap:16px">
+      <sc-if value="{{ pt.showTop }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="t-name" hint-size="60px,18px">Name</x-import><x-import component-from-global-scope="Syndra.Input" id="t-name" default-value="New members" placeholder="Who is this for?" hint-size="100%,46px"></x-import></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><x-import component-from-global-scope="Syndra.FieldLabel" html-for="t-for" hint-size="120px,18px">What it's for</x-import><x-import component-from-global-scope="Syndra.Input" id="t-for" default-value="Everyone in their first term" placeholder="Student staff who run the fabrication lab" hint-size="100%,46px"></x-import></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px"><x-import component-from-global-scope="Syndra.FieldLabel" hint-size="70px,18px">Start from</x-import>{{ startSegEl }}<sc-if value="{{ pt.copy }}" hint-placeholder-val="{{ false }}"><div style="width:220px"><x-import component-from-global-scope="Syndra.Select" default-value="lab" aria-label="Bundle to copy" hint-size="220px,40px"><option value="lab">Lab Tech · 4 roles</option><option value="staff">Staff · 9 roles</option><option value="studio">Studio · 5 roles</option></x-import></div></sc-if><span style="font-size:12.5px;color:var(--faint)">{{ pt.startHint }}</span></div>
+      </sc-if>
+      <sc-if value="{{ pt.copy }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 14px;border-radius:var(--radius-inner);border:1px solid var(--accent-line);background:var(--accent-soft)"><span style="flex:1 1 320px;font-size:13.5px;line-height:1.5"><strong style="font-weight:600">Copied Lab Tech v3: its 4 roles are chosen below.</strong> A copy, so later changes to Lab Tech don't reach New members. To keep in step with a bundle, include it instead.</span><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="100px,34px">Start empty</x-import></div>
+      </sc-if>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <x-import component-from-global-scope="Syndra.FieldLabel" html-for="t-q" hint-size="100px,18px">{{ pt.giveLabel }}</x-import>
+        <x-import component-from-global-scope="Syndra.Input" id="t-q" placeholder="Search roles and bundles in every project" aria-label="Search roles and bundles" hint-size="100%,46px"></x-import>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:2px 0">
+          <span style="font-size:12.5px;font-weight:600;color:var(--label);margin-right:2px">{{ pt.chosenLabel }}</span>
+          <sc-for list="{{ pt.chips }}" as="c" hint-placeholder-count="3">
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;border-radius:var(--radius-pill);border:1px solid {{ c.border }};background:{{ c.bg }};font-size:13px;font-weight:600">{{ c.label }}<sc-if value="{{ c.hasSub }}" hint-placeholder-val="{{ false }}"><span style="font-weight:500;color:var(--muted)">{{ c.sub }}</span></sc-if><button type="button" aria-label="Remove {{ c.label }}" style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:var(--radius-pill);background:none;color:var(--muted);font:inherit;font-size:14px;cursor:pointer" style-hover="background:var(--hover);color:var(--ink)">×</button></span>
+          </sc-for>
+        </div>
+        <div style="max-height:360px;overflow-y:auto;border-radius:var(--radius-inner);border:1px solid var(--line)">
+          <sc-for list="{{ pt.groups }}" as="g" hint-placeholder-count="6">
+            <div class="{{ g.divider }}">
+              <button type="button" aria-expanded="{{ g.open }}" style="width:100%;display:flex;align-items:center;gap:12px;min-height:48px;padding:8px 14px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer" style-hover="background:var(--hover)">
+                <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line);color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform:{{ g.rot }}"><path d="M6 9l6 6 6-6"></path></svg></span>
+                <span style="flex:1;min-width:0;font-size:14.5px;font-weight:600">{{ g.name }}</span>
+                <span style="font-size:12.5px;font-weight:600;color:{{ g.countColor }}">{{ g.count }}</span>
+              </button>
+              <sc-if value="{{ g.open }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:{{ pt.rowGap }};padding:0 12px 10px 52px">
+                  <sc-for list="{{ g.items }}" as="r" hint-placeholder-count="3">
+                    <div role="{{ r.role }}" aria-checked="{{ r.aria }}" aria-disabled="{{ r.locked }}" style="display:flex;align-items:center;gap:12px;min-height:44px;padding:{{ pt.rowPad }};border-radius:{{ pt.rowRadius }};border:1px solid {{ r.edge }};border-bottom-color:{{ r.edgeB }};background:{{ r.bg }};cursor:{{ r.cursor }};opacity:{{ r.op }}">
+                      <sc-if value="{{ pt.t3 }}" hint-placeholder-val="{{ false }}">{{ r.boxEl }}</sc-if><sc-if value="{{ pt.t1 }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="line-height:1;width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid {{ r.seatEdge }};background:{{ r.seatBg }};color:{{ r.seatInk }};font-size:13px;font-weight:700">{{ r.seatMark }}</span></sc-if>
+                      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">{{ r.label }}<sc-if value="{{ r.waits }}" hint-placeholder-val="{{ false }}"><span tabIndex="0" role="img" aria-label="Waits for you" title="Waits for you: when someone gains or loses this role, the change waits for you to send it" style="display:inline-block;width:9px;height:9px;margin-left:8px;vertical-align:1px;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted);background:linear-gradient(90deg, var(--muted) 50%, transparent 50%);cursor:help"></span></sc-if> <span class="type-mono" style="font-weight:400;font-size:12.5px;color:var(--faint)">{{ r.key }}</span><span style="font-weight:500;font-size:12.5px;color:var(--faint)">{{ r.meta }}</span></span><span style="font-size:13px;color:var(--muted)">{{ r.desc }}</span></span>
+                      <span style="font-size:12.5px;color:var(--faint)">{{ r.note }}</span>
+                      
+                      <sc-if value="{{ pt.t2 }}" hint-placeholder-val="{{ false }}">
+                        <sc-if value="{{ r.showAdd }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">{{ r.addVerb }}</x-import></sc-if>
+                        <sc-if value="{{ r.showAdded }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px"><span style="font-size:13px;font-weight:600;color:var(--accent-text)">{{ r.addedWord }}</span><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="80px,34px">Remove</x-import></span></sc-if>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ pt.footNote }}" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="170px,40px">{{ pt.createLabel }}</x-import></x-import>
+  </x-import>
+  </sc-if>
+
+  <sc-if value="{{ stPublish }}" hint-placeholder-val="{{ false }}">{{ publishEl }}</sc-if>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "index";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+    const WAITS = new Set(["Laser cutter · Operator", "Laser cutter · Supervisor", "Welding · Operator", "Storage · Member"]);
+    const R = (label, key, desc) => ({ label, key, desc, waits: WAITS.has(label) });
+    this.catalog = [
+      { p: "3D printing", roles: [R("Printer · Member", "print.member", "Use the FDM printers in the print room"), R("Printer · Operator", "print.operator", "Run long jobs and change filament"), R("Resin printer · Operator", "print.resin", "Use the resin printer and the wash station")] },
+      { p: "Electronics bench", roles: [R("Soldering station · Operator", "soldering.operator", "Use the soldering stations and fume extractor"), R("Oscilloscope · Member", "bench.scope", "Borrow the bench scopes")] },
+      { p: "Laser Lab", roles: [R("Laser cutter · Member", "laser.member", "Book time on the laser cutter"), R("Laser cutter · Operator", "laser.operator", "Run the laser cutter without a supervisor"), R("Laser cutter · Supervisor", "laser.supervisor", "Sign others off on the laser cutter"), R("Laser bay · Door", "laserbay.door", "Badge entry to the laser bay")] },
+      { p: "Main lab", roles: [R("Front door", "main.door", "Badge entry to the makerspace"), R("Lockers", "main.lockers", "A locker for the term")] },
+      { p: "Metal shop", roles: [R("Welding · Operator", "metal.weld", "Use the MIG welder"), R("Lathe · Operator", "metal.lathe", "Use the metal lathe"), R("Metal shop · Door", "metal.door", "Badge entry to the metal shop")] },
+      { p: "Network storage", roles: [R("Member", "storage.member", "A home folder on TrueNAS"), R("Archive · Write", "storage.archive", "Add to the shared project archive")] },
+      { p: "Textiles", roles: [R("Sewing machine · Member", "textile.sew", "Use the sewing machines"), R("Embroidery · Operator", "textile.embroider", "Run the embroidery machine")] },
+      { p: "Wood shop", roles: [R("Bandsaw · Member", "wood.bandsaw", "Use the bandsaw"), R("Table saw · Operator", "wood.tablesaw", "Use the table saw"), R("CNC router · Operator", "wood.cnc", "Run the CNC router"), R("Wood shop · Door", "wood.door", "Badge entry to the wood shop")] },
+    ];
+    this.chosen = ["main.door", "laser.member", "wood.bandsaw"];
+  }
+  role(key) { for (const g of this.catalog) for (const r of g.roles) if (r.key === key) return { ...r, project: g.p }; return null; }
+  renderVals() {
+    const S = window.Syndra, st = this.st, h = React.createElement;
+    const deg = st === "degraded";
+    const idx = ["index", "loading", "empty", "error", "degraded", "pick-a", "pick-a-search", "pick-b", "pick-e", "pick-f", "from-bundle", "include", "pick-t1", "pick-t2", "pick-t3", "pick-copy", "add-roles"].includes(st);
+    const isBase = st === "base-page" || st === "base-publish";
+    const nested = st === "nested-page" || st === "nested-follow";
+    const created = st === "created";
+    const tab = st === "bundle-people" || st === "base-page" ? "people" : st === "bundle-history" ? "history" : "grants";
+    const ago = (m) => new Date(Date.now() - m * 60000).toISOString();
+    const N = (text, tone) => ({ text, color: tone ? "var(--" + tone + "-text)" : "var(--faint)" });
+    const bundles = [
+      { name: "Lab Tech", purpose: "Student staff who run the fabrication lab", roles: 4, people: 11, notes: [N("Unpublished changes", "accent"), N("3 people on an older version", "warn")] },
+      { name: "Staff", purpose: "Makerspace staff, with every room and the storage archive", roles: 9, people: 5, notes: [N("Given to everyone who joins")] },
+      { name: "Studio", purpose: "Textiles and the print room", roles: 5, people: 9, notes: [] },
+      { name: "Wood shop", purpose: "Signed off on the wood shop machines", roles: 4, people: 22, notes: [] },
+    ].map((b, i) => ({ ...b, current: st === "split" && i === 0 ? "page" : undefined, bg: st === "split" && i === 0 ? "var(--surface-2)" : "transparent", edge: st === "split" && i === 0 ? "var(--accent)" : "transparent" }));
+
+    const roleRow = (key, opt) => { const r = this.role(key); return { label: r.label, key: r.key, desc: r.desc, bg: opt && opt.drop ? "var(--warn-soft)" : "transparent", tag: opt && opt.add ? "New in v4" : opt && opt.drop ? "Leaves in v4" : "", tagColor: opt && opt.drop ? "var(--warn-text)" : "var(--accent-text)", verb: opt && opt.drop ? "Keep" : "Remove" }; };
+    const grp = (project, rows) => ({ project, count: rows.length + (rows.length === 1 ? " role" : " roles"), roles: rows });
+    const lab = { name: "Lab Tech", purpose: "Student staff who run the fabrication lab.", hasDraft: true, hasInc: false, hasStats: false, hasDeps: false,
+      grantsLine: "Changes here go into v4. Nobody's access changes until you publish.",
+      groups: [grp("Laser Lab", [roleRow("laser.operator"), roleRow("laser.member"), roleRow("laser.supervisor", { add: true }), roleRow("laserbay.door", { drop: true })]), grp("Wood shop", [roleRow("wood.bandsaw")])],
+      welcomeLine: "Staff is given to new members now. One bundle at a time.", welcomeVerb: "Give Lab Tech instead",
+      retireLine: "The 11 people with it lose whatever only Lab Tech gave them. You see who and what before anything is sent." };
+    const nm = { name: "New members", purpose: "Everyone in their first term.", hasDraft: false, hasInc: false, hasStats: false, hasDeps: false,
+      grantsLine: "Changes here go into v2. Nobody has New members yet, so publishing moves nobody.",
+      groups: [grp("Laser Lab", [roleRow("laser.member")]), grp("Main lab", [roleRow("main.door")]), grp("Wood shop", [roleRow("wood.bandsaw")])],
+      welcomeLine: "Staff is given to new members now. One bundle at a time.", welcomeVerb: "Give New members instead",
+      retireLine: "Nobody has it, so retiring it takes nothing from anyone." };
+    const inc = { name: "New members", purpose: "Everyone in their first term.", hasDraft: false, hasInc: true, hasStats: false, hasDeps: false, incUpdate: st === "nested-page", incFollows: st === "nested-follow",
+      incRoles: ["main.door", "main.lockers", "print.member"].map(k => this.role(k)),
+      grantsLine: "Changes here go into v2. Nobody's access changes until you publish.",
+      groups: [grp("Laser Lab", [roleRow("laser.member")]), grp("Wood shop", [roleRow("wood.bandsaw")])],
+      welcomeLine: "Staff is given to new members now. One bundle at a time.", welcomeVerb: "Give New members instead",
+      retireLine: "The 40 people with it lose whatever only New members gave them. You see who and what before anything is sent." };
+    const pre = st === "base-publish";
+    const base = { name: "Safety basics", purpose: "Everyone who has done the safety induction.", hasDraft: false, hasInc: false, hasStats: !pre, hasDeps: !pre,
+      grantsLine: pre ? "Changes here go into v4. Nobody's access changes until you publish." : "Changes here go into v5. Nobody's access changes until you publish.",
+      groups: [grp("3D printing", [roleRow("print.member")]), grp("Main lab", [roleRow("main.door"), roleRow("main.lockers")]), grp("Network storage", [roleRow("storage.member", pre ? { add: true } : undefined)])],
+      welcomeLine: "Staff is given to new members now. One bundle at a time.", welcomeVerb: "Give Safety basics instead",
+      retireLine: "Refused while New members and Staff include it." };
+    const bd = isBase ? base : nested ? inc : created ? nm : lab;
+    const tl = (t, n) => h(React.Fragment, null, t + " ", h("span", { style: { color: "var(--faint)" } }, n));
+    const tabs = isBase ? [{ value: "grants", label: tl("What it gives", 4) }, { value: "people", label: tl("People", 53) }, { value: "history", label: tl("History", 4) }] : nested ? [{ value: "grants", label: tl("What it gives", 5) }, { value: "people", label: tl("People", 40) }, { value: "history", label: tl("History", 1) }] : created ? [{ value: "grants", label: tl("What it gives", 3) }, { value: "people", label: tl("People", 0) }, { value: "history", label: tl("History", 1) }]
+      : [{ value: "grants", label: tl("What it gives", 4) }, { value: "people", label: tl("People", 11) }, { value: "history", label: tl("History", 3) }];
+
+    const P = (name, sub, how, since, op) => ({ name, sub, how, since, op: op || 1 });
+    const versionGroups = isBase ? [
+      { id: "on-v4", title: "On v4", short: "v4", n: 5, count: "5 people", countColor: "var(--faint)", countWeight: 400, warn: false, moveLabel: "", people: [P("Aanya Rao", "Research assistant · Design", "Given by Kanishk Singh", "9 Oct"), P("Lena Brandt", "Visiting student", "Approved request", "9 Oct"), P("Meera Iyer", "Lab technician · Mechanical Engineering", "Moved from v3", "9 Oct"), P("Sai Khurana", "Lab technician · Mechanical Engineering", "Moved from v3", "9 Oct"), P("Zoya Ali", "Student staff · Physics", "Moved from v3", "9 Oct")] },
+      { id: "on-v3", title: "On v3", short: "v3", n: 3, count: "3 people · v4 adds Network storage · Member", countColor: "var(--warn-text)", countWeight: 600, warn: true, moveLabel: "Move these 3 to v4", people: [P("Priya Nair", "Research assistant · Design", "Given by Kanishk Singh", "2 Sept"), P("Dev Mehta", "Student staff · Physics", "Approved request", "9 Sept"), P("Ishaan Bose", "Student staff · Physics", "Given by Sai Khurana", "14 Sept")] },
+    ] : [
+      { id: "on-v3", moveLabel: "", title: "On v3", short: "v3", n: 8, count: "8 people", countColor: "var(--faint)", countWeight: 400, warn: false, people: [P("Aanya Rao", "Research assistant · Design", "Given by Kanishk Singh", "28 Sept"), P("Meera Iyer", "Lab technician · Mechanical Engineering", "Given by Kanishk Singh", "28 Sept"), P("Rohan Das", "Student staff · Physics", "Moved from v2", "28 Sept"), P("Sai Khurana", "Lab technician · Mechanical Engineering", "Moved from v2", "28 Sept"), P("Ishaan Bose", "Student staff · Physics", "Approved request", "29 Sept"), P("Nikhil Rao", "Student staff · Physics", "Given by Sai Khurana", "1 Oct"), P("Tara Menon", "Student staff · Physics", "Approved request", "3 Oct"), P("Zoya Ali", "Student staff · Physics", "Given by Kanishk Singh", "6 Oct")] },
+      { id: "on-v2", moveLabel: "Move these 3 to v3", title: "On v2", short: "v2", n: 3, count: "3 people · v3 adds Laser cutter · Operator", countColor: "var(--warn-text)", countWeight: 600, warn: true, people: [P("Priya Nair", "Research assistant · Design", "Given by Kanishk Singh", "3 Sept"), P("Dev Mehta", "Student staff · Physics", "Approved request", "9 Sept"), P("Omar Haddad", "Left 12 Sept", "Given by Kanishk Singh", "4 Sept", 0.6)] },
+    ];
+    const history = created ? [{ v: "v1", vColor: "var(--ink)", note: "Created with 3 roles", diff: "Laser cutter · Member, Front door, Bandsaw · Member", hasBy: true, by: "Kanishk Singh", at: "Just now", n: "Nobody", nColor: "var(--faint)" }] : [
+      { v: "v4", vColor: "var(--accent-text)", note: "Not published yet", diff: "+ Laser cutter · Supervisor · − Laser bay · Door", hasBy: false, by: "", at: "Being edited", n: "—", nColor: "var(--faint)" },
+      { v: "v3", vColor: "var(--ink)", note: "Laser cutter sign-off moved into the bundle", diff: "+ Laser cutter · Operator", hasBy: true, by: "Kanishk Singh", at: "28 Sept 14:02", n: "8", nColor: "var(--ink)" },
+      { v: "v2", vColor: "var(--ink)", note: "Bandsaw added after the wood shop induction changed", diff: "+ Bandsaw · Member", hasBy: true, by: "Kanishk Singh", at: "3 Sept 10:02", n: "3", nColor: "var(--warn-text)" },
+      { v: "v1", vColor: "var(--ink)", note: "Created with 2 roles", diff: "Laser cutter · Member, Laser bay · Door", hasBy: true, by: "Sai Khurana", at: "12 Aug 09:00", n: "Nobody", nColor: "var(--faint)" },
+    ];
+
+    const search = st === "pick-a-search";
+    const chosenSet = new Set(this.chosen);
+    const cnt = (g) => g.roles.filter(r => chosenSet.has(r.key)).length;
+    const doorMatch = (r) => /door/i.test(r.label + " " + r.key);
+    let pickProjects, pickGroups;
+    if (search) {
+      const hits = this.catalog.map(g => ({ p: g.p, roles: g.roles.filter(doorMatch) })).filter(g => g.roles.length);
+      pickProjects = [{ name: "All matches", count: "4", current: "true", bg: "var(--surface-2)", color: "var(--ink)", weight: 600, countColor: "var(--faint)", rule: true }].concat(hits.map(g => ({ name: g.p, count: "1", current: undefined, bg: "transparent", color: "var(--muted)", weight: 500, countColor: "var(--faint)", rule: false })));
+      pickGroups = hits.map(g => ({ project: g.p, canAll: false, n: g.roles.length, roles: g.roles.map(r => ({ ...r, on: chosenSet.has(r.key) })) }));
+    } else {
+      pickProjects = [{ name: "Chosen", count: this.chosen.length + " roles", current: undefined, bg: "transparent", color: "var(--ink)", weight: 600, countColor: "var(--accent-text)", rule: true }].concat(this.catalog.map(g => { const c = cnt(g), cur = g.p === "Laser Lab"; return { name: g.p, count: c ? c + " of " + g.roles.length : g.roles.length + " roles", current: cur ? "true" : undefined, bg: cur ? "var(--surface-2)" : "transparent", color: cur ? "var(--ink)" : "var(--muted)", weight: cur ? 600 : 500, countColor: c ? "var(--accent-text)" : "var(--faint)", rule: false }; }));
+      const g = this.catalog.find(x => x.p === "Laser Lab");
+      pickGroups = [{ project: "Laser Lab · " + g.roles.length + " roles", canAll: true, n: g.roles.length, roles: g.roles.map(r => ({ ...r, on: chosenSet.has(r.key) })) }];
+    }
+    const suggest = this.catalog.flatMap(g => g.roles.filter(doorMatch).map(r => ({ ...r, project: g.p }))).map((r, i) => { const on = chosenSet.has(r.key); return { ...r, first: i === 1 ? "true" : "false", bg: i === 1 ? "var(--surface-2)" : "transparent", op: on ? 0.55 : 1, hint: on ? "Already in" : i === 1 ? "Enter to add" : "", hintColor: on ? "var(--faint)" : "var(--accent-text)" }; });
+    const chosenGroups = ["Laser Lab", "Main lab", "Wood shop"].map(p => ({ project: p, roles: this.chosen.map(k => this.role(k)).filter(r => r.project === p) }));
+
+    const ll = { lab: "Laser cutter · Supervisor" };
+    const lbl = (t) => h("span", { style: { fontSize: 12.5, fontWeight: 600, color: "var(--label)" } }, t);
+    const hint = (t) => h("p", { style: { margin: "6px 0 0", fontSize: 12.5, lineHeight: 1.5, color: "var(--faint)" } }, t);
+    const diff = (sign, tone, role) => h("div", { style: { display: "flex", gap: 8, alignItems: "baseline" } }, h("span", { style: { fontWeight: 600, color: "var(--" + tone + "-text)" } }, sign), h("span", { style: { fontWeight: 600 } }, role));
+    const choice = (title, detail) => h("button", { type: "button", role: "radio", "aria-checked": false, style: { textAlign: "left", padding: "12px 16px", borderRadius: "var(--radius-inner)", border: "1px solid var(--line-strong)", background: "none", color: "var(--ink)", font: "inherit", cursor: "pointer" } }, h("span", { style: { display: "block", fontSize: 14.5, fontWeight: 600 } }, title), h("span", { style: { display: "block", marginTop: 2, fontSize: 13, lineHeight: 1.5, color: "var(--muted)" } }, detail));
+    const never = () => new Promise(() => {});
+    const compose = h("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+      h("div", null, lbl("What changes in v4"), h("div", { style: { marginTop: 6, display: "flex", flexDirection: "column", gap: 6, padding: "12px 16px", borderRadius: "var(--radius-inner)", border: "1px solid var(--line-strong)", fontSize: 14 } }, diff("+", "accent", ll.lab), diff("−", "warn", "Laser bay · Door")), hint("Everything else in v3 carries over unchanged.")),
+      h("div", { role: "radiogroup", "aria-label": "The 11 who already have it" }, lbl("The 11 who already have it"), h("div", { style: { marginTop: 6, display: "flex", flexDirection: "column", gap: 8 } }, choice("Move everyone to v4", "Their access changes to match the new version. The preview below lists what that does to each of them."), choice("Leave them on the version they are on", "v4 goes only to people given this bundle from now on. Nobody's access changes, and you can move them later."))),
+      h("div", null, lbl("Note for the history (optional)"), S ? h(S.Input, { placeholder: "Laser sign-off moved into the induction bundle", style: { marginTop: 6 } }) : null, hint("Sits on the version for good. \u201cv3\u201d means nothing in six months; \u201cv3, laser sign-off moved in\u201d does.")));
+
+    const peMode = st === "from-bundle" ? "copy" : st === "include" ? "include" : "plain";
+    const peChosen = new Set(peMode === "copy" ? ["laser.operator", "laser.member", "laserbay.door", "wood.bandsaw"] : this.chosen);
+    const viaInc = new Set(peMode === "include" ? ["main.door", "main.lockers", "print.member"] : []);
+    const rot = (o) => o ? "none" : "rotate(-90deg)";
+    const bundleItems = [
+      { name: "Lab Tech", meta: "v3 · 4 roles", note: "Student staff who run the fabrication lab" },
+      { name: "Safety basics", meta: "v3 · 3 roles", note: "Everyone who has done the safety induction", inc: true },
+      { name: "Staff", meta: "v2 · 9 roles", note: "Includes Safety basics, so it can't go inside another bundle", blocked: true },
+      { name: "Studio", meta: "v1 · 5 roles", note: "Textiles and the print room" },
+    ].map(b => ({ ...b, canInclude: !b.blocked && !(peMode === "include" && b.inc), included: peMode === "include" && !!b.inc, op: b.blocked ? 0.55 : 1 }));
+    const incOpen = peMode === "include";
+    const peGroups = [{ name: "Bundles", count: incOpen ? "1 included" : "4 bundles", countColor: incOpen ? "var(--accent-text)" : "var(--faint)", open: incOpen ? "true" : "false", rot: rot(incOpen), showRoles: false, showBundles: incOpen, bundles: bundleItems, roles: [], divider: "" }]
+      .concat(this.catalog.map(g => { const c = g.roles.filter(r => peChosen.has(r.key) || viaInc.has(r.key)).length; const open = (peMode === "plain" && g.p === "Laser Lab") || (peMode === "copy" && g.p === "Laser Lab") || (peMode === "include" && g.p === "Main lab");
+        return { name: g.p, count: c ? c + " of " + g.roles.length : g.roles.length + " roles", countColor: c ? "var(--accent-text)" : "var(--faint)", open: open ? "true" : "false", rot: rot(open), showRoles: open, showBundles: false, bundles: [], divider: "row-divider",
+          roles: g.roles.map(r => { const v = viaInc.has(r.key), d = peChosen.has(r.key); return { ...r, on: v || d, locked: v && !d, cursor: v && !d ? "default" : "pointer", note: v ? "In Safety basics" : "" }; }) }; }));
+    const roleChips = [...peChosen].map(k => ({ label: this.role(k).label, sub: "", hasSub: false, border: "var(--line-strong)", bg: "transparent" }));
+    const pe = {
+      startVal: peMode === "copy" ? "lab" : "none", copied: peMode === "copy", overlap: peMode === "include",
+      folds: st !== "pick-f", pills: st === "pick-f", groups: peGroups,
+      chips: (peMode === "include" ? [{ label: "Safety basics", sub: "bundle · 3 roles", hasSub: true, border: "var(--accent-line)", bg: "var(--accent-soft)" }] : []).concat(roleChips),
+      footNote: peMode === "copy" ? "4 roles from 2 projects" : peMode === "include" ? "Safety basics and 3 roles of your own · 5 roles in all" : "3 roles from 3 projects",
+      createLabel: peMode === "copy" ? "Create with 4 roles" : peMode === "include" ? "Create with 5 roles" : "Create with 3 roles",
+    };
+    const labG = this.catalog.find(x => x.p === "Laser Lab");
+    const pillRoles = labG.roles.map(r => ({ ...r, on: peChosen.has(r.key) }));
+    const pillOpts = [{ value: "chosen", label: "Chosen · 3" }].concat(this.catalog.map(g => { const c = g.roles.filter(r => peChosen.has(r.key)).length; return { value: g.p, label: c ? g.p + " · " + c : g.p }; }));
+    const compose2 = h("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+      h("div", null, lbl("What changes in v4"), h("div", { style: { marginTop: 6, display: "flex", flexDirection: "column", gap: 6, padding: "12px 16px", borderRadius: "var(--radius-inner)", border: "1px solid var(--line-strong)", fontSize: 14 } }, diff("+", "accent", "Network storage · Member"))),
+      h("div", { role: "radiogroup", "aria-label": "The 52 who have it" }, lbl("The 52 who have it: 12 directly, 40 through New members"), h("div", { style: { marginTop: 6, display: "flex", flexDirection: "column", gap: 8 } }, choice("Move everyone to v4", "All 52 get Network storage · Member, including the 40 who have Safety basics only because New members includes it."), choice("Leave them on the version they are on", "v4 goes only to people given Safety basics, or New members, from now on."))));
+    const tMode = st === "pick-t2" ? 2 : st === "pick-t3" ? 3 : 1;
+    const isCopy = st === "pick-copy", isAdd = st === "add-roles";
+    const tChosen = new Set(isCopy ? ["laser.operator", "laser.member", "laserbay.door", "wood.bandsaw"] : isAdd ? ["laser.supervisor"] : ["laser.member", "wood.bandsaw"]);
+    const tVia = new Set(isCopy ? [] : isAdd ? ["laser.operator", "laser.member", "laserbay.door", "wood.bandsaw"] : ["main.door", "main.lockers", "print.member"]);
+    const viaNote = isAdd ? "In Lab Tech" : "In Safety basics";
+    const item = (o) => { const on = o.on, lk = o.locked;
+      const t1 = tMode === 1, t3 = tMode === 3;
+      return { ...o, role: t1 && !lk ? "checkbox" : undefined, aria: t1 ? String(!!on) : undefined, cursor: lk ? "default" : "pointer", op: o.blocked ? 0.55 : 1,
+        edge: t1 ? (on ? "var(--accent-line)" : "transparent") : "transparent", edgeB: t1 ? (on ? "var(--accent-line)" : "transparent") : "var(--line)",
+        bg: t1 ? (on ? "var(--accent-soft)" : lk && !o.blocked ? "var(--surface-0)" : "transparent") : t3 && on ? "color-mix(in oklch, var(--accent-soft) 45%, transparent)" : "transparent",
+        seatEdge: on ? "var(--accent)" : lk && !o.blocked ? "var(--line-strong)" : o.blocked ? "var(--line)" : "var(--line-strong)", seatBg: on ? "var(--accent)" : lk && !o.blocked ? "var(--surface-2)" : "transparent", seatInk: on ? "var(--accent-ink)" : "var(--faint)", seatMark: on || (lk && !o.blocked) ? "✓" : "",
+        showAdd: !on && !lk, showAdded: !!on, addVerb: o.isBundle ? "Include" : "Add", addedWord: o.isBundle ? "Included" : "Added",
+        boxEl: S && t3 ? h(S.RowCheckbox, { label: (on ? "Remove " : "Choose ") + o.label, checked: !!(on || (lk && !o.blocked)), disabled: !!lk, onChange: () => {} }) : null };
+    };
+    const tBundles = [
+      { label: "Safety basics", meta: " · v3 · 3 roles", desc: "Everyone who has done the safety induction", on: !isCopy && !isAdd, isBundle: true },
+      { label: "Lab Tech", meta: " · v3 · 4 roles", desc: "Student staff who run the fabrication lab", isBundle: true },
+      { label: "Staff", meta: " · v2 · 9 roles", desc: "Includes Safety basics, so it can't go inside another bundle", isBundle: true, locked: true, blocked: true },
+      { label: "Studio", meta: " · v1 · 5 roles", desc: "Textiles and the print room", isBundle: true },
+    ].map(b => item({ key: "", note: "", ...b }));
+    const tGroups = [{ name: "Bundles", count: isCopy || isAdd ? "4 bundles" : "1 included", countColor: isCopy || isAdd ? "var(--faint)" : "var(--accent-text)", open: !isCopy && !isAdd, rot: !isCopy && !isAdd ? "none" : "rotate(-90deg)", divider: "", items: tBundles }]
+      .concat(this.catalog.map(g => { const c = g.roles.filter(r => tChosen.has(r.key) || tVia.has(r.key)).length; const open = isCopy || isAdd ? g.p === "Laser Lab" : g.p === "Main lab";
+        return { name: g.p, count: c ? c + " of " + g.roles.length : g.roles.length + " roles", countColor: c ? "var(--accent-text)" : "var(--faint)", open, rot: open ? "none" : "rotate(-90deg)", divider: "row-divider",
+          items: g.roles.map(r => { const v = tVia.has(r.key), d = tChosen.has(r.key); return item({ ...r, meta: "", on: d, locked: v && !d, note: v ? viaNote : "" }); }) }; }));
+    const pt = { t1: tMode === 1, t2: tMode === 2, t3: tMode === 3, copy: isCopy, showTop: !isAdd,
+      title: isAdd ? "Add to Lab Tech" : "New bundle", lede: isAdd ? "What you add goes into v4, Lab Tech's working copy. Nobody's access changes until you publish." : "Name it after who it's for. The roles you choose become version 1, so it can be given straight away.",
+      giveLabel: isAdd ? "Roles and bundles to add" : "What it gives", chosenLabel: isAdd ? "Adding" : "Chosen",
+      rowGap: tMode === 1 ? "6px" : "0px", rowPad: tMode === 1 ? "10px 12px" : "10px 0", rowRadius: tMode === 1 ? "12px" : "0",
+      startHint: isCopy ? "" : "Ticks what they have, so you only untick what doesn't belong.",
+      chips: (isCopy || isAdd ? [] : [{ label: "Safety basics", sub: "bundle · 3 roles", hasSub: true, border: "var(--accent-line)", bg: "var(--accent-soft)" }]).concat([...tChosen].map(k => ({ label: this.role(k).label, sub: "", hasSub: false, border: "var(--line-strong)", bg: "transparent" }))),
+      groups: tGroups,
+      footNote: isCopy ? "4 roles from 2 projects" : isAdd ? "1 role, into v4" : "Safety basics and 2 roles of your own · 5 roles in all",
+      createLabel: isCopy ? "Create with 4 roles" : isAdd ? "Add 1 role" : "Create with 5 roles" };
+    const deps = [
+      { tile: "NM", name: "New members", purpose: "Everyone in their first term", pin: "Includes v3, one behind", pinColor: "var(--warn-text)", pinWeight: 600, people: "40 people", behind: true },
+      { tile: "ST", name: "Staff", purpose: "Makerspace staff", pin: "Includes v4", pinColor: "var(--muted)", pinWeight: 400, people: "5 people", behind: false },
+    ];
+    const stats = [
+      { label: "Directly", value: "8", detail: "5 on v4 · 3 on v3", tone: "neutral", href: "#on-v4" },
+      { label: "Through bundles", value: "45", detail: "In New members and Staff", tone: "neutral", href: "#through-bundles" },
+      { label: "Behind v4", value: "43", detail: "3 directly · 40 through New members", tone: "warn", href: "#on-v3" },
+    ];
+    const readChips = versionGroups.map(v => ({ warn: v.warn, short: v.short, n: v.n })).concat(isBase ? [{ warn: false, short: "Through bundles", n: 45 }] : []);
+    const bundleRow = (tile, name, meta) => h("div", { style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--line)" } },
+      h("span", { "aria-hidden": true, style: { width: 30, height: 30, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 10, border: "1px dashed var(--line-strong)", background: "var(--surface-2)", fontFamily: "var(--font-display)", fontSize: 12.5, fontWeight: 600, color: "var(--muted)" } }, tile),
+      h("span", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 } }, h("span", { style: { fontSize: 14.5, fontWeight: 600 } }, name), h("span", { style: { fontSize: 12.5, color: "var(--muted)" } }, meta)),
+      S ? h(S.Segmented, { size: "sm", label: "Update " + name, value: "", onChange: () => {}, options: [{ value: "update", label: "Update" }, { value: "leave", label: "Leave" }] }) : null);
+    const compose3 = h("div", { style: { display: "flex", flexDirection: "column", gap: 16 } },
+      h("div", null, lbl("What changes in v4"), h("div", { style: { marginTop: 6, display: "flex", flexDirection: "column", gap: 6, padding: "12px 16px", borderRadius: "var(--radius-inner)", border: "1px solid var(--line-strong)", fontSize: 14 } }, diff("+", "accent", "Network storage · Member"))),
+      h("div", { role: "radiogroup", "aria-label": "The 8 who have it directly" }, lbl("The 8 who have it directly"), h("div", { style: { marginTop: 6, display: "flex", flexDirection: "column", gap: 8 } }, choice("Move everyone to v4", "They get Network storage · Member. The preview below lists each of them."), choice("Leave them on v3", "v4 goes only to people given Safety basics from now on. You can move them later from the People tab."))),
+      h("div", null, lbl("The 2 bundles that include it"), h("div", { style: { marginTop: 6, padding: "2px 16px", borderRadius: "var(--radius-inner)", border: "1px dashed var(--line-strong)" } },
+        bundleRow("NM", "New members", "40 people · includes v3"), bundleRow("ST", "Staff", "5 people · includes v3")),
+        hint("Update publishes that bundle's next version with Safety basics v4, and its people move the way you chose above. Leave keeps it on v3; its page offers v4 for later.")));
+    const f = (frame, label, note) => ({ src: "route-bundles-v2.dc.html?frame=" + frame, label, note });
+    return {
+      stPickT: ["pick-t1", "pick-t2", "pick-t3", "pick-copy", "add-roles"].includes(st), pt, deps, stats, readChips,
+      startSegEl: S ? h(S.Segmented, { size: "sm", label: "Start from", value: isCopy ? "bundle" : "nothing", onChange: () => {}, options: [{ value: "nothing", label: "Nothing" }, { value: "person", label: "A person" }, { value: "bundle", label: "Another bundle" }] }) : null,
+      stPickE: ["pick-e", "pick-f", "from-bundle", "include"].includes(st), pe, pillRoles,
+      pillsEl: S && st === "pick-f" ? h(S.FilterPills, { label: "Projects", value: "Laser Lab", onChange: () => {}, options: pillOpts }) : null,
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stDegraded: deg, stLoading: st === "loading", stEmpty: st === "empty", stError: st === "error", stCreated: created,
+      isIndex: idx, isDetail: !idx, isSplit: st === "split",
+      showIndexCard: st !== "error", showIndexRead: !["loading", "empty", "error"].includes(st), showIndexRows: !["loading", "empty", "error"].includes(st),
+      stPickA: st === "pick-a" || search, stPickB: st === "pick-b", stPublish: st === "publish" || st === "nested-follow" || st === "base-publish",
+      bundles, bd, tab, tabs, tabGrants: tab === "grants", tabPeople: tab === "people", tabHistory: tab === "history",
+      versionGroups, history, pickProjects, pickGroups, pickQuery: search ? "door" : "", suggest, chosenGroups,
+      indexRead: S ? h(S.ReadFreshness, { state: deg ? { readAt: ago(14), current: false } : { readAt: ago(0.4), current: true }, subject: "Bundles and who has them" }) : null,
+      peopleRead: S ? h(S.ReadFreshness, { state: { readAt: ago(0.4), current: true }, subject: "Who has " + bd.name }) : null,
+      indexActions: S ? h(S.Button, { variant: "accent", disabled: deg }, "New bundle") : null,
+      splitNew: S ? h(S.Button, { variant: "outline", size: "sm" }, "New bundle") : null,
+      emptyAction: { label: "Create the first one", onClick: () => {} },
+      eyebrowEl: st === "split" ? undefined : h("a", { href: "route-bundles-v2.dc.html?frame=index", style: { color: "var(--muted)", textDecoration: "none" } }, "Bundles"),
+      detailMeta: S ? h(S.MetaRow, null, pre ? ["v3 · published 2 Sept", "3 roles", "53 people"] : isBase ? ["v4 · published 9 Oct", "4 roles", "53 people"] : nested ? ["v1 · published 9 Oct", "5 roles", "40 people"] : created ? ["v1 · created just now", "3 roles", "Nobody has it yet"] : ["v3 · published 28 Sept", "4 roles", "11 people"]) : null,
+      detailActions: S ? h(React.Fragment, null, h(S.Button, { variant: "outline" }, "Rename"), h(S.ButtonLink, { variant: created ? "accent" : "outline", href: "route-users.dc.html?frame=bulk-a" }, "Add people")) : null,
+      createdEl: S && created ? h(S.ActionOutcome, { placement: "block", outcome: { kind: "applied", message: "New members created", detail: "Version 1 gives 3 roles. Nobody has it yet: Add people picks who gets it." } }) : null,
+      startFromEl: S ? h(S.Segmented, { size: "sm", label: "Start from", value: "nothing", onChange: () => {}, options: [{ value: "nothing", label: "Nothing" }, { value: "person", label: "A person" }, { value: "bundle", label: "Another bundle" }] }) : null,
+      publishEl: S && st === "base-publish" ? h(S.RehearsalDialog, { title: "Publish Safety basics v4", lede: "Safety basics reaches 53 people: 8 directly, and 45 through New members and Staff, which include it. Nobody moves unless you say so.", noun: ["person", "people"], ready: false, notReadyReason: "Choose what happens to the 8 people and to each bundle. Every answer is real, so there are no defaults.", definitionLabel: "Publish v4", compose: compose3, onRehearse: never, onApply: never, onClose: () => {} }) : S && st === "nested-follow" ? h(S.RehearsalDialog, { title: "Publish Safety basics v4", lede: "Safety basics reaches 52 people: 12 have it directly and 40 through New members, which includes it and follows along.", noun: ["person", "people"], ready: false, notReadyReason: "Choose what happens to the 52 people who have it.", definitionLabel: "Publish v4", compose: compose2, onRehearse: never, onApply: never, onClose: () => {} }) : S && st === "publish" ? h(S.RehearsalDialog, { title: "Publish Lab Tech v4", lede: "11 people have this bundle today. Publishing does not move them unless you say so.", noun: ["person", "people"], ready: false, notReadyReason: "Choose what happens to the 11 people who already have it. Both answers are real, so there is no default.", definitionLabel: "Publish v4", compose, onRehearse: never, onApply: never, onClose: () => {} }) : null,
+      sharedFrames: [
+        f("bundle-people", "People", "Grouped by version, because the version is what sets two people apart. A chip per version on the read line. The older group says what it is missing and offers Move these 3 to v3. Each row says how they got it."),
+        f("bundle-history", "History", "Every version with its note, what changed, who published it and how many people are on it now. The unpublished version sits on top in violet."),
+        f("publish", "Publish v4", "As built (#43). Neither answer is preselected; the review follows, as for every write."),
+        f("created", "Created", "Create lands on the new bundle's page with the outcome above it. The next step is the header's one violet button, Add people."),
+        f("degraded", "Degraded", "Last known bundles with the read's age. Everything that writes is paused."),
+        f("empty", "Empty", "Says what a bundle is for, with one way to make the first."),
+        f("loading", "Loading", "Skeleton rows; the count waits for the read."),
+        f("error", "Error", "The failed read takes the list's place; Nothing was changed."),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

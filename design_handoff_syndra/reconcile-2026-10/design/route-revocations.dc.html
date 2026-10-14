@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)} @keyframes sy-resort-a{from{opacity:.35}to{opacity:1}}@keyframes sy-resort-b{from{opacity:.35}to{opacity:1}}@keyframes sy-flash-a{from{background-color:var(--accent-soft)}to{background-color:transparent}}@keyframes sy-flash-b{from{background-color:var(--accent-soft)}to{background-color:transparent}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Unfinished revocations board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
+    <span class="type-label" style="color:var(--label)">Route · /governance/unconfirmed-revocations</span>
+    <h1 class="type-page-title" style="margin:0">Unfinished revocations</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Access somebody revoked that has not gone away yet. Two populations that mean different things: revocations Syndra is still sending clear themselves; the ones it has given up on do not, and those people still have the access. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1700px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#5</strong> named Unfinished revocations, beside Drift, never merged into it · <strong style="color:var(--ink)">#62</strong> both sections keep their seat at every count, and an empty one says what that means · the reason a revocation was given up is a sentence on the row · the edit that set it off is one tap away (c_ handle).</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Standing rules applied</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Two sections, so they fold, show 10 then more, and get chips on the read line and the floating pill (8a–8d) · search and Filters in the bar; no Select, because revoking is never bulk · Revoked carries the arrow, most recent on top; What and Where gather equal values · names link · the read line says how current the list is.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · code owed</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Rows become a table: who · what · where · revoked, numbers last · role keys become role names with the key beneath, linking to the project · "Last error:" becomes the reason in plain words, wrapped, in danger ink · each given-up row names its way forward ("Revoke again on Sai's page →") · Still on the way loses the accent tone: nothing there is yours to do · its note no longer says "waiting to be sent" · the footnote about c_ handles goes; the handle sits beside the role.</p></div>
+  </section>
+  <sc-for list="{{ boardGroups }}" as="bg" hint-placeholder-count="2">
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">{{ bg.title }}</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  </sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/governance/unconfirmed-revocations" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering, so revocations to it are waiting.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Those people still have the access until it answers. Syndra keeps trying and sends them in order the moment it does. This list is Syndra's own, so it is current.</p>
+      </div>
+    </div></sc-if>
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Unfinished revocations" meta="{{ meta }}" lede="Access somebody revoked that has not gone away yet. Revocations still on the way clear themselves. The ones Syndra has given up on do not, and those people still have the access until somebody ends it." hint-size="100%,130px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" hint-size="100%,44px"></x-import></sc-if>
+    <sc-if value="{{ hasRead }}" hint-placeholder-val="{{ false }}"><div style="margin-top:-4px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px">{{ readEl }}{{ jumpRest }}</div></sc-if>
+
+    <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}"><div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load unfinished revocations.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for them. Nothing was changed, and revocations already on the way are still being sent.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import><span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7e20c91a</span> · quote this if you ask for help</span></div>
+      </div>
+    </div></sc-if>
+
+    <sc-if value="{{ showPlain }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+      <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" label="Loading unfinished revocations" hint-size="100%,280px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Nothing outstanding." guidance="Every revocation has reached the system it was sent to." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
+    </x-import>
+    </sc-if>
+
+    <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:16px">
+      <sc-if value="{{ hasJump }}" hint-placeholder-val="{{ false }}">{{ jumpFloat }}</sc-if>
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+      <div id="{{ g.id }}" style="scroll-margin-top:16px">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+        <div style="border-radius:var(--radius-card) var(--radius-card) 0 0;animation:{{ g.flashAnim }}"><x-import component-from-global-scope="Syndra.CardHeader" title="{{ g.titleEl }}" count="{{ g.count }}" tone="{{ g.tone }}" note="{{ g.hint }}" hint-size="100%,60px"></x-import></div>
+        <div style="display:grid;grid-template-rows:{{ g.fold.fr }};visibility:{{ g.fold.vis }};transition:{{ g.fold.trans }}"><div style="min-height:0;overflow:hidden;opacity:{{ g.fold.op }};transition:{{ g.fold.opTrans }}">
+        <sc-if value="{{ g.isEmpty }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;align-items:center;gap:10px;padding:16px 20px;font-size:14px;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>{{ g.empty }}</div></sc-if>
+        <sc-if value="{{ g.hasRows }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.CardColumns" hint-size="100%,40px"><span style="width:190px;flex:none"><button type="button" aria-label="Sort by who" onClick="{{ sortWho }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWho }}" style-hover="color:var(--ink)">Who<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWho }};opacity:{{ opWho }}">↑</span></button></span><span style="flex:1 1 0;min-width:0"><button type="button" aria-label="Sort by what was revoked" onClick="{{ sortWhat }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWhat }}" style-hover="color:var(--ink)">What was revoked<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWhat }};opacity:{{ opWhat }}">↑</span></button></span><span class="hidden desktop:block" style="width:130px;flex:none"><button type="button" aria-label="Sort by where" onClick="{{ sortWhere }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;text-align:left;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWhere }}" style-hover="color:var(--ink)">Where<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWhere }};opacity:{{ opWhere }}">↑</span></button></span><span style="width:110px;flex:none;text-align:right"><button type="button" aria-label="Sort by revoked" onClick="{{ sortWhen }}" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;transition:color var(--duration-tint) var(--ease-tint);color:{{ colWhen }}" style-hover="color:var(--ink)">Revoked<span aria-hidden="true" style="display:inline-block;font-size:11px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);transform:{{ rotWhen }};opacity:{{ opWhen }}">↓</span></button></span><span class="hidden desktop:block" style="width:240px;flex:none"></span></x-import>
+        <div style="animation:{{ g.sortAnim }}"><sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+        <sc-if value="{{ r.hasRun }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;align-items:baseline;gap:10px;padding:12px 20px 8px;background:var(--surface-0)"><span class="type-label" style="color:var(--ink)">{{ r.run }}</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">{{ r.runCount }}</span></div></sc-if>
+        <div class="row-divider flex flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]" style="min-height:60px;animation:{{ r.anim }}">
+          <span class="flex w-full items-center gap-3 tablet:w-[190px] tablet:shrink-0">
+            <x-import component-from-global-scope="Syndra.Avatar" name="{{ r.who }}" hint-size="34px,34px"></x-import>
+            <span class="min-w-0 text-[15px] font-semibold" style="text-wrap:pretty"><a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.who }}</a></span>
+          </span>
+          <span class="w-full tablet:flex-1" style="min-width:0;display:flex;flex-direction:column;gap:3px;padding-top:2px">
+            <span style="font-size:14.5px;line-height:1.45;text-wrap:pretty"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.role }}</a></span>
+            <span style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;color:var(--faint)"><span class="type-mono">{{ r.key }}</span><span class="type-mono">{{ r.cause }}</span><span class="desktop:hidden">· {{ r.where }}</span></span>
+            <sc-if value="{{ r.hasError }}" hint-placeholder-val="{{ false }}"><span style="margin-top:4px;display:flex;align-items:baseline;gap:8px;font-size:13.5px;line-height:1.5;color:var(--danger-text);text-wrap:pretty"><x-import component-from-global-scope="Syndra.StatusDot" tone="danger" hint-size="7px,7px"></x-import>{{ r.error }}</span></sc-if>
+          </span>
+          <span class="hidden desktop:block" style="width:130px;flex:none;padding-top:2px;font-size:14px;color:var(--muted)">{{ r.where }}</span>
+          <span class="tablet:w-[110px] tablet:shrink-0 tablet:text-right" style="display:flex;flex-direction:column;gap:2px;padding-top:2px">
+            <span style="font-size:13.5px;font-weight:600;color:{{ r.ageInk }}">{{ r.age }}</span>
+            <span style="font-size:12.5px;color:var(--faint)">{{ r.at }}</span>
+          </span>
+          <span class="w-full desktop:w-auto" style="flex:none;min-width:240px;display:flex;justify-content:flex-end;padding-top:2px">
+            <sc-if value="{{ r.spent }}" hint-placeholder-val="{{ false }}"><a href="route-users-id.dc.html?frame=default" class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6" style="text-decoration:none;text-align:right" style-hover="text-decoration:underline;text-underline-offset:3px">{{ r.forward }}</a></sc-if>
+            <sc-if value="{{ r.queued }}" hint-placeholder-val="{{ true }}"><span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:13px;color:var(--muted);text-align:right"><span>Try {{ r.tries }} of 8</span><span style="font-size:12.5px;color:var(--faint)">{{ r.next }}</span></span></sc-if>
+          </span>
+        </div>
+        </sc-for></div>
+        <sc-if value="{{ g.hasFoot }}" hint-placeholder-val="{{ false }}"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:14px 20px"><span style="font-size:13.5px;color:var(--muted)">{{ g.footText }}</span><sc-if value="{{ g.canMore }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" on-click="{{ g.more }}" hint-size="120px,34px">{{ g.moreLabel }}</x-import></sc-if><sc-if value="{{ g.canAll }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ g.all }}" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Show all {{ g.count }}</button></sc-if><sc-if value="{{ g.canReset }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ g.reset }}" style="padding:0;border:0;background:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:var(--muted)" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Back to 10</button></sc-if></div></sc-if>
+        </sc-if>
+        </div></div>
+      </x-import>
+      </div>
+      </sc-for>
+    </div></sc-if>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    const m = this.st;
+    this.preScroll = m === "many-scrolled" ? "sec-q" : null;
+    this.state = { sort: m === "many-sort-where" ? "where" : "when", dir: -1, open: { s: m !== "many-fold", q: true }, shown: { s: 10, q: m === "many-more" ? 35 : 10 } };
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 6, drift: 4, unconfirmed_revocations: m === "empty" ? 0 : 2, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  scroller() { if (this._sc && this._sc.isConnected) return this._sc; let p = document.getElementById((this.navIds || [])[0]); while (p && p !== document.body) { const o = getComputedStyle(p).overflowY; if (o === "auto" || o === "scroll") break; p = p.parentElement; } this._sc = p && p !== document.body ? p : null; return this._sc; }
+  spy() { const ids = this.navIds; if (!ids || ids.length < 2 || !document.getElementById(ids[0])) return; const sc = this.scroller(); const top = sc ? sc.getBoundingClientRect().top : 0; let active = ids[0]; ids.forEach(id => { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top - top < 120) active = id; }); const rest = document.getElementById("jump-rest"); const scrolled = rest ? rest.getBoundingClientRect().bottom - top < 0 : false; if (active !== this.state.active || scrolled !== this.state.scrolled) this.setState({ active, scrolled }); }
+  componentDidMount() { this._spy = () => this.spy(); document.addEventListener("scroll", this._spy, true); setTimeout(this._spy, 300); if (this.preScroll) setTimeout(() => this.goTo(this.preScroll, true), 1200); }
+  componentWillUnmount() { document.removeEventListener("scroll", this._spy, true); }
+  goTo(id, instant) { const el = document.getElementById(id); if (!el) return; const sc = this.scroller(); const off = el.getBoundingClientRect().top - (sc ? sc.getBoundingClientRect().top : 0) - 64; const rm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; const behavior = instant || rm ? "auto" : "smooth"; if (sc) sc.scrollTo({ top: sc.scrollTop + off, behavior }); else window.scrollTo({ top: window.scrollY + off, behavior }); }
+  jumpNav(items, label, align) { const S = window.Syndra, h = React.createElement; if (!S || items.length < 2) return { rest: null, float: null };
+    const act = items.some(i => i.id === this.state.active) ? this.state.active : items[0].id, idx = items.findIndex(i => i.id === act), up = !!this.state.scrolled;
+    const go = (it) => (e) => { if (e) e.preventDefault(); this.setState(s => ({ flash: { id: it.id, n: ((s.flash || {}).n || 0) + 1 } })); it.go(); };
+    const dot = (it) => it.tone ? h(S.StatusDot, { tone: it.tone }) : null;
+    const rest = h("nav", { id: "jump-rest", "aria-label": label, style: { display: "flex", flexWrap: "wrap", gap: 8, marginLeft: align === "start" ? 0 : "auto" } }, items.map(it => h("a", { key: it.id, href: "#" + it.id, onClick: go(it), style: { textDecoration: "none", color: "inherit", borderRadius: "var(--radius-pill)" } }, h(S.Chip, { className: "gap-2" }, dot(it), it.label, h("span", { className: "text-faint" }, it.count), h("span", { "aria-hidden": true, style: { color: "var(--faint)", fontSize: 12 } }, "↓")))));
+    const float = h("div", { "aria-hidden": !up, style: { position: "sticky", top: 0, zIndex: 5, height: 0, marginBottom: -(this.jnGap || 16) } }, h("nav", { "aria-label": label + " (while scrolling)", "aria-hidden": !up, style: { position: "absolute", top: 12, left: "50%", transform: "translate(-50%, " + (up ? "0" : "-8px") + ")", opacity: up ? 1 : 0, pointerEvents: up ? "auto" : "none", transition: up ? "opacity var(--duration-tint) var(--ease-tint), transform var(--duration-settle) var(--ease-settle)" : "opacity var(--duration-tint) var(--ease-tint), transform 0s linear var(--duration-tint)", display: "flex", gap: 2, padding: 4, borderRadius: "var(--radius-pill)", border: "1px solid var(--line-strong)", background: "var(--surface-1)", boxShadow: "var(--shadow-dialog)", whiteSpace: "nowrap", maxWidth: "calc(100% - 24px)", overflowX: "auto" } },
+      items.map((it, i) => { const on = it.id === act; return h("a", { key: it.id, href: "#" + it.id, tabIndex: up ? 0 : -1, "aria-current": on ? "location" : undefined, onClick: go(it), style: { display: "inline-flex", alignItems: "center", gap: 8, minHeight: 36, padding: "0 14px", borderRadius: "var(--radius-pill)", textDecoration: "none", fontSize: 13, fontWeight: 600, color: on ? "var(--ink)" : "var(--muted)", background: on ? "var(--surface-2)" : "transparent", transition: "background-color var(--duration-tint) var(--ease-tint), color var(--duration-tint) var(--ease-tint)" } }, dot(it), it.label, h("span", { style: { color: "var(--faint)", fontWeight: 500 } }, it.count), on ? null : h("span", { "aria-hidden": true, style: { color: "var(--faint)", fontSize: 12 } }, i < idx ? "↑" : "↓")); })));
+    return { rest, float }; }
+  foldS(open) { return open ? { fr: "1fr", op: 1, vis: "visible", trans: "grid-template-rows var(--duration-settle) var(--ease-settle), visibility 0s", opTrans: "opacity var(--duration-tint) var(--ease-tint) 140ms" } : { fr: "0fr", op: 0, vis: "hidden", trans: "grid-template-rows var(--duration-settle) var(--ease-settle) 120ms, visibility 0s linear 380ms", opTrans: "opacity var(--duration-tint) var(--ease-tint)" }; }
+  flashA(on, n) { return on ? (n % 2 ? "sy-flash-a" : "sy-flash-b") + " var(--duration-flash) ease-out 280ms both" : "none"; }
+  toggle(k) { this.setState(s => ({ open: Object.assign({}, s.open, { [k]: !s.open[k] }) })); }
+  more(k, n) { this.setState(s => ({ shown: Object.assign({}, s.shown, { [k]: s.shown[k] + n }), fresh: Object.assign({}, s.fresh, { [k]: s.shown[k] }) })); clearTimeout(this._fr); this._fr = setTimeout(() => this.setState({ fresh: {} }), 900); }
+  reset(k) { this.goTo("sec-" + k); setTimeout(() => this.setState(s => ({ shown: Object.assign({}, s.shown, { [k]: 10 }) })), 480); }
+  setSort(key) { this.setState(s => ({ sort: key, dir: s.sort === key ? -s.dir : 1, sortTick: (s.sortTick || 0) + 1 })); }
+  jump(e, k) { if (e && e.preventDefault) e.preventDefault(); this.setState(s => ({ flash: { id: "sec-" + k, n: ((s.flash || {}).n || 0) + 1 } })); if (!this.state.open[k]) this.toggle(k); setTimeout(() => this.goTo("sec-" + k), 0); }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded", many = /^many/.test(st), noSpent = st === "none-given-up";
+    const known = !/^(loading|error)$/.test(st), list = known && st !== "empty";
+    const MO = ["Jan","Feb","Mar","Apr","May","June","July","Aug","Sept","Oct","Nov","Dec"];
+    const at = (min) => { const x = new Date(2026, 9, 6, 9, 14 - min); const d = x.getDate() === 6 ? "today" : x.getDate() + " " + MO[x.getMonth()]; return d + ", " + String(x.getHours()).padStart(2, "0") + ":" + String(x.getMinutes()).padStart(2, "0"); };
+    const age = (min) => min < 60 ? min + " min ago" : min < 1440 ? Math.round(min / 60) + (Math.round(min / 60) === 1 ? " hour ago" : " hours ago") : Math.round(min / 1440) + (Math.round(min / 1440) === 1 ? " day ago" : " days ago");
+    const R = (k, who, role, key, where, min, x) => Object.assign({ k, who, first: who.split(" ")[0], role, key, where, min, cause: "c_" + ((who.length * 7919 + min) % 65536).toString(16).padStart(4, "0"), error: "", tries: 1, next: "" }, x || {});
+    let rows = [
+      R("s", "Sai Khurana", "Laser cutter · Operator", "laser.operator", "Zitadel", 4320, { error: "Zitadel says this person no longer exists there, so the role could not be removed. If they were recreated under a new account, revoke it on that account.", tries: 8 }),
+      R("s", "Tomas Weber", "Members share", "smb.members", "TrueNAS", 1560, { error: "TrueNAS refused Syndra's key on all eight tries. Fix the key under Connected systems, or remove him from the share in TrueNAS by hand.", tries: 8 }),
+      R("q", "Omar Haddad", "Wood shop · Member", "wood.member", "Zitadel", 4, { tries: 1, next: "Next try in 1 min" }),
+      R("q", "Isha Menon", "Bandsaw · Member", "bandsaw.member", "Zitadel", 11, { tries: 2, next: "Next try in 3 min" }),
+      R("q", "Kabir Rao", "Members share", "smb.members", "TrueNAS", 38, { tries: 4, next: "Next try in 12 min" }),
+    ];
+    if (noSpent) rows = rows.filter(r => r.k === "q");
+    if (deg) rows = rows.map(r => r.k === "q" && r.where === "Zitadel" ? Object.assign({}, r, { tries: r.tries + 3, next: "Waits for Zitadel" }) : r);
+    if (many) {
+      const fn = ["Kavya","Daniel","Rhea","Nikhil","Zara","Ishaan","Ana","Vikram","Leela","Farhan","Sara","Dev","Tara","Yusuf","Neha","Ben"], ln = ["Menon","Okafor","Kapoor","Bose","Ahmed","Gupta","Ruiz","Shah","Nair","Ali","Lindqvist","Malhotra","Singh","Kamal","Joshi"];
+      const RL = [["Wood shop · Member","wood.member","Zitadel"],["3D printers · Member","printers.member","Zitadel"],["Members share","smb.members","TrueNAS"],["Studio · Booking","studio.booking","Zitadel"]];
+      for (let i = 0; i < 39; i++) { const r = RL[i % 4]; rows.push(R("q", fn[i % 16] + " " + ln[(i * 7) % 15], r[0], r[1], r[2], 6 + i * 2, { tries: 1 + (i % 5), next: "Next try in " + (1 + (i % 9)) + " min" })); }
+    }
+    const so = this.state.sort, dir = this.state.dir;
+    const keyOf = { who: r => r.who, what: r => r.role, where: r => r.where };
+    const runs = so === "what" || so === "where";
+    const sorter = (x, y) => { let c = so === "when" ? y.min - x.min : keyOf[so](x).localeCompare(keyOf[so](y)); if (so === "when") c = dir < 0 ? -c : c; else if (dir < 0) c = -c; return c || x.min - y.min; };
+    const chev = (open) => h("span", { "aria-hidden": true, style: { width: 28, height: 28, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", color: "var(--muted)" } }, h("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", style: { transition: "transform var(--duration-settle) var(--ease-settle)", transform: open ? "none" : "rotate(-90deg)" } }, h("path", { d: "M6 9l6 6 6-6" })));
+    const SEC = {
+      s: { tone: "danger", title: "Given up", short: "Given up", hint: "They still have it until somebody ends it", empty: "Nothing has been given up on. Every revocation still has a way through." },
+      q: { tone: undefined, title: "Still on the way", short: "Still on the way", hint: "Syndra keeps trying by itself", empty: "Nothing is on the way. Every revocation has gone through or been given up on." },
+    };
+    const CAP = 10;
+    const groups = ["s", "q"].map(k => {
+      let rs = rows.filter(r => r.k === k).slice().sort(sorter);
+      const cnt = {}; if (runs) rs.forEach(r => { const v = keyOf[so](r); cnt[v] = (cnt[v] || 0) + 1; });
+      let prev = null;
+      rs = rs.map(r => { const v = runs ? keyOf[so](r) : null; const o = Object.assign({}, r, { hasRun: runs && v !== prev, run: v, runCount: runs ? cnt[v] : 0, age: age(r.min), at: at(r.min), ageInk: k === "s" ? "var(--danger-text)" : r.min >= 30 ? "var(--warn-text)" : "var(--muted)", spent: k === "s", queued: k === "q", forward: "Revoke again on " + r.first + "'s page →", hasError: !!r.error }); prev = v; return o; });
+      const fr = (this.state.fresh || {})[k], fl = this.state.flash || {};
+      const g = SEC[k], id = "sec-" + k, open = this.state.open[k], count = rs.length, shown = Math.min(this.state.shown[k], count), left = count - shown;
+      return Object.assign({}, g, { k, id, count, open, isEmpty: count === 0, hasRows: count > 0,
+        rows: rs.slice(0, shown).map((r, j) => Object.assign({}, r, { anim: fr != null && j >= fr ? "arrive var(--duration-arrive) var(--ease-settle) " + Math.min(j - fr, 5) * 40 + "ms both" : "none" })),
+        fold: this.foldS(open), sortAnim: this.state.sortTick ? (this.state.sortTick % 2 ? "sy-resort-a" : "sy-resort-b") + " var(--duration-settle) var(--ease-settle) both" : "none", flashAnim: this.flashA(fl.id === id, fl.n || 0),
+        titleEl: h("button", { type: "button", "aria-expanded": open, "aria-controls": id, onClick: () => this.toggle(k), style: { display: "inline-flex", alignItems: "center", gap: 12, padding: 0, border: 0, background: "none", cursor: "pointer", font: "inherit", color: "inherit", textAlign: "left" } }, chev(open), g.title),
+        hasFoot: open && count > CAP, footText: left > 0 ? "Showing " + shown + " of " + count : "Showing all " + count,
+        canMore: left > 0, moreLabel: "Show " + Math.min(25, left) + " more", more: () => this.more(k, 25),
+        canAll: left > 25, all: () => this.more(k, count), canReset: shown > CAP, reset: () => this.reset(k) });
+    });
+    this.navIds = groups.map(g => g.id);
+    const jn = this.jumpNav(list ? groups.map(g => ({ id: g.id, label: g.short, count: g.count, tone: g.tone, go: () => this.jump(null, g.k) })) : [], "Sections of unfinished revocations");
+    const SH = (k, key) => ({ ["sort" + k]: () => this.setSort(key), ["rot" + k]: so === key && (key === "when" ? dir > 0 : dir < 0) ? "rotate(180deg)" : "none", ["op" + k]: so === key ? 1 : 0, ["col" + k]: so === key ? "var(--ink)" : "inherit" });
+    const sp = groups[0].count, qd = groups[1].count, people = new Set(rows.map(r => r.who)).size;
+    const f = (frame, label, note, phone) => phone ? { src: "route-revocations.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-revocations.dc.html?frame=" + frame, label, note, w: 1440, h: 1000, boxW: 720, boxH: 500, scale: 0.5 };
+    const lap = (frame, label, note) => ({ src: "route-revocations.dc.html?frame=" + frame, label, note, w: 920, h: 1000, boxW: 690, boxH: 750, scale: 0.75 });
+    return Object.assign({
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg,
+      showPlain: st === "loading" || st === "empty", stList: list, showBar: list, groups,
+      hasRead: list, readEl: S && list ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 20000).toISOString(), current: true }, subject: "Syndra's send queue" }) : null,
+      jumpRest: jn.rest, hasJump: !!jn.float, jumpFloat: jn.float,
+      meta: list && S ? h(S.MetaRow, null, [sp + " given up", qd + " on the way", people + " people"]) : undefined,
+      searchEl: S && list ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search unfinished revocations by person or role" }) : null,
+      filtersEl: S && list ? h(S.FilterPanel, { activeCount: 0, onClear: () => {} }, h(S.FilterField, { label: "Where" }, h(S.Select, { value: "", onChange: () => {}, "aria-label": "Filter by system" }, h("option", { value: "" }, "Every system"), h("option", { value: "z" }, "Zitadel"), h("option", { value: "t" }, "TrueNAS")))) : null,
+      boardGroups: [
+        { title: "Desktop · 1440", frames: [
+          f("default", "Default", "Given up first, in danger: each row says in plain words why Syndra stopped, and names the way forward on that person's page. Still on the way below, with no tone: each says which try it is on and when the next is. Ages over 30 minutes turn amber."),
+          f("none-given-up", "Nothing given up", "The section keeps its seat and says what an empty one means (#62). The list never moves under the reader when something is given up."),
+          f("empty", "Empty", "Nothing outstanding: the healthy dot."),
+          f("loading", "Loading", "The title and lede are known; no counts or chips until the list is read."),
+          f("error", "Error", "The red notice in the list's place. Revocations already on the way are still being sent."),
+          f("degraded", "Zitadel not answering", "The amber notice says revocations to Zitadel are waiting and those people still have access. TrueNAS rows carry on; Zitadel rows say they wait for it."),
+        ] },
+        { title: "Long sections · 2 and 42 rows", frames: [
+          f("many", "Open, 10 a section", "An outage fills Still on the way. Showing 10 of 42, with Show 25 more and Show all 42."),
+          f("many-more", "After Show 25 more", "Showing 35 of 42, with Show 7 more and Back to 10."),
+          f("many-fold", "Given up folded", "Folded to its heading and count; Still on the way moves up."),
+          f("many-sort-where", "Sorted by where", "Equal systems gather, A to Z: TrueNAS, then Zitadel; most recent first within each."),
+          f("many-scrolled", "Scrolled: the floating pill", "The pill shows Still on the way filled, Given up pointing ↑."),
+        ] },
+        { title: "Laptop · 920", frames: [lap("default", "At laptop width", "Where moves under the role; the way forward takes its own line beneath. The reason wraps; nothing truncates.")] },
+        { title: "Phone · 390", frames: [f("default", "Phone", "Each row stacks: who, what and where, how long ago, the reason in full, then the way forward.", true)] },
+      ],
+    }, SH("Who", "who"), SH("What", "what"), SH("Where", "where"), SH("When", "when"));
+  }
+}
+</script>
+</body>
+</html>

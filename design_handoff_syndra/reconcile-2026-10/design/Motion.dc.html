@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>@keyframes sy-resort-a{from{opacity:.35}to{opacity:1}}@keyframes sy-resort-b{from{opacity:.35}to{opacity:1}}@keyframes sy-flash-a{from{background-color:var(--accent-soft)}to{background-color:transparent}} body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a{color:var(--accent-text);text-decoration:none} a:hover{color:var(--focus-ring)}</style>
+</helmet>
+<x-import component-from-global-scope="Syndra.SyndraRoot" data="{{ rootData }}" hint-size="100%,100vh">
+<div style="--duration-tint: {{ dTint }}; --duration-press: {{ dPress }}; --duration-settle: {{ dSettle }}; --duration-arrive: {{ dArrive }}; --duration-flash: {{ dFlash }}; --duration-breathe: {{ dBreathe }}; --arrive-step: {{ dStep }}; padding:72px 72px 120px; display:flex; flex-direction:column; gap:72px; background:var(--ground); min-height:100vh">
+
+<header data-screen-label="Motion" style="display:flex;flex-direction:column;gap:14px;max-width:880px">
+  <span class="type-label" style="color:var(--label)">Syndra · Motion</span>
+  <h1 class="type-page-title" style="margin:0">Motion</h1>
+  <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">Every movement in Syndra is one of six, and each moment below is built from them. Route boards point here instead of describing motion again. Each demo loops; the line under it names the step on screen. Where two good answers exist they sit side by side — pick one by its id.</p>
+  <p style="margin:0;font-size:14px;line-height:1.6;color:var(--faint)">With reduced motion on, every movement has a still form: the new state appears in place, nothing travels, and the breathing dot rests at full strength. Use the Tweaks panel to slow the demos or see the still forms.</p>
+</header>
+
+<section data-screen-label="Vocabulary" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <h2 class="type-section-title" style="margin:0">Six movements</h2>
+    <p style="margin:0;font-size:15px;color:var(--muted)">The whole vocabulary. Nothing on the critical path is slower than settle.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,420px);gap:20px">
+
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:baseline;gap:10px"><span class="type-card-title">tint</span><span class="type-mono" style="color:var(--faint)">--duration-tint · --ease-tint</span></div>
+      <svg width="120" height="48" viewBox="0 0 120 48" style="overflow:visible"><path d="M0 48 C48 48 72 0 120 0" fill="none" stroke="var(--accent-text)" stroke-width="2"></path><line x1="0" y1="48" x2="120" y2="48" stroke="var(--line-strong)"></line></svg>
+      <div style="border-radius:var(--radius-inner);border:1px solid var(--line);overflow:hidden">
+        <div style="padding:14px 16px;display:flex;align-items:center;gap:10px;font-size:15px;transition:background-color var(--duration-tint) var(--ease-tint);background:{{ tintBg }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>A row under the pointer</div>
+      </div>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">Colour and opacity only. It never moves anything. Hover, a label swapping, a control retiring.</p>
+    </div>
+
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:baseline;gap:10px"><span class="type-card-title">press</span><span class="type-mono" style="color:var(--faint)">--duration-press · --ease-press</span></div>
+      <svg width="120" height="48" viewBox="0 0 120 48" style="overflow:visible"><path d="M0 48 C26 19 43 0 120 0" fill="none" stroke="var(--accent-text)" stroke-width="2"></path><line x1="0" y1="48" x2="120" y2="48" stroke="var(--line-strong)"></line></svg>
+      <div style="height:52px;display:flex;align-items:center">
+        <div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ pressScale }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="150px,40px">Send 12 changes</x-import></div>
+      </div>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">A 3% scale-down on the pressed control, destructive ones included. Never a translate.</p>
+    </div>
+
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:baseline;gap:10px"><span class="type-card-title">settle</span><span class="type-mono" style="color:var(--faint)">--duration-settle · --ease-settle</span></div>
+      <svg width="120" height="48" viewBox="0 0 120 48" style="overflow:visible"><path d="M0 48 C19 0 36 0 120 0" fill="none" stroke="var(--accent-text)" stroke-width="2"></path><line x1="0" y1="48" x2="120" y2="48" stroke="var(--line-strong)"></line></svg>
+      <div style="height:210px;border-radius:var(--radius-inner);border:1px solid var(--line);overflow:hidden;font-size:14.5px">
+        <div style="padding:12px 16px">Aanya Rao</div>
+        <div style="display:grid;transition:grid-template-rows var(--duration-settle) var(--ease-settle);grid-template-rows:{{ settleRows }}"><div style="overflow:hidden"><div style="padding:0 16px 12px;font-size:13.5px;color:var(--muted)">Laser cutter · Operator, given by Sai Khurana</div></div></div>
+        <div class="row-divider" style="padding:12px 16px">Priya Nair</div>
+        <div class="row-divider" style="padding:12px 16px">Sai Khurana</div>
+      </div>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">What is below is pushed, never overlapped. Disclosures, banners, a queue collapsing.</p>
+    </div>
+
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:baseline;gap:10px"><span class="type-card-title">arrive</span><span class="type-mono" style="color:var(--faint)">--duration-arrive · --arrive-step</span></div>
+      <svg width="120" height="48" viewBox="0 0 120 48" style="overflow:visible"><path d="M0 48 C19 0 36 0 120 0" fill="none" stroke="var(--accent-text)" stroke-width="2"></path><line x1="0" y1="48" x2="120" y2="48" stroke="var(--line-strong)"></line></svg>
+      <div style="height:210px;border-radius:var(--radius-inner);border:1px solid var(--line);overflow:hidden">
+        <sc-if value="{{ arriveOn }}" hint-placeholder-val="{{ true }}">
+          <div class="arrive-list" style="display:flex;flex-direction:column">
+            <div style="padding:9px 16px;font-size:14px">Aanya Rao</div>
+            <div class="row-divider" style="padding:9px 16px;font-size:14px">Priya Nair</div>
+            <div class="row-divider" style="padding:9px 16px;font-size:14px">Sai Khurana</div>
+            <div class="row-divider" style="padding:9px 16px;font-size:14px">Mei Tanaka</div>
+            <div class="row-divider" style="padding:9px 16px;font-size:14px">Omar Haddad</div>
+          </div>
+        </sc-if>
+      </div>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">A list's first paint: rows rise 8px, 40ms apart, at most six steps. Only on arrival — never on a refresh of data already on screen.</p>
+    </div>
+
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:baseline;gap:10px"><span class="type-card-title">breathe</span><span class="type-mono" style="color:var(--faint)">--duration-breathe</span></div>
+      <svg width="120" height="48" viewBox="0 0 120 48" style="overflow:visible"><path d="M0 48 C50 48 70 0 120 0" fill="none" stroke="var(--accent-text)" stroke-width="2"></path><line x1="0" y1="48" x2="120" y2="48" stroke="var(--line-strong)"></line></svg>
+      <div style="height:52px;display:flex;align-items:center;gap:16px">
+        <x-import component-from-global-scope="Syndra.Button" variant="accent" is-pending="{{ true }}" hint-size="130px,40px">Sending</x-import>
+        <span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--warn-text)"><span class="breathe" style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--warn)"></span>Zitadel isn't answering</span>
+      </div>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">The only loop, and it means still happening. Never a spinner, never on a number.</p>
+    </div>
+
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;align-items:baseline;gap:10px"><span class="type-card-title">flash</span><span class="type-mono" style="color:var(--faint)">--duration-flash</span></div>
+      <svg width="120" height="48" viewBox="0 0 120 48" style="overflow:visible"><path d="M0 48 C0 48 70 0 120 0" fill="none" stroke="var(--accent-text)" stroke-width="2"></path><line x1="0" y1="48" x2="120" y2="48" stroke="var(--line-strong)"></line></svg>
+      <div style="border-radius:var(--radius-inner);border:1px solid var(--line);overflow:hidden;font-size:14.5px">
+        <div style="padding:12px 16px">Aanya Rao</div>
+        <sc-if value="{{ flashOn }}" hint-placeholder-val="{{ false }}"><div class="row-divider flash" style="padding:12px 16px">Priya Nair — Operator given</div></sc-if>
+        <sc-if value="{{ flashOff }}" hint-placeholder-val="{{ true }}"><div class="row-divider" style="padding:12px 16px">Priya Nair — Operator given</div></sc-if>
+        <div class="row-divider" style="padding:12px 16px">Sai Khurana</div>
+      </div>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">One soft wash on the row that changed under your eye, then gone. Never on a row you did not just act on.</p>
+    </div>
+
+  </div>
+</section>
+
+<section data-screen-label="1 Dialog result" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Moment 1 · ledger rows 104, 96, 100</span>
+    <h2 class="type-section-title" style="margin:0">A dialog becomes its own result</h2>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Rule: the control that did the work retires; the outcome stays where the decision was made. A result never travels to a toast.</p>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+
+    <div id="1a" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">1a</x-import><span style="font-size:15.5px;font-weight:600">The outcome replaces the plan</span></div>
+      <div style="position:relative;height:390px;border-radius:var(--radius-inner);background:var(--ground);border:1px solid var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center">
+        <div style="width:480px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:var(--radius-card);box-shadow:var(--shadow-dialog);display:flex;flex-direction:column">
+          <x-import component-from-global-scope="Syndra.ModalHeader" title="Remove Operator from Aanya Rao?" lede="Aanya keeps her Member role. She can no longer start a cut job on her own." hint-size="100%,110px"></x-import>
+          <div style="padding:0 24px;min-height:74px">
+            <sc-if value="{{ dlgOpen }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-inner);background:var(--tint-1)"><span style="flex:1;font-size:14.5px"><strong style="font-weight:600">Aanya Rao</strong> <span style="color:var(--muted)">· Laser cutter — Operator</span></span><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="90px,24px">Will change</x-import></div>
+            </sc-if>
+            <sc-if value="{{ dlgDone }}" hint-placeholder-val="{{ false }}">
+              <div class="settle-in"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ dlgOutcome }}" hint-size="100%,80px"></x-import></div>
+            </sc-if>
+          </div>
+          <x-import component-from-global-scope="Syndra.ModalFooter" note="Syndra records this before it reaches Zitadel." hint-size="100%,90px">
+            <sc-if value="{{ dlgOpen }}" hint-placeholder-val="{{ true }}">
+              <x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="110px,40px">Keep access</x-import>
+              <div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ dlgScale }}"><x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" is-pending="{{ dlgPending }}" hint-size="150px,40px">Remove Operator</x-import></div>
+            </sc-if>
+            <sc-if value="{{ dlgDone }}" hint-placeholder-val="{{ false }}">
+              <div style="animation:fade var(--duration-tint) var(--ease-tint) both"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="80px,40px">Close</x-import></div>
+            </sc-if>
+          </x-import>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ dlgCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">press · 180</span> Remove Operator scales to 97%.</li>
+        <li><span class="type-mono" style="color:var(--faint)">breathe</span> The button holds its place and breathes; Esc and the scrim are disabled.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The plan fades; both footer controls fade; Done fades in.</li>
+        <li><span class="type-mono" style="color:var(--faint)">settle · 260 +40</span> The outcome rises 10px into the plan's seat.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--faint)">Still form: the outcome and Done appear in place.</p>
+    </div>
+
+    <div id="1b" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--accent-line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">1b</x-import><span style="font-size:15.5px;font-weight:600">The outcome marks the plan</span><span style="flex:1"></span><span style="font-size:13px;font-weight:600;color:var(--accent-text)">My pick</span></div>
+      <div style="position:relative;height:390px;border-radius:var(--radius-inner);background:var(--ground);border:1px solid var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center">
+        <div style="width:480px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:var(--radius-card);box-shadow:var(--shadow-dialog);display:flex;flex-direction:column">
+          <x-import component-from-global-scope="Syndra.ModalHeader" title="Remove Operator from Aanya Rao?" lede="Aanya keeps her Member role. She can no longer start a cut job on her own." hint-size="100%,110px"></x-import>
+          <div style="padding:0 24px;min-height:74px">
+            <sc-if value="{{ dlgOpen }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-inner);background:var(--tint-1)"><span style="flex:1;font-size:14.5px"><strong style="font-weight:600">Aanya Rao</strong> <span style="color:var(--muted)">· Laser cutter — Operator</span></span><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="90px,24px">Will change</x-import></div>
+            </sc-if>
+            <sc-if value="{{ dlgDone }}" hint-placeholder-val="{{ false }}">
+              <div class="flash" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-inner);background:var(--tint-1)"><span style="flex:1;font-size:14.5px"><strong style="font-weight:600">Aanya Rao</strong> <span style="color:var(--muted)">· Laser cutter — Operator</span></span><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ dlgOutcomeShort }}" placement="inline" hint-size="260px,26px"></x-import></div>
+            </sc-if>
+          </div>
+          <x-import component-from-global-scope="Syndra.ModalFooter" note="{{ dlgNoteB }}" hint-size="100%,90px">
+            <sc-if value="{{ dlgOpen }}" hint-placeholder-val="{{ true }}">
+              <x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="110px,40px">Keep access</x-import>
+              <div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ dlgScale }}"><x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" is-pending="{{ dlgPending }}" hint-size="150px,40px">Remove Operator</x-import></div>
+            </sc-if>
+            <sc-if value="{{ dlgDone }}" hint-placeholder-val="{{ false }}">
+              <div style="animation:fade var(--duration-tint) var(--ease-tint) both"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="80px,40px">Close</x-import></div>
+            </sc-if>
+          </x-import>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ dlgCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">press · 180</span> Remove Operator scales to 97%.</li>
+        <li><span class="type-mono" style="color:var(--faint)">breathe</span> The button holds its place and breathes; Esc and the scrim are disabled.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> Each plan row's effect swaps for its outcome; the footer note becomes the summary.</li>
+        <li><span class="type-mono" style="color:var(--faint)">flash · 900</span> The changed rows wash once. Nothing moves.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">Why I'd pick it: the operator reads the result on the very rows they reviewed, so a plan of forty people reports forty outcomes without a second list. Zero layout shift.</p>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--faint)">Still form: outcomes appear on the rows; no wash.</p>
+    </div>
+
+  </div>
+</section>
+
+<section data-screen-label="2 Row keeps seat" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Moment 2 · ledger rows 96, 40</span>
+    <h2 class="type-section-title" style="margin:0">A row keeps its seat after an action</h2>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Rule: the row stays exactly where the eye is until the next read. Its action retires, and the state that replaced it is said in the row, in the present tense.</p>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+
+    <div id="2a" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--accent-line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">2a</x-import><span style="font-size:15.5px;font-weight:600">The outcome takes the action's slot</span><span style="flex:1"></span><span style="font-size:13px;font-weight:600;color:var(--accent-text)">My pick</span></div>
+      <div style="height:400px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden;padding:20px">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+          <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600">Aanya Rao</span><span style="font-size:13.5px;color:var(--muted)">Laser cutter · Operator</span></div></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px">
+            <div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600">Priya Nair</span><span style="font-size:13.5px;color:var(--muted);white-space:nowrap">Laser cutter · Operator</span></div>
+            <div style="width:250px;display:flex;justify-content:flex-end"><sc-if value="{{ rowIdle }}" hint-placeholder-val="{{ true }}"><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ rowScale }}"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="140px,34px">Revoke Operator</x-import></div></sc-if>
+            <sc-if value="{{ rowDone }}" hint-placeholder-val="{{ false }}"><div style="animation:fade var(--duration-tint) var(--ease-tint) both"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ rowOutcome }}" placement="inline" hint-size="250px,26px"></x-import></div></sc-if></div>
+          </x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600">Sai Khurana</span><span style="font-size:13.5px;color:var(--muted)">Laser cutter · Operator</span></div></x-import>
+        </x-import>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ rowCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">press · 180</span> Revoke Operator scales to 97%.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The button fades; the outcome fades into the same slot. The row's height never changes.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">Why I'd pick it: nothing in a list being read moves, and the outcome sits exactly where the finger was.</p>
+    </div>
+
+    <div id="2b" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">2b</x-import><span style="font-size:15.5px;font-weight:600">The outcome opens beneath the row</span></div>
+      <div style="height:400px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden;padding:20px">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+          <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600">Aanya Rao</span><span style="font-size:13.5px;color:var(--muted)">Laser cutter · Operator</span></div></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px">
+            <div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600">Priya Nair</span><span style="font-size:13.5px;color:var(--muted);white-space:nowrap">Laser cutter · Operator</span></div>
+            <div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press),opacity var(--duration-tint) var(--ease-tint);transform:{{ rowScale }};opacity:{{ rowBtnOpacity }}"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="140px,34px">Revoke Operator</x-import></div>
+          </x-import>
+          <div style="display:grid;transition:grid-template-rows var(--duration-settle) var(--ease-settle);grid-template-rows:{{ rowRows }}"><div style="overflow:hidden"><div style="padding:0 20px 16px"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ rowOutcomeLong }}" hint-size="100%,80px"></x-import></div></div></div>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:15.5px;font-weight:600">Sai Khurana</span><span style="font-size:13.5px;color:var(--muted)">Laser cutter · Operator</span></div></x-import>
+        </x-import>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ rowCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">press · 180</span> Revoke Operator scales to 97%.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The button fades but keeps its width.</li>
+        <li><span class="type-mono" style="color:var(--faint)">settle · 260</span> The outcome opens below the row; the rows under it are pushed down.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--faint)">Room for the full sentence and a reference, at the cost of the list moving.</p>
+    </div>
+
+  </div>
+</section>
+
+<section data-screen-label="3 Selection bar" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Moment 3 · ledger rows 33, 103</span>
+    <h2 class="type-section-title" style="margin:0">The selection bar docks</h2>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Rule: ticking a row never moves the list. The bar rises into space the list reserved when Select was turned on, and only its words change after that.</p>
+  </div>
+  <div id="3a" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+    <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">3a</x-import><span style="font-size:15.5px;font-weight:600">Rise in, fall away faster</span></div>
+    <div style="position:relative;height:380px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden;padding:20px">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,240px">
+        <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><span role="checkbox" aria-checked="{{ checkA }}" aria-label="Select Aanya Rao" tabindex="0" style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:26px;cursor:pointer"><sc-if value="{{ checkA }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">✓</span></sc-if><sc-if value="{{ uncheckA }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span></sc-if></span><span style="flex:1;font-size:15.5px;font-weight:600">Aanya Rao</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab</span></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span role="checkbox" aria-checked="{{ checkB }}" aria-label="Select Priya Nair" tabindex="0" style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:26px;cursor:pointer"><sc-if value="{{ checkB }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">✓</span></sc-if><sc-if value="{{ uncheckB }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span></sc-if></span><span style="flex:1;font-size:15.5px;font-weight:600">Priya Nair</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab</span></x-import>
+        <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span role="checkbox" aria-checked="{{ false }}" aria-label="Select Sai Khurana" tabindex="0" style="display:inline-flex;align-items:center;justify-content:center;min-width:26px;min-height:26px;cursor:pointer"><sc-if value="{{ false }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">✓</span></sc-if><sc-if value="{{ true }}" hint-placeholder-val="{{ true }}"><span aria-hidden="true" style="width:24px;height:24px;flex:none;display:inline-flex;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong)"></span></sc-if></span><span style="flex:1;font-size:15.5px;font-weight:600">Sai Khurana</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab</span></x-import>
+      </x-import>
+      <div style="position:absolute;left:20px;right:20px;bottom:20px;height:76px;border:1px dashed var(--line-strong);border-radius:18px"></div>
+      <div style="position:absolute;left:20px;right:20px;bottom:20px;transition:{{ barTrans }};transform:{{ barTransform }};opacity:{{ barOpacity }}">
+        <x-import component-from-global-scope="Syndra.SelectionBar" count="{{ barCount }}" noun="{{ peopleNoun }}" scope="in Laser Lab" on-clear="{{ noop }}" hint-size="100%,64px">
+          <x-import component-from-global-scope="Syndra.SelectionAction" on-click="{{ noop }}" hint-size="120px,34px">Assign a role</x-import>
+          <x-import component-from-global-scope="Syndra.SelectionAction" tone="danger" on-click="{{ noop }}" hint-size="120px,34px">Remove a role</x-import>
+        </x-import>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ selCap }}</div>
+    <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+      <li><span class="type-mono" style="color:var(--faint)">reserve</span> Turning Select on reserves the bar's height at the foot of the list (dashed here).</li>
+      <li><span class="type-mono" style="color:var(--faint)">settle · 260</span> First tick: the bar rises 12px and fades in.</li>
+      <li><span class="type-mono" style="color:var(--faint)">none</span> Later ticks change the words only. The count never animates.</li>
+      <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> Clearing: the bar drops 6px and fades — leaving is quicker than arriving.</li>
+    </ol>
+  </div>
+</section>
+
+<section data-screen-label="4 Filter panel" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Moment 4 · ledger rows 60, 110</span>
+    <h2 class="type-section-title" style="margin:0">The filter panel opens and closes</h2>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Rule: the count on the button answers "why so few rows" without opening anything. The panel is a set of narrowings, read as one thing.</p>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+
+    <div id="4a" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--accent-line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">4a</x-import><span style="font-size:15.5px;font-weight:600">A popover over a list that holds still</span><span style="flex:1"></span><span style="font-size:13px;font-weight:600;color:var(--accent-text)">My pick · as built</span></div>
+      <div style="position:relative;height:400px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden;padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:10px"><div style="flex:1;max-width:300px"><x-import component-from-global-scope="Syndra.Input" placeholder="Search people" hint-size="100%,46px"></x-import></div><span style="flex:1"></span><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ filtScale }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Filters · 2</x-import></div></div>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,240px">
+          <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><span style="flex:1;font-size:15.5px;font-weight:600">Aanya Rao</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab · ends 12 Oct</span></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="flex:1;font-size:15.5px;font-weight:600">Priya Nair</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab · ends 19 Oct</span></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="flex:1;font-size:15.5px;font-weight:600">Sai Khurana</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab · ends 30 Oct</span></x-import>
+        </x-import>
+        <div style="position:absolute;top:66px;right:20px;width:300px;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:var(--radius-panel);box-shadow:var(--shadow-popover);transition:{{ filtATrans }};opacity:{{ filtAOpacity }};transform:{{ filtATransform }}">
+          <x-import component-from-global-scope="Syndra.FilterField" label="Project" hint-size="100%,70px"><x-import component-from-global-scope="Syndra.Select" hint-size="100%,46px"><option>Laser Lab</option></x-import></x-import>
+          <x-import component-from-global-scope="Syndra.FilterField" label="Needs attention" hint-size="100%,70px"><x-import component-from-global-scope="Syndra.Select" hint-size="100%,46px"><option>Access ending soon</option></x-import></x-import>
+          <div class="row-divider" style="display:flex;justify-content:flex-end;gap:8px;padding-top:12px"><x-import component-from-global-scope="Syndra.Button" variant="ghost" size="sm" hint-size="100px,34px">Clear filters</x-import><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="70px,34px">Close</x-import></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ filtCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">press · 180</span> Opening: the panel drops 4px from the button and fades in.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> Closing: it fades without travelling. Esc or a click outside closes it.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">Why I'd pick it: changing a filter re-reads the list under the panel, and the operator watches the rows change in place. The code reached the same answer for the same reason.</p>
+    </div>
+
+    <div id="4b" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">4b</x-import><span style="font-size:15.5px;font-weight:600">A panel that pushes the list down</span></div>
+      <div style="position:relative;height:400px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden;padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:10px"><div style="flex:1;max-width:300px"><x-import component-from-global-scope="Syndra.Input" placeholder="Search people" hint-size="100%,46px"></x-import></div><span style="flex:1"></span><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ filtScale }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Filters · 2</x-import></div></div>
+        <div style="display:grid;margin-top:-14px;transition:grid-template-rows var(--duration-settle) var(--ease-settle);grid-template-rows:{{ filtBRows }}"><div style="overflow:hidden"><div style="margin-top:14px;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;background:var(--surface-1);border:1px solid var(--line);border-radius:var(--radius-panel)">
+          <x-import component-from-global-scope="Syndra.FilterField" label="Project" hint-size="100%,70px"><x-import component-from-global-scope="Syndra.Select" hint-size="100%,46px"><option>Laser Lab</option></x-import></x-import>
+          <x-import component-from-global-scope="Syndra.FilterField" label="Needs attention" hint-size="100%,70px"><x-import component-from-global-scope="Syndra.Select" hint-size="100%,46px"><option>Access ending soon</option></x-import></x-import>
+        </div></div></div>
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,240px">
+          <x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,60px"><span style="flex:1;font-size:15.5px;font-weight:600">Aanya Rao</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab · ends 12 Oct</span></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="flex:1;font-size:15.5px;font-weight:600">Priya Nair</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab · ends 19 Oct</span></x-import>
+          <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="flex:1;font-size:15.5px;font-weight:600">Sai Khurana</span><span style="font-size:13.5px;color:var(--muted)">Laser Lab · ends 30 Oct</span></x-import>
+        </x-import>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ filtCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">settle · 260</span> The panel opens in flow and the list is pushed down by its height.</li>
+        <li><span class="type-mono" style="color:var(--faint)">settle · 260</span> Closing pulls the list back up.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--faint)">Every filter stays visible while the list is read, but the list jumps twice per visit and the first rows fall below the fold on a laptop.</p>
+    </div>
+
+  </div>
+</section>
+
+<section data-screen-label="5 Home collapse" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Moment 5 · ledger rows 24, 27</span>
+    <h2 class="type-section-title" style="margin:0">Home's queue empties</h2>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Rule: when the last thing that needs you is dealt with, the queue folds to one line and The makerspace rises to meet it. Nothing jumps; it is pushed.</p>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+
+    <div id="5a" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">5a</x-import><span style="font-size:15.5px;font-weight:600">Fold at once</span></div>
+      <div style="height:420px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden;padding:22px;display:flex;flex-direction:column;gap:18px">
+        <div style="position:relative;height:30px">
+          <div style="position:absolute;inset:0;transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ hAHeadOpen }}"><span class="type-card-title">1 thing needs you</span></div>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;gap:10px;transition:opacity var(--duration-tint) var(--ease-tint) var(--duration-settle);opacity:{{ hAHeadDone }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import><span class="type-card-title">Nothing needs you</span></div>
+        </div>
+        <div style="display:grid;margin-top:-18px;transition:grid-template-rows var(--duration-settle) var(--ease-settle) var(--duration-tint),opacity var(--duration-tint) var(--ease-tint);grid-template-rows:{{ hARows }};opacity:{{ hAOpacity }}"><div style="overflow:hidden"><div style="padding-top:18px">
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,130px">
+            <x-import component-from-global-scope="Syndra.CardHeader" title="Requests" count="{{ 1 }}" hint-size="100%,60px"></x-import>
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px"><span style="flex:1;font-size:14.5px"><strong style="font-weight:600">Priya Nair</strong> <span style="color:var(--muted)">asks for Laser cutter · Operator</span></span><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ hAScale }}"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" hint-size="140px,34px">Approve for Priya</x-import></div></x-import>
+          </x-import>
+        </div></div></div>
+        <span class="type-label" style="color:var(--label)">The makerspace</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <x-import component-from-global-scope="Syndra.StatCard" label="Machines" value="6 of 6 answering" detail="Checked 18 Sept 02:57" hint-size="100%,120px"></x-import>
+          <x-import component-from-global-scope="Syndra.StatCard" label="People" value="248" detail="12 with access ending this month" hint-size="100%,120px"></x-import>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ hACap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">press · 180</span> Approve for Priya scales to 97%.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The block fades.</li>
+        <li><span class="type-mono" style="color:var(--faint)">settle · 260</span> Its height folds; The makerspace is pushed up.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The headline becomes "Nothing needs you" with a healthy dot.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--faint)">Quickest, but the approval itself is never shown — the block is gone before its outcome could be read.</p>
+    </div>
+
+    <div id="5b" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--accent-line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">5b</x-import><span style="font-size:15.5px;font-weight:600">Say the outcome, then fold</span><span style="flex:1"></span><span style="font-size:13px;font-weight:600;color:var(--accent-text)">My pick</span></div>
+      <div style="height:420px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden;padding:22px;display:flex;flex-direction:column;gap:18px">
+        <div style="position:relative;height:30px">
+          <div style="position:absolute;inset:0;transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ hBHeadOpen }}"><span class="type-card-title">1 thing needs you</span></div>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;gap:10px;transition:opacity var(--duration-tint) var(--ease-tint) var(--duration-settle);opacity:{{ hBHeadDone }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import><span class="type-card-title">Nothing needs you</span></div>
+        </div>
+        <div style="display:grid;margin-top:-18px;transition:grid-template-rows var(--duration-settle) var(--ease-settle) var(--duration-tint),opacity var(--duration-tint) var(--ease-tint);grid-template-rows:{{ hBRows }};opacity:{{ hBOpacity }}"><div style="overflow:hidden"><div style="padding-top:18px">
+          <x-import component-from-global-scope="Syndra.Card" hint-size="100%,130px">
+            <x-import component-from-global-scope="Syndra.CardHeader" title="Requests" count="{{ 1 }}" hint-size="100%,60px"></x-import>
+            <x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,60px">
+              <span style="flex:1;font-size:14.5px"><strong style="font-weight:600">Priya Nair</strong> <span style="color:var(--muted)">asks for Laser cutter · Operator</span></span>
+              <sc-if value="{{ hBIdle }}" hint-placeholder-val="{{ true }}"><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ hBScale }}"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" hint-size="140px,34px">Approve for Priya</x-import></div></sc-if>
+              <sc-if value="{{ hBAck }}" hint-placeholder-val="{{ false }}"><div style="animation:fade var(--duration-tint) var(--ease-tint) both"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ homeOutcome }}" placement="inline" hint-size="240px,26px"></x-import></div></sc-if>
+            </x-import>
+          </x-import>
+        </div></div></div>
+        <span class="type-label" style="color:var(--label)">The makerspace</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <x-import component-from-global-scope="Syndra.StatCard" label="Machines" value="6 of 6 answering" detail="Checked 18 Sept 02:57" hint-size="100%,120px"></x-import>
+          <x-import component-from-global-scope="Syndra.StatCard" label="People" value="248" detail="12 with access ending this month" hint-size="100%,120px"></x-import>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ hBCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">press · 180</span> Approve for Priya scales to 97%.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The outcome takes the button's slot and holds for one beat (900ms).</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint + settle</span> Then the block fades and folds; The makerspace is pushed up.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The headline becomes "Nothing needs you".</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">Why I'd pick it: it obeys moment 2 — the operator sees what their tap did — before the page rearranges itself. The beat is the flash duration, so nothing new is invented.</p>
+    </div>
+
+  </div>
+</section>
+
+<section data-screen-label="6 Notices" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Moment 6 · ledger rows 97, 98 · proposed/Notice.md</span>
+    <h2 class="type-section-title" style="margin:0">Offline and Zitadel not answering arrive and leave</h2>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Rule: both are a Notice in the content column, above the page header, never a band under the top bar. Offline is neutral and sits first; Zitadel not answering is amber and breathes while it lasts. Each pushes the page down and never covers it. The page is not dimmed: what is on screen is real, last known data, and its read line says how old it is.</p>
+  </div>
+  <div id="6a" style="width:600px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+    <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">6a</x-import><span style="font-size:15.5px;font-weight:600">Push in, fade out, close the gap</span></div>
+    <div style="height:560px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden;padding:22px;box-sizing:border-box;display:flex;flex-direction:column">
+      <div style="display:grid;transition:{{ offTrans }};grid-template-rows:{{ offRows }}"><div style="min-height:0;overflow:hidden;opacity:{{ offOpacity }};transition:opacity var(--duration-tint) var(--ease-tint) {{ offOpDelay }}"><div style="padding-bottom:16px"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--line-strong);background:var(--surface-2)"><span style="margin-top:7px;width:8px;height:8px;flex:none;box-sizing:border-box;border-radius:var(--radius-pill);border:1.5px solid var(--muted)"></span><div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--ink)">You're offline.</span><p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--ink)">What is on screen is true; it is not being kept up to date. It catches up when the connection returns.</p></div></div></div></div></div>
+      <div style="display:grid;transition:{{ degTrans }};grid-template-rows:{{ degRows }}"><div style="min-height:0;overflow:hidden;opacity:{{ degOpacity }};transition:opacity var(--duration-tint) var(--ease-tint) {{ degOpDelay }}"><div style="padding-bottom:16px"><div role="status" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)"><span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span><div style="display:flex;flex-direction:column;gap:6px;min-width:0"><span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span><p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--ink)">Giving and revoking pause until it answers.</p></div></div></div></div></div>
+      <div style="display:flex;flex-direction:column;gap:6px;padding-bottom:22px"><span class="type-page-title" style="font-size:30px">People</span><span style="font-size:14.5px;color:var(--muted)">Everyone with access to a makerspace space.</span></div>
+      <div style="display:flex;align-items:center;gap:8px;padding-bottom:14px;font-size:13.5px;color:var(--muted)"><span style="width:7px;height:7px;border-radius:var(--radius-pill);transition:background-color var(--duration-tint) var(--ease-tint);background:{{ readDot }}"></span><span style="transition:color var(--duration-tint) var(--ease-tint);color:{{ readInk }}">{{ readLine }}</span></div>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,170px"><x-import component-from-global-scope="Syndra.CardRow" first="{{ true }}" hint-size="100%,56px"><span style="flex:1;font-size:15px;font-weight:600">Aanya Rao</span><span style="width:110px;flex:none;text-align:right;font-size:14px;color:var(--muted)">3 roles</span></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,56px"><span style="flex:1;font-size:15px;font-weight:600">Priya Nair</span><span style="width:110px;flex:none;text-align:right;font-size:14px;color:var(--muted)">2 roles</span></x-import><x-import component-from-global-scope="Syndra.CardRow" hint-size="100%,56px"><span style="flex:1;font-size:15px;font-weight:600">Sai Khurana</span><span style="width:110px;flex:none;text-align:right;font-size:14px;color:var(--muted)">5 roles</span></x-import></x-import>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ banCap }}</div>
+    <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+      <li><span class="type-mono" style="color:var(--faint)">settle · 260</span> Arriving: the Notice opens to its height and the page is pushed down; its text fades in 140ms behind.</li>
+      <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The read line under the header changes in place: current, or last known with its age. Nothing is dimmed.</li>
+      <li><span class="type-mono" style="color:var(--faint)">tint, then settle</span> Leaving: the text fades first, then the gap closes.</li>
+    </ol>
+  </div>
+</section>
+
+<section data-screen-label="7 Busy sheet" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Moment 7 · ledger row 84</span>
+    <h2 class="type-section-title" style="margin:0">A busy sheet refuses a drag</h2>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Rule: while a write is out, the grabber becomes a sentence — "Working — this can't be closed yet." A drag must answer, because silently ignoring it reads as a frozen app.</p>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+
+    <div id="7a" style="width:440px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--accent-line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">7a</x-import><span style="font-size:15.5px;font-weight:600">The sheet gives, then returns</span><span style="flex:1"></span><span style="font-size:13px;font-weight:600;color:var(--accent-text)">My pick</span></div>
+      <div style="position:relative;width:390px;height:440px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden">
+        <div style="padding:20px;display:flex;flex-direction:column;gap:10px;opacity:0.35"><span class="type-card-title">Wood shop induction</span><span style="font-size:14px;color:var(--muted)">6 people waiting for their grants</span></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;background:var(--surface-2);border-top:1px solid var(--line-strong);border-radius:var(--radius-card) var(--radius-card) 0 0;box-shadow:var(--shadow-dialog);transition:transform var(--duration-settle) var(--ease-settle);transform:{{ sheetAMove }}">
+          <div style="position:relative;height:40px;display:flex;align-items:center;justify-content:center">
+            <span aria-label="Dismiss" style="width:40px;height:5px;border-radius:var(--radius-pill);background:var(--line-strong);transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ grabOpacity }}"></span>
+            <span style="position:absolute;font-size:12.5px;font-weight:600;color:var(--muted);transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ workOpacity }}">Working — this can't be closed yet.</span>
+            <span style="position:absolute;top:4px;width:30px;height:30px;border-radius:var(--radius-pill);border:2px solid var(--accent-line);transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ fingerOpacity }}"></span>
+          </div>
+          <x-import component-from-global-scope="Syndra.ModalHeader" title="Send 6 changes to Zitadel" lede="Six grants for the Wood shop induction. Each person can book the bandsaw once Zitadel has them." hint-size="100%,120px"></x-import>
+          <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,80px">
+            <sc-if value="{{ sheetNotDone }}" hint-placeholder-val="{{ true }}"><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ sheetScale }}"><x-import component-from-global-scope="Syndra.Button" variant="accent" is-pending="{{ sheetBusy }}" hint-size="160px,44px">Send 6 changes</x-import></div></sc-if>
+            <sc-if value="{{ sheetDone }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;animation:fade var(--duration-tint) var(--ease-tint) both"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ sheetOutcome }}" placement="inline" hint-size="220px,26px"></x-import><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="80px,44px">Close</x-import></div></sc-if>
+          </x-import>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ sheetCapA }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> Busy: the grabber fades and the sentence fades into its place.</li>
+        <li><span class="type-mono" style="color:var(--faint)">settle · 260</span> A drag: the sheet follows the finger for 10px against heavy resistance, then settles back on release.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> Done: the sentence fades back to the grabber.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted)">Why I'd pick it: the answer comes in the language of the gesture, and the sentence says why.</p>
+    </div>
+
+    <div id="7b" style="width:440px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">7b</x-import><span style="font-size:15.5px;font-weight:600">The sheet holds; the sentence answers</span></div>
+      <div style="position:relative;width:390px;height:440px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden">
+        <div style="padding:20px;display:flex;flex-direction:column;gap:10px;opacity:0.35"><span class="type-card-title">Wood shop induction</span><span style="font-size:14px;color:var(--muted)">6 people waiting for their grants</span></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;background:var(--surface-2);border-top:1px solid var(--line-strong);border-radius:var(--radius-card) var(--radius-card) 0 0;box-shadow:var(--shadow-dialog)">
+          <div style="position:relative;height:40px;display:flex;align-items:center;justify-content:center">
+            <span aria-label="Dismiss" style="width:40px;height:5px;border-radius:var(--radius-pill);background:var(--line-strong);transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ grabOpacity }}"></span>
+            <sc-if value="{{ sheetDragging }}" hint-placeholder-val="{{ false }}"><span class="flash" style="position:absolute;padding:4px 10px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:600;color:var(--ink)">Working — this can't be closed yet.</span></sc-if>
+            <sc-if value="{{ sheetNotDragging }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;padding:4px 10px;font-size:12.5px;font-weight:600;color:var(--muted);transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ workOpacity }}">Working — this can't be closed yet.</span></sc-if>
+            <span style="position:absolute;top:4px;width:30px;height:30px;border-radius:var(--radius-pill);border:2px solid var(--accent-line);transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ fingerOpacity }}"></span>
+          </div>
+          <x-import component-from-global-scope="Syndra.ModalHeader" title="Send 6 changes to Zitadel" lede="Six grants for the Wood shop induction. Each person can book the bandsaw once Zitadel has them." hint-size="100%,120px"></x-import>
+          <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,80px">
+            <sc-if value="{{ sheetNotDone }}" hint-placeholder-val="{{ true }}"><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ sheetScale }}"><x-import component-from-global-scope="Syndra.Button" variant="accent" is-pending="{{ sheetBusy }}" hint-size="160px,44px">Send 6 changes</x-import></div></sc-if>
+            <sc-if value="{{ sheetDone }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;animation:fade var(--duration-tint) var(--ease-tint) both"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ sheetOutcome }}" placement="inline" hint-size="220px,26px"></x-import><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="80px,44px">Close</x-import></div></sc-if>
+          </x-import>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ sheetCapB }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> Busy: the grabber fades and the sentence fades into its place.</li>
+        <li><span class="type-mono" style="color:var(--faint)">flash · 900</span> A drag: the sheet does not move; the sentence brightens and washes once.</li>
+      </ol>
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--faint)">Calmer, but a finger that moved and saw nothing move with it can still read it as stuck.</p>
+    </div>
+
+  </div>
+</section>
+
+<section data-screen-label="8 Long lists" style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+    <span class="type-label" style="color:var(--label)">Moment 8 · Drift, Pending changes, a person</span>
+    <h2 class="type-section-title" style="margin:0">Finding your way through a long list</h2>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Rule: every movement here is one of the six. Things that open settle; things that close fade first; nothing travels that you did not ask to move, and the page never jumps under you. These are settled, not options: Drift, Pending changes and a person all use them.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(2,560px);gap:24px">
+    <div id="8a" style="width:560px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">8a</x-import><span style="font-size:15.5px;font-weight:600">Fold a section</span></div>
+      <div style="position:relative;height:260px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden"><div style="padding:18px"><div class="card"><div style="display:flex;align-items:center;gap:12px;padding:14px 16px">{{ foldChev }}<span class="type-card-title">Not given by Syndra</span><span style="font-size:13.5px;font-weight:600;color:var(--faint)">112</span></div><div style="display:grid;grid-template-rows:{{ foldS.fr }};transition:{{ foldS.trans }}"><div style="min-height:0;overflow:hidden;opacity:{{ foldS.op }};transition:{{ foldS.opTrans }}"><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Kavya Menon</span><span style="flex:1;color:var(--muted)">Wood shop · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Daniel Okafor</span><span style="flex:1;color:var(--muted)">3D printers · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Rhea Kapoor</span><span style="flex:1;color:var(--muted)">Laser cutter · Operator</span></div></div></div></div></div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ foldCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">settle · 260</span> The chevron turns a quarter; the rows close to the heading.</li><li><span class="type-mono" style="color:var(--faint)">tint · 120</span> Closing, the rows fade first and the height follows 120ms behind. Opening, the height settles and the rows fade in 140ms behind, the same as a banner (6a).</li></ol>
+    </div>
+    <div id="8b" style="width:560px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">8b</x-import><span style="font-size:15.5px;font-weight:600">Show more, and back to 10</span></div>
+      <div style="position:relative;height:300px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden"><div style="padding:18px;transition:transform {{ moreGlide }};transform:translateY({{ moreY }})"><div class="card"><div style="display:flex;align-items:center;gap:12px;padding:14px 16px">{{ moreChev }}<span class="type-card-title">Not given by Syndra</span><span style="font-size:13.5px;font-weight:600;color:var(--faint)">112</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Kavya Menon</span><span style="flex:1;color:var(--muted)">Wood shop · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Daniel Okafor</span><span style="flex:1;color:var(--muted)">3D printers · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Rhea Kapoor</span><span style="flex:1;color:var(--muted)">Laser cutter · Operator</span></div><sc-if value="{{ moreExtra }}" hint-placeholder-val="{{ false }}"><div class="arrive-list"><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Nikhil Bose</span><span style="flex:1;color:var(--muted)">Studio · Booking</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Zara Ahmed</span><span style="flex:1;color:var(--muted)">Bandsaw · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Ishaan Gupta</span><span style="flex:1;color:var(--muted)">Wood shop · Member</span></div></div></sc-if><div class="row-divider" style="display:flex;align-items:center;gap:14px;padding:12px 16px"><span style="font-size:13px;color:var(--muted)">{{ moreFoot }}</span><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ moreScale }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,34px">{{ moreBtn }}</x-import></div></div></div></div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ moreCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">press · 180</span> Show 25 more scales to 97%.</li><li><span class="type-mono" style="color:var(--faint)">arrive · 420</span> Only the new rows rise 8px, 40ms apart, at most six steps. Rows already there do not move.</li><li><span class="type-mono" style="color:var(--faint)">scroll · settle</span> Back to 10 glides to the section heading first; the extra rows are removed once they are out of sight, so nothing jumps.</li></ol>
+    </div>
+    <div id="8c" style="width:560px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">8c</x-import><span style="font-size:15.5px;font-weight:600">Sort by a column</span></div>
+      <div style="position:relative;height:330px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden"><div style="padding:18px"><div class="card"><div style="display:flex;gap:12px;padding:10px 16px;font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--label)"><span style="width:118px">Who</span><span style="flex:1;display:inline-flex;align-items:center;gap:5px;transition:color var(--duration-tint) var(--ease-tint);color:{{ sortCol }}"><span style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ sortScale }}">Why</span><span style="display:inline-block;font-size:12.5px;transition:transform var(--duration-settle) var(--ease-settle), opacity var(--duration-tint) var(--ease-tint);opacity:{{ sortArOp }}">↑</span></span></div><sc-if value="{{ sortFound }}" hint-placeholder-val="{{ true }}"><div style="animation:{{ sortAnimA }}"><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Kavya Menon</span><span style="flex:1;color:var(--muted)">Made by a person</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Daniel Okafor</span><span style="flex:1;color:var(--muted)">Maker not known</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Rhea Kapoor</span><span style="flex:1;color:var(--muted)">Made by a person</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Nikhil Bose</span><span style="flex:1;color:var(--muted)">Maker not known</span></div></div></sc-if><sc-if value="{{ sortWhy }}" hint-placeholder-val="{{ false }}"><div style="animation:{{ sortAnimB }}"><div class="row-divider" style="display:flex;align-items:baseline;gap:10px;padding:9px 16px 6px;background:var(--surface-0)"><span class="type-label" style="color:var(--ink)">Made by a person</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">2</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Kavya Menon</span><span style="flex:1;color:var(--muted)">Made by a person</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Rhea Kapoor</span><span style="flex:1;color:var(--muted)">Made by a person</span></div><div class="row-divider" style="display:flex;align-items:baseline;gap:10px;padding:9px 16px 6px;background:var(--surface-0)"><span class="type-label" style="color:var(--ink)">Maker not known</span><span style="font-size:12.5px;font-weight:600;color:var(--muted)">2</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Daniel Okafor</span><span style="flex:1;color:var(--muted)">Maker not known</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Nikhil Bose</span><span style="flex:1;color:var(--muted)">Maker not known</span></div></div></sc-if></div></div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ sortCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">press · 180</span> The heading presses.</li><li><span class="type-mono" style="color:var(--faint)">settle · 260</span> Rows do not travel to their new places; the list settles in from 35%. A row hunting across 100 places is noise.</li><li><span class="type-mono" style="color:var(--faint)">settle · 260</span> The arrow turns to show the direction; the heading takes ink (tint).</li></ol>
+    </div>
+    <div id="8d" style="width:560px;display:flex;flex-direction:column;gap:14px;border:1px solid var(--line);border-radius:var(--radius-card);padding:20px">
+      <div style="display:flex;align-items:center;gap:10px"><x-import component-from-global-scope="Syndra.Badge" tone="neutral" hint-size="34px,24px">8d</x-import><span style="font-size:15.5px;font-weight:600">Jump to a section</span></div>
+      <div style="position:relative;height:360px;border-radius:var(--radius-inner);background:var(--canvas);border:1px solid var(--line);overflow:hidden"><div style="padding:18px;transition:transform {{ jumpGlide }};transform:translateY({{ jumpY }})">
+  <div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 2px 14px"><span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:12.5px;font-weight:600"><span style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--danger)"></span>Not given by Syndra<span style="color:var(--faint)">112</span><span style="color:var(--faint)">↓</span></span><span style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);font-size:12.5px;font-weight:600"><span style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--warn)"></span>Gone from Zitadel<span style="color:var(--faint)">9</span><span style="color:var(--faint)">↓</span></span></div>
+  <div class="card"><div style="display:flex;align-items:center;gap:12px;padding:14px 16px"><span class="type-card-title">Not given by Syndra</span><span style="font-size:13.5px;font-weight:600;color:var(--faint)">112</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Kavya Menon</span><span style="flex:1;color:var(--muted)">Wood shop · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Daniel Okafor</span><span style="flex:1;color:var(--muted)">3D printers · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Rhea Kapoor</span><span style="flex:1;color:var(--muted)">Laser cutter · Operator</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Nikhil Bose</span><span style="flex:1;color:var(--muted)">Studio · Booking</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Zara Ahmed</span><span style="flex:1;color:var(--muted)">Bandsaw · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Ishaan Gupta</span><span style="flex:1;color:var(--muted)">Wood shop · Member</span></div></div>
+  <div class="card" style="margin-top:16px"><div style="border-radius:var(--radius-card) var(--radius-card) 0 0;animation:{{ jumpFlash }}"><div style="display:flex;align-items:center;gap:12px;padding:14px 16px"><span class="type-card-title">Gone from Zitadel</span><span style="font-size:13.5px;font-weight:600;color:var(--faint)">9</span></div></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Kavya Menon</span><span style="flex:1;color:var(--muted)">Wood shop · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Daniel Okafor</span><span style="flex:1;color:var(--muted)">3D printers · Member</span></div><div class="row-divider" style="display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:13.5px"><span style="width:118px;font-weight:600">Rhea Kapoor</span><span style="flex:1;color:var(--muted)">Laser cutter · Operator</span></div></div>
+</div>
+<div style="position:absolute;top:12px;left:50%;display:flex;gap:2px;padding:4px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:var(--surface-1);box-shadow:var(--shadow-dialog);white-space:nowrap;transition:{{ pillTrans }};opacity:{{ pillOp }};transform:translate(-50%, {{ pillY }})"><span style="display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:600;transition:background-color var(--duration-tint) var(--ease-tint), color var(--duration-tint) var(--ease-tint);background:{{ pZBg }};color:{{ pZInk }}"><span style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--danger)"></span>Not given by Syndra<span style="color:var(--faint);font-weight:500">112</span><span style="color:var(--faint);transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ pZAr }}">↑</span></span><div style="display:inline-flex;transition:transform var(--duration-press) var(--ease-press);transform:{{ pillScale }}"><span style="display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:600;transition:background-color var(--duration-tint) var(--ease-tint), color var(--duration-tint) var(--ease-tint);background:{{ pSBg }};color:{{ pSInk }}"><span style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--warn)"></span>Gone from Zitadel<span style="color:var(--faint);font-weight:500">9</span><span style="color:var(--faint);transition:opacity var(--duration-tint) var(--ease-tint);opacity:{{ pSAr }}">↓</span></span></div></div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ jumpCap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">settle · 260</span> When the read line scrolls away, the pill drops 8px into place and fades in; leaving, it only fades (tint).</li><li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The fill moves to the section you are in; the arrows say where the others are.</li><li><span class="type-mono" style="color:var(--faint)">flash · 900</span> A jump glides there; the heading you land on lights once with accent-soft and fades, so your eye knows where it is.</li></ol>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Picks" style="display:flex;flex-direction:column;gap:12px;max-width:880px">
+  <h2 class="type-section-title" style="margin:0">Chosen</h2>
+  <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Settled with the owner on 2 Oct 2026: <a href="#1b">1b</a>, <a href="#2a">2a</a>, <a href="#3a">3a</a>, <a href="#4a">4a</a>, <a href="#5b">5b</a>, <a href="#6a">6a</a> and <a href="#7a">7a</a>. Every route board uses these and names them by id. Long lists (<a href="#8a">8a</a>–<a href="#8d">8d</a>) added 5 Oct 2026, built from the same six.</p>
+</section>
+
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;speed&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;Normal&quot;, &quot;Half&quot;, &quot;Quarter&quot;], &quot;default&quot;: &quot;Normal&quot;, &quot;tsType&quot;: &quot;\&quot;Normal\&quot; | \&quot;Half\&quot; | \&quot;Quarter\&quot;&quot;, &quot;section&quot;: &quot;Playback&quot;}, &quot;reducedMotion&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Playback&quot;}}">
+class Component extends DCLogic {
+  static SEQ = {
+    tint: { c: 2400, s: [0, 1200] },
+    press: { c: 1600, s: [0, 800, 980] },
+    settle: { c: 3400, s: [0, 1000, 2600] },
+    arrive: { c: 3600, s: [0, 400] },
+    flash: { c: 2600, s: [0, 500] },
+    dlg: { c: 7600, s: [0, 2200, 2380, 3300] },
+    row: { c: 6000, s: [0, 1800, 1980] },
+    sel: { c: 6800, s: [0, 1000, 2200, 4800] },
+    filt: { c: 4800, s: [0, 1200, 3600] },
+    homeA: { c: 7000, s: [0, 1600, 1780] },
+    homeB: { c: 7600, s: [0, 1600, 1780, 2700] },
+    ban: { c: 9600, s: [0, 1200, 3400, 5800, 7800] },
+    sheet: { c: 7600, s: [0, 1400, 1580, 3000, 3500, 5600] },
+    fold: { c: 4400, s: [0, 1400, 2900] },
+    more: { c: 8200, s: [0, 1200, 1380, 3200, 4600, 4780, 5500] },
+    sort: { c: 6000, s: [0, 1400, 1580, 3800, 3980] },
+    jump: { c: 8000, s: [0, 1200, 2800, 2980, 5800] },
+  };
+  state = { ph: {} };
+  rootData = [{ key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } }];
+  peopleNoun = ["person", "people"];
+  noop = () => {};
+  componentDidMount() {
+    this.t = 0; this.last = performance.now();
+    this.iv = setInterval(() => this.tick(), 50);
+  }
+  componentWillUnmount() { clearInterval(this.iv);  }
+  rate() { const s = this.props.speed; return s === "Quarter" ? 0.25 : s === "Half" ? 0.5 : 1; }
+  tick() {
+    const now = performance.now(); this.t += (now - this.last) * this.rate(); this.last = now;
+    const seq = Component.SEQ; const ph = {}; let changed = false;
+    for (const k in seq) {
+      const d = seq[k]; const m = this.t % d.c; let i = 0;
+      d.s.forEach((v, j) => { if (m >= v) i = j; });
+      ph[k] = i; if (this.state.ph[k] !== i) changed = true;
+    }
+    if (changed) this.setState({ ph });
+  }
+  renderVals() {
+    const p = this.state.ph; const g = (k) => p[k] || 0;
+    const rm = !!this.props.reducedMotion; const rate = this.rate();
+    const d = (ms) => (rm ? "1ms" : Math.round(ms / rate) + "ms");
+    const sc = (on) => (on ? "scale(0.97)" : "scale(1)");
+    const SETTLE = "var(--duration-settle) var(--ease-settle)", TINT = "var(--duration-tint) var(--ease-tint)";
+    const enter = `grid-template-rows ${SETTLE}, opacity ${TINT} 140ms`;
+    const leave = `opacity ${TINT}, grid-template-rows ${SETTLE} 120ms`;
+
+    const dlg = g("dlg"), row = g("row"), sel = g("sel"), filt = g("filt"), hA = g("homeA"), hB = g("homeB"), ban = g("ban"), sh = g("sheet");
+    const barShown = sel === 1 || sel === 2;
+    const offShown = ban === 1 || ban === 2, degShown = ban === 2 || ban === 3;
+    const filtOpen = filt === 1;
+    const sheetBusy = sh >= 2 && sh <= 4, sheetDone = sh === 5, drag = sh === 3;
+
+    const fo = g("fold"), mo = g("more"), so = g("sort"), ju = g("jump");
+    const foldS = (open) => open ? { fr: "1fr", op: 1, trans: "grid-template-rows " + SETTLE, opTrans: "opacity " + TINT + " 140ms" } : { fr: "0fr", op: 0, trans: "grid-template-rows " + SETTLE + " 120ms", opTrans: "opacity " + TINT };
+    const h = React.createElement;
+    const chevEl = (open) => h("span", { style: { width: 28, height: 28, flex: "none", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-pill)", border: "1px solid var(--line)", color: "var(--muted)" } }, h("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", style: { transition: "transform " + SETTLE, transform: open ? "none" : "rotate(-90deg)" } }, h("path", { d: "M6 9l6 6 6-6" })));
+    const up = ju >= 1 && ju <= 3, onS = ju === 3;
+    const vals8 = {
+      foldS: foldS(fo !== 1), foldChev: chevEl(fo !== 1), foldCap: ["Open: the section's rows", "Fold: fade, then close", "Open again: settle, then fade in"][fo],
+      moreChev: chevEl(true), moreExtra: mo >= 2 && mo <= 5, moreScale: sc(mo === 1 || mo === 4), moreFoot: mo >= 2 && mo <= 5 ? "Showing 6 of 112" : "Showing 3 of 112", moreBtn: mo >= 2 && mo <= 5 ? "Back to 3" : "Show 3 more",
+      moreY: mo === 3 || mo === 4 ? "-128px" : "0px", moreGlide: (mo === 3 ? "600ms" : "var(--duration-settle)") + " var(--ease-settle)",
+      moreCap: ["Showing 3 of 112", "Pressing Show 3 more", "Only the new rows arrive", "Reading on", "Pressing Back to 3", "The page glides back to the heading", "The extra rows go, out of sight"][mo],
+      sortFound: so <= 1 || so === 4, sortWhy: so === 2 || so === 3, sortScale: sc(so === 1 || so === 3), sortCol: so === 2 || so === 3 ? "var(--ink)" : "var(--label)", sortArOp: so === 2 || so === 3 ? 1 : 0,
+      sortAnimA: so === 4 ? "sy-resort-a " + SETTLE + " both" : "none", sortAnimB: "sy-resort-b " + SETTLE + " both",
+      sortCap: ["Ordered by Found", "Pressing Why", "The same reasons gather; within each, the newest first", "Pressing Found", "Ordered by Found again"][so],
+      jumpY: ju === 0 || ju === 4 ? "0px" : ju <= 2 ? "-90px" : "-325px", jumpGlide: (ju === 1 || ju === 4 ? "900ms" : "520ms") + " var(--ease-settle)",
+      pillOp: up ? 1 : 0, pillY: up ? "0px" : "-8px", pillTrans: up ? "opacity " + TINT + ", transform " + SETTLE : "opacity " + TINT + ", transform 0s linear var(--duration-tint)", pillScale: sc(ju === 2),
+      pZBg: onS ? "transparent" : "var(--surface-2)", pZInk: onS ? "var(--muted)" : "var(--ink)", pZAr: onS ? 1 : 0, pSBg: onS ? "var(--surface-2)" : "transparent", pSInk: onS ? "var(--ink)" : "var(--muted)", pSAr: onS ? 0 : 1,
+      jumpFlash: onS ? "sy-flash-a var(--duration-flash) ease-out 280ms both" : "none",
+      jumpCap: ["At rest: chips on the read line", "Scrolling: the pill drops in, you are in the first section", "Pressing Gone from Zitadel", "Glide there; the heading lights once", "Back to the top: the pill fades away"][ju],
+    };
+    return { ...vals8,
+      rootData: this.rootData, peopleNoun: this.peopleNoun, noop: this.noop,
+      dTint: d(120), dPress: d(180), dSettle: d(260), dArrive: d(420), dFlash: d(900), dStep: d(40),
+      dBreathe: rm ? "1ms" : Math.round(2400 / rate) + "ms",
+
+      tintBg: g("tint") === 1 ? "var(--hover)" : "transparent",
+      pressScale: sc(g("press") === 1),
+      settleRows: g("settle") === 1 ? "1fr" : "0fr",
+      arriveOn: g("arrive") === 1,
+      flashOn: g("flash") === 1, flashOff: g("flash") !== 1,
+
+      dlgOpen: dlg < 3, dlgDone: dlg === 3, dlgPending: dlg === 2, dlgScale: sc(dlg === 1),
+      dlgOutcome: { kind: "queued", message: "Aanya's Operator role is revoked in Syndra. Syndra sends revocations to Zitadel on its own every few minutes" },
+      dlgOutcomeShort: { kind: "queued", message: "Revoked in Syndra" },
+      dlgNoteB: dlg === 3 ? "1 person changed. Syndra sends revocations to Zitadel on its own every few minutes." : "Syndra records this before it reaches Zitadel.",
+      dlgCap: ["Reviewing the change", "Pressing Remove Operator", "Working — the dialog can't be closed", "The dialog has become its own result"][dlg],
+
+      rowIdle: row < 2, rowDone: row === 2, rowScale: sc(row === 1), rowBtnOpacity: row === 2 ? 0 : 1, rowRows: row === 2 ? "1fr" : "0fr",
+      rowOutcome: { kind: "queued", message: "Sends shortly" },
+      rowOutcomeLong: { kind: "queued", message: "Priya's Operator role is revoked in Syndra. Syndra sends revocations to Zitadel on its own every few minutes" },
+      rowCap: ["Reading the list", "Pressing Revoke Operator", "The row keeps its seat; the state is said in it"][row],
+
+      checkA: barShown, checkB: sel === 2, uncheckA: !barShown, uncheckB: sel !== 2,
+      barCount: sel === 3 ? 2 : Math.max([0, 1, 2, 0][sel], 1),
+      barTransform: barShown ? "translateY(0)" : sel === 3 ? "translateY(6px)" : "translateY(12px)",
+      barOpacity: barShown ? 1 : 0,
+      barTrans: barShown ? `transform ${SETTLE}, opacity ${SETTLE}` : `transform ${TINT}, opacity ${TINT}`,
+      selCap: ["Select is on — nothing ticked yet", "First tick — the bar docks", "Second tick — only the words change", "Selection cleared — the bar leaves faster than it came"][sel],
+
+      filtScale: sc(false),
+      filtAOpacity: filtOpen ? 1 : 0,
+      filtATransform: filtOpen ? "translateY(0)" : "translateY(-4px)",
+      filtATrans: filtOpen ? "opacity var(--duration-press) var(--ease-press), transform var(--duration-press) var(--ease-press)" : `opacity ${TINT}, transform ${TINT}`,
+      filtBRows: filtOpen ? "1fr" : "0fr",
+      filtCap: ["Closed — the button says two filters are on", "Open", "Closed again"][filt],
+
+      hAScale: sc(hA === 1), hARows: hA === 2 ? "0fr" : "1fr", hAOpacity: hA === 2 ? 0 : 1,
+      hAHeadOpen: hA === 2 ? 0 : 1, hAHeadDone: hA === 2 ? 1 : 0,
+      hACap: ["One request waiting", "Approving", "The queue folds to one line; The makerspace is pushed up"][hA],
+      hBIdle: hB < 2, hBAck: hB >= 2, hBScale: sc(hB === 1), hBRows: hB === 3 ? "0fr" : "1fr", hBOpacity: hB === 3 ? 0 : 1,
+      hBHeadOpen: hB === 3 ? 0 : 1, hBHeadDone: hB === 3 ? 1 : 0,
+      homeOutcome: { kind: "applied", message: "Priya can start the laser cutter" },
+      hBCap: ["One request waiting", "Approving", "The outcome holds for one beat", "Then the queue folds to one line"][hB],
+
+      offRows: offShown ? "1fr" : "0fr", offOpacity: offShown ? 1 : 0, offTrans: offShown ? "grid-template-rows " + SETTLE : "grid-template-rows " + SETTLE + " 120ms", offOpDelay: offShown ? "140ms" : "0ms",
+      degRows: degShown ? "1fr" : "0fr", degOpacity: degShown ? 1 : 0, degTrans: degShown ? "grid-template-rows " + SETTLE : "grid-template-rows " + SETTLE + " 120ms", degOpDelay: degShown ? "140ms" : "0ms",
+      readLine: degShown ? "Last known · what Zitadel held at 09:40, 14 minutes ago" : "Current · read just now", readDot: degShown ? "var(--warn)" : "var(--healthy)", readInk: degShown ? "var(--warn-text)" : "var(--muted)",
+      banCap: ["Online, and every number is current", "The connection drops: the Offline notice pushes the page down", "Zitadel stops answering: its notice arrives under Offline; the read line says last known, with its age", "The connection returns: Offline fades, then its gap closes", "Zitadel answers: its notice leaves and the read line is current again"][ban],
+
+      sheetNotDone: !sheetDone, sheetDone, sheetBusy, sheetScale: sc(sh === 1),
+      grabOpacity: sheetBusy ? 0 : 1, workOpacity: sheetBusy ? 1 : 0, fingerOpacity: drag ? 1 : 0,
+      sheetAMove: drag ? "translateY(10px)" : "translateY(0)",
+      sheetDragging: drag, sheetNotDragging: !drag,
+      sheetOutcome: { kind: "applied", message: "Zitadel received 6 changes" },
+      sheetCapA: ["Sheet open", "Pressing Send 6 changes", "Busy — the grabber becomes a sentence", "A drag while busy — the sheet gives a little", "Released — it settles back", "Done — the grabber returns"][sh],
+      sheetCapB: ["Sheet open", "Pressing Send 6 changes", "Busy — the grabber becomes a sentence", "A drag while busy — the sentence answers", "Still working", "Done — the grabber returns"][sh],
+    };
+  }
+}
+</script>
+</body>
+</html>

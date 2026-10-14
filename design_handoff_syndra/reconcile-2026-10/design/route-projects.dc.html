@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Projects board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /projects</span>
+    <h1 class="type-page-title" style="margin:0">Projects</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Every project, how many people Zitadel shows in it, its roles and the apps that read it. Each frame is the real shell and components at true width; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#42</strong> each app reads exactly one project, so an app badge appears under one project only · <strong style="color:var(--ink)">#46 #48</strong> a project with no roles says "No roles yet — nothing here can be granted" beside its name; the count column stays a count, and counts roles that exist · <strong style="color:var(--ink)">#47</strong> People is what Zitadel shows, with its note and one freshness line · <strong style="color:var(--ink)">#89</strong> nouns on phone.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Cohesion · applied from the walkthrough</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Freshness and the red notice as on every list. Apps served stay Badges (a fact, not a way out). Columns follow 8b: name 250, apps take the width, Roles and People last in 110px seats. Below desktop the name gives up to 80px and Roles moves under it ('3 roles'), so apps keep at least 180px.</p></div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Desktop · 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ desktopFrames }}" as="f" hint-placeholder-count="5">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:1440px;height:1120px;border:0;transform:scale(0.5);transform-origin:0 0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Laptop · 920</h2>
+    <figure data-screen-label="Laptop 920" style="margin:0;display:flex;flex-direction:column;gap:10px">
+      <div style="width:690px;height:600px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="route-projects.dc.html?frame=default" title="Laptop 920" style="width:920px;height:800px;border:0;transform:scale(0.75);transform-origin:0 0"></iframe></div>
+      <figcaption style="max-width:690px;font-size:13.5px;line-height:1.55;color:var(--muted)">Rail open, ~640px of content. The page's own column keeps its minimum; secondary columns fold into the line under it.</figcaption>
+    </figure>
+  </section>
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="1">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:390px;height:844px;border:0"></iframe></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/projects" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ stDegraded }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+      <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Every project and number below is real, read 14 minutes ago, and may have changed since.</p>
+      </div>
+    </div>
+  </sc-if>
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Projects" lede="A project is a machine or area with its own set of roles — the Laser Cutter, the Studio. Each app checks a person's roles against one project. Open one to see its roles and who holds them." meta="{{ meta }}" hint-size="100%,130px"></x-import></div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+  <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+    <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+      <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load projects.</span>
+        <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+          <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
+          <span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_7f3a91c2</span> · quote this if you ask for help</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" hint-size="100%,48px"></x-import><sc-if value="{{ hasreadEl }}" hint-placeholder-val="{{ false }}"><div style="margin-top:-4px">{{ readEl }}</div></sc-if></sc-if>
+  <sc-if value="{{ showCard }}" hint-placeholder-val="{{ true }}">
+  <x-import component-from-global-scope="Syndra.Card"  hint-size="100%,400px">
+    <x-import component-from-global-scope="Syndra.CardColumns"  hint-size="100%,40px"><span class="w-[250px]" style="min-width:170px"><button type="button" aria-label="Sort by project" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink)" style-hover="color:var(--ink)">Project<span aria-hidden="true" style="font-size:11px">↑</span></button></span><span class="flex-1" style="min-width:180px">Apps served</span><span class="hidden text-right desktop:block" style="width:110px;flex:none">Roles</span><span class="text-right" style="width:110px;flex:none"><button type="button" aria-label="Sort by people" style="display:inline-flex;align-items:center;gap:5px;padding:0;border:0;background:none;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit" style-hover="color:var(--ink)">People</button></span></x-import>
+    <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 5 }}" avatar="{{ false }}" label="Loading projects" hint-size="100%,260px"></x-import></sc-if>
+    <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="No projects yet." guidance="A project appears here once it exists in Zitadel." hint-size="100%,140px"></x-import></sc-if>
+    <sc-if value="{{ stList }}" hint-placeholder-val="{{ true }}">
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="flex w-full flex-col gap-0.5 tablet:w-[250px]" style="min-width:170px"><span class="truncate text-[15.5px] font-semibold"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Laser Lab</a></span><span class="text-[13px] text-faint desktop:hidden">3 roles</span></span>
+        <span class="flex w-full flex-wrap gap-1.5 tablet:flex-1" style="min-width:180px"><a href="route-applications-id.dc.html?frame=default" style="text-decoration:none;color:inherit"><x-import component-from-global-scope="Syndra.Badge"  hint-size="100px,24px">Laser bookings</x-import></a><a href="route-applications-id.dc.html?frame=default" style="text-decoration:none;color:inherit"><x-import component-from-global-scope="Syndra.Badge"  hint-size="100px,24px">Laser badge reader</x-import></a></span>
+        <span class="hidden text-[15px] text-right desktop:block" style="width:110px;flex:none">3</span>
+        <span class="text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">41<span class="text-[13px] text-faint tablet:hidden"> people</span><span class="block text-[12.5px] text-warn-text">2 not in Zitadel</span></span>
+      </div>
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="flex w-full flex-col gap-0.5 tablet:w-[250px]" style="min-width:170px"><span class="truncate text-[15.5px] font-semibold"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Wood shop</a></span><span class="text-[13px] text-faint desktop:hidden">2 roles</span></span>
+        <span class="flex w-full flex-wrap gap-1.5 tablet:flex-1" style="min-width:180px"><a href="route-applications-id.dc.html?frame=default" style="text-decoration:none;color:inherit"><x-import component-from-global-scope="Syndra.Badge"  hint-size="100px,24px">Wood shop kiosk</x-import></a></span>
+        <span class="hidden text-[15px] text-right desktop:block" style="width:110px;flex:none">2</span>
+        <span class="text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">22<span class="text-[13px] text-faint tablet:hidden"> people</span></span>
+      </div>
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="flex w-full flex-col gap-0.5 tablet:w-[250px]" style="min-width:170px"><span class="truncate text-[15.5px] font-semibold"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Studio</a></span><span class="text-[13px] text-faint desktop:hidden">1 role</span></span>
+        <span class="flex w-full flex-wrap gap-1.5 tablet:flex-1" style="min-width:180px"><a href="route-applications-id.dc.html?frame=default" style="text-decoration:none;color:inherit"><x-import component-from-global-scope="Syndra.Badge"  hint-size="100px,24px">Studio bookings</x-import></a></span>
+        <span class="hidden text-[15px] text-right desktop:block" style="width:110px;flex:none">1</span>
+        <span class="text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">9<span class="text-[13px] text-faint tablet:hidden"> people</span></span>
+      </div>
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="flex w-full flex-col gap-0.5 tablet:w-[250px]" style="min-width:170px"><span class="truncate text-[15.5px] font-semibold"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Electronics bench</a></span><span class="text-[13px] text-faint desktop:hidden">2 roles</span></span>
+        <span class="flex w-full flex-wrap gap-1.5 tablet:flex-1" style="min-width:180px"><span class="text-[13px] text-faint">No app reads this yet</span></span>
+        <span class="hidden text-[15px] text-right desktop:block" style="width:110px;flex:none">2</span>
+        <span class="text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">6<span class="text-[13px] text-faint tablet:hidden"> people</span><span class="block text-[12.5px] text-danger-text">1 unexplained</span></span>
+      </div>
+      <div class="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]" style="cursor:pointer">
+        <span class="flex w-full flex-col gap-0.5 tablet:w-[250px]" style="min-width:170px"><span class="truncate text-[15.5px] font-semibold"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Front desk</a></span><span class="text-[13px] text-faint">No roles yet — nothing here can be granted</span></span>
+        <span class="flex w-full flex-wrap gap-1.5 tablet:flex-1" style="min-width:180px"><span class="text-[13px] text-faint">No app reads this yet</span></span>
+        <span class="hidden text-[15px] text-right desktop:block" style="width:110px;flex:none">0</span>
+        <span class="text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">0<span class="text-[13px] text-faint tablet:hidden"> people</span></span>
+      </div>
+    </sc-if>
+  </x-import>
+  </sc-if>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(window.location.search);
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@makerspace.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const deg = st === "degraded";
+    const f = (frame, label, note) => ({ src: "route-projects.dc.html?frame=" + frame, label, note });
+    const list = st === "default" || deg || st === "phone" || [].indexOf(st) >= 0;
+    const base = {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      stLoading: st === "loading", stError: st === "error", stEmpty: st === "empty", stDegraded: deg, stList: list, showCard: st !== "error",
+      readState: deg ? { readAt: new Date(Date.now() - 14 * 60000).toISOString(), current: false } : { readAt: new Date(Date.now() - 40000).toISOString(), current: true },
+    };
+    return { ...base,
+      hasreadEl: true,
+      readEl: S ? h(S.ReadFreshness, { state: base.readState, subject: "What Zitadel confirmed" }) : null,
+      searchEl: S ? h(S.Input, { placeholder: "Search projects or apps…", "aria-label": "Search projects by name or app" }) : null,
+      meta: st === "default" || deg || st === "phone" ? "5 projects · 4 apps served" : undefined,
+      desktopFrames: [
+        f("default", "Default", "Name, then the apps that read it, then the two counts in their right-hand seats (8b). Front desk says it has no roles beside its name (#46, #48); Laser Lab's apps each read only Laser Lab (#42)."),
+        f("empty", "Empty", "Says where projects come from."),
+        f("loading", "Loading", "Skeleton rows."),
+        f("error", "Error", "The red notice takes the list's place."),
+        f("degraded", "Degraded — last known data", "Last good read, freshness provisional."),
+      ],
+      phoneFrames: [f("phone", "Phone — default", "Name, then '41 people · 3 roles' with their nouns, then the apps.")] };
+  }
+}
+</script>
+</body>
+</html>
