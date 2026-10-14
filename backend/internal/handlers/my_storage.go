@@ -56,9 +56,18 @@ type myTargetView struct {
 	// vault holds no credential for this path — the member's password is
 	// forwarded to the target and kept nowhere.
 	Credential myCredentialStatus `json:"credential"`
-	// Reachable says the add-on answered. A member whose target is down is told
-	// so rather than shown a credential form that will fail.
+	// Reachable says the target is confirmed online (Health is `online`). A
+	// member whose target is down is told so rather than shown a credential form
+	// that will fail.
 	Reachable bool `json:"reachable"`
+	// Health is what Syndra can honestly say: `online`, `offline` (three failed
+	// reads in a row) or `unknown` (can't tell yet, so the page says nothing).
+	// One slow answer stays online.
+	Health addons.HealthStatus `json:"health"`
+	// CheckedAt is the latest health read; ReachableSince is when the target
+	// stopped answering, set only while it is offline.
+	CheckedAt      *time.Time `json:"checked_at,omitempty"`
+	ReachableSince *time.Time `json:"reachable_since,omitempty"`
 	// Lifecycle is the state an operator put the target in: `active`,
 	// `draining` or `read_only`.
 	//
@@ -215,9 +224,24 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 	if !addonsCallable(target) {
 		return view, nil
 	}
+	// The live read is counted by the health monitor; the page then says what
+	// the monitor can stand behind, so one slow answer does not read as an
+	// outage and a confirmed one carries the time it began.
 	health := addonsHealth(r.Context(), target)
-	view.Reachable = health.Reachable
+	state := addonsHealthOf(target)
+	view.Health = state.Status
+	view.Reachable = state.Status == addons.HealthOnline
+	if !state.CheckedAt.IsZero() {
+		checked := state.CheckedAt
+		view.CheckedAt = &checked
+	}
+	view.ReachableSince = state.ReachableSince
 	view.Lifecycle = health.Lifecycle
+	if view.Lifecycle == "" {
+		// The add-on did not answer this time; the last lifecycle it reported
+		// still stands, since only an operator changes it.
+		view.Lifecycle = state.Lifecycle
+	}
 
 	// Only where there is an account to connect WITH. In the other two states
 	// the instructions would describe reaching something that is not there —
@@ -284,6 +308,14 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 	case view.Account == nil:
 		jsonErrorResponse(w, http.StatusConflict, "ACCOUNT_PENDING",
 			"Your account here has not been created yet. This usually clears within a day; try again after that.")
+		return
+	case view.Lifecycle == "draining" || view.Lifecycle == "read_only":
+		// Refused before dispatch. The add-on would decline it anyway, and the
+		// member used to get "did not confirm" for a pause an operator chose.
+		// Syndra keeps no copy of the password, so nothing could apply it later
+		// either: the page says to change it once the pause lifts.
+		jsonErrorResponse(w, http.StatusConflict, "TARGET_PAUSED",
+			"Account changes on that system are paused, so your password can't be changed right now. Your current one keeps working.")
 		return
 	case !view.Reachable:
 		// Fails closed and says so. Accepting it and reporting success would
