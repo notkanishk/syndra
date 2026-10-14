@@ -277,8 +277,36 @@ type smbShare struct {
 	Enabled bool   `json:"enabled"`
 }
 
+// splitList reads a comma-separated list, dropping blanks.
+func splitList(raw string) []string {
+	var out []string
+	for _, v := range strings.Split(raw, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// shareScope is the configured share list as a set, nil for "every share".
+func shareScope(names []string) map[string]bool {
+	if len(names) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		set[n] = true
+	}
+	return set
+}
+
+// considers says whether Syndra looks at a share at all (TRUENAS_SHARES).
+func (s *server) considers(share string) bool {
+	return s.shares == nil || s.shares[share]
+}
+
 // enabledShares are the SMB shares a member can connect to, longest path
-// first so shareAt finds the innermost one.
+// first so shareAt finds the innermost one. Only shares Syndra considers.
 func (s *server) enabledShares() ([]smbShare, error) {
 	var all []smbShare
 	if err := s.nas.call("sharing.smb.query",
@@ -288,7 +316,7 @@ func (s *server) enabledShares() ([]smbShare, error) {
 	out := []smbShare{}
 	for _, sh := range all {
 		sh.Path = strings.TrimRight(sh.Path, "/")
-		if sh.Enabled && strings.HasPrefix(sh.Path, "/mnt/") {
+		if sh.Enabled && strings.HasPrefix(sh.Path, "/mnt/") && s.considers(sh.Name) {
 			out = append(out, sh)
 		}
 	}

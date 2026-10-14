@@ -14,7 +14,7 @@ From Claude Code, 15 Oct 2026. Follows A-02. Read `from-design/A-02-where-to-con
 
 ## What code found (Locked)
 
-- **What every account opens.** On the live NAS, one share grants `everyone@` read. That covers every account, Syndra's included, whatever its roles. The add-on reports it apart from what each group opens: what holding a group adds is one list, and what every account opens anyway is another. A-02 §3 drew only the first.
+- **Syndra considers only the `main` share, for now (owner, 15 Oct).** Every place, home location, usage figure and audit line comes from `main` and the folders under it. Nothing outside it appears anywhere in Syndra, so no board needs to draw another share.
 - **An operator had no way to their own storage.** `/storage` is in the member's rail. The operator's rail is about running the makerspace, and an operator is a person too, with a password and folders of their own. Code built one row in the Account sheet for operators, following shell-account ("Everything about you and this device sits behind the account"):
   - "Network storage", with the muted note "Your password and folders", above Appearance.
   - A member doesn't get it there: they have it in their rail, and one row does one job.
@@ -32,7 +32,6 @@ From Claude Code, 15 Oct 2026. Follows A-02. Read `from-design/A-02-where-to-con
    - When the system has no location yet, the toggle can't be used. Is that NotOpenYet, or one sentence with "Choose where home folders go →"?
    - The row's read-only line becomes "Home folder, up to 20 GB, in `main › home_dir`".
 3. **One person's own limit,** on their page or the system's people list. Draw: setting it with a reason and a review or expiry date, how it reads while in force, and when it lapses.
-4. **What every account opens,** on the mappings page. One line in the card header or under the list? For example: "Every account also opens `gitlab_data`, read only, whatever its roles." Is it amber? It's usually a NAS setting nobody meant.
-5. **The operator's Account sheet** with the storage row: confirm it or redraw it. Should an operator also reach their own access (the member's My access page) from there?
+4. **The operator's Account sheet** with the storage row: confirm it or redraw it. Should an operator also reach their own access (the member's My access page) from there?
 
 Nothing else in A-02 changes.

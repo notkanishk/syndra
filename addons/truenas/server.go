@@ -55,6 +55,10 @@ type server struct {
 	// (identity.go). Zero means the defaults.
 	idFloor, idCeiling int64
 
+	// shares is the set of SMB shares Syndra considers, nil for every enabled
+	// one. A share outside it is not read, offered, counted or audited.
+	shares map[string]bool
+
 	// reach is the last read of the shares' folder permissions (reach.go).
 	reach reachCache
 }

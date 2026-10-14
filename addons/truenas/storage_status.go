@@ -149,7 +149,7 @@ func (s *server) shareUsage(uid int64) ([]ShareUsage, error) {
 
 	out := make([]ShareUsage, 0, len(shares))
 	for _, sh := range shares {
-		if !sh.Enabled {
+		if !sh.Enabled || !s.considers(sh.Name) {
 			continue
 		}
 		dataset := datasetOf(sh.Path)
