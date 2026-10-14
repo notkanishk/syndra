@@ -28,22 +28,22 @@
 
 ## 3. Backend: one project per target (D3–D5)
 
-- [ ] 3.1 Migration 000051:
+- [x] 3.1 Migration 000051:
   - `targets.project_id` (unique) and `UNIQUE (target, project_id)`
   - infer from mappings, and `RAISE EXCEPTION` naming targets that span several projects
   - composite FK from `target_role_mappings` with `ON UPDATE RESTRICT`
   - down migration
-- [ ] 3.2 Live-DB migration tests: infer one; refuse two, naming both; a mapping to a foreign project is refused by the FK
-- [ ] 3.3 `PUT /targets/{t}/project`:
+- [x] 3.2 Live-DB migration tests: infer one; refuse two, naming both; a mapping to a foreign project is refused by the FK
+- [x] 3.3 `PUT /targets/{t}/project`:
   - `409 PROJECT_TAKEN` names the system holding it
   - `409 MAPPINGS_EXIST` carries the count
   - the `zitadel` target is refused
   - audit line
   - Tests for each
-- [ ] 3.4 `requireTargetProject` and `db.ErrProjectRequired` across the BUILD-NOTES write list. Lifecycle, reads and the `zitadel` target are exempt
-- [ ] 3.5 A table test asserting every gated route refuses with `409 PROJECT_REQUIRED` and lifecycle doesn't
-- [ ] 3.6 Mapping create and rehearse-create take the project from the target. `GET /targets/mappings` returns `409 PROJECT_REQUIRED` without one. Tests
-- [ ] 3.7 `GET /api/v1/targets` returns `project: {id, name} | null`. Test
+- [x] 3.4 `requireTargetProject` and `db.ErrProjectRequired` across the BUILD-NOTES write list. Lifecycle, reads and the `zitadel` target are exempt
+- [x] 3.5 A table test asserting every gated route refuses with `409 PROJECT_REQUIRED` and lifecycle doesn't
+- [x] 3.6 Mapping create and rehearse-create take the project from the target. `GET /targets/mappings` returns `409 PROJECT_REQUIRED` without one. Tests
+- [x] 3.7 `GET /api/v1/targets` returns `project: {id, name} | null`. Test
 
 ## 4. Backend: mappable values (D6–D7)
 

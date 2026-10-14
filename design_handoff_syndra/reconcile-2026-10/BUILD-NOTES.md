@@ -57,6 +57,17 @@ Written 14 Oct 2026, after reading the repo at `8c46586`. **Where this file and 
 
 **Exempt:** lifecycle (owner, 8 Oct) and every read. The package's list named five of these. It is enforced in the write transactions (`db.ErrProjectRequired`, the same pattern as `ErrTargetNotActive`, `db/entitlement_enqueue.go:26`), so no path can miss it.
 
+**Changed from the package (Locked): a project is needed to give access, never to take it away.** The package's gate list includes "take away" and "hold". Built, the gate refuses only the writes that give or bind access:
+- mappings: create, publish and rollback
+- adopt
+- reconcile
+- entitlements apply
+- drain
+- holds that allow
+- resolving merge and binding findings
+
+Take away, holds that deny, the dormant sweep, release and lifecycle never wait. A safety action that waits on configuration leaves a person with access nobody can remove. Design: no board changes. Those controls simply stay live in the `noproject` frame.
+
 **Routes as they are.** The mapping list is `GET /targets/mappings?target=` (`handlers/mappings.go:45`), not `/targets/{t}/mappings`. It keeps its route and returns `409 PROJECT_REQUIRED` while the target has no project.
 
 **Values from the add-on.**

@@ -13,7 +13,7 @@ func TestMappingsForRoles_QueryMatchesScanner(t *testing.T) {
 	const projectID = "mapping-query-project"
 	const roleKey = "staff"
 
-	if _, err := PG.Exec(ctx, `INSERT INTO targets (target) VALUES ($1) ON CONFLICT DO NOTHING`, target); err != nil {
+	if _, err := PG.Exec(ctx, `INSERT INTO targets (target, project_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, target, projectID); err != nil {
 		t.Fatalf("seed target: %v", err)
 	}
 	t.Cleanup(func() {

@@ -208,7 +208,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/propagations/drain", withCORS(withOperatorAuth(handleDrainPropagations)))
 	// And one target on its own, for the target that was unreachable while the
 	// rest drained and has come back.
-	mux.HandleFunc("POST /api/v1/targets/{target}/propagations/drain", withCORS(withOperatorAuth(handleDrainTarget)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/propagations/drain", withCORS(withOperatorAuth(withTargetProject(handleDrainTarget))))
 	mux.HandleFunc("GET /api/v1/propagations", withCORS(withOperatorAuth(handleListPendingPropagations)))
 	// Change history: the same rows grouped by the event that produced them,
 	// including the ones still waiting. A half-applied cascade has to be
@@ -255,8 +255,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/targets/{target}/mappings/versions", withCORS(withOperatorAuth(handleMappingHistory)))
 	// Rehearsed like every other mapping change. It was the exception, and it
 	// is the one that can move the most people.
-	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rehearse-rollback", withCORS(withOperatorAuth(handleRehearseMappingRollback)))
-	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(handleRollbackMappingVersion)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rehearse-rollback", withCORS(withOperatorAuth(withTargetProject(handleRehearseMappingRollback))))
+	mux.HandleFunc("POST /api/v1/targets/{target}/mappings/versions/{version}/rollback", withCORS(withOperatorAuth(withTargetProject(handleRollbackMappingVersion))))
 
 	// A member's own storage view and the one action on it. Self-scoped by
 	// construction: the subject is the authenticated actor and is never taken
@@ -276,7 +276,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/targets/{target}/system-health", withCORS(withOperatorAuth(handleTargetSystemHealth)))
 	mux.HandleFunc("GET /api/v1/targets/{target}/activity", withCORS(withOperatorAuth(handleTargetActivity)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/log-anchor/resolve", withCORS(withOperatorAuth(handleResolveLogFinding)))
-	mux.HandleFunc("POST /api/v1/targets/{target}/binding-conflicts/{id}/resolve", withCORS(withOperatorAuth(handleResolveBindingConflict)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/binding-conflicts/{id}/resolve", withCORS(withOperatorAuth(withTargetProject(handleResolveBindingConflict))))
 
 	// The unmanaged inventory: what lives on a target that Syndra never put
 	// there. Reported, never triaged — and adoption is the one way an account
@@ -286,12 +286,12 @@ func NewRouter() http.Handler {
 	// The add-on equivalent of governance/drift/reconcile, which covers Zitadel
 	// only. Operator-gated and idempotent: it reads the target and queues what
 	// is already owed, and queueing is not applying.
-	mux.HandleFunc("POST /api/v1/targets/{target}/reconcile", withCORS(withOperatorAuth(handleReconcileTarget)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/reconcile", withCORS(withOperatorAuth(withTargetProject(handleReconcileTarget))))
 	// Accounts Syndra created whose reason for existing has gone. A read; the
 	// removal runs through the ordinary plan-then-apply path.
 	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/accounts/dormant/sweep", withCORS(withOperatorAuth(handleDormantSweep)))
-	mux.HandleFunc("POST /api/v1/targets/{target}/inventory/{username}/adopt", withCORS(withOperatorAuth(handleAdoptAccount)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/inventory/{username}/adopt", withCORS(withOperatorAuth(withTargetProject(handleAdoptAccount))))
 	// Letting a binding go: the other resolution the reconciliation names, and
 	// the only one that was unreachable. Keyed on the subject rather than the
 	// account name, because the row it acts on is the binding — whose account
@@ -301,7 +301,7 @@ func NewRouter() http.Handler {
 	// answer to one. On the target rather than under a global queue: the three
 	// values in a finding mean nothing without the target they were read from.
 	mux.HandleFunc("GET /api/v1/targets/{target}/merge-findings", withCORS(withOperatorAuth(handleMergeFindings)))
-	mux.HandleFunc("POST /api/v1/targets/{target}/merge-findings/{id}/resolve", withCORS(withOperatorAuth(handleResolveMergeFinding)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/merge-findings/{id}/resolve", withCORS(withOperatorAuth(withTargetProject(handleResolveMergeFinding))))
 
 	// Access withdrawn that has not gone away. Beside drift triage, never inside
 	// it: drift is access that appeared without an explanation, and this is
@@ -310,6 +310,10 @@ func NewRouter() http.Handler {
 
 	// Stopping an add-on writing, without a redeploy. A maintenance mode you
 	// have to restart into is a maintenance mode nobody uses.
+	// The Zitadel project a system serves (truenas-reconcile D3). The routes
+	// wrapped in withTargetProject GIVE access and wait for it; taking access
+	// away never does.
+	mux.HandleFunc("PUT /api/v1/targets/{target}/project", withCORS(withOperatorAuth(handleSetTargetProject)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/lifecycle", withCORS(withOperatorAuth(handleSetTargetLifecycle)))
 
 	// Revocation as a composition (design §10). This target cannot end a
@@ -321,8 +325,8 @@ func NewRouter() http.Handler {
 	// like every other target-affecting operator action: the rehearsal computes
 	// the diff through the add-on and records it, and the apply cites the id it
 	// was given rather than resubmitting the request.
-	mux.HandleFunc("POST /api/v1/targets/{target}/entitlements/rehearse", withCORS(withOperatorAuth(handleRehearseEntitlements)))
-	mux.HandleFunc("POST /api/v1/targets/{target}/entitlements/apply", withCORS(withOperatorAuth(handleApplyEntitlements)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/entitlements/rehearse", withCORS(withOperatorAuth(withTargetProject(handleRehearseEntitlements))))
+	mux.HandleFunc("POST /api/v1/targets/{target}/entitlements/apply", withCORS(withOperatorAuth(withTargetProject(handleApplyEntitlements))))
 
 	// Allowances (group 8): the per-user overlay beside role-derived access.
 	// Nothing here deletes — an allowance is lifted, and the row survives,

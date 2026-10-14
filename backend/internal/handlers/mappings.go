@@ -43,6 +43,11 @@ type mappingRequest struct {
 }
 
 func handleListRoleMappings(w http.ResponseWriter, r *http.Request) {
+	// A system with no project has no mappings to list, and saying so is the
+	// answer its mapping page renders from (the no-project frame).
+	if target := r.URL.Query().Get("target"); target != "" && !requireProject(w, r, target) {
+		return
+	}
 	rows, err := dbListRoleMappings(r.Context(), r.URL.Query().Get("target"))
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -60,6 +65,13 @@ func handleCreateRoleMapping(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
+	// The target's project, never the caller's.
+	project, err := resolveMappingProject(r.Context(), req.Target, req.ProjectID)
+	if err != nil {
+		writeMappingError(w, err)
+		return
+	}
+	req.ProjectID = project
 	field, value, _, err := validateMappingAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
 	if err != nil {
 		writeMappingError(w, err)
@@ -213,6 +225,9 @@ func handlePublishMappingVersion(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "target is required", map[string]string{"target": "required"})
 		return
 	}
+	if !requireProject(w, r, req.Target) {
+		return
+	}
 	// The same guard its sibling runs, and skipped here it let an unregistered
 	// target reach the foreign key — which answers 500 with raw constraint text,
 	// the failure validateMappingAgainstTarget exists to prevent.
@@ -334,6 +349,9 @@ var errMappingTargetSilent = errors.New("the target has not published its capabi
 
 func writeMappingError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, db.ErrProjectRequired):
+		jsonErrorResponse(w, http.StatusConflict, "PROJECT_REQUIRED",
+			"Choose this system's Zitadel project first. Until then nothing can give access there.")
 	case errors.Is(err, db.ErrMappingExists):
 		jsonErrorResponse(w, http.StatusConflict, "MAPPING_EXISTS", err.Error())
 	case errors.Is(err, db.ErrMappingNotFound):

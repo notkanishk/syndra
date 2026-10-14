@@ -75,6 +75,16 @@ type targetSummary struct {
 	// Health is the confirmed reachability (addons.HealthOf): offline only
 	// after three failed reads in a row, unknown until Syndra can tell.
 	Health addons.HealthState `json:"health"`
+	// Project is the Zitadel project this system serves, nil until chosen.
+	// Shown read-only on Connected systems; a nil one is that row's Needs you.
+	Project *targetProjectRef `json:"project"`
+}
+
+type targetProjectRef struct {
+	ID string `json:"id"`
+	// Name is empty when Zitadel's projects could not be read, and the row
+	// shows the project as unnamed rather than as missing.
+	Name string `json:"name"`
 }
 
 type operationSummary struct {
@@ -99,9 +109,29 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 	for _, tc := range addonsTransportCredentials() {
 		transport[tc.Target] = tc
 	}
+	projects, err := dbTargetProjects(r.Context())
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	names := map[string]string{}
+	if len(projects) > 0 {
+		// Non-fatal: the id is Syndra's own record and still shown.
+		if catalog, err := directoryProjects(r.Context()); err == nil {
+			for _, p := range catalog {
+				names[p.ID] = p.Name
+			}
+		} else {
+			log.Printf("[TARGETS] could not name target projects: %v (non-fatal)", err)
+		}
+	}
 	out := make([]targetSummary, 0, len(registrations))
 	for _, reg := range registrations {
-		out = append(out, describeTarget(reg, transport[reg.Target]))
+		s := describeTarget(reg, transport[reg.Target])
+		if id, ok := projects[reg.Target]; ok {
+			s.Project = &targetProjectRef{ID: id, Name: names[id]}
+		}
+		out = append(out, s)
 	}
 	jsonResponse(w, http.StatusOK, map[string]any{"targets": out})
 }
