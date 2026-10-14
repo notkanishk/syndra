@@ -69,7 +69,18 @@ type nasGroup struct {
 	ID   apiID  `json:"id"`
 	GID  int64  `json:"gid"`
 	Name string `json:"group"`
+	// Builtin marks the machine's groups (builtin_users, builtin_administrators,
+	// wheel …). They are outside what Syndra manages: never offered, never
+	// added, never removed. Offering builtin_administrators hands NAS
+	// administration to everyone holding a role; removing builtin_users takes
+	// away every share whose ACL grants SMB's BUILTIN\Users.
+	Builtin bool `json:"builtin"`
 }
+
+// errGroupsTruncated is a group read that hit the cap. Half a list is not a
+// list: offered, it hides groups; converged against, it reads a member of a
+// missing group as a member of nothing.
+var errGroupsTruncated = errors.New("the target has more groups than one read returns, so this list would be partial")
 
 // apiID is a middleware record key as it appears on the wire.
 //
@@ -136,7 +147,7 @@ func (s *server) readSubjects() (Snapshot, error) {
 	// what came back costs one pass over a list that is already in memory.
 	users = withoutSystemAccounts(users)
 
-	names, _, err := s.groupIndex()
+	names, _, builtin, err := s.groupIndex()
 	if err != nil {
 		// A read that cannot name groups is a read whose group sets are
 		// meaningless to the resolver. Reported as a failure rather than
@@ -149,8 +160,13 @@ func (s *server) readSubjects() (Snapshot, error) {
 	subjects := make([]Subject, 0, len(users))
 	for _, u := range users {
 		groups := make([]string, 0, len(u.Groups))
+		var builtinIDs []apiID
 		for _, id := range u.Groups {
-			if name, ok := names[id.String()]; ok {
+			if name, ok := names[id.String()]; ok && builtin[name] {
+				// Not reported: no mapping can explain it, so a diff would call
+				// it drift forever. Kept, so the write carries it through.
+				builtinIDs = append(builtinIDs, id)
+			} else if ok {
 				groups = append(groups, name)
 			}
 			// An id with no name is skipped rather than rendered as a number.
@@ -173,7 +189,8 @@ func (s *server) readSubjects() (Snapshot, error) {
 			// rather than hidden: an operator who sees the account they know
 			// exists simply vanish from the inventory learns nothing, while one
 			// who sees it labelled learns why it is not on offer.
-			Self: selfName != "" && strings.EqualFold(u.Username, selfName),
+			Self:          selfName != "" && strings.EqualFold(u.Username, selfName),
+			builtinGroups: builtinIDs,
 		})
 	}
 	return Snapshot{TakenAt: time.Now().UTC(), Subjects: subjects, Truncated: truncated}, nil
@@ -208,22 +225,33 @@ func withoutSystemAccounts(users []nasUser) []nasUser {
 // the write is the half nobody sees fail until an account is in the wrong
 // groups, because the read it is later compared against would speak the other
 // one and report the account as converged.
-func (s *server) groupIndex() (byID map[string]string, byName map[string]apiID, err error) {
+//
+// builtin names the machine's groups, so each caller decides what they mean to
+// it: the audit path counts them, everything that offers or writes leaves them
+// out.
+func (s *server) groupIndex() (byID map[string]string, byName map[string]apiID, builtin map[string]bool, err error) {
 	var groups []nasGroup
 	query := []any{
 		[]any{},
-		map[string]any{"select": []string{"id", "gid", "group"}, "limit": subjectReadCap + 1},
+		map[string]any{"select": []string{"id", "gid", "group", "builtin"}, "limit": subjectReadCap + 1},
 	}
 	if err := s.nas.call("group.query", query, &groups); err != nil {
-		return nil, nil, fmt.Errorf("read groups: %w", err)
+		return nil, nil, nil, fmt.Errorf("read groups: %w", err)
+	}
+	if len(groups) > subjectReadCap {
+		return nil, nil, nil, errGroupsTruncated
 	}
 	byID = make(map[string]string, len(groups))
 	byName = make(map[string]apiID, len(groups))
+	builtin = make(map[string]bool)
 	for _, g := range groups {
 		byID[g.ID.String()] = g.Name
 		byName[g.Name] = g.ID
+		if g.Builtin {
+			builtin[g.Name] = true
+		}
 	}
-	return byID, byName, nil
+	return byID, byName, builtin, nil
 }
 
 // groupsOf names the groups one account belongs to.
@@ -261,7 +289,8 @@ func (s *server) groupsOf(username string) (map[string]bool, error) {
 		return nil, fmt.Errorf("the account this binding names is not on the target")
 	}
 
-	names, _, err := s.groupIndex()
+	// Built-in groups included: an audit watch list can name one.
+	names, _, _, err := s.groupIndex()
 	if err != nil {
 		return nil, err
 	}
@@ -325,12 +354,18 @@ func (s *server) groupIDsFor(names []string) ([]apiID, error) {
 	if len(names) == 0 {
 		return []apiID{}, nil
 	}
-	_, byName, err := s.groupIndex()
+	_, byName, builtin, err := s.groupIndex()
 	if err != nil {
 		return nil, err
 	}
 	ids := make([]apiID, 0, len(names))
 	for _, name := range names {
+		if builtin[name] {
+			// Loud rather than skipped: a mapping that names one predates the
+			// picker's filter, and an operator should see it, not have it
+			// quietly ignored.
+			return nil, fmt.Errorf("%q is a built-in group, which Syndra does not manage", name)
+		}
 		id, ok := byName[name]
 		if !ok {
 			return nil, fmt.Errorf("this target has no group named %q", name)

@@ -230,7 +230,7 @@ const (
 		{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[41,42]},
 		{"username":"leo","id":12,"uid":3002,"locked":true,"smb":false,"groups":[42]}
 	]`
-	fixtureGroups = `[{"id":41,"gid":545,"group":"builtin_users"},{"id":42,"gid":900,"group":"lab_makers"}]`
+	fixtureGroups = `[{"id":41,"gid":545,"group":"builtin_users","builtin":true},{"id":42,"gid":900,"group":"lab_makers"}]`
 )
 
 // The hash fields are the reason the query names its columns. `user.query`
@@ -317,7 +317,9 @@ func TestGroupsAreResolvedToNames(t *testing.T) {
 	if len(got.Subjects) != 2 {
 		t.Fatalf("want 2 subjects, got %d", len(got.Subjects))
 	}
-	if strings.Join(got.Subjects[0].Groups, ",") != "builtin_users,lab_makers" {
+	// builtin_users is not reported: it is the machine's, no mapping explains
+	// it, and a diff that saw it would call it drift on every read.
+	if strings.Join(got.Subjects[0].Groups, ",") != "lab_makers" {
 		t.Errorf("groups must be names, got %v", got.Subjects[0].Groups)
 	}
 	// `locked` is the NAS's word and `enabled` is Syndra's; the translation

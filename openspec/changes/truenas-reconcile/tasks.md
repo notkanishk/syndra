@@ -1,14 +1,15 @@
 ## 1. TrueNAS add-on: built-in groups and truncation (D8)
 
-- [ ] 1.1 `groupIndex` selects `builtin`, refuses `subjectReadCap + 1` rows, and returns which group ids are built in
-- [ ] 1.2 `handleValues` and the value-resolve path exclude built-in groups
-- [ ] 1.3 A subject's reported `Groups` omit built-in groups
-- [ ] 1.4 `converge` writes the mapped groups plus the account's current built-in memberships. `sameSet` compares only managed groups
-- [ ] 1.5 Tests:
+- [x] 1.1 `groupIndex` selects `builtin`, refuses `subjectReadCap + 1` rows, and returns which group ids are built in
+- [x] 1.2 `handleValues` and the value-resolve path exclude built-in groups
+- [x] 1.3 A subject's reported `Groups` omit built-in groups
+- [x] 1.4 `converge` writes the mapped groups plus the account's current built-in memberships. `sameSet` compares only managed groups
+- [x] 1.5 Tests:
   - an admin group is unresolvable
   - `builtin_users` survives a converge and isn't reported
   - an over-cap read errors in enumeration and in convergence
-- [ ] 1.6 Manifest declares `mappable_fields: [{name: group, label: Group, enumerate: values}]`. Test the manifest shape
+- Found on the way: `plan` never resolves group names (already true for an unknown group). A legacy mapping to a built-in group plans as a change, then `apply` refuses it with 422 naming the group. New mappings can't name one: the backend checks values against the filtered list. That leaves it loud, not silent. Making plan resolve names costs a group read per plan.
+- [ ] 1.6 (with 4.1) Manifest declares `mappable_fields: [{name: group, label: Group, enumerate: values}]`. Test the manifest shape
 
 ## 2. Backend: health monitor (D1) and the paused refusal (D2)
 

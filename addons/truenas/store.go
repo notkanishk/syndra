@@ -211,6 +211,11 @@ type Subject struct {
 	// altogether. The add-on refuses to adopt or purge it whatever any caller
 	// asks, so this exists to explain the refusal before somebody meets it.
 	Self bool `json:"self,omitempty"`
+
+	// builtinGroups are the account's built-in memberships, as record ids.
+	// Not on the wire: no mapping can explain them, so the backend never sees
+	// them. Kept so a convergence's full replace writes them back unchanged.
+	builtinGroups []apiID
 }
 
 var snapshotKey = []byte("latest")
