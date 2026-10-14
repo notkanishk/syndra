@@ -70,14 +70,17 @@ func handleCreateAllowance(w http.ResponseWriter, r *http.Request) {
 		writeAllowanceError(w, err)
 		return
 	}
+	convergeAfterHold(r.Context(), created.ActorID, created.SubjectID, created.Target)
 	jsonResponse(w, http.StatusCreated, created)
 }
 
 func handleLiftAllowance(w http.ResponseWriter, r *http.Request) {
-	if err := dbLiftAllowance(r.Context(), r.PathValue("id"), resolveActor(r, "")); err != nil {
+	subject, target, err := dbLiftAllowance(r.Context(), r.PathValue("id"), resolveActor(r, ""))
+	if err != nil {
 		writeAllowanceError(w, err)
 		return
 	}
+	convergeAfterHold(r.Context(), resolveActor(r, ""), subject, target)
 	jsonResponse(w, http.StatusOK, map[string]any{"status": "lifted"})
 }
 

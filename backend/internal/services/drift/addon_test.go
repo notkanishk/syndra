@@ -39,6 +39,12 @@ type addonReconcileHarness struct {
 	findingsWritten []db.MergeFinding
 	findingsCleared []string
 	basesWritten    []db.MergeBase
+	// The unbound half: mappings on the target, who holds each role, and who
+	// already has a convergence waiting. Empty by default, so every earlier
+	// test sees a target with nobody unbound.
+	mappings []db.RoleMapping
+	holders  map[string][]string
+	waiting  map[string]bool
 }
 
 func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
@@ -47,6 +53,13 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 	origRecord, origResolve := recordConvergence, resolveIntent
 	origUnrec, origRec := markUnreconciled, markReconciled
 	origBases := listMergeBases
+	origMappings, origHolders, origPending := listMappings, mappingHolders, pendingApply
+	t.Cleanup(func() { listMappings, mappingHolders, pendingApply = origMappings, origHolders, origPending })
+	listMappings = func(context.Context, string) ([]db.RoleMapping, error) { return h.mappings, nil }
+	mappingHolders = func(_ context.Context, project, role string) ([]string, error) {
+		return h.holders[project+"/"+role], nil
+	}
+	pendingApply = func(_ context.Context, _, user string) (bool, error) { return h.waiting[user], nil }
 	t.Cleanup(func() {
 		addonSubjects, addonPlan, listBindings = origSubjects, origPlan, origBindings
 		recordConvergence, resolveIntent = origRecord, origResolve

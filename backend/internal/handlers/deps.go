@@ -486,6 +486,8 @@ var (
 	dbRequireTargetProject     = db.RequireTargetProject
 	dbSetTargetProject         = db.SetTargetProject
 	resolveMappingProject      = mappingProject
+	svcConvergeProjectChange   = services.ConvergeProjectChange
+	svcConvergeSubjectOn       = services.ConvergeSubjectOn
 	directoryProjects          = func(ctx context.Context) ([]models.ProjectCatalog, error) { return directory.Default.Projects(ctx) }
 	dbStandingBindingConflicts = db.StandingBindingConflicts
 	dbResolveBindingConflict   = db.ResolveBindingConflict

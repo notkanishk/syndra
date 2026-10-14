@@ -113,3 +113,33 @@ func SetTargetProject(ctx context.Context, target, projectID string) error {
 	}
 	return nil
 }
+
+// TargetServingProject returns the target a Zitadel project serves, if any. A
+// project serves at most one target (targets_project_id_key).
+func TargetServingProject(ctx context.Context, projectID string) (string, bool, error) {
+	var target string
+	err := querier(ctx).QueryRow(ctx, `SELECT target FROM targets WHERE project_id = $1 AND state = 'active'`, projectID).Scan(&target)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("read target serving %s: %w", projectID, err)
+	}
+	return target, true, nil
+}
+
+// PendingApplyExists reports whether a convergence for this subject on this
+// target is already queued and not yet sent. The reconcile pass asks before
+// queueing one, so a person waiting on an operator gets one row in Pending
+// changes rather than a new one every six hours.
+func PendingApplyExists(ctx context.Context, target, userID string) (bool, error) {
+	const q = `SELECT EXISTS(
+		SELECT 1 FROM propagation_outbox
+		 WHERE op_type = 'apply' AND target = $1 AND user_id = $2
+		   AND status IN ('pending', 'in_flight'))`
+	var exists bool
+	if err := querier(ctx).QueryRow(ctx, q, target, userID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("pending apply exists (%s %s): %w", target, userID, err)
+	}
+	return exists, nil
+}

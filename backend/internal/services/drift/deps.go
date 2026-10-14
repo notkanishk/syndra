@@ -109,6 +109,12 @@ var (
 
 	recordConvergence = db.RecordSystemConvergence
 
+	// The unbound half of the pass: who holds a mapped role, and whether a
+	// convergence for them is already waiting.
+	listMappings   = db.ListRoleMappings
+	mappingHolders = db.MappingHolders
+	pendingApply   = db.PendingApplyExists
+
 	// The mutation-log anchor (2.28). Two seams rather than one, because the
 	// read and the comparison fail differently: a health read that did not
 	// happen is no evidence, and a comparison that says the chain was trimmed is

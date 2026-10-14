@@ -89,6 +89,13 @@
   - "Assign {account} to {name}"
 - [ ] 6.7 Tests for the gate, the strip, the dialog states and the assign Modal
 
+## 7a. Mapping dialog (owner, 14 Oct)
+
+- [x] 7a.1 Plan rows resolve names by id, so "Name not available" is gone from every plan screen
+- [x] 7a.2 Mapping rehearsal copy in plain language
+- [x] 7a.3 Every 500 answers with a sentence and a support reference; the cause is logged under that reference
+- [x] 7a.4 RoleMapping reads share one column list and one scan list, checked to match
+
 ## 7. Close the loop
 
 - [ ] 7.1 Full verification: backend, add-on and UI suites, plus lint and build
@@ -107,9 +114,10 @@
 
 ## 9. Every way of giving a role reaches TrueNAS (WALKTHROUGH G1, G4, G5)
 
-- [ ] 9.1 Request approval, direct grant and a webhook `grant_added` queue the same target convergence the cascade does. Test: an approved request yields a TrueNAS outbox row
-- [ ] 9.2 Creating or lifting a hold queues a convergence for its subject. Test
-- [ ] 9.3 `user_deactivated` queues a convergence that disables the account. Test
+- [x] 9.1 Request approval and every direct grant (add, replace, revoke) converge the one system their project serves (`services.ConvergeProjectChange`, through `grantDirect`). A grant made in Zitadel's own console does **not**: a Zitadel change with no Syndra trace is drift to triage, and the resolver doesn't count it as held.
+- [x] 9.1b Safety net: the reconcile pass queues a first convergence for everyone who holds a mapped role and has no account. It skips anyone with an unsent one already waiting, and anyone whose access resolves to disabled.
+- [x] 9.2 Creating or lifting a hold queues a convergence for its subject. Test
+- [x] 9.3 `user_deactivated` queues a convergence that disables the account. Test
 
 ## Found in production, 14 Oct 2026 (read-only audit of drive.makerspace.tools)
 

@@ -382,10 +382,23 @@ func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID stri
 	return nil
 }
 
-// processUserDeactivated handles user_deactivated and user_locked events:
-// full cache invalidation only.
+// processUserDeactivated handles user_deactivated and user_locked events: the
+// cache is invalidated, and every system the person has an account on gets a
+// convergence. The resolver reads their directory standing and disables the
+// account there; before this it waited for the next resolution, up to six
+// hours, with a departed member's storage account still switched on.
+//
+// Best-effort and never a reason to fail the delivery: the reconcile pass is
+// the backstop, and a 5xx here would only make Zitadel redeliver an event this
+// handler has already acted on as far as it can.
 func processUserDeactivated(ctx context.Context, event WebhookPayload) error {
 	_ = cacheInvalidateUser(ctx, event.UserID)
+	for _, reg := range addonsRegistered() {
+		if _, bound, err := dbGetTargetBinding(ctx, reg.Target, event.UserID); err != nil || !bound {
+			continue
+		}
+		convergeAfterHold(ctx, "zitadel:"+event.EventType, event.UserID, reg.Target)
+	}
 	return nil
 }
 
