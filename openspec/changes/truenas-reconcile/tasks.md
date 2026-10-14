@@ -28,8 +28,8 @@
 
 ## 2b. A-01 from design: the states between answering and offline
 
-- [ ] 2b.1 Monitor keeps the last three results, `missed_since` (the first miss of the current run) and `started_at`. Tests
-- [ ] 2b.2 One backend `status` with A-01's precedence: `cannot_connect` > `offline` > `waiting_to_retry` > `checking` > `answering`. It goes on the targets list and the health read. Test for each pairing
+- [x] 2b.1 Monitor keeps the last three results, `missed_since` (the first miss of the current run) and `started_at`. Tests
+- [x] 2b.2 One backend `status` with A-01's precedence: `cannot_connect` > `offline` > `waiting_to_retry` > `checking` > `answering`. It goes on the targets list and the health read. Test for each pairing
 - [ ] 2b.3 Values answer carries `builtin_count` and two built-in example names, for "TrueNAS has no groups of its own yet". Test
 - [ ] 2b.4 UI renames at the A-01 call sites, with their tests. Check pips (aria-label) on Connected systems and the system page
 
@@ -95,6 +95,27 @@
   - `ConfirmByTyping`
   - "Assign {account} to {name}"
 - [ ] 6.7 Tests for the gate, the strip, the dialog states and the assign Modal
+
+## 10. Home folders by role (owner, 14 Oct)
+
+- [ ] 10.1 Add-on schema: a single-valued mappable field `home` (label "Home folder"). Its values are folders inside an SMB share, read from the NAS. Tests
+- [ ] 10.2 Converge:
+  - no home yet: `home = <place>/<account name>`, with `home_create: true` and `home_mode: "700"`. That is TrueNAS's own private create, mode 700 with the ACL stripped.
+  - already there: no change.
+  - elsewhere: never moved. The outcome says so.
+  - no longer wanted: kept.
+  - Tests for each
+- [ ] 10.3 Refuse to point a home at a folder that already exists and is owned by another uid. The outcome names the folder. Test
+- [ ] 10.4 Two roles naming different places: everything else lands, the home is left as it is, and the outcome says which two. Test
+- [ ] 10.5 UI (after A-02): the home setting on the mapping screen, and "Your home folder" first among the member's places
+
+## 11. Identity numbers never reused (found 14 Oct, read-only audit)
+
+TrueNAS gives a new account the next free uid, and gives its personal group the next free gid. It can't see numbers that only remain as owners of old files. Old members' home folders are owned by uids and gids that now belong to new Syndra accounts, so those accounts can open those folders.
+
+- [ ] 11.1 The add-on assigns uids from its own range (default 20000 and up, configurable), above every uid on the NAS. It keeps a high-water mark in its store, so a number is never handed out twice. Test
+- [ ] 11.2 The personal group gets the same number: `group.create {gid: uid}`, then `user.create {group: <id>}`. If the user create fails, the group create is undone. Test
+- [ ] 11.3 Remediation of existing accounts and orphaned folders: owner decision, on the NAS
 
 ## 7a. Mapping dialog (owner, 14 Oct)
 

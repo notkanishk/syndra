@@ -75,6 +75,12 @@ type targetSummary struct {
 	// Health is the confirmed reachability (addons.HealthOf): offline only
 	// after three failed reads in a row, unknown until Syndra can tell.
 	Health addons.HealthState `json:"health"`
+	// Status is the one reading the row and the header show, decided here so
+	// no screen can rank them differently (A-01): cannot_connect, then
+	// offline, then waiting_to_retry, then checking, then answering. The
+	// breaker used to win over everything, which sent an operator to the
+	// Syndra server while TrueNAS itself was down.
+	Status string `json:"status"`
 	// Project is the Zitadel project this system serves, nil until chosen.
 	// Shown read-only on Connected systems; a nil one is that row's Needs you.
 	Project *targetProjectRef `json:"project"`
@@ -248,7 +254,25 @@ func describeTarget(reg addons.Registration, transport addons.TransportCredentia
 			SecretParams: op.SecretParams,
 		})
 	}
+	s.Status = targetStatus(s)
 	return s
+}
+
+// targetStatus ranks the readings that can be true at once (A-01, "which
+// reading wins"): what an operator must look at first comes first.
+func targetStatus(s targetSummary) string {
+	switch {
+	case s.TransportStatus == "error":
+		return "cannot_connect"
+	case s.Health.Status == addons.HealthOffline:
+		return "offline"
+	case s.CircuitOpen:
+		return "waiting_to_retry"
+	case s.Health.Status == addons.HealthUnknown:
+		return "checking"
+	default:
+		return "answering"
+	}
 }
 
 func errText(err error) string {

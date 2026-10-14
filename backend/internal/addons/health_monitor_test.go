@@ -1,6 +1,7 @@
 package addons
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -57,5 +58,27 @@ func TestBeforeAnyAnswerSyndraCannotTell(t *testing.T) {
 	m.observe("truenas", false, "", time.Now())
 	if st := m.state("truenas"); st.Status != HealthOffline {
 		t.Fatalf("the third confirms it even with no success seen, got %+v", st)
+	}
+}
+
+// A-01: the operator sees the last three checks and when the run of misses
+// began, before it is an outage.
+func TestTheMonitorRemembersTheLastThreeChecks(t *testing.T) {
+	m := newHealthMonitor()
+	t0 := time.Date(2026, 10, 14, 9, 39, 0, 0, time.UTC)
+	observeSeq(m, "truenas", t0, true, true, true, false)
+	st := m.state("truenas")
+	if got := strings.Join(st.Recent, ","); got != "answered,answered,missed" {
+		t.Fatalf("want the last three, oldest first, got %s", got)
+	}
+	if st.Status != HealthOnline || st.MissedSince == nil || !st.MissedSince.Equal(t0.Add(90*time.Second)) {
+		t.Fatalf("one miss stays online and carries when it began, got %+v", st)
+	}
+	m.observe("truenas", true, "active", t0.Add(2*time.Minute))
+	if st := m.state("truenas"); st.MissedSince != nil {
+		t.Fatalf("an answer ends the run, got %+v", st)
+	}
+	if st := newHealthMonitor().state("x"); st.StartedAt.IsZero() || st.Recent == nil {
+		t.Fatalf("never checked still says when Syndra started, with an empty list: %+v", st)
 	}
 }
