@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,8 @@ var (
 	bucketIdempotency = []byte("idempotency")
 	bucketSnapshot    = []byte("snapshot")
 	bucketBindings    = []byte("bindings")
+	// bucketIDs holds the high-water mark of the uids/gids handed out.
+	bucketIDs = []byte("ids")
 )
 
 // idempotencyTTL is the actual replay window, and saying so is the point.
@@ -46,7 +49,7 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("open store: %w", err)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings} {
+		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings, bucketIDs} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return err
 			}
@@ -193,6 +196,8 @@ type Subject struct {
 	Username   string   `json:"username"`
 	UID        int64    `json:"uid"`
 	Groups     []string `json:"groups"`
+	// Home is where the account's home folder is, empty when it has none.
+	Home string `json:"home,omitempty"`
 	Enabled    bool     `json:"enabled"`
 	SMBEnabled bool     `json:"smb_enabled"`
 	// PasswordSet is whether the account has a usable credential.
@@ -336,4 +341,32 @@ func (s *Store) BoundUsernames() (map[string]string, error) {
 		})
 	})
 	return out, err
+}
+
+var highWaterKey = []byte("high_water")
+
+// ClaimID hands out the next identity number in [floor, ceiling], above both
+// the last one this store handed out and the highest the target reports in the
+// range. Never the same number twice: the high-water mark only rises, and it
+// is written in the same transaction that reads it.
+func (s *Store) ClaimID(floor, ceiling, observedMax int64) (int64, error) {
+	var claimed int64
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(bucketIDs)
+		last := floor - 1
+		if raw := b.Get(highWaterKey); raw != nil {
+			if n, err := strconv.ParseInt(string(raw), 10, 64); err == nil && n > last {
+				last = n
+			}
+		}
+		if observedMax > last {
+			last = observedMax
+		}
+		claimed = last + 1
+		if claimed > ceiling {
+			return fmt.Errorf("the identity range %d–%d is used up; raise TRUENAS_ID_CEILING", floor, ceiling)
+		}
+		return b.Put(highWaterKey, []byte(strconv.FormatInt(claimed, 10)))
+	})
+	return claimed, err
 }

@@ -98,15 +98,15 @@
 
 ## 10. Home folders by role (owner, 14 Oct)
 
-- [ ] 10.1 Add-on schema: a single-valued mappable field `home` (label "Home folder"). Its values are folders inside an SMB share, read from the NAS. Tests
-- [ ] 10.2 Converge:
+- [x] 10.1 Add-on schema: a single-valued mappable field `home` (label "Home folder"). Its values are folders inside an SMB share, read from the NAS. Tests
+- [x] 10.2 Converge:
   - no home yet: `home = <place>/<account name>`, with `home_create: true` and `home_mode: "700"`. That is TrueNAS's own private create, mode 700 with the ACL stripped.
   - already there: no change.
   - elsewhere: never moved. The outcome says so.
   - no longer wanted: kept.
   - Tests for each
-- [ ] 10.3 Refuse to point a home at a folder that already exists and is owned by another uid. The outcome names the folder. Test
-- [ ] 10.4 Two roles naming different places: everything else lands, the home is left as it is, and the outcome says which two. Test
+- [x] 10.3 Refuse to point a home at a folder that already exists and is owned by another uid. The outcome names the folder. Test
+- [x] 10.4 Two roles naming different places: everything else lands, the home is left as it is, and the outcome says which two. Test
 - [x] 10.6 Home folder limit: `home_quota`, a per-role value in bytes, where the largest of a person's roles wins. It is set as a user quota on the home's dataset. A limit nobody gives any more is left as it is, never removed into "unlimited". The add-on key needs TrueNAS's DATASET_WRITE role to set it (owner decision).
 - [x] 10.7 Per-person limit: an allowance with direction `set` (migration 000052). It is allowed only on fields the add-on marks per-person, bounded by an expiry or a review date, and applied by the resolver over the roles' value, only for someone the target reaches.
 - [ ] 10.5 UI (after A-02): the home setting on the mapping screen, and "Your home folder" first among the member's places
@@ -115,9 +115,11 @@
 
 TrueNAS gives a new account the next free uid, and gives its personal group the next free gid. It can't see numbers that only remain as owners of old files. Old members' home folders are owned by uids and gids that now belong to new Syndra accounts, so those accounts can open those folders.
 
-- [ ] 11.1 The add-on assigns uids from its own range (default 20000 and up, configurable), above every uid on the NAS. It keeps a high-water mark in its store, so a number is never handed out twice. Test
-- [ ] 11.2 The personal group gets the same number: `group.create {gid: uid}`, then `user.create {group: <id>}`. If the user create fails, the group create is undone. Test
-- [ ] 11.3 Remediation of existing accounts and orphaned folders: owner decision, on the NAS
+- [x] 11.1 The add-on assigns uids from its own range, 200000–999999 by default (`TRUENAS_ID_FLOOR`, `TRUENAS_ID_CEILING`). TrueNAS accepts 0–90,000,000 and can't change a uid later; the range sits clear of the NAS's own accounts, of Proxmox container ids (100000–165535) and of the idmap ranges above 90M. It keeps a high-water mark in its store, so a number is never handed out twice. Test
+- [x] 11.2 The personal group gets the same number: `group.create {gid: uid}`, then `user.create {group: <id>}`. If the user create fails, the group create is undone. Test
+- [ ] 11.3 Remediation, on the NAS:
+  - [x] the 25 orphaned home folders are owned by root and private to the Admin group (14 Oct, with the owner's approval; the state before is kept for undo)
+  - [ ] the three Syndra-created accounts are recreated in the new range (owner approval)
 
 ## 7a. Mapping dialog (owner, 14 Oct)
 

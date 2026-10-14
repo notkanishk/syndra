@@ -63,6 +63,8 @@ type nasUser struct {
 	// `user.update({groups})` writes back, which is why both directions resolve
 	// through one map.
 	Groups []apiID `json:"groups"`
+	// Home is the account's home path; `/var/empty` when it has none.
+	Home string `json:"home"`
 }
 
 type nasGroup struct {
@@ -123,7 +125,7 @@ func (s *server) readSubjects() (Snapshot, error) {
 	query := []any{
 		[]any{},
 		map[string]any{
-			"select": []string{"id", "username", "uid", "locked", "smb", "groups", "builtin", "password_disabled"},
+			"select": []string{"id", "username", "uid", "locked", "smb", "groups", "builtin", "password_disabled", "home"},
 			"limit":  subjectReadCap + 1,
 		},
 	}
@@ -190,6 +192,7 @@ func (s *server) readSubjects() (Snapshot, error) {
 			// exists simply vanish from the inventory learns nothing, while one
 			// who sees it labelled learns why it is not on offer.
 			Self:          selfName != "" && strings.EqualFold(u.Username, selfName),
+			Home:          homeOf(u.Home),
 			builtinGroups: builtinIDs,
 		})
 	}

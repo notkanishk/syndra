@@ -168,8 +168,14 @@ async def main():
             # for group; a recording that omits them is a recording those
             # decodes cannot be checked against, which is how `groups` sat
             # unrecorded while being read on every inventory pass.
-            ("user.query", [[["builtin", "=", False]], {"select": ["id", "uid", "username", "locked", "smb", "password_disabled", "groups", "group", "builtin"], "limit": 1}]),
-            ("group.query", [[], {"select": ["id", "gid", "group"], "limit": 1}]),
+            ("user.query", [[["builtin", "=", False]], {"select": ["id", "uid", "username", "locked", "smb", "password_disabled", "groups", "group", "builtin", "home"], "limit": 1}]),
+            ("group.query", [[], {"select": ["id", "gid", "group", "builtin"], "limit": 1}]),
+            # The home-folder check (home.go) stats the folder a role would
+            # make. "/mnt" exists on every TrueNAS, so the shape is recorded
+            # without naming anyone's folder.
+            ("filesystem.stat", ["/mnt"]),
+            # Where a role may put home folders (home.go, homePlaces).
+            ("pool.dataset.query", [[], {"select": ["name", "mountpoint"], "limit": 1}]),
             # The union of both call sites' selects. `unauditedShares` asks for
             # name+audit and `shareUsage` asks for name+path+enabled, so a
             # recording of either one alone leaves the other unproven.

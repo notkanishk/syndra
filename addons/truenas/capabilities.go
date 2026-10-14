@@ -59,6 +59,15 @@ type EntitlementField struct {
 	// binding a role to a disabled account would fight the derived lifecycle
 	// state on every resolution.
 	Lifecycle bool `json:"lifecycle"`
+	// Label is the field's name for a person ("Home folder"). The mapping
+	// screen shows it; nothing in the frontend names a field itself.
+	Label string `json:"label,omitempty"`
+	// Single means a person has one value, whatever their roles say: a home
+	// folder is one place. The add-on decides what several values mean.
+	Single bool `json:"single,omitempty"`
+	// PerPerson means an operator may set this one field for one person, over
+	// what their roles give (an allowance with direction "set").
+	PerPerson bool `json:"per_person,omitempty"`
 }
 
 type Operation struct {
@@ -78,6 +87,12 @@ const (
 	FieldGroup      = "group"
 	FieldEnabled    = "enabled"
 	FieldSMBEnabled = "smb_enabled"
+	// FieldHome is where a role puts its holders' home folders: a place on the
+	// NAS, under which each person gets <place>/<account name>.
+	FieldHome = "home"
+	// FieldHomeQuota is the most a person may store in the home folder's
+	// dataset, in bytes. Several roles: the largest wins.
+	FieldHomeQuota = "home_quota"
 )
 
 // entitlementSchema is the desired state this add-on converges.
@@ -92,7 +107,9 @@ const (
 // nothing special-cases restoration because nothing special-cased suspension.
 func entitlementSchema() []EntitlementField {
 	return []EntitlementField{
-		{Name: FieldGroup, Type: "string[]"},
+		{Name: FieldGroup, Type: "string[]", Label: "Group"},
+		{Name: FieldHome, Type: "string", Label: "Home folder", Single: true},
+		{Name: FieldHomeQuota, Type: "int", Label: "Home folder limit", Single: true, PerPerson: true},
 		{Name: FieldEnabled, Type: "bool", Lifecycle: true},
 		{Name: FieldSMBEnabled, Type: "bool", Lifecycle: true},
 	}
@@ -223,6 +240,17 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 		}
 		sort.Strings(names)
 		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: names, Enumerable: true})
+	case FieldHome:
+		places, err := s.homePlaces()
+		if err != nil {
+			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+			return
+		}
+		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: places, Enumerable: true})
+	case FieldHomeQuota:
+		// A byte count, not a list: structure only, which the backend reads as
+		// "any value of the declared type", never as "no value is valid".
+		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: []string{}, Enumerable: false})
 	case FieldEnabled, FieldSMBEnabled:
 		// Lifecycle fields are resolver-computed and not mapping-bindable, so
 		// there is no legitimate reason to ask. Answered rather than refused,
