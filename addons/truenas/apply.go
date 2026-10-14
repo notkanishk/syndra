@@ -759,7 +759,7 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// subject id rather than a name from the directory: this add-on is not
 		// a copy of the identity provider, and a stale display name here would
 		// be one more thing that disagrees with Zitadel.
-		"full_name":    binding.Username,
+		"full_name": binding.Username,
 		// SMB only, never a login. Left unset, TrueNAS gives the account zsh,
 		// and one SSH key added later is a working shell on the NAS. The path
 		// is a key of `user.shell_choices` on 25.10, and the one every account

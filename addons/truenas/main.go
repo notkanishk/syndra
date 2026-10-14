@@ -81,9 +81,9 @@ type config struct {
 	// idFloor and idCeiling are the uid/gid range new accounts are given
 	// (TRUENAS_ID_FLOOR / TRUENAS_ID_CEILING; identity.go explains the default).
 	idFloor, idCeiling int64
-	nasAPIKey string
-	nasVerify bool
-	keyExpiry time.Time
+	nasAPIKey          string
+	nasVerify          bool
+	keyExpiry          time.Time
 	// keyNeverExpires is TRUENAS_API_KEY_EXPIRES_AT=never — an operator stating
 	// that the key was issued without one. Distinct from unset, which means
 	// nobody has said either way.
