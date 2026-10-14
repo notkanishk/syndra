@@ -9,7 +9,7 @@
   - `builtin_users` survives a converge and isn't reported
   - an over-cap read errors in enumeration and in convergence
 - Found on the way: `plan` never resolves group names (already true for an unknown group). A legacy mapping to a built-in group plans as a change, then `apply` refuses it with 422 naming the group. New mappings can't name one: the backend checks values against the filtered list. That leaves it loud, not silent. Making plan resolve names costs a group read per plan.
-- [ ] 1.6 (with 4.1) Manifest declares `mappable_fields: [{name: group, label: Group, enumerate: values}]`. Test the manifest shape
+- [x] 1.6 Superseded: the schema itself says what is mappable. Every non-lifecycle field is, with `label`, `single` and `per_person`. Was: manifest declares `mappable_fields: [{name: group, label: Group, enumerate: values}]`. Test the manifest shape
 
 ## 2. Backend: health monitor (D1) and the paused refusal (D2)
 
@@ -30,7 +30,7 @@
 
 - [x] 2b.1 Monitor keeps the last three results, `missed_since` (the first miss of the current run) and `started_at`. Tests
 - [x] 2b.2 One backend `status` with A-01's precedence: `cannot_connect` > `offline` > `waiting_to_retry` > `checking` > `answering`. It goes on the targets list and the health read. Test for each pairing
-- [ ] 2b.3 Values answer carries `builtin_count` and two built-in example names, for "TrueNAS has no groups of its own yet". Test
+- [x] 2b.3 Values answer carries `builtin_count` and two built-in example names, for "TrueNAS has no groups of its own yet". Test
 - [ ] 2b.4 UI renames at the A-01 call sites, with their tests. Check pips (aria-label) on Connected systems and the system page
 
 ## 3. Backend: one project per target (D3–D5)
@@ -54,9 +54,9 @@
 
 ## 4. Backend: mappable values (D6–D7)
 
-- [ ] 4.1 `EntitlementSchema.MappableFields`, with a fallback to non-lifecycle fields when it's absent. Tests for both manifests
-- [ ] 4.2 `GET /targets/{t}/mappable-values?field=`, with the last-known cache, `read_at` and `current`, and `409 VALUES_NEVER_READ`. Tests: fresh, stale and never read
-- [ ] 4.3 Drop `near` from the unresolvable refusal. Update the handler test
+- [x] 4.1 Superseded with 1.6: mappable = not lifecycle, so there is no second declaration to fall back from
+- [x] 4.2 `GET /targets/{t}/mappable-values?field=`, with the last-known cache, `read_at` and `current`, and `409 VALUES_NEVER_READ`. Tests: fresh, stale and never read
+- [ ] 4.3 Drop `near` from the unresolvable refusal, together with 6.3: until the picker ships the dialog is free text, and `near` is what answers a typo. Update the handler test
 
 ## 5. UI: Notice and member storage (D9, BUILD-LIST "/storage")
 
@@ -138,10 +138,15 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 
 ## 8. Where to connect, from the NAS (WALKTHROUGH Part 3)
 
-- [ ] 8.1 Add-on: `reach` read. It covers SMB shares, plus ACLs at each share root and first-level folder. For a set of groups it returns `{share, path, access: read|modify, dataset, addresses}`, cached per share and refreshed on reconcile. Tests: traverse-only isn't reach; Community resolves to `main/waddle_share` on the production-shaped fixture
-- [ ] 8.2 Manifest: declare the operation. Backend: `GET /me/targets` items carry `reach` from the member's own groups, never from the group names. Tests
-- [ ] 8.3 Operator: `GET /targets/{t}/groups/{group}/reach` for the mappings page's "what this group opens" line. Test
-- [ ] 8.4 `storage.status` reports usage per reachable path from its dataset, with 0 rather than absent. Test
+- [x] 8.1 Add-on: `GET /reach` reads each enabled share's root and first-level folder ACLs (unsimplified NFS4, in order: the first entry naming a permission decides it). Each place is `{share, folder, path, access: read|change, dataset}`. Per group it is what holding the group adds to what every account opens (everyone@ and builtin_users), which is listed apart. One read serves five minutes; a failed read serves the last one as not current. Tests: ordering, deny-first, inherit-only, group@, an untraversable root, the production-shaped fixture, cache and fallback, never read. Also replayed against the live NAS's own answers (read-only)
+- [x] 8.2 `storage.status` carries `places` from the groups the account is actually in, home folder first. `/me/targets` passes them through with both addresses built once from the connection host. No manifest operation: it is part of the member's own status read. Tests
+- [x] 8.3 Operator: `GET /targets/{t}/reach`, every group at once, so the card header says the read's age once (A-02 §3). Always 200, with `read: false` for "not read from TrueNAS yet". Tests
+- [x] 8.4 Usage per place from its dataset's user quota table, only where the member can change files. No row is 0 ("Nothing saved here yet"); an unreadable table is no usage, never 0. Test
+- [ ] 8.6 "from your Fabrication lead role" (A-02 §1): name the mapping that put the member in the group that opens each place
+- [ ] 8.7 Home values are the dataset folders at the top of each share, not hidden, labelled `share › folder` [x add-on and values endpoint]. Preview counts homes it will make ("Makes 34 home folders in main › home_dir; 2 people already have one there")
+- [ ] 8.8 "[Name]'s roles name two home folders" in Waiting on you, grouped by the pair of mappings (A-02 §7)
+- [ ] 8.9 "You no longer hold Lab Tech, the role that gave you this folder" (A-02 §6): the account's home against what the member's roles want now
+- [x] 8.10 Access given back: `needs_new_password` from the add-on (account has a password, SMB off, SMB wanted), and `restored_at` on `/me/targets`, the latest end of a deny hold on that target, lifted or lapsed. Tests
 - [ ] 8.5 UI: share blocks render from `reach`, and the `smb://host/group` derivation is deleted
 
 ## 9. Every way of giving a role reaches TrueNAS (WALKTHROUGH G1, G4, G5)

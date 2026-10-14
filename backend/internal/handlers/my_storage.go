@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/db"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
@@ -108,6 +110,10 @@ type myTargetView struct {
 	// guessed, because a share path that does not work teaches a member to
 	// distrust the whole page, starting with the parts that were right.
 	Connection *addons.Connection `json:"connection,omitempty"`
+	// RestoredAt is when access was given back, set only while the account
+	// waits for a new password after it (storage.needs_new_password): the
+	// latest end of a deny hold on this target.
+	RestoredAt *time.Time `json:"restored_at,omitempty"`
 }
 
 type myTargetAccount struct {
@@ -259,10 +265,44 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 		// Best-effort: a page that cannot read usage is still worth serving,
 		// and every field it fills is additive.
 		if status := addonsMyStorage(r.Context(), target, subject); status.Outcome == addons.OutcomeSucceeded {
+			if view.Connection != nil {
+				for i := range status.Places {
+					status.Places[i].Address(view.Connection.Host)
+				}
+			}
 			view.Storage = &status
+			if status.NeedsNewPassword {
+				view.RestoredAt = restoredAt(r.Context(), subject, target)
+			}
 		}
 	}
 	return view, nil
+}
+
+// restoredAt is when a deny hold on this target last ended, lifted or lapsed.
+// Nil when none has, or the history can't be read: the page then says access
+// was given back without a date rather than guessing one.
+func restoredAt(ctx context.Context, subject, target string) *time.Time {
+	all, err := dbAllowancesForSubject(ctx, subject)
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	var latest *time.Time
+	for _, a := range all {
+		if a.Target != target || a.Direction != db.AllowanceDeny {
+			continue
+		}
+		ended := a.LiftedAt
+		if ended == nil && a.ExpiresAt != nil && !a.ExpiresAt.After(now) {
+			ended = a.ExpiresAt
+		}
+		if ended != nil && (latest == nil || ended.After(*latest)) {
+			t := *ended
+			latest = &t
+		}
+	}
+	return latest
 }
 
 type setCredentialRequest struct {
