@@ -425,6 +425,8 @@ var (
 	// on an ordinary page load, and a durable row per page view would fill the
 	// operation log with events that changed nothing.
 	addonsMyStorage = addons.MyStorage
+	addonsReadReach = addons.ReadReach
+	addonsReadValues = addons.ReadValues
 	// What the TARGET's own audit log says about a subject. Also a read: an
 	// operator opening somebody's record must not append to the operation log
 	// for having looked.

@@ -146,6 +146,13 @@ func handleListTargets(w http.ResponseWriter, r *http.Request) {
 //
 // A live read rather than a cached opinion: reachability that reports the last
 // known answer is the field most likely to be wrong exactly when it is read.
+// handleTargetReach is what each of a target's groups opens, for the mappings
+// page: one line per place under each mapping, and the read's age said once.
+// Always 200: "not read from TrueNAS yet" is an answer the page renders.
+func handleTargetReach(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, http.StatusOK, addonsReadReach(r.Context(), r.PathValue("target")))
+}
+
 func handleTargetHealth(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("target")
 	health := addonsHealth(r.Context(), target)

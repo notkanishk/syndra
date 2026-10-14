@@ -17,3 +17,21 @@ A group read that returns more rows than `subjectReadCap` SHALL fail rather than
 #### Scenario: Over the cap
 - **WHEN** `group.query` returns `subjectReadCap + 1` rows
 - **THEN** enumeration and convergence both return an error and change nothing
+
+### Requirement: What a group opens is read from the folder ACLs
+The add-on SHALL read each enabled SMB share's root and first-level folder ACLs, unsimplified, and evaluate them as NFS4 does: entries in order, the first that applies to the reader and names a permission deciding it, inherit-only entries not applying to the folder itself. A place is read access with READ_DATA and change access with WRITE_DATA as well; traverse alone is not a place. A folder behind a root the reader can't traverse is out of reach. Per group, the answer SHALL be what holding the group adds to what every account opens (everyone@ and builtin_users), and the latter SHALL be listed apart.
+
+#### Scenario: The production layout
+- **WHEN** `main` lets Community traverse and `waddle_share` grants Community MODIFY
+- **THEN** Community opens `main › waddle_share`, can change files
+
+#### Scenario: The NAS can't be read
+- **WHEN** a read fails after one succeeded
+- **THEN** the last read is served with `current: false`, and with none the answer is `REACH_NEVER_READ`
+
+### Requirement: Home folders go in a dataset folder at the top of a share
+A home folder's place SHALL be a first-level folder of an enabled SMB share that is a dataset of its own and not hidden.
+
+#### Scenario: An application's share
+- **WHEN** a share's first-level folders are hidden folders and plain directories
+- **THEN** none of them is offered as a place for home folders
