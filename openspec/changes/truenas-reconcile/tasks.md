@@ -1,0 +1,97 @@
+## 1. TrueNAS add-on: built-in groups and truncation (D8)
+
+- [ ] 1.1 `groupIndex` selects `builtin`, refuses `subjectReadCap + 1` rows, and returns which group ids are built in
+- [ ] 1.2 `handleValues` and the value-resolve path exclude built-in groups
+- [ ] 1.3 A subject's reported `Groups` omit built-in groups
+- [ ] 1.4 `converge` writes the mapped groups plus the account's current built-in memberships. `sameSet` compares only managed groups
+- [ ] 1.5 Tests:
+  - an admin group is unresolvable
+  - `builtin_users` survives a converge and isn't reported
+  - an over-cap read errors in enumeration and in convergence
+- [ ] 1.6 Manifest declares `mappable_fields: [{name: group, label: Group, enumerate: values}]`. Test the manifest shape
+
+## 2. Backend: health monitor (D1) and the paused refusal (D2)
+
+- [ ] 2.1 `addons.HealthMonitor`:
+  - per-target `checked_at`, `consecutive_failures`, `first_failed_at`
+  - `State(target)` returns `online | offline(since) | unknown`
+  - a `periodic.Runner` probes every active add-on target every 30s
+- [ ] 2.2 Tests:
+  - one failure stays online
+  - three failures are offline since the first
+  - recovery clears the run
+  - no probe yet is unknown
+- [ ] 2.3 `GET /me/targets` items gain `checked_at` and `reachable_since`. `reachable` comes from the monitor (unknown leaves `reachable` absent). Handler tests
+- [ ] 2.4 `handleSetMyCredential` refuses `draining` / `read_only` with `409 TARGET_PAUSED` before dispatch. Test that nothing is dispatched
+- [ ] 2.5 The operator health read and `GET /api/v1/targets` expose the monitor's state beside the live read. Tests
+
+## 3. Backend: one project per target (D3–D5)
+
+- [ ] 3.1 Migration 000051:
+  - `targets.project_id` (unique) and `UNIQUE (target, project_id)`
+  - infer from mappings, and `RAISE EXCEPTION` naming targets that span several projects
+  - composite FK from `target_role_mappings` with `ON UPDATE RESTRICT`
+  - down migration
+- [ ] 3.2 Live-DB migration tests: infer one; refuse two, naming both; a mapping to a foreign project is refused by the FK
+- [ ] 3.3 `PUT /targets/{t}/project`:
+  - `409 PROJECT_TAKEN` names the system holding it
+  - `409 MAPPINGS_EXIST` carries the count
+  - the `zitadel` target is refused
+  - audit line
+  - Tests for each
+- [ ] 3.4 `requireTargetProject` and `db.ErrProjectRequired` across the BUILD-NOTES write list. Lifecycle, reads and the `zitadel` target are exempt
+- [ ] 3.5 A table test asserting every gated route refuses with `409 PROJECT_REQUIRED` and lifecycle doesn't
+- [ ] 3.6 Mapping create and rehearse-create take the project from the target. `GET /targets/mappings` returns `409 PROJECT_REQUIRED` without one. Tests
+- [ ] 3.7 `GET /api/v1/targets` returns `project: {id, name} | null`. Test
+
+## 4. Backend: mappable values (D6–D7)
+
+- [ ] 4.1 `EntitlementSchema.MappableFields`, with a fallback to non-lifecycle fields when it's absent. Tests for both manifests
+- [ ] 4.2 `GET /targets/{t}/mappable-values?field=`, with the last-known cache, `read_at` and `current`, and `409 VALUES_NEVER_READ`. Tests: fresh, stale and never read
+- [ ] 4.3 Drop `near` from the unresolvable refusal. Update the handler test
+
+## 5. UI: Notice and member storage (D9, BUILD-LIST "/storage")
+
+- [ ] 5.1 `components/ui/Notice.tsx` per `proposed/Notice.md` (amber, red, neutral; `role="alert"` when it blocks). Unit test
+- [ ] 5.2 Rebuild `MyStorage` to `route-storage`:
+  - the state line, and one display line per state
+  - one block per share with `CopyableValue` addresses
+  - the neutral usage bar, "nearly full" from 90%, "no limit set", and offline unavailable
+  - the password as a next step, and the quiet "Change password"
+  - one Notice per card
+  - the paused and offline refusals, the held state (#79) and the no-host state (#80)
+- [ ] 5.3 `useMyStorage` refetches every 30s while a Notice shows
+- [ ] 5.4 `ConnectionGuide` Modal, with device from the user agent, hidden while offline
+- [ ] 5.5 Phone notes: three-segment step bar, full-width guide button, password field ≥ 220px
+- [ ] 5.6 Tests: each state's copy and controls, never 0 usage offline, no password field when paused or offline
+
+## 6. UI: Connected systems (D9, B3, #57)
+
+- [ ] 6.1 Project gate (3a, frame `noproject`):
+  - violet Step 1 of 2 panel with the picker
+  - taken projects disabled and named
+  - role counts
+  - waiting regions inert at 40%
+  - result frame `projectset`
+- [ ] 6.2 Setup strip: Zitadel project link, mapping summary, and "Mappings →" / "Add the first mapping →". The census line drops its link and names the project
+- [ ] 6.3 `AddMappingDialog`:
+  - role picker scoped to the project, unmapped roles only
+  - field label from the manifest, with a Select only for two or more fields
+  - value Select from `mappable-values`, with the stale label, "TrueNAS hasn't listed its groups yet", and the re-read on unresolvable
+- [ ] 6.4 Mapping rows drop the project prefix
+- [ ] 6.5 Connected systems shows the project read-only. A null project shows "Choose its Zitadel project →" under Needs you
+- [ ] 6.6 #57 Assign Modal:
+  - people search with single-choice rows
+  - "Already has {username} on {target}"
+  - the Changes / Stays box
+  - `ConfirmByTyping`
+  - "Assign {account} to {name}"
+- [ ] 6.7 Tests for the gate, the strip, the dialog states and the assign Modal
+
+## 7. Close the loop
+
+- [ ] 7.1 Full verification: backend, add-on and UI suites, plus lint and build
+- [ ] 7.2 `design_handoff_syndra/reconcile-2026-10/SHIPPED.md` for this slice
+- [ ] 7.3 Owner reruns `/design-sync` so `Notice` and `ConnectionGuide` reach the design system
+- [ ] 7.4 Fold in A-01 from design (operator intermediate state, "paused" wording, NAS with no groups of its own)
+- [ ] 7.5 Codebase-memory re-index (`detect_changes`)
