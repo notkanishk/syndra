@@ -52,3 +52,6 @@ Ready-made classes: `type-page-title`, `type-section-title`, `type-card-title`, 
 ```
 
 Copy is plain language: say what physically happens ("She loses badge entry to the laser bay"), never the system's terms ("grant deleted").
+
+## Talking to Claude Code
+This system is published from the Syndra repo by `/design-sync`; never edit it here. Questions from code arrive as `Q-NN-<slug>.md`. Answer each with `handoff/<handoff>/from-design/A-NN-<slug>.md` in the design project (boards beside it in `handoff/<handoff>/design/`); Claude Code reads that path directly. A component this system lacks is drawn as `proposed/<Name>.md`, built in code, then synced back. The full protocol is `design_handoff_syndra/BRIDGE.md` in the repo.
