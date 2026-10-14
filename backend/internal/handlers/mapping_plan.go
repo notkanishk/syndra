@@ -616,6 +616,15 @@ func handleRehearseMappingCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The target's project, never the caller's: the fingerprint below covers
+	// it, so a create must rehearse with the same one it writes.
+	project, err := resolveMappingProject(r.Context(), req.Target, req.ProjectID)
+	if err != nil {
+		writeMappingError(w, err)
+		return
+	}
+	req.ProjectID = project
+
 	// Validated before the rehearsal, for the reason the edit path gives: a
 	// plan for a value the target cannot resolve is a diff an operator would
 	// approve and the write would then refuse.

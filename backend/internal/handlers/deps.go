@@ -9,6 +9,8 @@ import (
 	"syndra/internal/auth"
 	"syndra/internal/cache"
 	"syndra/internal/db"
+	"syndra/internal/directory"
+	"syndra/internal/models"
 	"syndra/internal/observe"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
@@ -479,6 +481,12 @@ var (
 	svcHeldRoles               = services.HeldRoles
 	dbCountMergeFindings       = db.CountStandingMergeFindings
 	dbGetLogAnchor             = db.GetLogAnchor
+	dbTargetProject            = db.TargetProject
+	dbTargetProjects           = db.TargetProjects
+	dbRequireTargetProject     = db.RequireTargetProject
+	dbSetTargetProject         = db.SetTargetProject
+	resolveMappingProject      = mappingProject
+	directoryProjects          = func(ctx context.Context) ([]models.ProjectCatalog, error) { return directory.Default.Projects(ctx) }
 	dbStandingBindingConflicts = db.StandingBindingConflicts
 	dbResolveBindingConflict   = db.ResolveBindingConflict
 	dbResolveLogViolation      = db.ResolveLogViolation

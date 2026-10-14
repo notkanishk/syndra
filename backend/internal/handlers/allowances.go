@@ -44,6 +44,11 @@ func handleCreateAllowance(w http.ResponseWriter, r *http.Request) {
 	// a sharper reason: a mapping the resolver ignores fails visibly the moment
 	// somebody looks for the entitlement, and an allowance the resolver ignores
 	// looks exactly like a suspension that worked.
+	// An allowance that GIVES waits for the system's project; a hold that
+	// takes away never does.
+	if req.Direction == "allow" && !requireProject(w, r, req.Target) {
+		return
+	}
 	field, value, err := validateAllowanceAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
 	if err != nil {
 		writeAllowanceError(w, err)
