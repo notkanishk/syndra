@@ -4,25 +4,34 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DegradedBanner } from "@/components/states/DegradedBanner";
+import { UiViewProvider } from "@/lib/ui-view";
 
 const mode = vi.hoisted(() => ({
   value: {} as Record<string, unknown>,
 }));
 
+const asked = vi.hoisted(() => ({ count: 0 }));
+
 vi.mock("@/lib/api-client", () => ({
-  request: async () => mode.value,
+  request: async () => {
+    asked.count++;
+    return mode.value;
+  },
 }));
 
-function renderBanner() {
+function renderBanner(isOperator = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <DegradedBanner />
+      <UiViewProvider isOperator={isOperator}>
+        <DegradedBanner />
+      </UiViewProvider>
     </QueryClientProvider>,
   );
 }
 
 beforeEach(() => {
+  asked.count = 0;
   mode.value = {
     directory: "zitadel",
     seed_active: false,
@@ -32,6 +41,16 @@ beforeEach(() => {
 });
 
 describe("Degraded banner", () => {
+  // A member's proxy refuses /system/mode; asking every minute was a 403 a
+  // minute on every member page.
+  it("never asks for a member", async () => {
+    mode.value = { ...mode.value, degraded: true };
+    renderBanner(false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(asked.count).toBe(0);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("says nothing when the directory is live and unseeded", async () => {
     renderBanner();
     await waitFor(() => {

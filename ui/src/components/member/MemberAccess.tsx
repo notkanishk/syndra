@@ -127,7 +127,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
           <EmptyState
             title="You don't have access to anything yet."
             guidance="Nobody has given you access. If there's a machine or a space you need, ask for it here and makerspace staff will decide — everything the makerspace offers is listed below."
-            action={{ label: "Ask for access", href: "/requests" }}
+            action={{ label: "Ask for access", href: "/requests?ask" }}
           />
         </Card>
       ) : (
@@ -186,7 +186,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
             </strong>{" "}
             If you still need it, ask and makerspace staff can extend it.
           </div>
-          <ButtonLink href="/requests" variant="accent">
+          <ButtonLink href="/requests?ask" variant="accent">
             Request an extension
           </ButtonLink>
         </div>

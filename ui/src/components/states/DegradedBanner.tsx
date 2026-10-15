@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { CommandBlock } from "@/components/ui/CommandBlock";
 import { request } from "@/lib/api-client";
+import { useUiView } from "@/lib/ui-view";
 
 interface SystemMode {
   /** "zitadel" when the live directory is answering; "demo" when it is not. */
@@ -42,9 +43,12 @@ interface SystemMode {
  * says so in words — colour is never the only signal.
  */
 export function DegradedBanner() {
+  // An operator's read: a member's proxy refuses /system/mode, every minute.
+  const { isOperator } = useUiView();
   const { data } = useQuery({
     queryKey: ["system", "mode"],
     queryFn: () => request<SystemMode>("/system/mode"),
+    enabled: isOperator,
     refetchInterval: 60_000,
     retry: false,
   });

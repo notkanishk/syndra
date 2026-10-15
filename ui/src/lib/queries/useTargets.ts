@@ -64,10 +64,12 @@ export interface TargetSummary {
   project?: { id: string; name: string } | null;
 }
 
-export function useTargets() {
+/** `enabled` is false for a member: their proxy refuses /targets. */
+export function useTargets(enabled = true) {
   return useQuery({
     queryKey: ["targets"],
     queryFn: () => request<{ targets: TargetSummary[] }>("/targets"),
+    enabled,
     // Deployment configuration: stale only when the deployment changes, which
     // is a restart.
     staleTime: 10 * 60_000,

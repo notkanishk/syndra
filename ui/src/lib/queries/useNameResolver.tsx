@@ -199,9 +199,12 @@ const LOOKUP_MAX_BATCH = 256;
 export function NameResolverProvider({
   children,
   enabled = true,
+  bundles = enabled,
 }: {
   children: React.ReactNode;
   enabled?: boolean;
+  /** Off for a member, whose proxy refuses GET /bundles on every page load. */
+  bundles?: boolean;
 }) {
   // Catalog: users + projects + nested roles. Member-allowed via proxy.
   const catalogQ = useQuery({
@@ -216,7 +219,7 @@ export function NameResolverProvider({
   const bundlesQ = useQuery({
     queryKey: ["name-bundles"],
     queryFn: () => request<Bundle[]>("bundles"),
-    enabled,
+    enabled: bundles,
     staleTime: STALE_TIME,
     retry: false,
   });

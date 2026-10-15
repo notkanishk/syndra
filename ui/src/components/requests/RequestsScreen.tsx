@@ -26,8 +26,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
-import { useProjects } from "@/lib/queries/useProjects";
-import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
+import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import {
   useCreateRequest,
   useDecideRequest,
@@ -88,6 +87,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
+  const ask = useAskOnArrival();
 
   // Decided rows stay in `rows` — the row reports its own outcome below and
   // only actually leaves once the refetch lands with its new status. Filtering
@@ -364,26 +364,49 @@ function OperatorQueue({ userId }: { userId?: string }) {
           onApplied={selection.clear}
         />
       )}
+
+      {/* An operator's own ask, arriving from My access. It used to land on
+          this queue with the dialog shut and the choice lost. */}
+      <RequestDialog
+        key={`${ask.linkedProject}:${ask.linkedRole}`}
+        open={ask.open}
+        onClose={ask.close}
+        initial={{ projectId: ask.linkedProject, roleKey: ask.linkedRole }}
+      />
     </div>
   );
+}
+
+/**
+ * "Ask for this" in the catalogue links here with the ask already chosen
+ * (`?project=…&role=…`), and "Ask for access" elsewhere with `?ask`, so the
+ * dialog opens on arrival rather than making somebody find the button again.
+ * The params are consumed as the dialog closes: a refresh after the request
+ * is sent should not reopen the form.
+ *
+ * For a member and an operator alike. An operator's own access is asked for
+ * like anyone's (A-03 §4), from My access; it then waits in the queue, where
+ * approving it is said to be their own.
+ */
+function useAskOnArrival() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const linkedProject = params.get("project") ?? "";
+  const linkedRole = params.get("role") ?? "";
+  const linked = Boolean(linkedProject) || params.has("ask");
+  const [open, setOpen] = useState(linked);
+  function close() {
+    setOpen(false);
+    if (linked) router.replace("/requests", { scroll: false });
+  }
+  return { open, setOpen, close, linkedProject, linkedRole };
 }
 
 /** A member's own requests, plus the form to make one. No jargon. */
 function MemberRequests({ userId }: { userId: string }) {
   const requests = useRequestsMine();
   const withdraw = useWithdrawRequest();
-  const router = useRouter();
-  const params = useSearchParams();
-
-  /**
-   * "Ask for this" in the catalogue links here with the ask already chosen, so
-   * the dialog opens on arrival rather than making somebody re-find the thing
-   * they just clicked. The params are consumed as the dialog closes — a
-   * refresh after the request is sent should not reopen the form.
-   */
-  const linkedProject = params.get("project") ?? "";
-  const linkedRole = params.get("role") ?? "";
-  const [open, setOpen] = useState(Boolean(linkedProject));
+  const { open, setOpen, close: closeDialog, linkedProject, linkedRole } = useAskOnArrival();
   // A member's own rows report their own withdrawals, in the row.
   const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   // Same idiom as OperatorQueue.act(): marked synchronously, before the await,
@@ -413,11 +436,6 @@ function MemberRequests({ userId }: { userId: string }) {
       });
       setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
     }
-  }
-
-  function closeDialog() {
-    setOpen(false);
-    if (linkedProject) router.replace("/requests", { scroll: false });
   }
 
   const mine = (requests.data ?? []).filter((entry) => entry.requester_id === userId);
@@ -517,8 +535,10 @@ function RequestDialog({
   /** Prefill from a "Ask for this" link in the catalogue. */
   initial?: { projectId?: string; roleKey?: string };
 }) {
-  const projects = useProjects();
-  const roles = useGlobalRoleCatalog();
+  // `/catalog`, the one list of what exists that a member may read. The
+  // operator lists (`/projects`, `/roles`) are refused to a member by the
+  // proxy, so the dialog offered them nothing but "Choose…".
+  const catalog = useCatalogProjects();
   const create = useCreateRequest();
   const [askOutcome, setAskOutcome] = useState<ActionResult | null>(null);
 
@@ -527,7 +547,7 @@ function RequestDialog({
   const [why, setWhy] = useState("");
   const [howLong, setHowLong] = useState<HowLong>("term");
 
-  const projectRoles = (roles.data ?? []).filter((role) => role.project_id === projectId);
+  const projectRoles = catalog.data.find((project) => project.id === projectId)?.roles ?? [];
   const days = howLong === "term" ? daysUntilTermEnd() : Number(howLong);
   const until = new Date(Date.now() + days * 86_400_000).toISOString();
 
@@ -552,9 +572,9 @@ function RequestDialog({
             }}
           >
             <option value="">Choose…</option>
-            {(projects.data ?? []).map((entry) => (
-              <option key={entry.project.id} value={entry.project.id}>
-                {entry.project.name}
+            {catalog.data.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
               </option>
             ))}
           </Select>
@@ -569,8 +589,8 @@ function RequestDialog({
           >
             <option value="">{projectId ? "Choose…" : "Pick a place first"}</option>
             {projectRoles.map((role) => (
-              <option key={role.role_key} value={role.role_key}>
-                {role.display_name || role.role_key}
+              <option key={role.key} value={role.key}>
+                {role.label || role.key}
               </option>
             ))}
           </Select>
