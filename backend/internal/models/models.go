@@ -679,6 +679,22 @@ type AccessRequest struct {
 	ReviewNote    string     `json:"review_note,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	ResolvedAt    *time.Time `json:"resolved_at,omitempty"`
+	// Holding is what the requester has of the role now, read for a waiting
+	// request so the person deciding sees what approving would change.
+	Holding *RequestHolding `json:"holding,omitempty"`
+}
+
+// The three things a person can already have of a role they ask for.
+const (
+	HoldingNone    = "none"
+	HoldingUntil   = "until"
+	HoldingForGood = "for_good"
+)
+
+// RequestHolding is what a requester already has of the role they ask for.
+type RequestHolding struct {
+	Kind  string     `json:"kind"`
+	Until *time.Time `json:"until,omitempty"`
 }
 
 type GovernanceSummary struct {

@@ -231,6 +231,13 @@ func handleAttributeDrift(w http.ResponseWriter, r *http.Request) {
 // rolled back; a write failure rolls back the resolution too — the drift never
 // leaves the triage queue without its durable ledger row.
 func attributeOneDrift(ctx context.Context, item models.DriftItem, req attributeRequest, actor string) error {
+	// Adopting records access Zitadel has. A syndra_only row is a grant Syndra
+	// records and Zitadel doesn't: adopting it wrote a second record of access
+	// nobody holds. Refused here, where every adopt path (one, bulk, a plan)
+	// passes.
+	if item.DriftType != db.DriftTargetOnly {
+		return errNothingToAdopt
+	}
 	payload, _ := json.Marshal(req)
 	return dbAttributeDriftTx(ctx, item.ID, db.EnqueueParams{
 		UserID: item.UserID, ProjectID: item.ProjectID, RoleKeys: item.RoleKeys,
@@ -422,6 +429,9 @@ const badSourceMessage = "source must be external_backfill; adopting records a d
 // db.ErrDriftNotPending → 409 is load-bearing: it is how a lost
 // concurrent-triage race is reported (the atomic claim+enqueue transaction
 // guarantees the whole action rolled back — no side effect ran).
+// errNothingToAdopt is adopting a finding Zitadel doesn't hold.
+var errNothingToAdopt = errors.New("Zitadel doesn't have this access, so there is nothing to adopt; revoke it, or mark it owned elsewhere")
+
 func writeDriftActionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, db.ErrDriftNotPending):
@@ -429,6 +439,8 @@ func writeDriftActionError(w http.ResponseWriter, err error) {
 	// Not a 409: nothing raced, and retrying will never work. The finding is on
 	// a system this action has no reach into, which is a statement about the
 	// request, not about a moment in time.
+	case errors.Is(err, errNothingToAdopt):
+		jsonErrorResponse(w, http.StatusUnprocessableEntity, "NOTHING_TO_ADOPT", err.Error())
 	case errors.Is(err, db.ErrDriftTargetUnsupported):
 		jsonErrorResponse(w, http.StatusUnprocessableEntity, "DRIFT_TARGET_UNSUPPORTED", err.Error())
 	default:

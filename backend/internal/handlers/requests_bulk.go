@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"syndra/internal/models"
 	"syndra/internal/services"
 )
 
@@ -131,6 +132,18 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 			out.Detail = fmt.Sprintf("Already %s.", request.Status)
 			plan.Outcomes = append(plan.Outcomes, out)
 			continue
+		}
+
+		// The plan agrees with the decision: a request for a role they have
+		// come to hold since asking can't be approved (resolveOneAccessRequest
+		// refuses it), only declined.
+		if status == "approved" {
+			if h, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey); err == nil && h.Kind != models.HoldingNone {
+				out.Effect = services.EffectBlocked
+				out.Detail = "Already has this, so approving would change nothing. Decline it to close the request."
+				plan.Outcomes = append(plan.Outcomes, out)
+				continue
+			}
 		}
 
 		out.Effect = services.EffectApply

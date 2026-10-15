@@ -97,6 +97,14 @@ export function ManageBundles({
       for (const id of changes) {
         const removing = assignedIds.has(id);
         const result = removing ? await remove.mutateAsync(id) : await assign.mutateAsync(id);
+        // Out of the staged set as soon as it is applied. Left in, a retry after
+        // a later one fails would read it against the new state and send the
+        // opposite (an assign becomes a remove).
+        setStaged((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
         const enqueued = result?.cascade?.enqueued ?? 0;
         waiting += enqueued;
         if (removing) revoking += enqueued;
