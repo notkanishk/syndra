@@ -106,6 +106,31 @@ New part for `/design-sync` to bring into the design system: `AnchoredPanel` (th
 
 **Question.** None, unless the boards meant a different phone layout for these. If they did, draw it.
 
+## 7 · One way to draw each thing, continued (system-wide)
+
+**Built (Locked)**, where a primitive or a rule in RULES already decided it:
+- **Cancel** in every dialog footer is the outline button. Seven were ghost.
+- **Row actions** are outline sm, per the 15 Oct rule: Dismiss, the stop-tracking Cancel, and Withdraw.
+- **A button's busy state** is the button's own spinner, never its label rewritten ("Revoking…", "Setting…").
+- **"Somewhere else →"** is one link: ArrowLink, violet, semibold, 13.5px, with a 44px target and the arrow not read aloud. Eleven hand-written ones moved to it, at five sizes before.
+- **Empty and loading states** on the access map and Home's makerspace cards use the shared EmptyState and the row skeleton.
+- **The 404 page and the crash panel** use Button and ButtonLink.
+
+**Questions.** Code chose nothing here. Each is two patterns in use, and yours to pick.
+1. **Callouts.** Notice is used on one screen. Nineteen others draw their own amber, red or violet box, many with a hand-copied "!" badge.
+   - Should every one become a Notice?
+   - Does Notice need an informational (violet) tone for the explanations at Roles, Expiring access, Bundles, and a person's access page?
+   - Or should those be plain prose under RULES ("ledes, notices and captions stay plain prose")?
+   - Do the cautions inside dialogs (the "I understand" box, Withheld) stay their own pattern?
+2. **Verbs per object.** Today it reads as Revoke for access, Remove for an assignment or a mapping, and Delete for a rule, bundle or role. The mapping dialog says "Remove this mapping" beside "Delete rule" and "Delete bundle". Confirm the scheme, and code will make every label follow it.
+3. **"Waiting to be sent".** RULES says "Waiting for you to send →", never "waiting to be sent". The product says "Waiting to be sent" in five places, including a member's own page, where the member can't send anything. Is the RULES phrase for operators only, with members reading something else?
+4. **Pagination.** RULES gives "Showing 10 of N · Show 25 more · Show all N · Back to 10". Five lists each do their own: "Load more", "Show all N", or a bare count. Confirm the pattern, including for the two lists that fetch more from the server rather than reveal more (Audit, a person's activity), and code builds it once.
+5. **Buttons with an arrow that act rather than go.** "Manage bundles →" on a person's page, "Open the rule →" on a role page, and EmptyState's own action are buttons that open a dialog, but carry the arrow that means "goes somewhere". Drop the arrow, or make them links?
+6. **The size of a destructive action on a page.** "Delete bundle" and "Delete rule" are full-size red, while every other destructive action is small. Which is right?
+7. **Choosing among cards.** The removal dialog's source chooser, Manage bundles, Publish version and Assign each build their own selectable card row. Should Radio and Checkbox grow a card-row form?
+8. **Three segmented controls.** The Basic/Advanced switch, the chime toggle and Tabs each draw their own pill group, deliberately. Keep them, or make them one Segmented?
+9. **Dates for an end.** "Expires 2 Aug", "Ends 2 Aug", "until 2 Aug" and "expiring 2 Aug" all appear for the same thing, and two dialogs use the long date with the year. Pick one verb and one format for a list and one for a sentence.
+
 ## What code would welcome from design
 
 Code moved the product toward one way of drawing each control. Where design sees a better one than code chose, redraw it and code will follow. The same goes for anywhere above where code picked between two plausible patterns.
