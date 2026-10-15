@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Syndra architecture review</title>
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose", flowchart: { curve: "basis" } });
+</script>
+<style>
+  .seam { border-style: dashed !important; }
+  .deep { background: linear-gradient(135deg, #0f172a, #1e293b); color: #e2e8f0; }
+  .label { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+  .mermaid { display:flex; justify-content:center; }
+  .diagram { min-height: 300px; }
+</style>
+</head>
+<body class="bg-stone-50 text-slate-900 font-sans">
+<main class="max-w-6xl mx-auto px-4 sm:px-6 py-12 space-y-14">
+
+<header class="space-y-4">
+  <p class="label text-slate-500">notkanishk/syndra · 16 Oct 2026 · hot spots from 80 commits since 15 Sep</p>
+  <h1 class="font-serif text-4xl">Deepening opportunities</h1>
+  <div class="flex flex-wrap gap-4 text-xs text-slate-600">
+    <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 border-2 border-slate-500 bg-white"></span>module</span>
+    <span class="flex items-center gap-2"><span class="inline-block w-5 h-0 border-t-2 border-dashed border-slate-500"></span>seam</span>
+    <span class="flex items-center gap-2"><span class="inline-block w-5 h-0 border-t-2 border-red-600"></span>leakage / drift</span>
+    <span class="flex items-center gap-2"><span class="inline-block w-5 h-4 deep"></span>deep module</span>
+  </div>
+</header>
+
+<section id="candidates" class="space-y-16">
+
+<!-- 1 -->
+<article id="c1" class="space-y-5">
+  <div class="flex flex-wrap items-center gap-3">
+    <h2 class="font-serif text-2xl">1 · One access-change planner: preview and apply from the same writes</h2>
+    <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs px-3 py-1 font-semibold">Strong</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 text-xs px-3 py-1">in-process</span>
+  </div>
+  <pre class="font-mono text-sm text-slate-600 whitespace-pre-wrap">backend/internal/services/bulk.go (rehearseOne, cancellingWrites)
+backend/internal/handlers/bulk.go (applyBulkOne) · handlers/requests_bulk.go:184 · handlers/access.go:512
+backend/internal/services/cascade.go (deltaWrites) · db/propagation_enqueue.go · db/cascade.go · db/cancel_gate.go</pre>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-2">Before: two derivations per operation</p>
+      <pre class="mermaid">
+flowchart TB
+  R[rehearseOne] --> CW[cancellingWrites<br/>shadow copy]
+  CW --> WC[WouldCancel]
+  A[applyBulkOne] --> CS[Cascade* / DeleteDirectGrant]
+  CS --> EQ[enqueueWrites]
+  D[decision plan] --> HP[hand-built params<br/>requests_bulk.go:184]
+  AP[approve] --> HP2[other params<br/>access.go:512]
+  CW -. can drift .-> CS
+  HP -. can drift .-> HP2
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#991b1b;
+  class CW,HP,HP2 leak
+      </pre>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-2">After: one module, two modes</p>
+      <pre class="mermaid">
+flowchart TB
+  R[rehearse] --> P
+  A[apply] --> P
+  D[decide request] --> P
+  P["Access-change planner<br/>operation → writes<br/>(guards · holding · role offered)"]
+  P -->|dry run| WC[WouldCancel → plan row]
+  P -->|commit| EQ[enqueueWrites]
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a,stroke-width:3px;
+  class P deep
+      </pre>
+    </div>
+  </div>
+  <p><strong>Problem.</strong> No module owns "which outbox writes does this operation cause". Four of five bulk operations and the bulk decision derive them once to preview and again to apply, so the preview can promise something the apply doesn't do (a bundle removal misses roles held through a mapping rule).</p>
+  <p><strong>Solution.</strong> A planner module takes an operation and returns its writes. Rehearsal runs it as a dry run and apply commits the same writes, and the guards (role offered, already held) live inside it once.</p>
+  <ul class="list-disc pl-6 text-sm space-y-1">
+    <li>locality: preview equals apply by construction</li>
+    <li>leverage: one interface, five operations, three surfaces</li>
+    <li>delete <code>cancellingWrites</code> and the hand-built params</li>
+    <li>bulk grant gains the single grant's guards</li>
+    <li>one parity test replaces per-surface tests</li>
+    <li>the plan can carry exact cancel ids, not a "reviewed" bypass</li>
+  </ul>
+</article>
+
+<!-- 2 -->
+<article id="c2" class="space-y-5">
+  <div class="flex flex-wrap items-center gap-3">
+    <h2 class="font-serif text-2xl">2 · One role-standing module: does this person hold this role, and why</h2>
+    <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs px-3 py-1 font-semibold">Strong</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 text-xs px-3 py-1">local-substitutable</span>
+  </div>
+  <pre class="font-mono text-sm text-slate-600 whitespace-pre-wrap">backend: services/cascade.go:108 effectiveClosure · services/views.go:1393 collectUserRoles · db/access_requests.go:76 RequestHolding · services/entitlement.go:434 effectiveRoleRefs
+ui: member/MemberAccess.tsx:35 · people/PersonAccess.tsx:137 · Holding.tsx:55 · people/GrantDirectAccess.tsx:90</pre>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-3">Before: eight answers to one question</p>
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div class="border-2 border-red-400 p-2">effectiveClosure<br/><span class="text-slate-500">"keep in sync with →"</span></div>
+        <div class="border-2 border-red-400 p-2">collectUserRoles<br/><span class="text-slate-500">emits "mapping"</span></div>
+        <div class="border-2 border-slate-400 p-2">RequestHolding<br/><span class="text-slate-500">reads outbox</span></div>
+        <div class="border-2 border-slate-400 p-2">effectiveRoleRefs</div>
+        <div class="border-2 border-slate-300 p-2">MemberAccess</div>
+        <div class="border-2 border-slate-300 p-2">PersonAccess<br/><span class="text-slate-500">two sources</span></div>
+        <div class="border-2 border-slate-300 p-2">Holding</div>
+        <div class="border-2 border-slate-300 p-2">GrantDirectAccess</div>
+      </div>
+      <p class="text-xs text-red-700 mt-3"><code>sourcePhrase</code> tests "rule" while the producer emits "mapping": a dead branch.</p>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram flex flex-col gap-3">
+      <p class="label text-slate-500">After: one standing, read everywhere</p>
+      <div class="deep rounded p-4 text-sm">
+        <p class="label text-slate-400">role standing</p>
+        <p>held · waiting to be sent · removal queued · not held</p>
+        <p class="text-slate-400 text-xs mt-1">+ reasons (direct · bundle · mapping), one closure, observed from Zitadel</p>
+      </div>
+      <div class="border-t-2 border-dashed border-slate-400 pt-2 text-xs text-slate-500">seam: the API ships standing per role; the UI has one <code>roleStanding</code> reader</div>
+      <div class="grid grid-cols-4 gap-1 text-[10px] text-slate-500">
+        <div class="border p-1">requests</div><div class="border p-1">cascade</div><div class="border p-1">views</div><div class="border p-1">4 UI screens</div>
+      </div>
+    </div>
+  </div>
+  <p><strong>Problem.</strong> Two closure engines held in sync by a comment, plus RequestHolding, effectiveRoleRefs and four UI re-derivations, each answering "holds it?" slightly differently. The "waiting to be sent" state already had to be taught to one of them.</p>
+  <p><strong>Solution.</strong> Merge the engines into one module that returns each role's standing with its reasons. The API ships it, and the UI reads it through one helper, extending the HolderFacts rule from headcounts to a single person's role.</p>
+  <ul class="list-disc pl-6 text-sm space-y-1">
+    <li>locality: one closure, one definition of held</li>
+    <li>new states land once</li>
+    <li>delete the "keep in sync" pair</li>
+    <li>UI tests one pure reader</li>
+  </ul>
+</article>
+
+<!-- 3 -->
+<article id="c3" class="space-y-5">
+  <div class="flex flex-wrap items-center gap-3">
+    <h2 class="font-serif text-2xl">3 · TrueNAS add-on: apply executes the change plan decided</h2>
+    <span class="rounded-full bg-emerald-100 text-emerald-800 text-xs px-3 py-1 font-semibold">Strong</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 text-xs px-3 py-1">ports &amp; adapters</span>
+  </div>
+  <pre class="font-mono text-sm text-slate-600 whitespace-pre-wrap">addons/truenas/plan.go:189,232,272 (projected, changes) · addons/truenas/apply.go:454,561,577-700 (update map)
+addons/truenas/nas.go:94 (rpc seam) · backend/internal/services/drift/addon.go:401 (plan as oracle)</pre>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-2">Before: the decision written twice</p>
+      <pre class="mermaid">
+flowchart TB
+  S[subject + desired] --> PJ[projected + changes<br/>plan.go]
+  S --> UP[update map field by field<br/>apply.go]
+  PJ --> BE[backend: Pending changes]
+  UP --> RPC[[rpc seam: 26 literal nas.call sites]]
+  PJ -. drifted: SMB promised,<br/>never made .-> UP
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#991b1b;
+  class PJ,UP leak
+      </pre>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-2">After: decide once, execute the result</p>
+      <pre class="mermaid">
+flowchart TB
+  S[subject + desired] --> DC["decide<br/>→ Change{fields, home, groups}"]
+  DC --> PL[plan: serialise Change]
+  DC --> AP[apply: execute Change]
+  AP --> NAS[[NAS module: named operations<br/>over the rpc seam]]
+  classDef deep fill:#0f172a,color:#e2e8f0,stroke:#0f172a,stroke-width:3px;
+  class DC,NAS deep
+      </pre>
+    </div>
+  </div>
+  <p><strong>Problem.</strong> Plan and apply share helpers but not the decision, and they've already drifted once (<code>smb_enrolment_test.go:84</code>). The backend trusts plan as an oracle, so drift fills Pending changes with rows that do nothing.</p>
+  <p><strong>Solution.</strong> A pure <em>decide</em> returns a Change value. Plan serialises it and apply executes it through a NAS module of named operations. That module keeps the existing rpc seam, which already has two adapters.</p>
+  <ul class="list-disc pl-6 text-sm space-y-1">
+    <li>plan equals apply by construction</li>
+    <li>decide tests need no NAS</li>
+    <li>wire literals concentrate in one module</li>
+    <li>keep the recorded-shape fixtures</li>
+  </ul>
+</article>
+
+<!-- 4 -->
+<article id="c4" class="space-y-5">
+  <div class="flex flex-wrap items-center gap-3">
+    <h2 class="font-serif text-2xl">4 · The plan gate as one surface interface</h2>
+    <span class="rounded-full bg-amber-100 text-amber-800 text-xs px-3 py-1 font-semibold">Worth exploring</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 text-xs px-3 py-1">in-process</span>
+  </div>
+  <pre class="font-mono text-sm text-slate-600 whitespace-pre-wrap">backend/internal/handlers/plan_gate.go:91 (issuePlan) · mapping_plan.go (×3 dbCreatePlan) · entitlements.go · bulk.go · bundle_versions.go
+backend/internal/db/plans.go (deep store)</pre>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram space-y-1">
+      <p class="label text-slate-500 mb-2">Before: each surface rebuilds the gate</p>
+      <div class="h-10 border-l-4 border-slate-300 bg-white pl-3 flex items-center text-xs">rehearse · per surface</div>
+      <div class="h-10 border-l-4 border-slate-300 bg-white pl-3 flex items-center text-xs">fingerprint · per surface</div>
+      <div class="h-10 border-l-4 border-red-400 bg-red-50 pl-3 flex items-center text-xs">issue + cohort guard · 5 copies</div>
+      <div class="h-10 border-l-4 border-red-400 bg-red-50 pl-3 flex items-center text-xs">apply · two protocols (claim-then-rows, recompute-under-lock)</div>
+      <div class="h-14 deep pl-3 flex items-center text-xs rounded">db/plans.go · deep store</div>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram space-y-1">
+      <p class="label text-slate-500 mb-2">After: surfaces fill one interface</p>
+      <div class="h-10 border-2 border-dashed border-slate-400 pl-3 flex items-center text-xs">Surface: Rehearse · Apply(row)</div>
+      <div class="h-32 deep pl-3 flex flex-col justify-center text-xs rounded gap-1">
+        <span>plan gate: fingerprint · issue · cohort guard · claim · stale check · apply loop</span>
+        <span class="text-slate-400">db/plans.go absorbed as its implementation</span>
+      </div>
+      <p class="text-xs text-slate-500 pt-2">11 surfaces become 11 small adapters</p>
+    </div>
+  </div>
+  <p><strong>Problem.</strong> The store is deep but the gate around it is shallow. The cohort guard said to live "in issuePlan for every surface" is actually copied five times and propped up by a compensating test, and bundle applies recompute under lock with nothing comparing the result against the stored plan.</p>
+  <p><strong>Solution.</strong> Widen <code>issuePlan</code> into a gate module whose interface each surface fills with Rehearse and Apply. The gate owns fingerprinting, issuing, claiming, staleness and the apply loop.</p>
+  <ul class="list-disc pl-6 text-sm space-y-1">
+    <li>the same defect can't ship twice</li>
+    <li>one apply protocol</li>
+    <li>pairs with candidate 1</li>
+  </ul>
+</article>
+
+<!-- 5 -->
+<article id="c5" class="space-y-5">
+  <div class="flex flex-wrap items-center gap-3">
+    <h2 class="font-serif text-2xl">5 · Replace ~290 function vars with a few store interfaces</h2>
+    <span class="rounded-full bg-amber-100 text-amber-800 text-xs px-3 py-1 font-semibold">Worth exploring</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 text-xs px-3 py-1">local-substitutable</span>
+  </div>
+  <pre class="font-mono text-sm text-slate-600 whitespace-pre-wrap">backend/internal/handlers/deps.go (189 vars, 166 direct) · services/deps.go (73, 57 direct)
+handlers/main_test.go:15 (7 global stubs) · services/cascade_test.go:27 (26 save/restore)</pre>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-3">Before: interface as wide as the implementation</p>
+      <div class="flex items-end gap-6 h-56">
+        <div class="flex flex-col items-center gap-1"><div class="w-16 bg-red-300" style="height:200px"></div><span class="text-[10px]">interface<br/>~290 vars</span></div>
+        <div class="flex flex-col items-center gap-1"><div class="w-16 bg-slate-300" style="height:210px"></div><span class="text-[10px]">implementation<br/>db.X calls</span></div>
+      </div>
+      <p class="text-xs text-slate-500 mt-2">~12 stubs to approve one request in a test; safety checks are off by default in tests.</p>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-3">After: two adapters justify each seam</p>
+      <div class="flex items-end gap-6 h-56">
+        <div class="flex flex-col items-center gap-1"><div class="w-16 bg-emerald-300" style="height:40px"></div><span class="text-[10px]">interface<br/>~5 stores</span></div>
+        <div class="flex flex-col items-center gap-1"><div class="w-16 deep" style="height:210px"></div><span class="text-[10px]">Postgres +<br/>in-memory</span></div>
+      </div>
+    </div>
+  </div>
+  <p><strong>Problem.</strong> Each var's interface is just the db function's signature, and every test hand-writes the second adapter. Fake setups don't compose, and the new safety checks are stubbed open globally.</p>
+  <p><strong>Solution.</strong> Introduce a few named store interfaces (grants, requests, outbox, plans, directory) with a Postgres adapter and an in-memory adapter that keeps real invariants.</p>
+  <ul class="list-disc pl-6 text-sm space-y-1">
+    <li>tests cross the real interface</li>
+    <li>guards stay on in tests</li>
+    <li>large churn: do it after 1 and 4</li>
+  </ul>
+</article>
+
+<!-- 6 -->
+<article id="c6" class="space-y-5">
+  <div class="flex flex-wrap items-center gap-3">
+    <h2 class="font-serif text-2xl">6 · Declare the backend ↔ add-on contract once</h2>
+    <span class="rounded-full bg-amber-100 text-amber-800 text-xs px-3 py-1 font-semibold">Worth exploring</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 text-xs px-3 py-1">ports &amp; adapters</span>
+  </div>
+  <pre class="font-mono text-sm text-slate-600 whitespace-pre-wrap">addons/truenas/capabilities.go · backend/internal/addons/*.go · handlers/target_homes.go:23
+ui/src/lib/role-mapping-plan.ts:25 · ui/src/components/targets/HomeLimit.tsx:28</pre>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram relative">
+      <p class="label text-slate-500 mb-3">Before: one field, four spellings</p>
+      <div class="grid grid-cols-2 gap-3 text-xs">
+        <div class="border-2 border-slate-400 p-3">add-on types<br/><code>home_quota</code></div>
+        <div class="border-2 border-slate-400 p-3">backend copy<br/><code>home_quota</code></div>
+        <div class="border-2 border-slate-400 p-3">mapping plan (ts)<br/><code>home_quota</code></div>
+        <div class="border-2 border-slate-400 p-3">HomeLimit (tsx)<br/><code>home_quota</code></div>
+      </div>
+      <p class="text-xs text-red-700 mt-3">Only 4 of ~10 messages are pinned by fixtures; the plan response and manifest aren't.</p>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-3">After: the manifest carries meaning</p>
+      <div class="deep rounded p-4 text-xs">contract package · message types + golden fixtures for every message</div>
+      <div class="border-t-2 border-dashed border-slate-400 my-3"></div>
+      <div class="grid grid-cols-3 gap-2 text-[10px] text-slate-500"><div class="border p-2">add-on</div><div class="border p-2">backend</div><div class="border p-2">UI reads field meaning from the manifest</div></div>
+    </div>
+  </div>
+  <p><strong>Problem.</strong> The message types are copied by hand on both sides of the seam, and field meaning is hardcoded in callers, so a new field takes about six edits.</p>
+  <p><strong>Solution.</strong> A shared contract module, plus a golden fixture for every message. The manifest declares field meaning so callers stop hardcoding <code>home</code> and <code>home_quota</code>.</p>
+  <ul class="list-disc pl-6 text-sm space-y-1"><li>one edit per new field</li><li>drift fails a fixture, not prod</li></ul>
+</article>
+
+<!-- 7 -->
+<article id="c7" class="space-y-5">
+  <div class="flex flex-wrap items-center gap-3">
+    <h2 class="font-serif text-2xl">7 · One row-action module for decide, mark, roll back</h2>
+    <span class="rounded-full bg-slate-200 text-slate-700 text-xs px-3 py-1 font-semibold">Speculative</span>
+    <span class="rounded-full bg-slate-200 text-slate-700 text-xs px-3 py-1">in-process</span>
+  </div>
+  <pre class="font-mono text-sm text-slate-600 whitespace-pre-wrap">ui/src/components/requests/RequestsScreen.tsx:131,419 · people/PersonRequests.tsx:52 · home/Home.tsx:211
+ui/src/components/targets/TargetOverview.tsx (1777 lines)</pre>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-2">Before: four copies in JSX</p>
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div class="border p-2">Requests: optimistic · rollback</div><div class="border p-2">Requests (2): optimistic · rollback</div>
+        <div class="border p-2">PersonRequests: optimistic · rollback</div><div class="border p-2">Home: optimistic · rollback</div>
+      </div>
+    </div>
+    <div class="rounded-lg border border-slate-200 bg-white p-4 diagram">
+      <p class="label text-slate-500 mb-2">After: one module, its calls faded inside</p>
+      <div class="deep rounded p-4 text-xs space-y-1">
+        <p>useRowAction(decide)</p>
+        <p class="opacity-50">mark pending → call → seat outcome (Motion 2a) → roll back on failure</p>
+      </div>
+    </div>
+  </div>
+  <p><strong>Problem.</strong> The same optimistic decide and rollback logic sits four times inside JSX, untested, and it's exactly the surface the Motion 2a sweep must touch.</p>
+  <p><strong>Solution.</strong> Extract one row-action module and do the motion sweep through it.</p>
+  <ul class="list-disc pl-6 text-sm space-y-1"><li>motion lands once</li><li>rollback gets a test</li></ul>
+</article>
+
+</section>
+
+<section id="top-recommendation" class="rounded-xl deep p-8 space-y-3">
+  <p class="label text-slate-400">Top recommendation</p>
+  <h2 class="font-serif text-3xl">1 · One access-change planner</h2>
+  <p class="text-slate-300">It's where the product's core promise (a preview is what will happen) is currently held by two copies, and the gap lets a plan cancel queued work it never named, against the newest owner rule. Deepening it also gives candidate 4 its apply step, and candidate 2 its single holding check. <a class="underline" href="#c1">Go to card →</a></p>
+</section>
+
+</main>
+</body>
+</html>

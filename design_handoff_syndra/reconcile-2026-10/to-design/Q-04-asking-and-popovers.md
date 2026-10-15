@@ -1,6 +1,6 @@
 # Q-04 · Asking for access, links that go where they say, and one way to draw each control
 
-From Claude Code, 15 Oct 2026. Follows A-03. Nothing here retires an earlier answer. Things found while testing on production, and in a sweep of every link and control after it, each fixed in code. §9–13 were Q-05, merged here before either was sent. The fixes are yours to confirm or redraw.
+From Claude Code, 15 Oct 2026. Follows A-03. Nothing here retires an earlier answer. Things found while testing on production, and in a sweep of every link and control after it, each fixed in code. §9–13 were Q-05, merged here before either was sent. §14 commissions the whole undoing flow. The fixes are yours to confirm or redraw.
 
 **Answer in the design project at** `handoff/2026-10-reconcile/from-design/A-04-asking-and-popovers.md`, with boards beside it in `handoff/2026-10-reconcile/design/`.
 
@@ -220,6 +220,31 @@ Both now mark the roles the person already has the same way, and won't let them 
 2. Should Change history and the member's Recent changes say a request was closed because the role came another way, or is the request row enough?
 3. Draw the "waiting to be sent" state in Ask for access and Grant direct access: today the picker says "you have this" or "has this" for a role that's given and not yet sent.
 4. **The cancel confirmation** is the one sheet that opens over another (RULES: sheets push, they don't stack). Code chose that so no screen can skip it. Draw it, and say whether it should instead replace the sheet underneath as a pushed step. Removing a bundle whose grants are still waiting already says so in its own dialog, and now also asks this. Is the second question welcome, since it adds who queued it and why, or noise?
+
+## 14 · Undoing something already set in motion: draw the whole flow (system-wide · commission)
+
+The owner's rule (Locked): an action that undoes a change still waiting to be sent, in either direction, says so before it happens. The admin may not know why that change was queued, so they're told, and they choose. §13 question 4 asks about one sheet. This asks for the whole experience. Code built a working version (`ui/src/components/ui/CancelQueuedConfirm.tsx`) so the rule holds today. Treat it as a placeholder, not a design.
+
+**What code guarantees (Locked; redraw freely, don't change what it does).**
+- The backend refuses the action and returns the exact list of changes it would cancel. Each has: what it is (giving or removing), system and role, person, who queued it, when, and the reason they gave (it may be empty).
+- Nothing changes until the admin confirms that exact list. If another change is queued between seeing the list and confirming, the backend refuses again with the longer list.
+- Choosing to keep them changes nothing, and the action that asked doesn't happen.
+- Plans (bulk changes, deciding several requests, publishing or moving a bundle) don't ask. The row says what it cancels, and a plan reviewed before a new change was queued goes stale.
+- After confirming, the cancelled change leaves Pending changes. Change history records "Cancelled a change that was waiting to be sent", with who did it.
+- Members acting on their own access and system work (expiry, rules) are never asked. Their cancellations are still recorded.
+
+**Draw, at desktop and phone width:**
+1. **The ask, one change**, opened from Grant direct access, from a person's page (Remove), and from the Requests decision.
+2. **The ask, several changes**, e.g. removing a bundle where three of its grants haven't been sent. Where does it fold?
+3. **The ask again with a longer list**, after someone else queued a change. How does the admin see what's new, not just a longer list?
+4. **No reason given.** What does the row say instead of the quote?
+5. **The outcome.** Today the dialog that ran the action reports its usual result and says nothing about the cancellation. Should it say "Gave community back. The waiting removal was cancelled."?
+6. **Kept.** The admin chose keep: what does the dialog underneath say, and does it stay open?
+7. **The plan row** that cancels something, in a bulk plan and in a bundle publish plan.
+8. **Change history** entries for the cancellation, read by an operator and in the member's Recent changes ("A change waiting to be sent for them was cancelled").
+9. **Motion** for each of these (see Q-05): how the ask arrives over the sheet that's already open, how the cancelled row leaves Pending changes, and how the outcome lands.
+
+Answer in §14 of the same A-04, with the boards beside it.
 
 ## What code would welcome from design
 
