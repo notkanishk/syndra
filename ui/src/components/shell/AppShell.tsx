@@ -48,7 +48,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   return (
-    <UiViewProvider isOperator={session.role === "admin"}>
+    <UiViewProvider isOperator={session.role === "admin"} selfId={session.id}>
       <PageCrumbProvider>
         <div className="flex h-dvh flex-col overflow-hidden bg-canvas tablet:flex-row">
           <Sidebar />
@@ -65,20 +65,19 @@ export function AppShell({
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <TopBar session={session} />
             <div id="app-scroll" className="min-h-0 flex-1 overflow-y-auto">
-              {/* One sticky slot holding both, rather than two banners each
-                  sticking to `top-0` on their own — at the same offset and the
-                  same z-index the second simply painted over the first, which
-                  inverted the ordering this comment argues for.
+              {/* Notices, not a band under the top bar (6a): every dysfunction
+                  is said in the content column, above the page it qualifies,
+                  and pushes the page down rather than covering it.
 
                   Offline is above degraded because it qualifies it: with no
                   network the mode read cannot refresh either, so a degraded
-                  banner underneath is reporting a state nobody can currently
+                  Notice underneath is reporting a state nobody can currently
                   confirm. */}
-              <div className="sticky top-0 z-40">
+              <main className="px-4 pb-9 pt-5 tablet:px-[26px] tablet:pt-[30px]">
                 <OfflineBanner />
                 <DegradedBanner />
-              </div>
-              <main className="px-4 pb-9 pt-5 tablet:px-[26px] tablet:pt-[30px]">{children}</main>
+                {children}
+              </main>
             </div>
           </div>
           <TouchNav />

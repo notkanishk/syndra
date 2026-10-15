@@ -1,5 +1,7 @@
 "use client";
 
+import { useBundles } from "@/lib/queries/useBundles";
+import { useUiView } from "@/lib/ui-view";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -74,7 +76,11 @@ export default function PeoplePage() {
   // What a bulk pick is FOR, apart from who is listed: "Add people to this
   // role" sent the role as a filter, which listed only the people who already
   // held it. It travels as `give_*` instead, and prefills the dialog.
-  const give = { projectId: params.get("give_project") ?? "", roleKey: params.get("give_role") ?? "" };
+  const give = {
+    projectId: params.get("give_project") ?? "",
+    roleKey: params.get("give_role") ?? "",
+    bundleId: params.get("give_bundle") ?? "",
+  };
 
   // The search box is typed into, so it holds local state and syncs to the URL
   // on a debounce — writing a history entry per keystroke would make the back
@@ -86,6 +92,7 @@ export default function PeoplePage() {
   const [bulkOp, setBulkOp] = useState<BulkOp | null>(null);
 
   const users = useUsers(filters.q);
+  const bundles = useBundles();
   const projects = useProjects();
   // A role filter is only meaningful inside a project, and membership comes
   // from the role-members endpoint so "who holds this" cannot mean two
@@ -95,11 +102,15 @@ export default function PeoplePage() {
   const setParams = useCallback(
     (next: Partial<PeopleFilters>, extra: Record<string, string> = {}) => {
       const merged = { ...filters, ...next };
-      const giving: Record<string, string> = give.roleKey ? { give_project: give.projectId, give_role: give.roleKey } : {};
+      const giving: Record<string, string> = give.roleKey
+        ? { give_project: give.projectId, give_role: give.roleKey }
+        : give.bundleId
+          ? { give_bundle: give.bundleId }
+          : {};
       const carried = bulkMode ? { bulk: "1", ...giving, ...extra } : extra;
       router.replace(`/users${serializeFilters(merged, carried)}`, { scroll: false });
     },
-    [filters, bulkMode, router, give.projectId, give.roleKey],
+    [filters, bulkMode, router, give.projectId, give.roleKey, give.bundleId],
   );
 
   useEffect(() => {
@@ -137,6 +148,7 @@ export default function PeoplePage() {
   const visible = rows.slice(0, limit);
   // Selection spans the whole filter, not the rendered page.
   const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
+  const { selfId } = useUiView();
   const expiringSoon = all.filter((entry) => entry.expiring_count > 0).length;
 
   const projectName = useMemo(
@@ -257,6 +269,12 @@ export default function PeoplePage() {
           Give a role. Everyone is listed, including people who already hold it.
         </p>
       )}
+      {bulkMode && give.bundleId && (
+        <p className="text-[14px] text-muted">
+          Pick who should get {bundles.data?.find((b) => b.id === give.bundleId)?.name ?? "the bundle"}, then
+          choose Add to a bundle.
+        </p>
+      )}
 
       {(filters.role || filters.bundle || filters.version) && (
         <div className="flex flex-wrap items-center gap-2">
@@ -367,6 +385,12 @@ export default function PeoplePage() {
           count={selection.count}
           noun={["person", "people"]}
           scope={scope}
+          // #32: never take access from yourself in bulk, and say so before.
+          composition={
+            selfId && selection.isSelected(selfId)
+              ? "Includes you · you are left out of anything that revokes access"
+              : undefined
+          }
           wholeScope={wholeFilter}
           visibleCount={visible.length}
           onSelectVisibleOnly={() => {
@@ -417,7 +441,9 @@ export default function PeoplePage() {
           op={bulkOp}
           userIds={Array.from(selection.selected)}
           scope={scope}
-          initial={give.roleKey ? give : { projectId: filters.project, roleKey: filters.role }}
+          initial={
+            give.roleKey || give.bundleId ? give : { projectId: filters.project, roleKey: filters.role }
+          }
           onClose={() => setBulkOp(null)}
         />
       )}
@@ -523,7 +549,7 @@ function PersonRow({
     // A label rather than a div: the whole row becomes the checkbox's hit area
     // for free, keyboard and screen reader included.
     <label
-      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft/40" : ""}`}
+      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft" : ""}`}
       {...selection.rowProps(entry.user.id)}
     >
       <span className="w-11 desktop:w-[26px]">

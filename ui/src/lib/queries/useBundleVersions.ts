@@ -34,6 +34,10 @@ export interface BundleHolder {
   version_id: string;
   version: number;
   assigned_at: string;
+  /** How they got it. Absent on rows recorded before this was tracked. */
+  assigned_by?: string; // absent too when automatic (welcome)
+  source?: "direct" | "request" | "moved" | "welcome";
+  moved_from_version?: number;
 }
 
 /** The unpublished difference between the working copy and the latest version. */
@@ -199,3 +203,19 @@ function invalidateBundle(qc: ReturnType<typeof useQueryClient>, bundleId: strin
 }
 
 export const bundleVersionKeys = KEYS;
+
+/**
+ * Discard changes (B6): the working copy goes back to the latest published
+ * version. Nobody's access is touched, so only the bundle's own reads refresh.
+ */
+export function useDiscardBundleDraft(bundleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<BundleDraft>(`/bundles/${encodeURIComponent(bundleId)}/draft`, { method: "DELETE" }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: KEYS.draft(bundleId) });
+      qc.invalidateQueries({ queryKey: ["bundles", bundleId, "roles"] });
+      qc.invalidateQueries({ queryKey: bundlesQueryKeys.list });
+    },
+  });
+}

@@ -75,6 +75,7 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor := resolveActor(r, "")
+	input.Actor = actor
 	requestFP := services.FingerprintBulkRequest(input)
 
 	if r.URL.Query().Get("apply") != "true" {
@@ -212,22 +213,27 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 // turns out to be empty, over-claiming tells them a door is locked when it is
 // open.
 func projectUpstream(ctx context.Context, outboxIDs []string) string {
+	ids := make([]string, 0, len(outboxIDs))
 	for _, id := range outboxIDs {
-		if id == "" {
-			// Nothing was queued for this one: nothing to watch land.
-			continue
+		// An empty id is nothing queued for this one: nothing to watch land.
+		if id != "" {
+			ids = append(ids, id)
 		}
-		res, err := svcDrainPropagationRow(ctx, id)
-		switch {
-		case err != nil:
-			return err.Error()
-		case res.Halted && res.Reason != "":
-			return res.Reason
-		case res.Applied == 0:
-			// Requeued, failed, or claimed by a concurrent drain. Either way this
-			// request did not watch it land.
-			return "still queued for propagation"
-		}
+	}
+	if len(ids) == 0 {
+		return ""
+	}
+	// The one rule (services.Deliver): a role that waits waits here too.
+	d := svcDeliver(ctx, ids, false)
+	switch {
+	case len(d.Waiting) > 0:
+		return d.WaitReason()
+	case d.Drain.Halted && d.Drain.Reason != "":
+		return d.Drain.Reason
+	case d.Drain.Applied < len(d.Sent):
+		// Requeued, failed, or claimed by a concurrent drain. Either way this
+		// request did not watch it land.
+		return "still queued for propagation"
 	}
 	return ""
 }
@@ -309,7 +315,10 @@ func cascadeQueuedReason(res services.CascadeResult) string {
 	switch {
 	case res.Enqueued == 0:
 		return "" // nothing to propagate; the closure was already correct
-	case res.Mode != "auto":
+	case res.Waiting > 0 && res.WaitReason == db.WaitReasonRoleWaits:
+		return "a role it gives always waits for you"
+	case res.Waiting > 0:
+		// Before the switch over: the bundle's own mode held it.
 		return "this bundle applies on confirmation"
 	case res.Drain.Halted && res.Drain.Reason != "":
 		return res.Drain.Reason

@@ -167,17 +167,21 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// client disconnect after commit cannot leave access ineffective.
 	rebuildUserCacheDetached(r.Context(), userID)
 
-	// Inline "apply now" for single mutations from inline forms (design §7 Q1):
-	// the operator opts in via ?apply=true to drain immediately rather than
-	// resuming from the dashboard. Targeted to THIS row only — applying one grant
-	// must not project unrelated mutations an operator left queued. A drain
-	// failure is non-fatal — the row stays pending and the operator can resume
-	// later. We then report this row's own post-drain status.
-	if r.URL.Query().Get("apply") == "true" && res.OutboxID != "" {
-		if _, derr := svcDrainPropagationRow(r.Context(), res.OutboxID); derr == nil {
+	// Delivered by the one rule (services.Deliver): it goes now unless the
+	// role waits. Before the switch over, a grant sent without ?apply=true
+	// still waits as it always did. Targeted to THIS row only — giving one
+	// role must not send unrelated changes an operator left queued. A failed
+	// send is non-fatal: the row stays pending and says why.
+	if res.OutboxID != "" {
+		d := svcDeliver(r.Context(), []string{res.OutboxID}, r.URL.Query().Get("apply") != "true")
+		res.WaitReason = d.WaitReason()
+		if len(d.Sent) > 0 {
 			if st, serr := dbGetPropagationStatus(r.Context(), res.OutboxID); serr == nil && st != "" {
 				res.Status = st
 			}
+		}
+		if res.Status == "applied" {
+			res.WaitReason = ""
 		}
 	}
 
@@ -386,9 +390,16 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch err := resolveOneAccessRequest(r.Context(), requestID, status, reviewer, req.ReviewNote); {
+	waitReason, err := resolveAccessRequestOutcome(r.Context(), requestID, status, reviewer, req.ReviewNote)
+	switch {
 	case err == nil:
-		jsonResponse(w, http.StatusOK, map[string]string{"message": "Request resolved"})
+		// wait_reason, when the approval isn't in Zitadel yet: role_waits,
+		// or halted:<reason>. The outcome says which, with the step left.
+		resp := map[string]string{"message": "Request resolved"}
+		if waitReason != "" {
+			resp["wait_reason"] = waitReason
+		}
+		jsonResponse(w, http.StatusOK, resp)
 	case errors.Is(err, errRequestNotFound):
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 	case errors.Is(err, errRequestAlreadyResolved):
@@ -463,16 +474,25 @@ func writeRoleOfferedError(w http.ResponseWriter, err error) {
 // second copy that drifted would leave requests approved but ungranted, which
 // re-surfaces later as syndra_only drift and is diagnosed by nobody.
 func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, reviewNote string) error {
+	_, err := resolveAccessRequestOutcome(ctx, requestID, status, reviewer, reviewNote)
+	return err
+}
+
+// resolveAccessRequestOutcome decides the request, and for an approval says
+// why the access isn't in Zitadel yet when it isn't (services.Deliver), so
+// the outcome can say "This role always waits for you" or "Zitadel didn't
+// answer".
+func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewer, reviewNote string) (waitReason string, err error) {
 	request, err := dbGetAccessRequestByID(ctx, requestID)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errRequestNotFound, err.Error())
+		return "", fmt.Errorf("%w: %s", errRequestNotFound, err.Error())
 	}
 
 	// Anything that is not pending is already settled — including 'withdrawn', which the
 	// member settled themselves. Enumerating the decided statuses instead would mean every new
 	// terminal state silently became decidable again.
 	if request.Status != "pending" {
-		return fmt.Errorf("%w (already %s)", errRequestAlreadyResolved, request.Status)
+		return "", fmt.Errorf("%w (already %s)", errRequestAlreadyResolved, request.Status)
 	}
 
 	if status == "approved" {
@@ -481,13 +501,13 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		// refused and the request is left for a decline.
 		holding, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if holding.Kind != models.HoldingNone {
-			return errRequestAlreadyHeld
+			return "", errRequestAlreadyHeld
 		}
 		if err := checkRoleOffered(ctx, request.ProjectID, request.RoleKey); err != nil {
-			return err
+			return "", err
 		}
 		var expiresAt *time.Time
 		if request.DurationDays != nil && *request.DurationDays > 0 {
@@ -523,9 +543,9 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		})
 		if err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {
-				return errRequestAlreadyResolved
+				return "", errRequestAlreadyResolved
 			}
-			return err
+			return "", err
 		}
 		// Rebuild the compiled cache from the just-committed ledger row FIRST, so
 		// access is effective immediately — independent of the best-effort inline
@@ -540,14 +560,14 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		// failure (e.g. Zitadel offline) leaves the row pending in the worklist for
 		// a later resume; access already works via the ledger.
 		if res.OutboxID != "" {
-			_, _ = svcDrainPropagationRow(ctx, res.OutboxID)
+			waitReason = svcDeliver(ctx, []string{res.OutboxID}, false).WaitReason()
 		}
 	} else { // rejected — no grant, just the conditional resolution
 		if err := dbResolveAccessRequest(ctx, requestID, status, reviewer, reviewNote); err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {
-				return errRequestAlreadyResolved
+				return "", errRequestAlreadyResolved
 			}
-			return err
+			return "", err
 		}
 	}
 
@@ -559,7 +579,7 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		action = "access_request.self_approved"
 	}
 	_ = dbInsertAuditLog(ctx, reviewer, request.RequesterID, action, requestID)
-	return nil
+	return waitReason, nil
 }
 
 func handleGetGovernanceSummary(w http.ResponseWriter, r *http.Request) {

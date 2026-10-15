@@ -41,6 +41,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/bundles/{id}/versions", withCORS(withUserAuth(handleGetBundleVersions)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/holders", withCORS(withOperatorAuth(handleGetBundleHolders)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(handleGetBundleDraft)))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(handleDiscardBundleDraft)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/publish", withCORS(withOperatorAuth(handlePublishBundleVersion)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/holders/move", withCORS(withOperatorAuth(handleMoveBundleHolders)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withUserAuth(handleGetBundleImpact)))
@@ -113,6 +114,13 @@ func NewRouter() http.Handler {
 	// Bulk confirmation-mode toggle (Task 22): flips confirmation_mode on a set of rules or
 	// bundles in one statement. Operator-gated — a cross-cutting policy mutation.
 	mux.HandleFunc("POST /api/v1/policies/confirmation-mode", withCORS(withOperatorAuth(handleBulkSetConfirmationMode)))
+
+	// Roles that wait for you (N14 B): the one write place for which roles
+	// wait in Pending changes. Operator-gated, like every makerspace-wide setting.
+	mux.HandleFunc("GET /api/v1/roles-that-wait", withCORS(withOperatorAuth(handleListRolesThatWait)))
+	mux.HandleFunc("PUT /api/v1/roles-that-wait/{project_id}/{role_key}", withCORS(withOperatorAuth(handleMarkRoleWaits)))
+	mux.HandleFunc("DELETE /api/v1/roles-that-wait/{project_id}/{role_key}", withCORS(withOperatorAuth(handleUnmarkRoleWaits)))
+	mux.HandleFunc("PUT /api/v1/config/confirmation-model", withCORS(withOperatorAuth(handleSwitchToRolesThatWait)))
 
 	// Audit log exposes every actor/target pair org-wide — operator-only (SC3).
 	mux.HandleFunc("GET /api/v1/audit", withCORS(withOperatorAuth(handleGetAuditLogs)))
