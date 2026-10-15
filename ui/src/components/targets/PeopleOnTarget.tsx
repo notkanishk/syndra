@@ -11,7 +11,8 @@ import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { targetLabel } from "@/lib/nav";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
-import { useTargetInventory, type BoundAccount } from "@/lib/queries/useTargets";
+import { useTargetHomes, useTargetInventory, type AccountHome, type BoundAccount } from "@/lib/queries/useTargets";
+import { HomeLine, LimitDialog, limitVerb } from "@/components/targets/HomeLimit";
 
 /**
  * Whose accounts are on this target (design §21's second question).
@@ -29,7 +30,9 @@ import { useTargetInventory, type BoundAccount } from "@/lib/queries/useTargets"
  */
 export function PeopleOnTarget({ target }: { target: string }) {
   const inventory = useTargetInventory(target);
+  const homes = useTargetHomes(target);
   const accounts = inventory.data?.accounts ?? [];
+  const homeOf = new Map((homes.data?.accounts ?? []).map((h) => [h.subject_id, h]));
   const name = targetLabel(target);
 
   return (
@@ -57,7 +60,13 @@ export function PeopleOnTarget({ target }: { target: string }) {
       >
         <>
           {accounts.map((account, i) => (
-            <PersonRow key={account.subject_id} target={target} account={account} first={i === 0} />
+            <PersonRow
+              key={account.subject_id}
+              target={target}
+              account={account}
+              home={homeOf.get(account.subject_id)}
+              first={i === 0}
+            />
           ))}
         </>
       </ListStates>
@@ -68,13 +77,17 @@ export function PeopleOnTarget({ target }: { target: string }) {
 function PersonRow({
   target,
   account,
+  home,
   first,
 }: {
   target: string;
   account: BoundAccount;
+  /** Their home folder limit and where it comes from; absent until read. */
+  home?: AccountHome;
   first: boolean;
 }) {
-  const [dialog, setDialog] = useState<"hold" | "takeaway" | null>(null);
+  const [dialog, setDialog] = useState<"hold" | "takeaway" | "limit" | null>(null);
+  const verb = limitVerb(home);
   // The name, because both dialogs speak to and about a person — and rung 3
   // asks the operator to type it. Through the same resolver every other surface
   // uses, so the name in the dialog is the name in the row: asking somebody to
@@ -96,15 +109,24 @@ function PersonRow({
           account since <Relative iso={account.bound_at} />
         </span>
         <span className="flex-1" />
-        {/* Pause it, or end it. The two answers to one question, in that order:
-            the reversible one first. */}
+        {/* Its home folder limit first, the one write place for it (A-03 §3);
+            then pause it, or end it, the reversible one first. */}
+        {verb && (
+          <Button variant="outline" size="sm" onClick={() => setDialog("limit")}>
+            {verb}
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={() => setDialog("hold")}>
           Put on hold
         </Button>
         <Button variant="danger" size="sm" onClick={() => setDialog("takeaway")}>
           Revoke
         </Button>
+        {home && <HomeLine home={home} />}
       </CardRow>
+      {dialog === "limit" && home && (
+        <LimitDialog target={target} name={name} home={home} onClose={() => setDialog(null)} />
+      )}
 
       {dialog === "hold" && (
         <HoldDialog

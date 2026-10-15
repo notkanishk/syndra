@@ -317,3 +317,15 @@ describe("what the page hands to the mutation", () => {
     expect(state.sent[0].spent).toBe(true);
   });
 });
+
+// A-03: a limit set below what someone holds. TrueNAS refuses new writes and
+// keeps every file, and the page says so in the member's terms.
+describe("a folder over its limit", () => {
+  it("says it's full, and that opening and deleting still work", () => {
+    state.targets = [
+      view({ storage: { ...view().storage!, places: [place({ path: "main/home_dir/ada", home: true, usage: { used_bytes: 34 * 2 ** 30, quota_bytes: 20 * 2 ** 30 } })] } }),
+    ];
+    renderStorage();
+    expect(screen.getByText(/^Full\. You can open and delete files here, but not save new ones until you're under 20\.0 GiB\.$/)).toBeTruthy();
+  });
+});

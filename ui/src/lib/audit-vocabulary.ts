@@ -62,6 +62,8 @@ export const AUDIT_ACTIONS: Record<
   "role.created": { verb: "Created a role" },
   "access_request.created": { verb: "Asked for access" },
   "access_request.approved": { verb: "Approved a request", template: "Approved {}'s request", passive: "Their request was approved" },
+  // Allowed and said (owner, 15 Oct): an operator approving their own request.
+  "access_request.self_approved": { verb: "Approved their own request", passive: "They approved their own request" },
   "access_request.rejected": { verb: "Declined a request", template: "Declined {}'s request", passive: "Their request was declined" },
   // Not destructive, and deliberately not phrased as a refusal — the person who filed it took it
   // back. `requestOutcome` keeps the same distinction on the request screens.
