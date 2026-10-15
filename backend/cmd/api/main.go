@@ -188,6 +188,9 @@ func main() {
 	// shipped ahead of it would be the fail-open rule inverted. RefreshAll
 	// bounds each add-on individually and runs them concurrently, so a
 	// switched-off one costs one timeout rather than the whole pass.
+	// Usually before the add-on container listens: quiet, and the start-up
+	// wait (awaitFirstManifests) says once what is still missing.
+	addons.QuietStartup(true)
 	_ = addons.RefreshAll(context.Background())
 
 	if err := seed.EnsureDemoData(context.Background()); err != nil {
