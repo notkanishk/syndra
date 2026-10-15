@@ -24,6 +24,12 @@ describe("requestOutcome", () => {
     expect(requestOutcome("pending")).toMatchObject({ operator: "Open", member: "Waiting" });
   });
 
+  // Given another way while it waited: neither a decision nor a refusal.
+  it("never reads a request fulfilled another way as declined", () => {
+    expect(requestOutcome("fulfilled")).toMatchObject({ operator: "Given another way", member: "You have this" });
+    expect(requestOutcome("fulfilled").member).not.toBe(requestOutcome("rejected").member);
+  });
+
   // A status this file has not been taught about is echoed back, not bucketed. The alternative
   // is a new backend state quietly rendering as an approval on a record of who may use a laser.
   it("passes an unknown status through rather than guessing", () => {

@@ -149,6 +149,9 @@ func enqueueCascadeRows(ctx context.Context, tx pgx.Tx, audits []CascadeAudit, p
 
 	ids := make([]string, 0, len(params))
 	for _, p := range params {
+		if err := closeGivenRequests(ctx, tx, p); err != nil {
+			return nil, err
+		}
 		// Countermand before compensate. A revoke answering a delivery that is
 		// still in this queue cancels it instead of queueing its opposite —
 		// see withdrawUndelivered for why that is narrower than it sounds.

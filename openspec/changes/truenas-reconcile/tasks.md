@@ -214,3 +214,14 @@ test_user asked five times, from one dialog, for Community, which they held for 
 - [x] D12 A dialog's footer no longer paints over the focus ring of the field above it (`ModalFooter` `mt-2`).
 - [x] D13 Grant direct access marks the roles the person already has in its picker, as Ask for access does.
 - [x] D14 The revoke sweep waits for the add-ons at start-up, like the reconcile, and the start-up refresh is quiet until then: every deploy logged an unreachable target from the second before the add-on listened.
+
+## Found in production, 15 Oct 2026 (a request overtaken by a grant)
+
+- [x] E1 A grant from any route (direct, approval, bundle, rule cascade) closes a waiting request for the same role in its own transaction, as `fulfilled` (migration 55), reviewer the giver, note naming the route, audited `access_request.closed_as_given`. It stayed open: the queue asked for a decision, the person couldn't ask again, and Decline told them "Not approved". Test (live, mutation-checked)
+- [x] E2 Migration 55 turns 000054's "already held" declines into `fulfilled`. Test (live)
+- [x] E3 Holding reads the queue: a queued add (a bundle's too, which has no ledger row) counts as held and `waiting`, and the refusal says it may not work yet; a queued revoke means not held, even while Zitadel still lists the role. Test (live)
+- [x] E4 An add cancels the queued revoke it answers (any source) and is owed only when the grant isn't standing; giving back before the removal was sent queued two changes that net to nothing. Test (live)
+- [x] E5 A person's page read a withdrawn request as "Waiting on a decision"; it uses the queue's words (`requestOutcome`). Test
+- [ ] E6 Open: approving a request for a role removed from the catalogue is not refused; it fails at send with the request already approved.
+- [ ] E7 Open: an extend while the first add is still queued queues a second identical add (harmless, shows twice in Pending changes).
+- [ ] E8 UI sweep owes design's request rows (route-requests): one status seat (dot, word, note), Withdraw outline and last, the role named on a member's row. Today a withdrawn row shows a pill plus "Applied", and a member's row names only the project.

@@ -150,6 +150,10 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 		}
 	}
 
+	if err := closeGivenRequests(ctx, tx, p); err != nil {
+		return "", err
+	}
+
 	const insertAudit = `INSERT INTO audit_logs
 		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id) VALUES ($1,$2,$3,$4)`
 	action := "direct_grant." + opTypeAuditVerb(p.OpType)

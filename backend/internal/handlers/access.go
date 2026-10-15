@@ -182,7 +182,7 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	switch status {
-	case "", "pending", "approved", "rejected", "withdrawn":
+	case "", "pending", "approved", "rejected", "withdrawn", "fulfilled":
 	default:
 		jsonValidationErrorResponse(w, "status must be one of pending, approved, rejected, withdrawn", map[string]string{"status": "enum"})
 		return
@@ -295,12 +295,16 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 // alreadyHeldMessage says what someone has of a role they were about to be
 // given or to ask for. who is "You" or "They".
 func alreadyHeldMessage(h models.RequestHolding, who string) string {
-	verb := "have"
+	msg := fmt.Sprintf("%s already have this, with no end date.", who)
 	if h.Kind == models.HoldingUntil && h.Until != nil {
-		return fmt.Sprintf("%s already %s this, until %s. Makerspace staff can extend it from Expiring access.",
-			who, verb, h.Until.Format("2 Jan 2006"))
+		msg = fmt.Sprintf("%s already have this, until %s. Makerspace staff can extend it from Expiring access.",
+			who, h.Until.Format("2 Jan 2006"))
 	}
-	return fmt.Sprintf("%s already %s this, with no end date.", who, verb)
+	// Given, not yet sent: still held, so not given twice, but it may not work yet.
+	if h.Waiting {
+		msg += " It's waiting to be sent, so it may not work yet."
+	}
+	return msg
 }
 
 // handleWithdrawAccessRequest lets the person who filed a request take it back.

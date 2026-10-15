@@ -12,7 +12,7 @@ export interface AccessRequest {
   role_key: string;
   justification: string;
   duration_days?: number | null;
-  status: "pending" | "approved" | "rejected" | "withdrawn" | string;
+  status: "pending" | "approved" | "rejected" | "withdrawn" | "fulfilled" | string;
   reviewer_id?: string;
   review_note?: string;
   created_at: string;
@@ -25,6 +25,8 @@ export interface RequestHolding {
   kind: "none" | "until" | "for_good";
   /** When it ends, for "until". */
   until?: string;
+  /** Given, and not yet sent to Zitadel. */
+  waiting?: boolean;
 }
 
 export interface CreateRequestInput {

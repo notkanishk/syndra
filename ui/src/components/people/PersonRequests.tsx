@@ -5,7 +5,9 @@ import { useMemo, useState } from "react";
 
 import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { requestOutcome } from "@/components/requests/RequestsScreen";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
@@ -193,14 +195,11 @@ function RequestRow({
  * state — somebody made a correct call — so it reads muted rather than red.
  */
 function Outcome({ status, note }: { status: string; note?: string }) {
-  const style =
-    status === "approved"
-      ? "text-accent-text"
-      : status === "rejected"
-        ? "text-muted"
-        : "text-warn-text";
-  const label =
-    status === "approved" ? "Approved" : status === "rejected" ? "Declined" : "Waiting on a decision";
+  // The queue's own words, so a withdrawn or fulfilled request never reads as
+  // "Waiting on a decision" here, as a withdrawn one did.
+  const said = requestOutcome(status);
+  const style = STATUS_TONE[said.tone].label;
+  const label = status === "pending" ? "Waiting on a decision" : said.operator;
 
   return (
     <span className="text-right">
