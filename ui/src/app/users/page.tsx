@@ -464,7 +464,10 @@ function PersonRow({
           ) : (
             <span className="block truncate text-[15px] font-semibold">{entry.user.name}</span>
           )}
-          <span className="block truncate text-[12.5px] text-faint">
+          <span
+            className="block truncate text-[12.5px] text-faint"
+            title={entry.user.title || entry.user.email}
+          >
             {entry.user.title || entry.user.email}
           </span>
         </span>

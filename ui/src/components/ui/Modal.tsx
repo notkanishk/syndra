@@ -210,9 +210,10 @@ export function Modal({
           because a mobile URL bar makes those two different numbers, and the
           one that lies is the one that hides the button. 32px keeps the
           gutter the scrim already sets on the horizontal axis. */}
+      {/* Long names, emails and ids in a title or row wrap inside the dialog instead of widening it. */}
       <div
         ref={panelRef}
-        className={`flex w-full ${SIZE_CLASS[size]} settle-in flex-col overflow-y-auto rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
+        className={`flex w-full ${SIZE_CLASS[size]} settle-in flex-col overflow-y-auto [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
       >
         <SheetGrabber busy={busy} onClose={onClose} />
         {children}

@@ -490,7 +490,7 @@ function ReconcileControl({ target }: { target: string }) {
           </CardRow>
           {result!.stale!.map((b) => (
             <CardRow key={b.subject_id} className="flex-wrap">
-              <Mono>{b.username}</Mono>
+              <Mono className="min-w-0 [overflow-wrap:anywhere]">{b.username}</Mono>
               {b.uid ? <span className="text-[13px] text-faint">id {b.uid}</span> : null}
               <span className="flex-1" />
               {released.includes(b.subject_id) ? (
@@ -1401,7 +1401,7 @@ function Inventory({ target }: { target: string }) {
                 ) : null
               }
             >
-              <span className="font-mono text-[13.5px]">{account.username}</span>
+              <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
               {account.uid !== undefined && (
                 <span className="text-[13px] text-faint">id {account.uid}</span>
               )}
@@ -1547,7 +1547,7 @@ function AdoptPanel({
                       <span className={`h-2 w-2 rounded-pill ${on ? "bg-accent" : "bg-transparent"}`} />
                     </span>
                     <Avatar name={user.name} />
-                    <span className="flex min-w-0 flex-1 flex-col gap-px">
+                    <span className="flex min-w-0 flex-1 flex-col gap-px [overflow-wrap:anywhere]">
                       <span className="text-[14.5px] font-semibold">{user.name || user.email}</span>
                       {sub && <span className="text-[12.5px] text-muted">{sub}</span>}
                       <span className="text-[12.5px] text-faint">{user.email}</span>
