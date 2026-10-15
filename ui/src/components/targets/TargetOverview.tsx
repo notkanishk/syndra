@@ -1,6 +1,7 @@
 "use client";
 
 import { describeFailure, sentence } from "@/lib/outcome";
+import { Radio } from "@/components/ui/Choice";
 import { roleCount } from "@/lib/role-mapping-plan";
 import { Fragment, useState } from "react";
 
@@ -1061,10 +1062,9 @@ function ResolveConflictDialog({
               key={claimant.id}
               className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft"
             >
-              <input
-                type="radio"
+              <Radio
                 name="conflict-owner"
-                className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
+                className="mt-1"
                 checked={owner === claimant.id}
                 onChange={() => setOwner(claimant.id)}
               />
