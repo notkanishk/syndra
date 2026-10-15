@@ -201,7 +201,7 @@ export function HoldDialog({
           </Button>
         )}
         <Button
-          variant={succeeded ? "accent" : "ghost"}
+          variant={succeeded ? "outline" : "ghost"}
           onClick={onClose}
           disabled={create.isPending}
         >

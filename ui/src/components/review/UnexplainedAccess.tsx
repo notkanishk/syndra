@@ -814,7 +814,7 @@ function ResolutionDialog({
             cursor to. `order-2` puts it back on the right, where the confirm
             action has always sat. */}
         <Button
-          variant={succeeded(outcome) ? "accent" : "outline"}
+          variant={succeeded(outcome) ? "outline" : "ghost"}
           className="order-2"
           onClick={onClose}
         >

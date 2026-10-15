@@ -234,7 +234,7 @@ function RoleRow({
               </Button>
             )}
             <Button
-              variant={outcome?.kind === "applied" ? "accent" : "outline"}
+              variant={outcome?.kind === "applied" ? "outline" : "ghost"}
               onClick={() => setConfirming(false)}
             >
               {outcome?.kind === "applied" ? "Close" : "Cancel"}

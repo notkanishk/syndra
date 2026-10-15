@@ -564,7 +564,7 @@ function LetItLapseDialog({
           </Button>
         )}
         <Button
-          variant={succeeded(outcome) ? "accent" : "ghost"}
+          variant={succeeded(outcome) ? "outline" : "ghost"}
           onClick={onClose}
           disabled={acknowledge.isPending}
         >

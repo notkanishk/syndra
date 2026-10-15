@@ -836,7 +836,7 @@ function RemovalImpact({
             Drop it from the working copy
           </Button>
         )}
-        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onCancel}>
+        <Button variant={succeeded(outcome) ? "outline" : "ghost"} onClick={onCancel}>
           {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
       </div>
