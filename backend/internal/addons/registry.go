@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -426,6 +427,14 @@ func Refresh(ctx context.Context, target string) error {
 // reads it. Shaped for periodic.Runner, which runs it once at startup and then
 // on each tick — without a refresh, a registered add-on stays permanently
 // uncallable, so this is what turns registration into capability.
+// quietStartup silences RefreshAll's per-target failure lines while start-up
+// waits for add-ons to listen (awaitFirstManifests), which then says once what
+// is still missing.
+var quietStartup atomic.Bool
+
+// QuietStartup turns that silence on and off.
+func QuietStartup(on bool) { quietStartup.Store(on) }
+
 func RefreshAll(ctx context.Context) error {
 	var wg sync.WaitGroup
 	for _, r := range Registered() {
@@ -434,7 +443,7 @@ func RefreshAll(ctx context.Context) error {
 			defer wg.Done()
 			c, cancel := context.WithTimeout(ctx, refreshTimeout)
 			defer cancel()
-			if err := Refresh(c, target); err != nil {
+			if err := Refresh(c, target); err != nil && !quietStartup.Load() {
 				log.Printf("[ADDON] refresh %s: %v", target, err)
 			}
 		}(r.Target)

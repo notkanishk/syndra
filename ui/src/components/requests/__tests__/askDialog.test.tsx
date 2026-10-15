@@ -165,3 +165,17 @@ describe("The queue · a request for a role they have since come to hold", () =>
     expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
   });
 });
+
+// Found on production, 15 Oct: Done, then Ask for access again, reopened on
+// the last result until a reload. Each opening starts clean.
+describe("Ask for access · each opening starts clean", () => {
+  it("opens on the form again after Done", async () => {
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    fireEvent.click(screen.getByRole("button", { name: /Send request/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Ask for access" })[0]);
+    expect(screen.getByLabelText("What do you need to use?")).toBeInTheDocument();
+    expect(screen.queryByText(/Asked for/)).not.toBeInTheDocument();
+  });
+});

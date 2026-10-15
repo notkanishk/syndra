@@ -164,6 +164,23 @@ export function ToBody({ children }: { children: ReactNode }) {
   return createPortal(children, document.body);
 }
 
+/**
+ * A dialog whose state lives only while it is open.
+ *
+ * Rendered closed with an early `return null`, a dialog kept its state: the
+ * request dialog reopened on "Asked for Staff" with Done, the last result,
+ * until a reload. Gated here, its body mounts on open and is gone on close, so
+ * each opening starts clean. Every dialog with an `open` prop goes through it;
+ * a guard test holds it to that.
+ */
+export function mountedWhileOpen<P extends { open: boolean }>(Body: React.ComponentType<P>) {
+  function WhileOpen(props: P) {
+    return props.open ? <Body {...props} /> : null;
+  }
+  WhileOpen.displayName = `mountedWhileOpen(${Body.displayName ?? Body.name})`;
+  return WhileOpen;
+}
+
 export function Modal({
   open,
   onClose,
@@ -305,8 +322,13 @@ export function ModalFooter({
   // engages inside a scrolling container — so nothing about the common case
   // moves. `bg-surface-2` is the panel's own colour, which is why the seam is
   // invisible until content passes behind it.
+  //
+  // `mt-2` is the focus ring's room. The ring sits 6px outside its field (2px
+  // at a 4px offset), and the opaque footer began right under the last field,
+  // so it painted over the bottom of that field's ring: the "Why?" box looked
+  // clipped while typing. The margin is transparent, so the ring shows.
   return (
-    <div className="sticky bottom-0 flex flex-none flex-col gap-2.5 bg-surface-2 px-6 pb-[22px] pt-5">
+    <div className="sticky bottom-0 mt-2 flex flex-none flex-col gap-2.5 bg-surface-2 px-6 pb-[22px] pt-5">
       <div className="flex flex-wrap items-center gap-2.5">{children}</div>
       {note && <div className="text-[12.5px] leading-[1.5] text-faint">{note}</div>}
     </div>

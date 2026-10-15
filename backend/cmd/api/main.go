@@ -82,6 +82,10 @@ func observeInterval() time.Duration {
 }
 
 func awaitFirstManifests(ctx context.Context) {
+	// Each start-up attempt that finds the add-on not listening yet is the
+	// ordinary case, not an error: quiet while waiting, one line at the end.
+	addons.QuietStartup(true)
+	defer addons.QuietStartup(false)
 	for _, wait := range []time.Duration{2, 3, 5, 10, 15, 30, 45} {
 		if len(addons.PendingManifests()) == 0 {
 			return
@@ -276,7 +280,19 @@ func main() {
 			}
 			return nil
 		})
-		go revokeSched.Start(ctx)
+		// After the add-ons have answered, like the reconcile below. Started
+		// at once, its first pass ran in the second before the add-on
+		// container listened and reported a target it could not reach, on
+		// every deploy. Bounded: an add-on that never answers delays the first
+		// pass by awaitFirstManifests' ceiling (under two minutes), no more.
+		if len(addons.Registered()) > 0 {
+			go func(r *periodic.Runner) {
+				awaitFirstManifests(ctx)
+				r.Start(ctx)
+			}(revokeSched)
+		} else {
+			go revokeSched.Start(ctx)
+		}
 	} else {
 		log.Println("[REVOKE] Disabled via REVOCATION_DRAIN_ENABLED=false")
 	}
@@ -329,6 +345,9 @@ func main() {
 	var addonSched *periodic.Runner
 	if len(addons.Registered()) > 0 {
 		addonSched = periodic.New("ADDON", addonRefreshInterval(), 15*time.Minute, addons.RefreshAll)
+		// Quiet before the first refresh, which runs at once and usually meets
+		// an add-on still starting; awaitFirstManifests lifts it.
+		addons.QuietStartup(true)
 		go addonSched.Start(ctx)
 		go awaitFirstManifests(ctx)
 	}
