@@ -119,6 +119,10 @@ The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built 
 - **What happens to a home folder after someone leaves** (owner, 2026-10-14). Today it is kept, always: Syndra never moves or deletes a home (truenas-reconcile D10). The choice to build: keep it (today), archive it (owner becomes root, private, the shape the 14 Oct cleanup of old folders used), or delete it after N days. It should be settable per system, with the date the person left shown beside each kept folder.
 - **Role kind (core / extra)**: designed, not owed until a screen needs it. The only SQL touch points are `backend/internal/db/roles.go:31,62,81`.
 
+### Architecture deepening — the 16 Oct review
+
+Seven candidates where one question is answered by several copies, ranked, in [`changes/architecture-deepening`](changes/architecture-deepening/tasks.md) with the review page beside them. Top: one access-change planner, so a plan's preview and its apply are the same code.
+
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
