@@ -21,7 +21,8 @@ export function NotOpenYet({
   open: boolean;
   title: string;
   why: string;
-  step: { label: string; href: string };
+  /** The way on. Absent when there is none to take from here right now. */
+  step?: { label: string; href: string };
   /** In a card (15px lead) or around a page's regions (19px display lead). */
   size?: "card" | "page";
   children: ReactNode;
@@ -44,12 +45,14 @@ export function NotOpenYet({
           {title}
         </span>
         <span className={`text-muted [text-wrap:pretty] ${page ? "text-[15px]" : "text-[14px]"}`}>{why}</span>
-        <a
-          href={step.href}
-          className="ml-auto inline-flex min-h-[44px] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0"
-        >
-          {step.label}
-        </a>
+        {step && (
+          <a
+            href={step.href}
+            className="ml-auto inline-flex min-h-[44px] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0"
+          >
+            {step.label}
+          </a>
+        )}
       </div>
       <div aria-disabled="true" inert className={`flex select-none flex-col opacity-45 ${page ? "gap-9" : "gap-3.5"}`}>
         {children}

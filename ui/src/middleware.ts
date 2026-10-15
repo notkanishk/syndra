@@ -7,7 +7,9 @@ import { buildRedirectUrl } from "@/lib/request-url";
 // A route a member may reach is navigation structure, and navigation structure
 // lives in one file. Safe on the Edge runtime where lib/session is not —
 // lib/nav imports nothing at all, so nothing follows it into the bundle.
+import { SESSION_ENDED } from "@/lib/login-error";
 import { memberMayVisit } from "@/lib/nav";
+import { safeReturnPath } from "@/lib/return-path";
 
 // Must match SESSION_COOKIE_NAME in lib/session.ts. Declared locally because
 // this file runs on the Edge runtime and importing lib/session would pull
@@ -129,7 +131,18 @@ export async function middleware(request: NextRequest) {
   }
 
   if (session.kind === "valid" && pathname === "/login") {
-    return redirectTo(request, "/");
+    // The backend refused this session's token (a read came back 401), so it
+    // is over whatever the cookie says. Cleared here and the door shown: sent
+    // on, the person met the page that 401s again, and round they went.
+    if (request.nextUrl.searchParams.get("error") === SESSION_ENDED) {
+      const response = NextResponse.next();
+      response.cookies.set(SESSION_COOKIE_NAME, "", { maxAge: 0, path: "/" });
+      return response;
+    }
+    // Already signed in, usually a link opened in a second tab: on to where
+    // they were going, not the landing.
+    const next = new URL(safeReturnPath(request.nextUrl.searchParams.get("next")), "http://next.invalid");
+    return redirectTo(request, next.pathname, false, next.search);
   }
 
   // `/login` needs no seat on the allowlist: a valid session was already sent

@@ -37,8 +37,18 @@ const HANDSHAKE = new Set([
   "state_mismatch",
 ]);
 
+/** A read the backend refused with 401: the session is over, not failed. */
+export const SESSION_ENDED = "session_ended";
+
 export function loginFailure(code: string | undefined): LoginFailure | null {
   if (!code) return null;
+
+  if (code === SESSION_ENDED) {
+    return {
+      head: "Your session ended.",
+      sub: "Sign in again and you'll be back where you were.",
+    };
+  }
 
   if (REFUSED.has(code)) {
     return {

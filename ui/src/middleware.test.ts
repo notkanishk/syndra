@@ -115,6 +115,29 @@ describe("middleware admin/member boundary", () => {
     expect(locationPath(res)).toBe("/");
   });
 
+  it("sends an already-signed-in visit on to where it was going", async () => {
+    const c = cookie({ type: "oidc", userId: "u1", role: "user", expiresAt: future() });
+    const res = await middleware(req("/login?next=%2Fstorage%3Ftab%3D1", c));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toMatch(/\/storage\?tab=1$/);
+  });
+
+  it("never sends one off-site", async () => {
+    const c = cookie({ type: "oidc", userId: "u1", role: "user", expiresAt: future() });
+    const res = await middleware(req("/login?next=%2F%2Fevil.example", c));
+    expect(locationPath(res)).toBe("/");
+  });
+
+  // A read the backend refused with 401 lands here. Sent on, the person met
+  // the page that 401s again, and round: the session is cleared and the door
+  // shown instead.
+  it("clears a session the backend refused and shows the door", async () => {
+    const c = cookie({ type: "oidc", userId: "u1", role: "user", expiresAt: future() });
+    const res = await middleware(req("/login?error=session_ended&next=%2Fstorage", c));
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("set-cookie")).toMatch(/syndra_session=;.*Max-Age=0/i);
+  });
+
   it("lets a valid admin through an admin-only path (no redirect)", async () => {
     const c = cookie({ type: "oidc", userId: "a1", role: "admin", expiresAt: future() });
     const res = await middleware(req("/users", c));

@@ -133,7 +133,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       ) : (
         <div className="flex flex-wrap gap-[18px]">
           {projects.map((project) => (
-            <Card key={project.project_id} className="min-w-[420px] flex-1">
+            <Card key={project.project_id} className="min-w-[min(420px,100%)] flex-1">
               <div className="px-5 py-4 type-card-title">
                 <ResolvedProjectName
                   name={project.project_name}
@@ -179,14 +179,17 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 
       {expiringGrant && (
         <div className="warn-note flex flex-wrap items-center gap-4 px-5 py-4">
-          <div className="min-w-[300px] flex-1 text-[15px] leading-[1.55] text-ink/80">
+          <div className="min-w-[min(300px,100%)] flex-1 text-[15px] leading-[1.55] text-ink/80">
             <strong className="font-semibold text-warn-text">
               {expiringRole ?? "One of your permissions"} runs out on{" "}
               {formatShortDate(expiringGrant.expires_at)}.
             </strong>{" "}
             If you still need it, ask and makerspace staff can extend it.
           </div>
-          <ButtonLink href="/requests?ask" variant="accent">
+          <ButtonLink
+            href={`/requests?project=${encodeURIComponent(expiringGrant.project_id)}&role=${encodeURIComponent(expiringGrant.role_key)}`}
+            variant="accent"
+          >
             Request an extension
           </ButtonLink>
         </div>

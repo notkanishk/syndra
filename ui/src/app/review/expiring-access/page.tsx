@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 
@@ -60,8 +61,18 @@ const EXTEND_DAYS = 90;
  * be doable to twelve rows in one gesture — the value of the record is that a
  * person read the row.
  */
+/**
+ * The window, from `?within=`: Home's tile counts the next 14 days and links
+ * here with it, so the number on the tile is the number of rows. 30 by default.
+ */
+function windowDays(raw: string | null): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 90 ? n : 30;
+}
+
 export default function ExpiringAccessPage() {
-  const grants = useExpiringGrants(30);
+  const within = windowDays(useSearchParams().get("within"));
+  const grants = useExpiringGrants(within);
   const rows = useMemo(() => [...(grants.data ?? [])].sort(sortBySoonest), [grants.data]);
 
   // Two groups, not a filter. The cost this screen imposes is rescanning rows somebody has
@@ -101,7 +112,7 @@ export default function ExpiringAccessPage() {
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Expiring access"
-        lede="Direct grants that end in the next 30 days, soonest first. Syndra ends each one on its date whether or not you visit this page."
+        lede={`Direct grants that end in the next ${within} days, soonest first. Syndra ends each one on its date whether or not you visit this page.`}
         actions={
           undecided.length > 0 ? (
             <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
@@ -142,7 +153,7 @@ export default function ExpiringAccessPage() {
           skeleton={<RowSkeleton rows={4} label="Loading expiring access" />}
           empty={
             <EmptyState
-              title="Nothing expires in the next 30 days."
+              title={`Nothing expires in the next ${within} days.`}
               guidance="Direct grants appear here a month before they end."
               resolved
             />
@@ -166,7 +177,7 @@ export default function ExpiringAccessPage() {
               rows are acknowledged ones looks identical to a queue nobody has touched. */}
           {undecided.length === 0 && acknowledged.length > 0 && (
             <div className="row-divider px-5 py-3.5 text-[14px] text-muted">
-              Nothing here is waiting on a decision. Every role that ends in the next 30 days has
+              Nothing here is waiting on a decision. Every role that ends in the next {within} days has
               been looked at.
             </div>
           )}
@@ -250,7 +261,7 @@ export default function ExpiringAccessPage() {
       {lapsing && <LetItLapseDialog grant={lapsing} onClose={() => setLapsing(null)} />}
 
       <div className="flex flex-wrap gap-[18px]">
-        <div className="card min-w-[320px] flex-1 px-5 py-4">
+        <div className="card min-w-[min(320px,100%)] flex-1 px-5 py-4">
           <h2 className="type-card-title mb-2">
             What &ldquo;Let it lapse&rdquo; does, and what it doesn&rsquo;t
           </h2>
@@ -261,7 +272,7 @@ export default function ExpiringAccessPage() {
             answer.
           </p>
         </div>
-        <div className="card min-w-[320px] flex-1 px-5 py-4">
+        <div className="card min-w-[min(320px,100%)] flex-1 px-5 py-4">
           <h2 className="type-card-title mb-2">When a row comes back</h2>
           <p className="max-w-[60ch] text-[14px] leading-[1.55] text-muted">
             An acknowledgement is about one date. If somebody extends the access or gives it again, the
