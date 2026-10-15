@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
 )
@@ -99,6 +101,8 @@ func handleBulkDecideRequests(w http.ResponseWriter, r *http.Request) {
 	}
 
 	plan := planApprovedRows("decide_requests", subjects, live)
+	// Reviewed: the plan's rows named every queued change this cancels.
+	db.CancellationsReviewed(r.Context())
 	applyDecisionPlan(r, &plan, status, req.ReviewNote)
 	jsonResponse(w, http.StatusOK, plan)
 }
@@ -125,11 +129,13 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 		out.Name = driftSubject(ctx, request.RequesterID)
 		out.Email = request.RequesterID
 
-		if request.Status == "approved" || request.Status == "rejected" {
+		if request.Status != "pending" {
 			// A queue worked by two people produces this constantly, and it is
-			// information rather than an error: somebody already decided.
+			// information rather than an error: somebody already decided. Any
+			// settled status, not only the two decisions: a withdrawn or
+			// fulfilled request read "will change" here and was then refused.
 			out.Effect = services.EffectNoChange
-			out.Detail = fmt.Sprintf("Already %s.", request.Status)
+			out.Detail = settledDetail(request.Status)
 			plan.Outcomes = append(plan.Outcomes, out)
 			continue
 		}
@@ -138,9 +144,26 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 		// come to hold since asking can't be approved (resolveOneAccessRequest
 		// refuses it), only declined.
 		if status == "approved" {
-			if h, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey); err == nil && h.Kind != models.HoldingNone {
+			h, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey)
+			switch {
+			case err != nil:
+				// Unread is not "doesn't have it": the decision would refuse.
+				out.Effect = services.EffectBlocked
+				out.Detail = "Syndra couldn't read what they already have, so it won't approve this blind. Try again."
+			case h.Kind != models.HoldingNone:
 				out.Effect = services.EffectBlocked
 				out.Detail = "Already has this, so approving would change nothing. Decline it to close the request."
+			}
+			if out.Effect == "" {
+				if err := checkRoleOffered(ctx, request.ProjectID, request.RoleKey); errors.Is(err, errRoleNotOffered) {
+					out.Effect = services.EffectBlocked
+					out.Detail = "This role no longer exists in Zitadel, so it can't be approved. Decline it to close the request."
+				} else if err != nil {
+					out.Effect = services.EffectBlocked
+					out.Detail = "Syndra couldn't read Zitadel's list of roles to check this one exists. Try again shortly."
+				}
+			}
+			if out.Effect != "" {
 				plan.Outcomes = append(plan.Outcomes, out)
 				continue
 			}
@@ -156,6 +179,17 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 					"Approving mints a direct grant for %d days, the same as granting it by hand.",
 					*request.DurationDays)
 			}
+			// Never invisibly (owner, 15 Oct): a queued removal this approval
+			// would cancel is named here, since the apply is marked reviewed.
+			cancels, err := dbWouldCancel(ctx, db.EnqueueParams{UserID: request.RequesterID, ProjectID: request.ProjectID,
+				RoleKeys: []string{request.RoleKey}, OpType: "add", Source: "direct"})
+			if err != nil {
+				out.Effect = services.EffectBlocked
+				out.Detail = "Syndra couldn't read what's waiting to be sent for them, so it won't approve this blind. Try again."
+				plan.Outcomes = append(plan.Outcomes, out)
+				continue
+			}
+			out = services.WithCancels(out, cancels)
 		} else {
 			out.Detail = fmt.Sprintf("Declined for %s.", request.RoleKey)
 			out.Consequence = "Nothing about their current access changes."
@@ -165,6 +199,22 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
 	return plan
+}
+
+// settledDetail names how a request was already settled, in the queue's words.
+func settledDetail(status string) string {
+	switch status {
+	case "approved":
+		return "Already approved."
+	case "rejected":
+		return "Already declined."
+	case "withdrawn":
+		return "Withdrawn by the person who asked."
+	case "fulfilled":
+		return "Already closed: the role was given another way."
+	default:
+		return fmt.Sprintf("Already %s.", status)
+	}
 }
 
 func applyDecisionPlan(r *http.Request, plan *services.BulkPlan, status, note string) {

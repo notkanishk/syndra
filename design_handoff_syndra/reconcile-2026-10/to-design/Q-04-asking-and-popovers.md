@@ -1,6 +1,6 @@
 # Q-04 · Asking for access, links that go where they say, and one way to draw each control
 
-From Claude Code, 15 Oct 2026. Follows A-03. Nothing here retires an earlier answer. Things found while testing on production, and in a sweep of every link and control after it, each fixed in code. The fixes are yours to confirm or redraw.
+From Claude Code, 15 Oct 2026. Follows A-03. Nothing here retires an earlier answer. Things found while testing on production, and in a sweep of every link and control after it, each fixed in code. §9–13 were Q-05, merged here before either was sent. The fixes are yours to confirm or redraw.
 
 **Answer in the design project at** `handoff/2026-10-reconcile/from-design/A-04-asking-and-popovers.md`, with boards beside it in `handoff/2026-10-reconcile/design/`.
 
@@ -139,7 +139,7 @@ New part for `/design-sync` to bring into the design system: `AnchoredPanel` (th
 - Approving any of them would have written its end date over the access the member already had.
 
 **Built (Locked, owner 15 Oct):** a request is for a role someone lacks, and one per role. Nothing merges into what's there.
-- **The dialog** marks each role "you have this", "yours until 18 Dec" or "already asked", and won't send one of them.
+- **The dialog** marks each role "you have this", "yours until 18 Dec" or "already asked", and won't send one of them (all its states: §10).
 - **Once sent**, the dialog becomes its result, with Done only.
 - **A request for a role they've come to hold since asking** shows "Already has this… decline it to close the request" in the queue, with Approve off.
 - **Giving a role someone already has** is refused everywhere: People's grant dialog, and bulk assign, including through a bundle. Extend is the one act that moves an end, and only later.
@@ -147,6 +147,79 @@ New part for `/design-sync` to bring into the design system: `AnchoredPanel` (th
 **Questions.**
 1. **Keeping a role that ends.** My access used to say "Request an extension", and a request for a held role is now refused. It now says to tell makerspace staff before it ends. Should a member have a way to ask for that inside Syndra, such as an "Ask to keep it" that lands in the queue as an extension, not a grant? Or is telling staff enough?
 2. **A second source.** Bulk assign used to add a direct grant beside a bundle, so access survived the bundle changing. It's refused now. Is that ever needed? If it is, should it be its own action ("Keep this even without the bundle")?
+
+## 9 · Asking and giving, drawn as one flow: the policy (owner, 15 Oct · Locked)
+
+- A member asks only for a role they don't have, and only once while it's waiting.
+- An operator gives only a role the person doesn't have.
+- An existing end is changed only by Extend, and only to a later date.
+- Nothing merges into access someone already has.
+
+## 10 · Ask for access: every state of the one dialog (route-requests `ask`)
+
+Built now, in code's own drawing. Please draw each one:
+
+1. **Choosing.** Each role in the picker is marked: "you have this", "yours until 18 Dec", or "already asked". Marked roles can't be picked.
+2. **A role you have, chosen from a link.** The hint replaces "Can't find it?":
+   - "You already have this, with no end date, so there's nothing to ask for."
+   - For a role that ends: "You have this until 18 Dec. To keep it longer, ask makerspace staff."
+   - Send is off.
+3. **A role already asked for.** "You've already asked for this. It's waiting, and the answer appears on this page." Send is off.
+4. **Sent.**
+   - The form goes, and the dialog becomes its result: "Asked for Staff on TrueNAS" with "You'll see the answer on this page", and Done.
+   - Reopened, it starts clean. Until today it reopened on the last result.
+5. **Refused by the server**: one of the above, reached another way, such as a second tab. It reads as an outcome in the sheet.
+
+**Questions.**
+- Is "becomes its result, Done only" right for an ask? Or should the sheet close and the new row arrive at the top of Your requests, with the result said there?
+- Today the result card shows an **"Applied"** badge for something that has only been asked. What should an ask's result say?
+
+## 11 · One way for a dialog to report what it did (system-wide)
+
+The same kind of action reports its result in three different ways:
+- **Ask for access** turns its sheet into a result card, with an "Applied" badge.
+- **Grant direct access** closes, and the person's page shows the result. The owner saw "the correct outcome but in a different form".
+- **Rehearsed dialogs** (mappings, bulk, revoke) end on their own result step, listing who changed.
+
+**Question.**
+- Draw one pattern for "a dialog did its thing", and say when each variant applies: a single direct change, a request someone else will decide, and a rehearsed change to many people.
+- Cover what the badge says ("Asked", "Given", "Waiting to be sent"), where the result lives (in the sheet or on the page), and what the one button reads.
+
+## 12 · The role picker, asking and giving (route-requests, people)
+
+The same choice is drawn two ways:
+- **Ask for access:** a native Select labelled "What do you need to do there?", showing role names only.
+- **Grant direct access:** a native Select labelled "Role", reading "Community · community" (name, then key). Below it are "2 people hold it", the role's description, and now "test user already has this, with no end."
+
+Both now mark the roles the person already has the same way, and won't let them be picked.
+
+**Questions.**
+1. Should both use one picker? Should it be the role picker you drew for bundles (BUILD-LIST 3: one search, the catalogue's folds, the selection seat), or stay a native Select?
+2. Should the key ("· community") show to an operator and not to a member, as now, or to neither?
+3. Where do "2 people hold it" and the description belong for an operator, and does a member see either?
+4. How does a role the person already has read in each? Code says "· you have this" to a member and "· has this" to an operator, and disables it. Should it instead stay pickable and explain itself when chosen?
+
+## 13 · A request overtaken by a grant, and a grant not yet sent (route-requests, route-me, people)
+
+**Found (Locked).** Tested on production, 15 Oct:
+- **Given directly while a request waited.** The request stayed open. The queue still asked for a decision, the person couldn't ask again once the role ended, and the only way to close it was Decline, which told them "Not approved" for access they had. The five requests Syndra closed itself earlier were closed the same wrong way.
+- **Asking for, or giving, a role that's given but not yet sent.** Refused, which is right, but it said "You already have this" while it doesn't work yet.
+- **Giving back a role whose removal hadn't been sent.** Refused as "already has this", because Zitadel still showed it. When it was allowed, it queued the add behind the removal: two changes to confirm that net to nothing.
+
+**Built (Locked).**
+- A grant, from any route (directly, by approving, through a bundle or a rule), closes a waiting request for the same role, in the same step. The request reads **"You have this"** to the member and **"Given another way"** to an operator, with a note saying how: "Given directly, so there was nothing left to decide." The five earlier closures now read the same, with "Already had this when it was asked".
+- A role given but not yet sent still counts as held, so it's never asked for or given twice. The refusal adds "It's waiting to be sent, so it may not work yet."
+- A role whose removal is queued counts as not held. Giving it back cancels the queued removal instead of adding a second change.
+- A person's page showed a withdrawn request as "Waiting on a decision". It now uses the queue's words.
+
+- **Undoing something already set in motion is never silent (owner, 15 Oct).** Giving a role whose removal is still waiting, or removing one whose grant is still waiting, cancels the queued change. Before it does, one confirmation names each change: "Removing TrueNAS / community for test user · Queued by Sam, 2h ago · “left the course”", with **Keep it** (first, and what Escape does) and **Cancel it and go ahead**. It opens over whichever dialog ran the action, which then reports the outcome. Plans (bulk, decisions, publishing a bundle) say it on the row instead: "Cancels a change waiting to be sent: the removal of community queued 15 Oct 2026 (left the course)." Change history records each cancellation.
+- A role Zitadel no longer offers can't be asked for, given or approved: "This role no longer exists in Zitadel. Nothing was changed."
+
+**Questions.**
+1. Are "You have this" and "Given another way" the right words? Does the member's row also need the note, or only the word?
+2. Should Change history and the member's Recent changes say a request was closed because the role came another way, or is the request row enough?
+3. Draw the "waiting to be sent" state in Ask for access and Grant direct access: today the picker says "you have this" or "has this" for a role that's given and not yet sent.
+4. **The cancel confirmation** is the one sheet that opens over another (RULES: sheets push, they don't stack). Code chose that so no screen can skip it. Draw it, and say whether it should instead replace the sheet underneath as a pushed step. Removing a bundle whose grants are still waiting already says so in its own dialog, and now also asks this. Is the second question welcome, since it adds who queued it and why, or noise?
 
 ## What code would welcome from design
 

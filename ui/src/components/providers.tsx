@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { CancelQueuedConfirm } from "@/components/ui/CancelQueuedConfirm";
 import { NameResolverProvider } from "@/lib/queries/useNameResolver";
 import { getQueryClient } from "@/lib/query-client";
 import { ThemeProvider } from "@/lib/theme";
@@ -43,6 +44,7 @@ export function Providers({
       <NameResolverProvider enabled={hasSession} bundles={hasSession && isOperator}>
         <ThemeProvider>
           <ErrorBoundary>{children}</ErrorBoundary>
+          {hasSession && isOperator ? <CancelQueuedConfirm /> : null}
         </ThemeProvider>
       </NameResolverProvider>
       {process.env.NODE_ENV === "development" ? (

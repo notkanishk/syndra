@@ -64,6 +64,10 @@ export function requestOutcome(status: string): {
       return { tone: "neutral", operator: "Declined", member: "Not approved" };
     case "withdrawn":
       return { tone: "neutral", operator: "Withdrawn", member: "You withdrew this" };
+    // Given another way while it waited (directly, or by a bundle), so closed
+    // by Syndra: a resolution, not a decision. The note says how.
+    case "fulfilled":
+      return { tone: "accent", operator: "Given another way", member: "You have this" };
     case "pending":
       return { tone: "warn", operator: "Open", member: "Waiting" };
     default:

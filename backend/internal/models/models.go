@@ -329,7 +329,7 @@ type ApplicationView struct {
 	// somebody else turned up".
 	ConfirmedUserCount *int             `json:"confirmed_user_count,omitempty"`
 	ObservedUserCount  *int             `json:"observed_user_count,omitempty"`
-	Observation       ObservationBasis `json:"observation"`
+	Observation        ObservationBasis `json:"observation"`
 }
 
 // ApplicationSimulation is the dry run of a real token. CustomClaims is the
@@ -691,10 +691,26 @@ const (
 	HoldingForGood = "for_good"
 )
 
+// QueuedChange is a change Syndra queued and hasn't sent, which an action
+// would cancel. Said to the operator before they confirm (owner, 15 Oct).
+type QueuedChange struct {
+	ID          string    `json:"id"`
+	OpType      string    `json:"op_type"`
+	UserID      string    `json:"user_id"`
+	ProjectID   string    `json:"project_id"`
+	RoleKeys    []string  `json:"role_keys"`
+	Source      string    `json:"source"`
+	InitiatedBy string    `json:"initiated_by"`
+	Reason      string    `json:"reason,omitempty"`
+	QueuedAt    time.Time `json:"queued_at"`
+}
+
 // RequestHolding is what a requester already has of the role they ask for.
 type RequestHolding struct {
 	Kind  string     `json:"kind"`
 	Until *time.Time `json:"until,omitempty"`
+	// Waiting: given, and not yet sent to Zitadel.
+	Waiting bool `json:"waiting,omitempty"`
 }
 
 type GovernanceSummary struct {

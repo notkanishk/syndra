@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
 )
@@ -162,6 +163,8 @@ func handlePublishBundleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reviewed: the plan's rows named every queued change this cancels.
+	db.CancellationsReviewed(r.Context())
 	plan, version, err := svcPublishBundleVersion(r.Context(), actor, call)
 	if err != nil {
 		// "nothing to publish" is a conflict with the world, not a server
@@ -305,6 +308,8 @@ func handleMoveBundleHolders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reviewed: the plan's rows named every queued change this cancels.
+	db.CancellationsReviewed(r.Context())
 	plan, err := svcMoveHolders(r.Context(), actor, call)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "APPLY_ERROR", err.Error())
