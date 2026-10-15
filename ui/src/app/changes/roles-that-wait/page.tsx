@@ -250,24 +250,6 @@ function WaitingRoles({
             })}
           </div>
         ))}
-        {stopped && (
-          <div className="px-5 py-3">
-            <ActionOutcome
-              outcome={{
-                kind: "applied",
-                message: `${stopped} goes straight to Zitadel now`,
-                detail: "Changes already waiting stay in Pending changes.",
-              }}
-            />
-          </div>
-        )}
-        {failure && (
-          <div className="px-5 py-3">
-            <Notice tone="danger" title="That role still waits.">
-              {failure} Nothing was changed.
-            </Notice>
-          </div>
-        )}
         {waitingChanges > 0 && (
           <div className="row-divider flex flex-wrap items-center gap-3 px-5 py-3.5">
             <NextStep />
@@ -278,6 +260,24 @@ function WaitingRoles({
           </div>
         )}
       </ListStates>
+        {stopped && (
+          <div className="row-divider px-5 py-3">
+            <ActionOutcome
+              outcome={{
+                kind: "applied",
+                message: `${stopped} goes straight to Zitadel now`,
+                detail: "Changes already waiting stay in Pending changes.",
+              }}
+            />
+          </div>
+        )}
+        {failure && (
+          <div className="row-divider px-5 py-3">
+            <Notice tone="danger" title="That role still waits.">
+              {failure} Nothing was changed.
+            </Notice>
+          </div>
+        )}
     </Card>
   );
 }

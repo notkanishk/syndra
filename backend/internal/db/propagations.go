@@ -437,8 +437,14 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
 			  AND (p.op_type = 'revoke' OR p.withdraws_only)
 			  -- A role that always waits waits for the operator on the way
-			  -- out too: losing it is theirs to send (N14 B).
+			  -- out too, however the loss came about (an expiry, a removal):
+			  -- losing it is theirs to send (N14 B). Read from role_waits
+			  -- itself, not only the row's stamp, so a row written without
+			  -- one (expiry, an unreadable flag) is held all the same; and a
+			  -- row held because its role waited stays held after unmarking.
 			  AND p.wait_reason IS DISTINCT FROM 'role_waits'
+			  AND NOT EXISTS (SELECT 1 FROM role_waits w
+			                  WHERE w.project_id = p.project_id AND w.role_key = ANY(p.role_keys))
 			  AND NOT EXISTS (
 			      SELECT 1 FROM propagation_outbox e
 			       WHERE e.target     = p.target

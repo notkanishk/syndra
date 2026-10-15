@@ -48,7 +48,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   return (
-    <UiViewProvider isOperator={session.role === "admin"}>
+    <UiViewProvider isOperator={session.role === "admin"} selfId={session.id}>
       <PageCrumbProvider>
         <div className="flex h-dvh flex-col overflow-hidden bg-canvas tablet:flex-row">
           <Sidebar />

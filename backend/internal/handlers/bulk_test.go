@@ -424,7 +424,7 @@ func TestHandleBulkGrants_ManualBundleReportsQueued(t *testing.T) {
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
 	stubDrain(t)
 	svcCascadeBundleAssigned = func(context.Context, string, string, string) (services.CascadeResult, error) {
-		return services.CascadeResult{Enqueued: 3, Mode: "manual"}, nil
+		return services.CascadeResult{Enqueued: 3, Mode: "manual", Waiting: 3, WaitReason: db.WaitReasonManual}, nil
 	}
 
 	rr := httptest.NewRecorder()
@@ -506,5 +506,17 @@ func TestHandleBulkGrants_RejectsInvalidRequests(t *testing.T) {
 	}
 	if *writes != 0 {
 		t.Errorf("a rejected request must not write, got %d", *writes)
+	}
+}
+
+// A bundle whose role waits says so, rather than blaming the bundle's mode or
+// calling it merely "still queued".
+func TestCascadeQueuedReason_SaysTheRoleWaits(t *testing.T) {
+	got := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Mode: "auto", Waiting: 1, WaitReason: db.WaitReasonRoleWaits})
+	if got != "a role it gives always waits for you" {
+		t.Fatalf("got %q", got)
+	}
+	if got := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Mode: "auto", Drain: propagation.DrainResult{Applied: 2}}); got != "" {
+		t.Fatalf("everything sent says nothing: %q", got)
 	}
 }

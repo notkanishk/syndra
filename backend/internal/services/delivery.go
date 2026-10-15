@@ -71,8 +71,12 @@ func Deliver(ctx context.Context, ids []string, legacyWait bool) Delivery {
 	if err != nil {
 		log.Printf("[DELIVERY] read roles that wait for %d row(s): %v (left waiting)", len(ids), err)
 		d.Waiting = ids
+		reason := db.WaitReasonHalted("delivery_unread")
 		for _, id := range ids {
-			d.Reason[id] = db.WaitReasonHalted("delivery_unread")
+			d.Reason[id] = reason
+		}
+		if err := svcSetWaitReason(ctx, ids, reason); err != nil {
+			log.Printf("[DELIVERY] record %s on %d row(s): %v", reason, len(ids), err)
 		}
 		return d
 	}
