@@ -456,7 +456,7 @@ func handleResolveBindingConflict(w http.ResponseWriter, r *http.Request) {
 			}
 			if _, _, qerr := dbRecordSystemConvergence(ctx, db.SystemConvergence{
 				Target: conflict.Target, SubjectID: subject, Actor: actor,
-				Reason:  "A disputed account was assigned an owner",
+				Reason:  "Their account was given an owner.",
 				Desired: set,
 			}); qerr != nil {
 				return fmt.Errorf("queue convergence for %s: %w", subject, qerr)

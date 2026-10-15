@@ -114,7 +114,7 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, _, err := dbRecordSystemConvergence(r.Context(), db.SystemConvergence{
 		Target: target, SubjectID: subject, Actor: actor,
-		Reason: "Access revoked", Desired: set,
+		Reason: "Their access was revoked.", Desired: set,
 		// Declared here because here is where it is knowably true: the set was
 		// resolved with `enabled` denied, so this row can disable and cannot
 		// confer. It is what lets the background runner drain the lock — and

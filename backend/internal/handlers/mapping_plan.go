@@ -278,7 +278,7 @@ func applyMappingChange(ctx context.Context, m db.RoleMapping, surface, actor, p
 			}
 			if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
 				Target: m.Target, SubjectID: id, Actor: actor,
-				Reason:  "A role-to-target mapping changed",
+				Reason:  "A mapping for their role changed.",
 				Desired: set,
 			}); err != nil {
 				return err
@@ -758,7 +758,7 @@ func createMappingAndConverge(ctx context.Context, m db.RoleMapping, actor, plan
 			}
 			if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
 				Target: m.Target, SubjectID: id, Actor: actor,
-				Reason:  "A role-to-target mapping was created",
+				Reason:  "A mapping for their role was added.",
 				Desired: set,
 			}); err != nil {
 				return err

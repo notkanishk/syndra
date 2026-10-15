@@ -425,9 +425,15 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 		if waiting {
 			continue
 		}
+		// What the target said would change, in its own words ("Joins Staff."),
+		// so Pending changes can say what the row does.
+		reason := out.Detail
+		if reason == "" {
+			reason = "Out of step with their roles."
+		}
 		if _, _, err := recordConvergence(ctx, db.SystemConvergence{
 			Target: target, SubjectID: out.Subject, Actor: reconcileActor,
-			Reason:  "Periodic reconciliation found the target out of step",
+			Reason:  reason,
 			Desired: set,
 		}); err != nil {
 			return queued, findings, fmt.Errorf("queue convergence for %s: %w", out.Subject, err)
@@ -717,7 +723,7 @@ func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBin
 		}
 		if _, _, err := recordConvergence(ctx, db.SystemConvergence{
 			Target: target, SubjectID: id, Actor: reconcileActor,
-			Reason:  "Holds a mapped role and has no account here yet",
+			Reason:  "Gets an account, for a role they hold.",
 			Desired: set,
 		}); err != nil {
 			return queued, fmt.Errorf("queue convergence for %s: %w", id, err)
