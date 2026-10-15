@@ -48,10 +48,10 @@ async function grant() {
   fireEvent.change(screen.getByLabelText("Role"), { target: { value: "operator" } });
   fireEvent.change(screen.getByPlaceholderText(/Capstone build/), { target: { value: "test" } });
   fireEvent.click(screen.getByRole("button", { name: "Grant access" }));
-  // "Done" only replaces "Grant access"/"Cancel" once an outcome (either kind)
+  // "Close" only replaces "Grant access"/"Cancel" once an outcome (either kind)
   // is set — a wait condition that holds regardless of which message the
   // outcome carries.
-  await screen.findByRole("button", { name: "Done" });
+  await screen.findByRole("button", { name: "Close" });
 }
 
 describe("GrantDirectAccess", () => {
@@ -71,7 +71,8 @@ describe("GrantDirectAccess", () => {
     open();
     await grant();
 
-    expect(screen.getByText("Waiting to be sent")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
+    expect(screen.queryByText("Applied")).not.toBeInTheDocument();
     expect(screen.getByText(/nothing has reached zitadel yet/i)).toBeInTheDocument();
     // Future tense while queued — "now holds" here would contradict the
     // "nothing has reached Zitadel yet" line right beside it.

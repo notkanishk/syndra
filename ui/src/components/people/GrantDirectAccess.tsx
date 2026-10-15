@@ -252,8 +252,8 @@ function GrantDirectAccessOpen({
 
       <ModalFooter>
         {outcome?.kind === "applied" || outcome?.kind === "queued" ? (
-          <Button variant="accent" onClick={onClose}>
-            Done
+          <Button variant="outline" onClick={onClose}>
+            Close
           </Button>
         ) : (
           <>

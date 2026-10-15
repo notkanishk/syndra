@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import AppError from "@/app/error";
@@ -44,9 +44,13 @@ describe("the render-error boundary", () => {
     renderError("a1b2c3");
     expect(screen.getByText("a1b2c3")).toBeTruthy();
 
+    expect(screen.getByRole("button", { name: /Copy reference/i })).toBeTruthy();
+
+    cleanup();
     vi.restoreAllMocks();
     renderError();
-    expect(screen.queryAllByText(/Reference/)).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /reference/i })).toBeNull();
+    expect(screen.queryByText("a1b2c3")).toBeNull();
   });
 });
 
