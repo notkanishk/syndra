@@ -1,12 +1,6 @@
 "use client";
 
 const STORAGE_KEY = "syndra-drift-chime";
-const SEEN_KEY = "syndra-drift-chime-seen";
-/** Fired on `window` the first time the chime actually plays, so ChimeToggle
- * can surface a one-time explanatory tooltip. ponytail: a CustomEvent is the
- * whole "pub/sub" needed for one listener — no context/store required. */
-export const CHIME_FIRST_PLAY_EVENT = "syndra-drift-chime-first-play";
-
 /** Whether the drift chime is enabled. Default on; mirrors theme.tsx's localStorage idiom. */
 export function isChimeEnabled(): boolean {
   if (typeof window === "undefined") return true;
@@ -20,9 +14,25 @@ export function setChimeEnabled(on: boolean) {
 }
 
 /**
+ * One AudioContext for the page, so its `state` can be read: a browser lets
+ * sound start only after a click on the page, and until then the context sits
+ * `suspended`. ChimeToggle says so rather than letting "On" promise a sound.
+ * Null where WebAudio does not exist.
+ */
+export function getChimeContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  if (shared && shared.state !== "closed") return shared;
+  const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  shared = Ctx ? new Ctx() : null;
+  return shared;
+}
+let shared: AudioContext | null = null;
+
+/**
  * Plays a short synthesized beep (~120ms) to cue a new drift item, gated on
  * the chime toggle and `prefers-reduced-motion`. Caller is responsible for
- * only invoking this when the drift count has just increased.
+ * only invoking this when the drift count has just increased; "Play it once"
+ * calls it directly, which is the same path minus that check.
  *
  * ponytail: a WebAudio oscillator avoids shipping/inlining an audio asset for
  * one short beep — swap for a real chime file only if this reads as too
@@ -33,9 +43,9 @@ export function playDriftChime() {
   if (!isChimeEnabled()) return;
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
 
-  const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctx) return;
-  const ctx = new Ctx();
+  const ctx = getChimeContext();
+  if (!ctx) return;
+  void ctx.resume?.();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = "sine";
@@ -45,10 +55,4 @@ export function playDriftChime() {
   osc.connect(gain).connect(ctx.destination);
   osc.start();
   osc.stop(ctx.currentTime + 0.12);
-  osc.onended = () => ctx.close();
-
-  if (localStorage.getItem(SEEN_KEY) !== "1") {
-    localStorage.setItem(SEEN_KEY, "1");
-    window.dispatchEvent(new CustomEvent(CHIME_FIRST_PLAY_EVENT));
-  }
 }

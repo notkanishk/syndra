@@ -25,6 +25,7 @@ import {
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
 import { ClockTime, Relative } from "@/components/ui/Time";
+import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
 /**
  * S3 · Automation › Pending changes.
@@ -127,6 +128,7 @@ export default function PendingChangesPage() {
           <span className="w-[150px]">Who</span>
           <span className="flex-1">Change</span>
           <span className="w-[160px]">Caused by</span>
+          <span className="w-[200px]">Why it&rsquo;s waiting</span>
           <span className="w-[78px] text-right">Waiting</span>
         </CardColumns>
 
@@ -175,6 +177,8 @@ export default function PendingChangesPage() {
                   <span className="w-full text-[13px] tablet:w-[160px] tablet:shrink-0">
                     <CausedBy row={row} bundles={bundles.data} rules={rules.data} />
                   </span>
+
+                  <WhyWaiting row={row} />
 
                   <span className="text-[13px] text-faint tablet:w-[78px] tablet:shrink-0 tablet:text-right">
                     <Relative iso={row.created_at} />
@@ -247,6 +251,21 @@ function SystemChange({ row }: { row: PendingPropagationRow }) {
       <span className="text-muted">{targetLabel(row.target ?? "")} account:</span>{" "}
       {row.reason || "brought in line with their roles."}
     </>
+  );
+}
+
+/** Empty when the row carries no reason; warn only for a send that stopped. */
+function WhyWaiting({ row }: { row: PendingPropagationRow }) {
+  const role = (row.role_keys ?? []).map(humanizeKey).join(", ") || "It";
+  const line = waitReasonLine(row.wait_reason, role, row.created_at);
+  return (
+    <span
+      className={`w-full text-[13px] tablet:w-[200px] tablet:shrink-0 ${
+        waitIsChosen(row.wait_reason) ? "text-muted" : "text-warn-text"
+      }`}
+    >
+      {line}
+    </span>
   );
 }
 

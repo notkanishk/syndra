@@ -26,6 +26,12 @@ export interface PendingRow {
   initiated_by?: string;
   /** Why it was queued. Said for an add-on row, which has no project or roles. */
   reason?: string;
+  /**
+   * Why it waits for the operator: "role_waits" (the role always waits),
+   * "halted:<reason>" (meant to go, and the send stopped), "manual" (a bundle
+   * or rule set to wait, before the switch over). Absent on older rows.
+   */
+  wait_reason?: string;
 }
 
 /** Named for the screen that reads it, where "propagation" is never spoken. */

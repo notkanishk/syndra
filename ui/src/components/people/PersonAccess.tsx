@@ -27,7 +27,9 @@ import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
+import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Withheld } from "@/components/ui/Withheld";
+import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
@@ -696,7 +698,10 @@ function RoleGroup({
   onRemove: (removal: Removal) => void;
   onReveal: (panelId: string) => void;
 }) {
+  const catalog = useGlobalRoleCatalog();
   if (roles.length === 0) return null;
+  const waitsFor = (key: string) =>
+    catalog.data?.some((r) => r.project_id === projectId && r.role_key === key && r.waits_for_send);
 
   return (
     <>
@@ -727,6 +732,7 @@ function RoleGroup({
           >
             <div className="w-[230px] shrink-0 text-[15px] font-semibold">
               {humanizeKey(role.role_key)}
+              {waitsFor(role.role_key) && <WaitsMark className="ml-2" />}
               {/* The raw key is an operator's handle for this role — a member
                   reading their own access has no use for it, and MemberAccess's
                   whole premise is that this screen carries no role keys. */}

@@ -3,12 +3,12 @@
 import { useState } from "react";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { ProjectName } from "@/components/names";
-import { roleLabel } from "@/lib/format";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useProjects } from "@/lib/queries/useProjects";
@@ -42,6 +42,8 @@ export function CreateRoleDialog({
   const create = useCreateRole();
   const resolver = useNameResolver();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // The role just made, so its outcome can offer to make it wait.
+  const [created, setCreated] = useState<string | null>(null);
 
   const [projectId, setProjectId] = useState(pinnedProjectId ?? "");
   const [roleKey, setRoleKey] = useState("");
@@ -174,8 +176,17 @@ export function CreateRoleDialog({
           nobody holds yet is a fact the operator has to act on next, and a
           dialog that closes itself takes that sentence with it. */}
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {created && outcome?.kind === "applied" && (
+        <div className="mx-6 mb-1">
+          <ArrowLink href={`/changes/roles-that-wait?add=${encodeURIComponent(created)}`}>
+            Make it wait for you
+          </ArrowLink>
+        </div>
+      )}
 
-      <ModalFooter>
+      <ModalFooter
+        note={outcome?.kind === "applied" ? undefined : "When it's given, it goes straight to Zitadel, like most roles."}
+      >
         {/* Gone once it has run. The catalog refetch that would flip `duplicate`
             to true has not landed the instant this succeeds, so a second click
             was free to resubmit the identical payload. */}
@@ -215,9 +226,10 @@ export function CreateRoleDialog({
                 });
                 setOutcome({
                   kind: "applied",
-                  message: `${roleLabel(project, roleKey, displayName)} created`,
-                  detail: "Nobody holds it yet. Give it to someone from People, or add it to a bundle.",
+                  message: `${displayName || roleKey} is in ${project}`,
+                  detail: "Nobody has it yet. When it's given, it goes straight to Zitadel.",
                 });
+                setCreated(`${projectId}:${roleKey}`);
               } catch (error) {
                 setOutcome(outcomeFromError(error));
               }

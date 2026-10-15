@@ -223,6 +223,8 @@ export interface CreateGrantInput {
 export interface CreateGrantResult {
   outbox_id: string;
   status: string;
+  /** Why the grant isn't in Zitadel yet: role_waits, halted:<reason> or manual. */
+  wait_reason?: string;
 }
 
 /**

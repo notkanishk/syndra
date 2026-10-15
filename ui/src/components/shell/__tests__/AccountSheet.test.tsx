@@ -61,6 +61,13 @@ describe("the account sheet", () => {
     expect(screen.getByRole("button", { name: /Appearance/ })).toBeTruthy();
   });
 
+  it("offers the drift sound as a browser-only setting", () => {
+    open();
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByText("Sound when drift is found")).toBeTruthy();
+    expect(within(sheet).getByText("In this browser only")).toBeTruthy();
+  });
+
   // Every control in here is something a thumb has to land on.
   it("gives every control a real target", () => {
     open();

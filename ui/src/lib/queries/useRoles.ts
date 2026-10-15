@@ -10,6 +10,8 @@ import { request } from "@/lib/api-client";
  * Add-roles-to-bundle picker.
  */
 export interface CatalogRole {
+  /** Anyone gaining or losing this role waits in Pending changes (Roles that wait). */
+  waits_for_send?: boolean;
   project_id: string;
   project_name: string;
   role_key: string;

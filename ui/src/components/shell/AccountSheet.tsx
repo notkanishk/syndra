@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { ChimeToggle } from "@/components/settings/ChimeToggle";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
 import { ACCOUNT_NAV } from "@/lib/nav";
@@ -106,6 +107,17 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             <span>Appearance</span>
             <span className="text-muted">{theme === "dark" ? "Dark" : "Light"}</span>
           </button>
+
+          {/* Another setting about this device: the chime is a browser
+              preference, so it sits beside Appearance rather than among the
+              org-wide automation policy it used to share a box with. */}
+          <div className="flex flex-col gap-2.5 rounded-inner border border-line px-4 py-3 text-[14.5px]">
+            <span className="flex flex-col gap-0.5">
+              <span>Sound when drift is found</span>
+              <span className="text-[13px] text-muted">In this browser only</span>
+            </span>
+            <ChimeToggle />
+          </div>
 
           {/* Offered here rather than as a banner on arrival. A first-load
               prompt interrupts somebody who came to read one thing and gets

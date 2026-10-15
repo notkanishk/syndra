@@ -27,6 +27,10 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
+import { WaitsMark } from "@/components/ui/WaitsMark";
+import { waitReasonLine } from "@/lib/wait-reason";
 import {
   useCreateRequest,
   useDecideRequest,
@@ -36,10 +40,33 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
-import { describeDuration, formatLongDate, formatShortDate } from "@/lib/format";
+import { describeDuration, formatLongDate, formatShortDate, humanizeKey } from "@/lib/format";
 import { HoldingNote, alreadyHeld, useAskState } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { daysUntilTermEnd } from "@/lib/term";
+
+/**
+ * What approving one request reports. The response says only whether the
+ * approval is in Zitadel yet (`wait_reason`), so that is all this can claim.
+ */
+export function approvalOutcome(
+  waitReason: string | undefined,
+  name: string,
+  role: string,
+): ActionResult {
+  if (!waitReason) return { kind: "applied", message: `Approved. ${name} can use it now.` };
+  if (waitReason === "role_waits") {
+    return {
+      kind: "queued",
+      message: "Approved. This role always waits for you, so it's in Pending changes.",
+    };
+  }
+  const why = waitReasonLine(waitReason, role, new Date().toISOString());
+  return {
+    kind: "queued",
+    message: `Approved. Not in Zitadel yet${why ? `: ${why}` : ""}. It goes when you send it.`,
+  };
+}
 
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
 
@@ -89,6 +116,8 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const [status, setStatus] = useState<StatusFilter>("pending");
   const requests = useRequestsAdmin(status);
   const decide = useDecideRequest();
+  const resolver = useNameResolver();
+  const catalog = useGlobalRoleCatalog();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
@@ -131,23 +160,22 @@ function OperatorQueue({ userId }: { userId?: string }) {
   async function act(entry: AccessRequest, next: "approved" | "rejected") {
     setResolved((prev) => new Set(prev).add(entry.id));
     try {
-      await decide.mutateAsync({ id: entry.id, status: next });
-      setOutcomes((prev) => ({
-        ...prev,
-        [entry.id]: {
-          kind: "applied",
-          // One sentence, not message+detail: this renders `placement="inline"`,
-          // which shows only `message`. Approving enqueues a grant and drains it
-          // inline best-effort, but the response (`{"message": "Request
-          // resolved"}`) never says whether that drain landed — so this cannot
-          // claim Zitadel has it. Declining never touches Zitadel at all, so it
-          // gets no such caveat.
-          message:
-            next === "approved"
-              ? "Approved. Sent; Zitadel has not been read back yet."
-              : "Declined",
-        },
-      }));
+      const result = await decide.mutateAsync({ id: entry.id, status: next });
+      // One sentence, not message+detail: this renders `placement="inline"`,
+      // which shows only `message`. Declining never touches Zitadel at all, so
+      // it gets no such caveat.
+      const catalogRole = catalog.data?.find(
+        (r) => r.project_id === entry.project_id && r.role_key === entry.role_key,
+      );
+      const outcome: ActionResult =
+        next === "approved"
+          ? approvalOutcome(
+              result?.wait_reason,
+              resolver.resolveUser(entry.requester_id).value?.display_name || "They",
+              catalogRole?.display_name || humanizeKey(entry.role_key),
+            )
+          : { kind: "applied", message: "Declined" };
+      setOutcomes((prev) => ({ ...prev, [entry.id]: outcome }));
     } catch (error) {
       setResolved((prev) => {
         const copy = new Set(prev);
@@ -260,6 +288,12 @@ function OperatorQueue({ userId }: { userId?: string }) {
               </div>
               <div className="w-full text-[14.5px] text-ink/80 tablet:w-[250px] tablet:shrink-0 tablet:truncate">
                 <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+                {catalog.data?.some(
+                  (r) =>
+                    r.project_id === entry.project_id &&
+                    r.role_key === entry.role_key &&
+                    r.waits_for_send,
+                ) && <WaitsMark className="ml-2" />}
                 {/* Half of the ask. A decision made without it is a decision
                     about a different request. */}
                 <span className="block text-[12.5px] text-faint">
