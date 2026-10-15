@@ -45,7 +45,13 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
 - [ ] 3.13 [needs-triage] Home and a person's Requests tab still show the old approval text (they call `useDecideRequest` without `approvalOutcome`)
 
 ## 4. Screens
-- [ ] 4.1 Bundles v2 (B5–B7, B9; B8 needs the owner's yes)
+- [x] 4.1 Bundles v2 (1c):
+  - [x] /bundles is a list (Bundle · What it's for · Roles · People, attention in words under the name); /bundles/[id] is the page: header (Rename, Add people → People in Select mode with Add to a bundle armed, `give_bundle`), the violet unpublished panel (Discard changes, B6; Publish vN), tabs What it gives (card per project, Remove opens the cost inline, "New in vN" / "Leaves in vN" with Keep) · People (grouped by version, "Move these N to vX", how each got it, B7) · History, then Given to everyone who joins and Retire
+  - [x] New bundle: lg, name and purpose side by side, Start from (Nothing · A person · Another bundle) as a one-time copy into the picker. B5's `copy_from` on the backend was not needed: the picker ticks what it copies, so the request already carries the roles
+  - [x] Role picker (2a, 3a): chosen roles as removable chips, a fold per project with "k of n" / "n roles"
+  - [x] Publish dialog: a dropped role's "−" is amber
+  - [ ] 4.1a [needs-info] B8 included bundles needs the owner's yes before building (and B9's bundles in the picker with it)
+  - [ ] 4.1b [ready-for-agent] The unpublished panel's "−" line could say what dropping would cost ("If people move, 9 of the 11 lose …"); today that is in the row's Remove panel
   - [x] B6 backend: `DELETE /bundles/{id}/draft` resets `bundle_roles` to the latest version's roles in one tx, audited `bundle.draft_discarded`, no outbox rows; returns the fresh draft
   - [x] B7 backend: migration 000057 adds `assigned_by`, `source`, `moved_from_version` to `user_bundle_assignments`; assign = `direct` + actor, welcome = `welcome` + nobody, publish-migrate and move = `moved` + actor + the version left. `request` is reserved: an access request asks for one role, never a bundle. Older rows stay NULL and the API omits the fields
 - [ ] 4.2 Insights (N12)

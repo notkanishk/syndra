@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
@@ -9,9 +10,11 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Relative } from "@/components/ui/Time";
+import { formatShortDate } from "@/lib/format";
 import {
   useApplyMoveHolders,
   useBundleHolders,
+  type BundleHolder,
   useBundleVersions,
   useRehearseMoveHolders,
   type BundleVersion,
@@ -130,8 +133,6 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
         ))}
       </ListStates>
 
-      <Holders bundleId={bundleId} onMoveTo={(v) => setMoving(v)} versions={rows} />
-
       {moving && (
         <MoveHoldersDialog
           bundleId={bundleId}
@@ -145,6 +146,46 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
               .filter((h) => h.version_id !== moving.id)
               .map((h) => h.user_id)
           }
+          onClose={() => setMoving(null)}
+        />
+      )}
+    </Card>
+  );
+}
+
+/**
+ * The People tab: who has this bundle, grouped by the version they're on,
+ * with the move for anyone behind.
+ */
+export function BundlePeople({ bundleId, name }: { bundleId: string; name: string }) {
+  const versions = useBundleVersions(bundleId);
+  const holders = useBundleHolders(bundleId);
+  const [moving, setMoving] = useState<BundleVersion | null>(null);
+  const rows = useMemo(() => versions.data ?? [], [versions.data]);
+  return (
+    <Card>
+      <ListStates
+        isLoading={holders.isLoading || versions.isLoading}
+        error={holders.error ?? versions.error}
+        isEmpty={(holders.data ?? []).length === 0}
+        onRetry={() => holders.refetch()}
+        errorTitle={`Couldn't load who has ${name}.`}
+        skeleton={<RowSkeleton rows={4} label="Loading people" />}
+        empty={
+          <EmptyState
+            title={`Nobody has ${name} yet.`}
+            guidance="Add people from here, or give it to someone from their page."
+          />
+        }
+      >
+        <Holders bundleId={bundleId} onMoveTo={(v) => setMoving(v)} versions={rows} />
+      </ListStates>
+      {moving && (
+        <MoveHoldersDialog
+          bundleId={bundleId}
+          name={name}
+          target={moving}
+          userIds={(holders.data ?? []).filter((h) => h.version_id !== moving.id).map((h) => h.user_id)}
           onClose={() => setMoving(null)}
         />
       )}
@@ -172,31 +213,73 @@ function Holders({
   }
   const latest = versions[0];
 
+  // Grouped by version, newest first (Bundles 6): each group says how many,
+  // an older one says it's behind and offers the move; each person says how
+  // they got it (B7) and since when.
   return (
-    <div className="border-t border-line">
-      <div className="px-5 pb-1 pt-3.5 type-label">Who is on what</div>
+    <div className="flex flex-col">
       {Array.from(byVersion.entries())
         .sort((a, b) => b[0] - a[0])
-        .map(([version, people]) => (
-          <div key={version} className="row-divider flex flex-wrap items-center gap-3 px-5 py-3">
-            <span className="w-[52px] shrink-0 font-display text-[15px]">v{version}</span>
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
-              {people.map((holder) => (
-                <span key={holder.user_id} className="flex items-center gap-1.5 text-[14px]">
-                  <UserAvatar id={holder.user_id} size="row" />
-                  <UserName id={holder.user_id} />
+        .map(([version, people]) => {
+          const behind = latest !== undefined && latest.version !== version;
+          return (
+            <section key={version} className="border-t border-line first:border-t-0">
+              <div className="flex flex-wrap items-center gap-3 px-5 pb-2 pt-4">
+                <h3 className="type-card-title">On v{version}</h3>
+                <span className={`text-[13px] ${behind ? "font-semibold text-warn-text" : "text-faint"}`}>
+                  {people.length} {people.length === 1 ? "person" : "people"}
+                  {behind ? ` · v${latest.version} is the latest` : ""}
                 </span>
+                {behind && (
+                  <Button size="sm" className="ml-auto" onClick={() => onMoveTo(latest)}>
+                    Move {people.length === 1 ? "them" : `these ${people.length}`} to v{latest.version}
+                  </Button>
+                )}
+              </div>
+              {people.map((holder) => (
+                <div key={holder.user_id} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-1 px-5 py-3">
+                  <span className="flex min-w-[min(220px,100%)] flex-1 items-center gap-3">
+                    <UserAvatar id={holder.user_id} size="row" />
+                    <Link
+                      href={`/users/${encodeURIComponent(holder.user_id)}`}
+                      className="text-[14.5px] font-semibold text-ink motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+                    >
+                      <UserName id={holder.user_id} />
+                    </Link>
+                  </span>
+                  <span className="min-w-0 flex-1 text-[13.5px] text-muted">{howTheyGotIt(holder)}</span>
+                  <span className="w-[110px] text-right text-[13.5px] text-muted">
+                    {formatShortDate(holder.assigned_at)}
+                  </span>
+                </div>
               ))}
-            </div>
-            {latest && latest.version !== version && (
-              <Button size="sm" onClick={() => onMoveTo(latest)}>
-                Move to v{latest.version}
-              </Button>
-            )}
-          </div>
-        ))}
+            </section>
+          );
+        })}
     </div>
   );
+}
+
+/** "Given by Kanishk Singh" · "Approved request" · "Moved from v2" · "Given when they joined". */
+function howTheyGotIt(holder: BundleHolder) {
+  switch (holder.source) {
+    case "moved":
+      return holder.moved_from_version ? `Moved from v${holder.moved_from_version}` : "Moved from an older version";
+    case "request":
+      return "Approved request";
+    case "welcome":
+      return "Given when they joined";
+    case "direct":
+      return holder.assigned_by ? (
+        <>
+          Given by <UserName id={holder.assigned_by} fallback="someone" />
+        </>
+      ) : (
+        "Given by hand"
+      );
+    default:
+      return null;
+  }
 }
 
 /**
