@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
 )
@@ -18,6 +19,8 @@ type bulkFixture struct {
 	roles  map[string]map[roleKey]*models.EffectiveRole
 	bundle map[string][]models.Bundle
 	grants map[string][]models.DirectGrant
+	// queued: what a write would cancel, by "user/op/role".
+	queued map[string][]models.QueuedChange
 }
 
 func setupBulk(t *testing.T, fx bulkFixture) {
@@ -31,12 +34,17 @@ func setupBulk(t *testing.T, fx bulkFixture) {
 	origGrants := svcGetDirectGrantsForUser
 	origBundle := svcGetBundleByID
 	origRoles := svcLatestVersionRoles
+	origCancel := svcWouldCancel
 	t.Cleanup(func() {
 		collectUserRolesHook = origCollect
 		svcGetDirectGrantsForUser = origGrants
 		svcGetBundleByID = origBundle
 		svcLatestVersionRoles = origRoles
+		svcWouldCancel = origCancel
 	})
+	svcWouldCancel = func(_ context.Context, p db.EnqueueParams) ([]models.QueuedChange, error) {
+		return fx.queued[p.UserID+"/"+p.OpType+"/"+p.RoleKeys[0]], nil
+	}
 
 	collectUserRolesHook = func(_ context.Context, uid string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
 		roles := fx.roles[uid]
@@ -520,5 +528,28 @@ func TestRehearseBulk_NeverPromisesAShorterEnd(t *testing.T) {
 	}
 	if o := outcomeFor(t, extend, "u_soon"); o.Effect != EffectApply || len(o.GrantIDs) != 1 {
 		t.Errorf("ending in 5 days is extended: %+v", o)
+	}
+}
+
+// A row that would cancel a queued change names it before anyone applies
+// (owner, 15 Oct): the apply is marked reviewed on the strength of this line.
+func TestABulkRowNamesWhatItWouldCancel(t *testing.T) {
+	queuedAt := time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
+	setupBulk(t, bulkFixture{
+		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}, {ID: "u2", Name: "Bo", Status: "active"}},
+		queued: map[string][]models.QueuedChange{
+			"u1/add/trained": {{ID: "q1", OpType: "revoke", RoleKeys: []string{"trained"}, QueuedAt: queuedAt, Reason: "left the course"}},
+		},
+	})
+	plan, err := RehearseBulk(context.Background(), BulkRequest{Op: BulkOpAssignRole, UserIDs: []string{"u1", "u2"}, ProjectID: "pLaser", RoleKey: "trained"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := outcomeFor(t, plan, "u1").Consequence
+	if !strings.Contains(got, "Cancels a change waiting to be sent: the removal of trained queued 15 Oct 2026 (left the course).") {
+		t.Fatalf("the row names the queued removal it cancels, got %q", got)
+	}
+	if c := outcomeFor(t, plan, "u2").Consequence; strings.Contains(c, "Cancels") {
+		t.Fatalf("nothing queued, nothing said, got %q", c)
 	}
 }

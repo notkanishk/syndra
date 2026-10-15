@@ -284,5 +284,5 @@ func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNo
 			return EnqueueResult{}, fmt.Errorf("commit approve tx: %w", err)
 		}
 	}
-	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: "pending"}, nil
+	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: enqueuedStatus(outboxID)}, nil
 }

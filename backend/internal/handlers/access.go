@@ -110,6 +110,11 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		expiresAt = &expiry
 	}
 
+	if err := checkRoleOffered(r.Context(), req.ProjectID, req.RoleKey); err != nil {
+		writeRoleOfferedError(w, err)
+		return
+	}
+
 	// Giving is for a role they don't have; extending is for one that ends.
 	// Neither merges into what is there (owner, 15 Oct).
 	holding, err := dbRequestHolding(r.Context(), userID, req.ProjectID, req.RoleKey)
@@ -168,7 +173,7 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// must not project unrelated mutations an operator left queued. A drain
 	// failure is non-fatal — the row stays pending and the operator can resume
 	// later. We then report this row's own post-drain status.
-	if r.URL.Query().Get("apply") == "true" {
+	if r.URL.Query().Get("apply") == "true" && res.OutboxID != "" {
 		if _, derr := svcDrainPropagationRow(r.Context(), res.OutboxID); derr == nil {
 			if st, serr := dbGetPropagationStatus(r.Context(), res.OutboxID); serr == nil && st != "" {
 				res.Status = st
@@ -249,6 +254,11 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.DurationDays < 0 {
 		jsonValidationErrorResponse(w, "duration_days must be zero or greater", map[string]string{"duration_days": "min=0"})
+		return
+	}
+
+	if err := checkRoleOffered(r.Context(), req.ProjectID, req.RoleKey); err != nil {
+		writeRoleOfferedError(w, err)
 		return
 	}
 
@@ -385,6 +395,8 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", err.Error())
 	case errors.Is(err, errRequestAlreadyHeld):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", "They already have this, so approving would change nothing. Decline it to close the request.")
+	case errors.Is(err, errRoleNotOffered), errors.Is(err, errCatalogueUnread):
+		writeRoleOfferedError(w, err)
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
@@ -396,7 +408,52 @@ var (
 	// errRequestAlreadyHeld is approving a request for a role the person has
 	// come to hold since asking. Nothing is granted; declining closes it.
 	errRequestAlreadyHeld = errors.New("they already have this, so approving would change nothing; decline it to close the request")
+	// errRoleNotOffered: the role isn't in Zitadel's catalogue (removed since,
+	// or never there). Nothing is given; a grant of it would fail at send with
+	// the request already approved.
+	errRoleNotOffered = errors.New("this role no longer exists in Zitadel")
+	// errCatalogueUnread: the catalogue couldn't be read, or Syndra is serving
+	// the demo one while Zitadel is configured. Fail closed.
+	errCatalogueUnread = errors.New("couldn't read Zitadel's list of roles")
 )
+
+// checkRoleOffered refuses a role the directory doesn't offer, before
+// anything is asked for, given or approved. The API accepted any project and
+// key; only the pickers kept to the catalogue. A var so handler tests about
+// something else can open it, as TestMain does for the project gate.
+var checkRoleOffered = roleOfferedInDirectory
+
+func roleOfferedInDirectory(ctx context.Context, projectID, roleKey string) error {
+	if systemZitadelConfigured() && directorySource().Tag() != "zitadel" {
+		return errCatalogueUnread
+	}
+	projects, err := directoryProjects(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errCatalogueUnread, err)
+	}
+	for _, p := range projects {
+		if p.ID != projectID {
+			continue
+		}
+		for _, role := range p.Roles {
+			if role.Key == roleKey {
+				return nil
+			}
+		}
+	}
+	return errRoleNotOffered
+}
+
+// writeRoleOfferedError says why, and that nothing changed.
+func writeRoleOfferedError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errRoleNotOffered) {
+		jsonErrorResponse(w, http.StatusConflict, "ROLE_NOT_OFFERED",
+			"This role no longer exists in Zitadel. Nothing was changed.")
+		return
+	}
+	jsonErrorResponse(w, http.StatusServiceUnavailable, "CATALOGUE_UNREAD",
+		"Syndra couldn't read Zitadel's list of roles to check this one exists, so nothing was changed. Try again shortly.")
+}
 
 // resolveOneAccessRequest is the decision itself, with no HTTP in it.
 //
@@ -428,6 +485,9 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		}
 		if holding.Kind != models.HoldingNone {
 			return errRequestAlreadyHeld
+		}
+		if err := checkRoleOffered(ctx, request.ProjectID, request.RoleKey); err != nil {
+			return err
 		}
 		var expiresAt *time.Time
 		if request.DurationDays != nil && *request.DurationDays > 0 {
@@ -479,7 +539,9 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		// to THIS row only (never the global batch), and non-fatal — a drain
 		// failure (e.g. Zitadel offline) leaves the row pending in the worklist for
 		// a later resume; access already works via the ledger.
-		_, _ = svcDrainPropagationRow(ctx, res.OutboxID)
+		if res.OutboxID != "" {
+			_, _ = svcDrainPropagationRow(ctx, res.OutboxID)
+		}
 	} else { // rejected — no grant, just the conditional resolution
 		if err := dbResolveAccessRequest(ctx, requestID, status, reviewer, reviewNote); err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {

@@ -212,10 +212,14 @@ Both now mark the roles the person already has the same way, and won't let them 
 - A role whose removal is queued counts as not held. Giving it back cancels the queued removal instead of adding a second change.
 - A person's page showed a withdrawn request as "Waiting on a decision". It now uses the queue's words.
 
+- **Undoing something already set in motion is never silent (owner, 15 Oct).** Giving a role whose removal is still waiting, or removing one whose grant is still waiting, cancels the queued change. Before it does, one confirmation names each change: "Removing TrueNAS / community for test user · Queued by Sam, 2h ago · “left the course”", with **Keep it** (first, and what Escape does) and **Cancel it and go ahead**. It opens over whichever dialog ran the action, which then reports the outcome. Plans (bulk, decisions, publishing a bundle) say it on the row instead: "Cancels a change waiting to be sent: the removal of community queued 15 Oct 2026 (left the course)." Change history records each cancellation.
+- A role Zitadel no longer offers can't be asked for, given or approved: "This role no longer exists in Zitadel. Nothing was changed."
+
 **Questions.**
 1. Are "You have this" and "Given another way" the right words? Does the member's row also need the note, or only the word?
 2. Should Change history and the member's Recent changes say a request was closed because the role came another way, or is the request row enough?
 3. Draw the "waiting to be sent" state in Ask for access and Grant direct access: today the picker says "you have this" or "has this" for a role that's given and not yet sent.
+4. **The cancel confirmation** is the one sheet that opens over another (RULES: sheets push, they don't stack). Code chose that so no screen can skip it. Draw it, and say whether it should instead replace the sheet underneath as a pushed step. Removing a bundle whose grants are still waiting already says so in its own dialog, and now also asks this. Is the second question welcome, since it adds who queued it and why, or noise?
 
 ## What code would welcome from design
 

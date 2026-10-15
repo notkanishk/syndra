@@ -206,7 +206,7 @@ func TestTheTriggerHangsOffTheOneChokepoint(t *testing.T) {
 	if strings.Contains(body, "triggerTargetConvergence(") {
 		t.Error("deltaParams resolves the entitlement set before the source write, which inverts it")
 	}
-	if strings.Index(body, "deferTargetConvergence(") > strings.Index(body, "params := make(") {
+	if strings.Index(body, "deferTargetConvergence(") > strings.Index(body, "params := deltaWrites(") {
 		t.Error("the trigger must register before the params are built, so a failure to register stops the change")
 	}
 

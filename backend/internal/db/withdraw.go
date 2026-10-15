@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"syndra/internal/models"
 )
 
 // A revoke exists to undo a delivery. If the delivery never left, there is
@@ -65,46 +67,48 @@ const withdrawnReason = "withdrawn before it was sent: the change that queued it
 // source: a cascade queues a revoke only when nothing else holds the role, so
 // whatever gives it back answers that revoke.
 func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p EnqueueParams) (owed bool, err error) {
-	if len(p.RoleKeys) != 1 {
+	args, ok := answeredArgs(target, p)
+	if !ok {
 		return true, nil
 	}
-	var answers []string
-	switch p.OpType {
-	case "revoke":
-		answers = []string{"add", "replace"}
-	case "add":
-		answers = []string{"revoke"}
-	default:
-		return true, nil
+	reason := withdrawnReason
+	if p.OpType == "add" {
+		reason = givenBackReason
 	}
-	source := p.Source
-	if source == "" {
-		source = "direct"
-	}
-
-	const cancel = `
-		UPDATE propagation_outbox
-		   SET status = 'superseded', completed_at = NOW(), last_error = $1
-		 WHERE target = $2 AND status = 'pending'
-		   AND op_type = ANY($8::text[])
-		   AND user_id = $3 AND project_id = $4 AND role_keys = $5::text[]
-		   AND (NOT $9 OR (source = $6 AND source_ref IS NOT DISTINCT FROM NULLIF($7,'')))
-		RETURNING id`
-	rows, err := tx.Query(ctx, cancel, withdrawnReason, target,
-		p.UserID, p.ProjectID, p.RoleKeys, source, p.SourceRef, answers, p.OpType == "revoke")
+	// Read, decide, then cancel: under the access-mutation lock nothing moves
+	// in between, and the rows refused are the rows that would have gone.
+	answered, err := scanQueuedChanges(tx.Query(ctx, queuedChangeColumns+answeredWhere+` ORDER BY created_at FOR UPDATE`, args...))
 	if err != nil {
 		return false, fmt.Errorf("withdraw queued delivery: %w", err)
 	}
-	cancelled := 0
-	for rows.Next() {
-		cancelled++
+	if len(answered) == 0 {
+		return true, nil
 	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	if !AdmitCancellations(ctx, answered) {
+		return false, ErrWouldCancel
+	}
+	cancelled := make([]string, 0, len(answered))
+	for _, c := range answered {
+		cancelled = append(cancelled, c.ID)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE propagation_outbox
+		   SET status = 'superseded', completed_at = NOW(), last_error = $2
+		 WHERE id = ANY($1::uuid[])`, cancelled, reason); err != nil {
 		return false, fmt.Errorf("withdraw queued delivery: %w", err)
 	}
-	if cancelled == 0 {
-		return true, nil
+	// Never invisibly (owner, 15 Oct): each cancellation is in Change history,
+	// by whoever's action caused it, as well as said before they confirm.
+	actor := p.GrantedBy
+	if actor == "" {
+		actor = "system"
+	}
+	for _, id := range cancelled {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
+			VALUES ($1, $2, $3, $4)`, actor, p.UserID, cancelledUnsentAudit, id); err != nil {
+			return false, fmt.Errorf("audit a cancelled queued change: %w", err)
+		}
 	}
 
 	// Is a delivery still standing? Only the LAST applied row decides: an add
@@ -128,4 +132,75 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 	}
 	// A revoke is owed while the grant stands; an add, only once it doesn't.
 	return live == (p.OpType == "revoke"), nil
+}
+
+// cancelledUnsentAudit is the Change history action for each cancellation.
+const cancelledUnsentAudit = "propagation.cancelled_unsent"
+
+const givenBackReason = "cancelled before it was sent: the role was given back"
+
+// answeredWhere is the one statement of which queued changes an action
+// cancels. WouldCancel (the preview) and withdrawUndelivered (the action)
+// both use it, so what an operator is told is what happens.
+//
+// A revoke answers adds from its own source. For a direct grant the source is
+// enough: there is one direct grant per person and role, and its add carries
+// the request id or nothing while its removal carries the grant id, so
+// matching the reference too meant removing an unsent direct grant queued the
+// removal behind the add.
+const answeredWhere = `target = $1 AND status = 'pending' AND op_type = ANY($7::text[])
+		   AND user_id = $2 AND project_id = $3 AND role_keys = $4::text[]
+		   AND (NOT $8 OR (source = $5 AND (source = 'direct' OR source_ref IS NOT DISTINCT FROM NULLIF($6,''))))`
+
+// answeredArgs are answeredWhere's eight arguments, or false when the change
+// answers nothing (more than one role, or not an add or a revoke).
+func answeredArgs(target string, p EnqueueParams) ([]any, bool) {
+	if len(p.RoleKeys) != 1 {
+		return nil, false
+	}
+	var answers []string
+	switch p.OpType {
+	case "revoke":
+		answers = []string{"add", "replace"}
+	case "add":
+		answers = []string{"revoke"}
+	default:
+		return nil, false
+	}
+	source := p.Source
+	if source == "" {
+		source = "direct"
+	}
+	return []any{target, p.UserID, p.ProjectID, p.RoleKeys, source, p.SourceRef, answers, p.OpType == "revoke"}, true
+}
+
+// WouldCancel is the queued, unsent changes this one would cancel, said before
+// anyone confirms it.
+func WouldCancel(ctx context.Context, p EnqueueParams) ([]models.QueuedChange, error) {
+	args, ok := answeredArgs("zitadel", p)
+	if !ok {
+		return nil, nil
+	}
+	return scanQueuedChanges(querier(ctx).Query(ctx, queuedChangeColumns+answeredWhere+` ORDER BY created_at`, args...))
+}
+
+const queuedChangeColumns = `
+		SELECT id, op_type, user_id, project_id, role_keys, source, COALESCE(initiated_by, ''), COALESCE(reason, ''), created_at
+		  FROM propagation_outbox
+		 WHERE `
+
+func scanQueuedChanges(rows pgx.Rows, err error) ([]models.QueuedChange, error) {
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.QueuedChange
+	for rows.Next() {
+		var c models.QueuedChange
+		if err := rows.Scan(&c.ID, &c.OpType, &c.UserID, &c.ProjectID, &c.RoleKeys, &c.Source, &c.InitiatedBy, &c.Reason, &c.QueuedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }

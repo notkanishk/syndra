@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
 )
@@ -306,20 +307,82 @@ func rehearseOne(
 
 	switch req.Op {
 	case BulkOpAssignRole:
-		return rehearseAssignRole(out, req, roleMap, grants), nil
+		out = rehearseAssignRole(out, req, roleMap, grants)
 	case BulkOpRemoveRole:
-		return rehearseRemoveRole(out, req, roleMap, grants), nil
+		out = rehearseRemoveRole(out, req, roleMap, grants)
 	case BulkOpAssignBundle:
-		return rehearseAssignBundle(ctx, out, req, bundleName, bundles)
+		if out, err = rehearseAssignBundle(ctx, out, req, bundleName, bundles); err != nil {
+			return BulkOutcome{}, err
+		}
 	case BulkOpRemoveBundle:
-		return rehearseRemoveBundle(out, req, bundleName, bundles), nil
+		out = rehearseRemoveBundle(out, req, bundleName, bundles)
 	case BulkOpExtend:
 		return rehearseExtend(out, req, grants), nil
+	default:
+		out.Effect = EffectBlocked
+		out.Detail = "Unsupported operation."
+		return out, nil
 	}
+	if out.Effect != EffectApply {
+		return out, nil
+	}
+	params, err := cancellingWrites(ctx, uid, req, roleMap)
+	if err != nil {
+		return BulkOutcome{}, err
+	}
+	cancels, err := cancelsLine(ctx, params)
+	if err != nil {
+		return BulkOutcome{}, err
+	}
+	return WithCancels(out, cancels), nil
+}
 
-	out.Effect = EffectBlocked
-	out.Detail = "Unsupported operation."
-	return out, nil
+// cancellingWrites are the single-role writes this row's apply would make
+// that can cancel a queued change: an add for each role it gives, a revoke
+// for each role it takes away from its only source.
+func cancellingWrites(ctx context.Context, uid string, req BulkRequest, roleMap map[roleKey]*models.EffectiveRole) ([]db.EnqueueParams, error) {
+	add := func(projectID, role string) db.EnqueueParams {
+		return db.EnqueueParams{UserID: uid, ProjectID: projectID, RoleKeys: []string{role}, OpType: "add"}
+	}
+	switch req.Op {
+	case BulkOpAssignRole:
+		return []db.EnqueueParams{add(req.ProjectID, req.RoleKey)}, nil
+	case BulkOpRemoveRole:
+		if otherSources(roleMap, req.ProjectID, req.RoleKey) != "" {
+			return nil, nil
+		}
+		return []db.EnqueueParams{{UserID: uid, ProjectID: req.ProjectID, RoleKeys: []string{req.RoleKey}, OpType: "revoke", Source: "direct"}}, nil
+	case BulkOpAssignBundle:
+		_, roles, err := svcLatestVersionRoles(ctx, req.BundleID)
+		if err != nil {
+			return nil, err
+		}
+		params := make([]db.EnqueueParams, 0, len(roles))
+		for _, r := range roles {
+			params = append(params, add(r.ProjectID, r.RoleKey))
+		}
+		return params, nil
+	case BulkOpRemoveBundle:
+		var params []db.EnqueueParams
+		for key, role := range roleMap {
+			only := len(role.Reasons) > 0
+			for _, reason := range role.Reasons {
+				if reason.BundleID != req.BundleID {
+					only = false
+				}
+			}
+			if only {
+				params = append(params, db.EnqueueParams{UserID: uid, ProjectID: key.projectID, RoleKeys: []string{key.roleKey},
+					OpType: "revoke", Source: "bundle", SourceRef: req.BundleID})
+			}
+		}
+		// The map has no order; the row's words should.
+		sort.Slice(params, func(i, j int) bool {
+			return params[i].ProjectID+"/"+params[i].RoleKeys[0] < params[j].ProjectID+"/"+params[j].RoleKeys[0]
+		})
+		return params, nil
+	}
+	return nil, nil
 }
 
 func rehearseAssignRole(

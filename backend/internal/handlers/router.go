@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base32"
@@ -414,7 +415,9 @@ func withUserAuth(next http.HandlerFunc) http.HandlerFunc {
 //
 // Reads the parsed principal from context; never re-extracts or re-parses
 // the bearer token (audit ref C4). Must only be called behind withUserAuth.
-func isOperator(r *http.Request) bool {
+func isOperator(r *http.Request) bool { return isOperatorCtx(r.Context()) }
+
+func isOperatorCtx(ctx context.Context) bool {
 	if os.Getenv("ZITADEL_DOMAIN") == "" {
 		return true
 	}
@@ -422,7 +425,7 @@ func isOperator(r *http.Request) bool {
 	if adminRoleKey == "" {
 		adminRoleKey = "admin"
 	}
-	return principalFromContext(r.Context()).HasProjectRole(adminRoleKey)
+	return principalFromContext(ctx).HasProjectRole(adminRoleKey)
 }
 
 // withOperatorAuth gates endpoints that require operator-level (admin) access.
@@ -526,7 +529,7 @@ func withCORS(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		next(w, r)
+		withCancelGate(next)(w, r)
 	}
 }
 
