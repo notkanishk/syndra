@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { Modal, ModalHeader } from "@/components/ui/Modal";
+import { ACCOUNT_NAV } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
 import { useInstallPrompt } from "@/lib/useInstallPrompt";
@@ -19,6 +21,12 @@ import { useInstallPrompt } from "@/lib/useInstallPrompt";
  * from a destination, and signing out clears every tab's place — which is
  * cheap to say and expensive to discover.
  */
+/** What each of an operator's own pages is for, under its link. */
+const OWN_NOTES: Record<string, string> = {
+  "/me": "What you can use, and asking for more",
+  "/storage": "Your password and folders",
+};
+
 export function AccountSheet({ session }: { session: SessionUser }) {
   const [open, setOpen] = useState(false);
   const { theme, toggle } = useTheme();
@@ -68,6 +76,24 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               )}
             </span>
           </div>
+
+          {/* An operator's own pages, between two hairlines: going somewhere,
+              so violet links. A member has these in their rail already. */}
+          {session.role !== "user" && (
+            <div className="flex flex-col border-y border-line py-1.5">
+              {ACCOUNT_NAV.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className="flex min-h-[44px] flex-col justify-center gap-0.5 py-1.5 motion-press"
+                >
+                  <span className="text-[14.5px] font-semibold text-accent-text">{item.label} →</span>
+                  <span className="text-[13px] text-muted">{OWN_NOTES[item.href]}</span>
+                </Link>
+              ))}
+            </div>
+          )}
 
           {/* A setting about this device, in a sheet about this device. The
               header keeps its own toggle where there is room for one. */}

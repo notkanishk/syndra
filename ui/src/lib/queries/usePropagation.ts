@@ -20,6 +20,12 @@ export interface PendingRow {
   attempts: number;
   created_at: string;
   last_error?: string;
+  /** Which system the row is for: "zitadel", or an add-on's target. */
+  target?: string;
+  /** Who queued it: a person's id, or a machine as "system:reconcile". */
+  initiated_by?: string;
+  /** Why it was queued. Said for an add-on row, which has no project or roles. */
+  reason?: string;
 }
 
 /** Named for the screen that reads it, where "propagation" is never spoken. */

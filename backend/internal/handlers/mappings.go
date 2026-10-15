@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -347,7 +346,7 @@ func validateMappingAgainstTarget(ctx context.Context, target, field, value stri
 	// to be able to say which one it is showing.
 	resolution, err := addonsResolvesValue(ctx, target, field, value)
 	if err != nil {
-		return "", "", resolution, resolutionCarrier{error: err, known: resolution.Known, value: value}
+		return "", "", resolution, err
 	}
 	return field, value, resolution, nil
 }
@@ -378,15 +377,10 @@ func writeMappingError(w http.ResponseWriter, err error) {
 		// operator typo, the single likeliest mistake on this form — fell
 		// through to the default and came back 500 DB_ERROR. The target had
 		// answered clearly and the operator was shown an internal error.
-		// The near misses, when the add-on enumerated any. A typo is answered by
-		// seeing the two names it might have been; being told to try again is
-		// the one response that cannot help, since the same question gets the
-		// same answer.
-		details := map[string]string{"value": "unresolvable"}
-		if near := nearestValues(err); near != "" {
-			details["near"] = near
-		}
-		jsonValidationErrorResponse(w, err.Error(), details)
+		// No near misses any more: values come from the add-on's own list, so a
+		// typo can't happen, and the one refusal left is a value removed on the
+		// target after the list was read. The dialog reads the list again.
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"value": "unresolvable"})
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
@@ -404,57 +398,6 @@ func handleMappingHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, history)
-}
-
-// resolutionCarrier lets a refusal carry what the add-on enumerated, so the
-// surface can name near misses without a second call.
-type resolutionCarrier struct {
-	error
-	known []string
-	value string
-}
-
-func (r resolutionCarrier) Unwrap() error { return r.error }
-
-// nearestValues names up to three enumerated values that share a prefix with
-// what was typed, longest prefix first. Empty when nothing is close — a list of
-// every group on the NAS is not a suggestion, it is a haystack.
-func nearestValues(err error) string {
-	var carrier resolutionCarrier
-	if !errors.As(err, &carrier) || len(carrier.known) == 0 {
-		return ""
-	}
-	typed := strings.ToLower(carrier.value)
-	type scored struct {
-		name string
-		n    int
-	}
-	near := []scored{}
-	for _, candidate := range carrier.known {
-		n := commonPrefix(typed, strings.ToLower(candidate))
-		// Three characters, so an unrelated name starting with the same letter
-		// is not offered as a correction.
-		if n >= 3 {
-			near = append(near, scored{candidate, n})
-		}
-	}
-	sort.SliceStable(near, func(i, j int) bool { return near[i].n > near[j].n })
-	names := []string{}
-	for i, s := range near {
-		if i == 3 {
-			break
-		}
-		names = append(names, s.name)
-	}
-	return strings.Join(names, ", ")
-}
-
-func commonPrefix(a, b string) int {
-	n := 0
-	for n < len(a) && n < len(b) && a[n] == b[n] {
-		n++
-	}
-	return n
 }
 
 // fieldLabel names a field for a person: the add-on's label when it gave one.

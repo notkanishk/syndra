@@ -92,7 +92,7 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
             ? `${counts}. Stopped — Syndra has given up on one change.`
             : "Stopped — Syndra has given up on one change.",
           detail:
-            "The queue is paused at that change, and nothing behind it was tried. Give or revoke the access again from the person's page to try afresh.",
+            "The queue stops at that change, and nothing behind it was tried. Give or revoke the access again from the person's page to try afresh.",
         };
       default:
         return {
@@ -171,7 +171,7 @@ function haltDetail(reason: string | undefined, system: string | undefined): str
     case "target_unreachable":
       return `${system ?? "The connected system"} is not answering. Its changes are still waiting to be sent, and nothing counts against the retry limit.`;
     case "max_retries_exceeded":
-      return "Syndra has given up on a change there, so that queue is paused at it. Nothing behind it was tried.";
+      return "Syndra has given up on a change there, so that queue stops at it. Nothing behind it was tried.";
     case "drain_in_progress":
       return "Another send was already running for it.";
     default:

@@ -44,6 +44,9 @@ function target(over: Partial<TargetSummary> = {}): TargetSummary {
       { id: "account.release", scope: "member", confirm: true, available: true },
     ],
     circuit_open: false,
+    status: "answering",
+    health: { status: "online", recent: ["answered", "answered", "answered"], checked_at: "2026-10-14T09:41:00Z" },
+    project: { id: "p1", name: "Makerspace" },
     ...over,
   };
 }
@@ -97,19 +100,75 @@ describe("connected systems", () => {
   // A secret that will not load is a fault on THIS side. Reporting it as the
   // target being unreachable sends an operator to the wrong machine.
   it("separates a transport fault from a target that is merely quiet", () => {
-    state.targets = [target({ transport_status: "error", transport_error: "no such file" })];
+    state.targets = [target({ transport_status: "error", transport_error: "no such file", status: "cannot_connect" })];
     render(<ConnectedSystemsPage />);
 
     expect(screen.getByText("Cannot connect")).toBeTruthy();
     expect(screen.queryByText("Answering")).toBeNull();
+    expect(screen.getByText(/Look at the Syndra server, not at TrueNAS/)).toBeTruthy();
   });
 
-  it("reports a suspended breaker as its own state, not as health", () => {
-    state.targets = [target({ circuit_open: true })];
+  // A-01: the breaker is "Waiting to retry", never "paused", which is only
+  // ever a person's choice.
+  it("reports the breaker as waiting to retry, and where to look", () => {
+    state.targets = [target({ circuit_open: true, status: "waiting_to_retry" })];
+    const { container } = render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("Waiting to retry")).toBeTruthy();
+    expect(screen.getByText(/look at the Syndra server/)).toBeTruthy();
+    expect(container.textContent).not.toMatch(/paused/i);
+  });
+
+  it("calls a system offline only after three misses, with when it began and the pips", () => {
+    state.targets = [
+      target({
+        status: "offline",
+        health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
+      }),
+    ];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("Paused after failures")).toBeTruthy();
-    expect(screen.queryByText("Answering")).toBeNull();
+    expect(screen.getByText("Offline")).toBeTruthy();
+    expect(screen.getByText(/^Since \d\d:\d\d$/)).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Last 3 checks: missed, missed, missed" })).toBeTruthy();
+  });
+
+  it("keeps a missed check green, with a faint line and the pips", () => {
+    state.targets = [
+      target({ health: { status: "online", recent: ["answered", "answered", "missed"], missed_since: "2026-10-14T09:40:00Z" } }),
+    ];
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("Answering")).toBeTruthy();
+    expect(screen.getByText(/^Missed 1 check, \d\d:\d\d$/)).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Last 3 checks: answered, answered, missed" })).toBeTruthy();
+  });
+
+  it("shows no pips on a healthy row", () => {
+    state.targets = [target()];
+    render(<ConnectedSystemsPage />);
+    expect(screen.queryByRole("img", { name: /Last 3 checks/ })).toBeNull();
+  });
+
+  it("says checking, not offline, when Syndra has just restarted", () => {
+    state.targets = [target({ status: "checking", health: { status: "unknown", recent: [], started_at: "2026-10-14T09:38:00Z" } })];
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("Checking")).toBeTruthy();
+    expect(screen.getByText(/^No check since restart, \d\d:\d\d$/)).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Last 3 checks: no check yet, no check yet, no check yet" })).toBeTruthy();
+  });
+
+  // 6.5: the project, read-only; none chosen is the row's Needs you.
+  it("shows the project it serves, or the way to choose one", () => {
+    state.targets = [target()];
+    const { unmount } = render(<ConnectedSystemsPage />);
+    expect(screen.getByText("Serves Makerspace")).toBeTruthy();
+    unmount();
+
+    state.targets = [target({ project: null })];
+    render(<ConnectedSystemsPage />);
+    expect(screen.getByRole("link", { name: "Choose its Zitadel project →" }).getAttribute("href")).toBe("/system/targets/truenas");
   });
 });
 
@@ -134,16 +193,16 @@ describe("the tone a reading wears", () => {
   });
 
   it("keeps amber for the reading that is a real fault on this host", () => {
-    state.targets = [target({ transport_status: "error", transport_error: "no such file" })];
+    state.targets = [target({ transport_status: "error", transport_error: "no such file", status: "cannot_connect" })];
     render(<ConnectedSystemsPage />);
 
     expect(toneOf("Cannot connect")).toBe("danger-text");
   });
 
   it("keeps amber for a breaker somebody has to act on", () => {
-    state.targets = [target({ circuit_open: true })];
+    state.targets = [target({ circuit_open: true, status: "waiting_to_retry" })];
     render(<ConnectedSystemsPage />);
 
-    expect(toneOf("Paused after failures")).toBe("warn-text");
+    expect(toneOf("Waiting to retry")).toBe("warn-text");
   });
 });

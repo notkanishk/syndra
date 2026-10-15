@@ -121,6 +121,14 @@ describe("breadcrumbs", () => {
     ]);
   });
 
+  // Reached from the Account sheet, an operator's own storage page still
+  // names itself, in either view.
+  it("names an operator's own page", () => {
+    expect(crumbsFor("/storage", "basic")).toEqual([{ label: "Network storage" }]);
+    expect(crumbsFor("/storage", "advanced")).toEqual([{ label: "Network storage" }]);
+    expect(crumbsFor("/me", "basic")).toEqual([{ label: "My access" }]);
+  });
+
   it("is empty for a route the audience cannot reach", () => {
     // A member has no Audit destination, so no crumb claims they do.
     expect(crumbsFor("/audit", "member")).toEqual([]);

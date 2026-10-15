@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"syndra/internal/db"
 )
@@ -39,6 +40,16 @@ type EntitlementSet struct {
 	Suppressed []SuppressedEntitlement `json:"suppressed,omitempty"`
 	// Lifecycle is resolver-computed and never mapping-bindable (§4).
 	Lifecycle LifecycleState `json:"lifecycle"`
+	// Given is which held roles gave each value that survived, keyed
+	// field+"\x00"+value, so a member's page can say "from your Fabrication
+	// lead role". Never sent to a target: a target converges values, not why.
+	Given map[string][]RoleSource `json:"-"`
+}
+
+// RoleSource is one held role behind a value.
+type RoleSource struct {
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
 }
 
 // SuppressedEntitlement is one thing a subject would hold and does not, with
@@ -52,6 +63,8 @@ type SuppressedEntitlement struct {
 	AllowanceID string `json:"allowance_id"`
 	ActorID     string `json:"actor_id"`
 	Reason      string `json:"reason"`
+	// Since is when the decision was made: "On hold since 9 Oct".
+	Since time.Time `json:"since"`
 }
 
 // LifecycleState is the account's derived existence and usability.
@@ -164,7 +177,7 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 		if a, isDenied := denied[m.Field+"\x00"+m.Value]; isDenied {
 			set.Suppressed = append(set.Suppressed, SuppressedEntitlement{
 				Field: m.Field, Value: m.Value,
-				AllowanceID: a.ID, ActorID: a.ActorID, Reason: a.Reason,
+				AllowanceID: a.ID, ActorID: a.ActorID, Reason: a.Reason, Since: a.CreatedAt,
 			})
 			continue
 		}
@@ -172,6 +185,11 @@ func ResolveEntitlements(ctx context.Context, subjectID, target string) (Entitle
 			values[m.Field] = map[string]struct{}{}
 		}
 		values[m.Field][m.Value] = struct{}{}
+		if set.Given == nil {
+			set.Given = map[string][]RoleSource{}
+		}
+		key := m.Field + "\x00" + m.Value
+		set.Given[key] = append(set.Given[key], RoleSource{ProjectID: m.ProjectID, RoleKey: m.RoleKey})
 	}
 
 	// Every mapped field appears, even when everything in it was suppressed. An
@@ -278,7 +296,7 @@ func resolveLifecycle(mappedAny bool, denied map[string]db.Allowance, set *Entit
 		}
 		set.Suppressed = append(set.Suppressed, SuppressedEntitlement{
 			Field: field, Value: "true",
-			AllowanceID: a.ID, ActorID: a.ActorID, Reason: a.Reason,
+			AllowanceID: a.ID, ActorID: a.ActorID, Reason: a.Reason, Since: a.CreatedAt,
 		})
 	}
 	return state

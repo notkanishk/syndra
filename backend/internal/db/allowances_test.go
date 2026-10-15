@@ -211,7 +211,9 @@ func TestTheReviewQueueExcludesWhatHasAlreadyEnded(t *testing.T) {
 			t.Errorf("the review queue must narrow on %q", cond)
 		}
 	}
-	if !strings.Contains(body, "direction = 'deny'") {
-		t.Error("only a denial has a review date to be due")
+	// A denial and one person's own value (a home folder limit) carry review
+	// dates; an allow never reaches the store.
+	if !strings.Contains(body, "direction IN ('deny', 'set')") {
+		t.Error("the review queue holds denials and own values, nothing else")
 	}
 }

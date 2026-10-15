@@ -87,8 +87,8 @@ const (
 	FieldGroup      = "group"
 	FieldEnabled    = "enabled"
 	FieldSMBEnabled = "smb_enabled"
-	// FieldHome is where a role puts its holders' home folders: a place on the
-	// NAS, under which each person gets <place>/<account name>.
+	// FieldHome is a role giving its holders a home folder ("true"). Each
+	// person's is <the system's home location>/<account name>, settings.go.
 	FieldHome = "home"
 	// FieldHomeQuota is the most a person may store in the home folder's
 	// dataset, in bytes. Several roles: the largest wins.
@@ -108,7 +108,7 @@ const (
 func entitlementSchema() []EntitlementField {
 	return []EntitlementField{
 		{Name: FieldGroup, Type: "string[]", Label: "Group"},
-		{Name: FieldHome, Type: "string", Label: "Home folder", Single: true},
+		{Name: FieldHome, Type: "bool", Label: "Gives a home folder", Single: true},
 		{Name: FieldHomeQuota, Type: "int", Label: "Home folder limit", Single: true, PerPerson: true},
 		{Name: FieldEnabled, Type: "bool", Lifecycle: true},
 		{Name: FieldSMBEnabled, Type: "bool", Lifecycle: true},
@@ -213,6 +213,15 @@ type ValuesResponse struct {
 	// which the backend must read as "structure only", never as "no value is
 	// valid".
 	Enumerable bool `json:"enumerable"`
+	// Labels names a value the way a person says it, where that differs from
+	// the value itself: a home folder's path reads as `main › home_dir`.
+	Labels map[string]string `json:"labels,omitempty"`
+	// BuiltinCount and BuiltinExamples say what was left out, for a NAS whose
+	// groups are all built in: "It lists 34 groups, all of them built in, like
+	// builtin_users and builtin_administrators." The examples are the first
+	// two the read returned, in its order.
+	BuiltinCount    int      `json:"builtin_count,omitempty"`
+	BuiltinExamples []string `json:"builtin_examples,omitempty"`
 }
 
 // handleValues answers what a field's values may be.
@@ -220,7 +229,7 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 	field := r.PathValue("field")
 	switch field {
 	case FieldGroup:
-		_, byName, builtin, err := s.groupIndex()
+		groups, err := s.readGroups()
 		if err != nil {
 			// Unreadable, which is not the same as empty. 503 rather than an
 			// empty enumerable list: the backend fails open on a read it could
@@ -229,24 +238,28 @@ func (s *server) handleValues(w http.ResponseWriter, r *http.Request, _ []byte) 
 			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
 			return
 		}
-		names := make([]string, 0, len(byName))
-		for name := range byName {
+		out := ValuesResponse{Field: field, Values: []string{}, Enumerable: true}
+		for _, g := range groups {
 			// Left out of the list rather than marked in it. The backend's value
 			// check reads this list, so a built-in group is unresolvable to a
 			// mapping as well as absent from the picker.
-			if !builtin[name] {
-				names = append(names, name)
+			if !g.Builtin {
+				out.Values = append(out.Values, g.Name)
+				continue
+			}
+			out.BuiltinCount++
+			if len(out.BuiltinExamples) < 2 {
+				out.BuiltinExamples = append(out.BuiltinExamples, g.Name)
 			}
 		}
-		sort.Strings(names)
-		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: names, Enumerable: true})
+		sort.Strings(out.Values)
+		writeJSON(w, http.StatusOK, out)
 	case FieldHome:
-		places, err := s.homePlaces()
-		if err != nil {
-			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
-			return
-		}
-		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: places, Enumerable: true})
+		// A role gives a home folder or names nothing. One value, so the
+		// backend's value check refuses anything else; where homes go is the
+		// system's own setting (settings.go).
+		writeJSON(w, http.StatusOK, ValuesResponse{Field: field, Values: []string{"true"}, Enumerable: true,
+			Labels: map[string]string{"true": "Gives a home folder"}})
 	case FieldHomeQuota:
 		// A byte count, not a list: structure only, which the backend reads as
 		// "any value of the declared type", never as "no value is valid".

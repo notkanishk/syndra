@@ -612,3 +612,26 @@ func TestTheClaimIsScopedToOneActiveTarget(t *testing.T) {
 		t.Error("the claim must lock only the outbox rows it claims")
 	}
 }
+
+// Why a row was queued reaches the row, because an add-on row has no project
+// and no roles: without it Pending changes listed "give /" and nothing else.
+func TestTheEnqueueStoresWhyTheRowWasQueued(t *testing.T) {
+	columns, selected := insertShape(t)
+	i := slices.Index(columns, "reason")
+	if i < 0 {
+		t.Fatal("the entitlement enqueue must write `reason`")
+	}
+	if !strings.HasPrefix(selected[i], "$") {
+		t.Errorf("reason must be the caller's words, a parameter, got %q", selected[i])
+	}
+	if !outboxColumns(t)["reason"] {
+		t.Error("no migration declares propagation_outbox.reason")
+	}
+	src, err := os.ReadFile("system_convergence.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "Reason:        c.Reason") {
+		t.Error("a system convergence must pass its Reason to the enqueue, or it is dropped as before")
+	}
+}

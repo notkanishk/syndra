@@ -690,6 +690,9 @@ func (s *server) readShareAudit() ([]shareAudit, error) {
 	}
 	out := make([]shareAudit, 0, len(shares))
 	for _, sh := range shares {
+		if !s.considers(sh.Name) {
+			continue
+		}
 		out = append(out, shareAudit{
 			Name: sh.Name, Enabled: sh.Audit.Enable,
 			WatchList: sh.Audit.WatchList, IgnoreList: sh.Audit.IgnoreList,

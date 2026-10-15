@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/db"
 	"syndra/internal/services"
 	"syndra/internal/services/addonop"
 )
@@ -108,6 +111,16 @@ type myTargetView struct {
 	// guessed, because a share path that does not work teaches a member to
 	// distrust the whole page, starting with the parts that were right.
 	Connection *addons.Connection `json:"connection,omitempty"`
+	// RestoredAt is when access was given back, set only while the account
+	// waits for a new password after it (storage.needs_new_password): the
+	// latest end of a deny hold on this target.
+	RestoredAt *time.Time `json:"restored_at,omitempty"`
+	// HomeKept is a home folder that no role the member holds gives any more.
+	// It stays, with their files, and only they can open it.
+	HomeKept bool `json:"home_kept,omitempty"`
+	// Roles are the member's own roles that reach this target, for "Your
+	// Laser operator role reaches TrueNAS, but no folder there is open to it".
+	Roles []services.RoleSource `json:"roles,omitempty"`
 }
 
 type myTargetAccount struct {
@@ -165,6 +178,7 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 	}
 	view.Entitled = set.Lifecycle.Enabled
 	view.Suspended = set.Suppressed
+	view.Roles = rolesReaching(set)
 	if view.Entitled {
 		// Only the values that survived resolution. A suppressed value listed
 		// here would be an instruction to reach something they cannot.
@@ -259,10 +273,112 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 		// Best-effort: a page that cannot read usage is still worth serving,
 		// and every field it fills is additive.
 		if status := addonsMyStorage(r.Context(), target, subject); status.Outcome == addons.OutcomeSucceeded {
+			if view.Connection != nil {
+				for i := range status.Places {
+					status.Places[i].Address(view.Connection.Host)
+				}
+			}
+			attributePlaces(r.Context(), target, set, status.Places)
+			view.HomeKept = homeKept(set, status.Places)
 			view.Storage = &status
+			if status.NeedsNewPassword {
+				view.RestoredAt = restoredAt(r.Context(), subject, target)
+			}
 		}
 	}
 	return view, nil
+}
+
+// attributePlaces names the member's own roles behind each place: the roles
+// that put them in a group that opens it. Best-effort, from the target's last
+// read of its folder permissions; a place with no attribution just says less.
+func attributePlaces(ctx context.Context, target string, set services.EntitlementSet, places []addons.Place) {
+	groups := set.Fields["group"]
+	if len(places) == 0 || len(groups) == 0 {
+		return
+	}
+	reach := addonsReadReach(ctx, target)
+	if !reach.Read {
+		return
+	}
+	for i := range places {
+		if places[i].Home {
+			continue
+		}
+		seen := map[services.RoleSource]bool{}
+		for _, g := range groups {
+			for _, opened := range reach.Groups[g] {
+				if opened.Path != places[i].Path {
+					continue
+				}
+				for _, role := range set.Given["group\x00"+g] {
+					if !seen[role] {
+						seen[role] = true
+						places[i].Roles = append(places[i].Roles, addons.PlaceRole{ProjectID: role.ProjectID, RoleKey: role.RoleKey})
+					}
+				}
+			}
+		}
+	}
+}
+
+// rolesReaching is every held role that gave this target anything, once each,
+// in a stable order.
+func rolesReaching(set services.EntitlementSet) []services.RoleSource {
+	seen := map[services.RoleSource]bool{}
+	var out []services.RoleSource
+	for _, roles := range set.Given {
+		for _, r := range roles {
+			if !seen[r] {
+				seen[r] = true
+				out = append(out, r)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ProjectID != out[j].ProjectID {
+			return out[i].ProjectID < out[j].ProjectID
+		}
+		return out[i].RoleKey < out[j].RoleKey
+	})
+	return out
+}
+
+// homeKept is a home folder on the account that none of the member's roles
+// gives any more.
+func homeKept(set services.EntitlementSet, places []addons.Place) bool {
+	for _, p := range places {
+		if p.Home {
+			return len(set.Fields["home"]) == 0
+		}
+	}
+	return false
+}
+
+// restoredAt is when a deny hold on this target last ended, lifted or lapsed.
+// Nil when none has, or the history can't be read: the page then says access
+// was given back without a date rather than guessing one.
+func restoredAt(ctx context.Context, subject, target string) *time.Time {
+	all, err := dbAllowancesForSubject(ctx, subject)
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	var latest *time.Time
+	for _, a := range all {
+		if a.Target != target || a.Direction != db.AllowanceDeny {
+			continue
+		}
+		ended := a.LiftedAt
+		if ended == nil && a.ExpiresAt != nil && !a.ExpiresAt.After(now) {
+			ended = a.ExpiresAt
+		}
+		if ended != nil && (latest == nil || ended.After(*latest)) {
+			t := *ended
+			latest = &t
+		}
+	}
+	return latest
 }
 
 type setCredentialRequest struct {

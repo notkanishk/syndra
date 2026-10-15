@@ -390,7 +390,14 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 		}
 	}
 
-	_ = dbInsertAuditLog(ctx, reviewer, request.RequesterID, "access_request."+status, requestID)
+	action := "access_request." + status
+	if status == "approved" && reviewer == request.RequesterID {
+		// Allowed, and said (owner, 15 Oct): an operator approving their own
+		// request is recorded as that, so Change history and the request row
+		// show it rather than reading like a second person's decision.
+		action = "access_request.self_approved"
+	}
+	_ = dbInsertAuditLog(ctx, reviewer, request.RequesterID, action, requestID)
 	return nil
 }
 

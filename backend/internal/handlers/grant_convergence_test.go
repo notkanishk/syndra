@@ -120,6 +120,14 @@ func TestOnlyPerPersonFieldsCanBeSetForOnePerson(t *testing.T) {
 	if code := post("home_quota", "53687091200"); code != http.StatusCreated {
 		t.Fatalf("a per-person limit must be accepted, got %d", code)
 	}
+	if code := post("home_quota", "0"); code != http.StatusCreated {
+		t.Fatalf("no limit (0) must be accepted, got %d", code)
+	}
+	for _, bad := range []string{"lots", "-5", "1.5"} {
+		if code := post("home_quota", bad); code != http.StatusBadRequest {
+			t.Fatalf("%q is not a whole number of bytes, got %d", bad, code)
+		}
+	}
 }
 
 // A home folder limit is a whole number of bytes; anything else is refused

@@ -77,11 +77,11 @@ type HowLong = "7" | "30" | "term";
 const PAGE = 25;
 
 export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; userId: string }) {
-  return isOperator ? <OperatorQueue /> : <MemberRequests userId={userId} />;
+  return isOperator ? <OperatorQueue userId={userId} /> : <MemberRequests userId={userId} />;
 }
 
 /** The operator queue — same row shape as the Home block, terminal actions. */
-function OperatorQueue() {
+function OperatorQueue({ userId }: { userId?: string }) {
   const [status, setStatus] = useState<StatusFilter>("pending");
   const requests = useRequestsAdmin(status);
   const decide = useDecideRequest();
@@ -288,9 +288,22 @@ function OperatorQueue() {
                 // badge for a just-decided row would read its stale cached
                 // status ("Open") against the ActionOutcome's fresh one
                 // ("Approved") at the same time.
-                <Badge tone={requestOutcome(entry.status).tone}>
-                  {requestOutcome(entry.status).operator}
-                </Badge>
+                <span className="flex flex-col items-start gap-1">
+                  <Badge tone={requestOutcome(entry.status).tone}>
+                    {requestOutcome(entry.status).operator}
+                  </Badge>
+                  {entry.status === "approved" && entry.reviewer_id && entry.reviewer_id === entry.requester_id && (
+                    <span className="text-[12.5px] text-faint">by the person who asked</span>
+                  )}
+                </span>
+              )}
+              {/* Allowed, and said before it happens (owner, 15 Oct): an
+                  operator can approve their own request, and it is recorded
+                  as exactly that. */}
+              {entry.status === "pending" && !resolved.has(entry.id) && userId && entry.requester_id === userId && (
+                <span className="w-full text-[13px] text-faint">
+                  Your own request. Approving it is allowed, and Change history records that you approved your own.
+                </span>
               )}
 
               {/* The row reports its own decision and keeps its seat. It

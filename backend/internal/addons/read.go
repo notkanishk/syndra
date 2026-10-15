@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -571,9 +572,229 @@ type StorageStatus struct {
 	// UsageReadable distinguishes "nothing used" from "could not look", which
 	// are the same zero otherwise.
 	UsageReadable bool `json:"usage_readable"`
+	// NeedsNewPassword is access given back after it was taken away: the
+	// account has had a password, and SMB waits for a new one. Distinct from a
+	// first password (NeedsPassword) and from re-enrolment.
+	NeedsNewPassword bool `json:"needs_new_password"`
+	// Places is everywhere the account can connect, read by the target from
+	// its own folder permissions for the groups the account is actually in,
+	// home folder first. PlacesReadable false is "not read", never "none".
+	Places         []Place `json:"places"`
+	PlacesReadable bool    `json:"places_readable"`
 
 	Outcome Outcome `json:"-"`
 	Err     error   `json:"-"`
+}
+
+// Values is what a target says one entitlement field's values may be, for a
+// picker. Outcome is not Succeeded when it couldn't say.
+type Values struct {
+	Values     []string          `json:"values"`
+	Labels     map[string]string `json:"labels,omitempty"`
+	Enumerable bool              `json:"enumerable"`
+	// BuiltinCount and BuiltinExamples are what the target left out of a group
+	// list: "It lists 34 groups, all of them built in, like …".
+	BuiltinCount    int      `json:"builtin_count,omitempty"`
+	BuiltinExamples []string `json:"builtin_examples,omitempty"`
+
+	Outcome Outcome `json:"-"`
+}
+
+// ReadValues asks a target for one field's values.
+func ReadValues(ctx context.Context, target, field string) Values {
+	a, err := Get(target)
+	if err != nil {
+		return Values{Outcome: OutcomeUnreached}
+	}
+	if !a.br.allow(timeNow()) {
+		return Values{Outcome: OutcomeUnreached}
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return Values{Outcome: OutcomeUnreached}
+	}
+	resp := doAuthenticated(ctx, cred, http.MethodGet,
+		a.Registration.BaseURL+"/values/"+url.PathEscape(field), nil, callTimeout)
+	a.br.record(timeNow(), resp)
+	if resp.Outcome != OutcomeSucceeded {
+		return Values{Outcome: resp.Outcome}
+	}
+	var out Values
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return Values{Outcome: OutcomeIndeterminate}
+	}
+	if out.Values == nil {
+		out.Values = []string{}
+	}
+	out.Outcome = OutcomeSucceeded
+	return out
+}
+
+// TargetSetting is one system-wide choice a target's add-on keeps, such as
+// where home folders go, with what it may be.
+type TargetSetting struct {
+	Name       string            `json:"name"`
+	Label      string            `json:"label"`
+	Value      string            `json:"value"`
+	SetBy      string            `json:"set_by,omitempty"`
+	SetAt      *time.Time        `json:"set_at,omitempty"`
+	Values     []string          `json:"values"`
+	Labels     map[string]string `json:"labels,omitempty"`
+	ValuesRead bool              `json:"values_read"`
+}
+
+// ReadSettings asks a target for its settings. ok is false when it couldn't
+// say, which is not "it has none".
+func ReadSettings(ctx context.Context, target string) (settings []TargetSetting, ok bool) {
+	resp, ok := settingsCall(ctx, target, http.MethodGet, "/settings", nil)
+	if !ok || resp.Outcome != OutcomeSucceeded {
+		return nil, false
+	}
+	var out struct {
+		Settings []TargetSetting `json:"settings"`
+	}
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return nil, false
+	}
+	return out.Settings, true
+}
+
+// PutSetting asks a target to change one setting. The add-on is the judge of
+// what the value may be; its status and body come back for the handler to
+// relay. ok is false when nothing answered.
+func PutSetting(ctx context.Context, target, name, value, actor string) (CallResponse, bool) {
+	body, _ := json.Marshal(map[string]string{"value": value, "actor": actor})
+	return settingsCall(ctx, target, http.MethodPut, "/settings/"+url.PathEscape(name), body)
+}
+
+func settingsCall(ctx context.Context, target, method, path string, body []byte) (CallResponse, bool) {
+	a, err := Get(target)
+	if err != nil || !a.br.allow(timeNow()) {
+		return CallResponse{}, false
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return CallResponse{}, false
+	}
+	resp := doAuthenticated(ctx, cred, method, a.Registration.BaseURL+path, body, callTimeout)
+	a.br.record(timeNow(), resp)
+	return resp, resp.Status != 0
+}
+
+// HomeUsage is one account's home folder on a target, as the target read it.
+type HomeUsage struct {
+	Username   string `json:"username"`
+	UID        int64  `json:"uid"`
+	Home       string `json:"home"`
+	UsedBytes  int64  `json:"used_bytes"`
+	QuotaBytes int64  `json:"quota_bytes,omitempty"`
+}
+
+// Homes is every home folder on a target. Read false is "couldn't ask".
+type Homes struct {
+	Read      bool        `json:"read"`
+	UsageRead bool        `json:"usage_read"`
+	Homes     []HomeUsage `json:"homes"`
+}
+
+// ReadHomes asks a target for every home folder and its use.
+func ReadHomes(ctx context.Context, target string) Homes {
+	resp, ok := settingsCall(ctx, target, http.MethodGet, "/homes", nil)
+	if !ok || resp.Outcome != OutcomeSucceeded {
+		return Homes{}
+	}
+	var out Homes
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return Homes{}
+	}
+	out.Read = true
+	return out
+}
+
+// Reach is what each of a target's own groups opens, as the target last read
+// its folder permissions. Read false is "not read from the target yet": the
+// target hasn't managed a read since its add-on started, or the add-on can't be
+// reached, and there is no last read to show.
+type Reach struct {
+	Read    bool      `json:"read"`
+	ReadAt  time.Time `json:"read_at,omitempty"`
+	Current bool      `json:"current"`
+	// Groups is every group of the makerspace's own; an empty list is "opens
+	// nothing yet". Each list is what holding the group ADDS to what every
+	// account opens.
+	Groups   map[string][]Place `json:"groups,omitempty"`
+	Everyone []Place            `json:"everyone,omitempty"`
+}
+
+// ReadReach asks a target what its groups open.
+func ReadReach(ctx context.Context, target string) Reach {
+	a, err := Get(target)
+	if err != nil {
+		return Reach{}
+	}
+	if !a.br.allow(timeNow()) {
+		return Reach{}
+	}
+	cred, err := credentialFor(a.Registration)
+	if err != nil {
+		return Reach{}
+	}
+	resp := doAuthenticated(ctx, cred, http.MethodGet, a.Registration.BaseURL+"/reach", nil, callTimeout)
+	a.br.record(timeNow(), resp)
+	if resp.Outcome != OutcomeSucceeded {
+		return Reach{}
+	}
+	var out Reach
+	if err := json.Unmarshal(resp.Body, &out); err != nil || out.ReadAt.IsZero() {
+		return Reach{}
+	}
+	out.Read = true
+	return out
+}
+
+// Place is somewhere a member can connect, and what they can do there.
+type Place struct {
+	Share string `json:"share"`
+	// Folder is the path inside the share, empty for the share's root.
+	Folder  string `json:"folder,omitempty"`
+	Path    string `json:"path"`
+	Access  string `json:"access"` // "read" or "change"
+	Dataset string `json:"dataset,omitempty"`
+	Home    bool   `json:"home,omitempty"`
+	// Usage is only on places the member can change, when it could be read.
+	// UsedBytes 0 is "nothing saved here yet".
+	Usage *struct {
+		UsedBytes  int64 `json:"used_bytes"`
+		QuotaBytes int64 `json:"quota_bytes,omitempty"`
+	} `json:"usage,omitempty"`
+	// SMBAddress and UNCAddress are filled by Syndra from the connection host,
+	// the one place an address is built: smb://host/share/folder for macOS and
+	// Linux, \\host\share\folder for Windows.
+	SMBAddress string `json:"smb_address,omitempty"`
+	UNCAddress string `json:"unc_address,omitempty"`
+	// Roles are the member's own roles whose groups open this place, filled
+	// by Syndra: "from your Fabrication lead role". Empty for a home folder.
+	Roles []PlaceRole `json:"roles,omitempty"`
+}
+
+// PlaceRole is one role, as a project and key.
+type PlaceRole struct {
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
+}
+
+// Address fills both addresses for a host.
+func (p *Place) Address(host string) {
+	segments := []string{p.Share}
+	if p.Folder != "" {
+		segments = append(segments, strings.Split(p.Folder, "/")...)
+	}
+	escaped := make([]string, len(segments))
+	for i, s := range segments {
+		escaped[i] = url.PathEscape(s)
+	}
+	p.SMBAddress = "smb://" + host + "/" + strings.Join(escaped, "/")
+	p.UNCAddress = `\\` + host + `\` + strings.Join(segments, `\`)
 }
 
 // MyStorage reads one member's own account state and usage.

@@ -13,6 +13,31 @@ import type { OneShotSecret } from "@/lib/secret";
  * experience of every new member until an operator resumes the drain.
  */
 
+/** A role, as a project and key. */
+export interface RoleSource {
+  project_id: string;
+  role_key: string;
+}
+
+/**
+ * Somewhere the member can connect, read by the target from its own folder
+ * permissions for the groups their account is actually in.
+ */
+export interface StoragePlace {
+  share: string;
+  /** The path inside the share; absent for the share's root. */
+  folder?: string;
+  path: string;
+  access: "read" | "change";
+  home?: boolean;
+  /** Only where they can change files and it could be read. 0 is nothing saved yet. */
+  usage?: { used_bytes: number; quota_bytes?: number };
+  smb_address?: string;
+  unc_address?: string;
+  /** Their own roles whose groups open it. */
+  roles?: RoleSource[];
+}
+
 export interface MyTargetView {
   target: string;
   /** At least one mapped role reaches this target for this person. */
@@ -22,7 +47,9 @@ export interface MyTargetView {
   /** What their current entitlements reach — only what resolves. */
   resources?: Record<string, string[]>;
   /** What an operator has withheld, with the reason, so "no access" is never unexplained. */
-  suspended?: Array<{ field: string; value: string; reason: string; actor_id: string }>;
+  suspended?: Array<{ field: string; value: string; reason: string; actor_id: string; since?: string }>;
+  /** Their own roles that reach this system. */
+  roles?: RoleSource[];
   credential: {
     set: boolean;
     /**
@@ -36,6 +63,18 @@ export interface MyTargetView {
   };
   /** The add-on answered. A member whose target is down is told, not shown a form that fails. */
   reachable: boolean;
+  /**
+   * What the health monitor can stand behind: `offline` only after three
+   * missed checks in a row, `unknown` when Syndra can't tell yet.
+   */
+  health?: "online" | "offline" | "unknown";
+  checked_at?: string;
+  /** When it stopped answering, set only while offline. */
+  reachable_since?: string;
+  /** When access was given back, while the account waits for a new password. */
+  restored_at?: string;
+  /** A home folder no role they hold gives any more. It stays. */
+  home_kept?: boolean;
   /**
    * The state an operator put the target in: `active`, `draining` or
    * `read_only`.
@@ -80,7 +119,21 @@ export interface MyTargetView {
     shares?: Array<{ share: string; used_bytes: number; quota_bytes?: number }>;
     /** "Nothing used" and "could not look" are the same zero without this. */
     usage_readable?: boolean;
+    /** Access given back: SMB waits for a new password. */
+    needs_new_password?: boolean;
+    places?: StoragePlace[];
+    /** False is "couldn't read", never "none". */
+    places_readable?: boolean;
   };
+}
+
+/**
+ * A system the page is waiting on: offline, or paused by an operator. While one
+ * shows, the page reads again every 30s, so "this page updates on its own"
+ * stays true.
+ */
+export function waitingOn(view: MyTargetView): boolean {
+  return view.health === "offline" || view.lifecycle === "draining" || view.lifecycle === "read_only";
 }
 
 export function useMyStorage() {
@@ -88,6 +141,8 @@ export function useMyStorage() {
     queryKey: ["me", "targets"],
     queryFn: () => request<{ targets: MyTargetView[] }>("/me/targets"),
     select: (data) => data.targets ?? [],
+    refetchInterval: (query) =>
+      (query.state.data?.targets ?? []).some(waitingOn) ? 30_000 : false,
   });
 }
 

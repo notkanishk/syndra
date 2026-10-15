@@ -311,6 +311,8 @@ services:
       # manifest omits the connection block and the member page omits the mount
       # instructions rather than printing a host that does not answer.
       - TRUENAS_SHARE_HOST=${TRUENAS_SHARE_HOST:-}
+      # The SMB shares Syndra considers, comma-separated; empty is every enabled one.
+      - TRUENAS_SHARES=${TRUENAS_SHARES:-}
       # The uid/gid range new accounts are given, one number per account and
       # its personal group, never handed out twice (addons/truenas/identity.go
       # has why 200000–999999). Change only before the first account is made.

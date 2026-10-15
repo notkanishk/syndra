@@ -891,14 +891,10 @@ func TestARollbackTooLargeIsRefusedUntilAcknowledged(t *testing.T) {
 	}
 }
 
-// A value the target does not recognise is answered by naming what it might
-// have been, never by a retry.
-//
-// The refusal is deterministic: the same question gets the same answer, so a
-// "try again" is the one response that cannot help, and an operator handed one
-// presses it twice before reading. What helps is seeing the two names that do
-// exist beside the one that does not.
-func TestARefusedValueNamesWhatItMightHaveBeen(t *testing.T) {
+// A value the target no longer has is refused with the code the dialog reads
+// again on, and no near misses: values come from the add-on's own list, so a
+// typo can't happen (4.3), and the list is the answer.
+func TestARefusedValueIsUnresolvableWithNoSuggestions(t *testing.T) {
 	h := stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
 	h.resolution = addons.Resolution{
 		Checked: true,
@@ -912,14 +908,11 @@ func TestARefusedValueNamesWhatItMightHaveBeen(t *testing.T) {
 		t.Fatalf("want 400, got %d (%s)", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	for _, near := range []string{"fabrication-leads", "fabrication"} {
-		if !strings.Contains(body, near) {
-			t.Errorf("the refusal must name %q as a candidate: %s", near, body)
-		}
+	if !strings.Contains(body, `"value":"unresolvable"`) {
+		t.Errorf("the dialog branches on this: %s", body)
 	}
-	// And not every group on the NAS: a haystack is not a suggestion.
-	if strings.Contains(body, "lab_makers") {
-		t.Errorf("an unrelated name is not a near miss: %s", body)
+	if strings.Contains(body, `"near"`) || strings.Contains(body, "fabrication-leads") {
+		t.Errorf("no near misses any more: %s", body)
 	}
 }
 

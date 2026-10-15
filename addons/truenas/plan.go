@@ -139,7 +139,7 @@ func (s *server) handlePlan(w http.ResponseWriter, r *http.Request, body []byte)
 
 // planOne says what would happen to one subject, and issues no mutating call.
 func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed map[string]string, truncated bool) ApplyOutcome {
-	desired, err := decodeDesired(req.Desired)
+	desired, err := s.decodeDesired(req.Desired)
 	if err != nil {
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectBlocked,
@@ -211,17 +211,53 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 	}
 
 	after := projected(current, desired, current.Username)
-	if sameSet(after.Groups, current.Groups) && after.Enabled == current.Enabled && after.SMBEnabled == current.SMBEnabled && after.Home == current.Home {
+	// The home and its limit, decided by the apply's own rules and reads, so
+	// the plan never promises a folder or a limit the apply would not make.
+	home, err := s.decideHome(desired, current.Username, current.Home, current.UID)
+	if err != nil {
+		return ApplyOutcome{
+			Subject: req.Subject, Effect: EffectBlocked,
+			Detail:      "Where the home folder would go could not be read: " + err.Error() + ".",
+			Consequence: "Nothing would change.",
+			Username:    current.Username, Fingerprint: fingerprint,
+		}
+	}
+	if home.path != "" {
+		after.Home = home.path
+	}
+	// A limit that can't be read is not planned: the apply would fail to read
+	// it too, and planning it would queue a row every pass.
+	_, quota, quotaOwed, _ := s.quotaOwed(desired, after.Home, current.UID)
+
+	changes := !sameSet(after.Groups, current.Groups) || after.Enabled != current.Enabled ||
+		after.SMBEnabled != current.SMBEnabled || after.Home != current.Home
+	if !changes && !quotaOwed {
+		detail := "Already in the requested state."
+		if desired.managed[FieldSMBEnabled] && desired.smbEnabled && !current.SMBEnabled {
+			// Not "already in the requested state": SMB is still off, and
+			// waiting on the member rather than on Syndra.
+			detail = smbWaiting(current)
+		}
+		if home.note != "" {
+			detail += " " + home.note
+		}
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
-			Detail:      "Already in the requested state.",
+			Detail:      detail,
 			Consequence: describeHolding(*current),
 			Username:    current.Username, Fingerprint: fingerprint,
 		}
 	}
+	detail := ""
+	if changes {
+		detail = describePlannedChange(*current, after)
+	}
+	if quotaOwed {
+		detail = strings.TrimSpace(detail + " " + quotaWords(quota))
+	}
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApply,
-		Detail:      describePlannedChange(*current, after),
+		Detail:      detail,
 		Consequence: describeHolding(after),
 		Username:    current.Username, Fingerprint: fingerprint,
 	}
@@ -248,13 +284,19 @@ func projected(current *Subject, desired desiredState, username string) Subject 
 		// what the create path does.
 		out.Enabled = true
 	}
-	if desired.managed[FieldSMBEnabled] {
-		out.SMBEnabled = desired.smbEnabled
+	// Only ever switched OFF: the apply never switches SMB on, the member's next
+	// password does. Planning it on promised a change no apply makes, and each
+	// reconciliation pass queued another convergence that drained to nothing.
+	if desired.managed[FieldSMBEnabled] && !desired.smbEnabled {
+		out.SMBEnabled = false
 	}
-	// A home folder is planned only where the apply would make one: one place,
-	// and no home yet. Moving one is never planned, because it is never done.
-	if desired.managed[FieldHome] && len(desired.homes) == 1 && out.Home == "" {
-		out.Home = path.Join(desired.homes[0], username)
+	// A home folder is planned only where the apply would make one: a home
+	// location chosen, and no home yet. Moving one is never planned, because it
+	// is never done.
+	// For a new account only; an existing one's is decided by decideHome.
+	if current == nil && desired.managed[FieldHome] && desired.wantsHome && desired.homeRoot != "" &&
+		(!desired.managed[FieldEnabled] || desired.enabled) {
+		out.Home = path.Join(desired.homeRoot, username)
 	}
 	return out
 }
