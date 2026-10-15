@@ -129,6 +129,8 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	plan := planApprovedRows(input.Op, subjects, current)
+	// Reviewed: the plan's rows named every queued change this cancels.
+	db.CancellationsReviewed(r.Context())
 	applyBulkPlan(r, &plan, input)
 	// 202, not 200, and the rule is the same everywhere in this API: 202 when
 	// the write is RECORDED and something else has to carry it to the target,
@@ -211,6 +213,10 @@ func applyBulkPlan(r *http.Request, plan *services.BulkPlan, input services.Bulk
 // open.
 func projectUpstream(ctx context.Context, outboxIDs []string) string {
 	for _, id := range outboxIDs {
+		if id == "" {
+			// Nothing was queued for this one: nothing to watch land.
+			continue
+		}
 		res, err := svcDrainPropagationRow(ctx, id)
 		switch {
 		case err != nil:

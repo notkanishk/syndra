@@ -230,7 +230,6 @@ func TestOneAllowanceOfAKindIsInForce(t *testing.T) {
 	}
 }
 
-
 // A waiting request for a role the person already has is closed by the
 // migration, attributed to system and audited.
 func TestTheMigrationClosesRequestsForRolesAlreadyHeld(t *testing.T) {
