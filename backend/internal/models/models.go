@@ -329,7 +329,7 @@ type ApplicationView struct {
 	// somebody else turned up".
 	ConfirmedUserCount *int             `json:"confirmed_user_count,omitempty"`
 	ObservedUserCount  *int             `json:"observed_user_count,omitempty"`
-	Observation       ObservationBasis `json:"observation"`
+	Observation        ObservationBasis `json:"observation"`
 }
 
 // ApplicationSimulation is the dry run of a real token. CustomClaims is the
@@ -695,6 +695,8 @@ const (
 type RequestHolding struct {
 	Kind  string     `json:"kind"`
 	Until *time.Time `json:"until,omitempty"`
+	// Waiting: given, and not yet sent to Zitadel.
+	Waiting bool `json:"waiting,omitempty"`
 }
 
 type GovernanceSummary struct {

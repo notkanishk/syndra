@@ -74,6 +74,10 @@ export const AUDIT_ACTIONS: Record<
     verb: "Closed a copy of a waiting request",
     passive: "A copy of their waiting request was closed",
   },
+  "access_request.closed_as_given": {
+    verb: "Closed a request for a role given another way",
+    passive: "Their request was closed: the role was given another way",
+  },
   "access_request.closed_as_held": {
     verb: "Closed a request for a role they already had",
     passive: "Their request was closed: they already had it",

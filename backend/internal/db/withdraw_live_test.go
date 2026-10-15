@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // What a revoke is owed, against a real database.
@@ -197,7 +198,7 @@ func TestTheCancellationIsScopedToOnePersonAndOneProject(t *testing.T) {
 }
 
 // An add is not a revoke. Nothing else may take this path.
-func TestOnlyARevokeWithdrawsAnything(t *testing.T) {
+func TestAnAddNeverCancelsAnotherAdd(t *testing.T) {
 	ctx := liveDB(t)
 	add := seedOutbox(t, ctx, "add", "pending", "u1", "p1", "bundle", "b1", []string{"community"})
 
@@ -208,5 +209,27 @@ func TestOnlyARevokeWithdrawsAnything(t *testing.T) {
 	}
 	if status, _ := statusOf(t, ctx, add); status != "pending" {
 		t.Fatalf("an add cancelled another add (%q)", status)
+	}
+}
+
+// Removed, then given back before the removal was sent (15 Oct): the add
+// cancels the queued revoke, and owes nothing while the grant still stands.
+func TestGivingBackCancelsAQueuedRemoval(t *testing.T) {
+	ctx := liveDB(t)
+	user := "live-wd-" + time.Now().Format("150405.000000000")
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user) })
+	seedOutbox(t, ctx, "add", "applied", user, "p1", "direct", "", []string{"community"})
+	revoke := seedOutbox(t, ctx, "revoke", "pending", user, "p1", "direct", "old-grant", []string{"community"})
+	add := EnqueueParams{UserID: user, ProjectID: "p1", RoleKeys: []string{"community"}, OpType: "add", Source: "direct"}
+	if owed := runWithdraw(t, ctx, add); owed {
+		t.Fatal("the grant still stands in Zitadel, so giving it back owes no add")
+	}
+	if status, _ := statusOf(t, ctx, revoke); status != "superseded" {
+		t.Fatalf("the queued removal is cancelled, got %s", status)
+	}
+	// Once the removal has gone out, giving it back is owed.
+	seedOutbox(t, ctx, "revoke", "applied", user, "p1", "direct", "", []string{"community"})
+	if owed := runWithdraw(t, ctx, add); !owed {
+		t.Fatal("nothing queued to cancel and nothing standing: the add is owed")
 	}
 }

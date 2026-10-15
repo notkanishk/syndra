@@ -57,8 +57,24 @@ const withdrawnReason = "withdrawn before it was sent: the change that queued it
 // cascade revoke qualifies; a multi-role row belongs to a direct grant that
 // covers more than what is being taken away, and cancelling the whole of it
 // would withdraw deliveries nobody countermanded.
+//
+// The same holds the other way round (found 15 Oct): a role removed and given
+// back before the removal was sent queued the add behind the revoke, two
+// changes to confirm that net to nothing. An add cancels the queued revoke it
+// answers, and is owed only when the grant is not still standing. From any
+// source: a cascade queues a revoke only when nothing else holds the role, so
+// whatever gives it back answers that revoke.
 func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p EnqueueParams) (owed bool, err error) {
-	if p.OpType != "revoke" || len(p.RoleKeys) != 1 {
+	if len(p.RoleKeys) != 1 {
+		return true, nil
+	}
+	var answers []string
+	switch p.OpType {
+	case "revoke":
+		answers = []string{"add", "replace"}
+	case "add":
+		answers = []string{"revoke"}
+	default:
 		return true, nil
 	}
 	source := p.Source
@@ -70,12 +86,12 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 		UPDATE propagation_outbox
 		   SET status = 'superseded', completed_at = NOW(), last_error = $1
 		 WHERE target = $2 AND status = 'pending'
-		   AND op_type IN ('add','replace')
+		   AND op_type = ANY($8::text[])
 		   AND user_id = $3 AND project_id = $4 AND role_keys = $5::text[]
-		   AND source = $6 AND source_ref IS NOT DISTINCT FROM NULLIF($7,'')
+		   AND (NOT $9 OR (source = $6 AND source_ref IS NOT DISTINCT FROM NULLIF($7,'')))
 		RETURNING id`
 	rows, err := tx.Query(ctx, cancel, withdrawnReason, target,
-		p.UserID, p.ProjectID, p.RoleKeys, source, p.SourceRef)
+		p.UserID, p.ProjectID, p.RoleKeys, source, p.SourceRef, answers, p.OpType == "revoke")
 	if err != nil {
 		return false, fmt.Errorf("withdraw queued delivery: %w", err)
 	}
@@ -110,5 +126,6 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 		Scan(&live); err != nil {
 		return false, fmt.Errorf("withdraw queued delivery: %w", err)
 	}
-	return live, nil
+	// A revoke is owed while the grant stands; an add, only once it doesn't.
+	return live == (p.OpType == "revoke"), nil
 }
