@@ -45,6 +45,9 @@ type addonReconcileHarness struct {
 	mappings []db.RoleMapping
 	holders  map[string][]string
 	waiting  map[string]bool
+	// waitingFor is what a waiting row wants, as JSON; absent means the same
+	// as this pass resolves.
+	waitingFor map[string]string
 }
 
 func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
@@ -59,7 +62,13 @@ func stubAddonReconcile(t *testing.T, h *addonReconcileHarness) {
 	mappingHolders = func(_ context.Context, project, role string) ([]string, error) {
 		return h.holders[project+"/"+role], nil
 	}
-	pendingApply = func(_ context.Context, _, user string) (bool, error) { return h.waiting[user], nil }
+	pendingApply = func(_ context.Context, _, user string, desired map[string]json.RawMessage) (bool, error) {
+		if want, ok := h.waitingFor[user]; ok {
+			got, _ := json.Marshal(desired)
+			return h.waiting[user] && string(got) == want, nil
+		}
+		return h.waiting[user], nil
+	}
 	t.Cleanup(func() {
 		addonSubjects, addonPlan, listBindings = origSubjects, origPlan, origBindings
 		recordConvergence, resolveIntent = origRecord, origResolve

@@ -79,3 +79,16 @@ func TestTargetHomesSaysEachLimitAndWhereItComesFrom(t *testing.T) {
 		t.Errorf("bo's use: %v", bo.UsedBytes)
 	}
 }
+
+// "No limit" is the largest limit, as the add-on applies it: beside a 20 GB
+// role it wins, and it never reads as a 0-byte limit the folder is "over".
+func TestNoLimitIsTheLargestRolesLimit(t *testing.T) {
+	set := services.EntitlementSet{Given: map[string][]services.RoleSource{
+		"home_quota\x0021474836480": {{ProjectID: "p", RoleKey: "member"}},
+		"home_quota\x000":           {{ProjectID: "p", RoleKey: "staff"}},
+	}}
+	limit, from := largestGiven(set, fieldHomeQuota)
+	if limit != nil || from == nil || from.RoleKey != "staff" {
+		t.Fatalf("want no limit, from staff; got %v from %+v", limit, from)
+	}
+}

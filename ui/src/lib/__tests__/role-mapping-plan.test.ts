@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { bytesToGb, gbToBytes, homeCount, limitWords, mergePlans, opsFor, rowsOf } from "@/lib/role-mapping-plan";
+import { applyParts, bytesToGb, gbToBytes, homeCount, limitWords, mergePlans, opsFor, roleCount, rowsOf } from "@/lib/role-mapping-plan";
 import type { MappingRehearsal, RoleMapping } from "@/lib/queries/useMappings";
 
 const row = (field: string, value: string): RoleMapping =>
@@ -26,14 +26,15 @@ describe("what a role change needs", () => {
     expect(opsFor(current, { group: "fab", home: true, quota: "1" })).toEqual([]);
     expect(opsFor(current, { group: "fab", home: true, quota: "0" }).map((o) => `${o.kind} ${o.field}`)).toEqual(["edit home_quota"]);
     expect(opsFor(current, { group: "fab", home: false, quota: null }).map((o) => `${o.kind} ${o.field}`)).toEqual([
-      "delete home",
       "delete home_quota",
+      "delete home",
     ]);
   });
 
   it("removes every row of a role when the role is removed", () => {
     const current = rowsOf([row("group", "fab"), row("home", "true")], "p", "lead");
-    expect(opsFor(current, null).map((o) => `${o.kind} ${o.field}`)).toEqual(["delete group", "delete home"]);
+    // Group last: a removal that stops part-way leaves the row the list shows.
+    expect(opsFor(current, null).map((o) => `${o.kind} ${o.field}`)).toEqual(["delete home", "delete group"]);
   });
 });
 
@@ -62,5 +63,42 @@ describe("limits in words", () => {
     expect(limitWords("21474836480")).toBe("up to 20 GB");
     expect(limitWords("0")).toBe("no limit");
     expect(gbToBytes("0")).toBe("");
+  });
+});
+
+describe("limits read back exactly", () => {
+  it("saves a fractional limit unchanged when nothing about it changed", () => {
+    const bytes = String(Math.round(1.25 * 1024 ** 3));
+    expect(gbToBytes(bytesToGb(bytes))).toBe(bytes);
+  });
+});
+
+describe("counting and applying a role", () => {
+  it("counts a role giving a group, a home and a limit once", () => {
+    expect(roleCount([row("group", "fab"), row("home", "true"), row("home_quota", "1")])).toBe(1);
+  });
+
+  it("says people once, not once per part", async () => {
+    const parts = ["group", "home", "home_quota"].map((field) => ({
+      op: { kind: "create" as const, field, value: "x" },
+      plan: plan([], `plan_${field}`),
+    }));
+    const queued = await applyParts(parts, { target: "truenas", projectId: "p", roleKey: "lead" }, async () => ({ queued_convergences: 34 }));
+    expect(queued).toBe(34);
+  });
+
+  it("says a role is part-way changed when a later part fails", async () => {
+    const parts = ["group", "home"].map((field) => ({
+      op: { kind: "create" as const, field, value: "x" },
+      plan: plan([], `plan_${field}`),
+    }));
+    let calls = 0;
+    const create = async () => {
+      if (++calls === 2) throw new Error("refused");
+      return { queued_convergences: 3 };
+    };
+    await expect(applyParts(parts, { target: "truenas", projectId: "p", roleKey: "lead" }, create)).rejects.toThrow(
+      /1 of 2 changes to this role were saved/,
+    );
   });
 });

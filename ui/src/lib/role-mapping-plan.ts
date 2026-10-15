@@ -1,3 +1,5 @@
+import { ApiError } from "@/lib/api-client";
+import { describeFailure, sentence } from "@/lib/outcome";
 import type { BulkEffect, BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
   applyMappingDelete,
@@ -65,7 +67,16 @@ export function opsFor(current: RoleRows, choice: RoleChoice | null): RowOp[] {
   want(FIELD_GROUP, current.group, choice ? choice.group : null);
   want(FIELD_HOME, current.home, choice?.home ? "true" : null);
   want(FIELD_HOME_QUOTA, current.quota, choice?.home ? choice.quota : null);
-  return ops;
+  // Removals last and group last among them: a removal that stops part-way
+  // then leaves the group row, which the list shows and can remove again.
+  // Group first, it left home rows no list shows, still giving home folders.
+  const removals = ops.filter((op) => op.kind === "delete").reverse();
+  return [...ops.filter((op) => op.kind !== "delete"), ...removals];
+}
+
+/** How many roles a system's mappings name: one per role, whatever it gives. */
+export function roleCount(mappings: RoleMapping[]): number {
+  return new Set(mappings.map((m) => `${m.project_id}\u0000${m.role_key}`)).size;
 }
 
 export interface RehearsedPart {
@@ -143,22 +154,40 @@ export async function rehearseOps(
   return parts;
 }
 
-/** Applies each part under its own approval; returns how many changes were queued. */
+/**
+ * Applies each part under its own approval; returns how many people have a
+ * change queued. Each part queues one per holder, so it is the largest part's
+ * count, never their sum: three parts for 34 people are 34 people waiting.
+ *
+ * A part that fails after others landed says so. The role is then part-way
+ * changed, and only reopening it shows what it gives now.
+ */
 export async function applyParts(
   parts: RehearsedPart[],
   role: { target: string; projectId: string; roleKey: string },
   create: (input: { target: string; projectId: string; roleKey: string; field: string; value: string; planId?: string }) => Promise<{ queued_convergences: number }>,
 ): Promise<number> {
   let queued = 0;
+  let done = 0;
   for (const { op, plan } of parts) {
     const planId = plan.plan_id ?? "";
-    const result =
-      op.kind === "create"
-        ? await create({ ...role, field: op.field, value: op.value, planId })
-        : op.kind === "edit"
-          ? await applyMappingEdit(op.row.id, op.value, planId)
-          : await applyMappingDelete(op.row.id, planId);
-    queued += result.queued_convergences;
+    try {
+      const result =
+        op.kind === "create"
+          ? await create({ ...role, field: op.field, value: op.value, planId })
+          : op.kind === "edit"
+            ? await applyMappingEdit(op.row.id, op.value, planId)
+            : await applyMappingDelete(op.row.id, planId);
+      queued = Math.max(queued, result.queued_convergences);
+      done++;
+    } catch (error) {
+      if (done === 0) throw error;
+      const why = sentence(describeFailure(error));
+      throw new ApiError(error instanceof ApiError ? error.status : 500, {
+        error: "PARTLY_SAVED",
+        message: `${done} of ${parts.length} changes to this role were saved before one failed, so it is part-way changed. Close this and open the role again to see what it gives now. ${why}`,
+      });
+    }
   }
   return queued;
 }
@@ -187,8 +216,8 @@ export function gbToBytes(gb: string): string {
   return Number.isFinite(n) && n > 0 ? String(Math.round(n * GB)) : "";
 }
 
+/** Exact, so reading a limit back and saving it unchanged changes nothing. */
 export function bytesToGb(bytes: string | undefined): string {
   if (!bytes || bytes === "0") return "";
-  const n = Number(bytes) / GB;
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+  return String(Number(bytes) / GB);
 }

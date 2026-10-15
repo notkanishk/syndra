@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { roleCount } from "@/lib/role-mapping-plan";
 
 import { EmptyState } from "@/components/states";
 import { Card } from "@/components/ui/Card";
@@ -33,7 +34,7 @@ export function MappingScreen({ target }: { target: string }) {
   const history = useMappingHistory(target);
   useCrumb("Mappings");
 
-  const reach = mappings.data?.length;
+  const reach = mappings.data ? roleCount(mappings.data) : undefined;
   const name = targetLabel(target);
   const noProject = mappings.error instanceof ApiError && mappings.error.code === "PROJECT_REQUIRED";
 

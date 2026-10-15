@@ -1,6 +1,7 @@
 "use client";
 
 import { describeFailure, sentence } from "@/lib/outcome";
+import { roleCount } from "@/lib/role-mapping-plan";
 import { Fragment, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
@@ -1280,6 +1281,8 @@ function Reading({
 function MappingCensus({ target, project }: { target: string; project?: string }) {
   const mappings = useMappings(target);
   const rows = mappings.data ?? [];
+  // A role giving a group, a home and a limit is three rows and one role.
+  const roles = roleCount(rows);
 
   return (
     <Card>
@@ -1296,8 +1299,8 @@ function MappingCensus({ target, project }: { target: string; project?: string }
             ) : (
               <>
                 <strong className="font-semibold">
-                  {rows.length === 1 ? "One role" : `${rows.length} roles`}
-                  {project ? ` in ${project}` : ""} {rows.length === 1 ? "reaches" : "reach"}{" "}
+                  {roles === 1 ? "One role" : `${roles} roles`}
+                  {project ? ` in ${project}` : ""} {roles === 1 ? "reaches" : "reach"}{" "}
                   {targetLabel(target)} through mappings.
                 </strong>{" "}
                 {/* M6 states how many people hold those roles here. The number
