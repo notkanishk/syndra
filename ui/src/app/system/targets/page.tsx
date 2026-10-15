@@ -100,7 +100,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
 
   return (
     <CardRow first={first} className="flex-wrap">
-      <span className="min-w-0 flex-1">
+      <span className="min-w-[min(200px,100%)] flex-1">
         <Link
           href={`/system/targets/${row.target}`}
           className="text-[15.5px] font-semibold hover:underline"

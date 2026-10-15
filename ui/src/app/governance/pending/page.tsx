@@ -156,7 +156,7 @@ export default function PendingChangesPage() {
                     <UserName id={row.user_id} />
                   </span>
 
-                  <span className="w-full text-[14px] tablet:min-w-[220px] tablet:flex-1 tablet:truncate">
+                  <span className="w-full text-[14px] tablet:min-w-[220px] tablet:flex-1">
                     {row.op_type === "apply" ? (
                       <SystemChange row={row} />
                     ) : (
@@ -181,7 +181,7 @@ export default function PendingChangesPage() {
                   </span>
 
                   {row.status === "failed" && (
-                    <div className="w-full text-[13px] text-danger-text">
+                    <div className="w-full text-[13px] text-danger-text [overflow-wrap:anywhere]">
                       Failed, and Syndra will try again
                       {row.last_error ? `: ${row.last_error}` : "."}
                     </div>

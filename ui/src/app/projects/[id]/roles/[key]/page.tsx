@@ -250,7 +250,10 @@ function MemberRow({
       >
         {member.user.name}
       </Link>
-      <div className="w-[170px] shrink-0 truncate text-[14px] text-muted">
+      <div
+        className="w-[170px] shrink-0 truncate text-[14px] text-muted"
+        title={member.user.title || member.user.team || member.user.email}
+      >
         {member.user.title || member.user.team || member.user.email}
       </div>
       <div className="min-w-0 flex-1">

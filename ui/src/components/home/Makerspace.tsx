@@ -396,7 +396,7 @@ function RecentActivity() {
                 every target_id to the person resolver, so a bundle edit read
                 "Unknown account 9e93893d-…" here and "Community · Basic" there
                 — one event, two screens, disagreeing. */}
-            <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
+            <span className="min-w-[min(240px,100%)] flex-1 text-[14px] text-muted">
               <EventSentence entry={entry} />
             </span>
           </div>

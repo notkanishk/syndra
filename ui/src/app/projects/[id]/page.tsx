@@ -130,9 +130,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             return (
             <div
               key={role.role_key}
-              className="row-divider flex items-start gap-[18px] px-5 py-3.5"
+              className="row-divider flex flex-wrap items-start gap-[18px] px-5 py-3.5"
             >
-              <div className="min-w-0 flex-1">
+              <div className="min-w-[min(220px,100%)] flex-1">
                 <div className="text-[15px] font-semibold">
                   {role.display_name || humanizeKey(role.role_key)}{" "}
                   <Mono className="font-normal text-faint">{role.role_key}</Mono>
