@@ -94,7 +94,7 @@ function renderStorage() {
   );
 }
 
-const passwordField = () => document.getElementById("storage-password");
+const passwordField = () => document.getElementById("storage-password-truenas");
 
 beforeEach(() => {
   state.sent = [];
@@ -105,7 +105,7 @@ describe("the three states", () => {
     state.targets = [view({ entitled: false, account: undefined, storage: undefined, roles: [] })];
     renderStorage();
     expect(screen.getByText("None of your roles reaches TrueNAS")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Ask for access in Requests/ }).getAttribute("href")).toBe("/requests");
+    expect(screen.getByRole("link", { name: /Ask for access in Requests/ }).getAttribute("href")).toBe("/requests?ask");
     expect(passwordField()).toBeNull();
     expect(screen.queryByText("Sign in as")).toBeNull();
   });
@@ -129,7 +129,7 @@ describe("the three states", () => {
     expect(screen.getByText("Set a password to switch your account on")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Set password" })).toBeTruthy();
     expect(screen.getByText("Set your password to open these")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Set it above ↑" }).getAttribute("href")).toBe("#storage-password");
+    expect(screen.getByRole("link", { name: "Set it above ↑" }).getAttribute("href")).toBe("#storage-password-truenas");
     const preview = screen.getByText("Your home folder").closest("[aria-disabled]");
     expect(preview?.getAttribute("aria-disabled")).toBe("true");
     expect(preview?.hasAttribute("inert")).toBe(true);

@@ -1,5 +1,7 @@
 "use client";
 
+import { Checkbox } from "@/components/ui/Choice";
+
 /**
  * The one selection bar.
  *
@@ -187,7 +189,6 @@ export function SelectionAction({
  */
 const GLYPH_BOX =
   "flex h-11 w-11 shrink-0 items-center justify-center desktop:h-auto desktop:w-auto";
-const GLYPH = "h-6 w-6 accent-[var(--accent)] desktop:h-4 desktop:w-4";
 
 /** A row checkbox. Spread `selection.checkboxProps(id)` onto it. */
 export function RowCheckbox({
@@ -198,7 +199,7 @@ export function RowCheckbox({
 } & Record<string, unknown>) {
   return (
     <span className={GLYPH_BOX}>
-      <input type="checkbox" aria-label={label} className={GLYPH} {...props} />
+      <Checkbox aria-label={label} {...props} />
     </span>
   );
 }
@@ -288,7 +289,7 @@ export function SelectAllRow({
   return (
     <label className="row-divider flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-5 py-2">
       <span className={GLYPH_BOX}>
-        <input type="checkbox" className={GLYPH} {...props} />
+        <Checkbox {...props} />
       </span>
       <span className="flex flex-col">
         <span className="text-[14px] font-semibold">{label}</span>

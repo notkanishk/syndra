@@ -33,7 +33,7 @@ export default function Sidebar() {
   // deployment registered one — never because this operator can see something.
   // The rail renders without it and gains the rows when it arrives: a structure
   // that waited for a fetch would be a rail that moves in response to a poll.
-  const { data: targets } = useTargets();
+  const { data: targets } = useTargets(isOperator);
   const entries =
     audience === "advanced"
       ? targetNav((targets ?? []).map((t) => t.target))

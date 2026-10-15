@@ -1,6 +1,7 @@
 "use client";
 
 import { Term } from "@/components/ui/Term";
+import { Checkbox } from "@/components/ui/Choice";
 import Link from "next/link";
 
 /**
@@ -125,9 +126,7 @@ export function DirectWriteWarning({
         // point and the absence is the entire risk.
         <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-3 text-[13.5px] text-ink">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center desktop:h-auto desktop:w-auto">
-            <input
-              type="checkbox"
-              className="h-6 w-6 accent-[var(--accent)] desktop:h-4 desktop:w-4"
+            <Checkbox
               checked={Boolean(acknowledged)}
               onChange={(event) => onAcknowledge(event.target.checked)}
             />

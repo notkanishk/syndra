@@ -21,12 +21,8 @@ vi.mock("@/lib/queries/useRequests", async (importOriginal) => ({
   useApplyBulkDecision: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock("@/lib/queries/useProjects", () => ({
-  useProjects: () => ({ data: [], isLoading: false, error: null }),
-}));
-
-vi.mock("@/lib/queries/useRoles", () => ({
-  useGlobalRoleCatalog: () => ({ data: [], isLoading: false, error: null }),
+vi.mock("@/lib/queries/useCatalogUsers", () => ({
+  useCatalogProjects: () => ({ data: [], isLoading: false, error: null, refetch: () => {} }),
 }));
 
 vi.mock("@/components/names", () => ({

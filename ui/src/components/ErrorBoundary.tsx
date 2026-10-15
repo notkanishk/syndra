@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Button } from "@/components/ui/Button";
 
 interface ErrorBoundaryState {
   error: Error | null;
@@ -45,13 +46,9 @@ export class ErrorBoundary extends React.Component<
             Something went wrong while drawing it. Nothing was changed — try again, or reload if it
             keeps happening.
           </p>
-          <button
-            onClick={this.reset}
-            type="button"
-            className="mt-1.5 min-h-[44px] self-start rounded-pill bg-tint-3 px-4 text-[13px] font-semibold text-ink motion-tint hover:bg-tint-2 desktop:min-h-0 desktop:py-1.5"
-          >
+          <Button variant="outline" onClick={this.reset}>
             Try again
-          </button>
+          </Button>
         </div>
       );
     }

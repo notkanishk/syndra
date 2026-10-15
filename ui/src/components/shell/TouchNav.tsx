@@ -40,7 +40,7 @@ export function TouchNav() {
   const pathname = usePathname();
   const { audience, isOperator } = useUiView();
   const { data: indicators, isPlaceholderData } = useIndicators(isOperator);
-  const { data: targets } = useTargets();
+  const { data: targets } = useTargets(isOperator);
 
   const entries =
     audience === "advanced"

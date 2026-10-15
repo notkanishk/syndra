@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { Checkbox } from "@/components/ui/Choice";
 
 import { useIsShort } from "@/lib/useViewport";
 
@@ -64,10 +65,9 @@ export function AcknowledgeCount({
   return (
     <div className="rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
       <label htmlFor={id} className="flex cursor-pointer items-start gap-3 text-[14px]">
-        <input
+        <Checkbox
           id={id}
-          type="checkbox"
-          className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
+          className="mt-1"
           checked={checked}
           disabled={disabled}
           onChange={(e) => onChange(e.target.checked)}

@@ -146,7 +146,7 @@ describe("Home › The makerspace", () => {
     ).toBeNull();
   });
 
-  it("makes every role in the shape list a link to the people holding it", () => {
+  it("makes every role in the shape list a link to its own page, which lists everyone the count counts", () => {
     state.roles = [
       {
         project_id: "pLaser",
@@ -168,7 +168,7 @@ describe("Home › The makerspace", () => {
     renderMakerspace();
 
     const link = screen.getByRole("link", { name: /Trained/ });
-    expect(link).toHaveAttribute("href", "/users?project=pLaser&role=trained");
+    expect(link).toHaveAttribute("href", "/projects/pLaser/roles/trained");
     // A role nobody holds is catalogue debt, not a headcount entry.
     expect(screen.queryByRole("link", { name: /Dormant/ })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "1 role nobody holds" })).toBeInTheDocument();
@@ -214,7 +214,7 @@ describe("Home › The makerspace", () => {
     state.users = [];
     renderMakerspace();
 
-    expect(screen.getByText("Reading…")).toBeInTheDocument();
+    expect(screen.getByLabelText("Loading gaps")).toBeInTheDocument();
     expect(screen.queryByText("Everybody here has something.")).not.toBeInTheDocument();
   });
 
@@ -223,7 +223,7 @@ describe("Home › The makerspace", () => {
     state.roles = [];
     renderMakerspace();
 
-    expect(screen.getAllByText("Reading…").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText(/^Loading (gaps|where access lives)$/).length).toBeGreaterThan(0);
     expect(screen.queryByText("Nobody holds a role yet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Every role and bundle is in use.")).not.toBeInTheDocument();
   });

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
 import { ACCOUNT_NAV } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
@@ -127,12 +128,9 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             ends the session rather than adjusting it. */}
         <div className="mt-3 border-t border-line px-6 pb-[22px] pt-4">
           <form action="/auth/logout" method="post">
-            <button
-              type="submit"
-              className="flex min-h-[44px] w-full items-center justify-center rounded-pill border border-line-strong text-[14.5px] font-semibold text-muted motion-press"
-            >
+            <Button type="submit" variant="outline" className="w-full">
               Sign out
-            </button>
+            </Button>
           </form>
           <p className="mt-2.5 text-[12.5px] leading-[1.5] text-faint">
             Signing out signs you out in every open tab. You stay signed in for weeks otherwise,

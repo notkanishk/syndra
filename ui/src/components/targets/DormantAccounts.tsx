@@ -193,7 +193,8 @@ export function DormantAccounts({ target }: { target: string }) {
           <div className="flex gap-2">
             <Button
               variant="dangerConfirm"
-              disabled={!acknowledged || !elevatedKey || remove.isPending}
+              disabled={!acknowledged || !elevatedKey}
+              isPending={remove.isPending}
               reason={
                 !remove.isPending
                   ? !acknowledged
@@ -217,9 +218,7 @@ export function DormantAccounts({ target }: { target: string }) {
                 )
               }
             >
-              {remove.isPending
-                ? "Removing…"
-                : `Remove ${chosen.length} ${chosen.length === 1 ? "account" : "accounts"}`}
+              {`Remove ${chosen.length} ${chosen.length === 1 ? "account" : "accounts"}`}
             </Button>
             <Button
               variant="ghost"
@@ -328,7 +327,7 @@ function SweepOutcomes({
         </p>
       ))}
       <div>
-        <Button variant="ghost" size="sm" onClick={onDismiss}>
+        <Button variant="outline" size="sm" onClick={onDismiss}>
           Dismiss this result
         </Button>
       </div>

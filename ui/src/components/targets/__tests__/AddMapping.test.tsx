@@ -371,7 +371,7 @@ describe("a role's home folder", () => {
     withRoot("");
     compose();
     expect(screen.queryByRole("radio", { name: "Gives a home folder" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Choose where home folders go →" }).getAttribute("href")).toBe("/system/targets/truenas");
+    expect(screen.getByRole("link", { name: "Choose where home folders go" }).getAttribute("href")).toBe("/system/targets/truenas");
     expect(preview().hasAttribute("disabled")).toBe(false);
   });
 

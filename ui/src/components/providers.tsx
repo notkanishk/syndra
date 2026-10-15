@@ -20,6 +20,7 @@ import { ThemeProvider } from "@/lib/theme";
 export function Providers({
   children,
   hasSession = true,
+  isOperator = false,
 }: {
   children: React.ReactNode;
   /**
@@ -28,6 +29,8 @@ export function Providers({
    * would only collect 401s.
    */
   hasSession?: boolean;
+  /** Bundles are an operator's read; a member's proxy refuses it. */
+  isOperator?: boolean;
 }) {
   // The cache() inside getQueryClient ensures one client per request on the
   // server and one shared client for the browser session. Calling it directly
@@ -37,7 +40,7 @@ export function Providers({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <NameResolverProvider enabled={hasSession}>
+      <NameResolverProvider enabled={hasSession} bundles={hasSession && isOperator}>
         <ThemeProvider>
           <ErrorBoundary>{children}</ErrorBoundary>
         </ThemeProvider>

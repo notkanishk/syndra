@@ -21,6 +21,7 @@ import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, Mono } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
@@ -419,6 +420,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <UnexplainedRoles
                 roleKeys={unexplainedIn(project)}
                 projectId={project.project_id}
+                userId={userId}
                 isOperator={isOperator}
               />
             </Card>
@@ -534,10 +536,13 @@ function ProjectRoleTally({ recorded, unexplained }: { recorded: number; unexpla
 function UnexplainedRoles({
   roleKeys,
   projectId,
+  userId,
   isOperator,
 }: {
   roleKeys: string[];
   projectId: string;
+  /** Drift opens on this person's rows, not the whole project's. */
+  userId: string;
   isOperator: boolean;
 }) {
   if (roleKeys.length === 0) return null;
@@ -563,12 +568,9 @@ function UnexplainedRoles({
           </span>
         ))}
         {isOperator && (
-          <Link
-            href={driftHref({ project: projectId })}
-            className="flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent motion-tint hover:underline desktop:min-h-0"
-          >
-            Decide on Drift →
-          </Link>
+          <ArrowLink href={driftHref({ project: projectId, user: userId, role: roleKeys.length === 1 ? roleKeys[0] : "" })}>
+            Decide on Drift
+          </ArrowLink>
         )}
       </div>
     </div>

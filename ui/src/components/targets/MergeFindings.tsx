@@ -298,7 +298,7 @@ function DecisionForm({
           </Button>
         )}
         <span className="flex-1" />
-        <Button size="sm" variant="ghost" onClick={onCancel}>
+        <Button onClick={onCancel}>
           Cancel
         </Button>
       </div>

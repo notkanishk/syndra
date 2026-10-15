@@ -98,10 +98,10 @@ function PersonRow({
   return (
     <>
       <CardRow first={first} className="flex-wrap">
-        <span className="text-[14px]">
+        <span className="min-w-0 [overflow-wrap:anywhere] text-[14px]">
           <UserName id={account.subject_id} />
         </span>
-        <span className="font-mono text-[13.5px] text-muted">{account.username}</span>
+        <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px] text-muted">{account.username}</span>
         {account.account_uid !== undefined && (
           <span className="text-[13px] text-faint">id {account.account_uid}</span>
         )}

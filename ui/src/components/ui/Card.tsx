@@ -1,5 +1,6 @@
 import Link from "next/link";
 import React from "react";
+import { ARROW_LINK } from "@/components/ui/ArrowLink";
 
 /**
  * The container surface: 20px radius, one hairline, no padding of its own so
@@ -166,7 +167,7 @@ export function CardHeaderLink({ href, children }: { href: string; children: Rea
   return (
     <Link
       href={href}
-      className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110 desktop:min-h-0"
+      className={ARROW_LINK}
     >
       {children}
     </Link>
