@@ -31,7 +31,7 @@ import (
 // at three in the morning.
 var subsystems = map[string]bool{
 	"ACCESS": true, "ACTION": true, "ADDON": true, "ALLOWANCE": true,
-	"AUTH": true, "CACHE": true, "CASCADE": true, "DATA PLANE": true,
+	"AUTH": true, "CACHE": true, "CASCADE": true, "DATA PLANE": true, "DELIVERY": true,
 	"DIRECTORY": true, "DORMANT": true, "DRIFT": true, "FINDINGS": true,
 	"GOVERNANCE": true, "OBSERVE": true, "ONBOARDING": true, "PANIC": true, "PROPAGATION": true,
 	"REVOKE": true, "ROLES": true, "SCHEDULER": true, "SEED": true,

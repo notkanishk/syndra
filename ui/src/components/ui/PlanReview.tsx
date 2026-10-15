@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import { PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
 import { UserName } from "@/components/names/UserName";
@@ -65,10 +66,34 @@ export function PlanReview({
             The list of {noun[1]} did not load. The totals under the buttons are all that came
             back.
           </p>
-        ) : outcomes.length === 0 ? (
+        ) : outcomes.length === 0 && !plan.excluded?.length ? (
           <p className="px-4 py-3 text-[13.5px] text-muted">{emptyNote(plan.op)}</p>
         ) : (
-          outcomes.map((outcome) => <PlanRow key={outcome.user_id} outcome={outcome} />)
+          <>
+            {outcomes.map((outcome) => (
+              <PlanRow key={outcome.user_id} outcome={outcome} />
+            ))}
+            {/* #32: the requester, left out of anything that takes access away. */}
+            {plan.excluded?.map((left) => (
+              <div key={left.user_id} className="row-divider flex items-start gap-4 px-4 py-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14.5px] font-semibold">
+                    <UserName id={left.user_id} />
+                  </span>
+                  <span className="block text-[13px] text-muted">
+                    Left out · this is you. Change your own access from{" "}
+                    <Link
+                      href={`/users/${encodeURIComponent(left.user_id)}`}
+                      className="font-semibold text-accent-text hover:brightness-110"
+                    >
+                      your page
+                    </Link>
+                    .
+                  </span>
+                </span>
+              </div>
+            ))}
+          </>
         )}
       </div>
     </div>

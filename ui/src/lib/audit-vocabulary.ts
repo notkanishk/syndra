@@ -61,6 +61,10 @@ export const AUDIT_ACTIONS: Record<
   "mapping_rule.deleted": { verb: "Deleted an automatic rule", destructive: true },
   "role.created": { verb: "Created a role" },
   "access_request.created": { verb: "Asked for access" },
+  // Roles that wait for you (N14 B): settings, not access, so no passive.
+  "role.waits_marked": { verb: "Marked a role to wait for you" },
+  "role.waits_unmarked": { verb: "Stopped a role waiting for you" },
+  "confirmation.switched_to_roles": { verb: "Switched to roles that wait" },
   "access_request.approved": { verb: "Approved a request", template: "Approved {}'s request", passive: "Their request was approved" },
   // Allowed and said (owner, 15 Oct): an operator approving their own request.
   "access_request.self_approved": { verb: "Approved their own request", passive: "They approved their own request" },

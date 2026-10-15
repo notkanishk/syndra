@@ -168,7 +168,7 @@ export function ToBody({ children }: { children: ReactNode }) {
  * A dialog whose state lives only while it is open.
  *
  * Rendered closed with an early `return null`, a dialog kept its state: the
- * request dialog reopened on "Asked for Staff" with Done, the last result,
+ * request dialog reopened on "Asked for Staff" with Close, the last result,
  * until a reload. Gated here, its body mounts on open and is gone on close, so
  * each opening starts clean. Every dialog with an `open` prop goes through it;
  * a guard test holds it to that.

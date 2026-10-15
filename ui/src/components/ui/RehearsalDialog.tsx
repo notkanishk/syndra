@@ -656,7 +656,7 @@ export function RehearsalDialog({
         )}
 
         {step === "result" && (
-          <Button variant="accent" onClick={onClose}>
+          <Button variant="outline" onClick={onClose}>
             Close
           </Button>
         )}

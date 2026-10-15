@@ -17,7 +17,7 @@ import BundlesPage from "@/app/bundles/page";
  * `rows.find(...)` lookup either returned undefined (unmounting the workspace
  * that owns the dialog) or fell through to `rows[0]`, remounting the workspace
  * on a different bundle. The report was destroyed before it could be read and
- * the dialog's own Done button was unreachable.
+ * the dialog's own Close button was unreachable.
  */
 
 const state = vi.hoisted(() => ({
@@ -73,10 +73,10 @@ describe("deleting a bundle", () => {
 
     // The report survives, and names the queued revocations.
     expect(screen.getByText(/4 changes waiting/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
-  it("lets go of the bundle only when the operator presses Done", async () => {
+  it("lets go of the bundle only when the operator presses Close", async () => {
     const { rerender } = render(<BundlesPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
@@ -86,9 +86,9 @@ describe("deleting a bundle", () => {
     state.bundles = [];
     rerender(<BundlesPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     expect(screen.getByText("No bundles yet.")).toBeInTheDocument();
   });
 });

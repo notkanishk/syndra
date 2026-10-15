@@ -74,11 +74,11 @@ export default function BundlesPage() {
    * and that dialog deliberately stays open to say how many revocations were
    * queued. The previous commit here added a comment explaining that clearing
    * the selection early throws away an outcome the operator has not read; the
-   * list refetch was doing it anyway, and the dialog's "Done" could never be
+   * list refetch was doing it anyway, and the dialog's "Close" could never be
    * reached.
    *
    * So the row is remembered, and only `onDeleted` — which the dialog calls
-   * from its own Done button — lets go of it.
+   * from its own Close button — lets go of it.
    */
   const [remembered, setRemembered] = useState<BundleRow | null>(null);
   if (live && live.id !== remembered?.id) setRemembered(live);
@@ -161,7 +161,7 @@ export default function BundlesPage() {
             isWelcome={active.is_welcome ?? false}
             holders={active.holder_count ?? 0}
             welcomeName={rows.find((bundle) => bundle.is_welcome)?.name}
-            // Called from the dialog's own Done button, once the operator has
+            // Called from the dialog's own Close button, once the operator has
             // read what the delete did. Both halves matter: the selection has
             // to clear so the list does not show the first bundle under the old
             // id's heading, and the remembered row has to go with it or the
@@ -216,7 +216,7 @@ function BundleWorkspace({
         <CardHeader
           title={name}
           note={`${roleRows.length} ${roleRows.length === 1 ? "role" : "roles"} · ${holders} ${
-            holders === 1 ? "holder" : "holders"
+            holders === 1 ? "person" : "people"
           }${draft.data ? ` · latest v${draft.data.latest_version}` : ""}`}
           // Rename sits on the title because that is what it changes. It is not an edit in the
           // versioning sense — it reaches nobody and publishes nothing — so it deliberately does
@@ -501,7 +501,7 @@ function RenameBundleDialog({
         {/* Closing on success used to fire in the same breath as `setOutcome`,
             which unmounts this dialog before the operator can read what it
             just set — "Now called X" was computed and never shown. Held open
-            until Done is pressed instead, same as the delete dialog. */}
+            until Close is pressed instead, same as the delete dialog. */}
         {!succeeded(outcome) && (
           <Button
             variant="accent"
@@ -528,7 +528,7 @@ function RenameBundleDialog({
           </Button>
         )}
         <Button disabled={update.isPending} onClick={onClose}>
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>
@@ -632,7 +632,7 @@ function DeleteBundleDialog({
           disabled={remove.isPending}
           onClick={gone ? onDeleted : onCancel}
         >
-          {gone ? "Done" : "Keep it"}
+          {gone ? "Close" : "Keep it"}
         </Button>
         {!gone && (
         <Button
@@ -836,8 +836,8 @@ function RemovalImpact({
             Drop it from the working copy
           </Button>
         )}
-        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onCancel}>
-          {succeeded(outcome) ? "Done" : "Cancel"}
+        <Button variant={succeeded(outcome) ? "outline" : "ghost"} onClick={onCancel}>
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
       </div>
     </div>
@@ -857,7 +857,7 @@ function HoldersPanel({
     <Card>
       <CardHeader title="Who holds it" count={holders.length} />
       {isLoading ? (
-        <RowSkeleton rows={3} avatar={false} label="Loading holders" />
+        <RowSkeleton rows={3} avatar={false} label="Loading people" />
       ) : holders.length === 0 ? (
         <div className="px-5 py-4 text-[14px] text-muted">
           Nobody holds {name} yet, so editing it changes nothing today.
@@ -955,7 +955,7 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
       <ModalFooter>
         {/* Closing on success used to fire alongside `setOutcome`, which
             unmounts this dialog before "X created" is ever painted — same
-            fix as the rename dialog: hold it open, let Done close it. */}
+            fix as the rename dialog: hold it open, let Close close it. */}
         {!succeeded(outcome) && (
           <Button
             variant="accent"
@@ -1000,7 +1000,7 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
             }
           }}
         >
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>

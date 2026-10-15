@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiView } from "@/lib/ui-view";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -137,6 +138,7 @@ export default function PeoplePage() {
   const visible = rows.slice(0, limit);
   // Selection spans the whole filter, not the rendered page.
   const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
+  const { selfId } = useUiView();
   const expiringSoon = all.filter((entry) => entry.expiring_count > 0).length;
 
   const projectName = useMemo(
@@ -367,6 +369,12 @@ export default function PeoplePage() {
           count={selection.count}
           noun={["person", "people"]}
           scope={scope}
+          // #32: never take access from yourself in bulk, and say so before.
+          composition={
+            selfId && selection.isSelected(selfId)
+              ? "Includes you · you are left out of anything that revokes access"
+              : undefined
+          }
           wholeScope={wholeFilter}
           visibleCount={visible.length}
           onSelectVisibleOnly={() => {
@@ -523,7 +531,7 @@ function PersonRow({
     // A label rather than a div: the whole row becomes the checkbox's hit area
     // for free, keyboard and screen reader included.
     <label
-      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft/40" : ""}`}
+      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft" : ""}`}
       {...selection.rowProps(entry.user.id)}
     >
       <span className="w-11 desktop:w-[26px]">
