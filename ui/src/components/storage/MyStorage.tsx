@@ -165,7 +165,7 @@ function TargetCard({ view }: { view: MyTargetView }) {
         {aside && <span className="text-[13.5px] text-faint">{aside}</span>}
         {state === "none" && (
           <Link
-            href="/requests"
+            href="/requests?ask"
             className="mt-1 inline-flex min-h-[44px] items-center self-start text-[15px] font-semibold text-accent-text motion-tint hover:brightness-110 desktop:min-h-0"
           >
             Ask for access in Requests →

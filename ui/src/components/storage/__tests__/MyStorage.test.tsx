@@ -105,7 +105,7 @@ describe("the three states", () => {
     state.targets = [view({ entitled: false, account: undefined, storage: undefined, roles: [] })];
     renderStorage();
     expect(screen.getByText("None of your roles reaches TrueNAS")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Ask for access in Requests/ }).getAttribute("href")).toBe("/requests");
+    expect(screen.getByRole("link", { name: /Ask for access in Requests/ }).getAttribute("href")).toBe("/requests?ask");
     expect(passwordField()).toBeNull();
     expect(screen.queryByText("Sign in as")).toBeNull();
   });
