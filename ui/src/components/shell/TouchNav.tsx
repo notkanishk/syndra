@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
 import { VIEW_EXPLANATION, VIEW_HINT } from "@/components/shell/ViewSwitch";
-import { useDialogFocusTrap } from "@/components/ui/Modal";
+import { ToBody, useDialogFocusTrap } from "@/components/ui/Modal";
 import { leafMatches, navFor, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
 import { useIndicators } from "@/lib/queries/useIndicators";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -269,6 +269,7 @@ function NavSheet({
   useDialogFocusTrap(panelRef, true, false, dismiss);
 
   return (
+    <ToBody>
     <div
       role="dialog"
       aria-modal="true"
@@ -346,6 +347,7 @@ function NavSheet({
         </div>
       </div>
     </div>
+    </ToBody>
   );
 }
 
