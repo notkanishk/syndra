@@ -204,6 +204,7 @@ var (
 	svcDbDeleteRole         = db.DeleteRole
 	svcDbGetAllLocalRoles   = db.GetAllLocalRoles
 	svcDbGetRoleUsageCounts = db.GetRoleUsageCounts
+	svcListRoleWaits        = db.ListRoleWaits
 	// What the observation store confirms of a recorded count, and how
 	// current that confirmation is. Separate seams (not folded into
 	// svcRoleHolderCounts) so a test can exercise the recorded count without

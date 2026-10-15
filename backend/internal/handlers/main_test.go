@@ -7,6 +7,7 @@ import (
 
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 // TestMain opens the project gate for the package by default. Almost every
@@ -20,5 +21,30 @@ func TestMain(m *testing.M) {
 	dbTargetProjects = func(context.Context) (map[string]string, error) { return map[string]string{}, nil }
 	checkRoleOffered = func(context.Context, string, string) error { return nil }
 	dbWouldCancel = func(context.Context, db.EnqueueParams) ([]models.QueuedChange, error) { return nil, nil }
+	// No role waits and nobody has switched over: a change held by its own
+	// mode waits, anything else is sent row by row through the stubbable
+	// DrainOne, as before roles that wait. delivery tests stub their own.
+	svcDeliver = func(ctx context.Context, ids []string, legacyWait bool) services.Delivery {
+		d := services.Delivery{Reason: map[string]string{}}
+		for _, id := range ids {
+			if legacyWait {
+				d.Waiting = append(d.Waiting, id)
+				d.Reason[id] = db.WaitReasonManual
+				continue
+			}
+			d.Sent = append(d.Sent, id)
+			dr, err := svcDrainPropagationRow(ctx, id)
+			if err != nil {
+				d.Drain.Halted, d.Drain.Reason = true, err.Error()
+				return d
+			}
+			d.Drain.Applied += dr.Applied
+			if dr.Halted {
+				d.Drain.Halted, d.Drain.Reason = true, dr.Reason
+				return d
+			}
+		}
+		return d
+	}
 	os.Exit(m.Run())
 }

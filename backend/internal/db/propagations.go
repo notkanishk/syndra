@@ -335,7 +335,7 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
-		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,'')`
+		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,'')`
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim propagations: %w", err)
@@ -378,7 +378,7 @@ func ClaimPropagationByID(ctx context.Context, target, id string) (*models.Pendi
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''),
 		          COALESCE(p.cascade_id::text,''), COALESCE(p.zitadel_grant_id,''),
-		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,'')`
+		          p.status, p.attempts, COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,'')`
 	rows, err := querier(ctx).Query(ctx, q, id, target)
 	if err != nil {
 		return nil, false, fmt.Errorf("claim propagation %s: %w", id, err)
@@ -436,6 +436,9 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
 			  AND (p.op_type = 'revoke' OR p.withdraws_only)
+			  -- A role that always waits waits for the operator on the way
+			  -- out too: losing it is theirs to send (N14 B).
+			  AND p.wait_reason IS DISTINCT FROM 'role_waits'
 			  AND NOT EXISTS (
 			      SELECT 1 FROM propagation_outbox e
 			       WHERE e.target     = p.target
@@ -461,7 +464,7 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 		RETURNING p.id, p.target, p.op_type, p.user_id, COALESCE(p.project_id,''), COALESCE(p.role_keys,'{}'),
 		          p.source, COALESCE(p.source_ref,''), COALESCE(p.cascade_id::text,''),
 		          COALESCE(p.zitadel_grant_id,''), p.status, p.attempts,
-		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,'')`
+		          COALESCE(p.last_error,''), p.initiated_by, p.created_at, p.started_at, p.completed_at, COALESCE(p.reason,''), COALESCE(p.wait_reason,'')`
 	rows, err := querier(ctx).Query(ctx, q, limit, target)
 	if err != nil {
 		return nil, fmt.Errorf("claim pending revocations: %w", err)
@@ -681,7 +684,7 @@ func GetPendingPropagations(ctx context.Context) ([]models.PendingPropagation, e
 		SELECT id, target, op_type, user_id, COALESCE(project_id,''), COALESCE(role_keys,'{}'),
 		       source, COALESCE(source_ref,''),
 		       COALESCE(cascade_id::text,''), COALESCE(zitadel_grant_id,''),
-		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,'')
+		       status, attempts, COALESCE(last_error,''), initiated_by, created_at, started_at, completed_at, COALESCE(reason,''), COALESCE(wait_reason,'')
 		FROM propagation_outbox
 		WHERE status IN ('pending','in_flight')
 		ORDER BY cascade_id NULLS LAST, created_at`
@@ -848,7 +851,7 @@ func scanPropagations(rows pgx.Rows) ([]models.PendingPropagation, error) {
 		if err := rows.Scan(&p.ID, &p.Target, &p.OpType, &p.UserID, &p.ProjectID, &p.RoleKeys,
 			&p.Source, &p.SourceRef, &p.CascadeID,
 			&p.ZitadelGrantID, &p.Status, &p.Attempts, &p.LastError, &p.InitiatedBy,
-			&p.CreatedAt, &p.StartedAt, &p.CompletedAt, &p.Reason); err != nil {
+			&p.CreatedAt, &p.StartedAt, &p.CompletedAt, &p.Reason, &p.WaitReason); err != nil {
 			return nil, fmt.Errorf("scan propagation: %w", err)
 		}
 		out = append(out, p)
