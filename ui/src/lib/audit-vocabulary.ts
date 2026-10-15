@@ -68,6 +68,16 @@ export const AUDIT_ACTIONS: Record<
   // Not destructive, and deliberately not phrased as a refusal — the person who filed it took it
   // back. `requestOutcome` keeps the same distinction on the request screens.
   "access_request.withdrawn": { verb: "Withdrew their request" },
+  // Closed by Syndra on 15 Oct (migration 54): a request is for a role someone
+  // lacks, one per role.
+  "access_request.closed_as_copy": {
+    verb: "Closed a copy of a waiting request",
+    passive: "A copy of their waiting request was closed",
+  },
+  "access_request.closed_as_held": {
+    verb: "Closed a request for a role they already had",
+    passive: "Their request was closed: they already had it",
+  },
   // Not destructive: the access was already going to lapse. What was recorded is that somebody
   // looked, which is the opposite of something being taken away unnoticed.
   "grant_expiry.acknowledged": { verb: "Recorded that expiring access should be left to lapse" },

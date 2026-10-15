@@ -16,6 +16,15 @@ export interface AccessRequest {
   reviewer_id?: string;
   review_note?: string;
   created_at: string;
+  /** What the requester already has of the role, read for a waiting request. */
+  holding?: RequestHolding;
+}
+
+/** What someone already has of a role they ask for. */
+export interface RequestHolding {
+  kind: "none" | "until" | "for_good";
+  /** When it ends, for "until". */
+  until?: string;
 }
 
 export interface CreateRequestInput {

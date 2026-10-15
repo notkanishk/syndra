@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
 )
@@ -81,6 +82,13 @@ func rehearseOneDrift(ctx context.Context, id, op string) services.BulkOutcome {
 		return out
 	}
 
+	// The plan agrees with attributeOneDrift: only access Zitadel has can be
+	// adopted, so a syndra_only row is blocked here rather than failing on apply.
+	if op == driftOpAdopt && item.DriftType != db.DriftTargetOnly {
+		out.Effect = services.EffectBlocked
+		out.Detail = "Zitadel doesn't have this, so there's nothing to adopt."
+		return out
+	}
 	out.Effect = services.EffectApply
 	switch op {
 	case driftOpAdopt:

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"syndra/internal/models"
 )
@@ -18,19 +21,74 @@ var ErrRequestNotPending = errors.New("access request is not pending")
 // ACCESS REQUESTS
 // -------------------------------------------------------------
 
+// ErrAlreadyAsked is a request for something the same person is already
+// waiting on. The id returned beside it is the waiting one.
+var ErrAlreadyAsked = errors.New("the same request is already waiting")
+
+// CreateAccessRequest files a request, or returns the one already waiting for
+// the same person and role with ErrAlreadyAsked.
+//
+// One waiting request per person and role is the index's
+// (idx_access_requests_one_waiting), so a second click, a second tab and a
+// retried POST all meet the same row rather than adding to the queue.
 func CreateAccessRequest(ctx context.Context, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
-	query := `
+	const insert = `
 		INSERT INTO access_requests (
 			requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days
 		)
 		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (requester_user_id, zitadel_project_id, zitadel_role_key) WHERE status = 'pending'
+		DO NOTHING
 		RETURNING id`
 
 	var id string
-	if err := querier(ctx).QueryRow(ctx, query, requesterID, projectID, roleKey, justification, durationDays).Scan(&id); err != nil {
+	err := querier(ctx).QueryRow(ctx, insert, requesterID, projectID, roleKey, justification, durationDays).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("failed to create access request: %w", err)
 	}
-	return id, nil
+	const waiting = `
+		SELECT id FROM access_requests
+		 WHERE requester_user_id = $1 AND zitadel_project_id = $2 AND zitadel_role_key = $3
+		   AND status = 'pending'`
+	if err := querier(ctx).QueryRow(ctx, waiting, requesterID, projectID, roleKey).Scan(&id); err != nil {
+		return "", fmt.Errorf("find the waiting request: %w", err)
+	}
+	return id, ErrAlreadyAsked
+}
+
+// RequestHolding is what a person already has of a role, for a request.
+//
+//   - "for_good": they hold it with no end. Syndra granted it for good, or
+//     Zitadel shows them holding it with no ending grant from Syndra (a bundle,
+//     a rule, or given there). Asking again asks for nothing.
+//   - "until": a grant from Syndra that ends at Until. Asking is asking to
+//     keep it longer.
+//   - "none": they don't hold it.
+func RequestHolding(ctx context.Context, userID, projectID, roleKey string) (models.RequestHolding, error) {
+	const q = `
+		SELECT
+			(SELECT expires_at FROM direct_role_grants
+			  WHERE user_id = $1 AND zitadel_project_id = $2 AND zitadel_role_key = $3),
+			EXISTS (SELECT 1 FROM direct_role_grants
+			         WHERE user_id = $1 AND zitadel_project_id = $2 AND zitadel_role_key = $3),
+			EXISTS (SELECT 1 FROM zitadel_grants_index
+			         WHERE user_id = $1 AND project_id = $2 AND $3 = ANY(role_keys))`
+	var until *time.Time
+	var granted, observed bool
+	if err := querier(ctx).QueryRow(ctx, q, userID, projectID, roleKey).Scan(&until, &granted, &observed); err != nil {
+		return models.RequestHolding{}, fmt.Errorf("read what %s holds of %s/%s: %w", userID, projectID, roleKey, err)
+	}
+	switch {
+	case granted && until != nil:
+		return models.RequestHolding{Kind: models.HoldingUntil, Until: until}, nil
+	case granted || observed:
+		return models.RequestHolding{Kind: models.HoldingForGood}, nil
+	default:
+		return models.RequestHolding{Kind: models.HoldingNone}, nil
+	}
 }
 
 func GetAccessRequests(ctx context.Context, status string) ([]models.AccessRequest, error) {

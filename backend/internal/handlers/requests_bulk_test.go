@@ -70,7 +70,13 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 	origAudit := dbInsertAuditLog
 	origDrain := svcDrainPropagationRow
 	origRebuild := cacheRebuildUser
+	origHolding := dbRequestHolding
+	// Nobody holds anything unless a test says so.
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingNone}, nil
+	}
 	t.Cleanup(func() {
+		dbRequestHolding = origHolding
 		cacheRebuildUser = origRebuild
 		dbGetAccessRequestByID = origGet
 		dbApproveRequestAndEnqueue = origApprove
@@ -225,5 +231,21 @@ func TestBulkDecide_RejectsInvalidRequests(t *testing.T) {
 	}
 	if *writes != 0 {
 		t.Errorf("a rejected request must not write, got %d", *writes)
+	}
+}
+
+
+// The plan agrees with the decision: a request for a role they have come to
+// hold since asking is blocked for approval, never approved over what they have.
+func TestBulkDecide_BlocksApprovingARoleTheyAlreadyHave(t *testing.T) {
+	stubRequestLookup(t, map[string]models.AccessRequest{"r1": pendingRequest("r1", "u1", "trained")})
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingForGood}, nil
+	}
+	rr := httptest.NewRecorder()
+	handleBulkDecideRequests(rr, bulkDecisionReq(t, `{"ids":["r1"],"status":"approved"}`, false))
+	plan := decodeBulkPlan(t, rr)
+	if len(plan.Outcomes) != 1 || plan.Outcomes[0].Effect != services.EffectBlocked {
+		t.Fatalf("want the approval blocked, got %+v", plan.Outcomes)
 	}
 }

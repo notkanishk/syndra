@@ -44,6 +44,11 @@ var (
 	ErrAllowanceAdditiveUnsupported = errors.New("db: additive allowances are not supported yet")
 	ErrAllowanceInvalid             = errors.New("db: invalid allowance")
 	ErrAllowanceNotFound            = errors.New("db: no such allowance")
+	// ErrAllowanceAlreadyInForce is a hold or allowance identical to one
+	// already in force. A second one made lifting the first look like it
+	// worked while the person stayed held, and revoking twice rotated the
+	// member's password twice.
+	ErrAllowanceAlreadyInForce = errors.New("db: the same allowance is already in force")
 )
 
 // Allowance is one overlay decision.
@@ -124,18 +129,64 @@ func (a Allowance) validate() error {
 }
 
 // CreateAllowance records one overlay decision.
+// CreateAllowance records an allowance, one in force per kind:
+//
+//   - A hold (deny) or an allow identical to one in force is refused with
+//     ErrAllowanceAlreadyInForce, and the one in force is returned.
+//   - A person's own value (set) replaces the one in force for that field, in
+//     the same transaction: the old one is lifted by the same actor. Two in
+//     force left the older hidden behind the newer, taking over again the
+//     moment the newer ended.
+//
+// Serialised per person, system and field by an advisory lock, so two tabs or
+// two operators meet the same row rather than each adding one.
 func CreateAllowance(ctx context.Context, a Allowance) (Allowance, error) {
 	if err := a.validate(); err != nil {
 		return Allowance{}, err
+	}
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		return Allowance{}, err
+	}
+	if owned {
+		defer tx.Rollback(ctx) // no-op after Commit
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('allowance:' || $1 || ':' || $2 || ':' || $3))`,
+		a.SubjectID, a.Target, a.Field); err != nil {
+		return Allowance{}, fmt.Errorf("lock allowance: %w", err)
+	}
+	const inForce = `lifted_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())`
+	if a.Direction == AllowanceSet {
+		if _, err := tx.Exec(ctx, `UPDATE allowances SET lifted_at = NOW(), lifted_by = $4
+			WHERE subject_id = $1 AND target = $2 AND field = $3 AND direction = 'set' AND `+inForce,
+			a.SubjectID, a.Target, a.Field, a.ActorID); err != nil {
+			return Allowance{}, fmt.Errorf("replace the allowance in force: %w", err)
+		}
+	} else {
+		var existing string
+		err := tx.QueryRow(ctx, `SELECT id FROM allowances
+			WHERE subject_id = $1 AND target = $2 AND field = $3 AND value = $4 AND direction = $5 AND `+inForce+`
+			LIMIT 1`, a.SubjectID, a.Target, a.Field, a.Value, a.Direction).Scan(&existing)
+		if err == nil {
+			a.ID = existing
+			return a, ErrAllowanceAlreadyInForce
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return Allowance{}, fmt.Errorf("read the allowance in force: %w", err)
+		}
 	}
 	const q = `
 		INSERT INTO allowances (subject_id, target, field, value, direction, actor_id, reason, expires_at, review_date)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at`
-	err := querier(ctx).QueryRow(ctx, q, a.SubjectID, a.Target, a.Field, a.Value, a.Direction,
-		a.ActorID, a.Reason, a.ExpiresAt, a.ReviewDate).Scan(&a.ID, &a.CreatedAt)
-	if err != nil {
+	if err := tx.QueryRow(ctx, q, a.SubjectID, a.Target, a.Field, a.Value, a.Direction,
+		a.ActorID, a.Reason, a.ExpiresAt, a.ReviewDate).Scan(&a.ID, &a.CreatedAt); err != nil {
 		return Allowance{}, fmt.Errorf("create allowance: %w", err)
+	}
+	if owned {
+		if err := tx.Commit(ctx); err != nil {
+			return Allowance{}, fmt.Errorf("commit allowance: %w", err)
+		}
 	}
 	return a, nil
 }

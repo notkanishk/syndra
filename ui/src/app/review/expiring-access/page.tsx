@@ -305,6 +305,8 @@ function ExpiringRow({
   const extend = useCreateGrant(grant.user_id);
   const clearAck = useClearExpiryAcknowledgement();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // Extending again would add another stretch to the same grant.
+  const [extended, setExtended] = useState(false);
   const remaining = daysUntil(grant.expires_at);
 
   return (
@@ -386,6 +388,7 @@ function ExpiringRow({
           variant={soonest ? "accent" : "outline"}
           size="sm"
           isPending={extend.isPending}
+          disabled={extended}
           onClick={async () => {
             try {
               const result = await extend.mutateAsync({
@@ -393,7 +396,9 @@ function ExpiringRow({
                 role_key: grant.role_key,
                 reason: "Extended from Expiring access",
                 duration_days: EXTEND_DAYS,
+                extend: true,
               });
+              setExtended(true);
               // This endpoint enqueues to the outbox in manual mode ("pending")
               // rather than applying inline — see CreateGrantResult. Reporting
               // "applied" unconditionally would say Zitadel has it when only

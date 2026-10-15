@@ -11,7 +11,7 @@ import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
  * grant when only Syndra's own ledger does.
  */
 
-const state = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
+const state = vi.hoisted(() => ({ mutateAsync: vi.fn(), grants: [] as unknown[] }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({ data: [{ project: { id: "p1", name: "Printing Lab" } }] }),
@@ -33,6 +33,8 @@ vi.mock("@/lib/queries/useRoles", () => ({
 
 vi.mock("@/lib/queries/useUsers", () => ({
   useCreateGrant: () => ({ mutateAsync: state.mutateAsync, isPending: false }),
+  useUserGrants: () => ({ data: state.grants }),
+  useUserAccess: () => ({ data: { projects: [] } }),
 }));
 
 function open() {
@@ -53,6 +55,17 @@ async function grant() {
 }
 
 describe("GrantDirectAccess", () => {
+  it("says a role already held with no end changes nothing, and will not send it", () => {
+    state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: null }];
+    open();
+    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "p1" } });
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "operator" } });
+    expect(screen.getByText(/already has this, with no end/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Grant access" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("They already have this.")).toBeTruthy();
+    state.grants = [];
+  });
+
   it("reports queued, not applied, when the grant is still in the outbox", async () => {
     state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "pending" });
     open();

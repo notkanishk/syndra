@@ -29,6 +29,10 @@ var (
 	// ErrMappingInvalid is a structurally impossible mapping, refused before
 	// any database contact.
 	ErrMappingInvalid = errors.New("db: invalid mapping")
+	// ErrNothingToPublish refuses a version identical to the newest one. It
+	// would be a second entry in the history that says nothing new, and a
+	// rollback target no different from the one before it.
+	ErrNothingToPublish = errors.New("db: nothing to publish: the mappings match the latest version")
 )
 
 // RoleMapping is one binding.
@@ -329,6 +333,11 @@ func PublishMappingVersion(ctx context.Context, target, note, actor string) (int
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "mapping_version:"+target); err != nil {
 			return fmt.Errorf("lock mapping versions for %s: %w", target, err)
 		}
+		// Checked under the lock above so two overlapping publishes of one
+		// unchanged set cannot both get past it.
+		if err := refuseIfUnchanged(ctx, tx, target); err != nil {
+			return err
+		}
 		const insertVersion = `
 			INSERT INTO target_mapping_versions (target, version, note, published_by)
 			SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3
@@ -351,6 +360,47 @@ func PublishMappingVersion(ctx context.Context, target, note, actor string) (int
 		return 0, err
 	}
 	return version, nil
+}
+
+// refuseIfUnchanged returns ErrNothingToPublish when the working set equals the
+// newest published version. A target with no version yet is never refused: the
+// first version is a real event even against an empty set.
+func refuseIfUnchanged(ctx context.Context, tx pgx.Tx, target string) error {
+	var latestID string
+	err := tx.QueryRow(ctx,
+		`SELECT id FROM target_mapping_versions WHERE target = $1 ORDER BY version DESC LIMIT 1`, target).Scan(&latestID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read latest mapping version for %s: %w", target, err)
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT project_id, role_key, field, value
+		  FROM target_mapping_version_entries WHERE version_id = $1`, latestID)
+	if err != nil {
+		return fmt.Errorf("read latest mapping version entries for %s: %w", target, err)
+	}
+	var snapshot []MappingVersionEntry
+	for rows.Next() {
+		var e MappingVersionEntry
+		if err := rows.Scan(&e.ProjectID, &e.RoleKey, &e.Field, &e.Value); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan latest mapping version entry: %w", err)
+		}
+		snapshot = append(snapshot, e)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read latest mapping version entries for %s: %w", target, err)
+	}
+	live, err := ListRoleMappings(ctx, target)
+	if err != nil {
+		return err
+	}
+	if sameBindings(live, snapshot) {
+		return ErrNothingToPublish
+	}
+	return nil
 }
 
 // RollbackMappingVersion restores a target's working copy to a published

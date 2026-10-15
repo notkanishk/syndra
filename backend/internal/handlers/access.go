@@ -26,6 +26,9 @@ type UpsertDirectGrantRequest struct {
 	GrantedBy    string `json:"granted_by,omitempty"`
 	Reason       string `json:"reason"`
 	DurationDays int    `json:"duration_days"`
+	// Extend says this changes the end of a grant they already have, to a
+	// later one. Without it, giving a role they already have is refused.
+	Extend bool `json:"extend,omitempty"`
 }
 
 type CreateAccessRequestRequest struct {
@@ -107,6 +110,30 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		expiresAt = &expiry
 	}
 
+	// Giving is for a role they don't have; extending is for one that ends.
+	// Neither merges into what is there (owner, 15 Oct).
+	holding, err := dbRequestHolding(r.Context(), userID, req.ProjectID, req.RoleKey)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	endRule := db.EndKept
+	switch {
+	case !req.Extend && holding.Kind != models.HoldingNone:
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "They"))
+		return
+	case req.Extend && holding.Kind != models.HoldingUntil:
+		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND",
+			"There is no end to extend: they have this with no end, or don't have it.")
+		return
+	case req.Extend && expiresAt != nil && !expiresAt.After(*holding.Until):
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST",
+			"It already runs past that date, so extending would shorten it. Nothing was changed.")
+		return
+	case req.Extend:
+		endRule = db.EndSet
+	}
+
 	// The grant is recorded in the durable ledger + outbox in one transaction
 	// (audit included); the Zitadel mutation happens later during the
 	// operator-triggered drain. This is the B4/D3 single-mutation-authority
@@ -121,6 +148,7 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:   expiresAt,
 		Source:      "direct",
 		OpType:      "add",
+		EndRule:     endRule,
 		PayloadJSON: string(payload),
 	})
 	if err != nil {
@@ -176,7 +204,26 @@ func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
 		}
 		requests = own
 	}
-	jsonResponse(w, http.StatusOK, requests)
+	jsonResponse(w, http.StatusOK, withHolding(r.Context(), requests))
+}
+
+// withHolding reads, for each waiting request, what the requester already has
+// of the role, so whoever decides sees what approving would change: nothing
+// (they have it for good), a later end, or new access. A read that fails
+// leaves the row without it rather than failing the list.
+func withHolding(ctx context.Context, requests []models.AccessRequest) []models.AccessRequest {
+	for i := range requests {
+		if requests[i].Status != "pending" {
+			continue
+		}
+		h, err := dbRequestHolding(ctx, requests[i].RequesterID, requests[i].ProjectID, requests[i].RoleKey)
+		if err != nil {
+			log.Printf("[ACCESS] could not read what %s holds for request %s: %v", requests[i].RequesterID, requests[i].ID, err)
+			continue
+		}
+		requests[i].Holding = &h
+	}
+	return requests
 }
 
 func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
@@ -205,11 +252,33 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A request is for a role they don't have (owner, 15 Oct). One that ends
+	// is extended by makerspace staff, never asked for again.
+	holding, err := dbRequestHolding(r.Context(), req.RequesterID, req.ProjectID, req.RoleKey)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	if holding.Kind != models.HoldingNone {
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "You"))
+		return
+	}
+
 	var durationDays *int
 	if req.DurationDays > 0 {
 		durationDays = &req.DurationDays
 	}
 	id, err := dbCreateAccessRequest(r.Context(), req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays)
+	if errors.Is(err, db.ErrAlreadyAsked) {
+		// The same ask is already waiting: one in the queue, however many
+		// times it was sent. Its id is returned so the page can point at it.
+		jsonResponse(w, http.StatusConflict, map[string]any{
+			"error":   "ALREADY_ASKED",
+			"message": "You've already asked for this, and it's waiting for an answer.",
+			"details": map[string]string{"waiting_request_id": id},
+		})
+		return
+	}
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -221,6 +290,17 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	actor := resolveActor(r, req.RequesterID)
 	_ = dbInsertAuditLog(r.Context(), actor, req.RequesterID, "access_request.created", id)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
+}
+
+// alreadyHeldMessage says what someone has of a role they were about to be
+// given or to ask for. who is "You" or "They".
+func alreadyHeldMessage(h models.RequestHolding, who string) string {
+	verb := "have"
+	if h.Kind == models.HoldingUntil && h.Until != nil {
+		return fmt.Sprintf("%s already %s this, until %s. Makerspace staff can extend it from Expiring access.",
+			who, verb, h.Until.Format("2 Jan 2006"))
+	}
+	return fmt.Sprintf("%s already %s this, with no end date.", who, verb)
 }
 
 // handleWithdrawAccessRequest lets the person who filed a request take it back.
@@ -299,6 +379,8 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 	case errors.Is(err, errRequestAlreadyResolved):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", err.Error())
+	case errors.Is(err, errRequestAlreadyHeld):
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", "They already have this, so approving would change nothing. Decline it to close the request.")
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
@@ -307,6 +389,9 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 var (
 	errRequestNotFound        = errors.New("access request not found")
 	errRequestAlreadyResolved = errors.New("access request is already resolved")
+	// errRequestAlreadyHeld is approving a request for a role the person has
+	// come to hold since asking. Nothing is granted; declining closes it.
+	errRequestAlreadyHeld = errors.New("they already have this, so approving would change nothing; decline it to close the request")
 )
 
 // resolveOneAccessRequest is the decision itself, with no HTTP in it.
@@ -330,6 +415,16 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 	}
 
 	if status == "approved" {
+		// They may have come to hold it since asking (granted directly, a
+		// bundle). Approving then would write over what they have, so it is
+		// refused and the request is left for a decline.
+		holding, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey)
+		if err != nil {
+			return err
+		}
+		if holding.Kind != models.HoldingNone {
+			return errRequestAlreadyHeld
+		}
 		var expiresAt *time.Time
 		if request.DurationDays != nil && *request.DurationDays > 0 {
 			expiry := time.Now().UTC().Add(time.Duration(*request.DurationDays) * 24 * time.Hour)
@@ -407,6 +502,8 @@ func handleGetGovernanceSummary(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
+	// Home's queue decides requests too, so it says what approving would change.
+	summary.PendingRequests = withHolding(r.Context(), summary.PendingRequests)
 	jsonResponse(w, http.StatusOK, summary)
 }
 

@@ -36,7 +36,8 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
-import { describeDuration, formatLongDate } from "@/lib/format";
+import { describeDuration, formatLongDate, formatShortDate } from "@/lib/format";
+import { HoldingNote, alreadyHeld, useAskState } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { daysUntilTermEnd } from "@/lib/term";
 
@@ -273,6 +274,8 @@ function OperatorQueue({ userId }: { userId?: string }) {
                     variant="accent"
                     size="sm"
                     className="flex-1 tablet:flex-none"
+                    disabled={alreadyHeld(entry)}
+                    reason={alreadyHeld(entry) ? "They already have this." : undefined}
                     onClick={() => act(entry, "approved")}
                   >
                     Approve
@@ -300,6 +303,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               {/* Allowed, and said before it happens (owner, 15 Oct): an
                   operator can approve their own request, and it is recorded
                   as exactly that. */}
+              {entry.status === "pending" && !resolved.has(entry.id) && <HoldingNote request={entry} />}
               {entry.status === "pending" && !resolved.has(entry.id) && userId && entry.requester_id === userId && (
                 <span className="w-full text-[13px] text-faint">
                   Your own request. Approving it is allowed, and Change history records that you approved your own.
@@ -372,6 +376,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
         open={ask.open}
         onClose={ask.close}
         initial={{ projectId: ask.linkedProject, roleKey: ask.linkedRole }}
+        userId={userId ?? ""}
       />
     </div>
   );
@@ -520,6 +525,7 @@ function MemberRequests({ userId }: { userId: string }) {
         open={open}
         onClose={closeDialog}
         initial={{ projectId: linkedProject, roleKey: linkedRole }}
+        userId={userId}
       />
     </div>
   );
@@ -529,11 +535,14 @@ function RequestDialog({
   open,
   onClose,
   initial,
+  userId,
 }: {
   open: boolean;
   onClose: () => void;
   /** Prefill from a "Ask for this" link in the catalogue. */
   initial?: { projectId?: string; roleKey?: string };
+  /** Who is asking: what they have and have asked for is read for them. */
+  userId: string;
 }) {
   // `/catalog`, the one list of what exists that a member may read. The
   // operator lists (`/projects`, `/roles`) are refused to a member by the
@@ -549,7 +558,13 @@ function RequestDialog({
 
   const projectRoles = catalog.data.find((project) => project.id === projectId)?.roles ?? [];
   const days = howLong === "term" ? daysUntilTermEnd() : Number(howLong);
+  const askState = useAskState(userId);
+  const chosen = askState(projectId, roleKey);
   const until = new Date(Date.now() + days * 86_400_000).toISOString();
+  // Sent: the sheet becomes its result and nothing can be sent twice from it.
+  const sent = askOutcome?.kind === "applied";
+  // A request is for a role they lack, one per role (owner, 15 Oct).
+  const blocked = chosen.kind !== "none";
 
   if (!open) return null;
 
@@ -561,6 +576,8 @@ function RequestDialog({
         lede="Say what you need and why. Makerspace staff decide — you'll see the answer here."
       />
       <div className="flex flex-col gap-3.5 px-6">
+        {!sent && (
+        <>
         <div>
           <FieldLabel htmlFor="req-project">What do you need to use?</FieldLabel>
           <Select
@@ -588,11 +605,25 @@ function RequestDialog({
             onChange={(event) => setRoleKey(event.target.value)}
           >
             <option value="">{projectId ? "Choose…" : "Pick a place first"}</option>
-            {projectRoles.map((role) => (
-              <option key={role.key} value={role.key}>
-                {role.label || role.key}
-              </option>
-            ))}
+            {projectRoles.map((role) => {
+              const state = askState(projectId, role.key);
+              return (
+                <option
+                  key={role.key}
+                  value={role.key}
+                  disabled={state.kind !== "none"}
+                >
+                  {role.label || role.key}
+                  {state.kind === "for_good"
+                    ? " · you have this"
+                    : state.kind === "asked"
+                      ? " · already asked"
+                      : state.kind === "until"
+                        ? ` · yours until ${formatShortDate(state.until)}`
+                        : ""}
+                </option>
+              );
+            })}
           </Select>
           {/* Design asked for a free-text escape here — "Can't find it?
               Describe what you need and we'll route it." A request without a
@@ -602,7 +633,20 @@ function RequestDialog({
               verbatim, so the escape points at the field that already works.
               A place with nothing defined in it is its own dead end and gets
               its own sentence rather than an empty menu. */}
-          {projectId && projectRoles.length === 0 ? (
+          {chosen.kind === "for_good" ? (
+            <FieldHint>
+              You already have this, with no end date, so there&rsquo;s nothing to ask for.
+            </FieldHint>
+          ) : chosen.kind === "asked" ? (
+            <FieldHint>
+              You&rsquo;ve already asked for this. It&rsquo;s waiting, and the answer appears on this page.
+            </FieldHint>
+          ) : chosen.kind === "until" ? (
+            <FieldHint>
+              You have this until {formatShortDate(chosen.until)}. To keep it longer, ask makerspace
+              staff: they extend it from their side.
+            </FieldHint>
+          ) : projectId && projectRoles.length === 0 ? (
             <FieldHint>
               Nothing is defined here yet, so there is nothing to ask for. Pick another place, or
               ask makerspace staff to set this one up.
@@ -661,17 +705,34 @@ function RequestDialog({
             placeholder="Running the Trotec for my capstone build"
           />
         </div>
+        </>
+        )}
+        {/* The sheet becomes its own result. A member is being told who decides
+            and that nothing else is needed from them, and a dialog that closes
+            itself takes both sentences with it. Once sent, the form goes:
+            left in place, it sent the same request again on every click. */}
+        {askOutcome && <ActionOutcome outcome={askOutcome} />}
       </div>
-      {/* The sheet becomes its own result. A member is being told who decides
-          and that nothing else is needed from them, and a dialog that closes
-          itself takes both sentences with it. */}
-      {askOutcome && <ActionOutcome outcome={askOutcome} className="mx-6 mb-1" />}
 
       <ModalFooter>
+        {sent ? (
+          <Button variant="accent" onClick={onClose}>
+            Done
+          </Button>
+        ) : (
+        <>
         <Button
           variant="accent"
-          disabled={!projectId || !roleKey}
-          reason={!projectId || !roleKey ? "Choose a project and a role." : undefined}
+          disabled={!projectId || !roleKey || blocked}
+          reason={
+            !projectId || !roleKey
+              ? "Choose a project and a role."
+              : chosen.kind === "asked"
+                ? "You've already asked for this."
+                : chosen.kind !== "none"
+                  ? "You already have this."
+                  : undefined
+          }
           isPending={create.isPending}
           onClick={async () => {
             try {
@@ -681,9 +742,11 @@ function RequestDialog({
                 justification: why,
                 duration_days: days,
               });
+              const roleName = projectRoles.find((role) => role.key === roleKey)?.label || roleKey;
+              const placeName = catalog.data.find((project) => project.id === projectId)?.name ?? "";
               setAskOutcome({
                 kind: "applied",
-                message: "Asked",
+                message: `Asked for ${roleName}${placeName ? ` on ${placeName}` : ""}`,
                 detail: "You'll see the answer on this page — nothing else is needed from you.",
               });
             } catch (error) {
@@ -694,6 +757,8 @@ function RequestDialog({
           Send request
         </Button>
         <Button onClick={onClose}>Cancel</Button>
+        </>
+        )}
       </ModalFooter>
     </Modal>
   );

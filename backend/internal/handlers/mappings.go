@@ -250,6 +250,13 @@ func handlePublishMappingVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	version, err := dbPublishMappingVersion(r.Context(), req.Target, strings.TrimSpace(req.Note), resolveActor(r, ""))
+	if errors.Is(err, db.ErrNothingToPublish) {
+		// A conflict with the world, not a fault: the same refusal a bundle's
+		// publish gives when nothing differs from its latest version.
+		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_PUBLISH",
+			"Nothing has changed since the last version, so there's nothing to publish.")
+		return
+	}
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return

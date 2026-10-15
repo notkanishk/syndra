@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -279,7 +280,13 @@ func resetAccessDeps(t *testing.T) {
 	origDrain := svcDrainPropagations
 	origDrainRow := svcDrainPropagationRow
 	origStatus := dbGetPropagationStatus
+	origHolding := dbRequestHolding
+	// Nobody holds anything unless a test says so.
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingNone}, nil
+	}
 	t.Cleanup(func() {
+		dbRequestHolding = origHolding
 		dbGetAccessRequestByID = origGetByID
 		dbResolveAccessRequest = origResolve
 		dbWithdrawAccessRequest = origWithdraw
@@ -941,5 +948,157 @@ func TestApprovingYourOwnRequestIsRecordedAsSelfApproved(t *testing.T) {
 		if rr.Code != http.StatusOK || len(actions) != 1 || actions[0] != tc.want {
 			t.Fatalf("reviewer %s: %d %v, want %s", tc.reviewer, rr.Code, actions, tc.want)
 		}
+	}
+}
+
+
+// Found on production, 15 Oct: a member asked five times for a role they held
+// for good. Each copy reached the queue, and approving any of them would have
+// cut their access to 64 days.
+
+func TestACreateForARoleHeldForGoodIsRefused(t *testing.T) {
+	resetAccessDeps(t)
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingForGood}, nil
+	}
+	created := false
+	dbCreateAccessRequest = func(context.Context, string, string, string, string, *int) (string, error) {
+		created = true
+		return "req-1", nil
+	}
+	body := `{"project_id":"p1","role_key":"community","justification":"again","duration_days":64}`
+	rr := httptest.NewRecorder()
+	handleCreateAccessRequest(rr, memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests", strings.NewReader(body)), "member-1"))
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "ALREADY_HELD") {
+		t.Fatalf("want 409 ALREADY_HELD, got %d %s", rr.Code, rr.Body.String())
+	}
+	if created {
+		t.Fatal("nothing may be filed for a role already held for good")
+	}
+}
+
+func TestACreateForARoleThatEndsIsRefusedToo(t *testing.T) {
+	resetAccessDeps(t)
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	until := time.Now().Add(72 * time.Hour)
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingUntil, Until: &until}, nil
+	}
+	created := false
+	dbCreateAccessRequest = func(context.Context, string, string, string, string, *int) (string, error) {
+		created = true
+		return "req-1", nil
+	}
+	body := `{"project_id":"p1","role_key":"community","justification":"keep it","duration_days":30}`
+	rr := httptest.NewRecorder()
+	handleCreateAccessRequest(rr, memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests", strings.NewReader(body)), "member-1"))
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "ALREADY_HELD") || created {
+		t.Fatalf("a request is only for a role they lack (owner, 15 Oct): %d %s (created %v)", rr.Code, rr.Body.String(), created)
+	}
+}
+
+func TestASecondIdenticalAskPointsAtTheWaitingOne(t *testing.T) {
+	resetAccessDeps(t)
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	audited := false
+	dbCreateAccessRequest = func(context.Context, string, string, string, string, *int) (string, error) {
+		return "req-first", db.ErrAlreadyAsked
+	}
+	dbInsertAuditLog = func(context.Context, string, string, string, string) error { audited = true; return nil }
+	body := `{"project_id":"p1","role_key":"community","justification":"again"}`
+	rr := httptest.NewRecorder()
+	handleCreateAccessRequest(rr, memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests", strings.NewReader(body)), "member-1"))
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "ALREADY_ASKED") || !strings.Contains(rr.Body.String(), "req-first") {
+		t.Fatalf("want 409 ALREADY_ASKED naming the waiting request, got %d %s", rr.Code, rr.Body.String())
+	}
+	if audited {
+		t.Fatal("a refused copy is not a new request and leaves no created audit row")
+	}
+}
+
+func TestApprovingARoleTheyHaveSinceComeToHoldIsRefused(t *testing.T) {
+	resetAccessDeps(t)
+	days := 64
+	dbGetAccessRequestByID = func(context.Context, string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: "r1", RequesterID: "u1", ProjectID: "p1", RoleKey: "community", Status: "pending", DurationDays: &days}, nil
+	}
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingForGood}, nil
+	}
+	granted := false
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+		granted = true
+		return db.EnqueueResult{}, nil
+	}
+	err := resolveOneAccessRequest(context.Background(), "r1", "approved", "op1", "")
+	if !errors.Is(err, errRequestAlreadyHeld) || granted {
+		t.Fatalf("approving a role they hold must be refused and grant nothing: %v (granted %v)", err, granted)
+	}
+}
+
+// Giving a role someone has is refused; Extend is the one way to change an
+// end, and only to a later one.
+func TestGivingARoleTheyHaveIsRefusedAndExtendOnlyLengthens(t *testing.T) {
+	resetAccessDeps(t)
+	until := time.Now().Add(10 * 24 * time.Hour)
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingUntil, Until: &until}, nil
+	}
+	var got []db.EnqueueParams
+	dbEnqueueDirectGrantPropagation = func(_ context.Context, p db.EnqueueParams) (db.EnqueueResult, error) {
+		got = append(got, p)
+		return db.EnqueueResult{OutboxID: "o1"}, nil
+	}
+	cacheRebuildUser = func(context.Context, string, []string) {}
+	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) { return propagation.DrainResult{}, nil }
+	call := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants", strings.NewReader(body))
+		req.SetPathValue("id", "u1")
+		rr := httptest.NewRecorder()
+		handleUpsertUserDirectGrant(rr, req)
+		return rr
+	}
+	if rr := call(`{"project_id":"p1","role_key":"trained","reason":"r","duration_days":30}`); rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "ALREADY_HELD") {
+		t.Fatalf("giving a role they have: want 409 ALREADY_HELD, got %d %s", rr.Code, rr.Body.String())
+	}
+	if rr := call(`{"project_id":"p1","role_key":"trained","reason":"r","duration_days":3,"extend":true}`); rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "ALREADY_RUNS_PAST") {
+		t.Fatalf("an extension to an earlier end: want 409 ALREADY_RUNS_PAST, got %d %s", rr.Code, rr.Body.String())
+	}
+	if len(got) != 0 {
+		t.Fatalf("nothing may be written for a refusal: %+v", got)
+	}
+	if rr := call(`{"project_id":"p1","role_key":"trained","reason":"r","duration_days":90,"extend":true}`); rr.Code >= 300 {
+		t.Fatalf("a later end is an extension: %d %s", rr.Code, rr.Body.String())
+	}
+	if len(got) != 1 || got[0].EndRule != db.EndSet {
+		t.Fatalf("an extension sets the end: %+v", got)
+	}
+}
+
+func TestWaitingRequestsSayWhatTheRequesterAlreadyHas(t *testing.T) {
+	resetAccessDeps(t)
+	origGet := dbGetAccessRequests
+	t.Cleanup(func() { dbGetAccessRequests = origGet })
+	dbGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) {
+		return []models.AccessRequest{
+			{ID: "r-wait", RequesterID: "u1", ProjectID: "p1", RoleKey: "community", Status: "pending"},
+			{ID: "r-done", RequesterID: "u1", ProjectID: "p1", RoleKey: "community", Status: "approved"},
+		}, nil
+	}
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		return models.RequestHolding{Kind: models.HoldingForGood}, nil
+	}
+	rr := httptest.NewRecorder()
+	handleGetAccessRequests(rr, httptest.NewRequest(http.MethodGet, "/api/v1/requests", nil))
+	var got []models.AccessRequest
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Holding == nil || got[0].Holding.Kind != models.HoldingForGood {
+		t.Errorf("a waiting request must say what they hold: %+v", got[0].Holding)
+	}
+	if got[1].Holding != nil {
+		t.Errorf("a decided request reads nothing: %+v", got[1].Holding)
 	}
 }

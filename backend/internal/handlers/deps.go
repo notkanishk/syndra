@@ -43,6 +43,7 @@ var (
 
 	dbCreateAccessRequest  = db.CreateAccessRequest
 	dbGetAccessRequestByID = db.GetAccessRequestByID
+	dbRequestHolding       = db.RequestHolding
 	// Taking back your own ask. Scoped to the requester inside the statement, not just here.
 	dbWithdrawAccessRequest = db.WithdrawAccessRequest
 	dbResolveAccessRequest  = db.ResolveAccessRequest

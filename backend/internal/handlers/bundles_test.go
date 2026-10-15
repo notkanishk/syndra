@@ -160,6 +160,24 @@ func TestHandleCreateBundle_HappyPath(t *testing.T) {
 	}
 }
 
+// A name that is taken is an ordinary thing to type, so it reads as a conflict, not a fault.
+func TestHandleCreateBundle_DuplicateNameIs409(t *testing.T) {
+	resetBundleDeps(t)
+
+	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
+		return "", &pgconn.PgError{Code: "23505"}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles",
+		strings.NewReader(`{"name":"Engineering","roles":[{"project_id":"p1","role_key":"laser"}]}`))
+	rr := httptest.NewRecorder()
+	handleCreateBundle(rr, req)
+
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "already exists") {
+		t.Fatalf("expected 409 naming the clash, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestHandleCreateBundle_ResolvedModeReachesCreate is Minor Fix #5: the RESOLVED confirmation
 // mode (not the raw request body) must be the value that actually reaches dbCreateBundle.
 func TestHandleCreateBundle_ResolvedModeReachesCreate(t *testing.T) {

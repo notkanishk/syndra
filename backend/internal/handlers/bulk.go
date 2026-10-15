@@ -240,7 +240,7 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 
 	switch input.Op {
 	case services.BulkOpAssignRole:
-		id, err := enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays)
+		id, err := enqueueBulkGrant(ctx, actor, out.UserID, input.ProjectID, input.RoleKey, input.Reason, input.DurationDays, db.EndKept)
 		if err != nil {
 			return nil, "", err
 		}
@@ -285,7 +285,7 @@ func applyBulkOne(r *http.Request, actor string, input services.BulkRequest, out
 			if _, ok := wanted[g.ID]; !ok {
 				continue
 			}
-			id, err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays)
+			id, err := enqueueBulkGrant(ctx, actor, out.UserID, g.ProjectID, g.RoleKey, input.Reason, input.DurationDays, db.EndSet)
 			if err != nil {
 				return nil, "", err
 			}
@@ -317,7 +317,7 @@ func cascadeQueuedReason(res services.CascadeResult) string {
 // exactly as the single-grant handler does, and returns the outbox id. The
 // Zitadel mutation itself happens on the drain the caller runs afterwards — a
 // bulk write is still not allowed to call the Management API from a handler.
-func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, reason string, durationDays int) (string, error) {
+func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, reason string, durationDays int, endRule db.EndRule) (string, error) {
 	var expiresAt *time.Time
 	if durationDays > 0 {
 		expiry := time.Now().UTC().Add(time.Duration(durationDays) * 24 * time.Hour)
@@ -333,14 +333,17 @@ func enqueueBulkGrant(ctx context.Context, actor, userID, projectID, roleKey, re
 	})
 
 	res, err := grantDirect(ctx, db.EnqueueParams{
-		UserID:      userID,
-		ProjectID:   projectID,
-		RoleKeys:    []string{roleKey},
-		GrantedBy:   actor,
-		Reason:      reason,
-		ExpiresAt:   expiresAt,
-		Source:      "direct",
-		OpType:      "add",
+		UserID:    userID,
+		ProjectID: projectID,
+		RoleKeys:  []string{roleKey},
+		GrantedBy: actor,
+		Reason:    reason,
+		ExpiresAt: expiresAt,
+		Source:    "direct",
+		OpType:    "add",
+		// Assign reaches only people without the role (the plan says no change
+		// for the rest); extend sets the later end its plan chose.
+		EndRule:     endRule,
 		PayloadJSON: string(payload),
 	})
 	if err != nil {
