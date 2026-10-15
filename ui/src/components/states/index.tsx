@@ -3,8 +3,7 @@
 import Link from "next/link";
 
 import { ApiError } from "@/lib/api-client";
-import { Button } from "@/components/ui/Button";
-import { CopyableValue } from "@/components/ui/CopyableValue";
+import { Notice } from "@/components/ui/Notice";
 // The prose a failure wears lives in one place, shared with every surface that
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
@@ -126,42 +125,33 @@ export function ErrorState({
   onRetry?: () => void;
   bare?: boolean;
 }) {
-  const detail = describeFailure(error);
+  // Zitadel never read: the degraded Notice above the page already says so,
+  // and a second, red one here would call it a failure of this list (N23).
+  if (isNeverRead(error)) return null;
+
   const requestId = error instanceof ApiError ? error.details?.request_id : undefined;
 
+  // The danger Notice (proposed/Notice.md), in the place of what failed to
+  // load. Inside a card it keeps the card's inset rather than drawing its own
+  // edge against the card's.
   return (
-    <div
-      role="alert"
-      className={
-        bare
-          ? "row-divider flex flex-col gap-2.5 px-6 py-7"
-          : "flex flex-col gap-2.5 rounded-card border border-danger-line bg-surface-1 px-6 py-7"
-      }
-    >
-      <div className={`type-empty-title ${bare ? "text-danger-text" : ""}`}>{title}</div>
-      <p className="text-[14px] text-muted">{`${sentence(detail)} ${NOTHING_CHANGED}`}</p>
-      {/* The shared control, not a hand-rolled pill: a browser pass found this
-          one rendering at 32px on a phone while every `Button` in the product
-          cleared 44, because the floor lives in `buttonClasses` and this had
-          walked around it. */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        {onRetry && (
-          <Button variant="ghost" size="sm" onClick={onRetry}>
-            Try again
-          </Button>
-        )}
-        {/* A labelled copy row rather than bare mono: an operator pasting this
-            into a message needs to be able to say what it is, and it is the
-            one thing here that gets the failure looked at. */}
-        {requestId && (
-          <div className="mt-1">
-            <CopyableValue value={requestId} label="Reference" />
-            <p className="mt-1 text-[12.5px] text-faint">Quote this if you ask for help.</p>
-          </div>
-        )}
-      </div>
+    <div className={bare ? "row-divider px-4 py-4 tablet:px-5" : ""}>
+      <Notice
+        tone="danger"
+        blocking
+        title={title}
+        action={onRetry ? { label: "Try again", onClick: onRetry } : undefined}
+        reference={typeof requestId === "string" ? requestId : undefined}
+      >
+        {`${sentence(describeFailure(error))} ${NOTHING_CHANGED}`}
+      </Notice>
     </div>
   );
+}
+
+/** A read Zitadel has never answered: there is nothing to show, not a failure. */
+export function isNeverRead(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "DIRECTORY_UNREACHABLE";
 }
 
 /**
@@ -189,6 +179,8 @@ export function ListStates({
   children: React.ReactNode;
 }) {
   if (isLoading) return <>{skeleton ?? <RowSkeleton />}</>;
+  // Never read (N23): no skeleton, no empty state, no rows.
+  if (isNeverRead(error)) return null;
   if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} bare />;
   if (isEmpty) return <>{empty}</>;
   // `arrive`, applied at the one place every list in the product already

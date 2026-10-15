@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -180,5 +182,71 @@ func TestHandleSystemMode_DegradedFallback(t *testing.T) {
 	}
 	if got.Directory != "demo" || !got.ZitadelConfigured {
 		t.Fatalf("expected demo+configured combo, got %+v", got)
+	}
+}
+
+// freshSource is a live directory that reports when Zitadel last answered.
+type freshSource struct {
+	stubSource
+	at      time.Time
+	current bool
+}
+
+func (s freshSource) Freshness() (time.Time, bool) { return s.at, s.current }
+
+// N23: Zitadel stopping is degraded, and last_read_at says whether there is a
+// last known read to show (set) or nothing at all (null).
+func TestHandleSystemMode_ZitadelStoppedAnswering(t *testing.T) {
+	at := time.Date(2026, 10, 16, 9, 40, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		src      freshSource
+		degraded bool
+		lastRead *time.Time
+	}{
+		{"answering", freshSource{stubSource{tag: "zitadel"}, at, true}, false, &at},
+		{"stopped, last read kept", freshSource{stubSource{tag: "zitadel"}, at, false}, true, &at},
+		{"never read", freshSource{stubSource{tag: "zitadel"}, time.Time{}, false}, true, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withSystemDeps(t, tc.src, true, false)
+			rr := httptest.NewRecorder()
+			handleSystemMode(rr, httptest.NewRequest(http.MethodGet, "/api/v1/system/mode", nil))
+
+			var got SystemModeResponse
+			if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if got.Degraded != tc.degraded {
+				t.Fatalf("degraded: want %v, got %v", tc.degraded, got.Degraded)
+			}
+			if (got.LastReadAt == nil) != (tc.lastRead == nil) ||
+				(got.LastReadAt != nil && !got.LastReadAt.Equal(*tc.lastRead)) {
+				t.Fatalf("last_read_at: want %v, got %v", tc.lastRead, got.LastReadAt)
+			}
+		})
+	}
+}
+
+// With nothing ever read, a directory read is 503 DIRECTORY_UNREACHABLE and
+// carries no rows, so the page shows its Notice and nothing else.
+func TestViewError_UnreachableIs503WithNoRows(t *testing.T) {
+	rr := httptest.NewRecorder()
+	viewError(rr, fmt.Errorf("list users: %w", directory.ErrUnreachable), http.StatusInternalServerError, "VIEW_ERROR")
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", rr.Code)
+	}
+	var body ErrorResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Error != "DIRECTORY_UNREACHABLE" {
+		t.Fatalf("want DIRECTORY_UNREACHABLE, got %q", body.Error)
+	}
+
+	rr = httptest.NewRecorder()
+	viewError(rr, errors.New("boom"), http.StatusNotFound, "NOT_FOUND")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("any other failure keeps its handler's status, got %d", rr.Code)
 	}
 }

@@ -133,7 +133,7 @@ export function ReadFreshness({
             ? "bg-healthy"
             : reading === "stale"
               ? "bg-warn"
-              : "border border-muted"
+              : "border border-warn"
         }`}
       />
       <span className={TONE[reading]}>{sentence(reading, subject, age, Boolean(onRefresh))}</span>
@@ -146,7 +146,7 @@ export function ReadFreshness({
       )}
       {onRefresh && reading === "stale" && (
         <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
-          {refreshing ? "Reading…" : "Read again"}
+          {refreshing ? "Reading" : "Read again"}
         </Button>
       )}
     </div>

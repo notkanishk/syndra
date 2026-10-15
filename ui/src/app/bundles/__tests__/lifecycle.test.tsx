@@ -134,9 +134,9 @@ describe("bundle rename", () => {
   /**
    * `setOutcome` used to fire alongside `onClose`, which unmounts the dialog
    * before "Now called Lab Technician" is ever painted. It now stays open on
-   * success until Done is pressed, same fix as the create dialog.
+   * success until Close is pressed, same fix as the create dialog.
    */
-  it("shows the rename landed and stays open until Done is pressed", async () => {
+  it("shows the rename landed and stays open until Close is pressed", async () => {
     render(<BundlesPage />);
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
 
@@ -148,7 +148,7 @@ describe("bundle rename", () => {
     );
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(document.body.textContent).not.toMatch(/Now called Lab Technician/);
   });
 });
@@ -188,16 +188,16 @@ describe("after a bundle is deleted", () => {
     expect(screen.queryByRole("button", { name: "Delete and revoke" })).toBeNull();
     // And the way out stops being a refusal, because there is nothing to refuse.
     expect(screen.queryByRole("button", { name: "Keep it" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
   it("clears the parent's selection only when the operator dismisses", async () => {
     await deleteTheSecondBundle();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeTruthy());
 
     // Still pinned to the deleted bundle until this click: the report is being
     // read, and the page must not move under it.
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     // The selection is released, which re-renders the PAGE — and the page is
     // what holds the list. Closing the dialog alone re-renders the workspace
@@ -220,6 +220,6 @@ describe("after a bundle is deleted", () => {
     // refusal. Relabelling here would tell the operator it worked.
     expect(screen.getByRole("button", { name: "Delete and revoke" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Keep it" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
   });
 });

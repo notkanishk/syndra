@@ -165,7 +165,7 @@ export default function AutomaticRulesPage() {
             <div
               key={rule.id}
               className={`row-divider flex w-full min-h-[60px] items-center gap-3 px-5 tablet:gap-[18px] ${
-                selection.isSelected(rule.id) ? "bg-accent-soft/30" : ""
+                selection.isSelected(rule.id) ? "bg-accent-soft" : ""
               }`}
             >
               {selecting && (
@@ -290,7 +290,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
   // Saved used to close the dialog in the same tick as setOutcome, which
   // discarded `savedDetail()` — the operator's only account of whether the
   // rule waits under Pending changes or already applied — before it ever
-  // painted. Now the footer swaps to Done, same as DeleteRuleConfirm below.
+  // painted. Now the footer swaps to Close, same as DeleteRuleConfirm below.
   // Both `applied` (auto mode) and `queued` (manual mode) mean the rule
   // itself saved; only a thrown error leaves the form armed to retry.
   const saved = outcome?.kind === "applied" || outcome?.kind === "queued";
@@ -548,7 +548,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
       >
         {saved && (
           <Button variant="accent" onClick={onClose}>
-            Done
+            Close
           </Button>
         )}
         {!saved && (
@@ -723,7 +723,7 @@ function DeleteRuleConfirm({
           disabled={remove.isPending}
           onClick={gone ? onDeleted : onCancel}
         >
-          {gone ? "Done" : "Keep the rule"}
+          {gone ? "Close" : "Keep the rule"}
         </Button>
         {!gone && (
         <Button

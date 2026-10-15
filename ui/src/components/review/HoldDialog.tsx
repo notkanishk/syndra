@@ -205,7 +205,7 @@ export function HoldDialog({
           onClick={onClose}
           disabled={create.isPending}
         >
-          {succeeded ? "Done" : "Cancel"}
+          {succeeded ? "Close" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>

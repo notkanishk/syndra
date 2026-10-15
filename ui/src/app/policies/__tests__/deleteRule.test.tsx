@@ -200,14 +200,14 @@ describe("after a rule is deleted", () => {
     await waitFor(() => expect(document.body.textContent).toMatch(/deleted/i));
     expect(screen.queryByRole("button", { name: "Delete rule and revoke access" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Keep the rule" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
   it("closes the editor on dismiss, rather than returning to it", async () => {
     await deleteTheRule();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeTruthy());
 
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     // Not back to the form: there is no rule behind it any more. `Keep the
     // rule` would have landed here instead, which is the defect.
@@ -225,7 +225,7 @@ describe("after a rule is deleted", () => {
 
     await waitFor(() => expect(document.body.textContent).toMatch(/unreachable/i));
     expect(screen.getByRole("button", { name: "Delete rule and revoke access" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
 
     // The rule is still there, so backing out puts the operator back on it.
     fireEvent.click(screen.getByRole("button", { name: "Keep the rule" }));

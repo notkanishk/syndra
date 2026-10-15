@@ -2,7 +2,9 @@
 
 import { useEffect } from "react";
 
-import { CopyableValue } from "@/components/ui/CopyableValue";
+import { ARROW_LINK } from "@/components/ui/ArrowLink";
+import { Notice } from "@/components/ui/Notice";
+import { NOTHING_CHANGED } from "@/lib/outcome";
 
 /**
  * When the app itself fails.
@@ -32,35 +34,29 @@ export default function AppError({ error }: { error: Error & { digest?: string }
     console.error("Syndra failed to render:", error);
   }, [error]);
 
+  // The shell is still standing, so this is said the way every failure is:
+  // the danger Notice in the content column, ending "Nothing was changed.",
+  // the reference as a copy row, and the way home as a violet text link.
   return (
-    <div className="flex min-h-[60dvh] items-center justify-center px-5">
-      <div className="w-full max-w-[52ch] rounded-[18px] border border-danger-line bg-surface-2 px-6 py-7">
-        <h1 className="type-card-title">This page could not be shown.</h1>
-        <p className="mt-2 text-[14.5px] leading-[1.55] text-muted">
-          Something in the page itself failed, not something you did. Nothing was changed:
-          this happened while showing you a screen, not while saving anything.
-        </p>
+    <div className="flex max-w-[76ch] flex-col gap-4">
+      <Notice
+        tone="danger"
+        blocking
+        title="This page couldn't be shown."
+        reference={error.digest || undefined}
+      >
+        Something in the page itself failed, not something you did. It happened while showing you
+        a screen, not while saving anything. {NOTHING_CHANGED}
+      </Notice>
 
-        {error.digest ? (
-          <div className="mt-4">
-            <div className="mb-1 type-label">Reference</div>
-            <CopyableValue label="Reference" value={error.digest} />
-            <p className="mt-1 text-[12.5px] text-faint">Quote this if you ask for help.</p>
-          </div>
-        ) : null}
-
-        {/* A plain anchor rather than a Link, deliberately: a soft navigation
-            re-renders the same client tree, and if what threw was in a layout
-            or a provider it throws again on arrival. A full document load is
-            the one way back that does not depend on the thing that broke. */}
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a
-          href="/"
-          className="mt-5 inline-flex min-h-[44px] items-center rounded-pill bg-accent-dense px-4 text-[13.5px] font-semibold text-accent-ink"
-        >
-          Go to the home page
-        </a>
-      </div>
+      {/* A plain anchor rather than a Link, deliberately: a soft navigation
+          re-renders the same client tree, and if what threw was in a layout
+          or a provider it throws again on arrival. A full document load is
+          the one way back that does not depend on the thing that broke. */}
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+      <a href="/" className={`${ARROW_LINK} self-start`}>
+        Go to the home page <span aria-hidden>→</span>
+      </a>
     </div>
   );
 }

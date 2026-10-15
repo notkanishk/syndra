@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnchoredPanel } from "@/components/ui/Anchored";
 
 import { Badge } from "@/components/ui/Badge";
+import { NextStep } from "@/components/ui/NextStep";
 
 /**
  * Access source — the signature component.
@@ -151,10 +152,8 @@ export function nothingSentYet(reasons: RoleReason[] | undefined | null): boolea
  * the confirmation the deployment asked for is the system working. What it must
  * not do is read as delivered.
  */
-export function NotSentYet({ className = "" }: { className?: string }) {
-  return (
-    <span className={`font-semibold text-warn-text ${className}`}>Waiting to be sent</span>
-  );
+export function NotSentYet({ className = "", why }: { className?: string; why?: string }) {
+  return <NextStep why={why} className={className} />;
 }
 
 export function AccessSourceList({
