@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Checkbox } from "@/components/ui/Choice";
 
 import { Mono } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
@@ -100,12 +101,10 @@ export function RolePicker({
                       locked ? "text-faint" : "cursor-pointer"
                     }`}
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={locked || selected.has(id)}
                       disabled={locked || disabled}
                       onChange={() => onToggle(id)}
-                      className="h-4 w-4 shrink-0 accent-[var(--accent)]"
                     />
                     <span className="min-w-0 flex-1 truncate">
                       {role.display_name || humanizeKey(role.role_key)}{" "}
