@@ -108,7 +108,7 @@ export function PublishVersionDialog({
                   key={`-${role.zitadel_project_id}:${role.zitadel_role_key}`}
                   className="flex items-baseline gap-2"
                 >
-                  <span className="font-semibold text-danger-text">−</span>
+                  <span className="font-semibold text-warn-text">−</span>
                   <RoleRef
                     projectId={role.zitadel_project_id}
                     roleKey={role.zitadel_role_key}

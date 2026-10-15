@@ -58,11 +58,39 @@ function open() {
   );
 }
 
+// Each project is a fold, closed until searched in or something in it is chosen.
+function openFolds() {
+  for (const fold of screen.getAllByRole("button", { expanded: false })) fireEvent.click(fold);
+}
+
 describe("AddRolesToBundle", () => {
   it("groups the whole catalogue by project so one search spans all of them", () => {
     open();
     expect(screen.getByText("Printing Lab")).toBeInTheDocument();
     expect(screen.getByText("Metal Shop")).toBeInTheDocument();
+  });
+
+  it("keeps each project folded until the operator opens it", () => {
+    open();
+    const fold = screen.getByRole("button", { name: /Printing Lab/ });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    expect(fold).toHaveTextContent("2 roles");
+
+    fireEvent.click(fold);
+    expect(fold).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("unticks a role from its chip", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Maintainer/ }));
+
+    expect(screen.getByRole("button", { name: "Add 1 role" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Maintainer" }));
+
+    expect(screen.queryByRole("button", { name: "Remove Maintainer" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: /Maintainer/ })).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: /^Add \d+ roles?$/ })).toBeNull();
   });
 
   it("searches across projects, not within one", async () => {
@@ -86,6 +114,7 @@ describe("AddRolesToBundle", () => {
 
   it("adds every picked role, one write at a time", async () => {
     open();
+    openFolds();
     const boxes = screen.getAllByRole("checkbox");
     fireEvent.click(boxes[0]);
     fireEvent.click(boxes[1]);
@@ -106,6 +135,7 @@ describe("AddRolesToBundle", () => {
       .mockRejectedValueOnce(new Error("Zitadel refused that role."));
 
     open();
+    openFolds();
     const boxes = screen.getAllByRole("checkbox");
     fireEvent.click(boxes[0]);
     fireEvent.click(boxes[1]);
@@ -124,6 +154,7 @@ describe("AddRolesToBundle", () => {
     state.addRole = vi.fn().mockRejectedValue(new Error("nope"));
 
     render(<AddRolesToBundle bundleId="b-1" name="Lab Tech" holders={4} onClose={onClose} />);
+    openFolds();
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
     fireEvent.click(screen.getByRole("button", { name: "Add 1 role" }));
 
