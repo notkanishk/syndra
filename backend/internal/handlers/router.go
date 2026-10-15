@@ -41,6 +41,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/bundles/{id}/versions", withCORS(withUserAuth(handleGetBundleVersions)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/holders", withCORS(withOperatorAuth(handleGetBundleHolders)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(handleGetBundleDraft)))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(handleDiscardBundleDraft)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/publish", withCORS(withOperatorAuth(handlePublishBundleVersion)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/holders/move", withCORS(withOperatorAuth(handleMoveBundleHolders)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withUserAuth(handleGetBundleImpact)))

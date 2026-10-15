@@ -34,6 +34,10 @@ export interface BundleHolder {
   version_id: string;
   version: number;
   assigned_at: string;
+  /** How they got it. Absent on rows recorded before this was tracked. */
+  assigned_by?: string; // absent too when automatic (welcome)
+  source?: "direct" | "request" | "moved" | "welcome";
+  moved_from_version?: number;
 }
 
 /** The unpublished difference between the working copy and the latest version. */

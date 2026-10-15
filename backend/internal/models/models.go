@@ -80,6 +80,11 @@ type BundleHolder struct {
 	VersionID  string    `json:"version_id"`
 	Version    int       `json:"version"`
 	AssignedAt time.Time `json:"assigned_at"`
+	// How they came to hold it. All three are absent for rows written before
+	// they were recorded; AssignedBy is also absent for automatic assignments.
+	AssignedBy       *string `json:"assigned_by,omitempty"`
+	Source           *string `json:"source,omitempty"` // direct | request | moved | welcome
+	MovedFromVersion *int    `json:"moved_from_version,omitempty"`
 }
 
 // BundleRole represents a specific Zitadel role mapped to a bundle

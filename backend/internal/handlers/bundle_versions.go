@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Bundle version surfaces.
@@ -82,6 +85,31 @@ func handleGetBundleDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, draft)
+}
+
+// DELETE /api/v1/bundles/{id}/draft — "Discard changes": the working copy goes
+// back to exactly the latest published version. Nobody's access is touched, so
+// there is no rehearsal and no cascade. Returns the fresh (empty) draft; with
+// nothing unpublished it is the same answer, still 200.
+func handleDiscardBundleDraft(w http.ResponseWriter, r *http.Request) {
+	bundleID := r.PathValue("id")
+	if !trimmedNonEmpty(bundleID) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	if err := svcDiscardBundleDraft(r.Context(), actor, bundleID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "bundle not found")
+			return
+		}
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	handleGetBundleDraft(w, r)
 }
 
 // PublishBundleVersionRequest is the body of a publish.

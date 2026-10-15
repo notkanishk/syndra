@@ -171,7 +171,8 @@ func GetUserBundleRolesGrouped(ctx context.Context, userID string) (map[string][
 // sits on, newest version first then user id, so the list has a stable order.
 func GetBundleHoldersByVersion(ctx context.Context, bundleID string) ([]models.BundleHolder, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT uba.user_id, bv.id, bv.version, uba.assigned_at
+		SELECT uba.user_id, bv.id, bv.version, uba.assigned_at,
+		       uba.assigned_by, uba.source, uba.moved_from_version
 		FROM user_bundle_assignments uba
 		JOIN bundle_versions bv ON bv.id = uba.version_id
 		WHERE uba.bundle_id = $1
@@ -184,7 +185,8 @@ func GetBundleHoldersByVersion(ctx context.Context, bundleID string) ([]models.B
 	var out []models.BundleHolder
 	for rows.Next() {
 		var h models.BundleHolder
-		if err := rows.Scan(&h.UserID, &h.VersionID, &h.Version, &h.AssignedAt); err != nil {
+		if err := rows.Scan(&h.UserID, &h.VersionID, &h.Version, &h.AssignedAt,
+			&h.AssignedBy, &h.Source, &h.MovedFromVersion); err != nil {
 			return nil, fmt.Errorf("scan bundle holder: %w", err)
 		}
 		h.BundleID = bundleID
@@ -304,9 +306,7 @@ func PublishVersionAndEnqueue(
 	}
 
 	if len(moved) > 0 {
-		if _, err := tx.Exec(ctx, `
-			UPDATE user_bundle_assignments SET version_id = $1
-			WHERE bundle_id = $2 AND user_id = ANY($3)`, out.ID, bundleID, moved); err != nil {
+		if _, err := tx.Exec(ctx, repinHolders, out.ID, bundleID, moved, actor); err != nil {
 			return out, nil, fmt.Errorf("repin holders: %w", err)
 		}
 	}
@@ -327,6 +327,61 @@ func PublishVersionAndEnqueue(
 		}
 	}
 	return out, ids, nil
+}
+
+// repinHolders moves holders ($3) of bundle $2 onto version $1 and records the
+// move: who did it ($4) and the version number they came from. Someone already
+// on $1 is left alone, so a no-op move never claims they "moved from" where
+// they still are.
+const repinHolders = `
+	UPDATE user_bundle_assignments uba
+	SET version_id = $1, source = 'moved', assigned_by = $4, moved_from_version = old.version
+	FROM bundle_versions old
+	WHERE old.id = uba.version_id
+	  AND uba.bundle_id = $2 AND uba.user_id = ANY($3) AND uba.version_id <> $1`
+
+// DiscardBundleDraft resets the working copy (bundle_roles) to exactly the
+// latest published version's roles, and audits it, in one transaction. Nobody's
+// access changes: holders resolve through their pinned version, never through
+// the working copy, so there is nothing to enqueue.
+func DiscardBundleDraft(ctx context.Context, actor, bundleID string) error {
+	tx, owned, err := beginOrJoin(ctx)
+	if err != nil {
+		return err
+	}
+	if owned {
+		defer tx.Rollback(ctx)
+	}
+
+	// Without a published version there is nothing to reset to, and the
+	// DELETE below would empty the working copy instead. Every bundle is
+	// created with v1, so this is a missing bundle.
+	var latestID string
+	if err := tx.QueryRow(ctx, `
+		SELECT id FROM bundle_versions WHERE bundle_id = $1
+		ORDER BY version DESC LIMIT 1`, bundleID).Scan(&latestID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM bundle_roles WHERE bundle_id = $1`, bundleID); err != nil {
+		return fmt.Errorf("clear working copy: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO bundle_roles (bundle_id, zitadel_project_id, zitadel_role_key)
+		SELECT $1, zitadel_project_id, zitadel_role_key
+		FROM bundle_version_roles WHERE version_id = $2`, bundleID, latestID); err != nil {
+		return fmt.Errorf("restore working copy: %w", err)
+	}
+	// The audit row through the one cascade writer, with no params: no outbox
+	// rows, no cascade id — this reached nobody.
+	if _, err := enqueueCascadeRows(ctx, tx, []CascadeAudit{{
+		Actor: actor, Target: bundleID, Action: "bundle.draft_discarded", ResourceID: latestID,
+	}}, nil); err != nil {
+		return fmt.Errorf("audit discard: %w", err)
+	}
+	if owned {
+		return tx.Commit(ctx)
+	}
+	return nil
 }
 
 // MoveHoldersAndEnqueue repins a set of holders onto a version and enqueues
@@ -359,9 +414,7 @@ func MoveHoldersAndEnqueue(
 		return nil, fmt.Errorf("version %s does not belong to bundle %s", versionID, bundleID)
 	}
 
-	if _, err := tx.Exec(ctx, `
-		UPDATE user_bundle_assignments SET version_id = $1
-		WHERE bundle_id = $2 AND user_id = ANY($3)`, versionID, bundleID, userIDs); err != nil {
+	if _, err := tx.Exec(ctx, repinHolders, versionID, bundleID, userIDs, actor); err != nil {
 		return nil, fmt.Errorf("repin holders: %w", err)
 	}
 
