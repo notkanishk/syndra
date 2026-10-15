@@ -87,6 +87,16 @@ type BulkRequest struct {
 	// outside the 30-day window the screen is scoped to. A bulk write must be
 	// able to say exactly what was ticked.
 	GrantIDs []string
+	// Actor is who asks. A bulk operation that takes access away leaves them
+	// out (#32, B4): an operator never takes access from themselves in bulk;
+	// their own page is where they change their own access.
+	Actor string
+}
+
+// BulkExclusion is a selected person a plan leaves out, and why.
+type BulkExclusion struct {
+	UserID string `json:"user_id"`
+	Reason string `json:"reason"` // "self"
 }
 
 // BulkOutcome is one person's row in the plan (before) or the result (after).
@@ -142,6 +152,9 @@ type BulkPlan struct {
 	// something a client sends back.
 	RequestFingerprint string        `json:"-"`
 	Outcomes           []BulkOutcome `json:"outcomes"`
+	// Excluded are selected people the plan leaves out: today only the
+	// requester, from an operation that takes access away.
+	Excluded []BulkExclusion `json:"excluded,omitempty"`
 	Summary            BulkSummary   `json:"summary"`
 }
 
@@ -240,7 +253,12 @@ func RehearseBulk(ctx context.Context, req BulkRequest) (BulkPlan, error) {
 	}
 
 	plan := BulkPlan{Op: req.Op}
+	takesAway := req.Op == BulkOpRemoveRole || req.Op == BulkOpRemoveBundle
 	for _, uid := range dedupeIDs(req.UserIDs) {
+		if takesAway && req.Actor != "" && uid == req.Actor {
+			plan.Excluded = append(plan.Excluded, BulkExclusion{UserID: uid, Reason: "self"})
+			continue
+		}
 		outcome, err := rehearseOne(ctx, snap, profiles, req, bundleName, uid)
 		if err != nil {
 			return BulkPlan{}, err

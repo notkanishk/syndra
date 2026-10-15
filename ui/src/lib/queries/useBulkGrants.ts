@@ -110,6 +110,8 @@ export interface BulkPlan {
   plan_id?: string;
   applied: boolean;
   outcomes: BulkOutcome[];
+  /** Selected people the plan leaves out: the requester, from anything that takes access away (#32). */
+  excluded?: { user_id: string; reason: "self" }[];
   summary: BulkSummary;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { AnchoredPanel } from "@/components/ui/Anchored";
 
@@ -19,6 +19,7 @@ export function WaitsMark({
 }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
+  const tip = useId();
   const show = () => setOpen(true);
   const hide = () => setOpen(false);
 
@@ -30,7 +31,7 @@ export function WaitsMark({
         ref={anchor}
         role="img"
         aria-label="Waits for you"
-        aria-describedby={open ? "waits-mark-tip" : undefined}
+        aria-describedby={open ? tip : undefined}
         tabIndex={0}
         onMouseEnter={show}
         onMouseLeave={hide}
@@ -46,7 +47,7 @@ export function WaitsMark({
         open={open}
         width={260}
         expectHeight={64}
-        id="waits-mark-tip"
+        id={tip}
       >
         <span
           role="tooltip"

@@ -75,6 +75,7 @@ func handleBulkGrants(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor := resolveActor(r, "")
+	input.Actor = actor
 	requestFP := services.FingerprintBulkRequest(input)
 
 	if r.URL.Query().Get("apply") != "true" {
@@ -314,7 +315,10 @@ func cascadeQueuedReason(res services.CascadeResult) string {
 	switch {
 	case res.Enqueued == 0:
 		return "" // nothing to propagate; the closure was already correct
-	case res.Mode != "auto":
+	case res.Waiting > 0 && res.WaitReason == db.WaitReasonRoleWaits:
+		return "a role it gives always waits for you"
+	case res.Waiting > 0:
+		// Before the switch over: the bundle's own mode held it.
 		return "this bundle applies on confirmation"
 	case res.Drain.Halted && res.Drain.Reason != "":
 		return res.Drain.Reason
