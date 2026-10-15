@@ -121,7 +121,7 @@ The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built 
 
 ### Reconcile build — what design gave, in its order
 
-Steps 1 (foundations) and 2 (never sample data) are built in [`changes/reconcile-build`](changes/reconcile-build/tasks.md). Next is step 3, confirmation option B (`waits_for_send`). The open tasks there carry their triage tags.
+Steps 1 (foundations), 2 (never sample data) and 3 (roles that wait for you) are built in [`changes/reconcile-build`](changes/reconcile-build/tasks.md). Next is step 4, the screens. Migration 000056 ships with step 3; the switch over on production is the owner's, from Roles that wait. The open tasks there carry their triage tags.
 
 ### Architecture deepening — the 16 Oct review
 

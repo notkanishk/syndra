@@ -30,10 +30,19 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
 - [ ] 2.9 [ready-for-agent] DegradedBanner.md: giving and revoking buttons disabled while degraded (check what `useDegraded` already disables)
 
 ## 3. Confirmation, option B (N14–N18)
-- [ ] 3.1 Backend: `waits_for_send` on (project, role key) with `marked_by`, `marked_at`; `wait_reason` on outbox rows
-- [ ] 3.2 Every path decides by the role's flag: cascade and bundle publish, grants by hand (replacing `?apply=true`), request approval
-- [ ] 3.3 WaitsMark, RolePicker (one for every role choice), Roles that wait settings, project When given, nav 3a
-- [ ] 3.4 Next step reads per user, rule, request and bundle version; outcomes say why a send didn't happen
+- [x] 3.1 Backend: `role_waits` (project, role key, `marked_by`, `marked_at`) and `propagation_outbox.wait_reason` (`role_waits` | `manual` | `halted:<reason>`), migration 000056
+- [x] 3.2 One rule, `services.Deliver`: cascades and bundle publish (`applyMode`), grants and removals by hand, request approval and bulk direct ops all decide through it. A row waits when a role it carries is marked; until the switch over (`confirmation.model = roles`) the old modes and `?apply=true` still hold their changes too, so nothing reaches Zitadel sooner than before. The unattended revocation runner skips rows whose role waits
+- [x] 3.3 API: `GET /roles-that-wait` (with the one-time move's suggestions until the switch), `PUT|DELETE /roles-that-wait/{project}/{role}` (audited), `PUT /config/confirmation-model`; the role catalogue carries `waits_for_send`; grants, removals, approvals and cascades return `wait_reason`
+- [x] 3.4 Roles that wait for you at `/changes/roles-that-wait` (`/automation/settings` redirects): the one-time move ("Mark N and finish", "Mark none"), the list by project with Marked, People and Stop waiting, Add roles through the role picker with its before-line, the waiting-changes line
+- [x] 3.5 WaitsMark: picker rows and legend, a project's When given column and line, rule rows and editor, Requests (Asked for), a person's role rows, Give a role
+- [x] 3.6 Nav 3a: Automatic rules and Access map at top level; a Changes group with Pending changes, Change history, Roles that wait. The drift sound moved to the Account sheet (Segmented Off · On, its three state lines)
+- [x] 3.7 Words from `wait_reason` (`lib/wait-reason.ts`): Pending changes "Why it's waiting", Give a role before-line and outcomes, approval outcomes, the new role's "Make it wait for you →", the rule editor's before-line; rule mode controls removed
+- [ ] 3.8 [ready-for-human] Run the live-database test `TestRoleWaits_MarkReadAndRecordAgainstTheSchema` once migration 000056 is on a test database (needs the owner's yes to migrate one)
+- [ ] 3.9 [ready-for-agent] After the switch over runs on production: a migration dropping `bundles.confirmation_mode`, `mapping_rules.confirmation_mode` and the global default setting, and the code that reads them (`applyMode`'s mode, `?apply=true`)
+- [ ] 3.10 [ready-for-agent] Bundle editor: When given per role and its summary sentence; publish review grouped Straight away · Waits for you · Unchanged (with step 4, Bundles v2)
+- [ ] 3.11 [ready-for-agent] My access 5 (N19): a member's waiting approval in Recent changes (needs B10's member-scoped read)
+- [ ] 3.12 [ready-for-agent] Next step reads per user, rule, request and bundle version (one query keyed by `source_ref`), so the status stays on the changed thing after a reload; today it shows on the outcome and in Pending changes
+- [ ] 3.13 [needs-triage] Home and a person's Requests tab still show the old approval text (they call `useDecideRequest` without `approvalOutcome`)
 
 ## 4. Screens
 - [ ] 4.1 Bundles v2 (B5–B7, B9; B8 needs the owner's yes)

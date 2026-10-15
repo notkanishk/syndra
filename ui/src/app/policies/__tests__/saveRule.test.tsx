@@ -8,6 +8,7 @@ import type { MappingRuleRow } from "@/lib/queries/useMappingRules";
 const state = vi.hoisted(() => ({
   rules: [] as MappingRuleRow[],
   update: vi.fn(),
+  targetWaits: false,
 }));
 
 vi.mock("@/lib/queries/useMappingRules", () => ({
@@ -15,18 +16,17 @@ vi.mock("@/lib/queries/useMappingRules", () => ({
   useCreateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateMappingRule: () => ({ mutateAsync: state.update, isPending: false }),
   useDeleteMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useSetRuleConfirmationMode: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useValidateMappingRule: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-}));
-
-vi.mock("@/lib/queries/useConfirmationMode", () => ({
-  useBulkSetConfirmationMode: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({ data: [{ project: { id: "pLaser", name: "Laser Lab" } }] }),
 }));
 
+// Before the switch over: a rule's own mode still holds its changes.
+vi.mock("@/lib/queries/useRolesThatWait", () => ({
+  useRolesThatWait: () => ({ data: { switched_over: false, roles: [], suggestions: [] } }),
+}));
 vi.mock("@/lib/queries/useRoles", () => ({
   useGlobalRoleCatalog: () => ({
     data: [
@@ -35,6 +35,7 @@ vi.mock("@/lib/queries/useRoles", () => ({
         project_name: "Laser Lab",
         role_key: "trained",
         display_name: "Trained",
+        waits_for_send: state.targetWaits,
       },
     ],
   }),
@@ -54,7 +55,6 @@ function rule(overrides: Partial<MappingRuleRow> = {}): MappingRuleRow {
     source_role: "member",
     target_project: "pLaser",
     target_role: "trained",
-    confirmation_mode: "manual",
     holder_count: 12,
     created_at: "2026-01-01T00:00:00Z",
     ...overrides,
@@ -72,6 +72,7 @@ async function saveTheOpenRule() {
 beforeEach(() => {
   state.rules = [rule()];
   state.update = vi.fn().mockResolvedValue({});
+  state.targetWaits = false;
 });
 
 afterEach(cleanup);
@@ -98,7 +99,8 @@ describe("opening a rule to edit", () => {
 });
 
 describe("after saving a rule", () => {
-  it("keeps the dialog open and reports where the access goes, for a manual rule", async () => {
+  it("keeps the dialog open and reports where the access goes, when the role waits", async () => {
+    state.targetWaits = true;
     await saveTheOpenRule();
 
     await waitFor(() => expect(document.body.textContent).toMatch(/Rule updated/));
@@ -112,14 +114,39 @@ describe("after saving a rule", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
-  it("reports Applied for an auto rule, and closes on Close", async () => {
-    state.rules = [rule({ confirmation_mode: "auto" })];
+  it("reports Applied when the role does not wait, and closes on Close", async () => {
     await saveTheOpenRule();
 
     await waitFor(() => expect(document.body.textContent).toMatch(/Applied/));
-    expect(document.body.textContent).toMatch(/takes effect the moment the rule applies|get the second at once/);
+    expect(document.body.textContent).toMatch(/get the second at once/);
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Close" })).toBeNull());
+  });
+});
+
+describe("the before-line", () => {
+  function pickBothRoles() {
+    render(<AutomaticRulesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "New rule" }));
+    fireEvent.change(screen.getByLabelText(/If someone holds/), { target: { value: "pLaser" } });
+    fireEvent.change(screen.getByLabelText("Role they hold"), { target: { value: "trained" } });
+    fireEvent.change(screen.getByLabelText(/then also give them/), { target: { value: "pLaser" } });
+    fireEvent.change(screen.getByLabelText("Role to give"), { target: { value: "trained" } });
+  }
+
+  it("is neutral when the role it gives does not wait", () => {
+    pickBothRoles();
+    expect(document.body.textContent).toContain("What this rule gives goes straight to Zitadel.");
+    expect(screen.queryByRole("img", { name: "Waits for you" })).toBeNull();
+  });
+
+  it("warns, and marks the role, when the role it gives waits", () => {
+    state.targetWaits = true;
+    pickBothRoles();
+    expect(document.body.textContent).toContain(
+      "Trained always waits for you, so what this rule gives will wait for you to send.",
+    );
+    expect(screen.getAllByRole("img", { name: "Waits for you" }).length).toBeGreaterThan(0);
   });
 });

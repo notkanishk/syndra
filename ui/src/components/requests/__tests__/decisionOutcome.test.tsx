@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 
-const decide = vi.fn().mockResolvedValue(undefined);
+const decide = vi.fn().mockResolvedValue({ message: "Request resolved" });
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
@@ -24,6 +24,21 @@ vi.mock("@/lib/queries/useRequests", async (importOriginal) => ({
   useDecideRequest: () => ({ mutateAsync: decide, isPending: false }),
   useRehearseBulkDecision: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useApplyBulkDecision: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
+vi.mock("@/lib/queries/useRoles", () => ({
+  useGlobalRoleCatalog: () => ({
+    data: [
+      {
+        project_id: "pLaser",
+        role_key: "trained",
+        project_name: "Laser",
+        display_name: "Trained",
+        assigned_user_count: 2,
+        waits_for_send: true,
+      },
+    ],
+  }),
 }));
 
 vi.mock("@/lib/queries/useCatalogUsers", () => ({
@@ -67,11 +82,46 @@ describe("a decided request names its person and its next step", () => {
     expect(screen.queryByText("u1")).toBeNull();
   });
 
-  it("approving says Zitadel hasn't confirmed it yet — the response never says so", async () => {
+  it("marks a role that waits in the Asked for cell", () => {
+    renderQueue();
+    expect(screen.getByRole("img", { name: "Waits for you" })).toBeTruthy();
+  });
+
+  it("approving with nothing waiting says they can use it now", async () => {
     renderQueue();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(decide).toHaveBeenCalledWith({ id: "r1", status: "approved" }));
-    expect(await screen.findByText(/Approved\. Sent; Zitadel has not been read back yet\./)).toBeTruthy();
+    expect(await screen.findByText(/Approved\. They can use it now\./)).toBeTruthy();
+  });
+
+  it("approving a role that always waits points at Pending changes", async () => {
+    decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "role_waits" });
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(
+      await screen.findByText("Approved. This role always waits for you, so it's in Pending changes."),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeTruthy();
+  });
+
+  it("approving while Zitadel was offline says when, and that it goes when sent", async () => {
+    decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "halted:zitadel_offline" });
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(
+      await screen.findByText(
+        /^Approved\. Not in Zitadel yet: Zitadel didn't answer at \d\d:\d\d\. It goes when you send it\.$/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("approving after another stop uses that stop's words", async () => {
+    decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "halted:drain_in_progress" });
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(
+      await screen.findByText(/Approved\. Not in Zitadel yet: Another send was running at \d\d:\d\d\./),
+    ).toBeTruthy();
   });
 
   it("declining carries no Zitadel caveat — nothing was ever sent there", async () => {

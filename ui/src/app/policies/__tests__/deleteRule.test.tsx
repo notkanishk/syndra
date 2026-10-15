@@ -15,18 +15,17 @@ vi.mock("@/lib/queries/useMappingRules", () => ({
   useCreateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteMappingRule: () => ({ mutateAsync: state.remove, isPending: false }),
-  useSetRuleConfirmationMode: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useValidateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
-}));
-
-vi.mock("@/lib/queries/useConfirmationMode", () => ({
-  useBulkSetConfirmationMode: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({ data: [{ project: { id: "pLaser", name: "Laser Lab" } }] }),
 }));
 
+// Before the switch over: a rule's own mode still holds its changes.
+vi.mock("@/lib/queries/useRolesThatWait", () => ({
+  useRolesThatWait: () => ({ data: { switched_over: false, roles: [], suggestions: [] } }),
+}));
 vi.mock("@/lib/queries/useRoles", () => ({
   useGlobalRoleCatalog: () => ({
     data: [
