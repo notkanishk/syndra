@@ -4,7 +4,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
-import type { TargetHealth, TargetInventory, TargetSummary } from "@/lib/queries/useTargets";
+import type {
+  AccountHome,
+  TargetHealth,
+  TargetInventory,
+  TargetSetting,
+  TargetSummary,
+} from "@/lib/queries/useTargets";
 
 const nameResolverMiss = { value: undefined, resolved: true } as const;
 
@@ -36,6 +42,9 @@ const state = {
   adopted: [] as Array<{ username: string; subjectId: string }>,
   adoptResult: { status: "adopted", detail: "The account is now bound to that person." } as unknown,
   projectSet: [] as string[],
+  settings: { read: true, settings: [] as TargetSetting[] } as { read: boolean; settings?: TargetSetting[] },
+  settingPut: [] as Array<{ name: string; value: string }>,
+  homes: { read: true, usage_read: true, accounts: [] as AccountHome[] },
 };
 
 vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
@@ -98,6 +107,16 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useSetLifecycle: () => ({ mutate: vi.fn(), isPending: false }),
+    useTargetSettings: () => ({ data: state.settings, isLoading: false, error: null, refetch: vi.fn() }),
+    useTargetHomes: () => ({ data: state.homes, isLoading: false, error: null }),
+    useSetTargetSetting: () => ({
+      mutate: (input: { name: string; value: string }, opts?: { onSuccess?: () => void }) => {
+        state.settingPut.push(input);
+        opts?.onSuccess?.();
+      },
+      isPending: false,
+      error: null,
+    }),
     useSetTargetProject: () => ({
       mutate: (id: string, opts?: { onSuccess?: () => void }) => {
         state.projectSet.push(id);
@@ -970,5 +989,69 @@ describe("the system's Zitadel project", () => {
     expect(screen.getByRole("link", { name: "Network storage" }).getAttribute("href")).toBe("/projects/p1");
     expect(screen.getAllByRole("link", { name: /mapping/i })).toHaveLength(1);
     expect(screen.queryByText("Choose TrueNAS's Zitadel project")).toBeNull();
+  });
+});
+
+// A-03 §1: where home folders go is chosen once, on the system page, in the
+// settings card; changing it moves nothing, and says how many stay.
+describe("where home folders go", () => {
+  const setting = (value: string, values = ["/mnt/p/main/home_dir", "/mnt/p/main/homes"]): TargetSetting => ({
+    name: "home_root",
+    label: "Where home folders go",
+    value,
+    values,
+    labels: { "/mnt/p/main/home_dir": "main › home_dir", "/mnt/p/main/homes": "main › homes" },
+    values_read: true,
+  });
+  function open(value: string, values?: string[]) {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.settings = { read: true, settings: [setting(value, values)] };
+    state.settingPut = [];
+    state.homes = {
+      read: true,
+      usage_read: true,
+      accounts: [
+        { subject_id: "a", username: "ada", gives_home: true, home: "/mnt/p/main/home_dir/ada" },
+        { subject_id: "b", username: "bo", gives_home: true, home: "/mnt/p/main/home_dir/bo" },
+        { subject_id: "c", username: "cy", gives_home: false },
+      ],
+    };
+    renderTarget();
+  }
+
+  it("is chosen once, and says mappings work without it", () => {
+    open("");
+    expect(screen.getByText("Not chosen yet")).toBeInTheDocument();
+    expect(screen.getByText(/none can give a home folder until it is chosen/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Choose where home folders go")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Nothing is made until a mapping gives home folders/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use main › home_dir" }));
+    expect(state.settingPut).toEqual([{ name: "home_root", value: "/mnt/p/main/home_dir" }]);
+  });
+
+  it("changes without moving anything, and says how many homes stay", () => {
+    open("/mnt/p/main/home_dir");
+    expect(screen.getByText("main › home_dir")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change folder" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByText("Changes")).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText("Folder in main"), { target: { value: "/mnt/p/main/homes" } });
+    expect(within(dialog).getByText(/The 2 home folders already in/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Nothing is moved, and nobody's access changes/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Make new homes in main › homes" }));
+    expect(state.settingPut).toEqual([{ name: "home_root", value: "/mnt/p/main/homes" }]);
+  });
+
+  it("says when main has no folder to make homes in", () => {
+    open("", []);
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("No folder to offer")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Read again" })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Nothing to choose until/)).toBeInTheDocument();
   });
 });

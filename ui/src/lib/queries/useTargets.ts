@@ -566,3 +566,67 @@ export function useMappableValues(target: string | undefined, field: string, ena
     retry: false,
   });
 }
+
+/** One system-wide choice an add-on keeps, such as where home folders go. */
+export interface TargetSetting {
+  name: string;
+  label: string;
+  value: string;
+  set_by?: string;
+  set_at?: string;
+  values: string[];
+  labels?: Record<string, string>;
+  values_read: boolean;
+}
+
+export function useTargetSettings(target: string | undefined) {
+  return useQuery({
+    queryKey: ["targets", target, "settings"],
+    queryFn: () => request<{ read: boolean; settings?: TargetSetting[] }>(`/targets/${target}/settings`),
+    enabled: Boolean(target),
+  });
+}
+
+export function useSetTargetSetting(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, value }: { name: string; value: string }) =>
+      request<TargetSetting>(`/targets/${target}/settings/${name}`, { method: "PUT", body: { value } }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets", target, "settings"] });
+    },
+  });
+}
+
+/** One managed account's home folder limit and where it comes from (A-03 §3). */
+export interface AccountHome {
+  subject_id: string;
+  username: string;
+  gives_home: boolean;
+  /** The largest its roles give, in bytes; absent is no limit. */
+  roles_limit?: number;
+  roles_limit_from?: { project_id: string; role_key: string };
+  own?: {
+    allowance_id: string;
+    bytes: number;
+    reason: string;
+    actor_id: string;
+    set_at: string;
+    expires_at?: string;
+    review_date?: string;
+    review_due?: boolean;
+  };
+  own_ended?: { bytes: number; ended_at: string };
+  home?: string;
+  used_bytes?: number;
+  quota_bytes?: number;
+}
+
+export function useTargetHomes(target: string | undefined) {
+  return useQuery({
+    queryKey: ["targets", target, "homes"],
+    queryFn: () =>
+      request<{ read: boolean; usage_read: boolean; accounts: AccountHome[] }>(`/targets/${target}/homes`),
+    enabled: Boolean(target),
+  });
+}

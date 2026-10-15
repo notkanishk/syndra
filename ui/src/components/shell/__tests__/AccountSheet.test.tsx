@@ -72,17 +72,19 @@ describe("the account sheet", () => {
 
   // An operator is a person too: their own storage password and folders sit
   // behind the account, since the rail is about running the makerspace.
-  it("takes an operator to their own network storage", () => {
+  it("takes an operator to their own access and network storage, access first", () => {
     open();
-    const link = screen.getByRole("link", { name: /Network storage/ });
-    expect(link.getAttribute("href")).toBe("/storage");
-    expect(link.className).toContain("min-h-[44px]");
+    const links = screen.getAllByRole("link");
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/me", "/storage"]);
+    expect(links[0].textContent).toContain("What you can use, and asking for more");
+    expect(links[1].textContent).toContain("Your password and folders");
+    for (const link of links) expect(link.className).toContain("min-h-[44px]");
   });
 
   // A member has the same page in their rail; one row per job.
   it("doesn't offer a member their storage twice", () => {
     render(<AccountSheet session={{ ...session, role: "user" } as SessionUser} />);
     fireEvent.click(screen.getByRole("button", { name: /Account/ }));
-    expect(screen.queryByRole("link", { name: /Network storage/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Network storage|My access/ })).toBeNull();
   });
 });
