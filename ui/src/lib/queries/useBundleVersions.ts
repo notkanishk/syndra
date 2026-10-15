@@ -199,3 +199,19 @@ function invalidateBundle(qc: ReturnType<typeof useQueryClient>, bundleId: strin
 }
 
 export const bundleVersionKeys = KEYS;
+
+/**
+ * Discard changes (B6): the working copy goes back to the latest published
+ * version. Nobody's access is touched, so only the bundle's own reads refresh.
+ */
+export function useDiscardBundleDraft(bundleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => request<BundleDraft>(`/bundles/${encodeURIComponent(bundleId)}/draft`, { method: "DELETE" }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: KEYS.draft(bundleId) });
+      qc.invalidateQueries({ queryKey: ["bundles", bundleId, "roles"] });
+      qc.invalidateQueries({ queryKey: bundlesQueryKeys.list });
+    },
+  });
+}
