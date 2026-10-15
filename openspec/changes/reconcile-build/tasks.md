@@ -46,6 +46,8 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
 
 ## 4. Screens
 - [ ] 4.1 Bundles v2 (B5–B7, B9; B8 needs the owner's yes)
+  - [x] B6 backend: `DELETE /bundles/{id}/draft` resets `bundle_roles` to the latest version's roles in one tx, audited `bundle.draft_discarded`, no outbox rows; returns the fresh draft
+  - [x] B7 backend: migration 000057 adds `assigned_by`, `source`, `moved_from_version` to `user_bundle_assignments`; assign = `direct` + actor, welcome = `welcome` + nobody, publish-migrate and move = `moved` + actor + the version left. `request` is reserved: an access request asks for one role, never a bundle. Older rows stay NULL and the API omits the fields
 - [ ] 4.2 Insights (N12)
 - [ ] 4.3 My access (B10, 52b, 52c)
 - [ ] 4.4 People bulk (B4: never take access from yourself)

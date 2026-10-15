@@ -53,6 +53,7 @@ export const AUDIT_ACTIONS: Record<
   // Same word the console puts on the button. An operator looking for what they just did should
   // find it under the verb they read.
   "bundle.deleted": { verb: "Retired a bundle", destructive: true },
+  "bundle.draft_discarded": { verb: "Discarded a bundle's unpublished changes", template: "Discarded the unpublished changes to the {} bundle" },
   "bundle.version_published": { verb: "Published a bundle version", template: "Published a version of the {} bundle" },
   "bundle.holder_moved": { verb: "Moved somebody to a different bundle version", template: "Moved {} to a different bundle version", passive: "Moved to a different bundle version" },
   welcome_bundle_assigned: { verb: "Gave a new member the default bundle", template: "Gave {} the default bundle, as a new member", passive: "Given the default bundle, as a new member" },
@@ -183,8 +184,8 @@ export function shortId(id: string | undefined, prefix: string): string {
  * What kind of thing `entry.target_id` names, so the audit row asks the right
  * resolver for it.
  *
- * `target_id` is not always a person: `bundle.role_added`/`role_removed`
- * record the bundle itself there (see db.CascadeAudit), and a raw bundle uuid
+ * `target_id` is not always a person: `bundle.role_added`/`role_removed`/
+ * `draft_discarded` record the bundle itself there (see db.CascadeAudit), and a raw bundle uuid
  * handed to the person resolver renders as "Unknown account <uuid>" — a
  * confident lie about an id that was never a person's in the first place.
  * `mapping_rule.*` writes no target today, but is matched here too so that
@@ -192,7 +193,7 @@ export function shortId(id: string | undefined, prefix: string): string {
  * resolver here has ever been asked to explain.
  */
 export function targetKind(action: string): "user" | "bundle" | "rule" {
-  if (action === "bundle.role_added" || action === "bundle.role_removed") return "bundle";
+  if (action === "bundle.role_added" || action === "bundle.role_removed" || action === "bundle.draft_discarded") return "bundle";
   if (action.startsWith("mapping_rule.")) return "rule";
   return "user";
 }
