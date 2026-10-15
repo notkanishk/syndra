@@ -210,3 +210,7 @@ test_user asked five times, from one dialog, for Community, which they held for 
 - [x] D8 Drift Adopt is refused for a finding Zitadel doesn't hold (syndra_only), in the plan and the apply; the button says why. Test
 - [x] D9 One hold of a kind in force: a second identical one is refused (409 ALREADY_IN_FORCE), so revoking twice no longer rotates the password twice; a person's own limit replaces the last in one transaction. Test (live)
 - [x] D10 Publishing an unchanged mapping set is refused; a duplicate bundle name says so instead of a database error; Manage bundles no longer inverts a change on retry; Extend locks after it lands. Test
+- [x] D11 Every dialog opens clean: dialogs with an `open` prop mount only while open (`mountedWhileOpen`); Ask for access reopened on its last result until a reload. A guard fails the old pattern. Test
+- [x] D12 A dialog's footer no longer paints over the focus ring of the field above it (`ModalFooter` `mt-2`).
+- [x] D13 Grant direct access marks the roles the person already has in its picker, as Ask for access does.
+- [x] D14 The revoke sweep waits for the add-ons at start-up, like the reconcile, and the start-up refresh is quiet until then: every deploy logged an unreachable target from the second before the add-on listened.
