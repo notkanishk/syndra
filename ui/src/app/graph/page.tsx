@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { ErrorState, RowSkeleton } from "@/components/states";
+import { AnchoredPanel } from "@/components/ui/Anchored";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -54,6 +55,7 @@ export default function AccessMapPage() {
   // three reads as a bug the first time it happens.
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const searchBox = useRef<HTMLDivElement | null>(null);
   const search = useDebounce(query, 200).trim().toLowerCase();
 
   const nodes = useMemo(() => topology.data?.nodes ?? [], [topology.data]);
@@ -115,7 +117,7 @@ export default function AccessMapPage() {
 
       <Card className="flex min-h-[560px] flex-col tablet:flex-row">
         <div className="flex w-full flex-none flex-col gap-4 border-b border-line p-4 tablet:w-[228px] tablet:border-b-0 tablet:border-r">
-          <div className="relative">
+          <div ref={searchBox} className="relative">
             {/* The primitive's own box. It was shaped into a pill here, which
                 is the one thing `Input` says not to do: a field somebody types
                 into reads as a container, and a pill reads as a control. */}
@@ -125,8 +127,13 @@ export default function AccessMapPage() {
               placeholder="Find a project, role, bundle or app"
               aria-label="Find a project, role, bundle or app"
             />
-            {matches.length > 0 && (
-              <div className="settle-in absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-panel border border-line-strong bg-surface-2 shadow-popover">
+            <AnchoredPanel
+              anchor={searchBox}
+              open={matches.length > 0}
+              width="anchor"
+              expectHeight={360}
+              className="settle-in overflow-hidden rounded-panel border border-line-strong bg-surface-2 shadow-popover"
+            >
                 {matches.map((node) => (
                   <button
                     key={node.id}
@@ -141,8 +148,7 @@ export default function AccessMapPage() {
                     <span className="truncate">{node.label}</span>
                   </button>
                 ))}
-              </div>
-            )}
+            </AnchoredPanel>
           </div>
 
           <div>

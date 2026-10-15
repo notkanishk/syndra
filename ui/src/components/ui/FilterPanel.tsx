@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
+import { AnchoredPanel } from "@/components/ui/Anchored";
 import { PILL } from "@/components/ui/Button";
 
 const PILL_BOX = `inline-flex items-center justify-center rounded-pill font-semibold motion-tint ${PILL.md}`;
@@ -35,12 +36,16 @@ export function FilterPanel({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement | null>(null);
   const id = useId();
 
   useEffect(() => {
     if (!open) return;
     function onDocument(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+      // The panel is under <body>, outside the button's wrapper.
+      const target = event.target as Node;
+      if (ref.current?.contains(target) || panel.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -72,14 +77,19 @@ export function FilterPanel({
         )}
       </button>
 
-      {open && (
-        <div
-          id={id}
-          // Right-aligned: the button sits at the end of its row on wide
-          // screens, and a panel hanging off the left of it would run past the
-          // window edge. z-40 clears the page and stays under a modal.
-          className="settle-in absolute right-0 top-[calc(100%+8px)] z-40 flex max-h-[min(72vh,34rem)] w-[min(22rem,calc(100vw-2rem))] flex-col rounded-panel border border-line-strong bg-surface-2 p-4 shadow-popover"
-        >
+      <AnchoredPanel
+        anchor={ref}
+        open={open}
+        id={id}
+        panelRef={panel}
+        // Right-aligned: the button sits at the end of its row on wide
+        // screens, and a panel hanging off the left of it would run past the
+        // window edge.
+        align="end"
+        width={352}
+        expectHeight={420}
+        className="settle-in flex max-h-[min(72vh,34rem)] flex-col rounded-panel border border-line-strong bg-surface-2 p-4 shadow-popover"
+      >
           {/* The fields scroll, the footer does not. Six of them run past the
               bottom of a laptop window, and Clear and Done are the two
               controls somebody needs once they have finished choosing. */}
@@ -101,8 +111,7 @@ export function FilterPanel({
               Done
             </button>
           </div>
-        </div>
-      )}
+      </AnchoredPanel>
     </div>
   );
 }

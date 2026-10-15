@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { anchoredStyle, useAnchoredBox } from "@/components/ui/Anchored";
 import { GLOSSARY, type TermName } from "@/lib/glossary";
 
 /**
@@ -79,51 +80,14 @@ export function Term({ name, children }: { name: TermName; children?: React.Reac
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  // Where to draw it, measured from the trigger. Recomputed while open,
-  // because the page behind an open popover can still scroll.
-  const [box, setBox] = useState<{ top: number; left: number; width: number } | null>(null);
-  const place = useCallback(() => {
-    const trigger = ref.current;
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const width = Math.min(304, window.innerWidth - 32);
-    // Nudged back inside when the term sits near the right edge, and flipped
-    // above when there is more room up than down — a definition that opens off
-    // the bottom of the window is one nobody can read.
-    const left = Math.max(16, Math.min(rect.left, window.innerWidth - width - 16));
-    const below = window.innerHeight - rect.bottom;
-    const top = below < 180 && rect.top > below ? rect.top - 7 : rect.bottom + 7;
-    setBox({ top, left, width });
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!shown) return;
-    place();
-    window.addEventListener("scroll", place, true);
-    window.addEventListener("resize", place);
-    return () => {
-      window.removeEventListener("scroll", place, true);
-      window.removeEventListener("resize", place);
-    };
-  }, [shown, place]);
+  // Where to draw it, measured from the trigger (shared with every popover).
+  const box = useAnchoredBox(ref, shown, 304, 180);
 
   const panel = (
     <span
       id={id}
       role="note"
-      style={
-        box
-          ? {
-              position: "fixed",
-              top: box.top,
-              left: box.left,
-              width: box.width,
-              // Above the page, below a modal — a definition must not cover
-              // the dialog somebody opened on top of it.
-              zIndex: 60,
-            }
-          : { position: "fixed", visibility: "hidden" }
-      }
+      style={anchoredStyle(box)}
       className="settle-in rounded-panel border border-line-strong bg-surface-2 px-3.5 py-3 text-left shadow-popover"
     >
       <span className="block type-label">{entry.title}</span>
