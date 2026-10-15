@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { LoginDoor, type DemoIdentity } from "@/components/login/LoginDoor";
-import { loginFailure } from "@/lib/login-error";
+import { SESSION_ENDED, loginFailure } from "@/lib/login-error";
 import { safeReturnPath } from "@/lib/return-path";
 import { getDemoUsers, getSession } from "@/lib/session";
 
@@ -28,13 +28,15 @@ export default async function LoginPage({
   // is where it re-enters the page as a value the browser will act on.
   const next = safeReturnPath(nextParam);
 
-  const session = await getSession();
-  // Already signed in and arriving with a destination — usually a link opened
-  // in a second tab. Send them to it rather than to the landing.
-  if (session) redirect(next);
-
   const { error } = params;
   const code = Array.isArray(error) ? error[0] : error;
+
+  const session = await getSession();
+  // Already signed in and arriving with a destination — usually a link opened
+  // in a second tab. Send them to it rather than to the landing. Not when the
+  // backend has just refused that session: middleware clears the cookie on
+  // the way out, and sending them on would meet the refusal again.
+  if (session && code !== SESSION_ENDED) redirect(next);
 
   const identities: DemoIdentity[] = getDemoUsers().map((user) => ({
     id: user.id,

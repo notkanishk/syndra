@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Radio } from "@/components/ui/Choice";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
@@ -88,10 +89,9 @@ export function HoldDialog({
           <legend className="mb-1 text-[14px]">What happens if nobody comes back to this</legend>
 
           <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
-            <input
-              type="radio"
+            <Radio
               name="hold-ending"
-              className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
+              className="mt-1"
               checked={ending === "stays"}
               onChange={() => setEnding("stays")}
             />
@@ -105,10 +105,9 @@ export function HoldDialog({
           </label>
 
           <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
-            <input
-              type="radio"
+            <Radio
               name="hold-ending"
-              className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
+              className="mt-1"
               checked={ending === "lifts"}
               onChange={() => setEnding("lifts")}
             />
@@ -198,7 +197,7 @@ export function HoldDialog({
               }
             }}
           >
-            {create.isPending ? "Holding…" : `Hold ${spoken}`}
+            {`Hold ${spoken}`}
           </Button>
         )}
         <Button

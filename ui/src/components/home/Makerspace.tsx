@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { UserName } from "@/components/names";
+import { RowSkeleton } from "@/components/states";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { machineName } from "@/lib/audit-vocabulary";
@@ -97,10 +98,12 @@ function Health() {
         note={unexplained > 0 ? "Access Syndra did not give — review it" : "Everything is accounted for"}
       />
       <HealthCell
-        label="Expiring inside the window"
+        label="Ending in the next 14 days"
         value={String(summary.data?.expiring_grants.length ?? 0)}
         tone={(summary.data?.expiring_grants.length ?? 0) > 0 ? "warn" : "calm"}
-        href="/review/expiring-access"
+        // The backend's horizon (role_members.go, 14 days), carried so the
+        // list it opens holds the rows this number counts.
+        href="/review/expiring-access?within=14"
         note="Direct access with an end date"
       />
     </div>
@@ -165,7 +168,7 @@ function Gaps() {
     return (
       <Card>
         <CardHeader title="Gaps" />
-        <div className="row-divider px-5 py-3.5 text-[14px] text-faint">Reading…</div>
+        <RowSkeleton rows={3} label="Loading gaps" />
       </Card>
     );
   }
@@ -269,7 +272,7 @@ function AccessShape() {
     <Card>
       <CardHeader title="Where access lives" />
       {loading ? (
-        <div className="px-5 py-3.5 text-[14px] text-faint">Reading…</div>
+        <RowSkeleton rows={3} label="Loading where access lives" />
       ) : (
         <>
           {top.length > 0 && (
@@ -289,7 +292,10 @@ function AccessShape() {
               return (
                 <Link
                   key={`${role.project_id}:${role.role_key}`}
-                  href={peopleHref({ project: role.project_id, role: role.role_key })}
+                  // The role's own page: its number is what Zitadel holds,
+                  // and People lists only those Syndra has a record of, so
+                  // the unexplained holders the note counts never appeared.
+                  href={`/projects/${encodeURIComponent(role.project_id)}/roles/${encodeURIComponent(role.role_key)}`}
                   className="row-divider flex items-baseline gap-3 px-5 py-3 motion-tint hover:bg-[var(--hover)]"
                 >
                   <span className="w-[36px] shrink-0 font-display text-[18px] leading-none">
@@ -391,7 +397,7 @@ function RecentActivity() {
                 every target_id to the person resolver, so a bundle edit read
                 "Unknown account 9e93893d-…" here and "Community · Basic" there
                 — one event, two screens, disagreeing. */}
-            <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
+            <span className="min-w-[min(240px,100%)] flex-1 text-[14px] text-muted">
               <EventSentence entry={entry} />
             </span>
           </div>

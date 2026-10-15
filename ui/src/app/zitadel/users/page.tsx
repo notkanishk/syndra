@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -170,12 +170,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
 
       <div className="row-divider px-5 py-3 text-[13.5px] leading-[1.55] text-muted">
         Everything below is what Zitadel holds for this person.{" "}
-        <Link
-          href={`/users/${userId}`}
-          className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0"
-        >
-          Syndra&rsquo;s explanation of the same access →
-        </Link>
+        <ArrowLink href={`/users/${userId}`}>Syndra&rsquo;s explanation of the same access</ArrowLink>
       </div>
 
       <ListStates

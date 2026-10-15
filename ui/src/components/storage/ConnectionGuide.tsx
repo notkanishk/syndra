@@ -218,7 +218,7 @@ export function ConnectionGuide({
                 {s.creds && (
                   <div className="grid max-w-[520px] grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1.5 rounded-inner border border-line bg-surface-0 px-3.5 py-3">
                     <span className="text-[13px] text-muted">Name</span>
-                    <span className="font-mono text-[14px]">{username}</span>
+                    <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[14px]">{username}</span>
                     <span className="text-[13px] text-muted">Password</span>
                     <span className="text-[14px]">Your storage password, not your Syndra or Google one</span>
                   </div>
@@ -236,7 +236,7 @@ export function ConnectionGuide({
             <li>If your sign-in is refused, check you used your storage password. You can change it at the end of this page.</li>
             <li>
               Still stuck? Ask makerspace staff, and mention your account name,{" "}
-              <span className="font-mono text-ink">{username}</span>.
+              <span className="[overflow-wrap:anywhere] font-mono text-ink">{username}</span>.
             </li>
           </ul>
         </div>

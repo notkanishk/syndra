@@ -63,7 +63,7 @@ describe("role members — holding is observed", () => {
     expect(screen.getByRole("link", { name: /Nina Roy/ })).toHaveAttribute("href", "/users/u2");
     expect(screen.getByRole("link", { name: /Review in drift/ })).toHaveAttribute(
       "href",
-      "/governance/drift?project=pLaser",
+      "/governance/drift?project=pLaser&role=trained",
     );
   });
 

@@ -168,7 +168,7 @@ describe("connected systems", () => {
 
     state.targets = [target({ project: null })];
     render(<ConnectedSystemsPage />);
-    expect(screen.getByRole("link", { name: "Choose its Zitadel project →" }).getAttribute("href")).toBe("/system/targets/truenas");
+    expect(screen.getByRole("link", { name: "Choose its Zitadel project" }).getAttribute("href")).toBe("/system/targets/truenas");
   });
 });
 

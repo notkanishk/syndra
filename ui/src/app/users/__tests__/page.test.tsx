@@ -317,3 +317,17 @@ describe("People index — bulk mode", () => {
     expect(await screen.findByText(/in Laser Lab/)).toBeInTheDocument();
   });
 });
+
+// "Add people to this role" sent the role as a filter, so People listed only
+// the people who already held it: the ones nobody needed to add.
+describe("People · choosing who gets a role", () => {
+  it("lists everyone, holders included, and says what the pick is for", () => {
+    users.data = [person({ user: { ...person().user, id: "u1", name: "Holds it" } }), person({ user: { ...person().user, id: "u2", name: "Needs it" }, key_project_ids: [] })];
+    roleMembers.data = { members: [{ user: { id: "u1" } }] };
+    nav.url = "/users?bulk=1&give_project=pLaser&give_role=trained";
+    renderPeople();
+    expect(screen.getByText("Holds it")).toBeInTheDocument();
+    expect(screen.getByText("Needs it")).toBeInTheDocument();
+    expect(screen.getByText(/Pick who should get/)).toBeInTheDocument();
+  });
+});

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { RoleRef } from "@/components/names";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
@@ -70,6 +71,10 @@ export default function PeoplePage() {
 
   const filters = useMemo(() => parseFilters(new URLSearchParams(params.toString())), [params]);
   const bulkMode = params.get("bulk") === "1";
+  // What a bulk pick is FOR, apart from who is listed: "Add people to this
+  // role" sent the role as a filter, which listed only the people who already
+  // held it. It travels as `give_*` instead, and prefills the dialog.
+  const give = { projectId: params.get("give_project") ?? "", roleKey: params.get("give_role") ?? "" };
 
   // The search box is typed into, so it holds local state and syncs to the URL
   // on a debounce — writing a history entry per keystroke would make the back
@@ -90,10 +95,11 @@ export default function PeoplePage() {
   const setParams = useCallback(
     (next: Partial<PeopleFilters>, extra: Record<string, string> = {}) => {
       const merged = { ...filters, ...next };
-      const carried = bulkMode ? { bulk: "1", ...extra } : extra;
+      const giving: Record<string, string> = give.roleKey ? { give_project: give.projectId, give_role: give.roleKey } : {};
+      const carried = bulkMode ? { bulk: "1", ...giving, ...extra } : extra;
       router.replace(`/users${serializeFilters(merged, carried)}`, { scroll: false });
     },
-    [filters, bulkMode, router],
+    [filters, bulkMode, router, give.projectId, give.roleKey],
   );
 
   useEffect(() => {
@@ -244,6 +250,13 @@ export default function PeoplePage() {
           />
         }
       />
+
+      {bulkMode && give.roleKey && (
+        <p className="text-[14px] text-muted">
+          Pick who should get <RoleRef projectId={give.projectId} roleKey={give.roleKey} />, then choose
+          Give a role. Everyone is listed, including people who already hold it.
+        </p>
+      )}
 
       {(filters.role || filters.bundle || filters.version) && (
         <div className="flex flex-wrap items-center gap-2">
@@ -404,7 +417,7 @@ export default function PeoplePage() {
           op={bulkOp}
           userIds={Array.from(selection.selected)}
           scope={scope}
-          initial={{ projectId: filters.project, roleKey: filters.role }}
+          initial={give.roleKey ? give : { projectId: filters.project, roleKey: filters.role }}
           onClose={() => setBulkOp(null)}
         />
       )}
@@ -451,7 +464,10 @@ function PersonRow({
           ) : (
             <span className="block truncate text-[15px] font-semibold">{entry.user.name}</span>
           )}
-          <span className="block truncate text-[12.5px] text-faint">
+          <span
+            className="block truncate text-[12.5px] text-faint"
+            title={entry.user.title || entry.user.email}
+          >
             {entry.user.title || entry.user.email}
           </span>
         </span>

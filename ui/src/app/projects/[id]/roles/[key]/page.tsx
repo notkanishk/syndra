@@ -13,6 +13,7 @@ import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Mono } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
@@ -20,6 +21,7 @@ import { WithheldInline } from "@/components/ui/Withheld";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { useCrumb } from "@/lib/page-crumb";
+import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useRoleMembers, type RoleMember } from "@/lib/queries/useRoleMembers";
 import { formatShortDate, humanizeKey } from "@/lib/format";
@@ -82,7 +84,7 @@ export default function RoleMembersPage({
           // the one thing it can't answer from what it knows, so that — and
           // only that — hands off to People in bulk mode, pre-armed with this
           // project and role.
-          <ButtonLink href={peopleHref({ project: id, role: roleKey }, { bulk: "1" })} variant="accent">
+          <ButtonLink href={peopleHref({}, { bulk: "1", give_project: id, give_role: roleKey })} variant="accent">
             Add people to this role
           </ButtonLink>
         }
@@ -180,12 +182,7 @@ export default function RoleMembersPage({
         <Card>
           <div className="flex flex-wrap items-center gap-3 px-5 py-4">
             <span className="type-card-title">In Zitadel without Syndra giving it</span>
-            <Link
-              href={`/governance/drift?project=${id}`}
-              className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text hover:underline desktop:min-h-6"
-            >
-              Review in drift →
-            </Link>
+            <ArrowLink href={driftHref({ project: id, role: roleKey })}>Review in drift</ArrowLink>
           </div>
           {observedOnly.map((person) => (
             <Link
@@ -249,7 +246,10 @@ function MemberRow({
       >
         {member.user.name}
       </Link>
-      <div className="w-[170px] shrink-0 truncate text-[14px] text-muted">
+      <div
+        className="w-[170px] shrink-0 truncate text-[14px] text-muted"
+        title={member.user.title || member.user.team || member.user.email}
+      >
         {member.user.title || member.user.team || member.user.email}
       </div>
       <div className="min-w-0 flex-1">

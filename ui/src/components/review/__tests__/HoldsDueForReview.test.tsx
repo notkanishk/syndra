@@ -25,7 +25,7 @@ describe("holds due", () => {
     render(<HoldsDueForReview />);
     expect(screen.getByRole("button", { name: /Lift the hold on their TrueNAS account/ })).toBeTruthy();
     expect(screen.getByText("their own home folder limit, 50 GB")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Review it on TrueNAS's page →" }).getAttribute("href")).toBe("/system/targets/truenas");
+    expect(screen.getByRole("link", { name: "Review it on TrueNAS's page" }).getAttribute("href")).toBe("/system/targets/truenas");
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByText(/It stays at 50 GB until it is kept or ended/)).toBeTruthy();
   });
