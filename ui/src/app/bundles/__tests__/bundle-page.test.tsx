@@ -38,7 +38,10 @@ vi.mock("@/lib/queries/useBundleVersions", () => ({
 
 vi.mock("@/lib/queries/useMappingRules", () => ({ useMappingRules: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useRoles", () => ({ useGlobalRoleCatalog: () => ({ data: [] }) }));
-vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => <div>who has it</div> }));
+vi.mock("@/components/bundles/BundleVersions", () => ({
+  BundlePeople: () => <div>who has it</div>,
+  BundleVersions: () => <div>every version</div>,
+}));
 vi.mock("@/components/names", () => ({
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
@@ -103,15 +106,11 @@ describe("a bundle's page", () => {
     expect(screen.getByRole("button", { name: "Discard changes" })).toBeInTheDocument();
   });
 
-  it("switches to History and lists the versions newest first", () => {
+  it("switches to History and shows every version", () => {
     render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: /History/ }));
-
-    const versions = screen.getAllByText(/^v[12]$/).map((el) => el.textContent);
-    expect(versions).toEqual(["v2", "v1"]);
-    expect(screen.getByText("Added laser")).toBeInTheDocument();
-    expect(screen.getByText("Created")).toBeInTheDocument();
-    expect(screen.getByText("Nobody")).toBeInTheDocument();
+    expect(screen.getByText("every version")).toBeInTheDocument();
+    expect(screen.queryByText("who has it")).not.toBeInTheDocument();
   });
 
   it("switches to People and shows who has it", () => {

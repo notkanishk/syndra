@@ -4,10 +4,9 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
-import { BundleVersions } from "@/components/bundles/BundleVersions";
+import { BundlePeople, BundleVersions } from "@/components/bundles/BundleVersions";
 import { PublishVersionDialog } from "@/components/bundles/PublishVersionDialog";
 import { RoleRef } from "@/components/names";
-import { UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
@@ -182,8 +181,8 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
             onAdd={() => setAdding(true)}
           />
         )}
-        {tab === "people" && <BundleVersions bundleId={bundleId} name={name} />}
-        {tab === "history" && <History versions={versions} />}
+        {tab === "people" && <BundlePeople bundleId={bundleId} name={name} />}
+        {tab === "history" && <BundleVersions bundleId={bundleId} name={name} />}
       </div>
 
       <EndCards
@@ -450,45 +449,6 @@ function WhatItGives({
         ))}
       </ListStates>
     </div>
-  );
-}
-
-/** Every version, newest first: what changed, who published it, who's on it. */
-function History({ versions }: { versions: ReturnType<typeof useBundleVersions> }) {
-  const rows = [...(versions.data ?? [])].sort((a, b) => b.version - a.version);
-  return (
-    <Card>
-      <ListStates
-        isLoading={versions.isLoading}
-        error={versions.error}
-        isEmpty={rows.length === 0}
-        onRetry={() => versions.refetch()}
-        errorTitle="Couldn't load the versions."
-        skeleton={<RowSkeleton rows={3} avatar={false} label="Loading versions" />}
-        empty={<EmptyState title="No version published yet." />}
-      >
-        {rows.map((v) => (
-          <div key={v.id} className="row-divider flex flex-wrap items-baseline gap-x-[18px] gap-y-1 px-5 py-3.5">
-            <span className="w-[44px] text-[15px] font-semibold">v{v.version}</span>
-            <span className="min-w-[min(240px,100%)] flex-1 text-[14px]">
-              {v.note || (v.version === 1 ? "Created" : "Published")}
-            </span>
-            <span className="text-[13px] text-muted">
-              {v.published_by ? (
-                <>
-                  <UserName id={v.published_by} fallback="Someone" />, {formatShortDate(v.published_at)}
-                </>
-              ) : (
-                formatShortDate(v.published_at)
-              )}
-            </span>
-            <span className="w-[110px] text-right text-[15px] font-semibold tabular-nums">
-              {v.holder_count === 0 ? <span className="font-normal text-faint">Nobody</span> : v.holder_count}
-            </span>
-          </div>
-        ))}
-      </ListStates>
-    </Card>
   );
 }
 
