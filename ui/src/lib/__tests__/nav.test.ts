@@ -126,6 +126,7 @@ describe("breadcrumbs", () => {
   it("names an operator's own page", () => {
     expect(crumbsFor("/storage", "basic")).toEqual([{ label: "Network storage" }]);
     expect(crumbsFor("/storage", "advanced")).toEqual([{ label: "Network storage" }]);
+    expect(crumbsFor("/me", "basic")).toEqual([{ label: "My access" }]);
   });
 
   it("is empty for a route the audience cannot reach", () => {
