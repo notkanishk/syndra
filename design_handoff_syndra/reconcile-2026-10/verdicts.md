@@ -338,3 +338,11 @@ N26  SYNTHESIS (5b)  Owner picked 5b, 14 Oct · Send one batch
 N27  KEEP-CODE  Daylight
      Nine of the busiest frames in light: every board is tokens only, so each switches whole. One finding, already owed: the provisional ring (86c). The door stays dark by design.
      Boards: route-additions (Daylight)
+
+## From Claude Code · Q-01 (14 Oct)
+
+Q-01  SYNTHESIS (B recommended)  TrueNAS states between answering and offline; "paused" split; picker with no groups of its own. Answer: from-design/A-01-truenas-states.md. Boards: route-systems (missed-a, missed, missed-c, offline, checking, paused), route-system-targets-id (missed, missed-c, checking, quiet, paused), route-system-targets-id-mappings (add-nogroups, add-unread, add-unchecked, paused).
+
+Q-02  SYNTHESIS (naming A recommended)  Places per folder, access given back, what a group opens, a group that opens nothing, home folders. Answer: from-design/A-02-where-to-connect.md. Boards: route-storage (ready, ready-path, restored, home-kept, opens-nothing), route-system-targets-id-mappings (default, opens-nothing, add, add-home, add-home-none, paused), route-system-targets-id (homes-disagree).
+
+Q-03  SYNTHESIS (Account sheet B recommended)  One home location per system, set on the system page; mapping gives a home on/off with a limit; one person's own limit on Accounts on TrueNAS; operator's Account sheet gains Network storage (and My access, B). Retires A-02 §7 homes-disagree. Answer: from-design/A-03-one-home-location.md. Boards: route-system-targets-id (home-*, limit-*), route-system-targets-id-mappings (add-home, add-home-unset), shell-account (proposed-storage, proposed-both).

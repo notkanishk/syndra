@@ -1,5 +1,5 @@
 <!--
-Landed 14 Oct 2026 from the design project, handoff/2026-10-reconcile/proposed/NotOpenYet.md, verbatim.
+Landed 14 Oct 2026 from the design project, handoff/2026-10-reconcile/proposed/NotOpenYet.md, verbatim; updated 15 Oct with A-03.
 -->
 # NotOpenYet · a section someone can't use yet
 
@@ -15,7 +15,7 @@ The lead line carries the meaning at full contrast; the dimmed contents are a pr
 ## Not this pattern
 - **One row that can't be chosen** (a locked role in the RolePicker, a locked row in Roles that wait): ticked grey with the why, per row.
 - **Stale or last-known data** (a NAS that isn't answering): a Notice above and 0.62 on what was read; still readable, still selectable.
-- **One control that can't act now** (password while TrueNAS is offline): the control is replaced by one sentence saying why.
+- **One control that can't act now** (password while TrueNAS is offline; a mapping's home folder before the system has a place for homes): the control is replaced by one sentence saying why, with the link to the step when there is one.
 
 ## Where
 - route-storage · needs-password, reenrol, restored: Your folders.

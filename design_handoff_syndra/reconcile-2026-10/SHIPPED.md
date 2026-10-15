@@ -1,6 +1,6 @@
 # Shipped: the October reconcile, TrueNAS slice
 
-From Claude Code, 15 Oct 2026. What is built against the boards, where code departed from them and why, and what waits on A-03. Branch `feat/truenas-reach`.
+From Claude Code, 15 Oct 2026. What is built against the boards, and where code departed from them and why. Branch `feat/truenas-reach`.
 
 ## Built as drawn
 
@@ -42,16 +42,19 @@ From Claude Code, 15 Oct 2026. What is built against the boards, where code depa
 - **The operator's own storage.** The operator reaches it from the Account sheet: a "Network storage" row, "Your password and folders". Drawn in no board; Q-03 asks to confirm it.
 - **Two roles naming two homes (A-02 §7).** Retired by the owner's ruling of 15 Oct: one home location per system.
 
-## Waits on A-03
+## A-03, built (15 Oct)
 
-- Where the home location is chosen.
-- The mapping dialog's "Gives a home folder" toggle and limit.
-- One person's own limit.
-- The row's home line.
-- The preview's count of the home folders it will make.
+- **route-system-targets-id**
+  - The setup card is one row per setting, and Home folders is its one write place.
+  - The home-folder states: unset, choose, none, and change (with the count that stays).
+  - Every managed account's home line, and its first verb: Set a limit, Change limit, Review limit.
+  - The person's own limit through set, on, review and ended.
+- **route-system-targets-id-mappings**
+  - Home folder as No home folder | Gives a home folder, with the limit as Up to a size | No limit.
+  - With no location chosen yet (add-home-unset), the sentence and its link take the control's place.
+  - The row's read-only home line, and the preview's count of the homes it makes.
+- **shell-account:** option B, My access → then Network storage →, between hairlines.
+- **Holds due:** a limit under review, read-only, linking to where it's decided.
+- **route-storage:** the folder's "Full" line, for a limit set below what is saved.
 
-The backend and add-on for all of these are built:
-- `GET/PUT /targets/{t}/settings/home_root`
-- `home: "true"` on a mapping
-- `home_quota`, with the highest limit winning
-- the per-person override
+Departed: the limit dialog says "they" rather than "her", because Syndra doesn't know anyone's pronouns. See BUILD-NOTES, "A-03, read against the code".
