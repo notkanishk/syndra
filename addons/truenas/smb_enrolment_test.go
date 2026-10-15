@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -76,5 +78,42 @@ func TestSMBIsNeverSwitchedOnAloneAndTheGroupsStillLand(t *testing.T) {
 		`{"call_id":"c2","subject":"sub-1","actor":"sub-1","params":{"password":"`+theSecret+`"}}`)
 	if pw.Code != http.StatusOK || m.updates[len(m.updates)-1]["smb"] != true {
 		t.Fatalf("the next password must carry SMB on: %d %v", pw.Code, m.updates[len(m.updates)-1])
+	}
+}
+
+// The plan has to agree with the apply about SMB. The apply never switches it
+// on (the member's password carries it), so a plan that said "SMB enabled" was
+// promising a change no apply makes: every reconciliation pass queued a fresh
+// convergence for every account still waiting on a password, each one drained
+// to "no change", and Pending changes never emptied.
+func TestThePlanDoesNotPromiseTheSMBOnlyAPasswordCanSwitchOn(t *testing.T) {
+	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":false,"password_disabled":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}]}`)
+	var plan PlanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+		t.Fatalf("want one outcome, got %s", rr.Body.String())
+	}
+	out := plan.Outcomes[0]
+	if out.Effect != EffectNoChange {
+		t.Fatalf("the apply would change nothing, so the plan must say so, got %s (%s)", out.Effect, out.Detail)
+	}
+	if !strings.Contains(out.Detail, "set a password") {
+		t.Errorf("the plan must say SMB is waiting rather than already on, got %q", out.Detail)
+	}
+
+	// And a real change beside it is still planned, without the SMB it can't make.
+	rr = httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"ada@example.edu",
+		"desired":{"group":["staff"],"enabled":true,"smb_enabled":true}}]}`)
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+		t.Fatalf("want one outcome, got %s", rr.Body.String())
+	}
+	if out := plan.Outcomes[0]; out.Effect != EffectApply || strings.Contains(out.Detail, "SMB enabled") {
+		t.Fatalf("want the group change alone, got %s (%s)", out.Effect, out.Detail)
 	}
 }

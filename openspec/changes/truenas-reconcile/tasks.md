@@ -172,3 +172,10 @@ The only Syndra writes in 60 days were prod's 3 `user.create` and 1 `user.update
 - [x] P2 (moot: the accounts were deleted on 15 Oct, 11.3) Two Syndra-created accounts were `smb: false`, with no password yet. Once the fix deploys, their first password switches SMB on. The test account was fixed by hand.
 - [ ] P2 Share permissions must come from the role groups, never `builtin_users`. Syndra deliberately never adds members to it (D8). The NAS-side permission changes are with the owner.
 - [ ] P2 NAS hardening and data-protection findings that aren't Syndra's own were reported to the owner directly. They are deliberately not recorded in this public repository.
+
+## Found in production, 15 Oct 2026 (Pending changes never drained)
+
+- [x] P1 The plan promised "SMB enabled" for an account still waiting on its first password, a change the apply never makes (the password carries it). Every "Check for differences" queued a new convergence for each such account, each drained to "no change", and Pending changes never emptied. The plan now says what the apply says: no change, waiting for the password. Test
+- [x] P2 The periodic pass queued a second row for a bound person who already had one waiting, so one difference was two rows after two passes. One row per person now, the rule the unbound half already kept. Test
+- [ ] P2 Pending changes shows an add-on convergence with no description, labelled "Given by hand". The reason the pass writes (`SystemConvergence.Reason`) is never stored, and the list reads only outbox columns, which are empty for an add-on row.
+- [ ] P2 Releasing an account does not withdraw a convergence already waiting for that person, and the next pass queues a create for anyone who still holds a mapped role. Releasing is not a way to keep someone off TrueNAS; removing their role, or the mapping, is.

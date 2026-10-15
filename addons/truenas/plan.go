@@ -212,9 +212,15 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 
 	after := projected(current, desired, current.Username)
 	if sameSet(after.Groups, current.Groups) && after.Enabled == current.Enabled && after.SMBEnabled == current.SMBEnabled && after.Home == current.Home {
+		detail := "Already in the requested state."
+		if desired.managed[FieldSMBEnabled] && desired.smbEnabled && !current.SMBEnabled {
+			// Not "already in the requested state": SMB is still off, and
+			// waiting on the member rather than on Syndra.
+			detail = smbWaiting(current)
+		}
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
-			Detail:      "Already in the requested state.",
+			Detail:      detail,
 			Consequence: describeHolding(*current),
 			Username:    current.Username, Fingerprint: fingerprint,
 		}
@@ -248,8 +254,11 @@ func projected(current *Subject, desired desiredState, username string) Subject 
 		// what the create path does.
 		out.Enabled = true
 	}
-	if desired.managed[FieldSMBEnabled] {
-		out.SMBEnabled = desired.smbEnabled
+	// Only ever switched OFF: the apply never switches SMB on, the member's next
+	// password does. Planning it on promised a change no apply makes, and each
+	// reconciliation pass queued another convergence that drained to nothing.
+	if desired.managed[FieldSMBEnabled] && !desired.smbEnabled {
+		out.SMBEnabled = false
 	}
 	// A home folder is planned only where the apply would make one: a home
 	// location chosen, and no home yet. Moving one is never planned, because it

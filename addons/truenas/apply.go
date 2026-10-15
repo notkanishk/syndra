@@ -104,6 +104,16 @@ type ApplyOutcome struct {
 	Conflict *BindingConflict `json:"conflict,omitempty"`
 }
 
+// smbWaiting is what an account wanting SMB on says while it waits for the
+// member's next password, the only call TrueNAS switches it on in. The plan
+// says it too, so the two never disagree about a change only a password makes.
+func smbWaiting(current *Subject) string {
+	if current.PasswordSet {
+		return "Waiting for " + current.Username + " to set their password again: TrueNAS switches SMB on only together with a new password."
+	}
+	return "Waiting for " + current.Username + " to set a password before SMB can be enabled."
+}
+
 // observedFields is the managed half of a subject as the target reports it.
 //
 // Managed fields only, matching what the merge compares: an unmanaged field is
@@ -601,10 +611,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 			update["smb"] = false
 		}
 	}
-	smbWait := "Waiting for " + current.Username + " to set a password before SMB can be enabled."
-	if current.PasswordSet {
-		smbWait = "Waiting for " + current.Username + " to set their password again: TrueNAS switches SMB on only together with a new password."
-	}
+	smbWait := smbWaiting(current)
 
 	// The home folder rides in the same update, so one write and one read-back
 	// verify it. The rules (never moved, never removed, never someone else's)

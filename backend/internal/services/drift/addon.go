@@ -415,6 +415,16 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 			log.Printf("[ADDON-RECONCILE] %s answered for %s, which was not in the request", target, out.Subject)
 			continue
 		}
+		// One row in Pending changes per person, as for the unbound below.
+		// ponytail: the waiting row carries the desired state it was queued
+		// with; a newer difference is queued by the pass after it drains.
+		waiting, err := pendingApply(ctx, target, out.Subject)
+		if err != nil {
+			return queued, findings, err
+		}
+		if waiting {
+			continue
+		}
 		if _, _, err := recordConvergence(ctx, db.SystemConvergence{
 			Target: target, SubjectID: out.Subject, Actor: reconcileActor,
 			Reason:  "Periodic reconciliation found the target out of step",
