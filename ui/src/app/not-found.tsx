@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ButtonLink } from "@/components/ui/Button";
 
 /**
  * An address that matches no route.
@@ -26,12 +26,9 @@ export default function NotFound() {
           nothing has been deleted. A person or a bundle that was removed would say so on its own
           page.
         </p>
-        <Link
-          href="/"
-          className="mt-5 inline-flex min-h-[44px] items-center rounded-pill bg-accent-dense px-4 text-[13.5px] font-semibold text-accent-ink"
-        >
+        <ButtonLink href="/" variant="accent" className="mt-5">
           Go to the home page
-        </Link>
+        </ButtonLink>
       </div>
     </div>
   );

@@ -536,7 +536,7 @@ function ReconcileControl({ target }: { target: string }) {
                   >
                     Stop tracking {b.username}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                  <Button variant="outline" size="sm" onClick={() => setConfirming(null)}>
                     Cancel
                   </Button>
                   {unfinished[b.subject_id] && (
@@ -1134,7 +1134,7 @@ function ResolveConflictDialog({
         >
           Record the owner
         </Button>
-        <Button variant="ghost" onClick={onClose} disabled={resolve.isPending}>
+        <Button onClick={onClose} disabled={resolve.isPending}>
           Cancel
         </Button>
       </ModalFooter>
@@ -1237,7 +1237,7 @@ function ResolveFindingDialog({
         >
           Accept this log and start over
         </Button>
-        <Button variant="ghost" onClick={onClose} disabled={resolve.isPending}>
+        <Button onClick={onClose} disabled={resolve.isPending}>
           Cancel
         </Button>
       </ModalFooter>
@@ -1589,7 +1589,7 @@ function AdoptPanel({
         {Boolean(error) && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(error))}</p>}
       </form>
       <ModalFooter>
-        <Button type="button" variant="ghost" onClick={onCancel}>
+        <Button type="button" onClick={onCancel}>
           Cancel
         </Button>
         {/* Violet, not red: it gives an account to someone, and red is kept
@@ -1656,7 +1656,7 @@ function AdoptionOutcome({
       </span>
       {result.warning && <span className="text-warn-text">{result.warning}</span>}
       <span className="flex-1" />
-      <Button variant="ghost" size="sm" onClick={onDismiss}>
+      <Button variant="outline" size="sm" onClick={onDismiss}>
         Dismiss this result
       </Button>
     </div>

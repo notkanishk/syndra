@@ -197,7 +197,7 @@ export function HoldDialog({
               }
             }}
           >
-            {create.isPending ? "Holding…" : `Hold ${spoken}`}
+            {`Hold ${spoken}`}
           </Button>
         )}
         <Button

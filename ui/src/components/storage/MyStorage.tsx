@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
@@ -164,12 +164,9 @@ function TargetCard({ view }: { view: MyTargetView }) {
         <p className="max-w-[66ch] text-[15px] leading-[1.55] text-muted [text-wrap:pretty]">{body}</p>
         {aside && <span className="text-[13.5px] text-faint">{aside}</span>}
         {state === "none" && (
-          <Link
-            href="/requests?ask"
-            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[15px] font-semibold text-accent-text motion-tint hover:brightness-110 desktop:min-h-0"
-          >
-            Ask for access in Requests →
-          </Link>
+          <ArrowLink href="/requests?ask" className="mt-1 self-start">
+            Ask for access in Requests
+          </ArrowLink>
         )}
       </div>
 
@@ -686,8 +683,8 @@ function PasswordForm({
             />
           </div>
           <span className="flex-none whitespace-nowrap">
-            <Button type="submit" variant={accent ? "accent" : "outline"} disabled={!password || set.isPending}>
-              {set.isPending ? "Setting…" : submitLabel}
+            <Button type="submit" variant={accent ? "accent" : "outline"} disabled={!password} isPending={set.isPending}>
+              {submitLabel}
             </Button>
           </span>
         </div>

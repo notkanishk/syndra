@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
@@ -96,12 +96,9 @@ function OwnValueRow({ hold, first }: { hold: Hold; first: boolean }) {
         on {system} · set by <UserName id={hold.actor_id} /> <Relative iso={hold.created_at} />
       </span>
       <span className="flex-1" />
-      <Link
-        href={`/system/targets/${hold.target}`}
-        className="inline-flex min-h-[44px] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0"
-      >
-        Review it on {system}&apos;s page →
-      </Link>
+      <ArrowLink href={`/system/targets/${hold.target}`} className="whitespace-nowrap">
+        Review it on {system}&apos;s page
+      </ArrowLink>
       <p className="w-full text-[13.5px] text-muted">
         {hold.reason || <span className="text-faint">No reason recorded.</span>}
       </p>
