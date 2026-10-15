@@ -77,6 +77,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /reach", s.auth.authenticated(s.handleReach))
 	// System-wide choices: where home folders go (settings.go).
 	mux.HandleFunc("GET /settings", s.auth.authenticated(s.handleSettings))
+	// Every home folder's use and limit (home.go).
+	mux.HandleFunc("GET /homes", s.auth.authenticated(s.handleHomes))
 	mux.HandleFunc("PUT /settings/{name}", s.auth.authenticated(s.handlePutSetting))
 	mux.HandleFunc("POST /apply", s.auth.authenticated(s.handleApply))
 	mux.HandleFunc("POST /plan", s.auth.authenticated(s.handlePlan))

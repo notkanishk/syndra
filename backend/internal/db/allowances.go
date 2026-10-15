@@ -234,8 +234,9 @@ func AllowancesForSubject(ctx context.Context, subjectID string) ([]Allowance, e
 	return scanAllowances(rows)
 }
 
-// AllowancesDueForReview lists indefinite suspensions whose review date has
-// passed and which nobody has decided about.
+// AllowancesDueForReview lists indefinite suspensions, and one person's own
+// values (a home folder limit), whose review date has passed and which nobody
+// has decided about.
 //
 // They stay in force. This is a prompt, not a lapse.
 func AllowancesDueForReview(ctx context.Context) ([]Allowance, error) {
@@ -243,7 +244,7 @@ func AllowancesDueForReview(ctx context.Context) ([]Allowance, error) {
 		SELECT id, subject_id, target, field, value, direction, actor_id, reason,
 		       created_at, expires_at, review_date, lifted_at, COALESCE(lifted_by, '')
 		  FROM allowances
-		 WHERE lifted_at IS NULL AND direction = 'deny'
+		 WHERE lifted_at IS NULL AND direction IN ('deny', 'set')
 		   AND review_date IS NOT NULL AND review_date <= NOW()
 		   AND (expires_at IS NULL OR expires_at > NOW())
 		 ORDER BY review_date`

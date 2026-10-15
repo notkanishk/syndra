@@ -681,6 +681,36 @@ func settingsCall(ctx context.Context, target, method, path string, body []byte)
 	return resp, resp.Status != 0
 }
 
+// HomeUsage is one account's home folder on a target, as the target read it.
+type HomeUsage struct {
+	Username   string `json:"username"`
+	UID        int64  `json:"uid"`
+	Home       string `json:"home"`
+	UsedBytes  int64  `json:"used_bytes"`
+	QuotaBytes int64  `json:"quota_bytes,omitempty"`
+}
+
+// Homes is every home folder on a target. Read false is "couldn't ask".
+type Homes struct {
+	Read      bool        `json:"read"`
+	UsageRead bool        `json:"usage_read"`
+	Homes     []HomeUsage `json:"homes"`
+}
+
+// ReadHomes asks a target for every home folder and its use.
+func ReadHomes(ctx context.Context, target string) Homes {
+	resp, ok := settingsCall(ctx, target, http.MethodGet, "/homes", nil)
+	if !ok || resp.Outcome != OutcomeSucceeded {
+		return Homes{}
+	}
+	var out Homes
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return Homes{}
+	}
+	out.Read = true
+	return out
+}
+
 // Reach is what each of a target's own groups opens, as the target last read
 // its folder permissions. Read false is "not read from the target yet": the
 // target hasn't managed a read since its add-on started, or the add-on can't be

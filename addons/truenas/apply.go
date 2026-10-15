@@ -203,7 +203,10 @@ type desiredState struct {
 	homeRoot  string
 	// homeQuota is the largest limit any of their roles (or an operator, for
 	// this one person) gives, in bytes. Zero when none was given.
-	homeQuota int64
+	// homeUnlimited is a role or an operator giving "No limit" ("0"), which
+	// is the largest limit there is: the folder's limit is lifted.
+	homeQuota     int64
+	homeUnlimited bool
 	// managed records which fields the request named at all. A field the
 	// backend did not send is one this target does not manage for that subject,
 	// and converging it to a zero value would be inventing an instruction.
@@ -259,6 +262,9 @@ func decodeDesiredFields(raw map[string]json.RawMessage) (desiredState, error) {
 				n, err := strconv.ParseInt(strings.TrimSpace(l), 10, 64)
 				if err != nil || n < 0 {
 					return desiredState{}, fmt.Errorf("field %q: %q is not a byte count", field, l)
+				}
+				if n == 0 {
+					d.homeUnlimited = true
 				}
 				if n > d.homeQuota {
 					d.homeQuota = n
