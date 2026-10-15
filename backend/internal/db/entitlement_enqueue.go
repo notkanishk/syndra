@@ -62,6 +62,8 @@ type EntitlementApply struct {
 	// operator. False is the safe default: an undeclared row waits, which is
 	// where every convergence waited before this existed.
 	WithdrawsOnly bool
+	// Reason is why it was queued, as Pending changes says it. Optional.
+	Reason string
 }
 
 // validOutboxSource reports whether s is one of the sources the outbox CHECK
@@ -156,8 +158,8 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 			   FOR UPDATE
 		)
 		INSERT INTO propagation_outbox
-			(op_type, user_id, payload_json, idempotency_key, initiated_by, source, target, plan_subject_id, withdraws_only)
-		SELECT 'apply', ps.subject_id, '{}'::jsonb, $1, p.created_by, $2, p.target, ps.id, $5
+			(op_type, user_id, payload_json, idempotency_key, initiated_by, source, target, plan_subject_id, withdraws_only, reason)
+		SELECT 'apply', ps.subject_id, '{}'::jsonb, $1, p.created_by, $2, p.target, ps.id, $5, $6
 		  FROM plan_subjects ps
 		  JOIN plans        p ON p.id = ps.plan_id
 		  JOIN locked_target lt ON lt.target = p.target
@@ -168,7 +170,7 @@ func EnqueueEntitlementApplyTx(ctx context.Context, tx pgx.Tx, p EntitlementAppl
 		RETURNING id, user_id, initiated_by, target`
 
 	var outboxID, subjectID, initiatedBy, target string
-	err = tx.QueryRow(ctx, insertOutbox, key, source, TargetZitadel, p.PlanSubjectID, p.WithdrawsOnly).
+	err = tx.QueryRow(ctx, insertOutbox, key, source, TargetZitadel, p.PlanSubjectID, p.WithdrawsOnly, nullIfEmpty(p.Reason)).
 		Scan(&outboxID, &subjectID, &initiatedBy, &target)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", explainEnqueueRefusal(ctx, tx, p.PlanSubjectID)
@@ -360,3 +362,11 @@ func ReadEntitlementIntent(ctx context.Context, outboxID string) (EntitlementInt
 // be an empty desired state and an empty desired state removes every
 // entitlement the subject has.
 var ErrNoApprovedIntent = errors.New("db: the outbox row cites no approved desired state")
+
+// nullIfEmpty writes an optional text column as NULL rather than "".
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}

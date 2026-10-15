@@ -157,7 +157,7 @@ func convergeOn(ctx context.Context, actor, userID, target string) error {
 	}
 	if _, _, err := dbRecordSystemConvergence(ctx, db.SystemConvergence{
 		Target: target, SubjectID: userID, Actor: actor,
-		Reason:  "Role change reached a mapped target",
+		Reason:  "Their roles changed.",
 		Desired: set.Desired(),
 	}); err != nil {
 		return fmt.Errorf("queue convergence for %s on %s: %w", userID, target, err)

@@ -151,3 +151,39 @@ describe("Pending changes · caused by", () => {
     expect(link).toHaveAttribute("href", "/operations/cascades?cascade=cas-8841-aaaa");
   });
 });
+
+/**
+ * A connected system's change has no project or roles. It used to read
+ * "give /" and "Given by hand", which said nothing true.
+ */
+describe("Pending changes · a connected system's change", () => {
+  const apply = (overrides: Partial<PendingRow> = {}) =>
+    row({
+      op_type: "apply",
+      project_id: "",
+      role_keys: [],
+      source: "direct",
+      source_ref: undefined,
+      cascade_id: undefined,
+      target: "truenas",
+      ...overrides,
+    });
+
+  it("says which system and why, and that the check queued it", () => {
+    pending.data = [apply({ initiated_by: "system:reconcile", reason: "Joins Staff." })];
+    renderPending();
+
+    expect(screen.getByText(/TrueNAS account:/)).toBeInTheDocument();
+    expect(screen.getByText(/Joins Staff\./)).toBeInTheDocument();
+    expect(screen.getByText("Check for differences")).toBeInTheDocument();
+    expect(screen.queryByText("Given by hand")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^give$/)).not.toBeInTheDocument();
+  });
+
+  it("says what every such row does when it was queued before the reason was kept", () => {
+    pending.data = [apply({ initiated_by: "system:reconcile" })];
+    renderPending();
+
+    expect(screen.getByText(/brought in line with their roles/)).toBeInTheDocument();
+  });
+});
