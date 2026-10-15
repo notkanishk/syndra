@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { ToBody } from "@/components/ui/Modal";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -100,6 +101,7 @@ function PlanProvenance({ plan }: { plan: EntitlementPlan }) {
     // on a rail and a tab bar on a phone. Reading the token rather than
     // guessing a number is what stops this dock and the tab bar disagreeing
     // the next time either one changes height.
+    <ToBody>
     <div
       className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-6"
       style={{ bottom: "calc(var(--touch-nav-height) + 24px)" }}
@@ -118,6 +120,7 @@ function PlanProvenance({ plan }: { plan: EntitlementPlan }) {
         />
       </div>
     </div>
+    </ToBody>
   );
 }
 
