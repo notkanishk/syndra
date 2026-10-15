@@ -2,8 +2,10 @@ package directory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,7 +43,9 @@ type zitadelSource struct {
 	cache sync.Map // key -> *cacheEntry
 
 	// When Zitadel last answered a list read, and since when it hasn't (zero
-	// while it answers). Unix nanoseconds. An expired entry stays in the
+	// while it answers). ponytail: one flag for every key, so in a partial
+	// outage a good read of one list reports the whole directory current;
+	// per-key freshness if a page ever needs to tell them apart. Unix nanoseconds. An expired entry stays in the
 	// cache as the last good read, so a Zitadel that stops answering leaves
 	// Syndra showing what it last held, marked not current, never sample data
 	// (N23, B11).
@@ -96,6 +100,9 @@ func (z *zitadelSource) answered() {
 // lastGood serves the last good read under key when Zitadel didn't answer,
 // or ErrUnreachable when there has never been one.
 func (z *zitadelSource) lastGood(key string, err error) (any, error) {
+	if !unanswered(err) {
+		return nil, err
+	}
 	z.missedSince.CompareAndSwap(0, z.now().UnixNano())
 	if v, ok := z.cache.Load(key); ok {
 		// Held for another TTL, so a Zitadel that has stopped answering costs
@@ -106,6 +113,22 @@ func (z *zitadelSource) lastGood(key string, err error) (any, error) {
 		return val, nil
 	}
 	return nil, fmt.Errorf("%w: %w", ErrUnreachable, err)
+}
+
+// unanswered is a failure that says Zitadel didn't answer: not a request the
+// caller cancelled, and not Zitadel answering no (a 4xx, other than a timeout
+// or rate limit). Only those are served from the last good read; a refusal
+// must reach the caller, or a deleted project would live on forever.
+func unanswered(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	var se *zitadel.StatusError
+	if errors.As(err, &se) && se.Code >= 400 && se.Code < 500 &&
+		se.Code != http.StatusRequestTimeout && se.Code != http.StatusTooManyRequests {
+		return false
+	}
+	return true
 }
 
 // Freshness reports when Zitadel last answered (zero when never) and whether
@@ -178,7 +201,12 @@ func (z *zitadelSource) FindUser(ctx context.Context, userID string) (models.Use
 	}
 	// Miss on the cached list — try a direct Zitadel lookup in case the user
 	// was created since the last cache fill. GetUser does not populate the
-	// list cache to avoid hiding deletions.
+	// list cache to avoid hiding deletions. Not while Zitadel isn't answering:
+	// the list served was the last good read, and a probe would only be one
+	// more slow failure reported as "not found".
+	if _, current := z.Freshness(); !current {
+		return models.UserProfile{}, false, fmt.Errorf("%w: user %s isn't in the last good read", ErrUnreachable, userID)
+	}
 	zu, err := z.client.GetUser(ctx, userID)
 	if err != nil {
 		return models.UserProfile{}, false, fmt.Errorf("directory: get user %s: %w", userID, err)
@@ -461,9 +489,13 @@ func (z *zitadelSource) fetchProjectApps(ctx context.Context, projectID string) 
 		return z.client.ListApplications(ctx, projectID, p)
 	})
 	if err != nil {
+		if v, err := z.lastGood(key, err); err == nil {
+			return v.([]zitadel.ZitadelApplication), true
+		}
 		log.Printf("[DIRECTORY] list applications for project %s failed (skipping): %v", projectID, err)
 		return nil, false
 	}
+	z.answered()
 	z.cachePut(key, items)
 	return items, true
 }

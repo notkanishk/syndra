@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { CommandBlock } from "@/components/ui/CommandBlock";
 import { Notice } from "@/components/ui/Notice";
@@ -76,6 +76,15 @@ export function DegradedBanner() {
   // reads as confirmation that the fix worked. Counting the rows is the only
   // signal that survives the restart.
   const [serverOpen, setServerOpen] = useState(false);
+  const client = useQueryClient();
+  const degraded = Boolean(data?.degraded);
+  const wasDegraded = useRef(degraded);
+  // Zitadel answering again: every list read while it was down asks again,
+  // rather than waiting out its stale time.
+  useEffect(() => {
+    if (wasDegraded.current && !degraded) void client.invalidateQueries();
+    wasDegraded.current = degraded;
+  }, [client, degraded]);
   const residue = data?.seed_residue ?? 0;
   const seededOverLive = residue > 0 && data?.directory === "zitadel";
   const open = Boolean(data?.degraded || seededOverLive);

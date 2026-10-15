@@ -813,3 +813,71 @@ func TestFreshnessOf_DemoIsAlwaysCurrent(t *testing.T) {
 		t.Fatalf("demo can't go stale: got %v %v", at, current)
 	}
 }
+
+// Zitadel answering no is not Zitadel down: a refusal reaches the caller,
+// and a cancelled request says nothing about Zitadel at all.
+func TestZitadelSource_RefusalsAndCancellationsAreNotOutages(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"a 404 from Zitadel", &zitadel.StatusError{Code: 404, Message: "not found"}},
+		{"a cancelled request", context.Canceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mc := newMockClient()
+			fail := false
+			mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+				if fail {
+					return nil, tc.err
+				}
+				return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1"}}}, nil
+			}
+			src := newZitadelSourceForTest(mc)
+			if _, err := src.Users(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			src.InvalidateUsers()
+			fail = true
+			if _, err := src.Users(context.Background()); err == nil || errors.Is(err, ErrUnreachable) {
+				t.Fatalf("want the refusal itself, got %v", err)
+			}
+			if _, current := src.Freshness(); !current {
+				t.Fatal("a refusal or a cancellation must not mark Zitadel as not answering")
+			}
+		})
+	}
+}
+
+func TestZitadelSource_FindUserDoesNotProbeWhileDown(t *testing.T) {
+	mc := newMockClient()
+	down := false
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		if down {
+			return nil, errors.New("connection refused")
+		}
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1"}}}, nil
+	}
+	probed := false
+	mc.getUserFn = func(context.Context, string) (*zitadel.ZitadelUser, error) {
+		probed = true
+		return nil, errors.New("connection refused")
+	}
+	src := newZitadelSourceForTest(mc)
+	if _, err := src.Users(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	src.InvalidateUsers()
+	down = true
+
+	if _, found, err := src.FindUser(context.Background(), "u1"); err != nil || !found {
+		t.Fatalf("a user in the last good read is found: %v %v", found, err)
+	}
+	_, _, err := src.FindUser(context.Background(), "u2")
+	if !errors.Is(err, ErrUnreachable) {
+		t.Fatalf("a user outside the last good read is unreachable, not missing: %v", err)
+	}
+	if probed {
+		t.Fatal("no direct lookup while Zitadel isn't answering")
+	}
+}

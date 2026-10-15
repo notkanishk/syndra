@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 type Phase = "opening" | "open" | "closing";
 
@@ -29,6 +29,10 @@ export function Unfold({
   className?: string;
 }) {
   const [phase, setPhase] = useState<Phase | null>(open ? "open" : null);
+  // What leaves is what was there: the caller's children may already
+  // describe the state that closed it.
+  const shown = useRef(children);
+  if (open) shown.current = children;
   const [was, setWas] = useState(open);
 
   // Adjusted during render, not in an effect, so the first frame of an
@@ -50,7 +54,7 @@ export function Unfold({
         setPhase((p) => (p === "closing" ? null : p === "opening" ? "open" : p));
       }}
     >
-      <div>{children}</div>
+      <div>{open ? children : shown.current}</div>
     </div>
   );
 }
