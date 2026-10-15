@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnchoredPanel } from "@/components/ui/Anchored";
 
 import { Badge } from "@/components/ui/Badge";
 
@@ -260,12 +261,17 @@ export function SourcePopover({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement | null>(null);
+  const panel = useRef<HTMLDivElement | null>(null);
   const kind = reason.kind as SourceKind;
 
   useEffect(() => {
     if (!open) return;
     function onDocument(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+      // The panel is under <body>, outside the trigger: a click inside it
+      // (its footer's action) is still inside the popover.
+      const target = event.target as Node;
+      if (ref.current?.contains(target) || panel.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -296,8 +302,13 @@ export function SourcePopover({
         <SourceChip kind={kind} />
       </button>
 
-      {open && (
-        <span className="absolute left-0 top-[calc(100%+8px)] z-30 w-[380px] settle-in rounded-panel border border-line-strong bg-surface-2 shadow-popover">
+      <AnchoredPanel
+        anchor={ref}
+        open={open}
+        width={380}
+        panelRef={panel}
+        className="settle-in rounded-panel border border-line-strong bg-surface-2 shadow-popover"
+      >
           <span className="flex items-center gap-2.5 border-b border-line px-[18px] py-4">
             <SourceChip kind={kind} />
             <span className="font-display text-[19px] font-semibold">{expandedTitle(kind)}</span>
@@ -317,8 +328,7 @@ export function SourcePopover({
               {footer}
             </span>
           )}
-        </span>
-      )}
+      </AnchoredPanel>
     </span>
   );
 }

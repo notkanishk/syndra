@@ -56,3 +56,16 @@ describe("every fixed overlay renders under <body>", () => {
     expect(dialog.parentElement).toBe(document.body);
   });
 });
+
+describe("every popover renders under <body>", () => {
+  // Absolute inside the page, a popover is clipped by the first overflow-hidden
+  // card or scrolling dialog around it. They go through AnchoredPanel.
+  const POPOVER_IN_PLACE = /["'`\s]absolute\b[^"'`]*shadow-popover|shadow-popover[^"'`]*\babsolute\b/;
+
+  it("never leaves one where a card can clip it", () => {
+    const offenders = walk(SRC)
+      .filter((file) => POPOVER_IN_PLACE.test(readFileSync(file, "utf8")))
+      .map((file) => relative(SRC, file));
+    expect(offenders, "draw it with AnchoredPanel from components/ui/Anchored").toEqual([]);
+  });
+});
