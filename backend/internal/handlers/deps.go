@@ -39,6 +39,9 @@ var (
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne
+	// svcDeliver is the one rule for whether a just-written change goes now
+	// or waits for the operator (roles that wait, N14 B).
+	svcDeliver = services.Deliver
 	svcDrainAddon                   = propagation.DrainAddon
 
 	dbCreateAccessRequest  = db.CreateAccessRequest

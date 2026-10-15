@@ -227,6 +227,17 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 		return nil, fmt.Errorf("count holders: %w", err)
 	}
 
+	// Roles that wait for you (N14 B): the catalogue carries the mark, so
+	// every picker and before-line reads it from the one read.
+	waitRows, err := svcListRoleWaits(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load roles that wait: %w", err)
+	}
+	waits := make(map[string]bool, len(waitRows))
+	for _, w := range waitRows {
+		waits[w.ProjectID+":"+w.RoleKey] = true
+	}
+
 	// Pre-index directory project names so building the catalog doesn't fan
 	// out another ProjectName lookup per role.
 	projectNames := make(map[string]string, len(dirProjects))
@@ -256,6 +267,7 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 			Group:             entry.group,
 			ClonedFromProject: entry.clonedFromP,
 			ClonedFromRole:    entry.clonedFromR,
+			WaitsForSend:      waits[key],
 			BundleCount:       usage.BundleCount,
 			RuleCount:         usage.RuleCount,
 			AssignedUserCount: assignedUsers,

@@ -64,6 +64,9 @@ type EnqueueResult struct {
 	OutboxID       string `json:"outbox_id"`
 	IdempotencyKey string `json:"idempotency_key"`
 	Status         string `json:"status"`
+	// WaitReason says why the change isn't in Zitadel yet, when it isn't:
+	// role_waits, manual, or halted:<reason> (services.Deliver).
+	WaitReason string `json:"wait_reason,omitempty"`
 }
 
 // EnqueueDirectGrantPropagation writes the intent ledger rows (one

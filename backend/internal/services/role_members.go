@@ -418,6 +418,8 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 // revokes upstream is the failure this type is here to make visible.
 type DirectGrantRemoval struct {
 	OutboxIDs []string `json:"outbox_ids"`
+	// WaitReason: why the removal isn't in Zitadel yet, when it isn't.
+	WaitReason string `json:"wait_reason,omitempty"`
 	// Revoked lists "project/role" pairs that lost their last source and are
 	// queued for removal from the identity provider.
 	Revoked []string `json:"revoked_roles"`
