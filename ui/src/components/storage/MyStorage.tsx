@@ -567,6 +567,9 @@ function PlaceBlock({
   const quota = usage?.quota_bytes ?? 0;
   const pct = usage && quota > 0 ? Math.min(100, (usage.used_bytes / quota) * 100) : 0;
   const full = pct >= 90;
+  // At or over its limit TrueNAS refuses new writes and keeps every file, so
+  // the member can still open and delete (a limit set below what they hold).
+  const over = Boolean(usage && quota > 0 && usage.used_bytes >= quota);
   let use: string | null = null;
   if (can) {
     if (offline) use = "Usage unavailable while offline";
@@ -593,6 +596,11 @@ function PlaceBlock({
         </span>
         {use && <span className={`ml-auto text-[13.5px] ${!offline && full ? "text-warn-text" : "text-muted"}`}>{use}</span>}
       </div>
+      {can && over && !offline && (
+        <span className="max-w-[70ch] text-[14px] leading-[1.55] text-warn-text [text-wrap:pretty]">
+          Full. You can open and delete files here, but not save new ones until you&apos;re under {formatBytes(quota)}.
+        </span>
+      )}
       {homeKept && (
         <span className="max-w-[70ch] text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
           None of the roles you hold gives a home folder any more. It stays, with your files in it, and only you can

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
@@ -51,9 +52,13 @@ export function HoldsDueForReview() {
         }
       >
         <>
-          {rows.map((hold, i) => (
-            <HoldRow key={hold.id} hold={hold} first={i === 0} />
-          ))}
+          {rows.map((hold, i) =>
+            hold.direction === "set" ? (
+              <OwnValueRow key={hold.id} hold={hold} first={i === 0} />
+            ) : (
+              <HoldRow key={hold.id} hold={hold} first={i === 0} />
+            ),
+          )}
         </>
       </ListStates>
     </Card>
@@ -70,6 +75,41 @@ function holdLabel(hold: Hold): string {
   if (hold.field === "share") return `the ${hold.value} share`;
   if (hold.field === "group") return `the ${hold.value} group`;
   return `${hold.field} ${hold.value}`;
+}
+
+/**
+ * One person's own value due for review: a home folder limit in place of what
+ * their roles give. Read-only here; it is kept or ended on the system's page,
+ * its one write place (A-03 §3).
+ */
+function OwnValueRow({ hold, first }: { hold: Hold; first: boolean }) {
+  const system = targetLabel(hold.target);
+  const bytes = Number(hold.value);
+  const limit = !bytes ? "no limit" : `${(bytes / 1024 ** 3).toFixed(bytes % 1024 ** 3 ? 1 : 0)} GB`;
+  return (
+    <CardRow first={first} className="flex-wrap">
+      <span className="text-[14px]">
+        <UserName id={hold.subject_id} />
+      </span>
+      <span className="text-[13.5px]">their own home folder limit, {limit}</span>
+      <span className="text-[13px] text-faint">
+        on {system} · set by <UserName id={hold.actor_id} /> <Relative iso={hold.created_at} />
+      </span>
+      <span className="flex-1" />
+      <Link
+        href={`/system/targets/${hold.target}`}
+        className="inline-flex min-h-[44px] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0"
+      >
+        Review it on {system}&apos;s page →
+      </Link>
+      <p className="w-full text-[13.5px] text-muted">
+        {hold.reason || <span className="text-faint">No reason recorded.</span>}
+      </p>
+      <p className="w-full text-[13px] text-faint">
+        Review date passed <Relative iso={hold.review_date} />. It stays at {limit} until it is kept or ended.
+      </p>
+    </CardRow>
+  );
 }
 
 function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
