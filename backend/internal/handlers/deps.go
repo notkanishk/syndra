@@ -51,6 +51,8 @@ var (
 	dbWithdrawAccessRequest = db.WithdrawAccessRequest
 	dbResolveAccessRequest  = db.ResolveAccessRequest
 	dbInsertAuditLog        = db.InsertAuditLog
+	// A member's own recent changes (B10). Their own records only.
+	dbListMyChanges = db.ListMyChanges
 
 	// Bundle handler injectable vars. dbAddRoleToBundle/dbAssignBundleToUser were removed
 	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see
