@@ -89,6 +89,11 @@ func (s *server) handlePutSetting(w http.ResponseWriter, r *http.Request, body [
 		return
 	}
 	if req.Value != "" {
+		// A current read, not the last one: a place gone since must not pass.
+		if _, _, current, err := s.readACLs(); err != nil || !current {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "TARGET_UNREADABLE"})
+			return
+		}
 		places, _, err := s.homePlaces()
 		if err != nil {
 			writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})

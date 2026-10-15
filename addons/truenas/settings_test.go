@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func getSettings(t *testing.T, s *server) SettingView {
@@ -87,6 +88,19 @@ func TestTheHomeLocationIsNotSetBlind(t *testing.T) {
 	s := testServer(t, fake)
 	if rr := putHomeRoot(t, s, "/mnt/tank/main/home_dir"); rr.Code == http.StatusOK {
 		t.Fatal("set without reading what the NAS offers")
+	}
+}
+
+// Nor against the last read when this one failed: a folder destroyed since
+// would pass, and homes would be made as plain directories in its parent.
+func TestTheHomeLocationIsNotSetAgainstAStaleRead(t *testing.T) {
+	fake := reachFake()
+	s := testServer(t, fake)
+	getSettings(t, s) // a good read, now cached
+	s.reach.readAt = time.Now().Add(-2 * reachMaxAge)
+	fake.refuse = map[string]string{"filesystem.getacl": "[EACCES] no"}
+	if rr := putHomeRoot(t, s, "/mnt/tank/main/home_dir"); rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503 against a stale read, got %d", rr.Code)
 	}
 }
 

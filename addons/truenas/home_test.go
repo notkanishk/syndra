@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Home folders by role: a role says only whether it gives one, the system has
@@ -23,7 +26,24 @@ func homeServer(t *testing.T, users string, answers map[string]string, refuse ma
 	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: homePlace}); err != nil {
 		t.Fatal(err)
 	}
+	// main › home_dir, a dataset of its own: the one home place.
+	s.reach.last = shareRead{
+		places: []aclPlace{{path: homePlace, share: "main", folder: "home_dir"}},
+		mounts: map[string]string{homePlace: "pool/main/home_dir"},
+	}
+	s.reach.readAt = time.Now()
 	return s, m
+}
+
+func planHome(t *testing.T, s *server, desired string) ApplyOutcome {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"ada@example.edu","desired":`+desired+`}]}`)
+	var plan PlanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+		t.Fatalf("want one outcome, got %s", rr.Body.String())
+	}
+	return plan.Outcomes[0]
 }
 
 var noSuchPath = map[string]string{"filesystem.stat": "[ENOENT] No such file or directory"}
@@ -149,5 +169,52 @@ func TestNoLimitIsTheLargestAndLiftsTheLimit(t *testing.T) {
 	entry := args[1].([]any)[0].(map[string]any)
 	if entry["quota_value"] != int64(0) {
 		t.Fatalf("quota_value = %v", entry["quota_value"])
+	}
+}
+
+// The plan plans what the apply does about homes and limits, and nothing more.
+// A limit-only change planned as "no change" never landed; a home the apply
+// refuses, planned as one, was queued again on every pass.
+func TestThePlanSeesALimitOnlyChange(t *testing.T) {
+	s, _ := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"`+homePlace+`/ada"}]`,
+		map[string]string{"pool.dataset.get_quota": `[{"id":3001,"quota":10737418240}]`}, nil)
+	out := planHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["53687091200"]}`)
+	if out.Effect != EffectApply || !strings.Contains(out.Detail, "50 GiB") {
+		t.Fatalf("a raised limit must be planned, got %s %q", out.Effect, out.Detail)
+	}
+}
+
+func TestThePlanDoesNotPromiseAHomeTheApplyRefuses(t *testing.T) {
+	s, _ := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`,
+		map[string]string{"filesystem.stat": `{"uid":2999}`}, nil)
+	out := planHome(t, s, `{"group":["lab_makers"],"home":["true"]}`)
+	if out.Effect != EffectNoChange || !strings.Contains(out.Detail, "belongs to someone else") {
+		t.Fatalf("a folder that is someone else's must not be planned as a home, got %s %q", out.Effect, out.Detail)
+	}
+}
+
+// A user quota is per dataset: on a home made by hand at a share's root it
+// would cap everything the person owns in the whole share.
+func TestALimitIsNeverSetOutsideAHomePlace(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/mnt/pool/main/ada"}]`,
+		map[string]string{"pool.dataset.get_quota": `[]`}, nil)
+	applyHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["53687091200"]}`)
+	for _, c := range m.fakeRPC.calls {
+		if c == "pool.dataset.set_quota" || c == "pool.dataset.get_quota" {
+			t.Fatalf("no limit may be read or set for a home outside the home places: %v", m.fakeRPC.calls)
+		}
+	}
+}
+
+// An account being switched off gets no new folder: a refused home would take
+// the lock in the same update down with it.
+func TestAnAccountBeingSwitchedOffGetsNoHome(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`, nil, noSuchPath)
+	applyHome(t, s, `{"group":[],"enabled":false,"home":["true"]}`)
+	if len(m.updates) != 1 || m.updates[0]["locked"] != true {
+		t.Fatalf("want the lock alone, got %v", m.updates)
+	}
+	if _, home := m.updates[0]["home"]; home {
+		t.Fatalf("no home for an account being switched off: %v", m.updates[0])
 	}
 }

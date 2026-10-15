@@ -102,11 +102,13 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{"read": homes.Read, "usage_read": homes.UsageRead, "accounts": out})
 }
 
-// largestGiven is the largest whole-number value a field's roles give, and the
-// role that gives it. Nil when no role gives one.
+// largestGiven is the largest limit a field's roles give, and the role that
+// gives it. "0" is no limit, the largest of all, as the add-on applies it: then
+// the limit is nil and the role is the one that lifts it. Both nil when no role
+// gives one.
 func largestGiven(set services.EntitlementSet, field string) (*int64, *services.RoleSource) {
 	var best *int64
-	var from *services.RoleSource
+	var from, unlimited *services.RoleSource
 	prefix := field + "\x00"
 	for key, roles := range set.Given {
 		if len(key) <= len(prefix) || key[:len(prefix)] != prefix || len(roles) == 0 {
@@ -116,10 +118,18 @@ func largestGiven(set services.EntitlementSet, field string) (*int64, *services.
 		if err != nil {
 			continue
 		}
+		if n == 0 {
+			r := roles[0]
+			unlimited = &r
+			continue
+		}
 		if best == nil || n > *best {
 			v, r := n, roles[0]
 			best, from = &v, &r
 		}
+	}
+	if unlimited != nil {
+		return nil, unlimited
 	}
 	return best, from
 }

@@ -179,3 +179,19 @@ The only Syndra writes in 60 days were prod's 3 `user.create` and 1 `user.update
 - [x] P2 The periodic pass queued a second row for a bound person who already had one waiting, so one difference was two rows after two passes. One row per person now, the rule the unbound half already kept. Test
 - [x] P2 Pending changes showed an add-on convergence as "give /", labelled "Given by hand". The reason each caller writes (`SystemConvergence.Reason`) was never stored. It is now (`propagation_outbox.reason`, migration 53), in plain words: the check's own "Joins Staff.", "Gets an account, for a role they hold.", "Their roles changed." The row reads "TrueNAS account: …", and says who queued it: a person, or Check for differences. Test
 - [ ] P2 Releasing an account does not withdraw a convergence already waiting for that person, and the next pass queues a create for anyone who still holds a mapped role. Releasing is not a way to keep someone off TrueNAS; removing their role, or the mapping, is.
+
+## Code review before the 15 Oct deploy
+
+- [x] R1 One row per person skipped a new row while an older one waited, and the drain applies the snapshot a row was queued with, so a stale state (an account enabled for someone deactivated since) could land. It now skips only a waiting row that wants exactly the same thing. Test
+- [x] R2 The plan ignored the home folder limit, so a limit-only change was "no change" and never landed, and a failed limit write was never retried. The plan now reads the limit, read-only, the way the apply does. Test
+- [x] R3 The plan promised a home the apply refuses (a folder that is someone else's), queued again every pass. It now decides the home with the apply's own rules and says why none is made. Test
+- [x] R4 A limit was set on whatever dataset held the home, so a home made by hand at a share's root would cap the person across the whole share. Limits are now set only for a home in a home place. Test
+- [x] R5 An account being switched off no longer gets a new home folder, which rode in the same update as the lock and could take it down. Test
+- [x] R6 Choosing where homes go is refused against a stale read of the NAS, not only a missing one. Test
+- [x] R7 "No limit" lost to any size on the system page's limit line, and read as a 0-byte limit to be over. Test
+- [x] R8 Mapping dialog: removals run group last, so one that stops part-way leaves a row the list shows; a part failing after others landed says the role is part-way changed; people waiting are counted once, not once per part. Test
+- [x] R9 Role counts on the system page and Mappings counted a role's group, home and limit rows as three roles. Test
+- [x] R10 Limit dialog: when the new limit saves and the old one doesn't end, it says so and retries only the ending, instead of saving a third.
+- [x] R11 A fractional limit read back rounded to one decimal and was rewritten on an unrelated change. Test
+- [ ] R12 Not fixed: `home_root` is not re-checked at apply time or part of the plan's fingerprint, so a place destroyed after it was chosen would get plain directories. Rare; the add-on refuses stale reads when it is chosen.
+- [ ] R13 Not fixed: rows a role leaves with no group row (only possible if a removal failed before R8) are not shown with a Remove.

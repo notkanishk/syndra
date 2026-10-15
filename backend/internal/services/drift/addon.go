@@ -415,10 +415,10 @@ func convergeBound(ctx context.Context, target string, bindings []db.TargetBindi
 			log.Printf("[ADDON-RECONCILE] %s answered for %s, which was not in the request", target, out.Subject)
 			continue
 		}
-		// One row in Pending changes per person, as for the unbound below.
-		// ponytail: the waiting row carries the desired state it was queued
-		// with; a newer difference is queued by the pass after it drains.
-		waiting, err := pendingApply(ctx, target, out.Subject)
+		// One row in Pending changes per person and difference, as for the
+		// unbound below. A waiting row that wants something else is not a
+		// reason to skip: it would apply its older snapshot.
+		waiting, err := pendingApply(ctx, target, out.Subject, set)
 		if err != nil {
 			return queued, findings, err
 		}
@@ -668,8 +668,8 @@ func anchorLog(ctx context.Context, target string) string {
 // convergeUnbound queues the first convergence for everyone who holds a role
 // mapped to this target and has no binding on it. The apply creates the account.
 //
-// Not someone with an unsent convergence already waiting: one row in Pending
-// changes per person, not a new one every pass. Not someone whose resolved
+// Not someone with an unsent convergence already waiting for the same thing:
+// one row in Pending changes per person, not a new one every pass. Not someone whose resolved
 // access is disabled (held, but suspended): an account made only to be switched
 // off is a stranger's name on the NAS for nothing.
 func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBinding) (int, error) {
@@ -707,18 +707,18 @@ func convergeUnbound(ctx context.Context, target string, bindings []db.TargetBin
 	sort.Strings(ids)
 	queued := 0
 	for _, id := range ids {
-		waiting, err := pendingApply(ctx, target, id)
-		if err != nil {
-			return queued, err
-		}
-		if waiting {
-			continue
-		}
 		set, err := resolveIntent(ctx, id, target)
 		if err != nil {
 			return queued, fmt.Errorf("resolve %s: %w", id, err)
 		}
 		if string(set["enabled"]) != "true" {
+			continue
+		}
+		waiting, err := pendingApply(ctx, target, id, set)
+		if err != nil {
+			return queued, err
+		}
+		if waiting {
 			continue
 		}
 		if _, _, err := recordConvergence(ctx, db.SystemConvergence{

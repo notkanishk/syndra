@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,6 +78,12 @@ func (s *server) decideHome(desired desiredState, username, current string, uid 
 	if !desired.managed[FieldHome] || !desired.wantsHome {
 		return homeDecision{}, nil
 	}
+	if desired.managed[FieldEnabled] && !desired.enabled {
+		// An account being switched off gets no new folder. The home rides in
+		// the same update as the lock, and a refused home would take the lock
+		// down with it.
+		return homeDecision{}, nil
+	}
 	if desired.homeRoot == "" {
 		return homeDecision{note: fmt.Sprintf("%s's role gives a home folder, and this system has no place for home folders chosen yet, so none was made.", username)}, nil
 	}
@@ -113,16 +120,51 @@ func homeFields(p string) map[string]any {
 // one is wanted and it differs. A limit nobody gives any more is left as it
 // is: removing it would make the folder unlimited, which no one decided.
 func (s *server) convergeQuota(desired desiredState, home string, uid int64) (string, error) {
-	if !desired.managed[FieldHomeQuota] || home == "" || (desired.homeQuota == 0 && !desired.homeUnlimited) {
-		return "", nil
+	dataset, want, owed, err := s.quotaOwed(desired, home, uid)
+	if err != nil || !owed {
+		return "", err
 	}
-	want := desired.homeQuota
+	if err := s.nas.call("pool.dataset.set_quota", []any{dataset, []any{map[string]any{
+		"quota_type": "USER", "id": strconv.FormatInt(uid, 10), "quota_value": want,
+	}}}, nil); err != nil {
+		return "", fmt.Errorf("set the home folder limit: %w", err)
+	}
+	return quotaWords(want), nil
+}
+
+// quotaWords is what an outcome says about a limit it sets.
+func quotaWords(want int64) string {
+	if want == 0 {
+		return "Home folder limit lifted."
+	}
+	return fmt.Sprintf("Home folder limit set to %s.", humanBytes(want))
+}
+
+// quotaOwed reads, and only reads, whether the account's limit differs from
+// what its roles want: the plan asks it so it plans the limit the apply sets,
+// and the apply asks it before writing.
+//
+// Only for a home that sits in one of the home places, a dataset of its own. A
+// user quota is per dataset, so on a home made by hand somewhere else (a share's
+// root, say) it would cap everything the person owns in the whole share.
+func (s *server) quotaOwed(desired desiredState, home string, uid int64) (dataset string, want int64, owed bool, err error) {
+	if !desired.managed[FieldHomeQuota] || home == "" || (desired.homeQuota == 0 && !desired.homeUnlimited) {
+		return "", 0, false, nil
+	}
+	want = desired.homeQuota
 	if desired.homeUnlimited {
 		want = 0 // TrueNAS's "no quota"
 	}
-	dataset := datasetOf(path.Dir(home))
+	places, _, err := s.homePlaces()
+	if err != nil {
+		return "", 0, false, fmt.Errorf("read where home folders may go: %w", err)
+	}
+	if !slices.Contains(places, path.Dir(home)) {
+		return "", 0, false, nil
+	}
+	dataset = datasetOf(path.Dir(home))
 	if dataset == "" {
-		return "", nil
+		return "", 0, false, nil
 	}
 	var rows []struct {
 		ID int64 `json:"id"`
@@ -131,25 +173,17 @@ func (s *server) convergeQuota(desired desiredState, home string, uid int64) (st
 		Quota int64 `json:"quota"`
 	}
 	if err := s.nas.call("pool.dataset.get_quota", []any{dataset, "USER", []any{[]any{"id", "=", uid}}}, &rows); err != nil {
-		return "", fmt.Errorf("read the home folder limit: %w", err)
+		return "", 0, false, fmt.Errorf("read the home folder limit: %w", err)
 	}
 	for _, r := range rows {
 		if r.ID == uid && r.Quota == want {
-			return "", nil
+			return dataset, want, false, nil
 		}
 	}
 	if want == 0 && len(rows) == 0 {
-		return "", nil // no row is no limit already
+		return dataset, want, false, nil // no row is no limit already
 	}
-	if err := s.nas.call("pool.dataset.set_quota", []any{dataset, []any{map[string]any{
-		"quota_type": "USER", "id": strconv.FormatInt(uid, 10), "quota_value": want,
-	}}}, nil); err != nil {
-		return "", fmt.Errorf("set the home folder limit: %w", err)
-	}
-	if want == 0 {
-		return "Home folder limit lifted.", nil
-	}
-	return fmt.Sprintf("Home folder limit set to %s.", humanBytes(want)), nil
+	return dataset, want, true, nil
 }
 
 // humanBytes says a limit the way a person reads one.

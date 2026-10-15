@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -128,18 +129,29 @@ func TargetServingProject(ctx context.Context, projectID string) (string, bool, 
 	return target, true, nil
 }
 
-// PendingApplyExists reports whether a convergence for this subject on this
-// target is already queued and not yet sent. The reconcile pass asks before
-// queueing one, so a person waiting on an operator gets one row in Pending
-// changes rather than a new one every six hours.
-func PendingApplyExists(ctx context.Context, target, userID string) (bool, error) {
+// PendingApplyWants reports whether a convergence for this subject on this
+// target is already queued, not yet sent, and wants exactly `desired`. The
+// reconcile pass asks before queueing one, so a person waiting on an operator
+// gets one row in Pending changes rather than a new one every six hours.
+//
+// Exactly, because the waiting row applies the snapshot it was queued with.
+// A row that wants something else (they were deactivated since, say) does not
+// count: skipping the new one would let the drain apply the stale state.
+func PendingApplyWants(ctx context.Context, target, userID string, desired map[string]json.RawMessage) (bool, error) {
+	want, err := json.Marshal(desired)
+	if err != nil {
+		return false, fmt.Errorf("pending apply wants (%s %s): %w", target, userID, err)
+	}
 	const q = `SELECT EXISTS(
-		SELECT 1 FROM propagation_outbox
-		 WHERE op_type = 'apply' AND target = $1 AND user_id = $2
-		   AND status IN ('pending', 'in_flight'))`
+		SELECT 1 FROM propagation_outbox p
+		  JOIN plan_subjects ps ON ps.id = p.plan_subject_id
+		  JOIN desired_state_snapshots s ON s.id = ps.snapshot_id
+		 WHERE p.op_type = 'apply' AND p.target = $1 AND p.user_id = $2
+		   AND p.status IN ('pending', 'in_flight')
+		   AND s.state_json = $3::jsonb)`
 	var exists bool
-	if err := querier(ctx).QueryRow(ctx, q, target, userID).Scan(&exists); err != nil {
-		return false, fmt.Errorf("pending apply exists (%s %s): %w", target, userID, err)
+	if err := querier(ctx).QueryRow(ctx, q, target, userID, string(want)).Scan(&exists); err != nil {
+		return false, fmt.Errorf("pending apply wants (%s %s): %w", target, userID, err)
 	}
 	return exists, nil
 }

@@ -211,12 +211,35 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 	}
 
 	after := projected(current, desired, current.Username)
-	if sameSet(after.Groups, current.Groups) && after.Enabled == current.Enabled && after.SMBEnabled == current.SMBEnabled && after.Home == current.Home {
+	// The home and its limit, decided by the apply's own rules and reads, so
+	// the plan never promises a folder or a limit the apply would not make.
+	home, err := s.decideHome(desired, current.Username, current.Home, current.UID)
+	if err != nil {
+		return ApplyOutcome{
+			Subject: req.Subject, Effect: EffectBlocked,
+			Detail:      "Where the home folder would go could not be read: " + err.Error() + ".",
+			Consequence: "Nothing would change.",
+			Username:    current.Username, Fingerprint: fingerprint,
+		}
+	}
+	if home.path != "" {
+		after.Home = home.path
+	}
+	// A limit that can't be read is not planned: the apply would fail to read
+	// it too, and planning it would queue a row every pass.
+	_, quota, quotaOwed, _ := s.quotaOwed(desired, after.Home, current.UID)
+
+	changes := !sameSet(after.Groups, current.Groups) || after.Enabled != current.Enabled ||
+		after.SMBEnabled != current.SMBEnabled || after.Home != current.Home
+	if !changes && !quotaOwed {
 		detail := "Already in the requested state."
 		if desired.managed[FieldSMBEnabled] && desired.smbEnabled && !current.SMBEnabled {
 			// Not "already in the requested state": SMB is still off, and
 			// waiting on the member rather than on Syndra.
 			detail = smbWaiting(current)
+		}
+		if home.note != "" {
+			detail += " " + home.note
 		}
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectNoChange,
@@ -225,9 +248,16 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 			Username:    current.Username, Fingerprint: fingerprint,
 		}
 	}
+	detail := ""
+	if changes {
+		detail = describePlannedChange(*current, after)
+	}
+	if quotaOwed {
+		detail = strings.TrimSpace(detail + " " + quotaWords(quota))
+	}
 	return ApplyOutcome{
 		Subject: req.Subject, Effect: EffectApply,
-		Detail:      describePlannedChange(*current, after),
+		Detail:      detail,
 		Consequence: describeHolding(after),
 		Username:    current.Username, Fingerprint: fingerprint,
 	}
@@ -263,7 +293,9 @@ func projected(current *Subject, desired desiredState, username string) Subject 
 	// A home folder is planned only where the apply would make one: a home
 	// location chosen, and no home yet. Moving one is never planned, because it
 	// is never done.
-	if desired.managed[FieldHome] && desired.wantsHome && desired.homeRoot != "" && out.Home == "" {
+	// For a new account only; an existing one's is decided by decideHome.
+	if current == nil && desired.managed[FieldHome] && desired.wantsHome && desired.homeRoot != "" &&
+		(!desired.managed[FieldEnabled] || desired.enabled) {
 		out.Home = path.Join(desired.homeRoot, username)
 	}
 	return out
