@@ -30,6 +30,9 @@ const RULES: Array<[string, RegExp, string]> = [
   ["a raw checkbox or radio", /type="(?:checkbox|radio)"/, "Checkbox or Radio from components/ui/Choice"],
   ["a <button> styled as a pill", /<button\b[^>]*className="[^"]*\brounded-pill\b[^"]*\bborder\b/, "Button"],
   ["a hand-written \"… →\" link", /→\s*<\/Link>/, "ArrowLink (it draws the arrow)"],
+  // A dialog that returns null while closed keeps its state, and reopens on
+  // its last result. It mounts only while open instead.
+  ["a dialog that stays mounted while closed", /if \(!open\) return null;/, "mountedWhileOpen from components/ui/Modal"],
 ];
 
 describe("controls come from the primitives", () => {

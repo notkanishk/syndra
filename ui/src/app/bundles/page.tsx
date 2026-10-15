@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import {
   outcomeFromError,
   statesNothingChanged,
@@ -892,14 +892,13 @@ function HoldersPanel({
  * So a bundle is born as the thing it was described as: name, purpose, and the
  * roles that go in v1.
  */
-function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => void }) {
   const create = useCreateBundle();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
 
-  if (!open) return null;
 
   const trimmed = name.trim();
   const chosen = Array.from(selected);
@@ -1007,3 +1006,5 @@ function CreateBundleDialog({ open, onClose }: { open: boolean; onClose: () => v
     </Modal>
   );
 }
+
+const CreateBundleDialog = mountedWhileOpen(CreateBundleDialogOpen);

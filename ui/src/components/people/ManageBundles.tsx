@@ -7,7 +7,7 @@ import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
 import { useMappingRules } from "@/lib/queries/useMappingRules";
 import { useAssignBundle, useUserAccess } from "@/lib/queries/useUsers";
@@ -33,11 +33,10 @@ import { useAssignBundle, useUserAccess } from "@/lib/queries/useUsers";
  * unpublished on the bundle screen, which is two screens disagreeing about the
  * same fact.
  */
-export function ManageBundles({
+function ManageBundlesOpen({
   userId,
   userName,
   assigned,
-  open,
   onClose,
 }: {
   userId: string;
@@ -76,7 +75,6 @@ export function ManageBundles({
     return keys;
   }, [access.data]);
 
-  if (!open) return null;
 
   const previewBundle = (bundles.data ?? []).find((bundle) => bundle.id === previewFor);
   const previewAdding = previewFor ? !assignedIds.has(previewFor) : false;
@@ -331,3 +329,5 @@ export function ManageBundles({
     </Modal>
   );
 }
+
+export const ManageBundles = mountedWhileOpen(ManageBundlesOpen);

@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button, PILL } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { holdersLine } from "@/lib/holders";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
@@ -45,10 +45,9 @@ function holdersHint(role: {
   return line.note && line.note !== "confirmed" ? `${who} (${line.note})` : who;
 }
 
-export function GrantDirectAccess({
+function GrantDirectAccessOpen({
   userId,
   userName,
-  open,
   onClose,
 }: {
   userId: string;
@@ -86,16 +85,21 @@ export function GrantDirectAccess({
   // no end Syndra knows of.
   const heldGrants = useUserGrants(userId);
   const heldAccess = useUserAccess(userId);
+  // What they hold of a role in this project: its end, null for none, or
+  // undefined when they don't hold it. The picker marks each role with it, the
+  // same way Ask for access marks the asker's.
+  const holdingOf = (key: string): string | null | undefined => {
+    const g = (heldGrants.data ?? []).find((x) => x.project_id === projectId && x.role_key === key);
+    if (g) return g.expires_at ?? null;
+    const seen = (heldAccess.data?.projects ?? []).find((p) => p.project_id === projectId)?.observed_role_keys?.includes(key);
+    return seen ? null : undefined;
+  };
   const heldGrant = (heldGrants.data ?? []).find((g) => g.project_id === projectId && g.role_key === roleKey);
-  const observed = (heldAccess.data?.projects ?? [])
-    .find((p) => p.project_id === projectId)
-    ?.observed_role_keys?.includes(roleKey);
-  const alreadyHeld = roleKey !== "" && Boolean(heldGrant || observed);
+  const alreadyHeld = roleKey !== "" && holdingOf(roleKey) !== undefined;
   const heldUntil = heldGrant?.expires_at ?? null;
   const heldNoEnd = alreadyHeld && !heldUntil;
   const who = userName || "They";
 
-  if (!open) return null;
 
   const ready = Boolean(projectId && roleKey) && (preset !== "date" || Boolean(customDate)) && !alreadyHeld;
 
@@ -134,11 +138,15 @@ export function GrantDirectAccess({
             onChange={(event) => setRoleKey(event.target.value)}
           >
             <option value="">{projectId ? "Choose a role…" : "Pick a project first"}</option>
-            {projectRoles.map((role) => (
-              <option key={role.role_key} value={role.role_key}>
-                {role.display_name || humanizeKey(role.role_key)} · {role.role_key}
-              </option>
-            ))}
+            {projectRoles.map((role) => {
+              const held = holdingOf(role.role_key);
+              return (
+                <option key={role.role_key} value={role.role_key} disabled={held !== undefined}>
+                  {role.display_name || humanizeKey(role.role_key)} · {role.role_key}
+                  {held === undefined ? "" : held === null ? " · has this" : ` · has this until ${formatShortDate(held)}`}
+                </option>
+              );
+            })}
           </Select>
           {selectedRole && (
             // Plain language, not a spec: what this role unlocks and how many
@@ -326,3 +334,5 @@ function resolveExpiry(preset: Preset, custom: string): { date: string | null; d
   const endOfTerm = nextTermEnd(now);
   return { date: endOfTerm.toISOString(), days: daysUntilTermEnd(now) };
 }
+
+export const GrantDirectAccess = mountedWhileOpen(GrantDirectAccessOpen);

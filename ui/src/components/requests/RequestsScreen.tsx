@@ -21,7 +21,7 @@ import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { FilterPills, Select } from "@/components/ui/Select";
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
@@ -531,8 +531,7 @@ function MemberRequests({ userId }: { userId: string }) {
   );
 }
 
-function RequestDialog({
-  open,
+function RequestDialogOpen({
   onClose,
   initial,
   userId,
@@ -566,7 +565,6 @@ function RequestDialog({
   // A request is for a role they lack, one per role (owner, 15 Oct).
   const blocked = chosen.kind !== "none";
 
-  if (!open) return null;
 
   return (
     <Modal open onClose={onClose} busy={create.isPending} size="sm" labelledBy="request-title">
@@ -804,3 +802,5 @@ function BulkDecisionDialog({
     />
   );
 }
+
+const RequestDialog = mountedWhileOpen(RequestDialogOpen);
