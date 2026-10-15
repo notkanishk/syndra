@@ -56,7 +56,7 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
   - [x] B7 backend: migration 000057 adds `assigned_by`, `source`, `moved_from_version` to `user_bundle_assignments`; assign = `direct` + actor, welcome = `welcome` + nobody, publish-migrate and move = `moved` + actor + the version left. `request` is reserved: an access request asks for one role, never a bundle. Older rows stay NULL and the API omits the fields
 - [ ] 4.2 Insights (N12)
 - [ ] 4.3 My access (B10, 52b, 52c)
-- [ ] 4.4 People bulk (B4: never take access from yourself)
+- [x] 4.4 People bulk (B4): a bulk revoke leaves the requester out (`excluded`), the bar says "Includes you · you are left out of anything that revokes access" (the copy guard replaced the board's "takes access away" with "revokes"), and the review row says "Left out · this is you"
 
 ## 5. Phone and login
 - [ ] 5.1 Filters below tablet as a Modal sm sheet (87c)
