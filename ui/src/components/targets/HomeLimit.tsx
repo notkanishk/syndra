@@ -247,7 +247,7 @@ export function LimitDialog({
         )}
       </div>
       <ModalFooter note={`Syndra sends it to ${system} as soon as you save.`}>
-        <Button variant="ghost" onClick={onClose}>
+        <Button onClick={onClose}>
           Cancel
         </Button>
         {own && savedNew ? (

@@ -29,6 +29,7 @@ const RULES: Array<[string, RegExp, string]> = [
   ["a raw <textarea>", /<textarea\b/, "Textarea"],
   ["a raw checkbox or radio", /type="(?:checkbox|radio)"/, "Checkbox or Radio from components/ui/Choice"],
   ["a <button> styled as a pill", /<button\b[^>]*className="[^"]*\brounded-pill\b[^"]*\bborder\b/, "Button"],
+  ["a hand-written \"… →\" link", /→\s*<\/Link>/, "ArrowLink (it draws the arrow)"],
 ];
 
 describe("controls come from the primitives", () => {

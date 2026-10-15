@@ -180,6 +180,7 @@ export function TakeAwayDialog({
         <Button
           variant="dangerConfirm"
           disabled={!armed}
+          isPending={revoke.isPending}
           reason={
             !armed && !revoke.isPending
               ? !reason.trim()
@@ -199,9 +200,9 @@ export function TakeAwayDialog({
             )
           }
         >
-          {revoke.isPending ? "Revoking…" : `Revoke access for ${subjectName}`}
+          {`Revoke access for ${subjectName}`}
         </Button>
-        <Button variant="ghost" onClick={onClose} disabled={revoke.isPending}>
+        <Button onClick={onClose} disabled={revoke.isPending}>
           Cancel
         </Button>
       </ModalFooter>

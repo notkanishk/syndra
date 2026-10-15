@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
@@ -95,14 +95,14 @@ export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Se
                       // the requests page next to the answers to earlier asks,
                       // and a link is shareable — "ask for this" is a sentence
                       // one person sends another.
-                      <Link
+                      <ArrowLink
                         href={`/requests?project=${encodeURIComponent(
                           project.id,
                         )}&role=${encodeURIComponent(role.key)}`}
-                        className="inline-flex min-h-[44px] shrink-0 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-0"
+                        className="shrink-0"
                       >
-                        Ask for this →
-                      </Link>
+                        Ask for this
+                      </ArrowLink>
                     )}
                   </div>
                 );

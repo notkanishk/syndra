@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Fragment, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -233,12 +233,7 @@ export function RoleMappingDialog({
                 <span className="text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
                   No mapping can give one until you choose where home folders go on {name}. This one works without
                   it; give it a home folder later by changing it.{" "}
-                  <Link
-                    href={`/system/targets/${target}`}
-                    className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0"
-                  >
-                    Choose where home folders go →
-                  </Link>
+                  <ArrowLink href={`/system/targets/${target}`}>Choose where home folders go</ArrowLink>
                 </span>
               ) : (
                 <>

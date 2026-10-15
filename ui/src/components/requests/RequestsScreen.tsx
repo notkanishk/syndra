@@ -494,7 +494,7 @@ function MemberRequests({ userId }: { userId: string }) {
               {entry.status === "pending" && !resolved.has(entry.id) && (
                 <Button
                   size="sm"
-                  variant="ghost"
+                  variant="outline"
                   disabled={withdraw.isPending}
                   onClick={() => withdrawOne(entry)}
                 >

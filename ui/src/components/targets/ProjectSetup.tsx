@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { StatusDot } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeaderLink } from "@/components/ui/Card";
 import { FieldHint, FieldLabel } from "@/components/ui/Input";
@@ -98,8 +99,8 @@ export function ProjectStep({ target, onSet }: { target: string; onSet: (name: s
             </Select>
           </div>
           <span className="flex-none whitespace-nowrap">
-            <Button type="submit" variant="accent" disabled={!chosen || set.isPending}>
-              {set.isPending ? "Setting…" : "Use this project"}
+            <Button type="submit" variant="accent" disabled={!chosen} isPending={set.isPending}>
+              Use this project
             </Button>
           </span>
         </form>
@@ -133,12 +134,9 @@ export function ProjectSet({ target, project }: { target: string; project: strin
           Nobody&apos;s access changed: no role reaches {name} yet. Map {project}&apos;s roles to {name} groups to
           give people accounts there.
         </p>
-        <Link
-          href={`/system/targets/${target}/mappings`}
-          className="inline-flex min-h-[44px] items-center self-start whitespace-nowrap text-[15px] font-semibold text-accent-text desktop:min-h-0"
-        >
-          Map its roles to {name} groups →
-        </Link>
+        <ArrowLink href={`/system/targets/${target}/mappings`} className="self-start whitespace-nowrap">
+          Map its roles to {name} groups
+        </ArrowLink>
       </div>
     </section>
   );
@@ -327,7 +325,7 @@ function HomeLocationDialog({
               : "Takes effect now. Nothing is made until a mapping gives home folders."
         }
       >
-        <Button variant="ghost" onClick={onClose}>
+        <Button onClick={onClose}>
           Cancel
         </Button>
         <Button

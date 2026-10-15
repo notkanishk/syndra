@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 
-import { ErrorState, RowSkeleton } from "@/components/states";
+import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { AnchoredPanel } from "@/components/ui/Anchored";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -197,12 +197,10 @@ export default function AccessMapPage() {
               onRetry={() => topology.refetch()}
             />
           ) : nodes.length === 0 ? (
-            <div className="flex flex-col gap-2">
-              <div className="type-empty-title">Nothing to show yet.</div>
-              <p className="max-w-[52ch] text-[14px] text-muted">
-                Items appear here once Syndra has at least one project and one role.
-              </p>
-            </div>
+            <EmptyState
+              title="Nothing to show yet."
+              guidance="Items appear here once Syndra has at least one project and one role."
+            />
           ) : !focus ? (
             <RootView
               nodes={nodes}
@@ -303,12 +301,7 @@ function RootView({
 
   if (visible.length === 0) {
     return (
-      <div className="flex flex-col gap-2">
-        <div className="type-empty-title">Nothing shown.</div>
-        <p className="max-w-[52ch] text-[14px] text-muted">
-          Every type of item is hidden. Turn one back on under Show.
-        </p>
-      </div>
+      <EmptyState title="Nothing shown." guidance="Every type of item is hidden. Turn one back on under Show." />
     );
   }
 

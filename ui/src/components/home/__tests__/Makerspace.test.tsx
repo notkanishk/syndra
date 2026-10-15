@@ -214,7 +214,7 @@ describe("Home › The makerspace", () => {
     state.users = [];
     renderMakerspace();
 
-    expect(screen.getByText("Reading…")).toBeInTheDocument();
+    expect(screen.getByLabelText("Loading gaps")).toBeInTheDocument();
     expect(screen.queryByText("Everybody here has something.")).not.toBeInTheDocument();
   });
 
@@ -223,7 +223,7 @@ describe("Home › The makerspace", () => {
     state.roles = [];
     renderMakerspace();
 
-    expect(screen.getAllByText("Reading…").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText(/^Loading (gaps|where access lives)$/).length).toBeGreaterThan(0);
     expect(screen.queryByText("Nobody holds a role yet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Every role and bundle is in use.")).not.toBeInTheDocument();
   });

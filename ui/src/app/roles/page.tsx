@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -161,12 +162,7 @@ export default function RolesPage() {
           <strong className="font-semibold text-ink">This list may be partial.</strong> It covers
           roles Syndra created and roles Zitadel reports. A role created straight in Zitadel, on a
           project Syndra cannot read, is not here.{" "}
-          <Link
-            href="/zitadel/projects"
-            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0"
-          >
-            Check a project&rsquo;s roles in Zitadel →
-          </Link>
+          <ArrowLink href="/zitadel/projects">Check a project&rsquo;s roles in Zitadel</ArrowLink>
         </div>
       </div>
 

@@ -976,7 +976,7 @@ describe("the system's Zitadel project", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use this project" }));
     expect(state.projectSet).toEqual(["p1"]);
     expect(screen.getByText("TrueNAS uses Network storage.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Map its roles to TrueNAS groups →" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Map its roles to TrueNAS groups" })).toBeInTheDocument();
     expect(fence()).toBeNull();
   });
 

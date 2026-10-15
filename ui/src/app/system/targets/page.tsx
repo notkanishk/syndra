@@ -5,6 +5,7 @@ import Link from "next/link";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { ReadingWord, targetReading, type Reading } from "@/components/targets/TargetReading";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardColumns, CardRow } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
@@ -110,12 +111,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         {/* The project it serves, read-only: it is set in one place, the
             system's own page. Absent is the row's Needs you. */}
         {row.project === null ? (
-          <Link
-            href={`/system/targets/${row.target}`}
-            className="flex min-h-[44px] items-center text-[13px] font-semibold text-accent-text desktop:min-h-0"
-          >
-            Choose its Zitadel project →
-          </Link>
+          <ArrowLink href={`/system/targets/${row.target}`}>Choose its Zitadel project</ArrowLink>
         ) : row.project ? (
           <span className="block truncate text-[13px] text-muted">
             Serves {row.project.name || "a project Syndra couldn't name"}

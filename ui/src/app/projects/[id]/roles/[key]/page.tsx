@@ -13,6 +13,7 @@ import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Mono } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
@@ -181,12 +182,7 @@ export default function RoleMembersPage({
         <Card>
           <div className="flex flex-wrap items-center gap-3 px-5 py-4">
             <span className="type-card-title">In Zitadel without Syndra giving it</span>
-            <Link
-              href={driftHref({ project: id, role: roleKey })}
-              className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text hover:underline desktop:min-h-6"
-            >
-              Review in drift →
-            </Link>
+            <ArrowLink href={driftHref({ project: id, role: roleKey })}>Review in drift</ArrowLink>
           </div>
           {observedOnly.map((person) => (
             <Link

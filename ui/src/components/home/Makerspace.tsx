@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { UserName } from "@/components/names";
+import { RowSkeleton } from "@/components/states";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { machineName } from "@/lib/audit-vocabulary";
@@ -167,7 +168,7 @@ function Gaps() {
     return (
       <Card>
         <CardHeader title="Gaps" />
-        <div className="row-divider px-5 py-3.5 text-[14px] text-faint">Reading…</div>
+        <RowSkeleton rows={3} label="Loading gaps" />
       </Card>
     );
   }
@@ -271,7 +272,7 @@ function AccessShape() {
     <Card>
       <CardHeader title="Where access lives" />
       {loading ? (
-        <div className="px-5 py-3.5 text-[14px] text-faint">Reading…</div>
+        <RowSkeleton rows={3} label="Loading where access lives" />
       ) : (
         <>
           {top.length > 0 && (
