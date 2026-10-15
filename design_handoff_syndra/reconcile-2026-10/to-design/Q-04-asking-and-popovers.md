@@ -131,6 +131,23 @@ New part for `/design-sync` to bring into the design system: `AnchoredPanel` (th
 8. **Three segmented controls.** The Basic/Advanced switch, the chime toggle and Tabs each draw their own pill group, deliberately. Keep them, or make them one Segmented?
 9. **Dates for an end.** "Expires 2 Aug", "Ends 2 Aug", "until 2 Aug" and "expiring 2 Aug" all appear for the same thing, and two dialogs use the long date with the year. Pick one verb and one format for a list and one for a sentence.
 
+## 8 · Asking for what you already have, and asking twice (route-requests, people, review)
+
+**Found (Locked).**
+- A member asked five times, from one dialog, for a role they held for good.
+- Every copy reached the queue.
+- Approving any of them would have written its end date over the access the member already had.
+
+**Built (Locked, owner 15 Oct):** a request is for a role someone lacks, and one per role. Nothing merges into what's there.
+- **The dialog** marks each role "you have this", "yours until 18 Dec" or "already asked", and won't send one of them.
+- **Once sent**, the dialog becomes its result, with Done only.
+- **A request for a role they've come to hold since asking** shows "Already has this… decline it to close the request" in the queue, with Approve off.
+- **Giving a role someone already has** is refused everywhere: People's grant dialog, and bulk assign, including through a bundle. Extend is the one act that moves an end, and only later.
+
+**Questions.**
+1. **Keeping a role that ends.** My access used to say "Request an extension", and a request for a held role is now refused. It now says to tell makerspace staff before it ends. Should a member have a way to ask for that inside Syndra, such as an "Ask to keep it" that lands in the queue as an extension, not a grant? Or is telling staff enough?
+2. **A second source.** Bulk assign used to add a direct grant beside a bundle, so access survived the bundle changing. It's refused now. Is that ever needed? If it is, should it be its own action ("Keep this even without the bundle")?
+
 ## What code would welcome from design
 
 Code moved the product toward one way of drawing each control. Where design sees a better one than code chose, redraw it and code will follow. The same goes for anywhere above where code picked between two plausible patterns.

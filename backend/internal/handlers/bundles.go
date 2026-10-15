@@ -108,6 +108,10 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, err := dbCreateBundle(r.Context(), req.Name, req.Description, mode, roles)
+	if db.IsUniqueViolation(err) {
+		jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A bundle with that name already exists.")
+		return
+	}
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return

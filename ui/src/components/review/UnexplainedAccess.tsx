@@ -555,7 +555,11 @@ function TriageRow({
   // A machine account is not a person: an integration that provisions itself
   // on every deploy will re-create this tomorrow whatever Syndra records, so
   // adopting is the wrong verb and is neutralised rather than hidden.
-  const adoptPointless = item.user_is_service_account;
+  // Adopting records access Zitadel has. A grant Syndra records that Zitadel
+  // doesn't (syndra_only) has nothing to adopt, and adopting it wrote a second,
+  // permanent record of access nobody holds.
+  const nothingToAdopt = item.drift_type === "syndra_only";
+  const adoptPointless = item.user_is_service_account || nothingToAdopt;
 
   return (
     <div className={leading ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}>
@@ -617,6 +621,7 @@ function TriageRow({
             variant={adoptPointless ? "ghost" : "accent"}
             size="sm"
             disabled={adoptPointless}
+            reason={nothingToAdopt ? "Zitadel doesn't have this, so there's nothing to adopt." : undefined}
             onClick={() => onResolve("attribute")}
           >
             Adopt

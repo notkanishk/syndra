@@ -3,7 +3,6 @@
 import { ResolvedProjectName } from "@/components/names";
 import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
-import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
   NotSentYet,
@@ -184,14 +183,9 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               {expiringRole ?? "One of your permissions"} runs out on{" "}
               {formatShortDate(expiringGrant.expires_at)}.
             </strong>{" "}
-            If you still need it, ask and makerspace staff can extend it.
+            If you still need it, tell makerspace staff before then: they can extend it. A
+            request is only for something you don&rsquo;t have yet.
           </div>
-          <ButtonLink
-            href={`/requests?project=${encodeURIComponent(expiringGrant.project_id)}&role=${encodeURIComponent(expiringGrant.role_key)}`}
-            variant="accent"
-          >
-            Request an extension
-          </ButtonLink>
         </div>
       )}
 

@@ -195,3 +195,18 @@ The only Syndra writes in 60 days were prod's 3 `user.create` and 1 `user.update
 - [x] R11 A fractional limit read back rounded to one decimal and was rewritten on an unrelated change. Test
 - [ ] R12 Not fixed: `home_root` is not re-checked at apply time or part of the plan's fingerprint, so a place destroyed after it was chosen would get plain directories. Rare; the add-on refuses stale reads when it is chosen.
 - [ ] R13 Not fixed: rows a role leaves with no group row (only possible if a removal failed before R8) are not shown with a Remove.
+
+## Found in production, 15 Oct 2026 (one role asked for five times)
+
+test_user asked five times, from one dialog, for Community, which they held for good. Every copy reached the queue, and approving one would have written its 64-day end over their access. Owner, 15 Oct: a request is for a role someone lacks, one per role; nothing merges into what is there.
+
+- [x] D1 One waiting request per person and role: a unique index (migration 54), and a second ask returns the waiting one (409 ALREADY_ASKED). Test (live)
+- [x] D2 No request for a role already held, with an end date or without (409 ALREADY_HELD). The dialog marks held and already-asked roles and won't send them. Test
+- [x] D3 Approving a request for a role the person has since come to hold is refused, in the single decision and the bulk plan alike; the queue says "Already has this… decline it to close the request" and Approve is off. Test
+- [x] D4 The dialog becomes its result once sent, with Done only, so nothing is sent twice from it. The bottom spacing that clipped is fixed with it. Test
+- [x] D5 Migration 54 closes, as `system` and audited, waiting requests for roles already held and copies of a waiting request (keeping the earliest). Test (live)
+- [x] D6 Giving a role someone already has is refused everywhere: People's grant dialog, the grant endpoint, and bulk assign (no change, including through a bundle). Extend is the one act that changes an existing end (`extend: true`, `db.EndSet`), and only to a later one. Test
+- [x] D7 A write that decides no end (bundle and rule cascades, the Zitadel users page, drift Adopt) keeps the end a grant has (`db.EndKept`, the default). They used to write "no end", turning access that ended into access that never does. Test (live)
+- [x] D8 Drift Adopt is refused for a finding Zitadel doesn't hold (syndra_only), in the plan and the apply; the button says why. Test
+- [x] D9 One hold of a kind in force: a second identical one is refused (409 ALREADY_IN_FORCE), so revoking twice no longer rotates the password twice; a person's own limit replaces the last in one transaction. Test (live)
+- [x] D10 Publishing an unchanged mapping set is refused; a duplicate bundle name says so instead of a database error; Manage bundles no longer inverts a change on retry; Extend locks after it lands. Test

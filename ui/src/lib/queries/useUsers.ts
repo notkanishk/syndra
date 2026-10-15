@@ -210,6 +210,11 @@ export interface CreateGrantInput {
   role_key: string;
   reason: string;
   duration_days: number;
+  /**
+   * Moves the end of a grant they already have, to a later one. Without it,
+   * giving a role they already have is refused (owner, 15 Oct).
+   */
+  extend?: boolean;
 }
 
 /** The outbox handle the direct-grant endpoint returns. `status` is "pending"

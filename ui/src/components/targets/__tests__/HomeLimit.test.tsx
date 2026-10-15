@@ -106,7 +106,7 @@ describe("giving one person their own limit", () => {
     expect((sent[0].body as { expires_at?: string }).expires_at).toBeTruthy();
   });
 
-  it("keeps a reviewed limit as a new one and ends the old, or just ends it", async () => {
+  it("keeps a reviewed limit as one write (the server replaces the old), or just ends it", async () => {
     const own = { allowance_id: "a1", bytes: 50 * GB, reason: "thesis data", actor_id: "op", set_at: "", review_date: "2026-11-30T00:00:00Z", review_due: true };
     const onClose = vi.fn();
     const { unmount } = wrap(<LimitDialog target="truenas" name="Ada Rao" home={{ ...base, own }} onClose={onClose} />);
@@ -114,7 +114,7 @@ describe("giving one person their own limit", () => {
     fireEvent.change(screen.getByLabelText("Review on"), { target: { value: "2027-02-28" } });
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(sent.map((s) => s.path)).toEqual(["/allowances", "/allowances/a1/lift"]);
+    expect(sent.map((s) => s.path)).toEqual(["/allowances"]);
     unmount();
 
     sent.length = 0;

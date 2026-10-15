@@ -335,15 +335,18 @@ func rehearseAssignRole(
 	out.Effect = EffectApply
 	switch {
 	case existing != nil:
-		out.Detail = "Renews the direct grant they already hold."
-		out.Consequence = expiryPhrase(existing.ExpiresAt, req.DurationDays)
+		// Giving is for people without the role (owner, 15 Oct); an end that
+		// needs moving is an extension, its own operation.
+		out.Effect = EffectNoChange
 		out.GrantIDs = []string{existing.ID}
+		if existing.ExpiresAt == nil {
+			out.Detail = "Already has this, with no end."
+		} else {
+			out.Detail = fmt.Sprintf("Already has this, until %s. Extend it instead.", formatDay(*existing.ExpiresAt))
+		}
 	case effective != nil:
-		// Effective via bundle or rule. Still a legitimate thing to do — a
-		// direct grant survives bundle changes — but the operator should know
-		// they are adding a second source, not first access.
-		out.Detail = "Adds a direct grant."
-		out.Consequence = fmt.Sprintf("Already effective %s — this becomes a second, independent source.", sourcePhrase(effective.Reasons))
+		out.Effect = EffectNoChange
+		out.Detail = fmt.Sprintf("Already has this %s.", sourcePhrase(effective.Reasons))
 	default:
 		out.Detail = "Gains this role."
 		out.Consequence = expiryPhrase(nil, req.DurationDays)
@@ -442,6 +445,7 @@ func rehearseExtend(out BulkOutcome, req BulkRequest, grants []models.DirectGran
 	// extend, and quietly stamping an expiry onto one would be the opposite of
 	// what the operator asked for.
 	var ids []string
+	alreadyLater := 0
 	for _, g := range grants {
 		if g.ExpiresAt == nil {
 			continue
@@ -455,9 +459,20 @@ func rehearseExtend(out BulkOutcome, req BulkRequest, grants []models.DirectGran
 		if req.RoleKey != "" && g.RoleKey != req.RoleKey {
 			continue
 		}
+		// One that already ends later is left as it is (db.EndLater): an
+		// extension never shortens.
+		if !lengthens(g.ExpiresAt, req.DurationDays) {
+			alreadyLater++
+			continue
+		}
 		ids = append(ids, g.ID)
 	}
 
+	if len(ids) == 0 && alreadyLater > 0 {
+		out.Effect = EffectNoChange
+		out.Detail = "Already ends later than this would make it."
+		return out
+	}
 	if len(ids) == 0 {
 		out.Effect = EffectNoChange
 		// Two different facts, and an operator acting on a plan needs to know which. "None
@@ -555,6 +570,18 @@ func displayBundle(name string) string {
 		return "this bundle"
 	}
 	return "the " + name + " bundle"
+}
+
+// lengthens reports whether giving a grant for durationDays (0 is no end)
+// makes an existing end later: the only change db.EndLater lets a write make.
+func lengthens(current *time.Time, durationDays int) bool {
+	if current == nil {
+		return false
+	}
+	if durationDays <= 0 {
+		return true
+	}
+	return time.Now().UTC().Add(time.Duration(durationDays) * 24 * time.Hour).After(*current)
 }
 
 func expiryPhrase(current *time.Time, durationDays int) string {

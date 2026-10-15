@@ -10,9 +10,9 @@ import { Select } from "@/components/ui/Select";
 import { holdersLine } from "@/lib/holders";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
-import { useCreateGrant } from "@/lib/queries/useUsers";
+import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, formatLongDate, humanizeKey, roleLabel } from "@/lib/format";
+import { daysUntil, formatLongDate, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 /**
@@ -81,9 +81,23 @@ export function GrantDirectAccess({
 
   const resolved = resolveExpiry(preset, customDate);
 
+  // What the person holds already, so giving it again is said before the click.
+  // A direct grant's own end wins; otherwise what Zitadel shows is held with
+  // no end Syndra knows of.
+  const heldGrants = useUserGrants(userId);
+  const heldAccess = useUserAccess(userId);
+  const heldGrant = (heldGrants.data ?? []).find((g) => g.project_id === projectId && g.role_key === roleKey);
+  const observed = (heldAccess.data?.projects ?? [])
+    .find((p) => p.project_id === projectId)
+    ?.observed_role_keys?.includes(roleKey);
+  const alreadyHeld = roleKey !== "" && Boolean(heldGrant || observed);
+  const heldUntil = heldGrant?.expires_at ?? null;
+  const heldNoEnd = alreadyHeld && !heldUntil;
+  const who = userName || "They";
+
   if (!open) return null;
 
-  const ready = Boolean(projectId && roleKey) && (preset !== "date" || Boolean(customDate));
+  const ready = Boolean(projectId && roleKey) && (preset !== "date" || Boolean(customDate)) && !alreadyHeld;
 
   return (
     <Modal open onClose={onClose} busy={grant.isPending} size="md" labelledBy="grant-title">
@@ -132,6 +146,13 @@ export function GrantDirectAccess({
             <FieldHint>
               {holdersHint(selectedRole)}
               {selectedRole.description ? ` · ${selectedRole.description}` : ""}
+            </FieldHint>
+          )}
+          {alreadyHeld && (
+            <FieldHint>
+              {heldNoEnd
+                ? `${who} already has this, with no end.`
+                : `${who} has this until ${formatShortDate(heldUntil)}. To keep it longer, extend it from Expiring access.`}
             </FieldHint>
           )}
         </div>
@@ -238,7 +259,9 @@ export function GrantDirectAccess({
                 !ready
                   ? !projectId || !roleKey
                     ? "Choose a project and a role."
-                    : "Pick the date the access should end."
+                    : alreadyHeld
+                      ? "They already have this."
+                      : "Pick the date the access should end."
                   : undefined
               }
               isPending={grant.isPending}
