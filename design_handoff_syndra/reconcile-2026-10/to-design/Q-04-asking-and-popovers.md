@@ -1,6 +1,6 @@
-# Q-04 · Asking for access, an operator's own ask, and where popovers draw
+# Q-04 · Asking for access, links that go where they say, and one way to draw each control
 
-From Claude Code, 15 Oct 2026. Follows A-03. Nothing here retires an earlier answer. Three things found while testing on production, each fixed in code. The fixes are yours to confirm or redraw.
+From Claude Code, 15 Oct 2026. Follows A-03. Nothing here retires an earlier answer. Things found while testing on production, and in a sweep of every link and control after it, each fixed in code. The fixes are yours to confirm or redraw.
 
 **Answer in the design project at** `handoff/2026-10-reconcile/from-design/A-04-asking-and-popovers.md`, with boards beside it in `handoff/2026-10-reconcile/design/`.
 
@@ -68,6 +68,47 @@ From Claude Code, 15 Oct 2026. Follows A-03. Nothing here retires an earlier ans
 2. **Width at phone sizes.** The source popover is 380px and shrinks to the window less 32px. On a phone, is that right, or should every popover there be a bottom sheet?
 
 New part for `/design-sync` to bring into the design system: `AnchoredPanel` (the popover's placement), beside `Notice`, `NotOpenYet` and `ConnectionGuide`.
+
+## 4 · Links that went somewhere other than they said (system-wide)
+
+**Found and built (Locked).** A sweep of every link in the product, for each role that can see it:
+- **"Add people to this role"** opened People filtered to the people who already held the role. Those are the only ones nobody needs to add. It now lists everyone, says "Pick who should get {role}, then choose Give a role", and prefills that role in the dialog.
+- **Home › Where access lives.** A role's number is what Zitadel holds, but the row opened People, which lists only people Syndra has a record of, so the unexplained holders it counted never appeared. It now opens the role's own page, which lists both.
+- **"Request an extension"** opened an empty ask. It now names the role that's ending.
+- **"Set it above ↑"** on Network storage jumped to the first system's password field, whichever card it was on, and pointed at nothing while the system was offline or paused. Each card now has its own field, and the link is gone when there's no field to reach.
+- **"The full log is in Review › Audit"** on a person's activity opened everyone's log. It now opens theirs.
+- **"Decide on Drift →"** on a person, and **"Review in drift →"** on a role, opened the whole project. They now open that person's rows, and that role's.
+- **Home's expiring tile** counted the next 14 days and opened a list of the next 30. It's labelled "Ending in the next 14 days" and opens the same 14.
+- **A session the server refused** sent the person to sign-in, which sent them straight back, and round. It now says "Your session ended. Sign in again and you'll be back where you were.", and signing in returns them there. A sign-in page opened while already signed in goes on to where it was headed.
+
+**Question.**
+- The expiring list has no control for its window: 14 from Home, 30 from the rail.
+- Should it show a "Next 14 days | Next 30 days" Segmented, so the number on Home and the list are visibly one decision?
+- Or should both use one window?
+
+## 5 · One control, drawn one way (system-wide)
+
+**Found and built (Locked).**
+- **Checkboxes and radios.** Seven were hand-drawn, at three sizes: 16px everywhere in the role picker, 24px under a thumb in the selection bar, and a top nudge in some labels. They're now one Checkbox and one Radio: the selection bar's glyph, 24px on a phone, 16px with a mouse, in the accent.
+- **Sign out** was a hand-styled pill in muted text. It's now the outline Button, so it reads like every other button.
+- A guard now fails any select, textarea, checkbox, radio or pill-shaped button drawn outside the primitives.
+
+**Questions.**
+1. **Checkbox and Radio** aren't in the design system. Should they be? If so, draw the checked, disabled and focus states, and say whether a disabled-but-held row (a bundle's locked role in the picker) looks different from a disabled-empty one.
+2. **Sign out** now has ink text instead of muted. Was the muted pill deliberate, to make leaving quieter than anything else in the sheet? If so, say so, and it becomes a variant rather than a one-off.
+
+## 6 · Cards wider than a phone (route-me, member catalogue, bundles, expiring)
+
+**Found and built (Locked).**
+- Cards that sit side by side on a wide screen had a minimum width of 420px. On a 375px phone each card was wider than the screen, and the page scrolled sideways.
+- That covers My access, the member catalogue, Bundles, and the Expiring access rows.
+- Each minimum is now "420px, or the width there is, whichever is smaller". Wide screens are unchanged, and a phone gets one card per row at full width.
+
+**Question.** None, unless the boards meant a different phone layout for these. If they did, draw it.
+
+## What code would welcome from design
+
+Code moved the product toward one way of drawing each control. Where design sees a better one than code chose, redraw it and code will follow. The same goes for anywhere above where code picked between two plausible patterns.
 
 ## Also changed, no question
 
