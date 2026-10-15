@@ -1,25 +1,37 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { FieldHint, FieldLabel } from "@/components/ui/Input";
+import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
-import { Select } from "@/components/ui/Select";
+import { Segmented, Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ApiError } from "@/lib/api-client";
-import { formatClock } from "@/lib/format";
+import { formatClock, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
+import { useCreateMapping, useMappings } from "@/lib/queries/useMappings";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
-  rehearseMappingCreate,
-  useCreateMapping,
-  useMappings,
-  type MappingRehearsal,
-} from "@/lib/queries/useMappings";
+  applyParts,
+  asQueued,
+  bytesToGb,
+  gbToBytes,
+  homeCount,
+  mergePlans,
+  opsFor,
+  rehearseOps,
+  rowsOf,
+  type RehearsedPart,
+  type RoleChoice,
+} from "@/lib/role-mapping-plan";
 import { useProjects } from "@/lib/queries/useProjects";
 import {
+  HOME_ROOT,
   useMappableValues,
   useTargetReach,
+  useTargetSettings,
   useTargets,
   type MappableValues,
   type ReachPlace,
@@ -40,6 +52,24 @@ import {
  * plan that was reviewed.
  */
 export function AddMappingDialog({ target, onClose }: { target: string; onClose: () => void }) {
+  return <RoleMappingDialog target={target} onClose={onClose} />;
+}
+
+/**
+ * What one role gives on a system (A-03 §2): its group, whether it gives a
+ * home folder, and that folder's limit. The one write place for all three;
+ * the mapping row shows them read-only, and Change opens this again.
+ */
+export function RoleMappingDialog({
+  target,
+  role,
+  onClose,
+}: {
+  target: string;
+  /** Changing a role already mapped; absent to add one. */
+  role?: { projectId: string; roleKey: string };
+  onClose: () => void;
+}) {
   const name = targetLabel(target);
   const roster = useTargets();
   const row = (roster.data ?? []).find((t) => t.target === target);
@@ -48,50 +78,86 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
   const mappings = useMappings(target);
   const values = useMappableValues(target, FIELD);
   const reach = useTargetReach(target);
+  const settings = useTargetSettings(target);
   const create = useCreateMapping();
-  const [roleKey, setRoleKey] = useState("");
-  const [value, setValue] = useState("");
-  const [rehearsed, setRehearsed] = useState<MappingRehearsal | null>(null);
+  const resolver = useNameResolver();
+
+  const current = role ? rowsOf(mappings.data ?? [], role.projectId, role.roleKey) : {};
+  const [roleKey, setRoleKey] = useState(role?.roleKey ?? "");
+  const [value, setValue] = useState(current.group?.value ?? "");
+  const [home, setHome] = useState(Boolean(current.home));
+  const [limit, setLimit] = useState<"size" | "none">(current.home && (!current.quota || current.quota.value === "0") ? "none" : "size");
+  const [gb, setGb] = useState(bytesToGb(current.quota?.value));
+  const [parts, setParts] = useState<RehearsedPart[]>([]);
 
   // The system's one project's roles, less the ones already mapped.
   const mapped = new Set((mappings.data ?? []).filter((m) => m.field === FIELD).map((m) => m.role_key));
-  const roles = (projects.data ?? [])
-    .find((r) => r.project.id === project?.id)
-    ?.project.roles.filter((r) => !mapped.has(r.key)) ?? [];
+  const roles =
+    (projects.data ?? []).find((r) => r.project.id === project?.id)?.project.roles.filter((r) => !mapped.has(r.key)) ?? [];
+  const roleLabel =
+    (role && resolver.resolveRole(role.projectId, role.roleKey).value?.display_name) || humanizeKey(role?.roleKey ?? "");
+
+  const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
+  const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
+  const choice: RoleChoice = {
+    group: value,
+    home,
+    quota: home ? (limit === "none" ? "0" : gbToBytes(gb)) : null,
+  };
+  const ops = opsFor(current, choice);
 
   const list = values.data;
   const neverRead = values.error instanceof ApiError && values.error.code === "VALUES_NEVER_READ";
   const noGroups = Boolean(list && list.values.length === 0);
   const fieldName = list ? `${list.label} on ${name}` : `Group on ${name}`;
-  const ready = Boolean(project && roleKey && value && list && !noGroups);
+  const ready = Boolean(
+    project && roleKey && value && list && !noGroups && ops.length > 0 && (choice.quota !== "" || !home),
+  );
   const notReadyReason = neverRead
     ? `Nothing to preview until ${name} lists its groups.`
     : noGroups
       ? `Nothing to preview until ${name} has a group of its own.`
-      : "Nothing is sent until you apply the preview.";
+      : role && ops.length === 0
+        ? "Nothing has changed yet."
+        : "Nothing is sent until you apply the preview.";
+  const who = { target, projectId: role?.projectId ?? project?.id ?? "", roleKey };
+  const homes = homeCount(parts);
+  const checked = parts.every((p) => p.plan.value_checked !== false);
+  const movesGroup = ops.some((o) => o.kind === "edit" && o.field === FIELD);
 
   return (
     <RehearsalDialog
-      title="Add a mapping"
-      lede={`Everyone who holds the role gets an account on ${name} in this group. The preview says how many people that is before anything is sent.`}
+      title={role ? `Change what ${roleLabel} gives` : "Add a mapping"}
+      lede={
+        role
+          ? `Everyone who holds ${roleLabel} moves with the change. The preview says how many people that is before anything is sent.`
+          : `Everyone who holds the role gets an account on ${name} in this group. The preview says how many people that is before anything is sent.`
+      }
       noun={["person", "people"]}
       ready={ready}
       notReadyReason={notReadyReason}
       definitionLabel="Save mapping"
       compose={
         <div className="grid gap-4">
-          <div className="grid gap-1.5">
-            <FieldLabel htmlFor="m-role">Role in {project?.name || "its project"}</FieldLabel>
-            <Select id="m-role" value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
-              <option value="">{roles.length ? "Choose a role" : "No role left to map"}</option>
-              {roles.map((r) => (
-                <option key={r.key} value={r.key}>
-                  {r.label || r.key}
-                </option>
-              ))}
-            </Select>
-            <FieldHint>Roles already mapped are not offered.</FieldHint>
-          </div>
+          {role ? (
+            <div className="grid gap-1.5">
+              <span className="type-label text-label">Role in {project?.name || "its project"}</span>
+              <span className="text-[15px] font-semibold">{roleLabel}</span>
+            </div>
+          ) : (
+            <div className="grid gap-1.5">
+              <FieldLabel htmlFor="m-role">Role in {project?.name || "its project"}</FieldLabel>
+              <Select id="m-role" value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
+                <option value="">{roles.length ? "Choose a role" : "No role left to map"}</option>
+                {roles.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {r.label || r.key}
+                  </option>
+                ))}
+              </Select>
+              <FieldHint>Roles already mapped are not offered.</FieldHint>
+            </div>
+          )}
 
           <div className="grid gap-1.5">
             <FieldLabel htmlFor="m-val">{fieldName}</FieldLabel>
@@ -156,28 +222,120 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
               </>
             )}
           </div>
+
+          {settings.data?.read && (
+            <div className="grid gap-1.5">
+              <span className="type-label text-label" id="m-home">
+                Home folder
+              </span>
+              {!homeRoot && !current.home ? (
+                // One control that can't act now: a sentence and the step.
+                <span className="text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">
+                  No mapping can give one until you choose where home folders go on {name}. This one works without
+                  it; give it a home folder later by changing it.{" "}
+                  <Link
+                    href={`/system/targets/${target}`}
+                    className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0"
+                  >
+                    Choose where home folders go →
+                  </Link>
+                </span>
+              ) : (
+                <>
+                  <span aria-labelledby="m-home">
+                    <Segmented
+                      label="Home folder"
+                      value={home ? "gives" : "none"}
+                      onChange={(v) => setHome(v === "gives")}
+                      options={[
+                        { value: "none", label: "No home folder" },
+                        { value: "gives", label: "Gives a home folder" },
+                      ]}
+                    />
+                  </span>
+                  <FieldHint>
+                    {home
+                      ? `Each person who holds the role gets a folder of their own in ${homeRoot}, named after their account and private to them. Syndra never moves or deletes one, even when the role is revoked.`
+                      : `Home folders go in ${homeRoot}, set on ${name}'s page for every role.`}
+                  </FieldHint>
+                  {home && (
+                    <div className="mt-1 grid gap-1.5">
+                      <span className="type-label text-label">Home folder limit</span>
+                      <span className="flex flex-wrap items-center gap-3">
+                        <Segmented
+                          label="Home folder limit"
+                          value={limit}
+                          onChange={setLimit}
+                          options={[
+                            { value: "size", label: "Up to a size" },
+                            { value: "none", label: "No limit" },
+                          ]}
+                        />
+                        {limit === "size" && (
+                          <span className="flex items-center gap-2">
+                            <span className="w-[110px]">
+                              <Input
+                                aria-label="Limit in GB"
+                                type="number"
+                                min={1}
+                                inputMode="decimal"
+                                value={gb}
+                                onChange={(e) => setGb(e.target.value)}
+                              />
+                            </span>
+                            <span className="text-[14px] text-muted">GB</span>
+                          </span>
+                        )}
+                      </span>
+                      <FieldHint>
+                        Someone with two roles that give a home folder gets the larger limit. One person can be given
+                        their own, on {name}&apos;s page under Accounts.
+                      </FieldHint>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       }
       consequence={
-        rehearsed?.value_checked === false ? (
+        homes || !checked || movesGroup ? (
           <>
-            <span className="font-semibold">
-              {name} could not be reached, so <span className="type-mono">{value}</span> was not checked.
-            </span>{" "}
-            The mapping is allowed through so an outage does not look like your mistake. If{" "}
-            <span className="type-mono">{value}</span> does not exist, the change fails when it reaches {name} and
-            waits in Pending changes until somebody fixes it.
+            {movesGroup && current.group && (
+              // The consequence no count implies: Syndra moves the group, not
+              // what the old group owns, and it has no way to.
+              <>
+                Files owned by group <span className="type-mono">{current.group.value}</span> stay with that group.
+                People moved to the new group lose access to those files unless somebody changes the files&rsquo;
+                owner on {name}.{" "}
+              </>
+            )}
+            {homes && homes.makes > 0 && (
+              <>
+                Makes {homes.makes} home folder{homes.makes === 1 ? "" : "s"} in{" "}
+                <span className="type-mono">{homeRoot}</span>
+                {homes.already > 0 ? `; ${homes.already} ${homes.already === 1 ? "person already has" : "people already have"} one there.` : "."}{" "}
+              </>
+            )}
+            {!checked && (
+              <>
+                <span className="font-semibold">
+                  {name} could not be reached, so <span className="type-mono">{value}</span> was not checked.
+                </span>{" "}
+                The mapping is allowed through so an outage does not look like your mistake. If{" "}
+                <span className="type-mono">{value}</span> does not exist, the change fails when it reaches {name} and
+                waits in Pending changes until somebody fixes it.
+              </>
+            )}
           </>
         ) : undefined
       }
       onRehearse={async (acknowledgeScope) => {
         try {
-          const plan = await rehearseMappingCreate(
-            { target, projectId: project?.id ?? "", roleKey, field: FIELD, value },
-            acknowledgeScope,
-          );
-          setRehearsed(plan);
-          return plan;
+          const rehearsed = await rehearseOps(ops, who, acknowledgeScope);
+          setParts(rehearsed);
+          return mergePlans(rehearsed);
         } catch (error) {
           // The one refusal a picker leaves: the group went away on the
           // system after the list was read. Read it again, and say so.
@@ -193,35 +351,9 @@ export function AddMappingDialog({ target, onClose }: { target: string; onClose:
           throw error;
         }
       }}
-      onApply={async (planId) => {
-        const result = await create.mutateAsync({
-          target,
-          projectId: project?.id ?? "",
-          roleKey,
-          field: FIELD,
-          value,
-          planId,
-        });
-        // Queued, never applied: the row is written here and the people it
-        // reaches are moved by the drain.
-        const base = rehearsed;
-        return {
-          op: "create_mapping",
-          applied: true,
-          outcomes: (base?.outcomes ?? []).map((outcome) => ({
-            ...outcome,
-            effect: "queued" as const,
-          })),
-          summary: {
-            total: base?.summary.total ?? 0,
-            apply: 0,
-            no_change: base?.summary.no_change ?? 0,
-            blocked: base?.summary.blocked ?? 0,
-            failed: 0,
-            succeeded: 0,
-            queued: result.queued_convergences,
-          },
-        };
+      onApply={async () => {
+        const queued = await applyParts(parts, who, (input) => create.mutateAsync(input));
+        return asQueued(mergePlans(parts), queued);
       }}
       onClose={onClose}
     />

@@ -567,6 +567,9 @@ export function useMappableValues(target: string | undefined, field: string, ena
   });
 }
 
+/** The add-on's name for where home folders go. */
+export const HOME_ROOT = "home_root";
+
 /** One system-wide choice an add-on keeps, such as where home folders go. */
 export interface TargetSetting {
   name: string;

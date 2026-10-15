@@ -59,8 +59,23 @@ const state: {
 // mappings themselves.
 const reach = { data: undefined as TargetReach | undefined };
 
+const homeSettings = {
+  data: { read: true, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
+    read: boolean;
+    settings: Array<{ name: string; label: string; value: string; values: string[]; labels?: Record<string, string>; values_read: boolean }>;
+  },
+};
+
 vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useTargets")>()),
+  useTargetSettings: () => ({ data: homeSettings.data, isLoading: false, error: null, refetch: () => {} }),
+  useTargets: () => ({ data: [{ target: "truenas", project: { id: "pLab", name: "Laser Lab" } }], isLoading: false, error: null }),
+  useMappableValues: () => ({
+    data: { field: "group", label: "Group", single: false, values: ["lab_makers", "lab_x"], enumerable: true, read_at: new Date().toISOString(), current: true },
+    error: null,
+    isLoading: false,
+    refetch: () => {},
+  }),
   useTargetReach: () => ({ data: reach.data, isLoading: false, error: null }),
 }));
 
@@ -156,12 +171,14 @@ describe("what roles reach a target", () => {
   // every other project. The edit and delete dialogs used to say "The role
   // maker currently gives...", naming the key with no project in sight
   // anywhere else in the dialog either.
-  it("names the role with its project, not the bare key, when editing or removing a mapping", () => {
+  it("names the role with its project, not the bare key, when changing a mapping", () => {
     state.holders = ["u1"];
     renderMappings();
 
+    // Changing: the dialog names the role, and the project once, as its own line.
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    expect(screen.getByText(/Laser Lab \/ Maker currently gives/)).toBeInTheDocument();
+    expect(screen.getByText("Change what Maker gives")).toBeInTheDocument();
+    expect(screen.getByText("Role in Laser Lab")).toBeInTheDocument();
   });
 
   // Rehearse-then-apply, through the shared dialog, so an operator who has read
@@ -171,9 +188,7 @@ describe("what roles reach a target", () => {
     renderMappings();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
-      target: { value: "lab_x" },
-    });
+    fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "lab_x" } });
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     await waitFor(() => expect(state.rehearsals.length).toBeGreaterThan(0));
@@ -277,9 +292,7 @@ describe("changing what a role reaches · the consequence no count implies", () 
     renderMappings();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
-      target: { value: "lab_x" },
-    });
+    fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "lab_x" } });
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     // On the REVIEW step, beside the plan — it is part of what is being
@@ -310,9 +323,7 @@ describe("a value the target could not be asked about", () => {
     renderMappings();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
-      target: { value: "archive-write" },
-    });
+    fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "lab_x" } });
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     await waitFor(() => expect(screen.getByText(/could not be reached, so/)).toBeTruthy());
@@ -326,9 +337,7 @@ describe("a value the target could not be asked about", () => {
     renderMappings();
 
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
-    fireEvent.change(screen.getByRole("textbox", { name: /new value/i }), {
-      target: { value: "archive-write" },
-    });
+    fireEvent.change(screen.getByLabelText("Group on TrueNAS"), { target: { value: "lab_x" } });
     fireEvent.click(screen.getByRole("button", { name: /preview/i }));
 
     await waitFor(() => expect(screen.getByText(/stay with that group/)).toBeTruthy());
@@ -393,5 +402,36 @@ describe("what each group opens", () => {
     expect(screen.getByText("What each group opens: not read from TrueNAS yet")).toBeInTheDocument();
     expect(screen.queryByText(/Opens nothing/)).toBeNull();
     reach.data = undefined;
+  });
+});
+
+// A-03 §2: the role's home folder and limit are rows of their own in the store,
+// shown here read-only as the role's home line, never as rows of their own.
+describe("a role's home line", () => {
+  it("reads the home folder and its limit under the role, set in the dialog", () => {
+    state.holders = [];
+    state.mappings = [
+      mapping,
+      { ...mapping, id: "m2", field: "home", value: "true" },
+      { ...mapping, id: "m3", field: "home_quota", value: "21474836480" },
+    ];
+    homeSettings.data = {
+      read: true,
+      settings: [
+        {
+          name: "home_root",
+          label: "Where home folders go",
+          value: "/mnt/p/main/home_dir",
+          values: [],
+          labels: { "/mnt/p/main/home_dir": "main › home_dir" },
+          values_read: true,
+        },
+      ],
+    };
+    renderMappings();
+    expect(screen.getByText(/Home folder, up to 20 GB/).textContent).toBe("Home folder, up to 20 GB, in main › home_dir");
+    expect(screen.queryByText(/home_quota →/)).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Change" })).toHaveLength(1);
+    state.mappings = [mapping];
   });
 });

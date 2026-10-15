@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Card, CardHeaderLink } from "@/components/ui/Card";
 import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
@@ -14,6 +14,7 @@ import { targetLabel } from "@/lib/nav";
 import { useMappingHistory, useMappings } from "@/lib/queries/useMappings";
 import { useProjects } from "@/lib/queries/useProjects";
 import {
+  HOME_ROOT,
   useSetTargetProject,
   useSetTargetSetting,
   useTargetHomes,
@@ -169,12 +170,9 @@ export function SetupStrip({ target, project }: { target: string; project: { id:
       <SettingRow
         label="Role mappings"
         action={
-          <Link
-            href={`/system/targets/${target}/mappings`}
-            className="inline-flex min-h-[44px] items-center whitespace-nowrap text-[14.5px] font-semibold text-accent-text desktop:min-h-0"
-          >
+          <CardHeaderLink href={`/system/targets/${target}/mappings`}>
             {roles === 0 ? "Add the first mapping →" : "Mappings →"}
-          </Link>
+          </CardHeaderLink>
         }
       >
         <span className="text-[15px] text-ink">
@@ -212,9 +210,6 @@ export function SetupStrip({ target, project }: { target: string; project: { id:
     </Card>
   );
 }
-
-/** The add-on's name for where home folders go. */
-export const HOME_ROOT = "home_root";
 
 function SettingRow({
   label,

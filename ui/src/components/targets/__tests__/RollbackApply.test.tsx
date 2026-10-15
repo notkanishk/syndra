@@ -45,8 +45,16 @@ const history: MappingHistory = {
 
 // What each group opens is read from the system; these tests are about the
 // mappings themselves.
+const homeSettings = {
+  data: { read: true, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
+    read: boolean;
+    settings: Array<{ name: string; label: string; value: string; values: string[]; labels?: Record<string, string>; values_read: boolean }>;
+  },
+};
+
 vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useTargets")>()),
+  useTargetSettings: () => ({ data: homeSettings.data, isLoading: false, error: null, refetch: () => {} }),
   useTargetReach: () => ({ data: undefined, isLoading: false, error: null }),
 }));
 

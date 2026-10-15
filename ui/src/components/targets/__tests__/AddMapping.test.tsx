@@ -50,6 +50,13 @@ vi.mock("@/lib/queries/useMappings", async (importOriginal) => ({
   }),
 }));
 
+const homeSettings = {
+  data: { read: true, settings: [{ name: "home_root", label: "Where home folders go", value: "", values: [], values_read: true }] } as {
+    read: boolean;
+    settings: Array<{ name: string; label: string; value: string; values: string[]; labels?: Record<string, string>; values_read: boolean }>;
+  },
+};
+
 vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useTargets")>()),
   useTargets: () => ({
@@ -71,6 +78,7 @@ vi.mock("@/lib/queries/useTargets", async (importOriginal) => ({
       state.refetched++;
     },
   }),
+  useTargetSettings: () => ({ data: homeSettings.data, isLoading: false, error: null, refetch: () => {} }),
   useTargetReach: () => ({ data: state.reach, isLoading: false, error: null }),
 }));
 
@@ -91,6 +99,15 @@ vi.mock("@/lib/queries/useProjects", () => ({
     ],
     isLoading: false,
     error: null,
+  }),
+}));
+
+vi.mock("@/lib/queries/useNameResolver", () => ({
+  useNameResolver: () => ({
+    resolveRole: (_p: string, key: string) => ({ value: { display_name: key === "lead" ? "Lab lead" : key }, resolved: true }),
+    resolveProject: () => ({ value: { name: "Laser Lab" }, resolved: true }),
+    resolveUser: (id: string) => ({ value: { id, name: id, email: "" }, resolved: true }),
+    resolveBundle: () => ({ value: undefined, resolved: true }),
   }),
 }));
 
@@ -328,5 +345,66 @@ describe("a mapping on a role nobody holds", () => {
     const apply = await screen.findByRole("button", { name: /^Apply/ });
     expect(apply.hasAttribute("disabled")).toBe(true);
     expect(state.created).toEqual([]);
+  });
+});
+
+// A-03 §2: the dialog is the one write place for what a role gives, its home
+// folder and limit included.
+describe("a role's home folder", () => {
+  const withRoot = (value: string) => {
+    homeSettings.data = {
+      read: true,
+      settings: [
+        {
+          name: "home_root",
+          label: "Where home folders go",
+          value,
+          values: ["/mnt/p/main/home_dir"],
+          labels: { "/mnt/p/main/home_dir": "main › home_dir" },
+          values_read: true,
+        },
+      ],
+    };
+  };
+
+  it("says where to choose the location first, and works without it", () => {
+    withRoot("");
+    compose();
+    expect(screen.queryByRole("radio", { name: "Gives a home folder" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Choose where home folders go →" }).getAttribute("href")).toBe("/system/targets/truenas");
+    expect(preview().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("rehearses the group, the home and its limit as one plan, and counts the homes it makes", async () => {
+    withRoot("/mnt/p/main/home_dir");
+    compose();
+    expect(screen.getByText(/Home folders go in main › home_dir, set on TrueNAS's page for every role/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "Gives a home folder" }));
+    // A size is the first choice, and nothing previews until it has one.
+    expect(preview().hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Limit in GB"), { target: { value: "20" } });
+    fireEvent.click(preview());
+
+    await waitFor(() => expect(state.rehearsals.length).toBe(3));
+    expect(state.rehearsals.map((r) => [r.input.field, r.input.value])).toEqual([
+      ["group", "makers"],
+      ["home", "true"],
+      ["home_quota", "21474836480"],
+    ]);
+    // Two people in the plan, both made a home: the home row's own rehearsal.
+    await waitFor(() => expect(document.body.textContent).toMatch(/Makes 2 home folders in main › home_dir\./));
+    fireEvent.click(await screen.findByRole("button", { name: /^Apply/ }));
+    await waitFor(() => expect(state.created.length).toBe(3));
+  });
+
+  it("gives no limit as an explicit choice", async () => {
+    withRoot("/mnt/p/main/home_dir");
+    compose();
+    fireEvent.click(screen.getByRole("radio", { name: "Gives a home folder" }));
+    fireEvent.click(screen.getByRole("radio", { name: "No limit" }));
+    fireEvent.click(preview());
+    await waitFor(() => expect(state.rehearsals.length).toBe(3));
+    expect(state.rehearsals[2].input).toMatchObject({ field: "home_quota", value: "0" });
+    withRoot("");
   });
 });
