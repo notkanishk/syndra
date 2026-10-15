@@ -1,6 +1,8 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useEffect } from "react";
 
 import { ApiError } from "@/lib/api-client";
 import { Notice } from "@/components/ui/Notice";
@@ -8,6 +10,7 @@ import { Notice } from "@/components/ui/Notice";
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
 import { NOTHING_CHANGED, describeFailure, sentence } from "@/lib/outcome";
+import { useUiView } from "@/lib/ui-view";
 
 /**
  * Four states, every list view. Not three — degraded is real and specific and
@@ -127,7 +130,7 @@ export function ErrorState({
 }) {
   // Zitadel never read: the degraded Notice above the page already says so,
   // and a second, red one here would call it a failure of this list (N23).
-  if (isNeverRead(error)) return null;
+  if (isNeverRead(error)) return <NeverRead />;
 
   const requestId = error instanceof ApiError ? error.details?.request_id : undefined;
 
@@ -152,6 +155,33 @@ export function ErrorState({
 /** A read Zitadel has never answered: there is nothing to show, not a failure. */
 export function isNeverRead(error: unknown): boolean {
   return error instanceof ApiError && error.code === "DIRECTORY_UNREACHABLE";
+}
+
+/**
+ * In the place of a read Zitadel has never answered (N23). An operator has
+ * the degraded Notice above the page and sees nothing more here; a member,
+ * who doesn't, gets one neutral line. Either way the page asks again every
+ * minute on its own, so it fills in when Zitadel answers.
+ */
+function NeverRead() {
+  const { isOperator } = useUiView();
+  const client = useQueryClient();
+  useEffect(() => {
+    const again = setInterval(
+      () => client.invalidateQueries({ predicate: (q) => q.state.status === "error" }),
+      60_000,
+    );
+    return () => clearInterval(again);
+  }, [client]);
+
+  if (isOperator) return null;
+  return (
+    <div className="px-4 py-4 tablet:px-5">
+      <Notice tone="neutral" title="Syndra can't reach the sign-in system right now.">
+        Nothing about your access has changed. This page tries again on its own.
+      </Notice>
+    </div>
+  );
 }
 
 /**
@@ -180,7 +210,7 @@ export function ListStates({
 }) {
   if (isLoading) return <>{skeleton ?? <RowSkeleton />}</>;
   // Never read (N23): no skeleton, no empty state, no rows.
-  if (isNeverRead(error)) return null;
+  if (isNeverRead(error)) return <NeverRead />;
   if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} bare />;
   if (isEmpty) return <>{empty}</>;
   // `arrive`, applied at the one place every list in the product already
