@@ -8,18 +8,30 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
-import { AddMappingButton, RefusedFields, placeName } from "@/components/targets/AddMappingDialog";
+import { AddMappingButton, RefusedFields, RoleMappingDialog, placeName } from "@/components/targets/AddMappingDialog";
+import {
+  FIELD_GROUP,
+  FIELD_HOME,
+  FIELD_HOME_QUOTA,
+  applyParts,
+  asQueued,
+  limitWords,
+  mergePlans,
+  opsFor,
+  rehearseOps,
+  rowsOf,
+  type RehearsedPart,
+  type RoleRows,
+} from "@/lib/role-mapping-plan";
 import { StatusDot } from "@/components/ui/Badge";
-import { useTargetReach, type ReachPlace, type TargetReach } from "@/lib/queries/useTargets";
+import { HOME_ROOT, useTargetReach, useTargetSettings, type ReachPlace, type TargetReach } from "@/lib/queries/useTargets";
 import { ConvergeButton } from "@/components/targets/ConvergeEntitlements";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
-  applyMappingDelete,
   applyMappingEdit,
-  rehearseMappingDelete,
   rehearseMappingEdit,
   useMappingHistory,
   useMappingHolders,
@@ -62,6 +74,11 @@ import { useIsTouch } from "@/lib/useViewport";
 export function MappingManagement({ target }: { target: string }) {
   const mappings = useMappings(target);
   const reach = useTargetReach(target);
+  const settings = useTargetSettings(target);
+  const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
+  const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
+  const all = mappings.data ?? [];
+  const shown = all.filter((m) => m.field !== FIELD_HOME && m.field !== FIELD_HOME_QUOTA);
   const [editing, setEditing] = useState<RoleMapping | null>(null);
   const [deleting, setDeleting] = useState<RoleMapping | null>(null);
   const name = targetLabel(target);
@@ -71,7 +88,7 @@ export function MappingManagement({ target }: { target: string }) {
       <Card>
         <CardHeader
           title={`What roles reach ${name}`}
-          count={mappings.data?.length}
+          count={mappings.data ? shown.length : undefined}
           note={<OpensNote name={name} reach={reach.data} />}
           action={<AddMappingButton target={target} first={(mappings.data ?? []).length === 0} />}
         />
@@ -89,10 +106,14 @@ export function MappingManagement({ target }: { target: string }) {
           }
         >
           <>
-            {(mappings.data ?? []).map((mapping, i) => (
+            {/* One row per role: its home folder and limit are rows of their
+                own in the store, shown here as the role's home line. */}
+            {shown.map((mapping, i) => (
               <MappingRow
                 key={mapping.id}
                 mapping={mapping}
+                home={mapping.field === FIELD_GROUP ? rowsOf(all, mapping.project_id, mapping.role_key) : undefined}
+                homeRoot={homeRoot}
                 first={i === 0}
                 opens={mapping.field === "group" && reach.data?.read ? (reach.data.groups?.[mapping.value] ?? []) : undefined}
                 dim={reach.data?.read === true && reach.data.current === false}
@@ -108,11 +129,28 @@ export function MappingManagement({ target }: { target: string }) {
 
       <VersionHistory target={target} />
 
-      {editing && (
-        <EditMappingDialog mapping={editing} onClose={() => { setEditing(null); void mappings.refetch(); }} />
-      )}
+      {editing &&
+        (editing.field === FIELD_GROUP ? (
+          <RoleMappingDialog
+            target={target}
+            role={{ projectId: editing.project_id, roleKey: editing.role_key }}
+            onClose={() => {
+              setEditing(null);
+              void mappings.refetch();
+            }}
+          />
+        ) : (
+          <EditMappingDialog mapping={editing} onClose={() => { setEditing(null); void mappings.refetch(); }} />
+        ))}
       {deleting && (
-        <DeleteMappingDialog mapping={deleting} onClose={() => { setDeleting(null); void mappings.refetch(); }} />
+        <DeleteMappingDialog
+          mapping={deleting}
+          rows={deleting.field === FIELD_GROUP ? rowsOf(all, deleting.project_id, deleting.role_key) : { group: deleting }}
+          onClose={() => {
+            setDeleting(null);
+            void mappings.refetch();
+          }}
+        />
       )}
     </>
   );
@@ -158,6 +196,8 @@ function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefin
 
 function MappingRow({
   mapping,
+  home,
+  homeRoot,
   first,
   opens,
   dim,
@@ -165,6 +205,10 @@ function MappingRow({
   onDelete,
 }: {
   mapping: RoleMapping;
+  /** The role's rows, for its home line; only on a group row. */
+  home?: RoleRows;
+  /** Where home folders go, as people say it. */
+  homeRoot: string;
   first: boolean;
   /** What its group opens; undefined when not read or not a group. */
   opens: ReachPlace[] | undefined;
@@ -216,6 +260,17 @@ function MappingRow({
                   <span>{place.access === "change" ? "can change files" : "read only"}</span>
                 </span>
               ))
+            )}
+          </span>
+        )}
+        {home?.home && (
+          // Read only: set in the dialog, its one write place (A-03 §2).
+          <span className="text-[13px] leading-[1.5] text-muted">
+            Home folder, {limitWords(home.quota?.value)}
+            {homeRoot && (
+              <>
+                , in <span className="type-mono text-[12.5px] text-ink">{homeRoot}</span>
+              </>
             )}
           </span>
         )}
@@ -341,28 +396,40 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
   );
 }
 
-function DeleteMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose: () => void }) {
-  const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
+function DeleteMappingDialog({
+  mapping,
+  rows,
+  onClose,
+}: {
+  mapping: RoleMapping;
+  /** Every row the role has here: removing the role's mapping removes them all. */
+  rows: RoleRows;
+  onClose: () => void;
+}) {
+  const [parts, setParts] = useState<RehearsedPart[]>([]);
   const roleName = useRoleName(mapping.project_id, mapping.role_key);
+  const who = { target: mapping.target, projectId: mapping.project_id, roleKey: mapping.role_key };
 
   return (
     <RehearsalDialog
       title="Remove this mapping"
       definitionLabel="Remove the mapping"
-      lede={`${roleName} will no longer give ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.`}
+      lede={`${roleName} will no longer give ${mapping.field} = ${mapping.value} on ${targetLabel(mapping.target)}. Everybody holding the role keeps the role and loses that group.${
+        rows.home ? " New home folders stop; the ones already made stay, with their files." : ""
+      }`}
       noun={["person", "people"]}
       // Destructive, because it takes access away — but still rung 2: the
       // cohort is a role's holders rather than a person somebody named, and the
       // dialog's own scope step is the ceremony.
       destructive
       onRehearse={async (acknowledgeScope) => {
-        const plan = await rehearseMappingDelete(mapping.id, acknowledgeScope);
-        setRehearsed(plan);
-        return plan;
+        const rehearsed = await rehearseOps(opsFor(rows, null), who, acknowledgeScope);
+        setParts(rehearsed);
+        return mergePlans(rehearsed);
       }}
-      onApply={async (planId) => {
-        const result = await applyMappingDelete(mapping.id, planId);
-        return asPlan("delete_mapping", rehearsed ?? emptyPlan("delete_mapping"), result);
+      onApply={async () => {
+        const queued = await applyParts(parts, who, () => Promise.reject(new Error("nothing is created when removing")));
+        return asQueued(mergePlans(parts), queued);
       }}
       onClose={onClose}
     />
