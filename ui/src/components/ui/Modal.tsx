@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * The dialog primitive. Destructive actions ALWAYS open one of these — never a
@@ -145,6 +146,24 @@ export function useDialogFocusTrap(
   }, [panelRef, open]);
 }
 
+/**
+ * Puts an overlay under <body>, never where it was written.
+ *
+ * `position: fixed` is fixed to the viewport only while no ancestor has a
+ * transform, filter or backdrop-filter, and an element animating `transform`
+ * counts even after the animation ends at `none`. Rendered in place, a dialog
+ * opened from a row in an arriving card was fixed to that card: clipped by it,
+ * drawn over its rows, with the page behind it uncovered. Every `fixed` overlay
+ * goes through this; a guard test holds it to that.
+ *
+ * Synchronous, not after mount: the focus trap reads the panel in the same
+ * commit. Overlays open on a person's action, so none renders on the server.
+ */
+export function ToBody({ children }: { children: ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
+}
+
 export function Modal({
   open,
   onClose,
@@ -168,6 +187,7 @@ export function Modal({
   if (!open) return null;
 
   return (
+    <ToBody>
     <InsideDialog.Provider value={true}>
     <div
       role="dialog"
@@ -199,6 +219,7 @@ export function Modal({
       </div>
     </div>
     </InsideDialog.Provider>
+    </ToBody>
   );
 }
 
