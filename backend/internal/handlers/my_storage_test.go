@@ -351,3 +351,114 @@ func TestTheMemberViewCarriesConfirmedHealth(t *testing.T) {
 		t.Fatalf("an outage carries when it began and when it was last checked: %+v", view)
 	}
 }
+
+// Where a member connects comes from the target's own folder permissions, and
+// Syndra builds each address once, from the registered host. A folder name with
+// a space is escaped in the URL and kept as is in the Windows path.
+func TestEachPlaceCarriesBothAddressesBuiltFromTheHost(t *testing.T) {
+	connection, storage := addonsConnection, addonsMyStorage
+	t.Cleanup(func() { addonsConnection, addonsMyStorage = connection, storage })
+	addonsConnection = func(string) (*addons.Connection, error) {
+		return &addons.Connection{Protocol: "smb", Host: "nas.example.edu"}, nil
+	}
+	addonsMyStorage = func(context.Context, string, string) addons.StorageStatus {
+		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
+			{Share: "main", Folder: "home_dir/ada", Access: "change", Home: true},
+			{Share: "main", Folder: "laser cutter", Access: "read"},
+			{Share: "open", Access: "read"},
+		}}
+	}
+	stubMyStorage(t, &storageHarness{entitled: true, bound: true})
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil)
+
+	view, err := describeMyTarget(r, "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][2]string{
+		{"smb://nas.example.edu/main/home_dir/ada", `\\nas.example.edu\main\home_dir\ada`},
+		{"smb://nas.example.edu/main/laser%20cutter", `\\nas.example.edu\main\laser cutter`},
+		{"smb://nas.example.edu/open", `\\nas.example.edu\open`},
+	}
+	for i, p := range view.Storage.Places {
+		if p.SMBAddress != want[i][0] || p.UNCAddress != want[i][1] {
+			t.Errorf("place %d: %q %q, want %q %q", i, p.SMBAddress, p.UNCAddress, want[i][0], want[i][1])
+		}
+	}
+}
+
+// Access given back waits for a new password, and the page says when it was
+// given back: the latest end of a deny hold on this target, lifted or lapsed.
+func TestAccessGivenBackCarriesWhenItWasGivenBack(t *testing.T) {
+	storage, allowances := addonsMyStorage, dbAllowancesForSubject
+	t.Cleanup(func() { addonsMyStorage, dbAllowancesForSubject = storage, allowances })
+	addonsMyStorage = func(context.Context, string, string) addons.StorageStatus {
+		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, NeedsNewPassword: true}
+	}
+	lifted := time.Date(2026, 10, 12, 10, 0, 0, 0, time.UTC)
+	lapsed := time.Date(2026, 10, 13, 8, 0, 0, 0, time.UTC)
+	later := time.Now().Add(24 * time.Hour)
+	dbAllowancesForSubject = func(context.Context, string) ([]db.Allowance, error) {
+		return []db.Allowance{
+			{Target: "truenas", Direction: db.AllowanceDeny, LiftedAt: &lifted},
+			{Target: "truenas", Direction: db.AllowanceDeny, ExpiresAt: &lapsed},
+			// Still in force, another system, and not a deny: none is a return.
+			{Target: "truenas", Direction: db.AllowanceDeny, ExpiresAt: &later},
+			{Target: "gitea", Direction: db.AllowanceDeny, LiftedAt: &later},
+			{Target: "truenas", Direction: db.AllowanceAllow, LiftedAt: &later},
+		}, nil
+	}
+	stubMyStorage(t, &storageHarness{entitled: true, bound: true})
+
+	view, err := describeMyTarget(httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil), "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.RestoredAt == nil || !view.RestoredAt.Equal(lapsed) {
+		t.Fatalf("restored_at = %v, want %v", view.RestoredAt, lapsed)
+	}
+}
+
+// "from your Fabrication lead role": each place names the member's own roles
+// whose groups open it, and a home no role gives any more is said to be kept.
+func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
+	storage, reach := addonsMyStorage, addonsReadReach
+	t.Cleanup(func() { addonsMyStorage, addonsReadReach = storage, reach })
+	addonsMyStorage = func(context.Context, string, string) addons.StorageStatus {
+		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
+			{Share: "main", Folder: "home_dir/ada", Path: "/mnt/p/main/home_dir/ada", Access: "change", Home: true},
+			{Share: "main", Folder: "waddle_share", Path: "/mnt/p/main/waddle_share", Access: "change"},
+			{Share: "main", Folder: "quack_share", Path: "/mnt/p/main/quack_share", Access: "read"},
+		}}
+	}
+	addonsReadReach = func(context.Context, string) addons.Reach {
+		return addons.Reach{Read: true, Groups: map[string][]addons.Place{
+			"community": {{Path: "/mnt/p/main/waddle_share"}},
+			"staff":     {{Path: "/mnt/p/main/waddle_share"}, {Path: "/mnt/p/main/quack_share"}},
+		}}
+	}
+	stubMyStorage(t, &storageHarness{entitled: true, bound: true})
+	svcResolveEntitlementSet = func(context.Context, string, string) (services.EntitlementSet, error) {
+		return services.EntitlementSet{
+			Fields:    map[string][]string{"group": {"community"}},
+			Lifecycle: services.LifecycleState{Enabled: true, SMBEnabled: true},
+			Given:     map[string][]services.RoleSource{"group\x00community": {{ProjectID: "p1", RoleKey: "fab_lead"}}},
+		}, nil
+	}
+
+	view, err := describeMyTarget(httptest.NewRequest(http.MethodGet, "/api/v1/me/targets", nil), "truenas", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	places := view.Storage.Places
+	if r := places[1].Roles; len(r) != 1 || r[0].RoleKey != "fab_lead" {
+		t.Errorf("waddle_share roles = %+v", r)
+	}
+	// quack_share opens to staff, which this member isn't in through a role.
+	if len(places[2].Roles) != 0 || len(places[0].Roles) != 0 {
+		t.Errorf("roles where none gives it: %+v / %+v", places[2].Roles, places[0].Roles)
+	}
+	if !view.HomeKept {
+		t.Error("a home no role gives any more must be said to be kept")
+	}
+}

@@ -4,7 +4,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
-import type { TargetHealth, TargetInventory, TargetSummary } from "@/lib/queries/useTargets";
+import type {
+  AccountHome,
+  TargetHealth,
+  TargetInventory,
+  TargetSetting,
+  TargetSummary,
+} from "@/lib/queries/useTargets";
 
 const nameResolverMiss = { value: undefined, resolved: true } as const;
 
@@ -35,7 +41,37 @@ const state = {
   ownerDecided: [] as Array<{ id: string; owner: string; note: string }>,
   adopted: [] as Array<{ username: string; subjectId: string }>,
   adoptResult: { status: "adopted", detail: "The account is now bound to that person." } as unknown,
+  projectSet: [] as string[],
+  settings: { read: true, settings: [] as TargetSetting[] } as { read: boolean; settings?: TargetSetting[] },
+  settingPut: [] as Array<{ name: string; value: string }>,
+  homes: { read: true, usage_read: true, accounts: [] as AccountHome[] },
 };
+
+vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/queries/useUsers")>()),
+  useUsers: (q: string) => ({
+    data: q
+      ? [
+          { user: { id: "s-99", name: "Sai Khurana", email: "sai@example.edu", title: "Lab technician", team: "Design", status: "active", avatar: "" } },
+          { user: { id: "s-12", name: "Kabir Rao", email: "kabir@example.edu", title: "Student", team: "", status: "active", avatar: "" } },
+        ]
+      : [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/lib/queries/useProjects", () => ({
+  useProjects: () => ({
+    data: [
+      { project: { id: "p1", name: "Network storage", kind: "", description: "", roles: [{ key: "a", label: "A" }, { key: "b", label: "B" }] } },
+      { project: { id: "p2", name: "Wood shop", kind: "", description: "", roles: [] } },
+      { project: { id: "p3", name: "Laser Lab", kind: "", description: "", roles: [{ key: "op", label: "Operator" }] } },
+    ],
+    isLoading: false,
+    error: null,
+  }),
+}));
 
 vi.mock("@/lib/queries/useTargets", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useTargets")>(
@@ -71,6 +107,24 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: null,
     }),
     useSetLifecycle: () => ({ mutate: vi.fn(), isPending: false }),
+    useTargetSettings: () => ({ data: state.settings, isLoading: false, error: null, refetch: vi.fn() }),
+    useTargetHomes: () => ({ data: state.homes, isLoading: false, error: null }),
+    useSetTargetSetting: () => ({
+      mutate: (input: { name: string; value: string }, opts?: { onSuccess?: () => void }) => {
+        state.settingPut.push(input);
+        opts?.onSuccess?.();
+      },
+      isPending: false,
+      error: null,
+    }),
+    useSetTargetProject: () => ({
+      mutate: (id: string, opts?: { onSuccess?: () => void }) => {
+        state.projectSet.push(id);
+        opts?.onSuccess?.();
+      },
+      isPending: false,
+      error: null,
+    }),
     useReconcileTarget: () => ({
       mutate: vi.fn(),
       isPending: false,
@@ -98,6 +152,7 @@ function summary(operations: TargetSummary["operations"]): TargetSummary {
     callable: true,
     operations,
     circuit_open: false,
+    project: { id: "p1", name: "Network storage" },
   };
 }
 
@@ -296,7 +351,8 @@ describe("one target's page", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    expect(screen.getByText(/Connection key missing/i)).toBeTruthy();
+    expect(screen.getByText("Cannot connect.")).toBeTruthy();
+    expect(screen.getByText(/a problem on/)).toBeTruthy();
     // The path, because "no secret configured" and "the mount is missing" are
     // the same symptom and different fixes.
     expect(screen.getByText(/run\/secrets\/addon\/truenas\.key/)).toBeTruthy();
@@ -396,12 +452,41 @@ describe("one target's page", () => {
     expect(screen.queryByText(/Not answering/)).toBeNull();
   });
 
-  it("distinguishes Syndra backing off from the target being down", () => {
+  // A-01: Syndra's breaker is "waiting to retry", and it sends the operator to
+  // the Syndra server; an outage outranks it and sends them to TrueNAS.
+  it("distinguishes Syndra waiting to retry from the target being down", () => {
     state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active", circuit_open: true };
-    renderTarget();
+    state.health = { reachable: true, lifecycle: "active", status: "waiting_to_retry", health: { status: "online", recent: ["answered"] } };
+    const { unmount } = renderTarget();
+    expect(screen.getByText("Syndra is waiting before it calls TrueNAS again.")).toBeInTheDocument();
+    expect(screen.getByText(/look at the Syndra server/)).toBeInTheDocument();
+    unmount();
 
-    expect(screen.getByText(/stopped trying to reach TrueNAS/i)).toBeInTheDocument();
+    state.health = {
+      reachable: false,
+      status: "offline",
+      health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
+    };
+    renderTarget();
+    expect(screen.getByText("TrueNAS isn't answering.")).toBeInTheDocument();
+    expect(screen.getByText(/Look at TrueNAS\./)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Last 3 checks: missed, missed, missed" })).toBeInTheDocument();
+  });
+
+  // One failed read is a missed check, not an outage: still Answering, said
+  // faintly with the pips, and what is on screen is the last copy.
+  it("keeps a missed check calm, and says the screen is the last copy", () => {
+    state.roster = [summary([])];
+    state.health = {
+      reachable: false,
+      status: "answering",
+      health: { status: "online", recent: ["answered", "answered", "missed"], missed_since: "2026-10-14T09:40:00Z" },
+    };
+    renderTarget();
+    expect(screen.getAllByText("Answering").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Missed its last check, at/)).toBeInTheDocument();
+    expect(screen.getByText(/no earlier copy to show/)).toBeInTheDocument();
+    expect(screen.queryByText(/isn't answering/)).toBeNull();
   });
 
   it("labels a stale inventory with its age and refuses adoption from it", () => {
@@ -455,8 +540,8 @@ describe("the top band: one status card and three tiles", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    expect(screen.getByText(/Reachable — answered just now\./)).toBeInTheDocument();
-    expect(screen.getByText(/talking to TrueNAS normally/)).toBeInTheDocument();
+    expect(screen.getAllByText("Answering").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Accepting changes\. Nothing is in flight\./)).toBeInTheDocument();
     expect(screen.queryByText("Can Syndra reach it")).toBeNull();
     expect(screen.queryByText("Last answered")).toBeNull();
   });
@@ -772,7 +857,10 @@ describe("what roles reach here · the census and its handoff", () => {
 describe("adopting an account", () => {
   const twoAccounts = {
     target: "truenas",
-    bound: 0,
+    bound: 1,
+    accounts: [
+      { target: "truenas", subject_id: "s-12", username: "kabir.r", bound_by: "op", bound_at: "", last_seen_at: "" },
+    ],
     unmanaged: [
       { username: "sai", uid: 3000 },
       { username: "kabir", uid: 3002 },
@@ -792,82 +880,178 @@ describe("adopting an account", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Assign to a person" })[0]);
   }
 
-  // It used to render after the whole list: click Adopt on the first account
-  // and the form opened under the LAST one, describing an account nobody had
-  // pointed at.
-  it("opens under the account it is about, not at the foot of the list", () => {
-    openAdoptForSai();
+  function chooseSai() {
+    fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "sa" } });
+    fireEvent.click(screen.getByRole("radio", { name: /Sai Khurana/ }));
+  }
 
-    const owner = screen.getByLabelText("Person").closest("form")!.parentElement!
-      .parentElement!;
-    expect(owner.textContent).toContain("sai");
-    expect(owner.textContent, "the form is not attached to another account").not.toContain("kabir");
+  // #57: a dialog about the account it was opened from.
+  it("opens a dialog about the account it was opened from", () => {
+    openAdoptForSai();
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Assign sai to a person")).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain("kabir ");
   });
 
   // Red is this product's word for a click that takes access away. This one
   // gives somebody an account.
   it("does not dress a grant as a destruction", () => {
     openAdoptForSai();
-
-    const submit = screen.getByRole("button", { name: /Assign sai to this person/ });
-    expect(submit.className, "dangerConfirm is reserved for removing access").not.toContain(
-      "bg-danger",
-    );
-    // The irreversibility is carried by rung 3 and by the copy, both of which
-    // must still be there for the colour change to be safe.
+    const submit = screen.getByRole("button", { name: /^Assign sai/ });
+    expect(submit.className, "dangerConfirm is reserved for removing access").not.toContain("bg-danger");
     expect(screen.getByText(/There is no undo/)).toBeInTheDocument();
     expect(screen.getByText(/Type the account name/)).toBeInTheDocument();
   });
 
-  // The old copy said "hands ... to that person" above a field that had not
-  // asked who yet, and directly above "nothing on the account changes now".
-  // Both true, and together they read as a contradiction.
-  it("names the person it is referring to, and separates what moves from what stays", () => {
+  // Found by name or email, never by a pasted ID; namesakes told apart by
+  // title, team and email; someone with an account here can't be chosen.
+  it("finds the person by name, and won't give a second account", () => {
     openAdoptForSai();
+    fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "a" } });
 
-    // A visible label, not a placeholder that disappears the moment you type.
-    expect(screen.getByLabelText("Person")).toBeInTheDocument();
-    expect(screen.getByText(/becomes the account of the person named below/)).toBeInTheDocument();
-    expect(screen.getByText(/is theirs from that moment/)).toBeInTheDocument();
-    // What stays: Syndra writes nothing to the account itself.
-    expect(screen.getByText(/changes nothing in the account now/)).toBeInTheDocument();
-    // And the target is named IN THE SENTENCE, because "its shares" is not a
-    // thing an operator can go and check against anything.
-    expect(
-      screen.getByText(/becomes the account of the person named below/).textContent,
-    ).toContain("TrueNAS");
+    const sai = screen.getByRole("radio", { name: /Sai Khurana/ });
+    expect(sai.textContent).toContain("Lab technician · Design");
+    expect(sai.textContent).toContain("sai@example.edu");
+    const kabir = screen.getByRole("radio", { name: /Kabir Rao/ });
+    expect(kabir.hasAttribute("disabled")).toBe(true);
+    expect(kabir.textContent).toContain("Already has kabir.r on TrueNAS");
   });
 
-  // Typed, not picked, so the one check available before the point of no
-  // return is showing whose name that ID actually resolves to.
-  it("shows whose name the typed ID resolves to, before and after confirming", () => {
+  it("says what changes and what stays, once someone is chosen", () => {
     openAdoptForSai();
-
-    fireEvent.change(screen.getByLabelText("Person"), { target: { value: "s-99" } });
-    expect(screen.getByText("Sai Khurana")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "sai" } });
-    fireEvent.click(screen.getByRole("button", { name: /Assign sai to this person/ }));
-
-    // The backend's own outcome text never names the person — it is written
-    // for the audit trail. The row must, so the operator sees who they just
-    // handed the account to rather than only that something happened.
-    expect(screen.getByText(/Assigned to/)).toBeInTheDocument();
-    expect(screen.getByText("Sai Khurana")).toBeInTheDocument();
+    expect(screen.queryByText("Changes")).toBeNull();
+    chooseSai();
+    expect(screen.getByRole("radio", { name: /Sai Khurana/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Changes")).toBeInTheDocument();
+    expect(screen.getByText(/belongs to/).textContent).toContain("Sai Khurana");
+    expect(screen.getByText(/Its home folder, its shares and its group memberships/)).toBeInTheDocument();
   });
 
-  it("reports the outcome under the account it happened to", () => {
+  it("assigns only once the name is typed, and reports it under the account", () => {
     openAdoptForSai();
+    chooseSai();
+    const submit = screen.getByRole("button", { name: "Assign sai to Sai Khurana" });
+    expect(submit.hasAttribute("disabled")).toBe(true);
 
-    fireEvent.change(screen.getByLabelText("Person"), { target: { value: "s-99" } });
     fireEvent.change(screen.getByLabelText(/Type the account name/), { target: { value: "sai" } });
-    fireEvent.click(screen.getByRole("button", { name: /Assign sai to this person/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Assign sai to Sai Khurana" }));
 
     expect(state.adopted).toEqual([{ username: "sai", subjectId: "s-99" }]);
+    expect(screen.queryByRole("dialog")).toBeNull();
     const outcome = screen.getByText(/bound to that person/).closest("[role=status]")!;
-    expect(
-      outcome.parentElement!.parentElement!.textContent,
-      "an unattributed outcome says 'Adopted.' about none of eight accounts in particular",
-    ).toContain("sai");
+    expect(outcome.parentElement!.parentElement!.textContent).toContain("sai");
+    expect(screen.getByText(/Assigned to/)).toBeInTheDocument();
+  });
+});
+
+
+// 3a: the project comes before anything that gives access. Health and the
+// pause stay live; what waits is drawn whole and inert under one line.
+describe("the system's Zitadel project", () => {
+  it("asks for it first, and holds back what waits on it", () => {
+    state.roster = [
+      { ...summary([]), project: null },
+      { ...summary([]), target: "door", project: { id: "p3", name: "Laser Lab" } },
+    ];
+    state.health = { reachable: true, lifecycle: "active", status: "answering", health: { status: "online", recent: ["answered"] } };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.projectSet = [];
+    renderTarget();
+
+    expect(screen.getByText("Choose TrueNAS's Zitadel project")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 2")).toBeInTheDocument();
+    const select = screen.getByLabelText("Zitadel project") as HTMLSelectElement;
+    const options = Array.from(select.options).map((o) => [o.textContent, o.disabled]);
+    expect(options).toContainEqual(["Network storage · 2 roles", false]);
+    expect(options).toContainEqual(["Wood shop · no roles yet", false]);
+    expect(options).toContainEqual(["Laser Lab · used by Door", true]);
+
+    expect(screen.getByText("Waits for TrueNAS's Zitadel project")).toBeInTheDocument();
+    const fence = () => document.getElementById("waiting")?.closest("[aria-disabled]");
+    expect(fence()?.hasAttribute("inert")).toBe(true);
+    // What reports on the system stays live.
+    expect(screen.getByText("Is it answering").closest("[aria-disabled]")).toBeNull();
+
+    fireEvent.change(select, { target: { value: "p1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Use this project" }));
+    expect(state.projectSet).toEqual(["p1"]);
+    expect(screen.getByText("TrueNAS uses Network storage.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Map its roles to TrueNAS groups →" })).toBeInTheDocument();
+    expect(fence()).toBeNull();
+  });
+
+  it("is a thin strip once set, and the only link to the mappings", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByRole("link", { name: "Network storage" }).getAttribute("href")).toBe("/projects/p1");
+    expect(screen.getAllByRole("link", { name: /mapping/i })).toHaveLength(1);
+    expect(screen.queryByText("Choose TrueNAS's Zitadel project")).toBeNull();
+  });
+});
+
+// A-03 §1: where home folders go is chosen once, on the system page, in the
+// settings card; changing it moves nothing, and says how many stay.
+describe("where home folders go", () => {
+  const setting = (value: string, values = ["/mnt/p/main/home_dir", "/mnt/p/main/homes"]): TargetSetting => ({
+    name: "home_root",
+    label: "Where home folders go",
+    value,
+    values,
+    labels: { "/mnt/p/main/home_dir": "main › home_dir", "/mnt/p/main/homes": "main › homes" },
+    values_read: true,
+  });
+  function open(value: string, values?: string[]) {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.settings = { read: true, settings: [setting(value, values)] };
+    state.settingPut = [];
+    state.homes = {
+      read: true,
+      usage_read: true,
+      accounts: [
+        { subject_id: "a", username: "ada", gives_home: true, home: "/mnt/p/main/home_dir/ada" },
+        { subject_id: "b", username: "bo", gives_home: true, home: "/mnt/p/main/home_dir/bo" },
+        { subject_id: "c", username: "cy", gives_home: false },
+      ],
+    };
+    renderTarget();
+  }
+
+  it("is chosen once, and says mappings work without it", () => {
+    open("");
+    expect(screen.getByText("Not chosen yet")).toBeInTheDocument();
+    expect(screen.getByText(/none can give a home folder until it is chosen/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Choose where home folders go")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Nothing is made until a mapping gives home folders/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use main › home_dir" }));
+    expect(state.settingPut).toEqual([{ name: "home_root", value: "/mnt/p/main/home_dir" }]);
+  });
+
+  it("changes without moving anything, and says how many homes stay", () => {
+    open("/mnt/p/main/home_dir");
+    expect(screen.getByText("main › home_dir")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change folder" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByText("Changes")).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText("Folder in main"), { target: { value: "/mnt/p/main/homes" } });
+    expect(within(dialog).getByText(/The 2 home folders already in/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Nothing is moved, and nobody's access changes/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Make new homes in main › homes" }));
+    expect(state.settingPut).toEqual([{ name: "home_root", value: "/mnt/p/main/homes" }]);
+  });
+
+  it("says when main has no folder to make homes in", () => {
+    open("", []);
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("No folder to offer")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Read again" })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Nothing to choose until/)).toBeInTheDocument();
   });
 });

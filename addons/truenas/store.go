@@ -23,6 +23,9 @@ var (
 	bucketBindings    = []byte("bindings")
 	// bucketIDs holds the high-water mark of the uids/gids handed out.
 	bucketIDs = []byte("ids")
+	// bucketSettings holds the system-wide choices an operator makes through
+	// Syndra, such as where home folders go (settings.go).
+	bucketSettings = []byte("settings")
 )
 
 // idempotencyTTL is the actual replay window, and saying so is the point.
@@ -49,7 +52,7 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("open store: %w", err)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {
-		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings, bucketIDs} {
+		for _, b := range [][]byte{bucketIdempotency, bucketSnapshot, bucketBindings, bucketIDs, bucketSettings} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return err
 			}
@@ -369,4 +372,40 @@ func (s *Store) ClaimID(floor, ceiling, observedMax int64) (int64, error) {
 		return b.Put(highWaterKey, []byte(strconv.FormatInt(claimed, 10)))
 	})
 	return claimed, err
+}
+
+// Setting is one system-wide choice, and who made it when.
+type Setting struct {
+	Value string    `json:"value"`
+	SetBy string    `json:"set_by,omitempty"`
+	SetAt time.Time `json:"set_at"`
+}
+
+// GetSetting reads one setting; found is false for one never set.
+func (s *Store) GetSetting(name string) (Setting, bool, error) {
+	var out Setting
+	var found bool
+	err := s.db.View(func(tx *bolt.Tx) error {
+		raw := tx.Bucket(bucketSettings).Get([]byte(name))
+		if raw == nil {
+			return nil
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return fmt.Errorf("stored setting %s is unreadable: %w", name, err)
+		}
+		found = true
+		return nil
+	})
+	return out, found, err
+}
+
+// PutSetting records one setting.
+func (s *Store) PutSetting(name string, v Setting) error {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return s.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketSettings).Put([]byte(name), raw)
+	})
 }

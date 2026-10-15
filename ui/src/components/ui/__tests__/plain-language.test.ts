@@ -99,6 +99,12 @@ const ARGUED: Record<string, Array<[RegExp, string]>> = {
     [/\busers?\b/i, "Defines terms whose own wording is about users of an app."],
     [/\btruncated\b/i, "A log anchor exists to detect a truncated log; that is the word for what happened to it."],
   ],
+  // The guide quotes each device's own dialog, word for word, because the
+  // member has to find that word on their screen: macOS and iOS say
+  // "Registered User", Windows asks for a "user name".
+  "components/storage/ConnectionGuide.tsx": [
+    [/\busers?\b/i, "Quotes the operating system's own sign-in dialog, which the member must match on screen."],
+  ],
 };
 
 function walk(dir: string, out: string[] = []): string[] {

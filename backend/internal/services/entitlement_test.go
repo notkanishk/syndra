@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -567,5 +568,30 @@ func TestAnUnreadableDirectoryDisablesNobody(t *testing.T) {
 				t.Fatal("reported as not a member without the directory saying so")
 			}
 		})
+	}
+}
+
+// Which held roles gave each value, so a member's page can name the role. A
+// value two roles give names both; a suppressed one names none, since it
+// wasn't given.
+func TestResolutionRecordsWhichRolesGaveEachValue(t *testing.T) {
+	set := resolve(t, &resolverFixture{
+		roles: []db.RoleRef{{ProjectID: "pLab", RoleKey: "maker"}, {ProjectID: "pLab", RoleKey: "lead"}},
+		mappings: []db.RoleMapping{
+			mapping("maker", "group", "lab_makers"),
+			mapping("lead", "group", "lab_makers"),
+			mapping("lead", "group", "leads"),
+		},
+		allowances: []db.Allowance{deny("group", "leads")},
+	})
+	want := []RoleSource{{ProjectID: "pLab", RoleKey: "maker"}, {ProjectID: "pLab", RoleKey: "lead"}}
+	if got := set.Given["group\x00lab_makers"]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("lab_makers given by %v, want %v", got, want)
+	}
+	if got := set.Given["group\x00leads"]; len(got) != 0 {
+		t.Fatalf("a suppressed value was given by %v", got)
+	}
+	if b, _ := json.Marshal(set); strings.Contains(string(b), "maker\"") && strings.Contains(string(b), "role_key") {
+		t.Fatal("which roles gave a value must never travel to a target")
 	}
 }

@@ -132,3 +132,18 @@ Every part of A-02 can be built as drawn, with A for naming (the folder). It arr
 - **"Makes 34 home folders in main › home_dir; 2 people already have one there".** The plan already projects each person's home; the rehearsal sums them.
 - **"[Priya Nair]'s roles name two home folders".** The resolver already sees two values for a single field. The system page's Waiting on you lists them, grouped by the pair of mappings.
 - **"You no longer hold Lab Tech, the role that gave you this folder".** `storage.status` reports the account's home, and the backend compares it with what the member's roles want now.
+
+## A-03, read against the code (15 Oct 2026)
+
+Built as drawn, with option B for the Account sheet. Answers to design's three questions:
+
+- **Holds due and a limit's review.** It didn't feed it: the review queue read only deny holds. It now reads one person's own values too, and lists a limit under review read-only, with "Review it on TrueNAS's page →". The limit is kept or ended in one place.
+- **TrueNAS below a limit.** A ZFS user quota set below what someone holds keeps every file and refuses new writes until they're under; deleting works. So the member's "Full. You can open and delete files here, but not save new ones until you're under 20 GB." is true, and built.
+- **An operator's own request.** It did land in their own queue, and they could approve it. Owner, 15 Oct: allowed, and said. The queue says "Your own request. Approving it is allowed, and Change history records that you approved your own." before it's approved, and "by the person who asked" after. Change history records `access_request.self_approved`.
+
+How code built the rest:
+
+- **"No limit".** Saved as an explicit 0, and the largest limit there is: a role or a person's own giving it lifts the folder's limit.
+- **Three rows, one decision.** A role's group, home folder and limit are three mapping rows. The dialog rehearses every row that changes and shows one review, then applies each row under its own approval. Remove takes every row the role has.
+- **The person's name, without pronouns.** The board's limit dialog says "her". Code doesn't know anyone's pronouns, so the screens say "their own home folder limit", "They have 18.4 GB…", and "Give them 50 GB".
+- **"Keep" on a reviewed limit.** Saves a new own limit with the new date and ends the old one, so nothing stays due behind it.

@@ -24,6 +24,27 @@ export interface TargetOperation {
   secret_params?: string[];
 }
 
+/**
+ * What the health monitor can stand behind (A-01): offline only after three
+ * missed checks in a row, unknown until Syndra can tell.
+ */
+export interface HealthState {
+  status: "online" | "offline" | "unknown";
+  checked_at?: string;
+  /** When the current run of misses began; set only while offline. */
+  reachable_since?: string;
+  lifecycle?: string;
+  /** The last three checks, oldest first. */
+  recent: Array<"answered" | "missed">;
+  /** The first miss of the current run, before it is ever offline. */
+  missed_since?: string;
+  /** When this Syndra process started. */
+  started_at?: string;
+}
+
+/** The one reading a row and a header show, ranked on the backend (A-01). */
+export type TargetStatus = "cannot_connect" | "offline" | "waiting_to_retry" | "checking" | "answering";
+
 export interface TargetSummary {
   target: string;
   registered: boolean;
@@ -37,6 +58,10 @@ export interface TargetSummary {
   manifest_fetched_at?: string;
   circuit_open: boolean;
   last_error?: string;
+  health?: HealthState;
+  status?: TargetStatus;
+  /** The Zitadel project this system serves; null until chosen. */
+  project?: { id: string; name: string } | null;
 }
 
 export function useTargets() {
@@ -57,6 +82,10 @@ export interface TargetHealth {
   version_tested?: boolean;
   version_note?: string;
   circuit_open?: boolean;
+  /** The confirmed reading beside this live one. */
+  health?: HealthState;
+  /** The same ranked reading the roster row shows, read now. */
+  status?: TargetStatus;
   lifecycle?: string;
   lifecycle_note?: string;
   in_flight?: number;
@@ -466,5 +495,141 @@ export function useSetLifecycle(target: string) {
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["targets", target, "health"] });
     },
+  });
+}
+
+/**
+ * Choosing the Zitadel project a system serves (D3). Changes nobody's access;
+ * the roster carries it, so the roster is read again.
+ */
+export function useSetTargetProject(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (projectId: string) =>
+      request<{ target: string; project: { id: string; name: string } }>(`/targets/${target}/project`, {
+        method: "PUT",
+        body: { project_id: projectId },
+      }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets"] });
+    },
+  });
+}
+
+/** One place a group opens, as the target read it from its folder permissions. */
+export interface ReachPlace {
+  share: string;
+  folder?: string;
+  path: string;
+  access: "read" | "change";
+}
+
+/** What each of a system's own groups opens (A-02 §3). `read: false` is "not read yet". */
+export interface TargetReach {
+  read: boolean;
+  read_at?: string;
+  current?: boolean;
+  groups?: Record<string, ReachPlace[]>;
+}
+
+export function useTargetReach(target: string | undefined) {
+  return useQuery({
+    queryKey: ["targets", target, "reach"],
+    queryFn: () => request<TargetReach>(`/targets/${target}/reach`),
+    enabled: Boolean(target),
+  });
+}
+
+/** A field's values, for the mapping dialog's pickers (D6–D7). */
+export interface MappableValues {
+  field: string;
+  label: string;
+  single: boolean;
+  values: string[];
+  labels?: Record<string, string>;
+  enumerable: boolean;
+  builtin_count?: number;
+  builtin_examples?: string[];
+  read_at: string;
+  current: boolean;
+}
+
+export function useMappableValues(target: string | undefined, field: string, enabled = true) {
+  return useQuery({
+    queryKey: ["targets", target, "mappable-values", field],
+    queryFn: () =>
+      request<MappableValues>(`/targets/${target}/mappable-values?field=${encodeURIComponent(field)}`),
+    enabled: Boolean(target) && enabled,
+    // Read when the dialog opens, every time: a group made on TrueNAS a minute
+    // ago must be offered.
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+/** The add-on's name for where home folders go. */
+export const HOME_ROOT = "home_root";
+
+/** One system-wide choice an add-on keeps, such as where home folders go. */
+export interface TargetSetting {
+  name: string;
+  label: string;
+  value: string;
+  set_by?: string;
+  set_at?: string;
+  values: string[];
+  labels?: Record<string, string>;
+  values_read: boolean;
+}
+
+export function useTargetSettings(target: string | undefined) {
+  return useQuery({
+    queryKey: ["targets", target, "settings"],
+    queryFn: () => request<{ read: boolean; settings?: TargetSetting[] }>(`/targets/${target}/settings`),
+    enabled: Boolean(target),
+  });
+}
+
+export function useSetTargetSetting(target: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, value }: { name: string; value: string }) =>
+      request<TargetSetting>(`/targets/${target}/settings/${name}`, { method: "PUT", body: { value } }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["targets", target, "settings"] });
+    },
+  });
+}
+
+/** One managed account's home folder limit and where it comes from (A-03 §3). */
+export interface AccountHome {
+  subject_id: string;
+  username: string;
+  gives_home: boolean;
+  /** The largest its roles give, in bytes; absent is no limit. */
+  roles_limit?: number;
+  roles_limit_from?: { project_id: string; role_key: string };
+  own?: {
+    allowance_id: string;
+    bytes: number;
+    reason: string;
+    actor_id: string;
+    set_at: string;
+    expires_at?: string;
+    review_date?: string;
+    review_due?: boolean;
+  };
+  own_ended?: { bytes: number; ended_at: string };
+  home?: string;
+  used_bytes?: number;
+  quota_bytes?: number;
+}
+
+export function useTargetHomes(target: string | undefined) {
+  return useQuery({
+    queryKey: ["targets", target, "homes"],
+    queryFn: () =>
+      request<{ read: boolean; usage_read: boolean; accounts: AccountHome[] }>(`/targets/${target}/homes`),
+    enabled: Boolean(target),
   });
 }

@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName, UserName } from "@/components/names";
-import { shortId } from "@/lib/audit-vocabulary";
+import { machineName, shortId } from "@/lib/audit-vocabulary";
+import { targetLabel } from "@/lib/nav";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
@@ -114,7 +115,7 @@ export default function PendingChangesPage() {
               Zitadel is not answering, as of <ClockTime />.
             </div>
             <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-              Sending is paused. Nothing is lost: the changes wait in order, and nothing has
+              Sending waits until Zitadel answers. Nothing is lost: the changes wait in order, and nothing has
               reached any system. Send them once Zitadel is back.
             </p>
           </div>
@@ -156,13 +157,19 @@ export default function PendingChangesPage() {
                   </span>
 
                   <span className="w-full text-[14px] tablet:min-w-[220px] tablet:flex-1 tablet:truncate">
-                    <span className="text-muted">{verb(row.op_type)}</span>{" "}
-                    <ProjectName id={row.project_id} /> /{" "}
-                    {(row.role_keys ?? []).map((key) => (
-                      <Mono key={key} className="mr-1.5">
-                        {key}
-                      </Mono>
-                    ))}
+                    {row.op_type === "apply" ? (
+                      <SystemChange row={row} />
+                    ) : (
+                      <>
+                        <span className="text-muted">{verb(row.op_type)}</span>{" "}
+                        <ProjectName id={row.project_id} /> /{" "}
+                        {(row.role_keys ?? []).map((key) => (
+                          <Mono key={key} className="mr-1.5">
+                            {key}
+                          </Mono>
+                        ))}
+                      </>
+                    )}
                   </span>
 
                   <span className="w-full text-[13px] tablet:w-[160px] tablet:shrink-0">
@@ -229,6 +236,20 @@ function groupByCascade(rows: PendingPropagationRow[]): CascadeGroup[] {
  * bare handle on its own. The handle stays alongside, muted, for tracing back
  * to Bundles, Access or Change history; it just never stands in for the name.
  */
+/**
+ * A connected system's change has no project or roles to name. It says which
+ * system, and why it was queued; rows from before the reason was kept say what
+ * every such row does.
+ */
+function SystemChange({ row }: { row: PendingPropagationRow }) {
+  return (
+    <>
+      <span className="text-muted">{targetLabel(row.target ?? "")} account:</span>{" "}
+      {row.reason || "brought in line with their roles."}
+    </>
+  );
+}
+
 function CausedBy({
   row,
   bundles,
@@ -243,6 +264,21 @@ function CausedBy({
   const rule = !isBundle ? rules?.find((r) => r.id === row.source_ref) : undefined;
 
   const isRule = row.source === "rule";
+  // A connected system's change is queued by whoever made it, or by the check
+  // that found it out of step. "Given by hand" was wrong for both.
+  if (row.op_type === "apply" && row.initiated_by) {
+    return (
+      <span className="truncate">
+        {row.initiated_by === "system:reconcile" ? (
+          "Check for differences"
+        ) : row.initiated_by.startsWith("system:") ? (
+          machineName(row.initiated_by)
+        ) : (
+          <UserName id={row.initiated_by} />
+        )}
+      </span>
+    );
+  }
   // Named by what caused it, never by a handle alone. A direct grant has no
   // handle: somebody chose it by hand on the person's page.
   const name = bundle

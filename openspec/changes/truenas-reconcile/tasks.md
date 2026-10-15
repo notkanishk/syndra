@@ -9,7 +9,7 @@
   - `builtin_users` survives a converge and isn't reported
   - an over-cap read errors in enumeration and in convergence
 - Found on the way: `plan` never resolves group names (already true for an unknown group). A legacy mapping to a built-in group plans as a change, then `apply` refuses it with 422 naming the group. New mappings can't name one: the backend checks values against the filtered list. That leaves it loud, not silent. Making plan resolve names costs a group read per plan.
-- [ ] 1.6 (with 4.1) Manifest declares `mappable_fields: [{name: group, label: Group, enumerate: values}]`. Test the manifest shape
+- [x] 1.6 Superseded: the schema itself says what is mappable. Every non-lifecycle field is, with `label`, `single` and `per_person`. Was: manifest declares `mappable_fields: [{name: group, label: Group, enumerate: values}]`. Test the manifest shape
 
 ## 2. Backend: health monitor (D1) and the paused refusal (D2)
 
@@ -30,8 +30,8 @@
 
 - [x] 2b.1 Monitor keeps the last three results, `missed_since` (the first miss of the current run) and `started_at`. Tests
 - [x] 2b.2 One backend `status` with A-01's precedence: `cannot_connect` > `offline` > `waiting_to_retry` > `checking` > `answering`. It goes on the targets list and the health read. Test for each pairing
-- [ ] 2b.3 Values answer carries `builtin_count` and two built-in example names, for "TrueNAS has no groups of its own yet". Test
-- [ ] 2b.4 UI renames at the A-01 call sites, with their tests. Check pips (aria-label) on Connected systems and the system page
+- [x] 2b.3 Values answer carries `builtin_count` and two built-in example names, for "TrueNAS has no groups of its own yet". Test
+- [x] 2b.4 UI renames at the A-01 call sites, with their tests. Check pips (aria-label) on Connected systems and the system page
 
 ## 3. Backend: one project per target (D3–D5)
 
@@ -54,47 +54,47 @@
 
 ## 4. Backend: mappable values (D6–D7)
 
-- [ ] 4.1 `EntitlementSchema.MappableFields`, with a fallback to non-lifecycle fields when it's absent. Tests for both manifests
-- [ ] 4.2 `GET /targets/{t}/mappable-values?field=`, with the last-known cache, `read_at` and `current`, and `409 VALUES_NEVER_READ`. Tests: fresh, stale and never read
-- [ ] 4.3 Drop `near` from the unresolvable refusal. Update the handler test
+- [x] 4.1 Superseded with 1.6: mappable = not lifecycle, so there is no second declaration to fall back from
+- [x] 4.2 `GET /targets/{t}/mappable-values?field=`, with the last-known cache, `read_at` and `current`, and `409 VALUES_NEVER_READ`. Tests: fresh, stale and never read
+- [x] 4.3 Drop `near` from the unresolvable refusal, together with 6.3: until the picker ships the dialog is free text, and `near` is what answers a typo. Update the handler test
 
 ## 5. UI: Notice and member storage (D9, BUILD-LIST "/storage")
 
-- [ ] 5.1 `components/ui/Notice.tsx` per `proposed/Notice.md` (amber, red, neutral; `role="alert"` when it blocks). Unit test
-- [ ] 5.2 Rebuild `MyStorage` to `route-storage`:
+- [x] 5.1 `components/ui/Notice.tsx` per `proposed/Notice.md` (amber, red, neutral; `role="alert"` when it blocks). Unit test
+- [x] 5.2 Rebuild `MyStorage` to `route-storage`:
   - the state line, and one display line per state
   - one block per share with `CopyableValue` addresses
   - the neutral usage bar, "nearly full" from 90%, "no limit set", and offline unavailable
   - the password as a next step, and the quiet "Change password"
   - one Notice per card
   - the paused and offline refusals, the held state (#79) and the no-host state (#80)
-- [ ] 5.3 `useMyStorage` refetches every 30s while a Notice shows
-- [ ] 5.4 `ConnectionGuide` Modal, with device from the user agent, hidden while offline
-- [ ] 5.5 Phone notes: three-segment step bar, full-width guide button, password field ≥ 220px
-- [ ] 5.6 Tests: each state's copy and controls, never 0 usage offline, no password field when paused or offline
+- [x] 5.3 `useMyStorage` refetches every 30s while a Notice shows
+- [x] 5.4 `ConnectionGuide` Modal, with device from the user agent, hidden while offline
+- [x] 5.5 Phone notes: three-segment step bar, full-width guide button, password field ≥ 220px
+- [x] 5.6 Tests: each state's copy and controls, never 0 usage offline, no password field when paused or offline
 
 ## 6. UI: Connected systems (D9, B3, #57)
 
-- [ ] 6.1 Project gate (3a, frame `noproject`):
+- [x] 6.1 Project gate (3a, frame `noproject`):
   - violet Step 1 of 2 panel with the picker
   - taken projects disabled and named
   - role counts
   - waiting regions inert at 40%
   - result frame `projectset`
-- [ ] 6.2 Setup strip: Zitadel project link, mapping summary, and "Mappings →" / "Add the first mapping →". The census line drops its link and names the project
-- [ ] 6.3 `AddMappingDialog`:
+- [x] 6.2 Setup strip: Zitadel project link, mapping summary, and "Mappings →" / "Add the first mapping →". The census line drops its link and names the project
+- [x] 6.3 `AddMappingDialog`:
   - role picker scoped to the project, unmapped roles only
   - field label from the manifest, with a Select only for two or more fields
   - value Select from `mappable-values`, with the stale label, "TrueNAS hasn't listed its groups yet", and the re-read on unresolvable
-- [ ] 6.4 Mapping rows drop the project prefix
-- [ ] 6.5 Connected systems shows the project read-only. A null project shows "Choose its Zitadel project →" under Needs you
-- [ ] 6.6 #57 Assign Modal:
+- [x] 6.4 Mapping rows drop the project prefix
+- [x] 6.5 Connected systems shows the project read-only. A null project shows "Choose its Zitadel project →" under Needs you
+- [x] 6.6 #57 Assign Modal:
   - people search with single-choice rows
   - "Already has {username} on {target}"
   - the Changes / Stays box
   - `ConfirmByTyping`
   - "Assign {account} to {name}"
-- [ ] 6.7 Tests for the gate, the strip, the dialog states and the assign Modal
+- [x] 6.7 Tests for the gate, the strip, the dialog states and the assign Modal
 
 ## 10. Home folders by role (owner, 14 Oct)
 
@@ -106,10 +106,12 @@
   - no longer wanted: kept.
   - Tests for each
 - [x] 10.3 Refuse to point a home at a folder that already exists and is owned by another uid. The outcome names the folder. Test
-- [x] 10.4 Two roles naming different places: everything else lands, the home is left as it is, and the outcome says which two. Test
+- [x] 10.4 (superseded by 10.8) Two roles naming different places: everything else lands, the home is left as it is, and the outcome says which two. Test
 - [x] 10.6 Home folder limit: `home_quota`, a per-role value in bytes, where the largest of a person's roles wins. It is set as a user quota on the home's dataset. A limit nobody gives any more is left as it is, never removed into "unlimited". The add-on key needs TrueNAS's DATASET_WRITE role to set it (owner decision).
 - [x] 10.7 Per-person limit: an allowance with direction `set` (migration 000052). It is allowed only on fields the add-on marks per-person, bounded by an expiry or a review date, and applied by the resolver over the roles' value, only for someone the target reaches.
-- [ ] 10.5 UI (after A-02): the home setting on the mapping screen, and "Your home folder" first among the member's places
+- [x] 10.9 A-03 built: the setup card's Home folders row (choose, change with what stays), the mapping dialog's home folder and limit as one reviewed plan, the row's home line, one person's own limit on the system's account list (set, in force, review due, ended over), Holds due listing a limit under review, the member's "Full" line, "No limit" as an explicit 0 that lifts the limit, and the operator's Account sheet with My access and Network storage. An operator approving their own request is allowed and recorded as `access_request.self_approved` (owner, 15 Oct). Tests
+- [x] 10.8 One home location per system (owner, 15 Oct). A role says only whether it gives a home folder (`home: "true"`) and its default limit; the higher limit among a person's roles wins. The location is the add-on's own setting, `home_root`, chosen from the dataset folders at the top of each share and set through Syndra (`GET/PUT /targets/{t}/settings/{name}`, who and when recorded). Changing it moves nothing: homes already made stay. With none chosen, no home is made and the outcome says why. Supersedes 10.4 and A-02 §5/§7. Tests
+- [x] 10.5 UI (A-03): the system's home location, the mapping dialog's "Gives a home folder" and limit, one person's own limit, and "Your home folder" first among the member's places
 
 ## 11. Identity numbers never reused (found 14 Oct, read-only audit)
 
@@ -119,7 +121,9 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 - [x] 11.2 The personal group gets the same number: `group.create {gid: uid}`, then `user.create {group: <id>}`. If the user create fails, the group create is undone. Test
 - [ ] 11.3 Remediation, on the NAS:
   - [x] the 25 orphaned home folders are owned by root and private to the Admin group (14 Oct, with the owner's approval; the state before is kept for undo)
-  - [ ] the three Syndra-created accounts are recreated in the new range (owner approval)
+  - [x] the three Syndra-created accounts and their personal groups are deleted on TrueNAS (15 Oct, owner's approval); Syndra makes them again in the new range once the add-on and UI are complete
+  - [ ] files under `main` owned by a number no account or group holds are given to root, ACLs untouched, with the owners recorded for undo (owner runs it on the NAS, 15 Oct)
+  - [ ] their three bindings are released in Syndra ("Check for differences" on the system page lists them as pointing at nothing; owner, signed in)
 
 ## 7a. Mapping dialog (owner, 14 Oct)
 
@@ -130,19 +134,25 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 
 ## 7. Close the loop
 
-- [ ] 7.1 Full verification: backend, add-on and UI suites, plus lint and build
-- [ ] 7.2 `design_handoff_syndra/reconcile-2026-10/SHIPPED.md` for this slice
+- [x] 7.1 Full verification: backend, add-on and UI suites, plus lint and build
+- [x] 7.2 `design_handoff_syndra/reconcile-2026-10/SHIPPED.md` for this slice
 - [ ] 7.3 Owner reruns `/design-sync` so `Notice` and `ConnectionGuide` reach the design system
-- [ ] 7.4 Fold in A-01 from design (operator intermediate state, "paused" wording, NAS with no groups of its own)
+- [x] 7.4 Fold in A-01 from design (operator intermediate state, "paused" wording, NAS with no groups of its own)
 - [ ] 7.5 Codebase-memory re-index (`detect_changes`)
 
 ## 8. Where to connect, from the NAS (WALKTHROUGH Part 3)
 
-- [ ] 8.1 Add-on: `reach` read. It covers SMB shares, plus ACLs at each share root and first-level folder. For a set of groups it returns `{share, path, access: read|modify, dataset, addresses}`, cached per share and refreshed on reconcile. Tests: traverse-only isn't reach; Community resolves to `main/waddle_share` on the production-shaped fixture
-- [ ] 8.2 Manifest: declare the operation. Backend: `GET /me/targets` items carry `reach` from the member's own groups, never from the group names. Tests
-- [ ] 8.3 Operator: `GET /targets/{t}/groups/{group}/reach` for the mappings page's "what this group opens" line. Test
-- [ ] 8.4 `storage.status` reports usage per reachable path from its dataset, with 0 rather than absent. Test
-- [ ] 8.5 UI: share blocks render from `reach`, and the `smb://host/group` derivation is deleted
+- [x] 8.1 Add-on: `GET /reach` reads each enabled share's root and first-level folder ACLs (unsimplified NFS4, in order: the first entry naming a permission decides it). Each place is `{share, folder, path, access: read|change, dataset}`. Per group it is what holding the group adds to what every account opens (everyone@ and builtin_users), which is listed apart. One read serves five minutes; a failed read serves the last one as not current. Tests: ordering, deny-first, inherit-only, group@, an untraversable root, the production-shaped fixture, cache and fallback, never read. Also replayed against the live NAS's own answers (read-only)
+- [x] 8.2 `storage.status` carries `places` from the groups the account is actually in, home folder first. `/me/targets` passes them through with both addresses built once from the connection host. No manifest operation: it is part of the member's own status read. Tests
+- [x] 8.3 Operator: `GET /targets/{t}/reach`, every group at once, so the card header says the read's age once (A-02 §3). Always 200, with `read: false` for "not read from TrueNAS yet". Tests
+- [x] 8.4 Usage per place from its dataset's user quota table, only where the member can change files. No row is 0 ("Nothing saved here yet"); an unreadable table is no usage, never 0. Test
+- [x] 8.6 "from your Fabrication lead role" (A-02 §1): the resolver records which held roles gave each value; `/me/targets` names the roles whose groups open each place, from the target's last read
+- [x] 8.7 (with A-03) Preview counts homes it will make ("Makes 34 home folders in main › home_dir; 2 people already have one there"). The places offered for the location are the dataset folders at the top of each share, not hidden, labelled `share › folder` [x]
+- [x] 8.8 Retired with 10.8: with one location, two roles can't name two home folders
+- [x] 8.9 Built as "None of the roles you hold gives a home folder any more" (`home_kept`): which lost role gave it isn't kept, so it isn't named. "You no longer hold Lab Tech, the role that gave you this folder" (A-02 §6): the account's home against what the member's roles want now
+- [x] 8.11 `TRUENAS_SHARES`: the SMB shares Syndra considers, empty for every enabled one. Outside it a share is not read for places or home locations, counted for usage or reported for audit coverage. Owner, 15 Oct: `main` only, for now. Test
+- [x] 8.10 Access given back: `needs_new_password` from the add-on (account has a password, SMB off, SMB wanted), and `restored_at` on `/me/targets`, the latest end of a deny hold on that target, lifted or lapsed. Tests
+- [x] 8.5 UI: share blocks render from `reach`, and the `smb://host/group` derivation is deleted
 
 ## 9. Every way of giving a role reaches TrueNAS (WALKTHROUGH G1, G4, G5)
 
@@ -159,6 +169,29 @@ The only Syndra writes in 60 days were prod's 3 `user.create` and 1 `user.update
 - [x] P1 Accounts were created with the zsh shell. They now get `/usr/sbin/nologin`, verified against `user.shell_choices`.
 - [x] P1 Dev and prod shared the production NAS and its API key, and dev holds an unsent outbox row that would have drained against production. Dev's add-on was stopped on 14 Oct (owner: dev pushes nothing). It restarts on the next `docker compose up -d`. A separate key, or no NAS at all for dev, is still owed.
 - [x] P2 The three Syndra-created accounts were switched to nologin on 14 Oct (owner approved). SSH password login, SSH keys and sudo were already off.
-- [ ] P2 Two Syndra-created accounts are still `smb: false`, with no password yet. Once the fix deploys, their first password switches SMB on. The test account was fixed by hand.
+- [x] P2 (moot: the accounts were deleted on 15 Oct, 11.3) Two Syndra-created accounts were `smb: false`, with no password yet. Once the fix deploys, their first password switches SMB on. The test account was fixed by hand.
 - [ ] P2 Share permissions must come from the role groups, never `builtin_users`. Syndra deliberately never adds members to it (D8). The NAS-side permission changes are with the owner.
 - [ ] P2 NAS hardening and data-protection findings that aren't Syndra's own were reported to the owner directly. They are deliberately not recorded in this public repository.
+
+## Found in production, 15 Oct 2026 (Pending changes never drained)
+
+- [x] P1 The plan promised "SMB enabled" for an account still waiting on its first password, a change the apply never makes (the password carries it). Every "Check for differences" queued a new convergence for each such account, each drained to "no change", and Pending changes never emptied. The plan now says what the apply says: no change, waiting for the password. Test
+- [x] P2 The periodic pass queued a second row for a bound person who already had one waiting, so one difference was two rows after two passes. One row per person now, the rule the unbound half already kept. Test
+- [x] P2 Pending changes showed an add-on convergence as "give /", labelled "Given by hand". The reason each caller writes (`SystemConvergence.Reason`) was never stored. It is now (`propagation_outbox.reason`, migration 53), in plain words: the check's own "Joins Staff.", "Gets an account, for a role they hold.", "Their roles changed." The row reads "TrueNAS account: …", and says who queued it: a person, or Check for differences. Test
+- [ ] P2 Releasing an account does not withdraw a convergence already waiting for that person, and the next pass queues a create for anyone who still holds a mapped role. Releasing is not a way to keep someone off TrueNAS; removing their role, or the mapping, is.
+
+## Code review before the 15 Oct deploy
+
+- [x] R1 One row per person skipped a new row while an older one waited, and the drain applies the snapshot a row was queued with, so a stale state (an account enabled for someone deactivated since) could land. It now skips only a waiting row that wants exactly the same thing. Test
+- [x] R2 The plan ignored the home folder limit, so a limit-only change was "no change" and never landed, and a failed limit write was never retried. The plan now reads the limit, read-only, the way the apply does. Test
+- [x] R3 The plan promised a home the apply refuses (a folder that is someone else's), queued again every pass. It now decides the home with the apply's own rules and says why none is made. Test
+- [x] R4 A limit was set on whatever dataset held the home, so a home made by hand at a share's root would cap the person across the whole share. Limits are now set only for a home in a home place. Test
+- [x] R5 An account being switched off no longer gets a new home folder, which rode in the same update as the lock and could take it down. Test
+- [x] R6 Choosing where homes go is refused against a stale read of the NAS, not only a missing one. Test
+- [x] R7 "No limit" lost to any size on the system page's limit line, and read as a 0-byte limit to be over. Test
+- [x] R8 Mapping dialog: removals run group last, so one that stops part-way leaves a row the list shows; a part failing after others landed says the role is part-way changed; people waiting are counted once, not once per part. Test
+- [x] R9 Role counts on the system page and Mappings counted a role's group, home and limit rows as three roles. Test
+- [x] R10 Limit dialog: when the new limit saves and the old one doesn't end, it says so and retries only the ending, instead of saving a third.
+- [x] R11 A fractional limit read back rounded to one decimal and was rewritten on an unrelated change. Test
+- [ ] R12 Not fixed: `home_root` is not re-checked at apply time or part of the plan's fingerprint, so a place destroyed after it was chosen would get plain directories. Rare; the add-on refuses stale reads when it is chosen.
+- [ ] R13 Not fixed: rows a role leaves with no group row (only possible if a removal failed before R8) are not shown with a Remove.

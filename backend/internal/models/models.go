@@ -456,6 +456,9 @@ type PendingPropagation struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	StartedAt      *time.Time `json:"started_at,omitempty"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+	// Reason is why it was queued, for a row whose project and roles say
+	// nothing: an add-on convergence. Empty on rows queued before it was kept.
+	Reason string `json:"reason,omitempty"`
 }
 
 // CascadeSummary is one cascade-originated outbox write, as it appears inside

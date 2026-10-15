@@ -1,13 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
-// Home folders by role: made private by TrueNAS itself, never moved, never
-// removed, never someone else's.
+// Home folders by role: a role says only whether it gives one, the system has
+// one place they go, and each is made private by TrueNAS itself, never moved,
+// never removed, never someone else's.
 
 const homePlace = "/mnt/pool/main/home_dir"
 
@@ -19,7 +23,27 @@ func homeServer(t *testing.T, users string, answers map[string]string, refuse ma
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.store.PutSetting(settingHomeRoot, Setting{Value: homePlace}); err != nil {
+		t.Fatal(err)
+	}
+	// main › home_dir, a dataset of its own: the one home place.
+	s.reach.last = shareRead{
+		places: []aclPlace{{path: homePlace, share: "main", folder: "home_dir"}},
+		mounts: map[string]string{homePlace: "pool/main/home_dir"},
+	}
+	s.reach.readAt = time.Now()
 	return s, m
+}
+
+func planHome(t *testing.T, s *server, desired string) ApplyOutcome {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	planInto(t, s, rr, `{"subjects":[{"subject":"sub-1","email":"ada@example.edu","desired":`+desired+`}]}`)
+	var plan PlanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil || len(plan.Outcomes) != 1 {
+		t.Fatalf("want one outcome, got %s", rr.Body.String())
+	}
+	return plan.Outcomes[0]
 }
 
 var noSuchPath = map[string]string{"filesystem.stat": "[ENOENT] No such file or directory"}
@@ -35,7 +59,7 @@ func applyHome(t *testing.T, s *server, desired string) ApplyOutcome {
 
 func TestARoleMakesAPrivateHomeFolder(t *testing.T) {
 	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`, nil, noSuchPath)
-	out := applyHome(t, s, `{"group":["lab_makers"],"home":["`+homePlace+`"]}`)
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"]}`)
 	if out.Effect != EffectApplied {
 		t.Fatalf("want applied, got %s (%s)", out.Effect, out.Detail)
 	}
@@ -45,13 +69,31 @@ func TestARoleMakesAPrivateHomeFolder(t *testing.T) {
 	}
 }
 
-func TestAHomeIsNeverMoved(t *testing.T) {
+// The location changed after this home was made, or it was made by hand. It
+// stays where it is, and that is not news: Syndra never moves a home folder.
+func TestAHomeElsewhereStaysWhereItIs(t *testing.T) {
 	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/mnt/pool/old/ada"}]`, nil, nil)
-	out := applyHome(t, s, `{"group":["lab_makers"],"home":["`+homePlace+`"]}`)
-	if len(m.updates) != 0 {
-		t.Fatalf("a home elsewhere must not be moved: %v", m.updates)
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"]}`)
+	if len(m.updates) != 0 || out.Effect != EffectNoChange {
+		t.Fatalf("a home elsewhere must not be moved: %s %v", out.Effect, m.updates)
 	}
-	if !strings.Contains(out.Detail, "never moves a home folder") {
+}
+
+// A role that gives a home folder on a system with no place chosen for them
+// makes none, says so, and everything else still lands.
+func TestNoHomeIsMadeUntilTheSystemHasAPlaceForThem(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[],"home":"/var/empty"}]`, nil, noSuchPath)
+	if err := s.store.PutSetting(settingHomeRoot, Setting{}); err != nil {
+		t.Fatal(err)
+	}
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"]}`)
+	if len(m.updates) != 1 {
+		t.Fatalf("the groups still land, got %v", m.updates)
+	}
+	if _, set := m.updates[0]["home"]; set {
+		t.Fatalf("a home was made with nowhere chosen for it: %v", m.updates[0])
+	}
+	if !strings.Contains(out.Detail, "no place for home folders chosen") {
 		t.Fatalf("the outcome must say why, got %q", out.Detail)
 	}
 }
@@ -59,7 +101,7 @@ func TestAHomeIsNeverMoved(t *testing.T) {
 func TestAnotherPersonsFolderIsNeverAdopted(t *testing.T) {
 	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`,
 		map[string]string{"filesystem.stat": `{"uid":3004,"gid":3001,"mode":16872}`}, nil)
-	out := applyHome(t, s, `{"group":["lab_makers"],"home":["`+homePlace+`"]}`)
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"]}`)
 	if len(m.updates) != 0 {
 		t.Fatalf("a folder owned by someone else must not become this home: %v", m.updates)
 	}
@@ -68,24 +110,29 @@ func TestAnotherPersonsFolderIsNeverAdopted(t *testing.T) {
 	}
 }
 
-func TestTwoRolesDisagreeingLeaveTheHomeAlone(t *testing.T) {
-	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[],"home":"/var/empty"}]`, nil, noSuchPath)
-	out := applyHome(t, s, `{"group":["lab_makers"],"home":["`+homePlace+`","/mnt/pool/main/staff_homes"]}`)
-	if len(m.updates) != 1 {
-		t.Fatalf("the groups still land, got %v", m.updates)
-	}
-	if _, set := m.updates[0]["home"]; set {
-		t.Fatalf("no home may be chosen between two: %v", m.updates[0])
-	}
-	if !strings.Contains(out.Detail, "different home folders") {
-		t.Fatalf("the outcome must name the disagreement, got %q", out.Detail)
+// Two roles that both give a home folder give one home: there is one place.
+func TestTwoRolesGivingAHomeGiveOne(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`, nil, noSuchPath)
+	applyHome(t, s, `{"group":["lab_makers"],"home":["true","true"]}`)
+	if len(m.updates) != 1 || m.updates[0]["home"] != homePlace+"/ada" {
+		t.Fatalf("want one home at %s/ada, got %v", homePlace, m.updates)
 	}
 }
 
+func TestARoleNamingAnythingButTrueIsRefused(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`, nil, noSuchPath)
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu","desired":{"home":["/mnt/pool/main/home_dir"]}}`)
+	if rr.Code == http.StatusOK || len(m.updates) != 0 {
+		t.Fatalf("a place sent per role must be refused now that there is one place: %d %v", rr.Code, m.updates)
+	}
+}
+
+// A person with two roles that give a home folder, with different limits,
+// gets the higher one (owner, 15 Oct).
 func TestTheLargestLimitIsSetOnTheHomesDataset(t *testing.T) {
 	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"`+homePlace+`/ada"}]`,
 		map[string]string{"pool.dataset.get_quota": `[]`}, nil)
-	out := applyHome(t, s, `{"group":["lab_makers"],"home":["`+homePlace+`"],"home_quota":["10737418240","53687091200"]}`)
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["10737418240","53687091200"]}`)
 	if out.Effect != EffectApplied || !strings.Contains(out.Detail, "50 GiB") {
 		t.Fatalf("want the 50 GiB limit set, got %s %q", out.Effect, out.Detail)
 	}
@@ -98,7 +145,7 @@ func TestTheLargestLimitIsSetOnTheHomesDataset(t *testing.T) {
 func TestAnUnchangedLimitIsNotRewritten(t *testing.T) {
 	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"`+homePlace+`/ada"}]`,
 		map[string]string{"pool.dataset.get_quota": `[{"id":3001,"quota":53687091200,"used_bytes":10}]`}, nil)
-	out := applyHome(t, s, `{"group":["lab_makers"],"home":["`+homePlace+`"],"home_quota":["53687091200"]}`)
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["53687091200"]}`)
 	if out.Effect != EffectNoChange {
 		t.Fatalf("want no change, got %s %q", out.Effect, out.Detail)
 	}
@@ -106,5 +153,68 @@ func TestAnUnchangedLimitIsNotRewritten(t *testing.T) {
 		if c == "pool.dataset.set_quota" {
 			t.Fatal("an unchanged limit must not be written")
 		}
+	}
+}
+
+// "No limit" is the largest limit there is: a role or a person's own giving it
+// lifts the folder's limit, even beside a role that gives a size.
+func TestNoLimitIsTheLargestAndLiftsTheLimit(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"`+homePlace+`/ada"}]`,
+		map[string]string{"pool.dataset.get_quota": `[{"id":3001,"quota":21474836480,"used_bytes":10}]`}, nil)
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["21474836480","0"]}`)
+	if !strings.Contains(out.Detail, "limit lifted") {
+		t.Fatalf("want the limit lifted, got %s %q", out.Effect, out.Detail)
+	}
+	args, _ := lastCallParams(m, "pool.dataset.set_quota").([]any)
+	entry := args[1].([]any)[0].(map[string]any)
+	if entry["quota_value"] != int64(0) {
+		t.Fatalf("quota_value = %v", entry["quota_value"])
+	}
+}
+
+// The plan plans what the apply does about homes and limits, and nothing more.
+// A limit-only change planned as "no change" never landed; a home the apply
+// refuses, planned as one, was queued again on every pass.
+func TestThePlanSeesALimitOnlyChange(t *testing.T) {
+	s, _ := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"`+homePlace+`/ada"}]`,
+		map[string]string{"pool.dataset.get_quota": `[{"id":3001,"quota":10737418240}]`}, nil)
+	out := planHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["53687091200"]}`)
+	if out.Effect != EffectApply || !strings.Contains(out.Detail, "50 GiB") {
+		t.Fatalf("a raised limit must be planned, got %s %q", out.Effect, out.Detail)
+	}
+}
+
+func TestThePlanDoesNotPromiseAHomeTheApplyRefuses(t *testing.T) {
+	s, _ := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`,
+		map[string]string{"filesystem.stat": `{"uid":2999}`}, nil)
+	out := planHome(t, s, `{"group":["lab_makers"],"home":["true"]}`)
+	if out.Effect != EffectNoChange || !strings.Contains(out.Detail, "belongs to someone else") {
+		t.Fatalf("a folder that is someone else's must not be planned as a home, got %s %q", out.Effect, out.Detail)
+	}
+}
+
+// A user quota is per dataset: on a home made by hand at a share's root it
+// would cap everything the person owns in the whole share.
+func TestALimitIsNeverSetOutsideAHomePlace(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/mnt/pool/main/ada"}]`,
+		map[string]string{"pool.dataset.get_quota": `[]`}, nil)
+	applyHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["53687091200"]}`)
+	for _, c := range m.fakeRPC.calls {
+		if c == "pool.dataset.set_quota" || c == "pool.dataset.get_quota" {
+			t.Fatalf("no limit may be read or set for a home outside the home places: %v", m.fakeRPC.calls)
+		}
+	}
+}
+
+// An account being switched off gets no new folder: a refused home would take
+// the lock in the same update down with it.
+func TestAnAccountBeingSwitchedOffGetsNoHome(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"/var/empty"}]`, nil, noSuchPath)
+	applyHome(t, s, `{"group":[],"enabled":false,"home":["true"]}`)
+	if len(m.updates) != 1 || m.updates[0]["locked"] != true {
+		t.Fatalf("want the lock alone, got %v", m.updates)
+	}
+	if _, home := m.updates[0]["home"]; home {
+		t.Fatalf("no home for an account being switched off: %v", m.updates[0])
 	}
 }

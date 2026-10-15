@@ -145,10 +145,10 @@ The usage panel has the same root cause. It lists every share where the member o
 | # | Gap | Where | Task |
 |---|---|---|---|
 | G1 | ~~Request approval and direct grants don't queue a TrueNAS convergence~~ fixed | | 9.1 |
-| G2 | Mount addresses assume share = group | `MyStorage.tsx:437`, add-on manifest | 8.x |
-| G3 | Usage lists shares by file ownership, not by access | `addons/truenas/storage_status.go:117` | 8.4 |
+| G2 | Mount addresses assume share = group. The add-on and backend now derive places from the ACLs; the page still renders the old derivation | `MyStorage.tsx:437` | 8.5 |
+| G3 | ~~Usage lists shares by file ownership, not by access~~ fixed: usage is per place the member can change | | 8.4 |
 | G4 | ~~A hold, or lifting one, queues nothing~~ fixed | | 9.2 |
 | G5 | ~~Deactivation in Zitadel lands only at the next resolution~~ fixed | | 9.3 |
 | G6 | The paused copy still promises the password is applied later | `MyStorage.tsx:400,584` | 5.2 |
 | G7 | The withheld list can print `true` for an SMB denial | `MyStorage.tsx` withheld list | 5.2 |
-| G8 | No home directory is set, though comments assume one | `addons/truenas/apply.go` | owner: is a personal home share wanted? |
+| G8 | ~~No home directory is set~~ fixed: home folders by role (group 10) | | 10.x |

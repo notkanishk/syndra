@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,21 +75,27 @@ func (s *server) statOwner(p string) (int64, error) {
 // decideHome applies the rules above. uid is the account's, or -1 for one that
 // does not exist yet.
 func (s *server) decideHome(desired desiredState, username, current string, uid int64) (homeDecision, error) {
-	if !desired.managed[FieldHome] || len(desired.homes) == 0 {
+	if !desired.managed[FieldHome] || !desired.wantsHome {
 		return homeDecision{}, nil
 	}
-	if len(desired.homes) > 1 {
-		return homeDecision{note: fmt.Sprintf("Two of %s's roles give different home folders (%s), so the home was left as it is.",
-			username, strings.Join(desired.homes, " and "))}, nil
+	if desired.managed[FieldEnabled] && !desired.enabled {
+		// An account being switched off gets no new folder. The home rides in
+		// the same update as the lock, and a refused home would take the lock
+		// down with it.
+		return homeDecision{}, nil
 	}
-	want := path.Join(desired.homes[0], username)
+	if desired.homeRoot == "" {
+		return homeDecision{note: fmt.Sprintf("%s's role gives a home folder, and this system has no place for home folders chosen yet, so none was made.", username)}, nil
+	}
+	want := path.Join(desired.homeRoot, username)
 	switch current {
 	case want:
 		return homeDecision{}, nil
 	case "":
 	default:
-		return homeDecision{note: fmt.Sprintf("%s's home is %s. The role puts homes in %s, and Syndra never moves a home folder; move it on TrueNAS if it should be there.",
-			username, current, desired.homes[0])}, nil
+		// Already has one, made before the location changed or by hand. It
+		// stays where it is: Syndra never moves a home folder.
+		return homeDecision{}, nil
 	}
 	owner, err := s.statOwner(want)
 	switch {
@@ -112,12 +120,51 @@ func homeFields(p string) map[string]any {
 // one is wanted and it differs. A limit nobody gives any more is left as it
 // is: removing it would make the folder unlimited, which no one decided.
 func (s *server) convergeQuota(desired desiredState, home string, uid int64) (string, error) {
-	if !desired.managed[FieldHomeQuota] || desired.homeQuota == 0 || home == "" {
-		return "", nil
+	dataset, want, owed, err := s.quotaOwed(desired, home, uid)
+	if err != nil || !owed {
+		return "", err
 	}
-	dataset := datasetOf(path.Dir(home))
+	if err := s.nas.call("pool.dataset.set_quota", []any{dataset, []any{map[string]any{
+		"quota_type": "USER", "id": strconv.FormatInt(uid, 10), "quota_value": want,
+	}}}, nil); err != nil {
+		return "", fmt.Errorf("set the home folder limit: %w", err)
+	}
+	return quotaWords(want), nil
+}
+
+// quotaWords is what an outcome says about a limit it sets.
+func quotaWords(want int64) string {
+	if want == 0 {
+		return "Home folder limit lifted."
+	}
+	return fmt.Sprintf("Home folder limit set to %s.", humanBytes(want))
+}
+
+// quotaOwed reads, and only reads, whether the account's limit differs from
+// what its roles want: the plan asks it so it plans the limit the apply sets,
+// and the apply asks it before writing.
+//
+// Only for a home that sits in one of the home places, a dataset of its own. A
+// user quota is per dataset, so on a home made by hand somewhere else (a share's
+// root, say) it would cap everything the person owns in the whole share.
+func (s *server) quotaOwed(desired desiredState, home string, uid int64) (dataset string, want int64, owed bool, err error) {
+	if !desired.managed[FieldHomeQuota] || home == "" || (desired.homeQuota == 0 && !desired.homeUnlimited) {
+		return "", 0, false, nil
+	}
+	want = desired.homeQuota
+	if desired.homeUnlimited {
+		want = 0 // TrueNAS's "no quota"
+	}
+	places, _, err := s.homePlaces()
+	if err != nil {
+		return "", 0, false, fmt.Errorf("read where home folders may go: %w", err)
+	}
+	if !slices.Contains(places, path.Dir(home)) {
+		return "", 0, false, nil
+	}
+	dataset = datasetOf(path.Dir(home))
 	if dataset == "" {
-		return "", nil
+		return "", 0, false, nil
 	}
 	var rows []struct {
 		ID int64 `json:"id"`
@@ -126,19 +173,17 @@ func (s *server) convergeQuota(desired desiredState, home string, uid int64) (st
 		Quota int64 `json:"quota"`
 	}
 	if err := s.nas.call("pool.dataset.get_quota", []any{dataset, "USER", []any{[]any{"id", "=", uid}}}, &rows); err != nil {
-		return "", fmt.Errorf("read the home folder limit: %w", err)
+		return "", 0, false, fmt.Errorf("read the home folder limit: %w", err)
 	}
 	for _, r := range rows {
-		if r.ID == uid && r.Quota == desired.homeQuota {
-			return "", nil
+		if r.ID == uid && r.Quota == want {
+			return dataset, want, false, nil
 		}
 	}
-	if err := s.nas.call("pool.dataset.set_quota", []any{dataset, []any{map[string]any{
-		"quota_type": "USER", "id": strconv.FormatInt(uid, 10), "quota_value": desired.homeQuota,
-	}}}, nil); err != nil {
-		return "", fmt.Errorf("set the home folder limit: %w", err)
+	if want == 0 && len(rows) == 0 {
+		return dataset, want, false, nil // no row is no limit already
 	}
-	return fmt.Sprintf("Home folder limit set to %s.", humanBytes(desired.homeQuota)), nil
+	return dataset, want, true, nil
 }
 
 // humanBytes says a limit the way a person reads one.
@@ -150,32 +195,83 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f GiB", float64(n)/gib)
 }
 
-// homePlaces are where a role may put home folders: every dataset inside an
-// enabled SMB share, so a home is always somewhere a member can reach. The
-// share's own root is left out: homes belong in a folder of their own.
-func (s *server) homePlaces() ([]string, error) {
-	var shares []struct {
-		Path    string `json:"path"`
-		Enabled bool   `json:"enabled"`
+// homePlaces are where a role may put home folders: the folders at the top of
+// each enabled SMB share that are datasets of their own, so a home is always
+// somewhere a member can reach, and its limit is a quota on a dataset that
+// holds only homes. The share's own root is left out (homes belong in a folder
+// of their own), and so are hidden folders and plain directories: on the live
+// NAS an application's share has two dozen of each, and none is a place for
+// people's homes. Each is labelled the way people say it, `main › home_dir`.
+func (s *server) homePlaces() (paths []string, labels map[string]string, err error) {
+	read, _, _, err := s.readACLs()
+	if err != nil {
+		return nil, nil, err
 	}
-	if err := s.nas.call("sharing.smb.query", []any{[]any{}, map[string]any{"select": []string{"path", "enabled"}}}, &shares); err != nil {
-		return nil, fmt.Errorf("read shares: %w", err)
-	}
-	var datasets []struct {
-		Mountpoint string `json:"mountpoint"`
-	}
-	if err := s.nas.call("pool.dataset.query", []any{[]any{}, map[string]any{"select": []string{"name", "mountpoint"}}}, &datasets); err != nil {
-		return nil, fmt.Errorf("read datasets: %w", err)
-	}
-	places := []string{}
-	for _, d := range datasets {
-		for _, sh := range shares {
-			root := strings.TrimRight(sh.Path, "/")
-			if sh.Enabled && root != "" && strings.HasPrefix(d.Mountpoint, root+"/") {
-				places = append(places, d.Mountpoint)
-				break
-			}
+	labels = map[string]string{}
+	for _, p := range read.places {
+		if p.folder != "" && !strings.HasPrefix(p.folder, ".") && read.mounts[p.path] != "" {
+			paths = append(paths, p.path)
+			labels[p.path] = p.share + " › " + p.folder
 		}
 	}
-	return uniqueSorted(places), nil
+	return uniqueSorted(paths), labels, nil
+}
+
+// HomeUsage is one account's home folder: where it is, what is saved in it, and
+// the limit TrueNAS holds for it. QuotaBytes 0 is no limit set.
+type HomeUsage struct {
+	Username   string `json:"username"`
+	UID        int64  `json:"uid"`
+	Home       string `json:"home"`
+	UsedBytes  int64  `json:"used_bytes"`
+	QuotaBytes int64  `json:"quota_bytes,omitempty"`
+}
+
+// HomesResponse is every account with a home folder in a share Syndra
+// considers, with its use, for the system page: "She has 18.4 GB in her home
+// folder now", and how many homes are already in a folder before the location
+// changes. UsageRead is false when a dataset's quota table couldn't be read;
+// the homes are still listed, with no use.
+type HomesResponse struct {
+	Homes     []HomeUsage `json:"homes"`
+	UsageRead bool        `json:"usage_read"`
+}
+
+// handleHomes reads every home folder once: one user read, one quota read per
+// dataset that holds homes.
+func (s *server) handleHomes(w http.ResponseWriter, _ *http.Request, _ []byte) {
+	snap, err := s.readSubjects()
+	if err != nil {
+		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+		return
+	}
+	shares, err := s.enabledShares()
+	if err != nil {
+		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+		return
+	}
+	out := HomesResponse{Homes: []HomeUsage{}, UsageRead: true}
+	quotas := map[string]map[int64]PlaceUsage{}
+	for _, sub := range snap.Subjects {
+		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
+			continue
+		}
+		h := HomeUsage{Username: sub.Username, UID: sub.UID, Home: sub.Home}
+		// The limit is a user quota on the dataset holding the home's parent,
+		// the same one convergeQuota sets.
+		dataset := datasetOf(path.Dir(sub.Home))
+		table, read := quotas[dataset]
+		if !read {
+			table = s.userQuotas(dataset)
+			quotas[dataset] = table
+		}
+		if table == nil {
+			out.UsageRead = false
+		} else if u, ok := table[sub.UID]; ok {
+			h.UsedBytes, h.QuotaBytes = u.UsedBytes, u.QuotaBytes
+		}
+		out.Homes = append(out.Homes, h)
+	}
+	sort.Slice(out.Homes, func(i, j int) bool { return out.Homes[i].Username < out.Homes[j].Username })
+	writeJSON(w, http.StatusOK, out)
 }

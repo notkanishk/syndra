@@ -904,3 +904,42 @@ func TestHandleResolveAccessRequest_WithdrawnCannotBeDecided(t *testing.T) {
 		t.Fatalf("the conflict must name the state it is in: %s", rr.Body.String())
 	}
 }
+
+// Owner, 15 Oct: an operator may approve their own request, and Change history
+// records it as exactly that, never as a second person's decision.
+func TestApprovingYourOwnRequestIsRecordedAsSelfApproved(t *testing.T) {
+	resetAccessDeps(t)
+	dbGetAccessRequestByID = func(_ context.Context, id string) (models.AccessRequest, error) {
+		return models.AccessRequest{ID: id, RequesterID: "op-1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
+	}
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+		return db.EnqueueResult{OutboxID: "ob", Status: "pending"}, nil
+	}
+	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{Applied: 1}, nil
+	}
+	cacheRebuildUser = func(context.Context, string, []string) {}
+	origConverge := svcConvergeProjectChange
+	t.Cleanup(func() { svcConvergeProjectChange = origConverge })
+	svcConvergeProjectChange = func(context.Context, string, string, string) error { return nil }
+	var actions []string
+	dbInsertAuditLog = func(_ context.Context, _, _, action, _ string) error {
+		actions = append(actions, action)
+		return nil
+	}
+
+	for _, tc := range []struct{ reviewer, want string }{
+		{"op-1", "access_request.self_approved"},
+		{"op-2", "access_request.approved"},
+	} {
+		actions = nil
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/requests/r1/decision",
+			strings.NewReader(`{"status":"approved","reviewer_id":"`+tc.reviewer+`","review_note":"ok"}`))
+		req.SetPathValue("id", "r1")
+		rr := httptest.NewRecorder()
+		handleResolveAccessRequest(rr, req)
+		if rr.Code != http.StatusOK || len(actions) != 1 || actions[0] != tc.want {
+			t.Fatalf("reviewer %s: %d %v, want %s", tc.reviewer, rr.Code, actions, tc.want)
+		}
+	}
+}

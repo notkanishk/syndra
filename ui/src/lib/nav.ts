@@ -205,6 +205,18 @@ export const MEMBER_NAV: NavEntry[] = [
   leaf("Network storage", "/storage"),
 ];
 
+/**
+ * An operator's own pages, reached from the Account sheet (A-03 §4, B).
+ *
+ * An operator is a person too: their own access, asked for like anyone's, and
+ * a storage password and folders of their own. The rail is about running the
+ * makerspace. Everything about you sits
+ * behind the account (shell-account board), so that is where these live for
+ * an operator. A member already has the same page in their rail, and one row
+ * per job means the sheet doesn't offer it to them twice.
+ */
+export const ACCOUNT_NAV: NavLeaf[] = [leaf("My access", "/me"), leaf("Network storage", "/storage")];
+
 export function navFor(audience: Audience): NavEntry[] {
   if (audience === "member") return MEMBER_NAV;
   return audience === "advanced" ? ADVANCED_NAV : BASIC_NAV;
@@ -297,7 +309,8 @@ export function crumbsFor(pathname: string, audience: Audience): Crumb[] {
   // "Syndra" fallback below. A member's tree is not a subset of anything here,
   // so this stays out of that case.
   if (audience !== "member") {
-    return findCrumb(ADVANCED_NAV, pathname);
+    const operator = findCrumb(ADVANCED_NAV, pathname);
+    return operator.length > 0 ? operator : findCrumb(ACCOUNT_NAV, pathname);
   }
 
   return [];

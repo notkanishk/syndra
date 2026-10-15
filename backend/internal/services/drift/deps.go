@@ -113,7 +113,7 @@ var (
 	// convergence for them is already waiting.
 	listMappings   = db.ListRoleMappings
 	mappingHolders = db.MappingHolders
-	pendingApply   = db.PendingApplyExists
+	pendingApply   = db.PendingApplyWants
 
 	// The mutation-log anchor (2.28). Two seams rather than one, because the
 	// read and the comparison fail differently: a health read that did not

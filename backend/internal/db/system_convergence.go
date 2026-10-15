@@ -58,7 +58,7 @@ type SystemConvergence struct {
 	// the bundle, not the system. A convergence attributed to "the system" is
 	// one nobody can trace back to a decision.
 	Actor string
-	// Reason is what happened, in the operator's language, for the audit row.
+	// Reason is what happened, in the operator's language. Pending changes shows it.
 	Reason string
 	// Desired is the resolved set, recorded as the intent this convergence is
 	// executing. Never nil: nil records as JSON null and the drain reads that
@@ -165,6 +165,7 @@ func RecordSystemConvergence(ctx context.Context, c SystemConvergence) (planID, 
 	outboxID, err = EnqueueEntitlementApplyTx(ctx, tx, EntitlementApply{
 		PlanSubjectID: subjects[0].ID,
 		WithdrawsOnly: c.WithdrawsOnly,
+		Reason:        c.Reason,
 	})
 	if err != nil {
 		return "", "", fmt.Errorf("queue system convergence: %w", err)

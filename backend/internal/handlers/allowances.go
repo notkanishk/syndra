@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,6 +54,15 @@ func handleCreateAllowance(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "That setting can't be set for one person. Only settings the system marks as per-person can.",
 			map[string]string{"field": "not_per_person"})
 		return
+	}
+	// A whole-number setting (a home folder limit, in bytes; 0 is no limit) is
+	// checked here: the add-on can't enumerate it, so nothing before the NAS
+	// would.
+	if req.Direction == db.AllowanceSet && fieldIsInt(req.Target, req.Field) {
+		if n, err := strconv.ParseInt(strings.TrimSpace(req.Value), 10, 64); err != nil || n < 0 {
+			jsonValidationErrorResponse(w, "That setting takes a whole number.", map[string]string{"value": "not_a_number"})
+			return
+		}
 	}
 	field, value, err := validateAllowanceAgainstTarget(r.Context(), req.Target, req.Field, req.Value)
 	if err != nil {
@@ -191,6 +201,19 @@ func writeAllowanceError(w http.ResponseWriter, err error) {
 
 // fieldIsPerPerson reports whether the target's add-on declares this field as
 // one an operator may set for one person.
+func fieldIsInt(target, field string) bool {
+	schema, err := addonsEntitlementSchema(target)
+	if err != nil {
+		return false
+	}
+	for _, f := range schema {
+		if f.Name == field {
+			return f.Type == "int"
+		}
+	}
+	return false
+}
+
 func fieldIsPerPerson(target, field string) bool {
 	schema, err := addonsEntitlementSchema(target)
 	if err != nil {
