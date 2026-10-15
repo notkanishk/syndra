@@ -523,7 +523,7 @@ function PersonRow({
     // A label rather than a div: the whole row becomes the checkbox's hit area
     // for free, keyboard and screen reader included.
     <label
-      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft/40" : ""}`}
+      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft" : ""}`}
       {...selection.rowProps(entry.user.id)}
     >
       <span className="w-11 desktop:w-[26px]">

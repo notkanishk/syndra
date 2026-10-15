@@ -272,7 +272,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
     fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Record the decision" })).toBeNull();
     expect(state.acknowledge).toHaveBeenCalledTimes(1);
   });
@@ -347,8 +347,8 @@ describe("extending a single row", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
 
-    await waitFor(() => expect(document.body.textContent).toMatch(/Waiting to be sent/i));
-    expect(document.body.textContent).toMatch(/Pending changes/);
+    const link = await screen.findByRole("link", { name: /Waiting for you to send/ });
+    expect(link.getAttribute("href")).toBe("/governance/pending");
     expect(document.body.textContent).not.toMatch(/Extended by 90 days/);
   });
 

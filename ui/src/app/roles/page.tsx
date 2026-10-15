@@ -167,7 +167,7 @@ export default function RolesPage() {
       </div>
 
       {/*
-        Holders is what Syndra decided, not what Zitadel has confirmed — the
+        People is what Syndra decided, not what Zitadel has confirmed — the
         "Confirmed" column says how much of that decision the observation
         store backs up, and this states once, for the whole page, when that
         confirmation last happened rather than repeating it on every row.
@@ -182,7 +182,7 @@ export default function RolesPage() {
           <span className="flex-1">Role</span>
           <span className="w-[130px]">Group</span>
           <span className="w-[150px]">Used by</span>
-          <span className="w-[110px] text-right">Holders</span>
+          <span className="w-[110px] text-right">People</span>
         </CardColumns>
 
         <ListStates

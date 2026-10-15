@@ -39,6 +39,14 @@ type zitadelSource struct {
 	now func() time.Time
 
 	cache sync.Map // key -> *cacheEntry
+
+	// When Zitadel last answered a list read, and since when it hasn't (zero
+	// while it answers). Unix nanoseconds. An expired entry stays in the
+	// cache as the last good read, so a Zitadel that stops answering leaves
+	// Syndra showing what it last held, marked not current, never sample data
+	// (N23, B11).
+	lastAnswered atomic.Int64
+	missedSince  atomic.Int64
 }
 
 type cacheEntry struct {
@@ -66,10 +74,48 @@ func (z *zitadelSource) cacheGet(key string) (any, bool) {
 	}
 	entry := v.(*cacheEntry)
 	if z.now().After(entry.expires) {
-		z.cache.Delete(key)
 		return nil, false
 	}
 	return entry.val, true
+}
+
+// expire keeps the entry as the last good read but makes the next read ask
+// Zitadel again. Invalidation expires rather than deletes for the same reason.
+func (z *zitadelSource) expire(key any) {
+	if v, ok := z.cache.Load(key); ok {
+		z.cache.Store(key, &cacheEntry{val: v.(*cacheEntry).val})
+	}
+}
+
+// answered records a list read Zitadel answered.
+func (z *zitadelSource) answered() {
+	z.lastAnswered.Store(z.now().UnixNano())
+	z.missedSince.Store(0)
+}
+
+// lastGood serves the last good read under key when Zitadel didn't answer,
+// or ErrUnreachable when there has never been one.
+func (z *zitadelSource) lastGood(key string, err error) (any, error) {
+	z.missedSince.CompareAndSwap(0, z.now().UnixNano())
+	if v, ok := z.cache.Load(key); ok {
+		// Held for another TTL, so a Zitadel that has stopped answering costs
+		// one slow call per TTL rather than one per page.
+		val := v.(*cacheEntry).val
+		z.cache.Store(key, &cacheEntry{val: val, expires: z.now().Add(CacheTTL)})
+		log.Printf("[DIRECTORY] serving the last good read for %s: %v", key, err)
+		return val, nil
+	}
+	return nil, fmt.Errorf("%w: %w", ErrUnreachable, err)
+}
+
+// Freshness reports when Zitadel last answered (zero when never) and whether
+// it is answering now.
+func (z *zitadelSource) Freshness() (time.Time, bool) {
+	var at time.Time
+	if n := z.lastAnswered.Load(); n != 0 {
+		at = time.Unix(0, n)
+	}
+	return at, z.missedSince.Load() == 0
 }
 
 func (z *zitadelSource) cachePut(key string, val any) {
@@ -98,8 +144,13 @@ func (z *zitadelSource) Users(ctx context.Context) ([]models.UserProfile, error)
 		return z.client.ListUsers(ctx, p)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("directory: list users: %w", err)
+		v, err := z.lastGood(usersCacheKey, fmt.Errorf("directory: list users: %w", err))
+		if err != nil {
+			return nil, err
+		}
+		return v.([]models.UserProfile), nil
 	}
+	z.answered()
 
 	out := make([]models.UserProfile, len(items))
 	for i, u := range items {
@@ -215,8 +266,13 @@ func (z *zitadelSource) Projects(ctx context.Context) ([]models.ProjectCatalog, 
 		return z.client.ListProjects(ctx, p)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("directory: list projects: %w", err)
+		v, err := z.lastGood(projectsCacheKey, fmt.Errorf("directory: list projects: %w", err))
+		if err != nil {
+			return nil, err
+		}
+		return v.([]models.ProjectCatalog), nil
 	}
+	z.answered()
 
 	out := make([]models.ProjectCatalog, 0, len(items))
 	for _, p := range items {
@@ -246,8 +302,13 @@ func (z *zitadelSource) roles(ctx context.Context, projectID string) ([]models.P
 		return z.client.ListProjectRoles(ctx, projectID, p)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("directory: list roles for project %s: %w", projectID, err)
+		v, err := z.lastGood(key, fmt.Errorf("directory: list roles for project %s: %w", projectID, err))
+		if err != nil {
+			return nil, err
+		}
+		return v.([]models.ProjectRole), nil
 	}
+	z.answered()
 
 	roles := make([]models.ProjectRole, 0, len(items))
 	for _, r := range items {
@@ -443,25 +504,25 @@ func (z *zitadelSource) Tag() string { return "zitadel" }
 
 func (z *zitadelSource) InvalidateAll() {
 	z.cache.Range(func(k, _ any) bool {
-		z.cache.Delete(k)
+		z.expire(k)
 		return true
 	})
 }
 
 func (z *zitadelSource) InvalidateProject(projectID string) {
-	z.cache.Delete(projectRolesCacheKey(projectID))
-	z.cache.Delete(projectsCacheKey)
-	z.cache.Delete(applicationsCacheKey)
-	z.cache.Delete(appsByProjectCacheKey(projectID))
+	z.expire(projectRolesCacheKey(projectID))
+	z.expire(projectsCacheKey)
+	z.expire(applicationsCacheKey)
+	z.expire(appsByProjectCacheKey(projectID))
 }
 
 func (z *zitadelSource) InvalidateUsers() {
-	z.cache.Delete(usersCacheKey)
+	z.expire(usersCacheKey)
 	// Metadata caches are keyed per-user; drop them too so a newly-set title
 	// shows up after an invalidation, not only after TTL.
 	z.cache.Range(func(k, _ any) bool {
 		if key, ok := k.(string); ok && strings.HasPrefix(key, userMetadataCachePrefix) {
-			z.cache.Delete(key)
+			z.expire(key)
 		}
 		return true
 	})

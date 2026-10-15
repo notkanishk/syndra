@@ -47,7 +47,7 @@ describe("HoldDialog", () => {
     // Once it has succeeded there is nothing left to re-run — the action
     // button is gone and Cancel has become the closing word.
     expect(screen.queryByText("Hold the prints share")).toBeNull();
-    expect(screen.getByText("Done")).toBeInTheDocument();
+    expect(screen.getByText("Close")).toBeInTheDocument();
   });
 
   it("says the hold lifts itself instead of pointing at Holds due, when that's the form chosen", async () => {

@@ -56,7 +56,7 @@ describe("upstream role delete", () => {
     ).toBeInTheDocument();
   });
 
-  it("retires the delete button on success, and flips Cancel to Done", async () => {
+  it("retires the delete button on success, and flips Cancel to Close", async () => {
     deleteRole.mockResolvedValueOnce({});
     renderPage();
     await openConfirm();
@@ -65,7 +65,7 @@ describe("upstream role delete", () => {
     await screen.findByText(/deleted in Zitadel/i);
 
     expect(screen.queryByRole("button", { name: "Delete role in Zitadel" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(deleteRole).toHaveBeenCalledTimes(1);
   });
 

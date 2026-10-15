@@ -69,7 +69,7 @@ func handleCreateRole(w http.ResponseWriter, r *http.Request) {
 func handleGetGlobalRoleCatalog(w http.ResponseWriter, r *http.Request) {
 	catalog, err := svcGlobalRoleCatalog(r.Context())
 	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		viewError(w, err, http.StatusInternalServerError, "INTERNAL_ERROR")
 		return
 	}
 

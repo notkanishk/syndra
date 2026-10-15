@@ -147,7 +147,7 @@ describe("Ask for access · only what they lack, once", () => {
     expect(await screen.findByText(/Asked for Trained operator on Laser Lab/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Send request/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("What do you need to use?")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(create.calls).toBe(1);
   });
 });
@@ -166,14 +166,14 @@ describe("The queue · a request for a role they have since come to hold", () =>
   });
 });
 
-// Found on production, 15 Oct: Done, then Ask for access again, reopened on
+// Found on production, 15 Oct: Close, then Ask for access again, reopened on
 // the last result until a reload. Each opening starts clean.
 describe("Ask for access · each opening starts clean", () => {
-  it("opens on the form again after Done", async () => {
+  it("opens on the form again after Close", async () => {
     search.value = "project=pLaser&role=trained";
     renderAs(false);
     fireEvent.click(screen.getByRole("button", { name: /Send request/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Close" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Ask for access" })[0]);
     expect(screen.getByLabelText("What do you need to use?")).toBeInTheDocument();
     expect(screen.queryByText(/Asked for/)).not.toBeInTheDocument();

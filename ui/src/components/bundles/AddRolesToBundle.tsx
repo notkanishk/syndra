@@ -159,7 +159,7 @@ export function AddRolesToBundle({
             ? "Add roles"
             : `Add ${chosen.length} ${chosen.length === 1 ? "role" : "roles"}`}
         </Button>
-        <Button onClick={onClose}>Done</Button>
+        <Button onClick={onClose}>Close</Button>
       </ModalFooter>
     </Modal>
   );

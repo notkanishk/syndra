@@ -237,7 +237,7 @@ function RoleRow({
               variant={outcome?.kind === "applied" ? "accent" : "outline"}
               onClick={() => setConfirming(false)}
             >
-              {outcome?.kind === "applied" ? "Done" : "Cancel"}
+              {outcome?.kind === "applied" ? "Close" : "Cancel"}
             </Button>
           </ModalFooter>
         </Modal>
@@ -355,7 +355,7 @@ function RoleDialog({
         >
           {role ? "Save in Zitadel" : "Create in Zitadel"}
         </Button>
-        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Done" : "Cancel"}</Button>
+        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Close" : "Cancel"}</Button>
       </ModalFooter>
     </Modal>
   );

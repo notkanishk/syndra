@@ -104,7 +104,7 @@ describe("a role whose grant has not been sent", () => {
     ]);
     renderPerson();
 
-    expect(screen.getByText("Waiting to be sent")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
     // An expiry on access that does not exist yet answers a question nobody
     // can ask, so the marker takes the slot rather than sitting beside it.
     expect(screen.queryByText("No expiry")).toBeNull();
@@ -117,7 +117,7 @@ describe("a role whose grant has not been sent", () => {
     ]);
     renderPerson();
 
-    expect(screen.queryByText("Waiting to be sent")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
     expect(screen.getByText("No expiry")).toBeInTheDocument();
   });
 
@@ -132,7 +132,7 @@ describe("a role whose grant has not been sent", () => {
 
     // They hold it. One of the two reasons is still owed, and saying the row
     // is waiting would deny access the person actually has.
-    expect(screen.queryByText("Waiting to be sent")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
     expect(screen.getByText(/Held 2 ways/)).toBeInTheDocument();
   });
 });
@@ -221,7 +221,7 @@ describe("a role Zitadel confirms", () => {
 });
 
 describe("the group label above a role Syndra decided", () => {
-  // "Granted" sat above a row reading "Waiting to be sent" — contradictory.
+  // "Granted" sat above a row reading "Waiting for you to send" — contradictory.
   // The per-row state carries the truth now; the label just names the group.
   it("says Given, not Granted", () => {
     state.projects = project([{ kind: "direct", description: "" }]);

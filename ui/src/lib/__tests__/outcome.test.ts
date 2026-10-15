@@ -20,7 +20,7 @@ describe("the outcome vocabulary", () => {
   it("never lets queued wear the tone of applied", () => {
     expect(OUTCOME_TONE.queued).not.toBe(OUTCOME_TONE.applied);
     expect(OUTCOME_TONE.queued).toContain("warn");
-    expect(OUTCOME_LABEL.queued).toBe("Waiting to be sent");
+    expect(OUTCOME_LABEL.queued).toBe("Waiting for you to send");
   });
 
   // Past tense for results, future tense for plans. A plan says what would
@@ -49,6 +49,16 @@ describe("an error becomes an outcome", () => {
     );
     expect(outcome.kind).toBe("refused");
     expect(outcome.message).toBe("That plan is no longer current.");
+  });
+
+  it("reads an ended session as a refusal that says the work is still there, without repeating Nothing was changed", () => {
+    const outcome = outcomeFromError(new ApiError(401, { message: "Signed out", error: "SESSION_ENDED" }));
+    expect(outcome.kind).toBe("refused");
+    expect(outcome.detail).toBe(
+      "What you were doing is still here. Sign in again, then press the same button once more.",
+    );
+    // ActionOutcome appends NOTHING_CHANGED to refusals; saying it here too would print it twice.
+    expect(outcome.detail).not.toMatch(/Nothing was changed/);
   });
 
   it("reads a 5xx as a failure", () => {

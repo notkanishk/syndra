@@ -270,14 +270,14 @@ function DirectDialog({
                 : undefined
         }
       >
-        {/* Cancel/Done comes FIRST in the markup, not just visually — the
+        {/* Cancel/Close comes FIRST in the markup, not just visually — the
             dialog's focus trap (Modal.tsx) focuses the first focusable
             element in the panel on open, and a destructive confirm rendered
             first got that focus for free: Enter, pressed on reflex to close
             a dialog that just opened, revoked access instead. The safe exit
             takes the initial focus; the destructive action never does. */}
         <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onClose}>
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
         {/* Same rule as the bundle dialog: an action that has run is not an
             action any more, and leaving it armed lets a second click revoke
@@ -409,7 +409,7 @@ function BundleDialog({
           variant={succeeded(outcome) ? "accent" : "outline"}
           onClick={onClose}
         >
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
         {/* Gone once it has run. A destructive confirm that stays armed after
             it succeeded fires again on the next click — which is what a person

@@ -240,7 +240,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
             <div
               key={entry.id}
               className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px] ${
-                selection.isSelected(entry.id) ? "bg-accent-soft/30" : ""
+                selection.isSelected(entry.id) ? "bg-accent-soft" : ""
               }`}
               {...selection.rowProps(entry.id)}
             >
@@ -719,7 +719,7 @@ function RequestDialogOpen({
       <ModalFooter>
         {sent ? (
           <Button variant="accent" onClick={onClose}>
-            Done
+            Close
           </Button>
         ) : (
         <>

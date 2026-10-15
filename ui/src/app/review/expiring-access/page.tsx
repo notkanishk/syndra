@@ -321,7 +321,7 @@ function ExpiringRow({
               // is nothing to be ineligible for, and the edge would be noise.
               "border-l-[3px] border-dashed border-line-strong"
             : "border-l-[3px] border-transparent"
-      } ${ack ? "opacity-[.72]" : ""} ${selection.isSelected(grant.id) ? "bg-accent-soft/30" : ""}`}
+      } ${ack ? "opacity-[.72]" : ""} ${selection.isSelected(grant.id) ? "bg-accent-soft" : ""}`}
       {...(ack ? {} : selection.rowProps(grant.id))}
     >
       {selecting && (
@@ -409,9 +409,7 @@ function ExpiringRow({
                 message: waiting
                   ? `Will extend by ${EXTEND_DAYS} days once sent`
                   : `Extended by ${EXTEND_DAYS} days`,
-                detail: waiting
-                  ? "Waiting to be sent — see Pending changes."
-                  : "It leaves this list when the page next refreshes.",
+                detail: waiting ? undefined : "It leaves this list when the page next refreshes.",
               });
             } catch (error) {
               setOutcome(outcomeFromError(error));
@@ -570,7 +568,7 @@ function LetItLapseDialog({
           onClick={onClose}
           disabled={acknowledge.isPending}
         >
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>

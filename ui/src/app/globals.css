@@ -204,6 +204,24 @@
     }
   }
 
+  @keyframes unfold {
+    from {
+      grid-template-rows: 0fr;
+    }
+    to {
+      grid-template-rows: 1fr;
+    }
+  }
+
+  @keyframes fold {
+    from {
+      grid-template-rows: 1fr;
+    }
+    to {
+      grid-template-rows: 0fr;
+    }
+  }
+
   @keyframes flash {
     from {
       background-color: var(--accent-soft);
@@ -640,6 +658,118 @@
 
 @utility settle-scrim {
   animation: fade var(--duration-settle) var(--ease-tint) both;
+}
+
+/* The selection seat (proposed/SelectionSeat.md): how a choice is marked
+   everywhere. A real input, transparent over a 24px round seat it styles.
+   Chosen fills accent and the mark settles in from 60%; some chosen is the
+   same fill with a dash; locked is grey, ticked, and can't change here. */
+@utility seat {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+
+  & > input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  & > span {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1.5px solid var(--line-strong);
+    color: var(--accent-ink);
+    transition-property: background-color, border-color, transform;
+    transition-duration: var(--duration-press);
+    transition-timing-function: var(--ease-press);
+  }
+  & > span > svg {
+    opacity: 0;
+    transform: scale(0.6);
+    transition-property: opacity, transform;
+    transition-duration: var(--duration-press);
+    transition-timing-function: var(--ease-settle);
+  }
+  & > input:checked + span,
+  & > input:indeterminate + span {
+    background-color: var(--accent);
+    border-color: var(--accent);
+  }
+  & > input:checked:not(:indeterminate) + span > .seat-mark,
+  & > input:indeterminate + span > .seat-dash {
+    opacity: 1;
+    transform: none;
+  }
+  & > input:active:not(:disabled) + span {
+    transform: scale(0.97);
+  }
+  & > input:focus-visible + span {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 3px;
+  }
+  & > input:disabled {
+    cursor: not-allowed;
+  }
+  & > input:disabled + span {
+    opacity: 0.45;
+  }
+  /* Declared last, at the same specificity as checked and disabled, so a
+     locked seat is grey and full strength rather than violet or faded. */
+  &[data-locked] > input + span {
+    background-color: var(--surface-2);
+    border-color: var(--line-strong);
+    color: var(--faint);
+    opacity: 1;
+  }
+  &[data-locked] > input + span > .seat-mark {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The outcome fading into the slot the button left (Motion 2a): colour and
+   opacity only, so the row's height never changes. */
+@utility tint-in {
+  animation: fade var(--duration-tint) var(--ease-tint) both;
+}
+
+/* settle, pushed (Motion 6a, 8a): a region opens to its height and pushes
+   the page down, its contents fading in 140ms behind; closing fades first,
+   then the gap closes. Leaving is quicker than arriving. The grid row is what
+   travels, so the height is the content's own and never a guessed max-height.
+   `Unfold` drives the states. */
+@utility unfold {
+  display: grid;
+  grid-template-rows: 1fr;
+
+  > * {
+    min-height: 0;
+  }
+
+  &[data-phase="opening"] {
+    animation: unfold var(--duration-settle) var(--ease-settle) both;
+  }
+  &[data-phase="opening"] > * {
+    overflow: hidden;
+    animation: fade var(--duration-settle) var(--ease-tint) 140ms both;
+  }
+  &[data-phase="closing"] {
+    /* Its own keyframes, not `unfold reverse`: reversing also reverses the
+       easing, and the gap would start slow and snap shut. */
+    animation: fold var(--duration-settle) var(--ease-settle) var(--duration-tint) both;
+  }
+  &[data-phase="closing"] > * {
+    overflow: hidden;
+    animation: fade var(--duration-tint) var(--ease-tint) reverse both;
+  }
 }
 
 /* arrive · 420ms — first paint of a screen or a list. Rows rise 8px in

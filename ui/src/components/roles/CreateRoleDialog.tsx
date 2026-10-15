@@ -226,7 +226,7 @@ export function CreateRoleDialog({
             Create role
           </Button>
         )}
-        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Done" : "Cancel"}</Button>
+        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Close" : "Cancel"}</Button>
       </ModalFooter>
     </Modal>
   );

@@ -103,21 +103,23 @@ describe("after saving a rule", () => {
 
     await waitFor(() => expect(document.body.textContent).toMatch(/Rule updated/));
     // Not "Applied" — a manual rule's access still waits under Pending changes,
-    // so the pill and the detail sentence must agree.
-    expect(document.body.textContent).toMatch(/Waiting to be sent/);
+    // so the link to send it and the detail sentence must agree.
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ }).getAttribute("href")).toBe(
+      "/governance/pending",
+    );
     expect(document.body.textContent).toMatch(/waits under Pending changes/);
     expect(screen.queryByRole("button", { name: "Save rule" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
-  it("reports Applied for an auto rule, and closes on Done", async () => {
+  it("reports Applied for an auto rule, and closes on Close", async () => {
     state.rules = [rule({ confirmation_mode: "auto" })];
     await saveTheOpenRule();
 
     await waitFor(() => expect(document.body.textContent).toMatch(/Applied/));
     expect(document.body.textContent).toMatch(/takes effect the moment the rule applies|get the second at once/);
 
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Done" })).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Close" })).toBeNull());
   });
 });

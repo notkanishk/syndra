@@ -55,7 +55,7 @@ describe("dropping a role from a bundle's working copy", () => {
     fireEvent.click(screen.getByRole("button", { name: "Drop" }));
     fireEvent.click(screen.getByRole("button", { name: "Drop it from the working copy" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Drop it from the working copy" })).toBeNull();
     expect(state.remove).toHaveBeenCalledTimes(1);
   });
@@ -69,6 +69,6 @@ describe("dropping a role from a bundle's working copy", () => {
 
     await waitFor(() => expect(screen.getByText(/Nothing was changed/i)).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Drop it from the working copy" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
   });
 });

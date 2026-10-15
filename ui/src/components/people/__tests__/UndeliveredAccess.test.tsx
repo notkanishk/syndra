@@ -159,13 +159,13 @@ describe("the action, once it has run", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Withdraw the queued change/ }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
 
     // The dialog stays open to report what happened, and a destructive
     // confirm left armed inside it queues another cascade on the next click —
     // which is what a person does when the dialog does not close.
     expect(screen.queryByRole("button", { name: /Withdraw the queued change/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(removed.calls).toBe(1);
   });
 
