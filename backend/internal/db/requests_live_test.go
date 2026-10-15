@@ -230,7 +230,6 @@ func TestOneAllowanceOfAKindIsInForce(t *testing.T) {
 	}
 }
 
-
 // A waiting request for a role the person already has is closed by the
 // migration, attributed to system and audited.
 func TestTheMigrationClosesRequestsForRolesAlreadyHeld(t *testing.T) {
@@ -263,5 +262,144 @@ func TestTheMigrationClosesRequestsForRolesAlreadyHeld(t *testing.T) {
 	_ = PG.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE resource_id=$1 AND action='access_request.closed_as_held'`, heldID).Scan(&audited)
 	if audited != 1 {
 		t.Fatalf("the closure is audited once, got %d", audited)
+	}
+}
+
+func requestStatus(t *testing.T, ctx context.Context, id string) (status, by, note string) {
+	t.Helper()
+	if err := PG.QueryRow(ctx, `SELECT status, COALESCE(reviewer_user_id,''), COALESCE(review_note,'') FROM access_requests WHERE id=$1`, id).Scan(&status, &by, &note); err != nil {
+		t.Fatal(err)
+	}
+	return
+}
+
+func dropOutboxAfter(t *testing.T, ctx context.Context, user string) {
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user) })
+}
+
+// Given directly while a request for it waited (15 Oct): the request closes
+// as fulfilled, by the person who gave it, in the grant's own transaction.
+func TestAGrantClosesTheRequestItAnswers(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	dropOutboxAfter(t, ctx, user)
+	asked, err := CreateAccessRequest(ctx, user, "pLaser", "trained", "need it", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := CreateAccessRequest(ctx, user, "pLaser", "door", "need it", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnqueueDirectGrantPropagation(ctx, EnqueueParams{
+		UserID: user, ProjectID: "pLaser", RoleKeys: []string{"trained"}, GrantedBy: "op",
+		Reason: "r", OpType: "add", PayloadJSON: `{}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if status, by, note := requestStatus(t, ctx, asked); status != "fulfilled" || by != "op" || note == "" {
+		t.Fatalf("the answered request closes as fulfilled by the giver, got %s by %q (%q)", status, by, note)
+	}
+	if status, _, _ := requestStatus(t, ctx, other); status != "pending" {
+		t.Fatalf("a request for another role is left waiting, got %s", status)
+	}
+	var audited int
+	_ = PG.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE resource_id=$1 AND action='access_request.closed_as_given'`, asked).Scan(&audited)
+	if audited != 1 {
+		t.Fatalf("the closure is audited once, got %d", audited)
+	}
+	// Closed, so asking again once it ends is a new request, not "already asked".
+	if _, err := PG.Exec(ctx, `DELETE FROM direct_role_grants WHERE user_id=$1`, user); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id=$1`, user); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CreateAccessRequest(ctx, user, "pLaser", "trained", "again", nil); err != nil {
+		t.Fatalf("after it was given and taken away they may ask again: %v", err)
+	}
+}
+
+// The same through a bundle, which writes no ledger row: the cascade path closes it.
+func TestABundleClosesTheRequestItAnswers(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	dropOutboxAfter(t, ctx, user)
+	asked, err := CreateAccessRequest(ctx, user, "pLaser", "trained", "need it", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enqueueCascadeRows(ctx, tx, nil, []EnqueueParams{{
+		UserID: user, ProjectID: "pLaser", RoleKeys: []string{"trained"}, GrantedBy: "op",
+		OpType: "add", PayloadJSON: `{}`, Source: "bundle", SourceRef: "b1",
+	}}); err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if status, _, note := requestStatus(t, ctx, asked); status != "fulfilled" || note != givenNote("bundle") {
+		t.Fatalf("closed as given through a bundle, got %s (%q)", status, note)
+	}
+}
+
+// Given but not sent is held and says so; a role whose removal is queued is
+// not held, even while Zitadel still lists it.
+func TestHoldingReadsWhatIsQueued(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	dropOutboxAfter(t, ctx, user)
+	read := func(role string) models.RequestHolding {
+		t.Helper()
+		h, err := RequestHolding(ctx, user, "pLaser", role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	seedOutbox(t, ctx, "add", "pending", user, "pLaser", "bundle", "b1", []string{"trained"})
+	if h := read("trained"); h.Kind != models.HoldingForGood || !h.Waiting {
+		t.Fatalf("a queued bundle add is held and waiting, got %+v", h)
+	}
+	if _, err := PG.Exec(ctx, `INSERT INTO zitadel_grants_index (grant_id, user_id, project_id, role_keys) VALUES ($1,$2,'pLaser',ARRAY['door'])`, "g-"+user, user); err != nil {
+		t.Fatal(err)
+	}
+	if h := read("door"); h.Kind != models.HoldingForGood || h.Waiting {
+		t.Fatalf("observed and nothing queued is held, not waiting, got %+v", h)
+	}
+	seedOutbox(t, ctx, "revoke", "pending", user, "pLaser", "direct", "", []string{"door"})
+	if h := read("door"); h.Kind != models.HoldingNone {
+		t.Fatalf("a role whose removal is queued is not held, got %+v", h)
+	}
+}
+
+// 000055 turns 000054's "declined, already held" closures into fulfilled ones.
+func TestTheMigrationCallsAlreadyHeldClosuresFulfilled(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	up, err := os.ReadFile("../../db/migrations/000055_request_fulfilled.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var held, declined string
+	if err := PG.QueryRow(ctx, `INSERT INTO access_requests (requester_user_id, zitadel_project_id, zitadel_role_key, justification, status, reviewer_user_id, review_note, resolved_at) VALUES ($1,'pLaser','trained','x','rejected','system','They already have this, so there was nothing to approve.',now()) RETURNING id`, user).Scan(&held); err != nil {
+		t.Fatal(err)
+	}
+	if err := PG.QueryRow(ctx, `INSERT INTO access_requests (requester_user_id, zitadel_project_id, zitadel_role_key, justification, status, reviewer_user_id, resolved_at) VALUES ($1,'pLaser','door','x','rejected','op',now()) RETURNING id`, user).Scan(&declined); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, string(up)); err != nil {
+		t.Fatalf("migration: %v", err)
+	}
+	if status, _, _ := requestStatus(t, ctx, held); status != "fulfilled" {
+		t.Fatalf("an already-held closure is fulfilled, got %s", status)
+	}
+	if status, _, _ := requestStatus(t, ctx, declined); status != "rejected" {
+		t.Fatalf("a real decline stays declined, got %s", status)
 	}
 }

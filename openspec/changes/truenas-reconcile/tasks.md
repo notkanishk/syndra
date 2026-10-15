@@ -214,3 +214,18 @@ test_user asked five times, from one dialog, for Community, which they held for 
 - [x] D12 A dialog's footer no longer paints over the focus ring of the field above it (`ModalFooter` `mt-2`).
 - [x] D13 Grant direct access marks the roles the person already has in its picker, as Ask for access does.
 - [x] D14 The revoke sweep waits for the add-ons at start-up, like the reconcile, and the start-up refresh is quiet until then: every deploy logged an unreachable target from the second before the add-on listened.
+
+## Found in production, 15 Oct 2026 (a request overtaken by a grant)
+
+- [x] E1 A grant from any route (direct, approval, bundle, rule cascade) closes a waiting request for the same role in its own transaction, as `fulfilled` (migration 55), reviewer the giver, note naming the route, audited `access_request.closed_as_given`. It stayed open: the queue asked for a decision, the person couldn't ask again, and Decline told them "Not approved". Test (live, mutation-checked)
+- [x] E2 Migration 55 turns 000054's "already held" declines into `fulfilled`. Test (live)
+- [x] E3 Holding reads the queue: a queued add (a bundle's too, which has no ledger row) counts as held and `waiting`, and the refusal says it may not work yet; a queued revoke means not held, even while Zitadel still lists the role. Test (live)
+- [x] E4 An add cancels the queued revoke it answers (any source) and is owed only when the grant isn't standing; giving back before the removal was sent queued two changes that net to nothing. Test (live)
+- [x] E5 A person's page read a withdrawn request as "Waiting on a decision"; it uses the queue's words (`requestOutcome`). Test
+- [x] E6 A role Zitadel doesn't offer is refused when asked for, given or approved (409 ROLE_NOT_OFFERED), and in the decision plan; an unread or degraded catalogue fails closed (503 CATALOGUE_UNREAD). The API took any project and key; only the pickers kept to the catalogue. Test
+- [x] E7 An add identical to one still queued reuses it: extending before the first send no longer queues a second. Test (live)
+- [x] E9 Never invisibly (owner, 15 Oct): an operator's action that would cancel a queued, unsent change is refused (409 WOULD_CANCEL_QUEUED, with each change: what, for whom, who queued it, when, why) until they confirm exactly those; `request()` asks one root confirmation and resends with `X-Syndra-Cancel-Ack`. The gate sits at the one place cancellations happen (`withdrawUndelivered`, `db.CancelGate`), so no screen can cancel silently. Plans name the cancellations on their rows and fold the ids into the row fingerprint (a change queued after review makes the plan stale); their apply is marked reviewed. System work and a member's own request aren't asked. Every cancellation is audited `propagation.cancelled_unsent` by the actor. Test (live, handler, UI)
+- [x] E10 Removing an unsent direct grant now cancels its queued add: the match required the grant id as reference, which a direct add never carries, so both were queued. Preview and action share one predicate (`answeredWhere`). Test (live)
+- [x] E11 The decision plan read withdrawn or fulfilled requests as "will change" and then refused them; a holding it couldn't read let it say approve. Both fixed. Test
+- [x] E12 A write that queued nothing (a removal cancelled, the grant still standing) reported "pending"; it reports applied, and nothing tries to drain an empty id.
+- [ ] E8 UI sweep owes design's request rows (route-requests): one status seat (dot, word, note), Withdraw outline and last, the role named on a member's row. Today a withdrawn row shows a pill plus "Applied", and a member's row names only the project.

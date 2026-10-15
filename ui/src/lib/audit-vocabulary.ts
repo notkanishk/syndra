@@ -74,6 +74,16 @@ export const AUDIT_ACTIONS: Record<
     verb: "Closed a copy of a waiting request",
     passive: "A copy of their waiting request was closed",
   },
+  // An action cancelled a change still waiting to be sent, after the operator
+  // was shown it (owner, 15 Oct: never invisibly). resource_id is the outbox row.
+  "propagation.cancelled_unsent": {
+    verb: "Cancelled a change that was waiting to be sent",
+    passive: "A change waiting to be sent for them was cancelled",
+  },
+  "access_request.closed_as_given": {
+    verb: "Closed a request for a role given another way",
+    passive: "Their request was closed: the role was given another way",
+  },
   "access_request.closed_as_held": {
     verb: "Closed a request for a role they already had",
     passive: "Their request was closed: they already had it",

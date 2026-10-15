@@ -9,6 +9,7 @@
  * code (`error.code`) or human message (`error.message`).
  */
 
+import { CANCEL_ACK_HEADER, confirmCancellations, type QueuedChange } from "@/lib/cancel-confirm";
 import { SESSION_ENDED } from "@/lib/login-error";
 
 const API_BASE = "/api/proxy";
@@ -17,6 +18,8 @@ export interface ApiErrorBody {
   error?: string;
   message?: string;
   details?: Record<string, string>;
+  /** WOULD_CANCEL_QUEUED: what the action would have cancelled. */
+  cancels?: QueuedChange[];
 }
 
 export class ApiError extends Error {
@@ -141,6 +144,21 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
           message: "Your session ended before this ran",
         });
       }
+    }
+    // The action would cancel changes still waiting to be sent. Ask, then send
+    // again naming exactly what was shown: if more was queued meanwhile, the
+    // backend refuses again with the longer list and this asks again.
+    const refusal = parsed as ApiErrorBody;
+    if (res.status === 409 && refusal?.error === "WOULD_CANCEL_QUEUED" && refusal.cancels?.length) {
+      if (await confirmCancellations(refusal.cancels)) {
+        const again = new Headers(init?.headers);
+        again.set(CANCEL_ACK_HEADER, refusal.cancels.map((change) => change.id).join(","));
+        return request<T>(path, { ...init, headers: again });
+      }
+      throw new ApiError(409, {
+        error: "KEPT_QUEUED",
+        message: "Nothing was changed. The changes waiting to be sent are still waiting",
+      });
     }
     throw new ApiError(res.status, parsed as ApiErrorBody | string);
   }

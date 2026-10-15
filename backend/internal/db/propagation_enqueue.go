@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -101,7 +102,7 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 			return EnqueueResult{}, fmt.Errorf("commit enqueue tx: %w", err)
 		}
 	}
-	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: "pending"}, nil
+	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: enqueuedStatus(outboxID)}, nil
 }
 
 // enqueueWrites performs the ledger upsert (add/replace) + audit + outbox insert
@@ -150,6 +151,10 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 		}
 	}
 
+	if err := closeGivenRequests(ctx, tx, p); err != nil {
+		return "", err
+	}
+
 	const insertAudit = `INSERT INTO audit_logs
 		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id) VALUES ($1,$2,$3,$4)`
 	action := "direct_grant." + opTypeAuditVerb(p.OpType)
@@ -175,6 +180,25 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 		return "", nil
 	}
 
+	// The same add already waiting to be sent delivers this one too. Extending
+	// a grant before its first send queued a second, identical add: two rows
+	// in Pending changes for one role. The ledger carries the new end; the
+	// queued row is what sends it, so its id is the answer.
+	if p.OpType == "add" {
+		var queued string
+		err := tx.QueryRow(ctx, `
+			SELECT id FROM propagation_outbox
+			 WHERE target = 'zitadel' AND status = 'pending' AND op_type = 'add'
+			   AND user_id = $1 AND project_id = $2 AND role_keys = $3::text[]
+			 ORDER BY created_at LIMIT 1`, p.UserID, p.ProjectID, p.RoleKeys).Scan(&queued)
+		if err == nil {
+			return queued, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", fmt.Errorf("find a queued add: %w", err)
+		}
+	}
+
 	const insertOutbox = `
 		INSERT INTO propagation_outbox
 			(op_type, user_id, project_id, role_keys, zitadel_grant_id, payload_json, idempotency_key, initiated_by, source, source_ref, target)
@@ -186,6 +210,16 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 		return "", fmt.Errorf("insert outbox: %w", err)
 	}
 	return outboxID, nil
+}
+
+// enqueuedStatus: no row queued means nothing is owed upstream (a queued
+// removal was cancelled and the grant still stands, or nothing is sent at all),
+// so nothing is waiting; "pending" there told the operator it was.
+func enqueuedStatus(outboxID string) string {
+	if outboxID == "" {
+		return "applied"
+	}
+	return "pending"
 }
 
 // opTypeAuditVerb maps the outbox op_type to the audit action suffix.

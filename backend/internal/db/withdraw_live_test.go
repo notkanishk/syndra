@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 )
 
 // What a revoke is owed, against a real database.
@@ -197,7 +199,7 @@ func TestTheCancellationIsScopedToOnePersonAndOneProject(t *testing.T) {
 }
 
 // An add is not a revoke. Nothing else may take this path.
-func TestOnlyARevokeWithdrawsAnything(t *testing.T) {
+func TestAnAddNeverCancelsAnotherAdd(t *testing.T) {
 	ctx := liveDB(t)
 	add := seedOutbox(t, ctx, "add", "pending", "u1", "p1", "bundle", "b1", []string{"community"})
 
@@ -208,5 +210,142 @@ func TestOnlyARevokeWithdrawsAnything(t *testing.T) {
 	}
 	if status, _ := statusOf(t, ctx, add); status != "pending" {
 		t.Fatalf("an add cancelled another add (%q)", status)
+	}
+}
+
+// Removed, then given back before the removal was sent (15 Oct): the add
+// cancels the queued revoke, and owes nothing while the grant still stands.
+func TestGivingBackCancelsAQueuedRemoval(t *testing.T) {
+	ctx := liveDB(t)
+	user := "live-wd-" + time.Now().Format("150405.000000000")
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user) })
+	seedOutbox(t, ctx, "add", "applied", user, "p1", "direct", "", []string{"community"})
+	revoke := seedOutbox(t, ctx, "revoke", "pending", user, "p1", "direct", "old-grant", []string{"community"})
+	add := EnqueueParams{UserID: user, ProjectID: "p1", RoleKeys: []string{"community"}, OpType: "add", Source: "direct"}
+	if owed := runWithdraw(t, ctx, add); owed {
+		t.Fatal("the grant still stands in Zitadel, so giving it back owes no add")
+	}
+	if status, _ := statusOf(t, ctx, revoke); status != "superseded" {
+		t.Fatalf("the queued removal is cancelled, got %s", status)
+	}
+	// Once the removal has gone out, giving it back is owed.
+	seedOutbox(t, ctx, "revoke", "applied", user, "p1", "direct", "", []string{"community"})
+	if owed := runWithdraw(t, ctx, add); !owed {
+		t.Fatal("nothing queued to cancel and nothing standing: the add is owed")
+	}
+}
+
+// What the operator is told is what happens: the preview names exactly the
+// rows the action then cancels, and each cancellation is in Change history.
+// Covers the direct case that used to slip: an unsent direct grant (no
+// reference) removed by its grant id.
+func TestThePreviewNamesWhatTheActionCancels(t *testing.T) {
+	ctx := liveDB(t)
+	user := "live-wd-" + time.Now().Format("150405.000000000")
+	t.Cleanup(func() {
+		_, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user)
+		_, _ = PG.Exec(ctx, `DELETE FROM audit_logs WHERE target_zitadel_user_id = $1`, user)
+	})
+	add := seedOutbox(t, ctx, "add", "pending", user, "p1", "direct", "", []string{"community"})
+	other := seedOutbox(t, ctx, "add", "pending", user, "p1", "direct", "", []string{"staff"})
+	removal := revokeParams(user, "p1", "community", "direct", "grant-123")
+	removal.GrantedBy = "op"
+
+	preview, err := WouldCancel(ctx, removal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview) != 1 || preview[0].ID != add || preview[0].OpType != "add" {
+		t.Fatalf("the preview names the one queued add, got %+v", preview)
+	}
+	if owed := runWithdraw(t, ctx, removal); owed {
+		t.Fatal("never sent, so nothing is owed")
+	}
+	if status, _ := statusOf(t, ctx, add); status != "superseded" {
+		t.Fatalf("the add the preview named is cancelled, got %s", status)
+	}
+	if status, _ := statusOf(t, ctx, other); status != "pending" {
+		t.Fatalf("another role's add is untouched, got %s", status)
+	}
+	var audited int
+	_ = PG.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE resource_id=$1 AND action='propagation.cancelled_unsent' AND actor_zitadel_user_id='op'`, add).Scan(&audited)
+	if audited != 1 {
+		t.Fatalf("the cancellation is audited once, by the operator, got %d", audited)
+	}
+}
+
+// Extending before the first send reuses the queued add: one row, not two.
+func TestAnIdenticalQueuedAddIsReused(t *testing.T) {
+	ctx := liveDB(t)
+	user := "live-wd-" + time.Now().Format("150405.000000000")
+	t.Cleanup(func() {
+		_, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user)
+		_, _ = PG.Exec(ctx, `DELETE FROM direct_role_grants WHERE user_id = $1`, user)
+		_, _ = PG.Exec(ctx, `DELETE FROM audit_logs WHERE target_zitadel_user_id = $1`, user)
+	})
+	give := func(rule EndRule, days int) string {
+		t.Helper()
+		end := time.Now().Add(time.Duration(days) * 24 * time.Hour).UTC()
+		res, err := EnqueueDirectGrantPropagation(ctx, EnqueueParams{
+			UserID: user, ProjectID: "p1", RoleKeys: []string{"community"}, GrantedBy: "op",
+			Reason: "r", ExpiresAt: &end, OpType: "add", PayloadJSON: `{}`, EndRule: rule,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.OutboxID
+	}
+	first := give(EndKept, 10)
+	second := give(EndSet, 40)
+	if first != second {
+		t.Fatalf("the extension rides the queued add, got %s then %s", first, second)
+	}
+	var n int
+	_ = PG.QueryRow(ctx, `SELECT count(*) FROM propagation_outbox WHERE user_id=$1 AND status='pending'`, user).Scan(&n)
+	if n != 1 {
+		t.Fatalf("one queued add, got %d", n)
+	}
+}
+
+// On an operator's request, a cancellation they weren't shown is refused and
+// nothing moves; shown that exact change, it is cancelled.
+func TestAnUnshownCancellationIsRefusedAndNothingMoves(t *testing.T) {
+	ctx := liveDB(t)
+	user := "live-wd-" + time.Now().Format("150405.000000000")
+	t.Cleanup(func() {
+		_, _ = PG.Exec(ctx, `DELETE FROM propagation_outbox WHERE user_id = $1`, user)
+		_, _ = PG.Exec(ctx, `DELETE FROM audit_logs WHERE target_zitadel_user_id = $1`, user)
+	})
+	revoke := seedOutbox(t, ctx, "revoke", "pending", user, "p1", "direct", "old", []string{"community"})
+	add := EnqueueParams{UserID: user, ProjectID: "p1", RoleKeys: []string{"community"}, OpType: "add", Source: "direct", GrantedBy: "op"}
+
+	gated, gate := GuardCancellations(ctx, nil, nil)
+	tx, err := PG.Begin(gated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = withdrawUndelivered(gated, tx, "zitadel", add)
+	_ = tx.Rollback(gated)
+	if !errors.Is(err, ErrWouldCancel) || len(gate.Refused()) != 1 || gate.Refused()[0].ID != revoke {
+		t.Fatalf("refused, naming the queued removal: err %v, refused %+v", err, gate.Refused())
+	}
+	if status, _ := statusOf(t, ctx, revoke); status != "pending" {
+		t.Fatalf("nothing moves on a refusal, got %s", status)
+	}
+
+	shown, _ := GuardCancellations(ctx, []string{revoke}, nil)
+	tx, err = PG.Begin(shown)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := withdrawUndelivered(shown, tx, "zitadel", add); err != nil {
+		_ = tx.Rollback(shown)
+		t.Fatalf("shown exactly this, it goes ahead: %v", err)
+	}
+	if err := tx.Commit(shown); err != nil {
+		t.Fatal(err)
+	}
+	if status, _ := statusOf(t, ctx, revoke); status != "superseded" {
+		t.Fatalf("cancelled once acknowledged, got %s", status)
 	}
 }

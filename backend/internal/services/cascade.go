@@ -262,22 +262,26 @@ func deltaParams(ctx context.Context, userID string, adds, revokes []roleKey, ac
 	if err := deferTargetConvergence(ctx, actor, userID, append(append([]roleKey(nil), adds...), revokes...)); err != nil {
 		return nil, err
 	}
-	params := make([]db.EnqueueParams, 0, len(adds)+len(revokes))
-	for _, k := range adds {
-		params = append(params, db.EnqueueParams{
-			UserID: userID, ProjectID: k.projectID, RoleKeys: []string{k.roleKey},
-			GrantedBy: actor, Reason: reason,
-			Source: source, SourceRef: sourceRef, OpType: "add", PayloadJSON: "{}",
-		})
-	}
-	for _, k := range revokes {
-		params = append(params, db.EnqueueParams{
-			UserID: userID, ProjectID: k.projectID, RoleKeys: []string{k.roleKey},
-			GrantedBy: actor, Reason: reason,
-			Source: source, SourceRef: sourceRef, OpType: "revoke", PayloadJSON: "{}",
-		})
+	params := deltaWrites(userID, adds, revokes, source, sourceRef)
+	for i := range params {
+		params[i].GrantedBy, params[i].Reason, params[i].PayloadJSON = actor, reason, "{}"
 	}
 	return params, nil
+}
+
+// deltaWrites are a delta's single-role writes, without side effects: what a
+// rehearsal asks db.WouldCancel about is what the apply then enqueues.
+func deltaWrites(userID string, adds, revokes []roleKey, source, sourceRef string) []db.EnqueueParams {
+	params := make([]db.EnqueueParams, 0, len(adds)+len(revokes))
+	for _, k := range adds {
+		params = append(params, db.EnqueueParams{UserID: userID, ProjectID: k.projectID, RoleKeys: []string{k.roleKey},
+			Source: source, SourceRef: sourceRef, OpType: "add"})
+	}
+	for _, k := range revokes {
+		params = append(params, db.EnqueueParams{UserID: userID, ProjectID: k.projectID, RoleKeys: []string{k.roleKey},
+			Source: source, SourceRef: sourceRef, OpType: "revoke"})
+	}
+	return params
 }
 
 // CascadeBundleAssignedToUser assigns the bundle AND enqueues the user's closure delta (bundle

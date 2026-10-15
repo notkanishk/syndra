@@ -169,12 +169,17 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 			return plan, draft, err
 		}
 		out.Effect, out.Detail, out.Consequence = describeMove(h.Version, draft.NextVersion, adds, revokes)
+		cancels, err := cancelsLine(ctx, deltaWrites(h.UserID, adds, revokes, "bundle", req.BundleID))
+		if err != nil {
+			return plan, draft, err
+		}
 		// The verdict's own inputs: which version they are on, and what moving
 		// them would actually add and take away. Both can move without the
 		// bundle changing at all — a direct grant or another bundle landing on
 		// this person turns "LOSES laser" into "no change to their access", and
 		// an approval read as the first must not apply as the second.
 		out.Fingerprint = fingerprintHolderMove("bundle_publish_move", req.BundleID, h, adds, revokes)
+		out = WithCancels(out, cancels)
 		plan.Outcomes = append(plan.Outcomes, out)
 	}
 
@@ -491,10 +496,15 @@ func RehearseMoveHolders(ctx context.Context, req MoveHoldersRequest) (BulkPlan,
 			return plan, err
 		}
 		out.Effect, out.Detail, out.Consequence = describeMove(h.Version, targetVersion, adds, revokes)
+		cancels, err := cancelsLine(ctx, deltaWrites(id, adds, revokes, "bundle", req.BundleID))
+		if err != nil {
+			return plan, err
+		}
 		if out.Effect == EffectNoChange {
 			out.Detail = fmt.Sprintf("v%d → v%d, no change to their access", h.Version, targetVersion)
 		}
 		out.Fingerprint = fingerprintHolderMove("move_holders", req.BundleID, h, adds, revokes)
+		out = WithCancels(out, cancels)
 		plan.Outcomes = append(plan.Outcomes, out)
 	}
 
