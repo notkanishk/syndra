@@ -32,7 +32,31 @@ type EnqueueParams struct {
 	// grant on the next drain, which is precisely what happens when an operator
 	// adopts a role and then removes it upstream by hand.
 	NoPropagation bool
+	// EndRule is what a write does to the end of a grant that already exists.
+	//
+	// Every write used to replace it, so approving a 64-day request from
+	// someone holding the role for good cut them to 64 days, and a bundle, the
+	// Zitadel users page or a drift adoption, none of which says anything about
+	// an end, turned a grant that ended into one that never does. Giving or
+	// approving a role someone already has is now refused before it gets here
+	// (owner, 15 Oct: one request per role, and only for a role they lack), so:
+	//
+	//   - EndKept (the default): an existing grant keeps its end.
+	//   - EndSet: the end is the one given. Only an extension, the one act
+	//     whose whole point is a grant's end, and only to a later one (the
+	//     handler refuses anything else).
+	//
+	// A new grant always takes ExpiresAt as given.
+	EndRule EndRule
 }
+
+// EndRule decides what a write does to an existing grant's end.
+type EndRule string
+
+const (
+	EndKept EndRule = ""
+	EndSet  EndRule = "set"
+)
 
 // EnqueueResult is the operator-facing handle returned to the HTTP caller.
 type EnqueueResult struct {
@@ -109,13 +133,15 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 			VALUES ($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''))
 			ON CONFLICT (user_id, zitadel_project_id, zitadel_role_key)
 			DO UPDATE SET granted_by=EXCLUDED.granted_by, reason=EXCLUDED.reason,
-			              expires_at=EXCLUDED.expires_at, source=EXCLUDED.source,
+			              expires_at = CASE WHEN $9 = 'set' THEN EXCLUDED.expires_at
+			                                ELSE direct_role_grants.expires_at END,
+			              source=EXCLUDED.source,
 			              source_ref=EXCLUDED.source_ref, updated_at=CURRENT_TIMESTAMP
 			RETURNING id`
 		for i, role := range p.RoleKeys {
 			var id string
 			if err := tx.QueryRow(ctx, upsertGrant, p.UserID, p.ProjectID, role,
-				p.GrantedBy, p.Reason, p.ExpiresAt, source, p.SourceRef).Scan(&id); err != nil {
+				p.GrantedBy, p.Reason, p.ExpiresAt, source, p.SourceRef, string(p.EndRule)).Scan(&id); err != nil {
 				return "", fmt.Errorf("upsert direct grant (%s): %w", role, err)
 			}
 			if i == 0 {

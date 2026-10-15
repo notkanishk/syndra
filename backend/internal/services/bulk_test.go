@@ -164,7 +164,7 @@ func TestRehearseBulk_RemoveNamesWhoKeepsTheRoleAnyway(t *testing.T) {
 // Granting a role somebody already has effectively is legitimate — a direct
 // grant survives bundle changes — but it is a second source, not first access,
 // and the rehearsal must not present it as a person gaining something.
-func TestRehearseBulk_AssignFlagsRedundantSecondSource(t *testing.T) {
+func TestRehearseBulk_AssignLeavesSomeoneWhoHoldsItThroughABundle(t *testing.T) {
 	setupBulk(t, bulkFixture{
 		users: []models.UserProfile{{ID: "u1", Name: "Ada", Status: "active"}},
 		roles: map[string]map[roleKey]*models.EffectiveRole{
@@ -180,11 +180,10 @@ func TestRehearseBulk_AssignFlagsRedundantSecondSource(t *testing.T) {
 	}
 
 	out := outcomeFor(t, plan, "u1")
-	if out.Effect != EffectApply {
-		t.Errorf("still a real write, got %q", out.Effect)
-	}
-	if !strings.Contains(out.Consequence, "second") {
-		t.Errorf("must say this is a second source: %q", out.Consequence)
+	// Owner, 15 Oct: a role someone already has, however they have it, is not
+	// given again. It used to add a second, direct source beside the bundle.
+	if out.Effect != EffectNoChange {
+		t.Errorf("already holds it through a bundle: no change, got %q", out.Effect)
 	}
 }
 
@@ -472,5 +471,54 @@ func TestValidateBulkRequest_RejectsOversizeSelection(t *testing.T) {
 	})
 	if problems == nil || problems["user_ids"] == "" {
 		t.Errorf("an unbounded selection must be refused, got %v", problems)
+	}
+}
+
+// Giving a role is for people without it (owner, 15 Oct): anyone who holds it,
+// for good or until a date, is no change. An extension skips a grant that
+// already runs past it, so it never shortens.
+func TestRehearseBulk_NeverPromisesAShorterEnd(t *testing.T) {
+	far := time.Now().Add(200 * 24 * time.Hour)
+	soon := time.Now().Add(5 * 24 * time.Hour)
+	setupBulk(t, bulkFixture{
+		users: []models.UserProfile{
+			{ID: "u_forever", Name: "Ada", Status: "active"},
+			{ID: "u_far", Name: "Sam", Status: "active"},
+			{ID: "u_soon", Name: "Lee", Status: "active"},
+		},
+		grants: map[string][]models.DirectGrant{
+			"u_forever": {{ID: "g1", ProjectID: "pLaser", RoleKey: "trained"}},
+			"u_far":     {{ID: "g2", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &far}},
+			"u_soon":    {{ID: "g3", ProjectID: "pLaser", RoleKey: "trained", ExpiresAt: &soon}},
+		},
+	})
+	assign, err := RehearseBulk(context.Background(), BulkRequest{
+		Op: BulkOpAssignRole, UserIDs: []string{"u_forever", "u_far", "u_soon"},
+		ProjectID: "pLaser", RoleKey: "trained", DurationDays: 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := outcomeFor(t, assign, "u_forever"); o.Effect != EffectNoChange {
+		t.Errorf("held for good, 30 days changes nothing: %+v", o)
+	}
+	if o := outcomeFor(t, assign, "u_far"); o.Effect != EffectNoChange {
+		t.Errorf("held past 30 days, nothing changes: %+v", o)
+	}
+	if o := outcomeFor(t, assign, "u_soon"); o.Effect != EffectNoChange {
+		t.Errorf("already holds it (ending soon): giving is refused, extending is its own operation: %+v", o)
+	}
+
+	extend, err := RehearseBulk(context.Background(), BulkRequest{
+		Op: BulkOpExtend, UserIDs: []string{"u_far", "u_soon"}, DurationDays: 90,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := outcomeFor(t, extend, "u_far"); o.Effect != EffectNoChange {
+		t.Errorf("already ends past 90 days, nothing to extend: %+v", o)
+	}
+	if o := outcomeFor(t, extend, "u_soon"); o.Effect != EffectApply || len(o.GrantIDs) != 1 {
+		t.Errorf("ending in 5 days is extended: %+v", o)
 	}
 }

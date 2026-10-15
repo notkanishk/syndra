@@ -291,7 +291,7 @@ func TestHandleBulkAttributeDrift_WritesNoPropagation(t *testing.T) {
 func TestHandleRevokeDrift_LostRaceIs409(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, ZitadelGrantID: "g1", Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, ZitadelGrantID: "g1", DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	// The atomic claim+enqueue's guarded UPDATE matched nothing (already resolved
 	// by another operator); the whole tx rolled back — nothing was written.
@@ -318,7 +318,7 @@ func TestHandleRevokeDrift_LostRaceIs409(t *testing.T) {
 func TestHandleMarkExternal_MalformedBodyIs400(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	var marked bool
 	dbMarkDriftExternalTx = func(context.Context, string, string, string, []string, string, string, string) error {
@@ -343,7 +343,7 @@ func TestHandleMarkExternal_MalformedBodyIs400(t *testing.T) {
 func TestHandleMarkExternal_EmptyBodyIsAllowed(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	var gotReason string
 	var marked bool
@@ -371,7 +371,7 @@ func TestHandleBulkAttributeDrift_MissingSourceIs400(t *testing.T) {
 	resetDriftDeps(t)
 	var attributed bool
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error {
 		attributed = true
@@ -394,7 +394,7 @@ func TestHandleBulkAttributeDrift_MissingSourceIs400(t *testing.T) {
 func TestHandleBulkAttributeDrift_ValidSourceAttributes(t *testing.T) {
 	resetDriftDeps(t)
 	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
-		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, Status: "pending_triage"}, nil
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "target_only", Status: "pending_triage"}, nil
 	}
 	var gotSource string
 	dbAttributeDriftTx = func(_ context.Context, _ string, p db.EnqueueParams) error {
@@ -768,4 +768,22 @@ func driftApplyRequest(t *testing.T, path, body string) *http.Request {
 	payload["plan_id"] = issued.PlanID
 	cited, _ := json.Marshal(payload)
 	return httptest.NewRequest("POST", path+"?apply=true", strings.NewReader(string(cited)))
+}
+
+
+// Adopting records access Zitadel has; a syndra_only row has none to record.
+func TestAdoptingAFindingZitadelDoesNotHoldIsRefused(t *testing.T) {
+	resetDriftDeps(t)
+	dbGetDriftItem = func(context.Context, string) (models.DriftItem, error) {
+		return models.DriftItem{ID: "d1", UserID: "u1", ProjectID: "p1", RoleKeys: []string{"viewer"}, DriftType: "syndra_only", Status: "pending_triage"}, nil
+	}
+	attributed := false
+	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) error { attributed = true; return nil }
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/governance/drift/d1/attribute", strings.NewReader(`{"source":"external_backfill"}`))
+	req.SetPathValue("id", "d1")
+	w := httptest.NewRecorder()
+	handleAttributeDrift(w, req)
+	if w.Code != http.StatusUnprocessableEntity || attributed {
+		t.Fatalf("want 422 and nothing written, got %d (written %v) %s", w.Code, attributed, w.Body.String())
+	}
 }

@@ -276,6 +276,24 @@ func TestADuplicateBindingIsAConflict(t *testing.T) {
 	}
 }
 
+// Publishing a set identical to the newest version adds a history row that says
+// nothing. It is a conflict with the world, the same as a bundle's publish.
+func TestPublishingUnchangedMappingsIsRefused(t *testing.T) {
+	stubMappingDeps(t, []addons.EntitlementField{{Name: "group", Type: "string[]"}})
+	publish := dbPublishMappingVersion
+	t.Cleanup(func() { dbPublishMappingVersion = publish })
+	dbPublishMappingVersion = func(context.Context, string, string, string) (int, error) {
+		return 0, db.ErrNothingToPublish
+	}
+
+	rr := httptest.NewRecorder()
+	handlePublishMappingVersion(rr, httptest.NewRequest(http.MethodPost, "/api/v1/targets/mappings/versions",
+		strings.NewReader(`{"target":"truenas","note":"same again"}`)))
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "NOTHING_TO_PUBLISH") {
+		t.Fatalf("want 409 NOTHING_TO_PUBLISH, got %d (%s)", rr.Code, rr.Body.String())
+	}
+}
+
 // The actor is the authenticated operator and never a field of the request. An
 // allowance whose author is whoever the client said is one nobody can be asked
 // about, which is the whole thing this layer exists for.

@@ -147,9 +147,6 @@ export function LimitDialog({
   const [until, setUntil] = useState<"ends" | "review">(own?.review_date && !own.expires_at ? "review" : "ends");
   const [date, setDate] = useState("");
   const reviewing = Boolean(own?.review_due);
-  // The new limit saved and the one it replaces didn't end. Saving again would
-  // give a third; only the ending is retried.
-  const [savedNew, setSavedNew] = useState(false);
 
   const bytes = kind === "none" ? 0 : Math.round(Number(gb) * GB);
   const sized = kind === "none" || (Number(gb) > 0 && Number.isFinite(Number(gb)));
@@ -158,6 +155,8 @@ export function LimitDialog({
   const rolesWords = home.roles_limit === undefined ? "no limit" : `up to ${gbWords(home.roles_limit)}`;
   const busy = set.isPending || lift.isPending;
 
+  // The server replaces the limit in force with this one in a single step, so
+  // there is nothing left to end afterwards.
   const save = () =>
     set.mutate(
       {
@@ -167,12 +166,7 @@ export function LimitDialog({
         endsOn: until === "ends" ? endOfDay(date) : undefined,
         reviewOn: until === "review" ? endOfDay(date) : undefined,
       },
-      {
-        // The newest own limit is the one in force; the one it replaces ends,
-        // so nothing stays due for review behind it.
-        onSuccess: () =>
-          own ? lift.mutate(own.allowance_id, { onSuccess: onClose, onError: () => setSavedNew(true) }) : onClose(),
-      },
+      { onSuccess: onClose },
     );
 
   return (
@@ -235,37 +229,22 @@ export function LimitDialog({
               : "It stays until you keep it or end it. On that day it lists under Holds due."}
           </FieldHint>
         </div>
-        {savedNew ? (
-          <p className="text-[13.5px] text-danger-text">
-            The new limit is saved. The one it replaces couldn&apos;t be ended, so it still shows as theirs:{" "}
-            {sentence(describeFailure(lift.error))}
-          </p>
-        ) : (
-          (set.error || lift.error) && (
-            <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error ?? lift.error))}</p>
-          )
+        {(set.error || lift.error) && (
+          <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error ?? lift.error))}</p>
         )}
       </div>
       <ModalFooter note={`Syndra sends it to ${system} as soon as you save.`}>
         <Button onClick={onClose}>
           Cancel
         </Button>
-        {own && savedNew ? (
-          <Button variant="accent" disabled={busy} onClick={() => lift.mutate(own.allowance_id, { onSuccess: onClose })}>
-            End the previous one
+        {own && (
+          <Button variant="outline" disabled={busy} onClick={() => lift.mutate(own.allowance_id, { onSuccess: onClose })}>
+            End it
           </Button>
-        ) : (
-          <>
-            {own && (
-              <Button variant="outline" disabled={busy} onClick={() => lift.mutate(own.allowance_id, { onSuccess: onClose })}>
-                End it
-              </Button>
-            )}
-            <Button variant="accent" disabled={!ready || busy} onClick={save}>
-              {reviewing ? "Keep it" : `Give them ${kind === "none" ? "no limit" : gbWords(bytes)}`}
-            </Button>
-          </>
         )}
+        <Button variant="accent" disabled={!ready || busy} onClick={save}>
+          {reviewing ? "Keep it" : `Give them ${kind === "none" ? "no limit" : gbWords(bytes)}`}
+        </Button>
       </ModalFooter>
     </Modal>
   );

@@ -189,6 +189,9 @@ func writeAllowanceError(w http.ResponseWriter, err error) {
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"allowance": "invalid"})
 	case errors.Is(err, db.ErrAllowanceNotFound):
 		jsonErrorResponse(w, http.StatusNotFound, "ALLOWANCE_NOT_FOUND", err.Error())
+	case errors.Is(err, db.ErrAllowanceAlreadyInForce):
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_IN_FORCE",
+			"The same hold is already in force for this person, so nothing was added.")
 	default:
 		// The message is this layer's own, never the driver's. An unclassified
 		// failure here is a constraint name, a column list, or a fragment of the

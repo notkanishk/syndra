@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
 
 import Link from "next/link";
 
@@ -267,6 +268,8 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
             <Button
               variant="accent"
               size="sm"
+              disabled={alreadyHeld(entry)}
+              reason={alreadyHeld(entry) ? "They already have this." : undefined}
               onClick={() => act(entry.id, "approved", entry.requester_id)}
             >
               Approve
@@ -276,6 +279,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
             </Button>
           </div>
 
+          {!outcomes[entry.id] && <HoldingNote request={entry} />}
           {outcomes[entry.id] && (
             <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
           )}
@@ -320,6 +324,8 @@ function ExpiringRow({
   const extend = useCreateGrant(grant.user_id);
   const remaining = daysUntil(grant.expires_at);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // Extending again would add another 90 days to the same grant.
+  const [extended, setExtended] = useState(false);
 
   return (
     <CardRow>
@@ -342,6 +348,7 @@ function ExpiringRow({
       <Button
         size="sm"
         isPending={extend.isPending}
+        disabled={extended}
         onClick={async () => {
           try {
             await extend.mutateAsync({
@@ -349,7 +356,9 @@ function ExpiringRow({
               role_key: grant.role_key,
               reason: "Extended from Home",
               duration_days: 90,
+              extend: true,
             });
+            setExtended(true);
             setOutcome({
               kind: "applied",
               message: "Extended by 90 days",
