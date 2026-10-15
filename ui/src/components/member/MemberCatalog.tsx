@@ -66,7 +66,7 @@ export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Se
           const hasAll = project.roles.every((role) => held.has(role.key));
 
           return (
-            <Card key={project.id} className="min-w-[420px] flex-1">
+            <Card key={project.id} className="min-w-[min(420px,100%)] flex-1">
               <CardHeader
                 title={project.name}
                 note={hasAll ? "You have everything here" : project.description || undefined}

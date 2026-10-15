@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
 // both. The value itself is held against the backend constant by
 // `lib/queries/__tests__/bulkCeiling.test.ts`, which was written because this
 // comment used to claim that check existed before it did.
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("") }));
+
 vi.mock("@/lib/queries/useBulkGrants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useBulkGrants")>()),
   BULK_MAX_USERS: 4,

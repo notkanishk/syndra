@@ -211,8 +211,8 @@ function BundleWorkspace({
   const roleRows = roles.data ?? [];
 
   return (
-    <div className="flex min-w-[420px] flex-1 flex-wrap items-start gap-5">
-      <Card className="min-w-[340px] flex-1">
+    <div className="flex min-w-[min(420px,100%)] flex-1 flex-wrap items-start gap-5">
+      <Card className="min-w-[min(340px,100%)] flex-1">
         <CardHeader
           title={name}
           note={`${roleRows.length} ${roleRows.length === 1 ? "role" : "roles"} · ${holders} ${
@@ -382,7 +382,7 @@ function BundleWorkspace({
         </div>
       </Card>
 
-      <div className="min-w-[320px] flex-1">
+      <div className="min-w-[min(320px,100%)] flex-1">
         {pendingRemoval ? (
           <RemovalImpact
             bundleId={bundleId}

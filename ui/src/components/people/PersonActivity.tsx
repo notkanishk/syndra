@@ -90,7 +90,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
           <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
             Showing the most recent 200 entries — this is not their whole history. The full log is
             in{" "}
-            <Link href="/audit" className="font-semibold text-accent-text">
+            <Link href={`/audit?user=${encodeURIComponent(userId)}`} className="font-semibold text-accent-text">
               Review › Audit
             </Link>
             .

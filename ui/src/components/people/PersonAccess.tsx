@@ -419,6 +419,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <UnexplainedRoles
                 roleKeys={unexplainedIn(project)}
                 projectId={project.project_id}
+                userId={userId}
                 isOperator={isOperator}
               />
             </Card>
@@ -534,10 +535,13 @@ function ProjectRoleTally({ recorded, unexplained }: { recorded: number; unexpla
 function UnexplainedRoles({
   roleKeys,
   projectId,
+  userId,
   isOperator,
 }: {
   roleKeys: string[];
   projectId: string;
+  /** Drift opens on this person's rows, not the whole project's. */
+  userId: string;
   isOperator: boolean;
 }) {
   if (roleKeys.length === 0) return null;
@@ -564,7 +568,7 @@ function UnexplainedRoles({
         ))}
         {isOperator && (
           <Link
-            href={driftHref({ project: projectId })}
+            href={driftHref({ project: projectId, user: userId, role: roleKeys.length === 1 ? roleKeys[0] : "" })}
             className="flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent motion-tint hover:underline desktop:min-h-0"
           >
             Decide on Drift →

@@ -199,7 +199,14 @@ function TargetCard({ view }: { view: MyTargetView }) {
             </div>
           </div>
 
-          <Folders view={view} state={state} label={label} roleName={roleName} roles={roles} />
+          <Folders
+            view={view}
+            state={state}
+            label={label}
+            roleName={roleName}
+            roles={roles}
+            passwordBlocked={passwordBlocked}
+          />
 
           {notice && (
             <Notice tone="warn" title={notice.title} className="mx-5 mb-5">
@@ -427,12 +434,15 @@ function Folders({
   label,
   roleName,
   roles,
+  passwordBlocked,
 }: {
   view: MyTargetView;
   state: State;
   label: string;
   roleName: (r: RoleSource) => string;
   roles: string[];
+  /** Offline or paused: there is no password field to send them to. */
+  passwordBlocked: boolean;
 }) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [device, setDevice] = useState<Device>("mac");
@@ -492,7 +502,7 @@ function Folders({
           open={!locked}
           title={state === "restored" ? "Set a new password to open these" : "Set your password to open these"}
           why={`Until then, ${label} turns every sign-in away.`}
-          step={{ label: "Set it above ↑", href: "#storage-password" }}
+          step={passwordBlocked ? undefined : { label: "Set it above ↑", href: `#${passwordFieldId(view)}` }}
         >
           <div className="flex flex-col gap-3.5">
             {places.map((place) => (
@@ -633,6 +643,11 @@ function PlaceBlock({
  * nowhere: not in the response, not in the query cache, not in Syndra's
  * database.
  */
+/** One per system: two cards' fields shared an id, so "Set it above" jumped to the first. */
+function passwordFieldId(view: MyTargetView): string {
+  return `storage-password-${view.target}`;
+}
+
 function PasswordForm({
   view,
   label,
@@ -658,11 +673,11 @@ function PasswordForm({
       }}
     >
       <div className="flex max-w-[460px] flex-col gap-1.5">
-        {accent && <FieldLabel htmlFor="storage-password">Storage password</FieldLabel>}
+        {accent && <FieldLabel htmlFor={passwordFieldId(view)}>Storage password</FieldLabel>}
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="min-w-0 flex-[1_1_220px]">
             <Input
-              id="storage-password"
+              id={passwordFieldId(view)}
               type="password"
               autoComplete="new-password"
               aria-label={accent ? undefined : "New storage password"}

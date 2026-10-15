@@ -9,6 +9,8 @@
  * code (`error.code`) or human message (`error.message`).
  */
 
+import { SESSION_ENDED } from "@/lib/login-error";
+
 const API_BASE = "/api/proxy";
 
 export interface ApiErrorBody {
@@ -132,7 +134,7 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     if (res.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
       if (method === "GET") {
         const next = `${window.location.pathname}${window.location.search}`;
-        window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+        window.location.assign(`/login?error=${SESSION_ENDED}&next=${encodeURIComponent(next)}`);
       } else {
         throw new ApiError(401, {
           error: "SESSION_ENDED",
