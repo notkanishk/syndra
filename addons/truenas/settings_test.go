@@ -100,3 +100,29 @@ func TestAnUnknownSettingIsNotFound(t *testing.T) {
 		t.Fatalf("unknown setting: %d", rr.Code)
 	}
 }
+
+// Every home folder in a share Syndra considers, with what is saved in it and
+// its limit, for the system page.
+func TestHomesListsEachHomeWithItsUseAndLimit(t *testing.T) {
+	fake := reachFake()
+	fake.users = `[
+		{"username":"ada","id":11,"uid":200001,"locked":false,"smb":true,"groups":[50],"home":"/mnt/tank/main/home_dir/ada"},
+		{"username":"bo","id":12,"uid":200002,"locked":false,"smb":true,"groups":[50],"home":"/var/empty"},
+		{"username":"cy","id":13,"uid":200003,"locked":false,"smb":true,"groups":[50],"home":"/mnt/tank/old/cy"}]`
+	fake.answers["pool.dataset.get_quota tank/main/home_dir"] = `[{"id":200001,"used_bytes":19756849561,"quota":21474836480,"quota_type":"USER"}]`
+	s := testServer(t, fake)
+
+	rr := httptest.NewRecorder()
+	s.handleHomes(rr, httptest.NewRequest(http.MethodGet, "/homes", nil), nil)
+	var out HomesResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+	// bo has no home; cy's is in a disabled share, outside what Syndra reads.
+	if len(out.Homes) != 1 || out.Homes[0].Username != "ada" || !out.UsageRead {
+		t.Fatalf("homes = %+v", out)
+	}
+	if h := out.Homes[0]; h.UsedBytes != 19756849561 || h.QuotaBytes != 21474836480 {
+		t.Fatalf("ada = %+v", h)
+	}
+}

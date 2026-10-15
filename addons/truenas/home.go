@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"path"
 	"sort"
 	"strconv"
@@ -112,8 +113,12 @@ func homeFields(p string) map[string]any {
 // one is wanted and it differs. A limit nobody gives any more is left as it
 // is: removing it would make the folder unlimited, which no one decided.
 func (s *server) convergeQuota(desired desiredState, home string, uid int64) (string, error) {
-	if !desired.managed[FieldHomeQuota] || desired.homeQuota == 0 || home == "" {
+	if !desired.managed[FieldHomeQuota] || home == "" || (desired.homeQuota == 0 && !desired.homeUnlimited) {
 		return "", nil
+	}
+	want := desired.homeQuota
+	if desired.homeUnlimited {
+		want = 0 // TrueNAS's "no quota"
 	}
 	dataset := datasetOf(path.Dir(home))
 	if dataset == "" {
@@ -129,16 +134,22 @@ func (s *server) convergeQuota(desired desiredState, home string, uid int64) (st
 		return "", fmt.Errorf("read the home folder limit: %w", err)
 	}
 	for _, r := range rows {
-		if r.ID == uid && r.Quota == desired.homeQuota {
+		if r.ID == uid && r.Quota == want {
 			return "", nil
 		}
 	}
+	if want == 0 && len(rows) == 0 {
+		return "", nil // no row is no limit already
+	}
 	if err := s.nas.call("pool.dataset.set_quota", []any{dataset, []any{map[string]any{
-		"quota_type": "USER", "id": strconv.FormatInt(uid, 10), "quota_value": desired.homeQuota,
+		"quota_type": "USER", "id": strconv.FormatInt(uid, 10), "quota_value": want,
 	}}}, nil); err != nil {
 		return "", fmt.Errorf("set the home folder limit: %w", err)
 	}
-	return fmt.Sprintf("Home folder limit set to %s.", humanBytes(desired.homeQuota)), nil
+	if want == 0 {
+		return "Home folder limit lifted.", nil
+	}
+	return fmt.Sprintf("Home folder limit set to %s.", humanBytes(want)), nil
 }
 
 // humanBytes says a limit the way a person reads one.
@@ -170,4 +181,63 @@ func (s *server) homePlaces() (paths []string, labels map[string]string, err err
 		}
 	}
 	return uniqueSorted(paths), labels, nil
+}
+
+// HomeUsage is one account's home folder: where it is, what is saved in it, and
+// the limit TrueNAS holds for it. QuotaBytes 0 is no limit set.
+type HomeUsage struct {
+	Username   string `json:"username"`
+	UID        int64  `json:"uid"`
+	Home       string `json:"home"`
+	UsedBytes  int64  `json:"used_bytes"`
+	QuotaBytes int64  `json:"quota_bytes,omitempty"`
+}
+
+// HomesResponse is every account with a home folder in a share Syndra
+// considers, with its use, for the system page: "She has 18.4 GB in her home
+// folder now", and how many homes are already in a folder before the location
+// changes. UsageRead is false when a dataset's quota table couldn't be read;
+// the homes are still listed, with no use.
+type HomesResponse struct {
+	Homes     []HomeUsage `json:"homes"`
+	UsageRead bool        `json:"usage_read"`
+}
+
+// handleHomes reads every home folder once: one user read, one quota read per
+// dataset that holds homes.
+func (s *server) handleHomes(w http.ResponseWriter, _ *http.Request, _ []byte) {
+	snap, err := s.readSubjects()
+	if err != nil {
+		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+		return
+	}
+	shares, err := s.enabledShares()
+	if err != nil {
+		writeJSON(w, statusFor(err), map[string]string{"error": "TARGET_UNREADABLE"})
+		return
+	}
+	out := HomesResponse{Homes: []HomeUsage{}, UsageRead: true}
+	quotas := map[string]map[int64]PlaceUsage{}
+	for _, sub := range snap.Subjects {
+		if _, inside, ok := shareAt(shares, sub.Home); !ok || inside == "" {
+			continue
+		}
+		h := HomeUsage{Username: sub.Username, UID: sub.UID, Home: sub.Home}
+		// The limit is a user quota on the dataset holding the home's parent,
+		// the same one convergeQuota sets.
+		dataset := datasetOf(path.Dir(sub.Home))
+		table, read := quotas[dataset]
+		if !read {
+			table = s.userQuotas(dataset)
+			quotas[dataset] = table
+		}
+		if table == nil {
+			out.UsageRead = false
+		} else if u, ok := table[sub.UID]; ok {
+			h.UsedBytes, h.QuotaBytes = u.UsedBytes, u.QuotaBytes
+		}
+		out.Homes = append(out.Homes, h)
+	}
+	sort.Slice(out.Homes, func(i, j int) bool { return out.Homes[i].Username < out.Homes[j].Username })
+	writeJSON(w, http.StatusOK, out)
 }

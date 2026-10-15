@@ -135,3 +135,19 @@ func TestAnUnchangedLimitIsNotRewritten(t *testing.T) {
 		}
 	}
 }
+
+// "No limit" is the largest limit there is: a role or a person's own giving it
+// lifts the folder's limit, even beside a role that gives a size.
+func TestNoLimitIsTheLargestAndLiftsTheLimit(t *testing.T) {
+	s, m := homeServer(t, `[{"username":"ada","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42],"home":"`+homePlace+`/ada"}]`,
+		map[string]string{"pool.dataset.get_quota": `[{"id":3001,"quota":21474836480,"used_bytes":10}]`}, nil)
+	out := applyHome(t, s, `{"group":["lab_makers"],"home":["true"],"home_quota":["21474836480","0"]}`)
+	if !strings.Contains(out.Detail, "limit lifted") {
+		t.Fatalf("want the limit lifted, got %s %q", out.Effect, out.Detail)
+	}
+	args, _ := lastCallParams(m, "pool.dataset.set_quota").([]any)
+	entry := args[1].([]any)[0].(map[string]any)
+	if entry["quota_value"] != int64(0) {
+		t.Fatalf("quota_value = %v", entry["quota_value"])
+	}
+}
