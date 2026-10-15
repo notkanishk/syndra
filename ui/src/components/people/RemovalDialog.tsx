@@ -276,7 +276,7 @@ function DirectDialog({
             first got that focus for free: Enter, pressed on reflex to close
             a dialog that just opened, revoked access instead. The safe exit
             takes the initial focus; the destructive action never does. */}
-        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onClose}>
+        <Button variant={succeeded(outcome) ? "outline" : "ghost"} onClick={onClose}>
           {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
         {/* Same rule as the bundle dialog: an action that has run is not an
@@ -406,7 +406,7 @@ function BundleDialog({
             exit must be the one that gets it, never the destructive confirm
             below. */}
         <Button
-          variant={succeeded(outcome) ? "accent" : "outline"}
+          variant={succeeded(outcome) ? "outline" : "ghost"}
           onClick={onClose}
         >
           {succeeded(outcome) ? "Close" : "Cancel"}

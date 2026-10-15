@@ -283,7 +283,7 @@ function ManageBundlesOpen({
         {done ? (
           // The work is recorded and the outcome above says so. The next action
           // is to leave, so it stops being the quiet button in the corner.
-          <Button variant="accent" onClick={onClose}>
+          <Button variant="outline" onClick={onClose}>
             Close
           </Button>
         ) : (

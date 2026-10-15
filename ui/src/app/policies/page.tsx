@@ -547,7 +547,7 @@ function RuleEditor({ rule, onClose }: { rule: MappingRuleRow | null; onClose: (
         }
       >
         {saved && (
-          <Button variant="accent" onClick={onClose}>
+          <Button variant="outline" onClick={onClose}>
             Close
           </Button>
         )}
