@@ -4,6 +4,8 @@ import { StatusDot } from "@/components/ui/Badge";
 import { askLengthForMember, askLengthForOperator, formatShortDate } from "@/lib/format";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestsMine } from "@/lib/queries/useRequests";
+import { nothingSentYet } from "@/components/access/AccessSource";
+import { useMyChanges } from "@/lib/queries/useMyChanges";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 
 /**
@@ -75,31 +77,46 @@ export function HoldingNote({ request }: { request: AccessRequest }) {
 
 export type AskState =
   | { kind: "none" }
-  | { kind: "asked" }
+  /** Asked, and waiting for makerspace staff. */
+  | { kind: "asked"; at?: string }
   | { kind: "for_good" }
-  | { kind: "until"; until: string };
+  | { kind: "until"; until: string }
+  /** Given, and not yet sent to Zitadel. */
+  | { kind: "onway"; at?: string };
 
 /**
  * What a person already has, or has asked for, of each role: the dialog's
- * reading of the same facts the backend checks. None of these can be asked
- * for; only "none" can.
+ * reading of the same facts the backend checks. Only "none" can be asked for,
+ * and "until" can be asked to keep.
  */
 export function useAskState(userId: string) {
   const access = useUserAccess(userId);
   const grants = useUserGrants(userId);
   const requests = useRequestsMine();
+  const changes = useMyChanges();
 
   return (projectId: string, roleKey: string): AskState => {
     if (!projectId || !roleKey) return { kind: "none" };
-    const waiting = (requests.data ?? []).some(
+    const waiting = (requests.data ?? []).find(
       (r) => r.status === "pending" && r.requester_id === userId && r.project_id === projectId && r.role_key === roleKey,
     );
-    if (waiting) return { kind: "asked" };
+    if (waiting) return { kind: "asked", at: waiting.created_at };
     const grant = (grants.data ?? []).find((g) => g.project_id === projectId && g.role_key === roleKey);
     if (grant?.expires_at) return { kind: "until", until: grant.expires_at };
-    const observed = access.data?.projects
-      ?.find((p) => p.project_id === projectId)
-      ?.observed_role_keys?.includes(roleKey);
+    const project = access.data?.projects?.find((p) => p.project_id === projectId);
+    const role = [...(project?.source_roles ?? []), ...(project?.derived_roles ?? [])].find(
+      (r) => r.role_key === roleKey,
+    );
+    if (role && nothingSentYet(role.reasons)) {
+      // The newest thing that gave it: when the member was told.
+      const at = (changes.data ?? [])
+        .filter((c) => c.project_id === projectId && c.role_key === roleKey && (c.kind === "given" || c.waiting))
+        .map((c) => c.at)
+        .sort()
+        .pop();
+      return { kind: "onway", at };
+    }
+    const observed = project?.observed_role_keys?.includes(roleKey);
     if (grant || observed) return { kind: "for_good" };
     return { kind: "none" };
   };

@@ -22,6 +22,9 @@ export interface AccessRequest {
   kind?: "access" | "extend";
   /** What the requester already has of the role, read for a waiting request. */
   holding?: RequestHolding;
+  /** A waiting extension only: the end they have now, and the end approving would set. Absent when unknown. */
+  current_until?: string;
+  until?: string;
 }
 
 /** What someone already has of a role they ask for. */
@@ -76,15 +79,15 @@ export function useRequestsAdmin(status: string = "pending") {
 }
 
 /**
- * Member view — lists only the caller's own requests. The proxy filters the
- * response server-side so we don't need to scope client-side, and the
- * unfiltered `requests` key stays shared with the admin queue cache.
+ * The caller's own requests. A member's list is always theirs; `?mine=1` asks
+ * the same of an operator, whose plain read is the whole queue. Kept under its
+ * own key so the unfiltered queue's cache stays the queue's.
  */
 export function useRequestsMine() {
   return useQuery({
     queryKey: KEYS.byStatus("mine"),
     queryFn: async (): Promise<AccessRequest[]> => {
-      const data = await request<unknown>("/requests");
+      const data = await request<unknown>("/requests?mine=1");
       return Array.isArray(data) ? (data as AccessRequest[]) : [];
     },
   });
