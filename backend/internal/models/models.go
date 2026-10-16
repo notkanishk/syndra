@@ -971,3 +971,77 @@ type CatalogRole struct {
 	ObservedUserCount *int             `json:"observed_user_count,omitempty"`
 	Observation       ObservationBasis `json:"observation"`
 }
+
+// InsightsFindings is the read-only "what is odd about how access is arranged"
+// report (Insights I2). Everything in it derives from the one access snapshot,
+// so it can never disagree with the holder counts elsewhere.
+type InsightsFindings struct {
+	// ReadAt is when Zitadel was last observed; nil when it never has been.
+	ReadAt       *time.Time           `json:"read_at,omitempty"`
+	SingleRoutes []InsightSingleRoute `json:"single_routes"`
+	Unused       InsightUnused        `json:"unused"`
+	Overlaps     []InsightOverlap     `json:"overlaps"`
+}
+
+// InsightSource is the one bundle or rule a role mostly arrives through.
+type InsightSource struct {
+	Kind string `json:"kind"` // "bundle" | "rule"
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// InsightSingleRoute: of Holders people holding a role, OnlyThatWay hold it
+// through Source and nothing else.
+type InsightSingleRoute struct {
+	ProjectID   string        `json:"project_id"`
+	RoleKey     string        `json:"role_key"`
+	Source      InsightSource `json:"source"`
+	OnlyThatWay int           `json:"only_that_way"`
+	Holders     int           `json:"holders"`
+}
+
+type InsightUnused struct {
+	Roles    []RoleGrant           `json:"roles"`
+	Bundles  []InsightUnusedBundle `json:"bundles"`
+	Projects []InsightProjectRef   `json:"projects"`
+}
+
+// InsightUnusedBundle gives every holder nothing they do not already have.
+type InsightUnusedBundle struct {
+	BundleID string `json:"bundle_id"`
+	Name     string `json:"name"`
+	Holders  int    `json:"holders"`
+}
+
+type InsightProjectRef struct {
+	ProjectID string `json:"project_id"`
+	Name      string `json:"name"`
+}
+
+type InsightBundleRef struct {
+	BundleID string `json:"bundle_id"`
+	Name     string `json:"name"`
+}
+
+// InsightOverlap is two bundles whose latest versions share roles.
+type InsightOverlap struct {
+	A      InsightBundleRef `json:"a"`
+	B      InsightBundleRef `json:"b"`
+	Shared []RoleGrant      `json:"shared"`
+	AOnly  []RoleGrant      `json:"a_only"`
+	BOnly  []RoleGrant      `json:"b_only"`
+}
+
+// InsightsWho answers "who has this and not that".
+type InsightsWho struct {
+	People []InsightPerson `json:"people"`
+}
+
+// InsightPerson carries how they hold the `has` side — the reasons straight from
+// the snapshot, so the answer explains itself the way every other surface does.
+type InsightPerson struct {
+	UserID string       `json:"user_id"`
+	Name   string       `json:"name"`
+	Email  string       `json:"email"`
+	How    []RoleReason `json:"how"`
+}

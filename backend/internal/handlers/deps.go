@@ -471,7 +471,10 @@ var (
 	addonsConnection = addons.ConnectionFor
 	// The backend's memory of an add-on's mutation log, read beside that add-on's
 	// own account of itself. Two authorities on purpose.
-	svcDormantAccounts    = services.DormantAccounts
+	svcDormantAccounts = services.DormantAccounts
+	// Insights (I2): read-only findings and the who-has-without question.
+	svcInsightsFindings   = services.InsightsFindings
+	svcInsightsWho        = services.InsightsWho
 	dbListMappingHistory  = db.ListMappingHistory
 	dbForgetTargetBinding = db.ForgetTargetBinding
 	// The merge base goes with the binding, always. One left behind is a claim

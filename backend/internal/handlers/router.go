@@ -308,6 +308,9 @@ func NewRouter() http.Handler {
 	// only. Operator-gated and idempotent: it reads the target and queues what
 	// is already owed, and queueing is not applying.
 	mux.HandleFunc("POST /api/v1/targets/{target}/reconcile", withCORS(withOperatorAuth(withTargetProject(handleReconcileTarget))))
+	// Insights: read-only analytics over the one access snapshot.
+	mux.HandleFunc("GET /api/v1/insights/findings", withCORS(withOperatorAuth(handleInsightsFindings)))
+	mux.HandleFunc("GET /api/v1/insights/who", withCORS(withOperatorAuth(handleInsightsWho)))
 	// Accounts Syndra created whose reason for existing has gone. A read; the
 	// removal runs through the ordinary plan-then-apply path.
 	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))
