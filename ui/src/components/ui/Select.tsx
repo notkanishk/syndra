@@ -85,7 +85,8 @@ export function FilterPills<T extends string>({
   onChange,
   label,
 }: {
-  options: Array<{ value: T; label: string }>;
+  /** A disabled option stays where it is, with `title` saying why. */
+  options: Array<{ value: T; label: string; disabled?: boolean; title?: string }>;
   value: T;
   onChange: (next: T) => void;
   label: string;
@@ -100,6 +101,8 @@ export function FilterPills<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
+            disabled={option.disabled}
+            title={option.title}
             onClick={() => onChange(option.value)}
             // The same box as `Button` size="md" minus its border: 44px floor
             // through the tablet range, then px-4 / 13.5px / py-[7px]. The
@@ -110,7 +113,7 @@ export function FilterPills<T extends string>({
             // which is what was meant to carry it.
             className={`rounded-pill motion-tint ${PILL.md} ${
               active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
-            }`}
+            } disabled:cursor-not-allowed disabled:text-faint disabled:hover:text-faint`}
           >
             {option.label}
           </button>

@@ -5,9 +5,9 @@ import { useMemo, type ReactNode } from "react";
 import { buildModel } from "@/components/insights/model";
 import type { InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { ListStates, RowSkeleton } from "@/components/states";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Select";
-import { useInsightsTrends, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
+import { useInsightsTrends, useInsightsUsage, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
 
 const PERIODS: Array<{ value: TrendPeriod; label: string }> = [
@@ -17,6 +17,7 @@ const PERIODS: Array<{ value: TrendPeriod; label: string }> = [
 ];
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const people = (n: number) => plural(n, "person", "people");
 
 function hours(h: number | null): string {
   if (h == null) return "No decisions yet";
@@ -65,6 +66,7 @@ function Weeks({ weekly }: { weekly: InsightsTrends["weekly"] }) {
 export function TrendsTab({ url }: { url: InsightsUrl }) {
   const trends = useInsightsTrends(url.period);
   const topology = useTopology();
+  const usage = useInsightsUsage().data;
   const model = useMemo(() => (topology.data ? buildModel(topology.data) : null), [topology.data]);
   const t = trends.data;
   const roleName = (projectId: string, roleKey: string) => {
@@ -151,6 +153,27 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
               {t.ending_soon.map((p) => (
                 <Fact key={p.project_id} label={p.project_name} value={`${p.d30} · ${p.d60} · ${p.d90}`} />
               ))}
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Held but not used"
+                note={usage ? `Not used in ${usage.window_days} days` : undefined}
+                action={<CardHeaderLink href="/insights?lens=use">Show on the map</CardHeaderLink>}
+              />
+              {!usage ? (
+                <Quiet>Reading recent use.</Quiet>
+              ) : !usage.sources.sign_in.receiving ? (
+                <Quiet>Recent use fills in once sign-ins arrive.</Quiet>
+              ) : !usage.holders_observed ? (
+                <Quiet>Syndra hasn&apos;t read who holds what from Zitadel yet.</Quiet>
+              ) : usage.held_not_used.length === 0 ? (
+                <Quiet>Every role someone holds has been used in {usage.window_days} days.</Quiet>
+              ) : (
+                [...usage.held_not_used]
+                  .sort((a, b) => b.people - a.people)
+                  .map((r) => <Fact key={`${r.project_id}:${r.role_key}`} label={roleName(r.project_id, r.role_key)} value={people(r.people)} />)
+              )}
             </Card>
 
             <Card>

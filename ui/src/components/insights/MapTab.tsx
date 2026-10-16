@@ -6,6 +6,8 @@ import { AnswerPanel, type Panel } from "@/components/insights/AnswerPanel";
 import { asOfPanel, pastHeld } from "@/components/insights/asof";
 import { addDays, dayLabel, today as todayDay } from "@/components/insights/days";
 import { LaneMap } from "@/components/insights/LaneMap";
+import { LensChoice } from "@/components/insights/LensChoice";
+import { readLens } from "@/components/insights/lens";
 import { NodeList } from "@/components/insights/NodeList";
 import {
   buildModel,
@@ -24,7 +26,7 @@ import { QuestionSeat } from "@/components/insights/QuestionSeat";
 import { RestCards } from "@/components/insights/RestCards";
 import { Timeline } from "@/components/insights/Timeline";
 import { useAnswer } from "@/components/insights/useAnswer";
-import { FINDINGS, MAX_PINS, type Finding, type InsightsUrl } from "@/components/insights/useInsightsUrl";
+import { FINDINGS, LENSES, MAX_PINS, type Finding, type InsightsUrl, type Lens } from "@/components/insights/useInsightsUrl";
 import { useFindings } from "@/components/insights/useFindings";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button, PILL } from "@/components/ui/Button";
@@ -33,7 +35,7 @@ import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills, Segmented, Select } from "@/components/ui/Select";
 import { Unfold } from "@/components/ui/Unfold";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
-import { useInsightsAsOf, useInsightsTimeline } from "@/lib/queries/useInsights";
+import { useInsightsAsOf, useInsightsLens, useInsightsTimeline, useInsightsUsage } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
 import { useIsPhone, useIsTouch } from "@/lib/useViewport";
 
@@ -49,6 +51,9 @@ const PHONE_NOTE = "The map draws this on a wider screen. The link keeps the que
 const TIMELINE_DAYS = 120;
 const NO_MARKS = new Map<string, never[]>();
 const NO_IDS = new Set<string>();
+// Picking anything else steps the lens back, so one answer is on the map at a time.
+const NO_LENS = { lens: null, days: null, group: null };
+const AS_OF_LENS = "Other lenses read today's access.";
 const THREADS = ["", "One thread", "Two threads, side by side", "Three threads, side by side"];
 
 /**
@@ -96,6 +101,18 @@ export function MapTab({ url }: { url: InsightsUrl }) {
   const pins = model && !asOn ? url.pins.filter((id) => model.byId.has(id)) : [];
   const finding = url.finding && !asOn && findings.counts[url.finding] > 0 ? url.finding : null;
 
+  // A lens is a question about today, and the only answer on the map at rest.
+  const lens: Lens = !asOn && !finding && !question && !pins.length ? url.lens : "people";
+  const team = url.group.startsWith("team:") ? url.group.slice(5).trim() : null;
+  const lensAsk =
+    lens === "ending" ? { kind: "ending" as const, days: url.days } : lens === "group" && team !== "" ? { kind: "group" as const, group: team ? `team:${team}` : url.group } : null;
+  const lensData = useInsightsLens(lensAsk);
+  const usage = useInsightsUsage(lens === "use");
+  const lensRead = useMemo(
+    () => (model && lens !== "people" ? readLens(model, lens, { usage, lens: lensData, days: url.days, group: url.group }) : null),
+    [model, lens, usage, lensData, url.days, url.group],
+  );
+
   // The map as it was: the picture's own graph, with the people it held that day.
   const picture = asof.data?.kind === "picture" ? asof.data : null;
   const past = useMemo(() => (picture ? buildModel(picture.topology) : null), [picture]);
@@ -120,12 +137,14 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     } else if (focus) {
       paint(h, reach(model, focus), "accent");
       for (const p of pins) if (p !== focus) paint(h, reach(model, p), tones.get(p)!);
+    } else if (lensRead) {
+      lensRead.counts.forEach((_, id) => h.nodes.set(id, "ink"));
     } else {
       for (const p of pins) paint(h, reach(model, p), tones.get(p)!);
     }
     return h.nodes.size ? h : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, finding, findings.lit, focus, asked, answer.answer, pins.join()]);
+  }, [model, finding, findings.lit, focus, asked, answer.answer, lensRead, pins.join()]);
 
   const held = (id: string) => findings.held.get(id) ?? null;
   let panel: Panel | null = null;
@@ -154,9 +173,11 @@ export function MapTab({ url }: { url: InsightsUrl }) {
         ...(cross ? [{ tone: "ink" as const, text: cross }] : []),
       ],
     };
-  } else if (model && !phone && findings.ready) panel = findings.glance;
+  } else if (model && lensRead) panel = lensRead.panel;
+  else if (model && !phone && findings.ready) panel = findings.glance;
 
-  const ask = (q: Question | null) => url.set({ ...toParams(q), finding: null, asof: null });
+  const ask = (q: Question | null) => url.set({ ...toParams(q), ...NO_LENS, finding: null, asof: null });
+  const chooseLens = (next: Lens) => url.set({ ...NO_LENS, lens: next === "people" ? null : next, ...toParams(null), finding: null, pin: null });
   const toToday = () => {
     setScrubOpen(false);
     url.set({ asof: null });
@@ -170,6 +191,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     if (finding) url.set({ finding: null });
     else if (question) ask(null);
     else if (pins.length) url.set({ pin: null });
+    else if (lens !== "people") url.set(NO_LENS);
   };
   const pin = () => target && !pins.includes(target) && pins.length < MAX_PINS && url.set({ pin: [...pins, target].join(",") });
   const unpin = (id: string) => url.set({ pin: pins.filter((p) => p !== id).join(",") || null });
@@ -196,6 +218,8 @@ export function MapTab({ url }: { url: InsightsUrl }) {
         ask(null);
       } else input.current?.focus();
     } else if (e.key === "?") setKeysOpen((o) => !o);
+    else if (k === "t") (scrubbing ? toToday : earlier)();
+    else if (k === "l" && !asOn) chooseLens(LENSES[(LENSES.findIndex((l) => l.value === lens) + 1) % LENSES.length].value);
     else if (k === "p" && target) togglePin();
     else if (model && focus && e.key.startsWith("Arrow")) {
       const node = model.byId.get(focus)!;
@@ -242,13 +266,22 @@ export function MapTab({ url }: { url: InsightsUrl }) {
           />
           {phone ? (
             <div className="w-full">
-              <Select aria-label="Lens" defaultValue="people">
-                <option value="people">Lens: People</option>
+              <Select aria-label="Lens" value={lens} onChange={(e) => chooseLens(e.target.value as Lens)}>
+                {LENSES.map((l) => (
+                  <option key={l.value} value={l.value} disabled={asOn && l.value !== "people"}>
+                    Lens: {l.label}
+                  </option>
+                ))}
               </Select>
             </div>
           ) : (
             <div className="flex items-center gap-3">
-              <FilterPills label="Lens" value="people" onChange={() => {}} options={[{ value: "people", label: "People" }]} />
+              <FilterPills
+                label="Lens"
+                value={lens}
+                onChange={chooseLens}
+                options={LENSES.map((l) => ({ ...l, disabled: asOn && l.value !== "people", title: asOn && l.value !== "people" ? AS_OF_LENS : undefined }))}
+              />
               {!touch && (
                 <Segmented
                   size="sm"
@@ -263,6 +296,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
               )}
             </div>
           )}
+          <LensChoice url={url} lens={lens} />
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -283,6 +317,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
               <Button variant="ghost" size="sm" onClick={toToday}>
                 Back to now
               </Button>
+              <span className="text-[13px] text-faint">{AS_OF_LENS}</span>
             </>
           ) : (
             !phone && (
@@ -299,7 +334,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
                 key={f}
                 type="button"
                 aria-pressed={finding === f}
-                onClick={() => url.set({ ...toParams(null), finding: finding === f ? null : f })}
+                onClick={() => url.set({ ...toParams(null), ...NO_LENS, finding: finding === f ? null : f })}
                 className={`motion-tint inline-flex items-center gap-2 rounded-pill font-semibold ${PILL.sm} ${finding === f ? "bg-tint-3" : "bg-tint-2"}`}
               >
                 <span aria-hidden className={`size-1.5 rounded-pill ${DOT[f]}`} />
@@ -327,10 +362,10 @@ export function MapTab({ url }: { url: InsightsUrl }) {
       <Unfold open={Boolean(panel)}>
         {panel && (
           <AnswerPanel
-            key={`${finding}|${JSON.stringify(question)}|${pins.join()}`}
+            key={`${finding}|${JSON.stringify(question)}|${pins.join()}|${lens}|${url.days}|${url.group}`}
             panel={panel}
             phone={phone}
-            onBack={question || finding || pins.length ? back : undefined}
+            onBack={question || finding || pins.length || lens !== "people" ? back : undefined}
             pins={pins.map((id) => ({ id, name: model!.nameOf(id), tone: tones.get(id)! }))}
             onUnpin={unpin}
             onPin={!finding && target && !pins.includes(target) && pins.length < MAX_PINS ? pin : undefined}
@@ -361,7 +396,9 @@ export function MapTab({ url }: { url: InsightsUrl }) {
             model={shown}
             highlight={highlight}
             focusId={focus}
-            count={asOn ? (id) => thenHeld.get(id) ?? null : held}
+            count={asOn ? (id) => thenHeld.get(id) ?? null : lensRead ? (id) => lensRead.counts.get(id) ?? null : held}
+            unit={lensRead?.unit}
+            note={lensRead?.note}
             unused={asOn ? NO_IDS : findings.unused}
             marks={asOn ? NO_MARKS : findings.marks}
             keysOpen={keysOpen}
