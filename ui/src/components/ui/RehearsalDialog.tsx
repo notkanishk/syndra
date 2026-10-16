@@ -71,6 +71,47 @@ export function resultMessage(
 }
 
 /**
+ * The result block's word: the act, in the past tense, with the count in it
+ * ("Given to 12 people"). Queued people are counted, because the word then
+ * wears the amber dot and the link to send them says the rest.
+ *
+ * Only the acts with a settled word return one. The mapping and bundle-version
+ * surfaces (create/edit/delete/rollback mapping, publish a version, move
+ * holders) have no past tense the copy guide has decided on, so they return
+ * nothing and the block keeps its "Applied" pill. A failure or a plan that
+ * reached nobody also returns nothing: neither is "given to 0 people".
+ */
+export function resultWord(plan: BulkPlan, noun: [string, string]): string | undefined {
+  const { succeeded, failed, queued } = plan.summary;
+  const n = succeeded + queued;
+  if (failed > 0 || n === 0) return undefined;
+  const who = `${n} ${n === 1 ? noun[0] : noun[1]}`;
+  switch (plan.op) {
+    case "assign_role":
+    case "assign_bundle":
+      return `Given to ${who}`;
+    case "remove_role":
+    case "remove_bundle":
+      return `Revoked from ${who}`;
+    case "extend":
+      return `Extended for ${who}`;
+    default:
+      return undefined;
+  }
+}
+
+/** The sentence beside {@link resultWord}: the word already says who, so only what is still waiting. */
+export function resultSentence(
+  plan: BulkPlan,
+  noun: [string, string],
+  system: string = "Zitadel",
+): string {
+  const { queued } = plan.summary;
+  if (queued === 0) return "It has taken effect.";
+  return `${queued} ${queued === 1 ? noun[0] : noun[1]} ${queued === 1 ? "is" : "are"} waiting to be sent to ${system}.`;
+}
+
+/**
  * The operations whose queued rows drain themselves.
  *
  * The backend's rule is on the OUTBOX ROW — `op_type = 'revoke' OR
@@ -340,7 +381,7 @@ export function RehearsalDialog({
   // resolve to `no_change` reach forty people and change nothing for them.
   const nothingWillAct = plan !== null && plan.summary.apply === 0;
   const isDefinitionApply = Boolean(definitionLabel) && nothingWillAct && !incoherent;
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [outcome, setOutcome] = useState<(Outcome & { word?: string }) | null>(null);
 
   /**
    * Why Apply cannot be pressed, or undefined when it can.
@@ -411,10 +452,12 @@ export function RehearsalDialog({
       // On the result step, which already existed — the notification was a
       // second surface reporting what this step is for, and the one that
       // removed itself after four seconds.
+      const word = resultWord(result, noun);
       setOutcome({
         kind: resultKind(result),
-        message: resultMessage(result, noun, system),
+        message: word ? resultSentence(result, noun, system) : resultMessage(result, noun, system),
         detail: queuedNote(result, system),
+        word,
       });
     } catch (error) {
       const stale = stalePlanError(error);
@@ -550,7 +593,7 @@ export function RehearsalDialog({
       {/* The plan's own result, on the step that exists for it. A refusal
           appears on whichever step the operator is standing on, because that
           is where they will look for the reason the button did nothing. */}
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={outcome.word} className="mx-6 mb-1" />}
 
       <ModalFooter
         note={
