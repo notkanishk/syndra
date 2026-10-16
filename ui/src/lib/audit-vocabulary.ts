@@ -102,7 +102,6 @@ export const AUDIT_ACTIONS: Record<
   "grant_expiry.acknowledged": { verb: "Recorded that expiring access should be left to lapse" },
   "grant_expiry.acknowledgement_cleared": { verb: "Put expiring access back in the undecided list" },
   "claim_profile.updated": { verb: "Changed a project's token format" },
-  "terms.updated": { verb: "Changed the term dates" },
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
 };

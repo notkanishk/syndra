@@ -24,6 +24,7 @@ import {
   usePendingPropagations,
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
+import { Notice } from "@/components/ui/Notice";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
@@ -104,23 +105,10 @@ export default function PendingChangesPage() {
         colleague — and the point of this copy is that nothing is broken.
       */}
       {!reachable && (
-        <div className="warn-note flex items-start gap-3.5 px-5 py-4">
-          <span
-            aria-hidden
-            className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-warn-soft text-[12px] font-bold text-warn-text"
-          >
-            !
-          </span>
-          <div>
-            <div className="text-[15px] font-semibold text-warn-text">
-              Zitadel is not answering, as of <ClockTime />.
-            </div>
-            <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-              Sending waits until Zitadel answers. Nothing is lost: the changes wait in order, and nothing has
-              reached any system. Send them once Zitadel is back.
-            </p>
-          </div>
-        </div>
+        <Notice tone="warn" live title="Zitadel is not answering.">
+          As of <ClockTime />. Sending waits until Zitadel answers. Nothing is lost: the changes wait in
+          order, and nothing has reached any system. Send them once Zitadel is back.
+        </Notice>
       )}
 
       <Card>

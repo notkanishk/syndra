@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
-import { VIEW_EXPLANATION, VIEW_HINT } from "@/components/shell/ViewSwitch";
+import { VIEW_EXPLANATION, ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap } from "@/components/ui/Modal";
 import { leafMatches, navFor, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
 import { useIndicators } from "@/lib/queries/useIndicators";
@@ -231,7 +231,7 @@ function NavSheet({
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const { view, isOperator, setView } = useUiView();
+  const { isOperator } = useUiView();
 
   // Held in a ref for the same reason the focus trap holds its own: `onClose`
   // is a fresh closure every render, and this component re-renders on the
@@ -311,23 +311,8 @@ function NavSheet({
           // Switching reveals in place and never navigates, so the sheet stays
           // open around it — the operator is choosing what this screen shows,
           // not where to go.
-          <div role="group" aria-label="Basic or Advanced view" className="mb-3 flex rounded-pill bg-tint-1 p-1">
-            {(["basic", "advanced"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setView(option)}
-                aria-pressed={view === option}
-                title={VIEW_HINT[option]}
-                className={`min-h-[44px] flex-1 rounded-pill text-[13.5px] capitalize motion-press press-scale ${
-                  // Dense, not bright: the label is 13.5px and the bright
-                  // accent fails AA under 18.5px.
-                  view === option ? "bg-accent-dense font-semibold text-accent-ink" : "text-muted"
-                }`}
-              >
-                {option}
-              </button>
-            ))}
+          <div className="mb-3">
+            <ViewSwitch fill />
           </div>
         )}
         {isOperator && (
