@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"syndra/internal/models"
 	"syndra/internal/services"
 )
 
@@ -49,4 +50,29 @@ func handleInsightsWho(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, who)
+}
+
+// handleInsightsWhatIf answers POST {"change": {...}}: who would gain and lose
+// what if it were made. It makes no change, issues no plan, queues nothing.
+func handleInsightsWhatIf(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Change models.InsightsWhatIfChange `json:"change"`
+	}
+	if err := decodeJSONStrict(r.Body, &req); err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
+	res, err := svcInsightsWhatIf(r.Context(), req.Change)
+	switch {
+	case errors.Is(err, services.ErrInvalidWhatIf):
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"change": "invalid"})
+		return
+	case errors.Is(err, services.ErrWhatIfNotFound):
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	case err != nil:
+		viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
+		return
+	}
+	jsonResponse(w, http.StatusOK, res)
 }

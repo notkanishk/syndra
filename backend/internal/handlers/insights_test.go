@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"syndra/internal/auth"
@@ -16,8 +18,8 @@ import (
 
 func stubInsights(t *testing.T) {
 	t.Helper()
-	f, w := svcInsightsFindings, svcInsightsWho
-	t.Cleanup(func() { svcInsightsFindings, svcInsightsWho = f, w })
+	f, w, i := svcInsightsFindings, svcInsightsWho, svcInsightsWhatIf
+	t.Cleanup(func() { svcInsightsFindings, svcInsightsWho, svcInsightsWhatIf = f, w, i })
 }
 
 func getWho(query url.Values) *httptest.ResponseRecorder {
@@ -144,6 +146,10 @@ func TestRouter_InsightsAreOperatorOnly(t *testing.T) {
 	t.Cleanup(func() { jwtValidate = origValidate })
 	router := NewRouter()
 
+	svcInsightsWhatIf = func(context.Context, models.InsightsWhatIfChange) (models.InsightsWhatIf, error) {
+		return models.InsightsWhatIf{}, nil
+	}
+
 	paths := []string{"/api/v1/insights/findings", "/api/v1/insights/who?has=role:p1:x"}
 	for role, want := range map[string]int{"member": http.StatusForbidden, "admin": http.StatusOK} {
 		jwtValidate = func(context.Context, string, string, string) (*auth.Principal, error) {
@@ -158,5 +164,104 @@ func TestRouter_InsightsAreOperatorOnly(t *testing.T) {
 				t.Errorf("%s as %s: status %d, want %d: %s", p, role, rr.Code, want, rr.Body.String())
 			}
 		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/insights/whatif", strings.NewReader(`{"change":{"kind":"bundle_gone","bundle_id":"b1"}}`))
+		req.Header.Set("Authorization", "Bearer token")
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		if rr.Code != want {
+			t.Errorf("whatif as %s: status %d, want %d: %s", role, rr.Code, want, rr.Body.String())
+		}
+	}
+}
+
+func postWhatIf(body string) *httptest.ResponseRecorder {
+	rr := httptest.NewRecorder()
+	handleInsightsWhatIf(rr, httptest.NewRequest(http.MethodPost, "/api/v1/insights/whatif", strings.NewReader(body)))
+	return rr
+}
+
+func TestInsightsWhatIfHandler_PassesTheChangeAndReturnsTheAnswer(t *testing.T) {
+	stubInsights(t)
+	var got models.InsightsWhatIfChange
+	svcInsightsWhatIf = func(_ context.Context, c models.InsightsWhatIfChange) (models.InsightsWhatIf, error) {
+		got = c
+		return models.InsightsWhatIf{
+			Change: c, Unchanged: 3,
+			Gains:  []models.InsightWhatIfPerson{{UserID: "u1", Name: "Ada", Roles: []models.RoleGrant{{ProjectID: "p1", RoleKey: "x"}}}},
+			Losses: []models.InsightWhatIfPerson{},
+		}, nil
+	}
+	rr := postWhatIf(`{"change":{"kind":"bundle_gives_also","bundle_id":"b1","project_id":"p1","role_key":"x"}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+	}
+	if got != (models.InsightsWhatIfChange{Kind: "bundle_gives_also", BundleID: "b1", ProjectID: "p1", RoleKey: "x"}) {
+		t.Fatalf("change passed = %+v", got)
+	}
+	var body struct {
+		Change map[string]string `json:"change"`
+		Gains  []struct {
+			Name  string              `json:"name"`
+			Roles []map[string]string `json:"roles"`
+		} `json:"gains"`
+		Losses    []any `json:"losses"`
+		Unchanged int   `json:"unchanged"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Change["kind"] != "bundle_gives_also" || len(body.Gains) != 1 || body.Gains[0].Roles[0]["role_key"] != "x" ||
+		body.Losses == nil || body.Unchanged != 3 {
+		t.Fatalf("body = %s", rr.Body.String())
+	}
+}
+
+func TestInsightsWhatIfHandler_ErrorsMapToStatuses(t *testing.T) {
+	stubInsights(t)
+	for name, tc := range map[string]struct {
+		err    error
+		status int
+		code   string
+	}{
+		"invalid":  {fmt.Errorf("%w: kind nope", services.ErrInvalidWhatIf), http.StatusBadRequest, "VALIDATION_FAILED"},
+		"missing":  {fmt.Errorf("%w: no such bundle", services.ErrWhatIfNotFound), http.StatusNotFound, "NOT_FOUND"},
+		"internal": {errors.New("boom"), http.StatusInternalServerError, "INSIGHTS_ERROR"},
+	} {
+		svcInsightsWhatIf = func(context.Context, models.InsightsWhatIfChange) (models.InsightsWhatIf, error) {
+			return models.InsightsWhatIf{}, tc.err
+		}
+		rr := postWhatIf(`{"change":{"kind":"bundle_gone","bundle_id":"b1"}}`)
+		var body ErrorResponse
+		_ = json.Unmarshal(rr.Body.Bytes(), &body)
+		if rr.Code != tc.status || body.Error != tc.code {
+			t.Errorf("%s: status %d body %s, want %d %s", name, rr.Code, rr.Body.String(), tc.status, tc.code)
+		}
+	}
+}
+
+func TestInsightsWhatIfHandler_BadBodyIs400AndNeverReachesTheService(t *testing.T) {
+	stubInsights(t)
+	called := false
+	svcInsightsWhatIf = func(context.Context, models.InsightsWhatIfChange) (models.InsightsWhatIf, error) {
+		called = true
+		return models.InsightsWhatIf{}, nil
+	}
+	for name, body := range map[string]string{
+		"empty":         ``,
+		"not json":      `nope`,
+		"unknown field": `{"change":{"kind":"bundle_gone","bundle_id":"b1","admin":true}}`,
+		"unknown top":   `{"change":{"kind":"bundle_gone","bundle_id":"b1"},"apply":true}`,
+		"trailing":      `{"change":{"kind":"bundle_gone","bundle_id":"b1"}} {}`,
+		"wrong type":    `{"change":{"kind":7}}`,
+	} {
+		rr := postWhatIf(body)
+		var resp ErrorResponse
+		_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+		if rr.Code != http.StatusBadRequest || resp.Error != "VALIDATION_FAILED" {
+			t.Errorf("%s: status %d body %s, want 400 VALIDATION_FAILED", name, rr.Code, rr.Body.String())
+		}
+	}
+	if called {
+		t.Fatal("a body that does not decode must never reach the service")
 	}
 }

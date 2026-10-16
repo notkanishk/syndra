@@ -189,6 +189,9 @@ var (
 	svcDeleteDirectGrantAndEnqueue        = db.DeleteDirectGrantAndEnqueue
 	svcDeleteExpiredDirectGrantAndEnqueue = db.DeleteExpiredDirectGrantAndEnqueue
 	svcInTxLockingAccess                  = db.InTxLockingAccess
+	// One immutable read-only view for answers assembled from many queries
+	// (Insights what-if). Never takes the access-mutation lock.
+	svcInReadSnapshot = db.InReadSnapshot
 	svcGetActiveMappingRules              = db.GetActiveMappingRules
 	// What this person has been given and Syndra has not yet sent. Read on the
 	// access view so a recorded change is never rendered as a delivered one.
