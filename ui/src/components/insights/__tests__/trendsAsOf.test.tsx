@@ -57,7 +57,7 @@ describe("Trends tab", () => {
 
     expect(screen.getByRole("radio", { name: "This term" })).toBeChecked();
     await screen.findByText("Delivery history starts being kept from now.");
-    for (const title of ["Weekly changes", "Requests", "Delivery", "Drift", "Ending soon", "Upkeep"]) {
+    for (const title of ["Access given and revoked, by week", "Requests", "Delivery", "Drift", "Ending soon", "Upkeep"]) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
     expect(screen.getByText("3 given, 1 revoked")).toBeInTheDocument();

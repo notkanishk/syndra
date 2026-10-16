@@ -2,6 +2,7 @@ import type { Panel } from "@/components/insights/AnswerPanel";
 import { dayLabel, dayOf } from "@/components/insights/days";
 import type { Model } from "@/components/insights/model";
 import type { InsightsLens, InsightsUsage } from "@/lib/queries/useInsights";
+import { RECENT_USE } from "@/components/insights/useInsightsUrl";
 
 /** What a lens says: the people it counts per role node, and the sentences. */
 export interface LensRead {
@@ -51,8 +52,8 @@ const more = (n: number) => (n > 0 ? [{ tone: "ink" as const, text: `And ${roles
 const NOT_READ = "Syndra hasn't read who holds what from Zitadel yet.";
 
 export function usageRead(u: InsightsUsage, m: Model): LensRead {
-  const eyebrow = `Recent use · sign-ins, ${u.window_days} days`;
-  if (!u.sources.sign_in.receiving) return sentence(eyebrow, "Not showing yet", "Recent use fills in once sign-ins arrive.");
+  const eyebrow = `${RECENT_USE} · ${u.window_days} days`;
+  if (!u.sources.sign_in.receiving) return sentence(eyebrow, "Not showing yet", "This fills in once sign-ins arrive.");
   if (!u.holders_observed) return sentence(eyebrow, "Not read yet", NOT_READ);
   const rows = [...u.held_not_used].sort((a, b) => b.people - a.people);
   if (rows.length === 0) return sentence(eyebrow, `Every role someone holds has been used in ${u.window_days} days`, "Nothing is held without being used.");
@@ -157,7 +158,7 @@ export function readLens(
   lens: "use" | "ending" | "group",
   s: { usage: Read<InsightsUsage>; lens: Read<InsightsLens>; days: number; group: string },
 ): LensRead | null {
-  if (lens === "use") return s.usage.data ? usageRead(s.usage.data, m) : s.usage.isError ? unread("Recent use") : null;
+  if (lens === "use") return s.usage.data ? usageRead(s.usage.data, m) : s.usage.isError ? unread(RECENT_USE) : null;
   if (lens === "ending") return s.lens.data ? endingRead(s.lens.data, s.days, m) : s.lens.isError ? unread("Ending soon") : null;
   if (teamOf(s.group) === "") return sentence("A group", "Which team?", "Type a team name to see what it holds.");
   return s.lens.data ? groupRead(s.lens.data, s.group, m) : s.lens.isError ? unread("A group") : null;

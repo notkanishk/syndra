@@ -98,7 +98,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
         {t && (
           <div className="grid gap-4 tablet:grid-cols-2">
             <Card className="tablet:col-span-2">
-              <CardHeader title="Weekly changes" note={`${t.totals.given} given, ${t.totals.taken_away} revoked`} />
+              <CardHeader title="Access given and revoked, by week" note={`${t.totals.given} given, ${t.totals.taken_away} revoked`} />
               <Weeks weekly={t.weekly} />
               <Fact label="Through a bundle" value={t.weekly.reduce((n, w) => n + w.through_bundle, 0)} />
               <Fact label="By request" value={t.weekly.reduce((n, w) => n + w.by_request, 0)} />
@@ -158,13 +158,13 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
             <Card>
               <CardHeader
                 title="Held but not used"
-                note={usage ? `Not used in ${usage.window_days} days` : undefined}
+                note={usage ? `No sign-in to its app in ${usage.window_days} days.` : undefined}
                 action={<CardHeaderLink href="/insights?lens=use">Show on the map</CardHeaderLink>}
               />
               {!usage ? (
                 <Quiet>Reading recent use.</Quiet>
               ) : !usage.sources.sign_in.receiving ? (
-                <Quiet>Recent use fills in once sign-ins arrive.</Quiet>
+                <Quiet>This fills in once sign-ins arrive.</Quiet>
               ) : !usage.holders_observed ? (
                 <Quiet>Syndra hasn&apos;t read who holds what from Zitadel yet.</Quiet>
               ) : usage.held_not_used.length === 0 ? (
