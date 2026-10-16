@@ -2,7 +2,7 @@ import type { RestCard } from "@/components/insights/useFindings";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader } from "@/components/ui/Card";
 
-const DOT = { drift: "bg-danger", send: "bg-warn", unused: "bg-muted" } as const;
+const DOT = { drift: "bg-danger", send: "bg-warn", single: "bg-warn", unused: "bg-muted", overlap: "bg-muted" } as const;
 
 /**
  * Below tablet the answer is the page (N20, 20a). At rest the map lists what

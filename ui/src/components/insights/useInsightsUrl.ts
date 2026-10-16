@@ -3,13 +3,15 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
-export type Finding = "drift" | "send" | "unused";
-const FINDINGS: Finding[] = ["drift", "send", "unused"];
+import { fromParams } from "@/components/insights/question";
+
+export type Finding = "drift" | "send" | "single" | "unused" | "overlap";
+export const FINDINGS: Finding[] = ["drift", "send", "single", "unused", "overlap"];
 export const MAX_PINS = 3;
 
 /**
- * Everything Insights remembers is in the link: the tab, the question (`q`),
- * Map or List, the pins and the finding. Nothing here is component state, so
+ * Everything Insights remembers is in the link: the tab, the question (`q`
+ * and the parts it names), Map or List, the pins and the finding. Nothing here is component state, so
  * a link opened on a desktop is the map as it was left on a phone.
  */
 export function useInsightsUrl() {
@@ -38,7 +40,7 @@ export function useInsightsUrl() {
 
   return {
     tab: params.get("tab") === "trends" ? ("trends" as const) : ("map" as const),
-    q: params.get("q") || null,
+    question: fromParams((k) => params.get(k)),
     view: params.get("view") === "list" ? ("list" as const) : ("map" as const),
     pins,
     finding,

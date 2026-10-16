@@ -144,6 +144,11 @@ export function pinTones(pins: string[], focus: string | null): Map<string, Tone
   return tones;
 }
 
+/** The map node for a bundle or project id, whether it is given bare or with the node's prefix. */
+export function refNode(m: Model, kind: "bundle" | "project", id: string): string | null {
+  return [`${kind}:${id}`, id].find((x) => m.byId.get(x)?.kind === kind) ?? null;
+}
+
 /** Up to four names, then how many more. */
 export function listOf(names: string[], max = 4): string {
   return names.length > max ? `${names.slice(0, max).join(", ")} and ${names.length - max} more` : formatList(names);

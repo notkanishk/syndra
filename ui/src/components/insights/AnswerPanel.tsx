@@ -14,7 +14,8 @@ export interface Panel {
   eyebrow: string;
   title: string;
   meta?: string;
-  lines: Array<{ tone: Tone; text: string }>;
+  /** A line may open with a bold lead: "By hand:", a person's name. */
+  lines: Array<{ tone: Tone; lead?: string; text: string }>;
   open?: { label: string; href: string };
 }
 
@@ -26,7 +27,8 @@ const BOX = {
 } as const;
 
 /** The panel's words as plain text: its title, then one sentence a line. */
-export const panelText = (panel: Panel) => [panel.title, ...panel.lines.map((l) => l.text)].join("\n");
+export const panelText = (panel: Panel) =>
+  [panel.title, ...panel.lines.map((l) => (l.lead ? `${l.lead} ${l.text}` : l.text).trim())].join("\n");
 
 /**
  * The answer, in sentences. The map draws the thread; this says it, and links
@@ -40,6 +42,7 @@ export function AnswerPanel({
   onUnpin,
   onPin,
   onlyPinned,
+  phone = false,
 }: {
   panel: Panel;
   onBack?: () => void;
@@ -48,6 +51,8 @@ export function AnswerPanel({
   /** Present only when the followed thing can be pinned. */
   onPin?: () => void;
   onlyPinned?: () => void;
+  /** Below tablet the panel is the page, and the pin says what it pins. */
+  phone?: boolean;
 }) {
   const clipboard = useClipboardAvailable();
   const [copied, setCopied] = useState(false);
@@ -85,7 +90,10 @@ export function AnswerPanel({
               className="size-[7px] flex-none rounded-pill"
               style={{ background: TONE_COLOUR[line.tone] }}
             />
-            <span>{line.text}</span>
+            <span>
+              {line.lead && <strong className="font-semibold">{line.lead} </strong>}
+              {line.text}
+            </span>
           </p>
         ))}
       </div>
@@ -116,7 +124,7 @@ export function AnswerPanel({
         <span className="flex-1" />
         {onPin && (
           <Button variant="ghost" size="sm" onClick={onPin}>
-            Pin
+            {phone ? "Pin this" : "Pin"}
           </Button>
         )}
         {onlyPinned && (
