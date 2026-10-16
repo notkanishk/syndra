@@ -259,3 +259,73 @@ describe("PublishVersionDialog", () => {
     expect(state.apply.mock.calls[0][0]).toMatchObject({ migrate: true, plan_id: "plan_7" });
   });
 });
+
+/**
+ * B8: a bundle others include asks, per including bundle, Update or Leave.
+ * Neither is a default, and Publish waits for every answer.
+ */
+describe("PublishVersionDialog · bundles that include it", () => {
+  const includers = [
+    { bundle_id: "nm", name: "New members", included_version: 3, people: 40 },
+    { bundle_id: "st", name: "Staff", included_version: 3, people: 5 },
+  ];
+
+  function openWithIncluders() {
+    render(
+      <PublishVersionDialog
+        bundleId="sb"
+        name="Safety basics"
+        draft={draft({ holder_count: 8, include_changes: [], includes: [] })}
+        includers={includers}
+        onClose={vi.fn()}
+      />,
+    );
+  }
+
+  it("asks each, with no default", () => {
+    openWithIncluders();
+    expect(screen.getByText("The 2 bundles that include it")).toBeInTheDocument();
+    const newMembers = screen.getByRole("radiogroup", { name: "New members: update or leave" });
+    const radios = Array.from(newMembers.querySelectorAll("input"));
+    expect(radios).toHaveLength(2);
+    expect(radios.every((r) => !r.checked)).toBe(true);
+  });
+
+  it("keeps Preview disabled until every bundle is answered", () => {
+    openWithIncluders();
+    fireEvent.click(screen.getByText("Move everyone to v3"));
+    const preview = screen.getByRole("button", { name: "Preview the change" });
+    expect(preview).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole("radio", { name: "Update" })[0]);
+    expect(preview).toBeDisabled();
+
+    fireEvent.click(screen.getAllByRole("radio", { name: "Leave" })[1]);
+    expect(preview).toBeEnabled();
+  });
+
+  it("sends every answer with the preview", async () => {
+    openWithIncluders();
+    fireEvent.click(screen.getByText("Leave them on the version they are on"));
+    fireEvent.click(screen.getAllByRole("radio", { name: "Update" })[0]);
+    fireEvent.click(screen.getAllByRole("radio", { name: "Leave" })[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
+
+    await waitFor(() => expect(state.rehearse).toHaveBeenCalled());
+    expect(state.rehearse.mock.calls[0][0]).toMatchObject({
+      includers: [
+        { bundle_id: "nm", action: "update" },
+        { bundle_id: "st", action: "leave" },
+      ],
+    });
+  });
+
+  it("says who it reaches through them", () => {
+    openWithIncluders();
+    expect(
+      screen.getByText(
+        "Safety basics reaches 53 people: 8 directly, and 45 through New members and Staff, which include it. Nobody moves unless you say so.",
+      ),
+    ).toBeInTheDocument();
+  });
+});

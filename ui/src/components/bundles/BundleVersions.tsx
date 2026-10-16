@@ -6,12 +6,16 @@ import { useMemo, useState } from "react";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate } from "@/lib/format";
+import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { useSetBundleInclude, type BundleRow } from "@/lib/queries/useBundles";
 import {
+  type BundleIncluder,
   useApplyMoveHolders,
   useBundleHolders,
   type BundleHolder,
@@ -223,7 +227,7 @@ function Holders({
         .map(([version, people]) => {
           const behind = latest !== undefined && latest.version !== version;
           return (
-            <section key={version} className="border-t border-line first:border-t-0">
+            <section key={version} id={`on-v${version}`} className="scroll-mt-6 border-t border-line first:border-t-0">
               <div className="flex flex-wrap items-center gap-3 px-5 pb-2 pt-4">
                 <h3 className="type-card-title">On v{version}</h3>
                 <span className={`text-[13px] ${behind ? "font-semibold text-warn-text" : "text-faint"}`}>
@@ -326,5 +330,131 @@ function MoveHoldersDialog({
       }
       onClose={onClose}
     />
+  );
+}
+
+/**
+ * Through other bundles (Bundles 6): the bundles that include this one, each
+ * a square tile with the version it includes and its people. "Update to vN"
+ * puts the latest into that bundle's working copy; its people get it when it
+ * publishes, rehearsed there as usual.
+ */
+export function ThroughOtherBundles({
+  name,
+  bundleId,
+  latest,
+  includers,
+  bundles,
+}: {
+  name: string;
+  bundleId: string;
+  latest: number;
+  includers: BundleIncluder[];
+  bundles: BundleRow[];
+}) {
+  const people = includers.reduce((n, i) => n + i.people, 0);
+  return (
+    <section id="through-bundles" className="card scroll-mt-6 overflow-hidden" style={{ borderStyle: "dashed" }}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-4">
+        <h3 className="type-card-title">Through other bundles</h3>
+        <span className="text-[13.5px] text-faint">
+          {people} {people === 1 ? "person" : "people"} in {includers.length}{" "}
+          {includers.length === 1 ? "bundle" : "bundles"}
+        </span>
+      </div>
+      <p className="row-divider px-5 py-2.5 text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+        These bundles include {name}, so their people have it too. Each is pinned to a version. Updating one
+        puts v{latest} into its next version; its people get it when that bundle publishes, with the usual
+        review.
+      </p>
+      {includers.map((includer) => (
+        <IncluderTile
+          key={includer.bundle_id}
+          childId={bundleId}
+          includer={includer}
+          latest={latest}
+          purpose={bundles.find((b) => b.id === includer.bundle_id)?.description}
+        />
+      ))}
+    </section>
+  );
+}
+
+function IncluderTile({
+  childId,
+  includer,
+  latest,
+  purpose,
+}: {
+  childId: string;
+  includer: BundleIncluder;
+  latest: number;
+  purpose?: string;
+}) {
+  const update = useSetBundleInclude(includer.bundle_id);
+  const [failure, setFailure] = useState<Outcome | null>(null);
+  const pinned = includer.included_version;
+  const behind = pinned > 0 && pinned < latest;
+  const waiting = includer.draft_version === latest;
+  const gap = latest - pinned;
+  const href = `/bundles/${encodeURIComponent(includer.bundle_id)}`;
+  const tile = includer.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+
+  return (
+    <div className="row-divider px-5 py-3">
+      <div className="flex flex-wrap items-center gap-x-[18px] gap-y-2">
+        <span className="flex min-w-0 flex-[1_1_260px] items-center gap-3">
+          <span
+            aria-hidden
+            className="inline-flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-dashed border-line-strong bg-surface-2 font-display text-[13px] font-semibold text-muted"
+          >
+            {tile}
+          </span>
+          <span className="flex min-w-0 flex-col gap-px">
+            <Link
+              href={href}
+              className="text-[15px] font-semibold text-ink motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+            >
+              {includer.name}
+            </Link>
+            <span className="text-[12.5px] text-faint">Bundle{purpose ? ` · ${purpose}` : ""}</span>
+          </span>
+        </span>
+        <span className={`flex-[1_1_160px] text-[13.5px] ${behind ? "font-semibold text-warn-text" : "text-muted"}`}>
+          {pinned === 0
+            ? `v${includer.draft_version} in its next version`
+            : `Includes v${pinned}${behind ? `, ${gap === 1 ? "one" : gap} behind` : ""}`}
+        </span>
+        <span className="w-[110px] flex-none text-right text-[13.5px] text-muted">
+          {includer.people} {includer.people === 1 ? "person" : "people"}
+        </span>
+        <span className="flex w-[150px] flex-none justify-end">
+          {behind &&
+            (waiting ? (
+              <span className="text-right text-[13px] text-faint">v{latest} in its next version</span>
+            ) : (
+              <Button
+                size="sm"
+                isPending={update.isPending}
+                onClick={async () => {
+                  setFailure(null);
+                  try {
+                    await update.mutateAsync({ child: childId, version: latest });
+                  } catch (error) {
+                    setFailure(outcomeFromError(error));
+                  }
+                }}
+              >
+                Update to v{latest}
+              </Button>
+            ))}
+        </span>
+      </div>
+      {failure && <ActionOutcome outcome={failure} className="mt-2.5" />}
+    </div>
   );
 }

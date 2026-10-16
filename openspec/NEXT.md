@@ -1,6 +1,6 @@
 # Syndra — Next Steps
 
-> Single pickup point. Everything open, in one place, as of **2026-08-10**.
+> Single pickup point. Everything open, in one place, as of **2026-10-16**.
 > Sources consolidated here: `ROADMAP.md` phases 4–6, `docs/AUDIT.md` deferrals, open `changes/*/tasks.md`, and tooling debt.
 > [< Index](INDEX.md) · [Architecture](changes/syndra-core-architecture/design.md) · [Roadmap](changes/syndra-core-architecture/ROADMAP.md)
 
@@ -121,7 +121,7 @@ The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built 
 
 ### Reconcile build — what design gave, in its order
 
-Steps 1 (foundations), 2 (never sample data) and 3 (roles that wait for you) are built in [`changes/reconcile-build`](changes/reconcile-build/tasks.md). Next is step 4, the screens. Migration 000056 ships with step 3; the switch over on production is the owner's, from Roles that wait. The open tasks there carry their triage tags.
+Steps 1 (foundations), 2 (never sample data) and 3 (roles that wait for you) are built in [`changes/reconcile-build`](changes/reconcile-build/tasks.md). Step 4 (screens) is under way: Bundles v2 with included bundles, My access with extend requests, and Insights (reads, trends, as-of dates, lenses, recent use). Migration 000056 ships with step 3. Migration 000058 switches every deployment to `confirmation.model = roles`; production's roles stay as they are, and the owner marks which ones wait later. The open tasks there carry their triage tags. Insights' open questions are in `design_handoff_syndra/reconcile-2026-10/to-design/Q-06-from-the-build.md` §7.
 
 ### Architecture deepening — the 16 Oct review
 
@@ -242,6 +242,8 @@ None of these are code. All need a live instance and a human.
   **One drawn promise the backend refuses:** the decided-and-waiting row says deciding again replaces the queued work. `RecordMergeDecision` guards on `decision IS NULL` and fails closed, because the two resolutions it sits between are recreate-the-account and stop-managing-it. Invert the copy; do not relax the guard.
 
   Still open: what routes sit behind *apply it again* / *stop wanting it*; which index readings can co-occur; and that a member reads nothing when an operator sets read-only — `MyStorage` carries no lifecycle field, in neither backend nor UI.
+- **Insights and extend-request live-DB tests have never run.** The Insights reads (trends, snapshots, usage, lens, includes) and extend requests are unit-tested only. With migrations through `000062` on a test database, run `insights_trends_live_test.go`, `insights_snapshots_live_test.go`, `usage_live_test.go`, `insights_lens_live_test.go`, `bundle_includes_live_test.go` and `requests_live_test.go` with `SYNDRA_TEST_DATABASE_URL` set. [ready-for-human] (`reconcile-build` 4.2.11)
+- **Sign-in events are on (17 Oct 2026).** Zitadel sends `oidc_session.added` and `user.token.added` to the event webhook; Recent use fills in once #46 is deployed. (`reconcile-build` 4.2.12)
 - **Obsidian-clarity UI checklists** (`OCR-S2-19`, `OCR-S3-10`) — per-route manual pass over empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast. Browser-driven, can't be automated as specified.
 
 ---

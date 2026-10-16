@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 
-import { humanizeKey } from "@/lib/format";
+import { formatLongDate, humanizeKey } from "@/lib/format";
 import { outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
-import { useDecideRequest, type AccessRequest } from "@/lib/queries/useRequests";
+import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
 import { waitReasonLine } from "@/lib/wait-reason";
 
 /**
@@ -19,11 +19,18 @@ export function approvalOutcome(
   waitReason: string | undefined,
   name: string,
   role: string,
+  result?: Pick<DecisionResult, "effect" | "until">,
 ): ActionOutcome {
   if (!waitReason) {
+    const ends = result?.until ? `until ${formatLongDate(result.until)}` : "with no end date";
     return {
       kind: "applied",
-      message: `Approved. ${name} can use it now.`,
+      message:
+        result?.effect === "extended"
+          ? `Approved. ${name} keeps it ${ends}.`
+          : result?.effect === "given_again"
+            ? `Approved. It had ended, so ${name} has it again ${ends}.`
+            : `Approved. ${name} can use it now.`,
       detail: "Sent · not yet seen in Zitadel",
     };
   }
@@ -85,6 +92,7 @@ export function useRequestDecisions() {
                 resolver.resolveUser(entry.requester_id).value?.display_name || "They",
                 resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
                   humanizeKey(entry.role_key),
+                result,
               ),
             }
           : { word: "Declined", outcome: DECLINED };

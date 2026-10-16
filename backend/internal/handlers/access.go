@@ -37,6 +37,8 @@ type CreateAccessRequestRequest struct {
 	RoleKey       string `json:"role_key"`
 	Justification string `json:"justification"`
 	DurationDays  int    `json:"duration_days"`
+	// Kind is "access" (the default) or "extend": "Ask to keep it longer".
+	Kind string `json:"kind,omitempty"`
 }
 
 type ResolveAccessRequestRequest struct {
@@ -127,15 +129,17 @@ func handleUpsertUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	case !req.Extend && holding.Kind != models.HoldingNone:
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "They"))
 		return
-	case req.Extend && holding.Kind != models.HoldingUntil:
-		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND",
-			"There is no end to extend: they have this with no end, or don't have it.")
-		return
-	case req.Extend && expiresAt != nil && !expiresAt.After(*holding.Until):
-		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST",
-			"It already runs past that date, so extending would shorten it. Nothing was changed.")
-		return
 	case req.Extend:
+		switch err := checkExtension(holding, expiresAt); {
+		case errors.Is(err, errNothingToExtend):
+			jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND",
+				"There is no end to extend: they have this with no end, or don't have it.")
+			return
+		case errors.Is(err, errExtensionShortens):
+			jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST",
+				"It already runs past that date, so extending would shorten it. Nothing was changed.")
+			return
+		}
 		endRule = db.EndSet
 	}
 
@@ -260,21 +264,16 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "duration_days must be zero or greater", map[string]string{"duration_days": "min=0"})
 		return
 	}
+	if req.Kind == "" {
+		req.Kind = requestKindAccess
+	}
+	if req.Kind != requestKindAccess && req.Kind != requestKindExtend {
+		jsonValidationErrorResponse(w, `kind must be "access" or "extend"`, map[string]string{"kind": "enum"})
+		return
+	}
 
 	if err := checkRoleOffered(r.Context(), req.ProjectID, req.RoleKey); err != nil {
 		writeRoleOfferedError(w, err)
-		return
-	}
-
-	// A request is for a role they don't have (owner, 15 Oct). One that ends
-	// is extended by makerspace staff, never asked for again.
-	holding, err := dbRequestHolding(r.Context(), req.RequesterID, req.ProjectID, req.RoleKey)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	if holding.Kind != models.HoldingNone {
-		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "You"))
 		return
 	}
 
@@ -282,7 +281,31 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	if req.DurationDays > 0 {
 		durationDays = &req.DurationDays
 	}
-	id, err := dbCreateAccessRequest(r.Context(), req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays)
+
+	// An ask is for a role they don't have; asking to keep one longer is for
+	// a role that ends (owner, 15 and 16 Oct). Neither gives a role twice.
+	holding, err := dbRequestHolding(r.Context(), req.RequesterID, req.ProjectID, req.RoleKey)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	switch err := checkRequestKind(req.Kind, holding, durationDays, time.Now()); {
+	case errors.Is(err, errRequestAlreadyHeld):
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "You"))
+		return
+	case errors.Is(err, errNothingHeldToExtend):
+		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND", "You don't have this, so there's nothing to keep longer. Ask for it instead.")
+		return
+	case errors.Is(err, errNothingToExtend):
+		jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_EXTEND", "You already have this with no end date, so there's nothing to keep longer.")
+		return
+	case errors.Is(err, errExtensionShortens):
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST",
+			fmt.Sprintf("You already have this %s, which is later than that. Choose a longer time.", endPhrase(holding.Until)))
+		return
+	}
+
+	id, err := dbCreateAccessRequestOfKind(r.Context(), req.Kind, req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays)
 	if errors.Is(err, db.ErrAlreadyAsked) {
 		// The same ask is already waiting: one in the queue, however many
 		// times it was sent. Its id is returned so the page can point at it.
@@ -311,8 +334,11 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 func alreadyHeldMessage(h models.RequestHolding, who string) string {
 	msg := fmt.Sprintf("%s already have this, with no end date.", who)
 	if h.Kind == models.HoldingUntil && h.Until != nil {
-		msg = fmt.Sprintf("%s already have this, until %s. Makerspace staff can extend it from Expiring access.",
+		msg = fmt.Sprintf("%s already have this, until %s. Ask to keep it longer instead.",
 			who, h.Until.Format("2 Jan 2006"))
+		if who == "They" {
+			msg = fmt.Sprintf("They already have this, until %s. Extend it instead.", h.Until.Format("2 Jan 2006"))
+		}
 	}
 	// Given, not yet sent: still held, so not given twice, but it may not work yet.
 	if h.Waiting {
@@ -390,14 +416,21 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	waitReason, err := resolveAccessRequestOutcome(r.Context(), requestID, status, reviewer, req.ReviewNote)
+	decided, err := resolveAccessRequestOutcome(r.Context(), requestID, status, reviewer, req.ReviewNote)
 	switch {
 	case err == nil:
-		// wait_reason, when the approval isn't in Zitadel yet: role_waits,
-		// or halted:<reason>. The outcome says which, with the step left.
-		resp := map[string]string{"message": "Request resolved"}
-		if waitReason != "" {
-			resp["wait_reason"] = waitReason
+		// For an approval: effect (given, extended, given_again), until (the
+		// end it now has; absent for none), and wait_reason when it isn't in
+		// Zitadel yet (role_waits or halted:<reason>). The outcome says each.
+		resp := map[string]any{"message": "Request resolved"}
+		if decided.Effect != "" {
+			resp["effect"] = decided.Effect
+		}
+		if decided.Until != nil {
+			resp["until"] = decided.Until
+		}
+		if decided.WaitReason != "" {
+			resp["wait_reason"] = decided.WaitReason
 		}
 		jsonResponse(w, http.StatusOK, resp)
 	case errors.Is(err, errRequestNotFound):
@@ -406,6 +439,8 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RESOLVED", err.Error())
 	case errors.Is(err, errRequestAlreadyHeld):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", "They already have this, so approving would change nothing. Decline it to close the request.")
+	case errors.Is(err, errExtensionShortens):
+		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST", "They already have this past the end this asks for, so approving would shorten it. Decline it to close the request.")
 	case errors.Is(err, errRoleNotOffered), errors.Is(err, errCatalogueUnread):
 		writeRoleOfferedError(w, err)
 	default:
@@ -473,6 +508,15 @@ func writeRoleOfferedError(w http.ResponseWriter, err error) {
 // guard, cache rebuild, inline drain — is the part that must not diverge: a
 // second copy that drifted would leave requests approved but ungranted, which
 // re-surfaces later as syndra_only drift and is diagnosed by nobody.
+// decisionResult is what deciding a request did: for an approval, what it
+// gave (given, extended, given_again), until when, and why it isn't in
+// Zitadel yet when it isn't.
+type decisionResult struct {
+	WaitReason string
+	Effect     approvalEffect
+	Until      *time.Time
+}
+
 func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, reviewNote string) error {
 	_, err := resolveAccessRequestOutcome(ctx, requestID, status, reviewer, reviewNote)
 	return err
@@ -482,17 +526,17 @@ func resolveOneAccessRequest(ctx context.Context, requestID, status, reviewer, r
 // why the access isn't in Zitadel yet when it isn't (services.Deliver), so
 // the outcome can say "This role always waits for you" or "Zitadel didn't
 // answer".
-func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewer, reviewNote string) (waitReason string, err error) {
+func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewer, reviewNote string) (res decisionResult, err error) {
 	request, err := dbGetAccessRequestByID(ctx, requestID)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", errRequestNotFound, err.Error())
+		return decisionResult{}, fmt.Errorf("%w: %s", errRequestNotFound, err.Error())
 	}
 
 	// Anything that is not pending is already settled — including 'withdrawn', which the
 	// member settled themselves. Enumerating the decided statuses instead would mean every new
 	// terminal state silently became decidable again.
 	if request.Status != "pending" {
-		return "", fmt.Errorf("%w (already %s)", errRequestAlreadyResolved, request.Status)
+		return decisionResult{}, fmt.Errorf("%w (already %s)", errRequestAlreadyResolved, request.Status)
 	}
 
 	if status == "approved" {
@@ -501,19 +545,20 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 		// refused and the request is left for a decline.
 		holding, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey)
 		if err != nil {
-			return "", err
+			return decisionResult{}, err
 		}
-		if holding.Kind != models.HoldingNone {
-			return "", errRequestAlreadyHeld
+		// What approving does depends on what they hold now, not when they
+		// asked: an ask needs them not to have it; keeping it longer moves the
+		// end of the grant they have, or, if it lapsed while waiting, gives it
+		// back for the time asked (planApproval).
+		plan, err := planApproval(request, holding, time.Now())
+		if err != nil {
+			return decisionResult{}, err
 		}
 		if err := checkRoleOffered(ctx, request.ProjectID, request.RoleKey); err != nil {
-			return "", err
+			return decisionResult{}, err
 		}
-		var expiresAt *time.Time
-		if request.DurationDays != nil && *request.DurationDays > 0 {
-			expiry := time.Now().UTC().Add(time.Duration(*request.DurationDays) * 24 * time.Hour)
-			expiresAt = &expiry
-		}
+		expiresAt := plan.ExpiresAt
 		// An approval creates the same kind of direct grant as the operator grant
 		// endpoint, so it flows through the durable ledger+outbox (B4/D3 single
 		// mutation authority) rather than the bare upsert — otherwise the grant is
@@ -529,13 +574,14 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 			"role_key":     request.RoleKey,
 			"from_request": requestID,
 		})
-		res, err := dbApproveRequestAndEnqueue(ctx, requestID, reviewer, reviewNote, db.EnqueueParams{
+		queued, err := dbApproveRequestAndEnqueue(ctx, requestID, reviewer, reviewNote, db.EnqueueParams{
 			UserID:      request.RequesterID,
 			ProjectID:   request.ProjectID,
 			RoleKeys:    []string{request.RoleKey},
 			GrantedBy:   reviewer,
-			Reason:      "Approved from access request",
+			Reason:      approvalReason(plan.Effect),
 			ExpiresAt:   expiresAt,
+			EndRule:     plan.EndRule,
 			Source:      "direct",
 			SourceRef:   requestID,
 			OpType:      "add",
@@ -543,9 +589,9 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 		})
 		if err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {
-				return "", errRequestAlreadyResolved
+				return decisionResult{}, errRequestAlreadyResolved
 			}
-			return "", err
+			return decisionResult{}, err
 		}
 		// Rebuild the compiled cache from the just-committed ledger row FIRST, so
 		// access is effective immediately — independent of the best-effort inline
@@ -559,15 +605,16 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 		// to THIS row only (never the global batch), and non-fatal — a drain
 		// failure (e.g. Zitadel offline) leaves the row pending in the worklist for
 		// a later resume; access already works via the ledger.
-		if res.OutboxID != "" {
-			waitReason = svcDeliver(ctx, []string{res.OutboxID}, false).WaitReason()
+		res.Effect, res.Until = plan.Effect, plan.ExpiresAt
+		if queued.OutboxID != "" {
+			res.WaitReason = svcDeliver(ctx, []string{queued.OutboxID}, false).WaitReason()
 		}
 	} else { // rejected — no grant, just the conditional resolution
 		if err := dbResolveAccessRequest(ctx, requestID, status, reviewer, reviewNote); err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {
-				return "", errRequestAlreadyResolved
+				return decisionResult{}, errRequestAlreadyResolved
 			}
-			return "", err
+			return decisionResult{}, err
 		}
 	}
 
@@ -579,7 +626,7 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 		action = "access_request.self_approved"
 	}
 	_ = dbInsertAuditLog(ctx, reviewer, request.RequesterID, action, requestID)
-	return waitReason, nil
+	return res, nil
 }
 
 func handleGetGovernanceSummary(w http.ResponseWriter, r *http.Request) {

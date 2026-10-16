@@ -202,7 +202,9 @@ func TestTheDuplicateBindingAbsorptionNamesItsArbiter(t *testing.T) {
 // bundle is held just as much as one granted by hand.
 func TestTheMappingCohortCountsEverySourceOfTheRole(t *testing.T) {
 	body := funcBody(t, readDBSource(t, "mappings.go"), "MappingHolders")
-	for _, frag := range []string{"FROM direct_role_grants", "user_bundle_assignments", "bundle_version_roles",
+	// bundle_version_effective_roles, not bundle_version_roles: a role held
+	// through an included bundle (B8) is held just as much as the bundle's own.
+	for _, frag := range []string{"FROM direct_role_grants", "user_bundle_assignments", "bundle_version_effective_roles",
 		// The rule arm, which the comment above the query promised and the
 		// query did not have: a role a rule derives is held just as much.
 		"mapping_rules",

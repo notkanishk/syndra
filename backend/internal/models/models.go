@@ -34,7 +34,12 @@ type Bundle struct {
 	// are different objects, and only one of them means "the edit you made
 	// last term never reached anyone".
 	LatestVersion int `json:"latest_version"`
-	StaleHolders  int `json:"stale_holders"`
+	// HasIncludes: it includes other bundles (B8), so it can't go inside
+	// another. IncludedIn names the bundles that include it, so it can't take
+	// others in.
+	HasIncludes  bool     `json:"has_includes"`
+	IncludedIn   []string `json:"included_in,omitempty"`
+	StaleHolders int      `json:"stale_holders"`
 
 	// UnpublishedChanges is how many role additions or removals sit in the
 	// working copy and have not been published. Zero means the bundle and its
@@ -92,6 +97,20 @@ type BundleRole struct {
 	BundleID  string `json:"bundle_id"`
 	ProjectID string `json:"zitadel_project_id"`
 	RoleKey   string `json:"zitadel_role_key"`
+	// ViaBundleID is the included bundle this role comes through, when it
+	// isn't the bundle's own (B8). A role both own and included is own.
+	ViaBundleID string `json:"via_bundle_id,omitempty"`
+}
+
+// BundleInclude is one bundle included in another, pinned to a version (B8).
+type BundleInclude struct {
+	ChildBundleID  string `json:"child_bundle_id"`
+	ChildName      string `json:"child_name"`
+	ChildVersionID string `json:"child_version_id"`
+	ChildVersion   int    `json:"child_version"`
+	// ChildLatest is the child's newest published version, so a parent can
+	// say "v4 is out" when it still includes v3.
+	ChildLatest int `json:"child_latest_version"`
 }
 
 // MappingRule defines absolute policy logic
@@ -142,6 +161,9 @@ type UserProfile struct {
 	Team   string `json:"team"`
 	Status string `json:"status"`
 	Avatar string `json:"avatar"`
+	// Joined is when Zitadel created the account; nil when Zitadel gave none.
+	// Server-side only: the Insights "new this term" lens reads it.
+	Joined *time.Time `json:"-"`
 }
 
 type ProjectRole struct {
@@ -172,6 +194,10 @@ type ApplicationCatalog struct {
 	Consumer    string `json:"consumer"`
 	ClaimName   string `json:"claim_name"`
 	FormatType  string `json:"format_type"`
+	// ClientID is the OIDC/API client id, which is what a token's events name
+	// (the application id is a different string). Not part of any response; it is
+	// here so a sign-in can be traced to the project its application belongs to.
+	ClientID string `json:"-"`
 }
 
 type RoleGrant struct {
@@ -180,10 +206,14 @@ type RoleGrant struct {
 }
 
 type RoleReason struct {
-	Kind           string `json:"kind"`
-	Description    string `json:"description"`
-	BundleID       string `json:"bundle_id,omitempty"`
-	BundleName     string `json:"bundle_name,omitempty"`
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	BundleID    string `json:"bundle_id,omitempty"`
+	BundleName  string `json:"bundle_name,omitempty"`
+	// ViaBundleID and ViaBundleName name the included bundle a bundle role
+	// comes through (B8): "Via New members, from Safety basics".
+	ViaBundleID    string `json:"via_bundle_id,omitempty"`
+	ViaBundleName  string `json:"via_bundle_name,omitempty"`
 	TriggerProject string `json:"trigger_project,omitempty"`
 	TriggerRole    string `json:"trigger_role,omitempty"`
 	// Queued says this source has been recorded and not yet sent: the change
@@ -678,6 +708,9 @@ type ExternalGrantExclusion struct {
 }
 
 type AccessRequest struct {
+	// Kind is "access" (a role they don't have) or "extend" (keep one that
+	// ends for longer: the grant's end moves, the role is never given twice).
+	Kind          string     `json:"kind"`
 	ID            string     `json:"id"`
 	RequesterID   string     `json:"requester_id"`
 	ProjectID     string     `json:"project_id"`
@@ -944,4 +977,105 @@ type CatalogRole struct {
 	// whoever gave it — the headline number. Nil when never observed.
 	ObservedUserCount *int             `json:"observed_user_count,omitempty"`
 	Observation       ObservationBasis `json:"observation"`
+}
+
+// InsightsFindings is the read-only "what is odd about how access is arranged"
+// report (Insights I2). Everything in it derives from the one access snapshot,
+// so it can never disagree with the holder counts elsewhere.
+type InsightsFindings struct {
+	// ReadAt is when Zitadel was last observed; nil when it never has been.
+	ReadAt       *time.Time           `json:"read_at,omitempty"`
+	SingleRoutes []InsightSingleRoute `json:"single_routes"`
+	Unused       InsightUnused        `json:"unused"`
+	Overlaps     []InsightOverlap     `json:"overlaps"`
+}
+
+// InsightSource is the one bundle or rule a role mostly arrives through.
+type InsightSource struct {
+	Kind string `json:"kind"` // "bundle" | "rule"
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// InsightSingleRoute: of Holders people holding a role, OnlyThatWay hold it
+// through Source and nothing else.
+type InsightSingleRoute struct {
+	ProjectID   string        `json:"project_id"`
+	RoleKey     string        `json:"role_key"`
+	Source      InsightSource `json:"source"`
+	OnlyThatWay int           `json:"only_that_way"`
+	Holders     int           `json:"holders"`
+}
+
+type InsightUnused struct {
+	Roles    []RoleGrant           `json:"roles"`
+	Bundles  []InsightUnusedBundle `json:"bundles"`
+	Projects []InsightProjectRef   `json:"projects"`
+}
+
+// InsightUnusedBundle gives every holder nothing they do not already have.
+type InsightUnusedBundle struct {
+	BundleID string `json:"bundle_id"`
+	Name     string `json:"name"`
+	Holders  int    `json:"holders"`
+}
+
+type InsightProjectRef struct {
+	ProjectID string `json:"project_id"`
+	Name      string `json:"name"`
+}
+
+type InsightBundleRef struct {
+	BundleID string `json:"bundle_id"`
+	Name     string `json:"name"`
+}
+
+// InsightOverlap is two bundles whose latest versions share roles.
+type InsightOverlap struct {
+	A      InsightBundleRef `json:"a"`
+	B      InsightBundleRef `json:"b"`
+	Shared []RoleGrant      `json:"shared"`
+	AOnly  []RoleGrant      `json:"a_only"`
+	BOnly  []RoleGrant      `json:"b_only"`
+}
+
+// InsightsWho answers "who has this and not that".
+type InsightsWho struct {
+	People []InsightPerson `json:"people"`
+}
+
+// InsightPerson carries how they hold the `has` side — the reasons straight from
+// the snapshot, so the answer explains itself the way every other surface does.
+type InsightPerson struct {
+	UserID string       `json:"user_id"`
+	Name   string       `json:"name"`
+	Email  string       `json:"email"`
+	How    []RoleReason `json:"how"`
+}
+
+// InsightsWhatIf is the answer to "if this changed, who would gain and lose
+// what" (Insights I3). Nothing was changed to produce it.
+type InsightsWhatIf struct {
+	Change    InsightsWhatIfChange  `json:"change"`
+	Gains     []InsightWhatIfPerson `json:"gains"`
+	Losses    []InsightWhatIfPerson `json:"losses"`
+	Unchanged int                   `json:"unchanged"`
+	// ReadAt is when Zitadel was last observed; nil when it never has been.
+	ReadAt *time.Time `json:"read_at,omitempty"`
+}
+
+// InsightsWhatIfChange is the hypothetical, and also the request body's
+// "change". Which fields apply depends on Kind.
+type InsightsWhatIfChange struct {
+	Kind      string `json:"kind"`
+	BundleID  string `json:"bundle_id,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
+	RoleKey   string `json:"role_key,omitempty"`
+	RuleID    string `json:"rule_id,omitempty"`
+}
+
+type InsightWhatIfPerson struct {
+	UserID string      `json:"user_id"`
+	Name   string      `json:"name"`
+	Roles  []RoleGrant `json:"roles"`
 }

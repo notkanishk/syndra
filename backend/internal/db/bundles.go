@@ -140,6 +140,12 @@ func DeleteBundleAndEnqueue(ctx context.Context, actor, bundleID string, params 
 		defer tx.Rollback(ctx)
 	}
 
+	// What older, unheld versions of other bundles included is history, let
+	// go with the bundle; anything live was refused by the caller (B8), and
+	// the RESTRICT keys refuse the delete if one slipped through.
+	if _, err := tx.Exec(ctx, `DELETE FROM bundle_version_includes WHERE child_bundle_id = $1`, bundleID); err != nil {
+		return nil, fmt.Errorf("let go of past includes (id=%s): %w", bundleID, err)
+	}
 	tag, err := tx.Exec(ctx, `DELETE FROM bundles WHERE id = $1`, bundleID)
 	if err != nil {
 		return nil, fmt.Errorf("delete bundle (id=%s): %w", bundleID, err)

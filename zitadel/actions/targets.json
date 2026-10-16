@@ -32,6 +32,8 @@
     { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.locked" } } },
     { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.added" } } },
     { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.changed" } } },
-    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.removed" } } }
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.grant.removed" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "oidc_session.added" } } },
+    { "target": "syndra-event-listener", "condition": { "event":    { "event": "user.token.added" } } }
   ]
 }

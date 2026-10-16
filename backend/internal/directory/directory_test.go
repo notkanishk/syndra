@@ -881,3 +881,13 @@ func TestZitadelSource_FindUserDoesNotProbeWhileDown(t *testing.T) {
 		t.Fatal("no direct lookup while Zitadel isn't answering")
 	}
 }
+
+func TestToUserProfile_CarriesCreation(t *testing.T) {
+	at := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
+	if got := toUserProfile(zitadel.ZitadelUser{ID: "u1", Created: at}); got.Joined == nil || !got.Joined.Equal(at) {
+		t.Errorf("Joined = %v; want %v", got.Joined, at)
+	}
+	if got := toUserProfile(zitadel.ZitadelUser{ID: "u2"}); got.Joined != nil {
+		t.Errorf("no creation date must leave Joined nil, got %v", got.Joined)
+	}
+}

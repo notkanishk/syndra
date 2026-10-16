@@ -465,6 +465,7 @@ func (z *zitadelSource) Applications(ctx context.Context) ([]models.ApplicationC
 				Name:        coalesce(app.Name, app.ID),
 				ProjectID:   p.ID,
 				Description: "",
+				ClientID:    app.ClientID,
 				Consumer:    zitadel.HumanizeAppType(app.Type),
 				ClaimName:   claimName,
 				FormatType:  formatType,
@@ -574,7 +575,12 @@ func toUserProfile(u zitadel.ZitadelUser) models.UserProfile {
 	if name == "" {
 		name = u.ID
 	}
+	var joined *time.Time
+	if !u.Created.IsZero() {
+		joined = &u.Created
+	}
 	return models.UserProfile{
+		Joined: joined,
 		ID:     u.ID,
 		Name:   name,
 		Email:  u.Email,

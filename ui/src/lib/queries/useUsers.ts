@@ -49,6 +49,15 @@ export interface UserListEntry {
 export interface AccessRoleReason {
   kind: string;
   description: string;
+  bundle_id?: string;
+  bundle_name?: string;
+  /** The included bundle a bundle role comes through: "through {bundle}, from {via}". */
+  via_bundle_id?: string;
+  via_bundle_name?: string;
+  trigger_project?: string;
+  trigger_role?: string;
+  /** Recorded, not yet sent to Zitadel. */
+  queued?: boolean;
 }
 
 export interface AccessRole {

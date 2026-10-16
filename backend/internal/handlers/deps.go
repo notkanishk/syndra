@@ -41,16 +41,18 @@ var (
 	svcDrainPropagationRow          = propagation.DrainOne
 	// svcDeliver is the one rule for whether a just-written change goes now
 	// or waits for the operator (roles that wait, N14 B).
-	svcDeliver = services.Deliver
-	svcDrainAddon                   = propagation.DrainAddon
+	svcDeliver    = services.Deliver
+	svcDrainAddon = propagation.DrainAddon
 
-	dbCreateAccessRequest  = db.CreateAccessRequest
-	dbGetAccessRequestByID = db.GetAccessRequestByID
-	dbRequestHolding       = db.RequestHolding
+	dbCreateAccessRequestOfKind = db.CreateAccessRequestOfKind
+	dbGetAccessRequestByID      = db.GetAccessRequestByID
+	dbRequestHolding            = db.RequestHolding
 	// Taking back your own ask. Scoped to the requester inside the statement, not just here.
 	dbWithdrawAccessRequest = db.WithdrawAccessRequest
 	dbResolveAccessRequest  = db.ResolveAccessRequest
 	dbInsertAuditLog        = db.InsertAuditLog
+	// A member's own recent changes (B10). Their own records only.
+	dbListMyChanges = db.ListMyChanges
 
 	// Bundle handler injectable vars. dbAddRoleToBundle/dbAssignBundleToUser were removed
 	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see
@@ -469,7 +471,24 @@ var (
 	addonsConnection = addons.ConnectionFor
 	// The backend's memory of an add-on's mutation log, read beside that add-on's
 	// own account of itself. Two authorities on purpose.
-	svcDormantAccounts    = services.DormantAccounts
+	svcDormantAccounts = services.DormantAccounts
+	// Insights (I2): read-only findings and the who-has-without question.
+	svcInsightsFindings   = services.InsightsFindings
+	svcInsightsWho        = services.InsightsWho
+	svcInsightsWhatIf     = services.InsightsWhatIf
+	svcInsightsTrends     = services.InsightsTrends
+	svcInsightsAsOf       = services.InsightsAsOf
+	svcInsightsTimeline   = services.InsightsTimeline
+	svcInsightsUsage      = services.InsightsUsage
+	svcInsightsLensEnding = services.InsightsLensEnding
+	svcInsightsLensGroup  = services.InsightsLensGroup
+	dbGetUserUsage        = db.GetUserUsage
+	// Sign-in usage (I6): the webhook records, and resolves an application to
+	// its project through the directory.
+	dbRecordUsage         = db.RecordUsage
+	directoryApplications = func(ctx context.Context) ([]models.ApplicationCatalog, error) {
+		return directory.Default.Applications(ctx)
+	}
 	dbListMappingHistory  = db.ListMappingHistory
 	dbForgetTargetBinding = db.ForgetTargetBinding
 	// The merge base goes with the binding, always. One left behind is a claim

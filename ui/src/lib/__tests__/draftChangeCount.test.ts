@@ -22,6 +22,8 @@ function draft(over: Partial<BundleDraft> = {}): BundleDraft {
     added: [],
     removed: [],
     holder_count: 4,
+    includes: [],
+    include_changes: [],
     ...over,
   };
 }
@@ -31,6 +33,12 @@ const role = { bundle_id: "b1", zitadel_project_id: "pLaser", zitadel_role_key: 
 describe("draftChangeCount", () => {
   it("counts additions and removals together", () => {
     expect(draftChangeCount(draft({ added: [role], removed: [role] }))).toBe(2);
+  });
+
+  // An include added, dropped or moved is a change of its own (B8), on top of the roles it brings.
+  it("counts include changes too", () => {
+    const change = { child_bundle_id: "c", child_name: "Safety basics", from_version: 0, to_version: 3 };
+    expect(draftChangeCount(draft({ added: [role], include_changes: [change] }))).toBe(2);
   });
 
   it("is zero for a draft with nothing unpublished", () => {

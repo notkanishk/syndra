@@ -13,7 +13,9 @@ and POSTs them to Syndra's `/api/webhooks/zitadel` endpoint, driving:
   `user.locked` — note: deactivation and locking are user-aggregate events,
   not human-aggregate; Zitadel rejects `user.human.deactivated` /
   `user.human.locked` with `COMMAND-74aaqj8fv9` "Execution condition is
-  invalid").
+  invalid"). Likewise `user.token.v2.added` is not an event this instance
+  offers for an execution (same error, 17 Oct 2026); `oidc_session.added`
+  and `user.token.added` cover sign-ins.
 
 The target is type `restAsync` (fire-and-forget) — Zitadel does not block on
 Syndra latency. Companion target `syndra-claim-injector` (type `restCall`,
@@ -31,6 +33,8 @@ function triggers) handles claim shaping; both are registered by a single
 | `user.grant.added` | `grant_added` (per role) | Cache rebuild + mapping rules + LLDAP intent |
 | `user.grant.changed` | `grant_changed` (per role) | Same |
 | `user.grant.removed` | `grant_removed` (per role) | Cache invalidation + revoke + LLDAP intent |
+| `oidc_session.added` | `user_signed_in` | Recent use: the person's last sign-in to that app (Insights) |
+| `user.token.added` | `user_signed_in` | Recent use: the person's last sign-in to that app (Insights) |
 
 Unknown events are acknowledged with `200 OK` and logged but not dispatched.
 

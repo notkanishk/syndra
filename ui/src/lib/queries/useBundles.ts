@@ -20,6 +20,10 @@ export interface BundleRow {
   stale_holders?: number;
   /** Role additions or removals sitting in the working copy, unpublished. */
   unpublished_changes?: number;
+  /** It includes other bundles (B8), so it can't go inside another. */
+  has_includes?: boolean;
+  /** The bundles that include it, by name, so it can't include others. */
+  included_in?: string[];
   /** Set only when the bundle was read for one person: the version THEY hold. */
   pinned_version?: number;
   created_at?: string;
@@ -29,6 +33,8 @@ export interface BundleRoleRow {
   bundle_id: string;
   zitadel_project_id: string;
   zitadel_role_key: string;
+  /** The included bundle this role comes through, when it isn't the bundle's own (B8). */
+  via_bundle_id?: string;
 }
 
 export interface BundleImpactView {
@@ -52,6 +58,8 @@ export interface CreateBundleInput {
    * described anything.
    */
   roles: AddBundleRoleInput[];
+  /** Bundles to include from v1, each at its latest version (B8). Roles may be empty with these. */
+  includes?: string[];
 }
 
 /** No confirmation_mode: that is changed on the index, alongside every other rule and bundle. */
@@ -267,6 +275,36 @@ export function useRemoveBundleRole(bundleId: string) {
         `/bundles/${bundleId}/roles/${encodeURIComponent(projectId)}/${encodeURIComponent(roleKey)}`,
         { method: "DELETE" },
       ),
+    onSuccess: () => invalidateAfterEdit(qc, bundleId),
+  });
+}
+
+/**
+ * Include another bundle in this one's working copy, or move it to another of
+ * its versions (B8). No version means its latest. Like a role, it reaches
+ * nobody until this bundle publishes. Invalidating the list (a prefix of every
+ * bundle key) also refreshes the included bundle's "Through other bundles".
+ */
+export function useSetBundleInclude(bundleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ child, version }: { child: string; version?: number }) =>
+      request(`/bundles/${encodeURIComponent(bundleId)}/draft/includes/${encodeURIComponent(child)}`, {
+        method: "PUT",
+        body: version ? { version } : {},
+      }),
+    onSuccess: () => invalidateAfterEdit(qc, bundleId),
+  });
+}
+
+/** Take an included bundle out of the working copy. */
+export function useRemoveBundleInclude(bundleId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (child: string) =>
+      request(`/bundles/${encodeURIComponent(bundleId)}/draft/includes/${encodeURIComponent(child)}`, {
+        method: "DELETE",
+      }),
     onSuccess: () => invalidateAfterEdit(qc, bundleId),
   });
 }

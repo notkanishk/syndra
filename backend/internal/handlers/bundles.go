@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services"
 )
 
 type AddRoleToBundleRequest struct {
@@ -33,6 +35,9 @@ type CreateBundleRequest struct {
 	Description      string                   `json:"description"`
 	ConfirmationMode string                   `json:"confirmation_mode,omitempty"`
 	Roles            []AddRoleToBundleRequest `json:"roles"`
+	// Includes are bundles to include from v1, each at its latest version
+	// (B8). A bundle may be made of includes alone.
+	Includes []string `json:"includes,omitempty"`
 }
 
 // UpdateBundleRequest carries no confirmation_mode: that is changed through
@@ -72,7 +77,15 @@ func handleGetBundles(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := range bundles {
 		if draft, err := svcBundleDraft(r.Context(), bundles[i].ID); err == nil {
-			bundles[i].UnpublishedChanges = len(draft.Added) + len(draft.Removed)
+			bundles[i].UnpublishedChanges = len(draft.Added) + len(draft.Removed) + len(draft.IncludeChanges)
+		}
+		// One level deep (B8): the picker says why a bundle can't go inside
+		// another, or can't take one in.
+		if has, err := dbBundleIncludesAnything(r.Context(), bundles[i].ID); err == nil {
+			bundles[i].HasIncludes = has
+		}
+		if in, err := dbRetireBlockers(r.Context(), bundles[i].ID); err == nil && len(in) > 0 {
+			bundles[i].IncludedIn = in
 		}
 	}
 
@@ -91,7 +104,7 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 		problems["name"] = "required"
 	}
 	roles, roleProblem := normalizeNewBundleRoles(req.Roles)
-	if roleProblem != "" {
+	if roleProblem != "" && !(len(req.Roles) == 0 && len(req.Includes) > 0) {
 		problems["roles"] = roleProblem
 	}
 	if len(problems) > 0 {
@@ -107,7 +120,27 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	id, err := dbCreateBundle(r.Context(), req.Name, req.Description, mode, roles)
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	// The bundle, its v1 and what it includes land together, or none do.
+	var id string
+	err = dbInTxLockingAccess(r.Context(), func(ctx context.Context) error {
+		var err error
+		if id, err = dbCreateBundle(ctx, req.Name, req.Description, mode, roles); err != nil {
+			return err
+		}
+		for _, child := range req.Includes {
+			if err := dbIncludeInFirstVersion(ctx, actor, id, strings.TrimSpace(child)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if writeIncludeError(w, err) {
+		return
+	}
 	if db.IsUniqueViolation(err) {
 		jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A bundle with that name already exists.")
 		return
@@ -117,10 +150,6 @@ func handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actor := getAdminUserID(r.Context())
-	if actor == "" {
-		actor = "system"
-	}
 	_ = dbInsertAuditLog(r.Context(), actor, "-", "bundle.created", id)
 	jsonResponse(w, http.StatusCreated, map[string]string{"id": id})
 }
@@ -226,6 +255,15 @@ func handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Bundle not found")
+			return
+		}
+		var included *services.ErrBundleIncluded
+		if errors.As(err, &included) {
+			jsonResponse(w, http.StatusConflict, map[string]any{
+				"error":   "BUNDLE_INCLUDED",
+				"message": "Refused while " + strings.Join(included.Includers, " and ") + " include it. Nothing was changed.",
+				"details": map[string]any{"includers": included.Includers},
+			})
 			return
 		}
 		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())

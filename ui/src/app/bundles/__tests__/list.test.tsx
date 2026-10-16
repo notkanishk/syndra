@@ -8,6 +8,9 @@ import type { BundleRow } from "@/lib/queries/useBundles";
 const state = vi.hoisted(() => ({ bundles: [] as BundleRow[] }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
+  useBundleRolesByBundle: () => ({ byId: {}, allLoaded: true }),
+  useSetBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({ data: state.bundles, isLoading: false, error: null, refetch: () => {} }),
   useCreateBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));

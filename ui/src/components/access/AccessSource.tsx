@@ -35,6 +35,9 @@ export interface RoleReason {
   description?: string;
   bundle_id?: string;
   bundle_name?: string;
+  /** The included bundle a bundle role comes through (B8). */
+  via_bundle_id?: string;
+  via_bundle_name?: string;
   trigger_project?: string;
   trigger_role?: string;
   /**
@@ -169,7 +172,12 @@ export function AccessSourceList({
   }
 
   const [strongest, ...rest] = ordered;
-  const qualifier = showQualifier ? sourceQualifier(strongest) : undefined;
+  // A role that comes through an included bundle names both (B8).
+  const qualifier = !showQualifier
+    ? undefined
+    : strongest.kind === "bundle" && strongest.via_bundle_name
+      ? `Via ${strongest.bundle_name}, from ${strongest.via_bundle_name}`
+      : sourceQualifier(strongest);
 
   return (
     <span className="flex flex-wrap items-center gap-[9px]">

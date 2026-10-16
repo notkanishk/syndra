@@ -41,6 +41,10 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/bundles/{id}/versions", withCORS(withUserAuth(handleGetBundleVersions)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/holders", withCORS(withOperatorAuth(handleGetBundleHolders)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(handleGetBundleDraft)))
+	// Included bundles (B8): working-copy edits, and who includes a bundle.
+	mux.HandleFunc("PUT /api/v1/bundles/{id}/draft/includes/{child}", withCORS(withOperatorAuth(handleSetBundleInclude)))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}/draft/includes/{child}", withCORS(withOperatorAuth(handleRemoveBundleInclude)))
+	mux.HandleFunc("GET /api/v1/bundles/{id}/includers", withCORS(withOperatorAuth(handleGetBundleIncluders)))
 	mux.HandleFunc("DELETE /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(handleDiscardBundleDraft)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/publish", withCORS(withOperatorAuth(handlePublishBundleVersion)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/holders/move", withCORS(withOperatorAuth(handleMoveBundleHolders)))
@@ -274,6 +278,7 @@ func NewRouter() http.Handler {
 	// from the request, because a member-scoped operation must bind who it acts
 	// ON and not only who may call it.
 	mux.HandleFunc("GET /api/v1/me/targets", withCORS(withUserAuth(handleMyTargets)))
+	mux.HandleFunc("GET /api/v1/me/changes", withCORS(withUserAuth(handleMyChanges)))
 	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(handleSetMyCredential)))
 
 	// The add-on roster. Deployment configuration, not data: an operator on a
@@ -303,6 +308,16 @@ func NewRouter() http.Handler {
 	// only. Operator-gated and idempotent: it reads the target and queues what
 	// is already owed, and queueing is not applying.
 	mux.HandleFunc("POST /api/v1/targets/{target}/reconcile", withCORS(withOperatorAuth(withTargetProject(handleReconcileTarget))))
+	// Insights: read-only analytics over the one access snapshot.
+	mux.HandleFunc("GET /api/v1/insights/findings", withCORS(withOperatorAuth(handleInsightsFindings)))
+	mux.HandleFunc("GET /api/v1/insights/who", withCORS(withOperatorAuth(handleInsightsWho)))
+	mux.HandleFunc("POST /api/v1/insights/whatif", withCORS(withOperatorAuth(handleInsightsWhatIf)))
+	mux.HandleFunc("GET /api/v1/insights/trends", withCORS(withOperatorAuth(handleInsightsTrends)))
+	mux.HandleFunc("GET /api/v1/insights/asof", withCORS(withOperatorAuth(handleInsightsAsOf)))
+	mux.HandleFunc("GET /api/v1/insights/timeline", withCORS(withOperatorAuth(handleInsightsTimeline)))
+	mux.HandleFunc("GET /api/v1/insights/usage", withCORS(withOperatorAuth(handleInsightsUsage)))
+	mux.HandleFunc("GET /api/v1/insights/lens", withCORS(withOperatorAuth(handleInsightsLens)))
+	mux.HandleFunc("GET /api/v1/users/{id}/usage", withCORS(withOperatorAuth(handleGetUserUsage)))
 	// Accounts Syndra created whose reason for existing has gone. A read; the
 	// removal runs through the ordinary plan-then-apply path.
 	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))

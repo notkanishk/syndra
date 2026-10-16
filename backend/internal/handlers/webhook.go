@@ -37,6 +37,11 @@ type WebhookPayload struct {
 	// them — the row then says the actor is unknown instead of guessing.
 	EditorID       string     `json:"-"`
 	EventCreatedAt *time.Time `json:"-"`
+
+	// ClientRefs are the application or client ids a sign-in event named, best
+	// first, each already bounded. Untrusted beyond "a string to look up": they
+	// only ever select a project from the directory. Internal-only.
+	ClientRefs []string `json:"-"`
 }
 
 var validEventTypes = map[string]bool{
@@ -46,6 +51,7 @@ var validEventTypes = map[string]bool{
 	"user_deactivated": true,
 	"user_locked":      true,
 	"user_created":     true,
+	"user_signed_in":   true,
 }
 
 // HandleZitadelWebhook processes incoming Zitadel events.
@@ -100,7 +106,7 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validEventTypes[event.EventType] {
 		jsonValidationErrorResponse(w, "Invalid event_type", map[string]string{
-			"event_type": "must be one of: grant_added, grant_removed, grant_changed, user_deactivated, user_locked, user_created",
+			"event_type": "must be one of: grant_added, grant_removed, grant_changed, user_deactivated, user_locked, user_created, user_signed_in",
 		})
 		return
 	}
@@ -113,6 +119,13 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "user_id is required", map[string]string{
 			"user_id": "required",
 		})
+		return
+	}
+	// A sign-in is a usage fact, not an access change. It is recorded and
+	// acknowledged here, BEFORE the dedupe/persist step and the dispatch switch,
+	// so it can never reach grant processing, the cache, orchestration or drift.
+	if event.EventType == "user_signed_in" {
+		recordSignIn(w, r, event)
 		return
 	}
 	// Zitadel-origin grant events whose enrichment couldn't find the missing
@@ -450,4 +463,50 @@ func observeAfterEvent(ctx context.Context, userID string) {
 	if _, err := observeUser(ctx, userID); err != nil {
 		log.Printf("[WEBHOOK] re-observe failed user=%s: %v (non-fatal — the sweep will catch up)", userID, err)
 	}
+}
+
+// recordSignIn stores "this person signed in, to this project, at this time".
+//
+// Deliberately NOT written to webhook_events, the same as an ignored event: that
+// table is the operator-visible ledger of access-affecting deliveries and is
+// kept forever, and a sign-in on every login would bury it and grow without
+// bound. Redelivery needs no dedupe key either: the upsert keeps the later time,
+// so replaying an event changes nothing.
+func recordSignIn(w http.ResponseWriter, r *http.Request, event WebhookPayload) {
+	now := time.Now()
+	at := now
+	if event.EventCreatedAt != nil && event.EventCreatedAt.Before(now) {
+		at = *event.EventCreatedAt // never a time in the future
+	}
+	project := resolveSignInProject(r.Context(), event.ClientRefs)
+	if err := dbRecordUsage(r.Context(), event.UserID, project, db.UsageSignIn, at); err != nil {
+		// A 5xx is safe: the redelivery is idempotent.
+		log.Printf("[WEBHOOK] failed to record sign-in user=%s: %v", event.UserID, err)
+		jsonErrorResponse(w, http.StatusInternalServerError, "PROCESSING_FAULT", "failed to record sign-in")
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]string{"message": "sign-in recorded"})
+}
+
+// resolveSignInProject maps the first ref that names a known application (by
+// its application id or its client id) to that application's project. "" when
+// none does, or the directory cannot be read: the sign-in is still recorded,
+// as use of no particular project.
+func resolveSignInProject(ctx context.Context, refs []string) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	apps, err := directoryApplications(ctx)
+	if err != nil {
+		log.Printf("[WEBHOOK] sign-in app lookup failed: %v — recording without a project", err)
+		return ""
+	}
+	for _, ref := range refs {
+		for _, a := range apps {
+			if a.ProjectID != "" && (a.ID == ref || (a.ClientID != "" && a.ClientID == ref)) {
+				return a.ProjectID
+			}
+		}
+	}
+	return ""
 }

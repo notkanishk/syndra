@@ -253,7 +253,7 @@ func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, e
 			UNION
 			SELECT ba.user_id, bvr.zitadel_project_id, bvr.zitadel_role_key
 			  FROM user_bundle_assignments ba
-			  JOIN bundle_version_roles bvr ON bvr.version_id = ba.version_id
+			  JOIN bundle_version_effective_roles bvr ON bvr.version_id = ba.version_id
 		)
 		SELECT DISTINCT user_id FROM (
 			SELECT user_id FROM held WHERE project_id = $1 AND role_key = $2
