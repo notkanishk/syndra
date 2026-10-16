@@ -71,7 +71,7 @@ type RoleMembersView struct {
 	// ObservedOnly is who Zitadel shows holding this role with no Syndra record
 	// behind it — drift, listed here so the page cannot say "4 people hold
 	// this role" while Zitadel holds twelve. Nil when never observed.
-	ObservedOnly []models.UserProfile `json:"observed_only"`
+	ObservedOnly []models.UserProfile    `json:"observed_only"`
 	Observation  models.ObservationBasis `json:"observation"`
 	// WithheldCount is how many of them are holding the role with something
 	// taken away. Its own number rather than a length the client computes: the

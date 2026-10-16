@@ -155,7 +155,7 @@ type BulkPlan struct {
 	// Excluded are selected people the plan leaves out: today only the
 	// requester, from an operation that takes access away.
 	Excluded []BulkExclusion `json:"excluded,omitempty"`
-	Summary            BulkSummary   `json:"summary"`
+	Summary  BulkSummary     `json:"summary"`
 }
 
 type BulkSummary struct {
