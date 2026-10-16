@@ -71,7 +71,10 @@ export const PLAN_EFFECT_LABEL: Record<PlanEffect, string> = {
   no_change: "No change",
   blocked: "Refused",
   failed: "Failed",
-  queued: "Waiting for you to send",
+  // The future tense, like "Will change": nothing has been queued yet, so a
+  // plan row can't wear the link a queued result does (A-06 §4). It becomes
+  // "Waiting for you to send →" in the result, once it is true.
+  queued: "Will wait for you to send",
 };
 
 export const PLAN_EFFECT_TONE: Record<PlanEffect, string> = {

@@ -41,7 +41,8 @@ describe("Recent changes rows", () => {
   it("Withdrawn", () => {
     const r = row({ kind: "request_withdrawn" });
     expect(r.textContent).toContain("Withdrawn");
-    expect(r.textContent).toContain("Your request for Laser cutter · Operator was withdrawn.");
+    expect(r.textContent).toContain("You withdrew your request for Laser cutter · Operator.");
+    expect(r.textContent).not.toContain("was withdrawn");
     expect(screen.queryByText("Ask again")).toBeNull();
   });
 
@@ -50,7 +51,7 @@ describe("Recent changes rows", () => {
       "Your request to keep Laser cutter · Operator longer was approved.",
     );
     expect(row({ kind: "request_withdrawn", request_kind: "extend" }).textContent).toContain(
-      "Your request to keep Laser cutter · Operator longer was withdrawn.",
+      "You withdrew your request to keep Laser cutter · Operator longer.",
     );
     const r = row({ kind: "request_declined", request_kind: "extend" });
     expect(r.textContent).toContain("Your request to keep Laser cutter · Operator longer was not approved.");
@@ -64,9 +65,20 @@ describe("Recent changes rows", () => {
     expect(row({ via: { bundle_id: "b1" } }).textContent).toContain(
       "Laser cutter · Operator was given to you, because you’re in Lab Tech.",
     );
+    // A rule, with no trigger role the page can name.
     expect(row({ via: { rule_id: "r1" } }).textContent).toContain(
-      "Laser cutter · Operator came with your other access, automatically.",
+      "Laser cutter · Operator was given automatically by a makerspace rule.",
     );
+  });
+
+  it("names the role a rule follows, when the page can tell", () => {
+    const items = [{ kind: "given", at: AT, project_id: "p1", role_key: "op", via: { rule_id: "r1" } } as MyChange];
+    const { container } = render(
+      <RecentChanges items={items} roleName={roleName} triggerRole={() => "Door access · Member"} />,
+    );
+    const r = container.querySelector(".row-divider") as HTMLElement;
+    expect(r.textContent).toContain("Laser cutter · Operator came automatically, because you have Door access · Member.");
+    expect(r.textContent).not.toContain("makerspace rule");
   });
 
   it("Revoked, in the danger tone", () => {

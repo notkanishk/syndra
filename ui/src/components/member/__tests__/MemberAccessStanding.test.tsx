@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MemberAccess, summarySentence } from "@/components/member/MemberAccess";
+import { formatShortDate } from "@/lib/format";
 
 const access = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 const grants = vi.hoisted(() => ({ value: [] as unknown[] }));
@@ -131,12 +132,14 @@ describe("MemberAccess standing", () => {
     access.value = view(COMPLETE, [], {}, { queued: true });
     render(<MemberAccess session={session} />);
     expect(screen.queryByText(/Waiting for you to send/)).toBeNull();
-    expect(screen.getAllByText("Not there yet")).toHaveLength(2);
+    expect(screen.queryByText(/waiting to be sent/i)).toBeNull();
+    expect(screen.getAllByText("On its way")).toHaveLength(2);
+    expect(screen.getAllByText("It starts working once makerspace staff send it.")).toHaveLength(2);
   });
 });
 
 describe("MemberAccess expiry lives on its row", () => {
-  it("tints the role that runs out, says when, offers to keep it, and sorts it first", () => {
+  it("tints the role that ends, says when, offers to keep it, and sorts it first", () => {
     reset();
     grants.value = [{ project_id: "p1", role_key: "mill", expires_at: inDays(10) }];
     access.value = view(COMPLETE, ["laser", "mill"], { observed_role_count: 2 });
@@ -155,8 +158,15 @@ describe("MemberAccess expiry lives on its row", () => {
   });
 
   it("puts it in the summary", () => {
+    const first = formatShortDate("2026-10-20T10:00:00Z");
     expect(summarySentence(4, 2, ["2026-10-20T10:00:00Z"])).toBe(
-      "Four roles across two rooms. One runs out on 20 Oct.",
+      `Four roles across two rooms. One ends on ${first}.`,
+    );
+    expect(summarySentence(4, 2, ["2026-10-20T10:00:00Z", "2026-11-02T10:00:00Z"])).toBe(
+      `Four roles across two rooms. 2 roles end, the first on ${first}.`,
+    );
+    expect(summarySentence(4, 2, ["2026-10-20T10:00:00Z", "2026-11-02T10:00:00Z", "2026-12-02T10:00:00Z"])).not.toMatch(
+      /run out|runs out/,
     );
     expect(summarySentence(1, 1, [])).toBe("One role across one room.");
     expect(summarySentence(undefined, 0, [])).toBe("Checking what you can use.");
@@ -200,20 +210,35 @@ describe("MemberAccess recent changes", () => {
     ];
     access.value = view(COMPLETE, ["laser"], {}, { queued: true });
     render(<MemberAccess session={session} />);
+    expect(screen.getAllByText("On its way").length).toBeGreaterThan(0);
     expect(
-      screen.getByText("Not there yet · approved today, and makerspace staff check this role before it reaches you"),
+      screen.getByText("Given today. It starts working once makerspace staff send it."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Not there yet/)).toBeNull();
+  });
+
+  it("dates a role that was given on another day", () => {
+    reset();
+    changes.value = [
+      { kind: "request_approved", at: "2026-01-15T09:00:00Z", project_id: "p1", role_key: "mill", by: "op", via: null, waiting: true, wait_reason: "role_waits" },
+    ];
+    access.value = view(COMPLETE, ["laser"], {}, { queued: true });
+    render(<MemberAccess session={session} />);
+    expect(
+      screen.getByText(/^Given 15 Jan( 2026)?\. It starts working once makerspace staff send it\.$/),
     ).toBeTruthy();
   });
 
-  it("says Syndra couldn't reach the sign-in system when the send halted", () => {
+  it("says the same when the send halted: a member can't act on why", () => {
     reset();
     changes.value = [
       { kind: "request_approved", at: new Date().toISOString(), project_id: "p1", role_key: "mill", by: "op", via: null, waiting: true, wait_reason: "halted:zitadel_offline" },
     ];
     access.value = view(COMPLETE, ["laser"], {}, { queued: true });
     render(<MemberAccess session={session} />);
+    expect(screen.getAllByText("On its way").length).toBeGreaterThan(0);
     expect(
-      screen.getByText("Not there yet · approved today, and Syndra couldn't reach the sign-in system; staff will send it"),
+      screen.getByText("Given today. It starts working once makerspace staff send it."),
     ).toBeTruthy();
   });
 });

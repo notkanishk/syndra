@@ -190,6 +190,20 @@ describe("The queue · a request for a role they have since come to hold", () =>
   });
 });
 
+describe("The queue · how long an ask is for", () => {
+  it("says the length and the date approving now would end it", () => {
+    mine.data = [
+      {
+        id: "r1", requester_id: "u9", project_id: "pLaser", role_key: "trained", status: "pending",
+        justification: "capstone", created_at: "2026-10-15T12:00:00Z", duration_days: 30,
+      },
+    ];
+    renderAs(true);
+    expect(screen.getByText(/^For a month · until \d{1,2} [A-Z][a-z]{2}( \d{4})?$/)).toBeInTheDocument();
+    expect(screen.queryByText(/from when it's approved/)).not.toBeInTheDocument();
+  });
+});
+
 describe("The queue · a request to keep a role longer", () => {
   const extendRow = (holding: Record<string, unknown>) => [
     {

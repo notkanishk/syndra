@@ -76,6 +76,31 @@ describe("a member's request rows", () => {
     expect(screen.queryByText("Declined")).toBeNull();
   });
 
+  // A-04 §13.1: a request closed because it was given another way needs the
+  // note, or it looks like a lost one.
+  it("says why a request closed because staff gave it to you directly", () => {
+    renderMine([request({ status: "fulfilled", resolved_at: "2026-01-15T09:00:00Z" })]);
+    expect(screen.getByText("You have this")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /^Makerspace staff gave it to you directly on 15 Jan( 2026)?, so there was nothing left to decide\.$/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("leaves the date out when the request carries none", () => {
+    renderMine([request({ status: "fulfilled" })]);
+    expect(
+      screen.getByText("Makerspace staff gave it to you directly, so there was nothing left to decide."),
+    ).toBeTruthy();
+  });
+
+  it("gives a waiting row the length only, from when it's approved", () => {
+    renderMine([request()]);
+    expect(screen.getByText("For a month, from when it's approved.")).toBeTruthy();
+    expect(screen.queryByText(/until/)).toBeNull();
+  });
+
   it("puts Withdraw last in the row, outline, only on a waiting request", () => {
     renderMine([request(), request({ id: "r2", status: "approved" })]);
     const withdraw = screen.getAllByRole("button", { name: "Withdraw" });

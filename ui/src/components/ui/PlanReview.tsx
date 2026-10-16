@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
-import { PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
+import { OUTCOME_LABEL, PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
+import { StatusDot } from "@/components/ui/Badge";
 import { UserName } from "@/components/names/UserName";
 
 /**
@@ -71,7 +72,7 @@ export function PlanReview({
         ) : (
           <>
             {outcomes.map((outcome) => (
-              <PlanRow key={outcome.user_id} outcome={outcome} />
+              <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} />
             ))}
             {/* #32: the requester, left out of anything that takes access away. */}
             {plan.excluded?.map((left) => (
@@ -100,8 +101,14 @@ export function PlanReview({
   );
 }
 
-function PlanRow({ outcome }: { outcome: BulkOutcome }) {
-  const label = PLAN_EFFECT_LABEL[outcome.effect] ?? PLAN_EFFECT_LABEL.no_change;
+function PlanRow({ outcome, applied }: { outcome: BulkOutcome; applied: boolean }) {
+  // Before the apply, a queued row forecasts ("Will wait for you to send");
+  // once the plan has run it is true, and says so in the operator's words.
+  const forecast = outcome.effect === "queued" && !applied;
+  const label =
+    outcome.effect === "queued" && applied
+      ? OUTCOME_LABEL.queued
+      : (PLAN_EFFECT_LABEL[outcome.effect] ?? PLAN_EFFECT_LABEL.no_change);
   const tone = PLAN_EFFECT_TONE[outcome.effect] ?? PLAN_EFFECT_TONE.no_change;
 
   return (
@@ -123,7 +130,12 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
           ) : null}
         </span>
       </span>
-      <span className={`shrink-0 rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${tone}`}>
+      <span
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${tone}`}
+      >
+        {/* A change that will wait wears the amber dot and says so in the future
+            tense. No link: nothing is queued yet, so there is nothing to send. */}
+        {forecast && <StatusDot tone="warn" />}
         {label}
       </span>
     </div>

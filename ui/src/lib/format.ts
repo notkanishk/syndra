@@ -47,6 +47,42 @@ export function describeDuration(days: number | null | undefined): string {
   return `for ${days} ${days === 1 ? "day" : "days"}`;
 }
 
+/**
+ * How long an ask is for, in the words people use for it: "a week", "a month",
+ * else "N days". The dialog offers a week, a month and the end of term, so the
+ * common lengths read as the choice that was made rather than as arithmetic.
+ */
+export function lengthWords(days: number): string {
+  if (days === 7) return "a week";
+  if (days === 14) return "two weeks";
+  if (days >= 28 && days <= 31) return "a month";
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/**
+ * A pending ask's length, as the person who asked reads it (A-06 §2): the
+ * length only, never a date. Approving starts it from the moment it is
+ * approved, so a date here would be wrong by however long the ask waits.
+ */
+export function askLengthForMember(days: number | null | undefined): string {
+  if (!days || days < 1) return "With no end date.";
+  return `For ${lengthWords(days)}, from when it's approved.`;
+}
+
+/**
+ * The same ask, as the person deciding reads it: the length and the date that
+ * approving it now would end it. "For a month · until 17 Nov". Approval starts
+ * it now, so that date is what Approve will do.
+ */
+export function askLengthForOperator(
+  days: number | null | undefined,
+  now: Date = new Date(),
+): string {
+  if (!days || days < 1) return "With no end date";
+  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  return `For ${lengthWords(days)} · until ${formatShortDate(end.toISOString(), now)}`;
+}
+
 export type UrgencyTone = "critical" | "warning" | "neutral" | "expired";
 
 /**

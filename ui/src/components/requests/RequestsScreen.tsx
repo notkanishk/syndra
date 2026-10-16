@@ -40,7 +40,7 @@ import {
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate, humanizeKey } from "@/lib/format";
-import { HoldingNote, alreadyHeld, describeAsk, useAskState } from "@/components/requests/Holding";
+import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember, useAskState } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { daysUntilTermEnd } from "@/lib/term";
 
@@ -56,6 +56,18 @@ type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
  * must never read as a decision.
  */
 export function requestOutcome(status: string): {
+  /** The member's dot. */
+  tone: StatusTone;
+  /** The operator's dot, where it differs: a decision is lime, being overtaken is not one. */
+  operatorTone: StatusTone;
+  operator: string;
+  member: string;
+} {
+  const o = requestOutcomeWords(status);
+  return { ...o, operatorTone: status === "fulfilled" ? "neutral" : o.tone };
+}
+
+function requestOutcomeWords(status: string): {
   tone: StatusTone;
   operator: string;
   member: string;
@@ -83,6 +95,15 @@ export function requestOutcome(status: string): {
  * faint note under it. The same seat a decision just made reports in, so a row
  * never changes shape between the tap and the next read.
  */
+/**
+ * Why a request closed with nothing decided, in the member's words (A-04
+ * §13.1). Without it a closed request looks like a lost one.
+ */
+export function overtakenNote(request: AccessRequest): string {
+  const on = request.resolved_at ? ` on ${formatShortDate(request.resolved_at)}` : "";
+  return `Makerspace staff gave it to you directly${on}, so there was nothing left to decide.`;
+}
+
 export function StatusSeat({ tone, word, note }: { tone: StatusTone; word: string; note?: string }) {
   return (
     <span className="flex flex-col gap-1">
@@ -304,7 +325,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   />
                 ) : resolved.has(entry.id) ? null : (
                   <StatusSeat
-                    tone={requestOutcome(entry.status).tone}
+                    tone={requestOutcome(entry.status).operatorTone}
                     word={requestOutcome(entry.status).operator}
                     note={
                       entry.status === "approved" &&
@@ -497,7 +518,9 @@ function MemberRequests({ userId }: { userId: string }) {
                     humanizeKey(entry.role_key)}
                 </div>
                 <div className="text-[13.5px] text-faint [text-wrap:pretty]">
-                  {describeAsk(entry)} ·{" "}
+                  {describeAskForMember(entry)}
+                </div>
+                <div className="text-[13.5px] text-faint [text-wrap:pretty]">
                   {entry.justification || "No reason given"}
                 </div>
               </div>
@@ -518,6 +541,7 @@ function MemberRequests({ userId }: { userId: string }) {
                     <StatusSeat
                       tone={requestOutcome(entry.status).tone}
                       word={requestOutcome(entry.status).member}
+                      note={entry.status === "fulfilled" ? overtakenNote(entry) : undefined}
                     />
                     {outcomes[entry.id] && <ActionOutcome placement="seat" outcome={outcomes[entry.id]!} />}
                   </div>

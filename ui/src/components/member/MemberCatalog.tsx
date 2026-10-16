@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { askHref } from "@/components/member/RecentChanges";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Unfold } from "@/components/ui/Unfold";
@@ -99,9 +100,12 @@ export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Se
         {nothingFound && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5">
             <span className="flex-1 text-[14px] text-muted">
-              Nothing on offer matches &ldquo;{query.trim()}&rdquo;. Ask for access, and say what you need under Why.
+              Nothing you can ask for matches &ldquo;{query.trim()}&rdquo;. Ask for access, and say what
+              you need in Why.
             </span>
-            <ArrowLink href="/requests?ask">Ask for access</ArrowLink>
+            <ButtonLink href="/requests?ask" size="sm">
+              Ask for access
+            </ButtonLink>
           </div>
         )}
         {projects.map((project, i) => {

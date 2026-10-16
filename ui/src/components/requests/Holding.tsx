@@ -1,7 +1,7 @@
 "use client";
 
 import { StatusDot } from "@/components/ui/Badge";
-import { describeDuration, formatShortDate } from "@/lib/format";
+import { askLengthForMember, askLengthForOperator, formatShortDate } from "@/lib/format";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
@@ -25,13 +25,24 @@ export function alreadyHeld(request: AccessRequest): boolean {
   return Boolean(kind && kind !== "none");
 }
 
-/** The ask's duration line: how long, and whether it is for the role or for more of it. */
+/**
+ * The ask's duration line, for the person deciding: how long, and the date
+ * approving it now would end it; or, for a request to keep a role, that it is.
+ * A member reads `describeAskForMember`: the length only.
+ */
 export function describeAsk(request: AccessRequest): string {
   const days = request.duration_days ?? 0;
-  if (request.kind !== "extend") return describeDuration(days);
+  if (request.kind !== "extend") return askLengthForOperator(days);
   return `Asks to keep it longer · ${
     days < 1 ? "with no end date" : `for ${days} more ${days === 1 ? "day" : "days"}`
   }`;
+}
+
+/** The same line for the person who asked: no date, because approving starts it then. */
+export function describeAskForMember(request: AccessRequest): string {
+  const days = request.duration_days ?? 0;
+  if (request.kind !== "extend") return askLengthForMember(days);
+  return describeAsk(request);
 }
 
 /**

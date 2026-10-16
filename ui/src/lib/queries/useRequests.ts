@@ -16,6 +16,8 @@ export interface AccessRequest {
   reviewer_id?: string;
   review_note?: string;
   created_at: string;
+  /** When it was decided, withdrawn, or closed by Syndra because it was given another way. */
+  resolved_at?: string | null;
   /** "extend" asks to keep a role they hold longer; absent means an ordinary ask. */
   kind?: "access" | "extend";
   /** What the requester already has of the role, read for a waiting request. */

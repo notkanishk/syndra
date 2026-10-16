@@ -31,6 +31,11 @@ describe("the outcome vocabulary", () => {
     expect(Object.keys(OUTCOME_LABEL)).not.toContain("apply");
   });
 
+  it("forecasts a queued change in the future tense, the result keeps the operator's words", () => {
+    expect(PLAN_EFFECT_LABEL.queued).toBe("Will wait for you to send");
+    expect(OUTCOME_LABEL.queued).toBe("Waiting for you to send");
+  });
+
   it("labels every outcome it can carry", () => {
     for (const kind of ["applied", "queued", "no_change", "refused", "failed"] as const) {
       expect(OUTCOME_LABEL[kind], `${kind} needs a word`).toBeTruthy();

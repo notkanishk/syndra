@@ -10,7 +10,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
-import { describeDuration } from "@/lib/format";
+import { describeAsk } from "@/components/requests/Holding";
 import { useRequestDecisions, type Decided } from "@/lib/request-decisions";
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 
@@ -122,7 +122,7 @@ function RequestRow({
       <span className="w-full text-[14.5px] tablet:w-[250px] tablet:shrink-0 tablet:truncate">
         <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
         <span className="block text-[12.5px] text-faint">
-          {describeDuration(entry.duration_days)}
+          {describeAsk(entry)}
         </span>
       </span>
       <span className="w-full text-[14px] text-muted tablet:min-w-[200px] tablet:flex-1 tablet:truncate">
