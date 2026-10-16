@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName } from "@/components/names";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useApplications, type ApplicationView } from "@/lib/queries/useApplications";
+import { Notice } from "@/components/ui/Notice";
 
 /**
  * Apps — the index. An app is the thing that receives the token; its page is
@@ -61,23 +62,14 @@ export default function AppsPage() {
       />
 
       {mixedProjects.size > 0 && (
-        <div className="warn-note flex items-start gap-3.5 px-[18px] py-3.5">
-          <span
-            aria-hidden
-            className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-warn-soft text-[12px] font-bold text-warn-text"
-          >
-            !
-          </span>
-          <p className="max-w-[92ch] text-[14px] leading-[1.55] text-muted">
-            <strong className="font-semibold text-ink">
-              {mixedProjects.size === 1 ? "One project is" : `${mixedProjects.size} projects are`}{" "}
-              read in more than one format.
-            </strong>{" "}
-            That is legal and often deliberate, but it is the single most common cause of
-            &ldquo;this app isn&rsquo;t seeing the roles it expects&rdquo; — so the index surfaces
-            it rather than making somebody open every app to find it.
-          </p>
-        </div>
+        <Notice
+          tone="warn"
+          title={`${mixedProjects.size === 1 ? "One project is" : `${mixedProjects.size} projects are`} read in more than one format.`}
+        >
+          That is legal and often deliberate, but it is the single most common cause of
+          &ldquo;this app isn&rsquo;t seeing the roles it expects&rdquo; — so the index surfaces it
+          rather than making somebody open every app to find it.
+        </Notice>
       )}
 
       {/* One basis for the whole page — every row carries an identical copy,

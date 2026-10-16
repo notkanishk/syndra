@@ -305,20 +305,13 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
           </div>
 
           {multiSource && (
-            <div className="accent-note flex items-start gap-3 px-5 py-4">
-              <span
-                aria-hidden
-                className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-accent-soft text-[12px] font-bold text-accent-text"
-              >
-                i
-              </span>
-              <p className="text-[14.5px] leading-[1.55] text-ink/80">
-                <strong className="font-semibold text-ink">
-                  {multiSource.projectName} / {multiSource.roleKey} is held twice
-                </strong>{" "}
-                — {multiSource.explanation}. Removing one would not remove this role.
-              </p>
-            </div>
+            // An explanation, so a caption under the heading and not a box (A-04 §7.1a).
+            <p className="text-[14px] leading-[1.55] text-muted">
+              <strong className="font-semibold text-ink">
+                {multiSource.projectName} / {multiSource.roleKey} is held twice
+              </strong>{" "}
+              — {multiSource.explanation}. Removing one would not remove this role.
+            </p>
           )}
 
           {/*

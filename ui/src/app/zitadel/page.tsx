@@ -9,6 +9,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CommandBlock } from "@/components/ui/CommandBlock";
+import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { request } from "@/lib/api-client";
@@ -307,21 +308,16 @@ function HealthVerdict({
   }
 
   return (
-    <div className={`${notConfigured ? "warn-note" : "danger-note"} px-5 py-4`}>
-      <div
-        className={`text-[15px] font-semibold ${
-          notConfigured ? "text-warn-text" : "text-danger-text"
-        }`}
-      >
-        {notConfigured
-          ? "Not connected — Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access."
-          : "Unreachable — Syndra's last attempt to reach Zitadel failed."}
-      </div>
-      <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-        {detail ||
-          "Syndra is showing what it last knew. Nothing is lost: changes waiting to be sent stay in order and go through when Zitadel is back."}
-      </p>
-    </div>
+    <Notice
+      tone={notConfigured ? "warn" : "danger"}
+      title={notConfigured ? "Not connected" : "Unreachable"}
+    >
+      {notConfigured
+        ? "Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access. "
+        : "Syndra's last attempt to reach Zitadel failed. "}
+      {detail ||
+        "Syndra is showing what it last knew. Nothing is lost: changes waiting to be sent stay in order and go through when Zitadel is back."}
+    </Notice>
   );
 }
 

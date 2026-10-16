@@ -497,22 +497,13 @@ export function UnexplainedAccess() {
             who cannot find bulk revoke should learn it was a decision rather
             than assume the feature is broken.
           */}
-          <div className="danger-note flex items-start gap-3.5 px-[18px] py-4">
-            <span
-              aria-hidden
-              className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-danger-soft text-[12px] font-bold text-danger-text"
-            >
-              !
-            </span>
-            <p className="max-w-[92ch] text-[14px] leading-[1.55] text-muted">
-              <strong className="font-semibold text-ink">
-                You can adopt several rows at once, or mark several as owned elsewhere. Revoking
-                is always one row at a time.
-              </strong>{" "}
-              Revoking ends real access on real machines, and each revocation deserves its own
-              look.
-            </p>
-          </div>
+          <p className="max-w-[92ch] text-[14px] leading-[1.55] text-muted">
+            <strong className="font-semibold text-ink">
+              You can adopt several rows at once, or mark several as owned elsewhere. Revoking is
+              always one row at a time.
+            </strong>{" "}
+            Revoking ends real access on real machines, and each revocation deserves its own look.
+          </p>
         </>
       ) : (
         <Reconciliation />

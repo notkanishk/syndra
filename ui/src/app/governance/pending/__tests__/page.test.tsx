@@ -111,6 +111,8 @@ describe("Pending changes", () => {
     renderPending();
 
     expect(screen.getByText(/Zitadel is not answering/)).toBeInTheDocument();
+    // A warn Notice with the breathing dot, not a hand-drawn box with a "!".
+    expect(screen.getByRole("status", { name: "" }).querySelector(".breathe")).not.toBeNull();
     expect(
       screen.getByText(/Sending waits until Zitadel answers/),
     ).toBeInTheDocument();

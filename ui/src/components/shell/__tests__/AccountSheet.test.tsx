@@ -33,6 +33,16 @@ describe("the account sheet", () => {
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });
 
+  // A-04 §5.2: an ink outline, the same as any outline button. Not a muted pill,
+  // and not danger either: it ends a session, it destroys nothing.
+  it("draws Sign out as an ink outline", () => {
+    open();
+    const out = screen.getByRole("button", { name: "Sign out" });
+    expect(out.className).toContain("border-line-strong");
+    expect(out.className).toContain("text-ink");
+    expect(out.className).not.toMatch(/bg-tint|text-muted|danger/);
+  });
+
   it("says what signing out costs, before it is tapped", () => {
     open();
     expect(screen.getByText(/signs you out in every open tab/i)).toBeTruthy();
