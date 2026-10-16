@@ -31,6 +31,9 @@ function triggers) handles claim shaping; both are registered by a single
 | `user.grant.added` | `grant_added` (per role) | Cache rebuild + mapping rules + LLDAP intent |
 | `user.grant.changed` | `grant_changed` (per role) | Same |
 | `user.grant.removed` | `grant_removed` (per role) | Cache invalidation + revoke + LLDAP intent |
+| `oidc_session.added` | `user_signed_in` | Recent use: the person's last sign-in to that app (Insights) |
+| `user.token.added` | `user_signed_in` | Recent use: the person's last sign-in to that app (Insights) |
+| `user.token.v2.added` | `user_signed_in` | Recent use: the person's last sign-in to that app (Insights) |
 
 Unknown events are acknowledged with `200 OK` and logged but not dispatched.
 
