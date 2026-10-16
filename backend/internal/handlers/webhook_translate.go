@@ -142,7 +142,7 @@ func translateEventName(ev zitadelEventPayload) WebhookPayload {
 		return mapGrantEvent("grant_changed", ev)
 	case "user.grant.removed", "user.user.grant.removed":
 		return mapGrantEvent("grant_removed", ev)
-	case "user.token.added", "user.token.v2.added":
+	case "user.token.added":
 		// A user aggregate: the aggregate ID is the person, as for user.human.*.
 		if ev.AggregateType != "" && ev.AggregateType != "user" {
 			log.Printf("[WEBHOOK] %s on aggregate type %q — ignoring", ev.EventType, ev.AggregateType)
