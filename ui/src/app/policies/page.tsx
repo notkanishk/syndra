@@ -551,7 +551,7 @@ function RuleEditor({
             disabled={busy}
             onClick={() => setConfirmingDelete(true)}
           >
-            Delete rule
+            Retire rule
           </Button>
         )}
       </ModalFooter>
@@ -614,7 +614,7 @@ function DeleteRuleConfirm({
       labelledBy="rule-delete-title"
     >
       <ModalHeader
-        title={`Delete ${shortRuleId(rule.id)}?`}
+        title={`Retire ${shortRuleId(rule.id)}?`}
         titleId="rule-delete-title"
         chip={ruleChip(rule)}
         lede={`Some people may hold ${label} only because of this rule.`}
@@ -627,7 +627,7 @@ function DeleteRuleConfirm({
             <li>The rule stops giving {label} to anybody.</li>
             <li>
               {holders === 0
-                ? "This rule is giving the second role to nobody today, so deleting it revokes nothing."
+                ? "This rule is giving the second role to nobody today, so retiring it revokes nothing."
                 : `${holders} ${holders === 1 ? "person has" : "people have"} ${label} from this rule. ` +
                   `It is revoked for them unless a bundle or a direct grant also gives it.`}
             </li>
@@ -642,7 +642,7 @@ function DeleteRuleConfirm({
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
-      <ModalFooter note="If you only want the rule to give a different role, edit it instead of deleting it.">
+      <ModalFooter note="If you only want the rule to give a different role, edit it instead of retiring it.">
         {/* First in the DOM, not first on screen: Modal focuses the panel's
             first focusable element on open, and a dialog must not open with
             the cursor already on the button that revokes access. `order-2`
@@ -674,7 +674,7 @@ function DeleteRuleConfirm({
                   n === 0
                     ? {
                         kind: "applied",
-                        message: `${shortRuleId(rule.id)} deleted`,
+                        message: `${shortRuleId(rule.id)} retired`,
                         detail:
                           "Nobody's access changed — the rule was giving nothing.",
                       }
@@ -684,7 +684,7 @@ function DeleteRuleConfirm({
                         // somebody to resume the queue, and calling them applied
                         // would say access is gone that is still there.
                         kind: auto ? "applied" : "queued",
-                        message: `${shortRuleId(rule.id)} deleted — ${n} ${
+                        message: `${shortRuleId(rule.id)} retired — ${n} ${
                           n === 1 ? "revocation" : "revocations"
                         } ${auto ? "sent" : "waiting to be sent"}`,
                         detail: auto
@@ -697,7 +697,7 @@ function DeleteRuleConfirm({
               }
             }}
           >
-            Delete rule and revoke access
+            Retire rule and revoke access
           </Button>
         )}
       </ModalFooter>

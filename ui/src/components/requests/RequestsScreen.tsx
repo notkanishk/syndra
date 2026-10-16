@@ -39,7 +39,7 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
-import { formatLongDate, formatShortDate, humanizeKey } from "@/lib/format";
+import { formatShortDate, humanizeKey } from "@/lib/format";
 import { HoldingNote, alreadyHeld, describeAsk, useAskState } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { daysUntilTermEnd } from "@/lib/term";
@@ -719,8 +719,8 @@ function RequestDialogOpen({
             ))}
           </div>
           <FieldHint>
-            If it&rsquo;s approved, it runs to {formatLongDate(until)} and then stops. You can ask
-            again.
+            If it&rsquo;s approved, you have it until {formatShortDate(until)}, and then it
+            ends. You can ask again.
           </FieldHint>
         </div>
         <div>

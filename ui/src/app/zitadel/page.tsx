@@ -14,7 +14,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { request } from "@/lib/api-client";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useZitadelHealth } from "@/lib/queries/useZitadel";
-import { formatLongDate } from "@/lib/format";
+import { formatShortDate } from "@/lib/format";
 
 interface RotationStatus {
   key_installed?: boolean;
@@ -499,8 +499,8 @@ function rotationDetail(status: RotationStatus | undefined): string {
     const threshold = status.threshold_days ?? 90;
     const replaceBy = new Date(status.last_rotated_at);
     replaceBy.setDate(replaceBy.getDate() + threshold);
-    return `Replace by ${formatLongDate(replaceBy.toISOString())} · nothing to do`;
+    return `Replace by ${formatShortDate(replaceBy.toISOString())} · nothing to do`;
   }
-  if (status?.last_rotated_at) return `Last replaced ${formatLongDate(status.last_rotated_at)}`;
+  if (status?.last_rotated_at) return `Last replaced ${formatShortDate(status.last_rotated_at)}`;
   return "A secret Syndra and Zitadel share so each can trust the other during sign-in.";
 }

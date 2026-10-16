@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { confirmedNote, describeDuration, describeExpiry, humanizeKey, personLine, roleLabel } from "@/lib/format";
+import {
+  confirmedNote,
+  describeDuration,
+  describeExpiry,
+  formatShortDate,
+  formatWhen,
+  humanizeKey,
+  personLine,
+  roleLabel,
+} from "@/lib/format";
 
 describe("personLine", () => {
   it("reads title · team", () => {
@@ -42,6 +51,16 @@ describe("describeExpiry", () => {
     const past = new Date("2026-04-25T12:00:00Z").toISOString();
     const result = describeExpiry(past, now)!;
     expect(result.tone).toBe("expired");
+    expect(result.countdown).toBe("ended");
+  });
+
+  it("says ends, never expires", () => {
+    const hours = new Date("2026-04-27T20:00:00Z").toISOString();
+    expect(describeExpiry(hours, now)!.countdown).toBe("ends in 8 hours");
+    const soon = new Date("2026-04-30T12:00:00Z").toISOString();
+    expect(describeExpiry(soon, now)!.countdown).toBe("ends in 3 days");
+    const later = new Date("2026-06-01T12:00:00Z").toISOString();
+    expect(describeExpiry(later, now)!.countdown).toMatch(/^ends in \d+ days$/);
   });
 
   it("flags critical (≤7 days)", () => {
@@ -107,5 +126,31 @@ describe("confirmedNote", () => {
   it("states the confirmed count on its own when it differs from recorded", () => {
     expect(confirmedNote(4, 2)).toBe("2 confirmed");
     expect(confirmedNote(2, 0)).toBe("0 confirmed");
+  });
+});
+
+describe("formatShortDate", () => {
+  // Noon UTC keeps the local calendar day the same in any timezone a test runs in.
+  const now = new Date("2026-10-17T12:00:00Z");
+
+  it("leaves the year off a date in this year", () => {
+    expect(formatShortDate("2026-08-02T12:00:00Z", now)).toBe("2 Aug");
+  });
+
+  it("names the year of a date next year", () => {
+    expect(formatShortDate("2027-01-18T12:00:00Z", now)).toBe("18 Jan 2027");
+  });
+
+  it("names the year of a date last year", () => {
+    expect(formatShortDate("2025-12-18T12:00:00Z", now)).toBe("18 Dec 2025");
+  });
+
+  it("stays a dash for nothing", () => {
+    expect(formatShortDate(null, now)).toBe("—");
+    expect(formatShortDate("not a date", now)).toBe("—");
+  });
+
+  it("carries the year into a feed stamp too", () => {
+    expect(formatWhen("2027-01-18T12:00:00Z", now)).toMatch(/^18 Jan 2027 /);
   });
 });

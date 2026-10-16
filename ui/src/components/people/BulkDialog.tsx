@@ -177,7 +177,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
           {(op === "assign_role" || op === "extend") && (
             <div>
               <FieldLabel htmlFor="bulk-duration">
-                {op === "extend" ? "Extend by (days)" : "Expires after (days)"}
+                {op === "extend" ? "Extend by (days)" : "Ends after (days)"}
               </FieldLabel>
               <Input
                 id="bulk-duration"
@@ -188,7 +188,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
               />
               {op === "assign_role" && durationDays === 0 && (
                 <p className="mt-1.5 text-[12.5px] text-faint">
-                  0 grants access with no expiry — it stays until somebody removes it.
+                  0 grants access with no end date — it stays until somebody removes it.
                 </p>
               )}
             </div>

@@ -198,7 +198,7 @@ export default function PeoplePage() {
         meta={
           all.length > 0
             ? `${all.length} ${all.length === 1 ? "person" : "people"}${
-                expiringSoon > 0 ? ` · ${expiringSoon} with access expiring inside 30 days` : ""
+                expiringSoon > 0 ? ` · ${expiringSoon} with access ending inside 30 days` : ""
               }`
             : undefined
         }
@@ -427,7 +427,7 @@ export default function PeoplePage() {
             Add to a bundle
           </SelectionAction>
           <SelectionAction onClick={() => setBulkOp("extend")}>
-            Extend what expires
+            Extend what ends
           </SelectionAction>
           <SelectionAction tone="danger" onClick={() => setBulkOp("remove_bundle")}>
             Remove from a bundle
@@ -582,7 +582,7 @@ function NeedsAttention({ entry }: { entry: UserListEntry }) {
     const days = daysUntil(entry.soonest_expiry);
     return (
       <span className="text-[13.5px] font-semibold text-warn-text">
-        {entry.expiring_count} expires{" "}
+        {entry.expiring_count} {entry.expiring_count === 1 ? "ends" : "end"}{" "}
         {days === null ? "soon" : days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`}
       </span>
     );

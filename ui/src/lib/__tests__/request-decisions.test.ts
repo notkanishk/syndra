@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { formatShortDate } from "@/lib/format";
 import { DECLINED, approvalOutcome } from "@/lib/request-decisions";
 
 // One approval vocabulary for every place a request is decided (3.13): the
@@ -35,7 +36,7 @@ describe("approvalOutcome", () => {
   it("an extension says where the end moved to", () => {
     expect(approvalOutcome(undefined, "Ada", "Trained", { effect: "extended", until: "2026-11-03T12:00:00Z" })).toMatchObject({
       kind: "applied",
-      message: "Approved. Ada keeps it until 3 Nov 2026.",
+      message: `Approved. Ada keeps it until ${formatShortDate("2026-11-03T12:00:00Z")}.`,
     });
     expect(approvalOutcome(undefined, "Ada", "Trained", { effect: "extended" }).message).toBe(
       "Approved. Ada keeps it with no end date.",
@@ -44,7 +45,7 @@ describe("approvalOutcome", () => {
 
   it("one that ended while it waited says it was given again", () => {
     expect(approvalOutcome(undefined, "Ada", "Trained", { effect: "given_again", until: "2026-11-03T12:00:00Z" }).message).toBe(
-      "Approved. It had ended, so Ada has it again until 3 Nov 2026.",
+      `Approved. It had ended, so Ada has it again until ${formatShortDate("2026-11-03T12:00:00Z")}.`,
     );
   });
 
