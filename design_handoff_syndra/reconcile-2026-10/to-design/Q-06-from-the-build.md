@@ -57,3 +57,23 @@ Each of these uses the existing tokens. Please fold them into the Q-05 answer.
 - **The selection seat:** the fill changes on press 180ms. The check settles in from 60% scale on the settle curve. Pressing scales the seat to 97%.
 - **Outcomes** fade into their slot on tint (2a). So do the picker's chips and the WaitsMark tooltip.
 - **The bundle page's tabs** switch with no motion.
+
+## 6 · Included bundles: one reading chosen (confirm)
+
+BUILD-LIST reads two ways on what "Update" does when a bundle that others include is published. The build takes the safer reading:
+
+- **"Update" writes only the including bundle's draft.** Nobody's access moves when the child is published. The including bundle's own publish moves its people, with its own rehearsal.
+- **"Leave" keeps the version it includes now.**
+- Every including bundle needs an answer before the child can publish.
+
+If the board meant "Update" to move the including bundle's people straight away, please say so and draw what that bundle's owner sees.
+
+## 7 · Insights: questions the build couldn't answer
+
+- **Term dates.** Trends and the "new this term" group use Aug–Dec, Jan–May and Jun–Jul. Are these right?
+- **Badge taps.** Recent use draws sign-ins and badge taps, but Syndra has no source for badge taps yet. Until one is connected, the badge half stays empty and says so. Should the card show at all before then?
+- **The what-if preview thread.** The answer panel for "what if" names who would gain and lose access. No board draws the thread from that answer back to the map. Is one wanted?
+- **Held but not used, "Last used".** The board's card has a Last used column. Syndra keeps when a person last signed in to an app, not when they last used a particular role, so the column is left out. Is the card right without it?
+- **Recent use on the map.** The board fades roles by how recently they were used. The build lights only roles held but not used, since that is what the record can show. Is that enough?
+- **Ending soon's window.** No board draws the choice of days. The build offers 7, 30 and 90, with 30 first.
+- **Trends has no key.** The board's key list gives T to "Choose a date", so the build follows the board and Trends has no key of its own.
