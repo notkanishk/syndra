@@ -791,3 +791,26 @@ func TestTokenRejectionReturnsOnlyItsOwnLiterals(t *testing.T) {
 		}
 	}
 }
+
+func TestListUsers_ReadsCreationDate(t *testing.T) {
+	resetDeps(t)
+	client, _ := testClient(t)
+
+	httpDo = func(_ *http.Client, req *http.Request) (*http.Response, error) {
+		return rawResp(200, `{"details":{"totalResult":"3"},"result":[
+			{"id":"u1","userName":"a","state":"USER_STATE_ACTIVE","details":{"creationDate":"2026-08-03T09:25:46.211127Z"},"human":{"email":{"email":"a@example.edu"}}},
+			{"id":"u2","userName":"b","state":"USER_STATE_ACTIVE","human":{}},
+			{"id":"u3","userName":"c","state":"USER_STATE_ACTIVE","details":{"creationDate":"not a date"},"human":{}}]}`), nil
+	}
+	res, err := client.ListUsers(context.Background(), SearchParams{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 8, 3, 9, 25, 46, 211127000, time.UTC)
+	if !res.Items[0].Created.Equal(want) {
+		t.Errorf("created = %v; want %v", res.Items[0].Created, want)
+	}
+	if !res.Items[1].Created.IsZero() || !res.Items[2].Created.IsZero() {
+		t.Errorf("missing or unreadable date must be zero, got %v / %v", res.Items[1].Created, res.Items[2].Created)
+	}
+}

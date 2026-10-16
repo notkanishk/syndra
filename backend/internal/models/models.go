@@ -161,6 +161,9 @@ type UserProfile struct {
 	Team   string `json:"team"`
 	Status string `json:"status"`
 	Avatar string `json:"avatar"`
+	// Joined is when Zitadel created the account; nil when Zitadel gave none.
+	// Server-side only: the Insights "new this term" lens reads it.
+	Joined *time.Time `json:"-"`
 }
 
 type ProjectRole struct {

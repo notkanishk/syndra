@@ -91,8 +91,10 @@ func ParseLensGroup(s string) (LensGroup, error) {
 // grant would not end the access.
 type lensPerson struct {
 	ID, Status, Team string
-	Observed         map[string]bool
-	Indirect         map[string]bool
+	// Joined is when Zitadel created the account; nil when it gave no date.
+	Joined   *time.Time
+	Observed map[string]bool
+	Indirect map[string]bool
 }
 
 // lensWorld is the one read a lens works from. Observed is false when nothing
@@ -122,7 +124,7 @@ func readLensWorld(ctx context.Context, withRoutes bool) (lensWorld, error) {
 	}
 	w := lensWorld{Observed: basis.ReadAt != nil}
 	for _, u := range snap.Users() {
-		p := lensPerson{ID: u.ID, Status: u.Status, Team: u.Team}
+		p := lensPerson{ID: u.ID, Status: u.Status, Team: u.Team, Joined: u.Joined}
 		if w.Observed {
 			if p.Observed, err = snap.Observed(u.ID); err != nil {
 				return lensWorld{}, err
@@ -252,9 +254,9 @@ func tallyGroup(group []lensPerson, name func(string, string) (string, string)) 
 	return out
 }
 
-// pickGroup selects the people a group means. firstSeen and termStart matter
-// only to new_term: somebody nothing has ever been recorded for has no first
-// time, so is not new. A person's status is the directory's own word.
+// pickGroup selects the people a group means. Joined, firstSeen and termStart
+// matter only to new_term: somebody with no Zitadel creation date and nothing
+// ever recorded has no first time, so is not new. A person's status is the directory's own word.
 //
 // Statuses that exist (directory.normalizeUserState): active, inactive,
 // initial, locked, deleted, unspecified. "left" is leftStatuses: inactive,
@@ -267,7 +269,14 @@ func pickGroup(g LensGroup, people []lensPerson, firstSeen map[string]time.Time,
 		case LensLeft:
 			in = leftStatuses[strings.ToLower(p.Status)]
 		case LensNewTerm:
+			// Zitadel's creation date wins: holding and people are observed
+			// from Zitadel, records only explain. First seen is a fallback for
+			// an account with no date, and a poor one: rows backfilled at
+			// deploy or first sync make everyone look new.
 			at, ok := firstSeen[p.ID]
+			if p.Joined != nil {
+				at, ok = *p.Joined, true
+			}
 			in = ok && !at.Before(termStart)
 		case LensTeam:
 			in = strings.EqualFold(strings.TrimSpace(p.Team), g.Team)
