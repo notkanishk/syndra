@@ -725,6 +725,11 @@ type AccessRequest struct {
 	// Holding is what the requester has of the role now, read for a waiting
 	// request so the person deciding sees what approving would change.
 	Holding *RequestHolding `json:"holding,omitempty"`
+	// CurrentUntil and Until are set on a waiting extension only: the end the
+	// requester has now (absent when it has none or has lapsed) and the end
+	// approving would set, so the queue shows what Approve will do.
+	CurrentUntil *time.Time `json:"current_until,omitempty"`
+	Until        *time.Time `json:"until,omitempty"`
 }
 
 // The three things a person can already have of a role they ask for.
