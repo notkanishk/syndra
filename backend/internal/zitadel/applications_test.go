@@ -3,6 +3,7 @@ package zitadel
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -138,6 +139,30 @@ func TestHumanizeAppType_KnownAndUnknown(t *testing.T) {
 	for _, c := range cases {
 		if got := HumanizeAppType(c.in); got != c.want {
 			t.Errorf("HumanizeAppType(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestClientIDOf_ReadsOIDCAndAPIBlocksAndNeverFails(t *testing.T) {
+	raw := func(s string) json.RawMessage { return json.RawMessage(s) }
+	cases := []struct {
+		name   string
+		blocks []json.RawMessage
+		want   string
+	}{
+		{"oidc", []json.RawMessage{raw(`{"clientId":"c1@p"}`), nil, nil}, "c1@p"},
+		{"api", []json.RawMessage{nil, raw(`{"clientId":"c2"}`), nil}, "c2"},
+		{"saml has none", []json.RawMessage{nil, nil, raw(`{"entityId":"e"}`)}, ""},
+		{"malformed", []json.RawMessage{raw(`[1,`)}, ""},
+		{"empty", nil, ""},
+	}
+	for _, c := range cases {
+		blocks := c.blocks
+		if len(blocks) > 2 {
+			blocks = blocks[:2] // clientIDOf is only given the OIDC and API blocks
+		}
+		if got := clientIDOf(blocks...); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
 }

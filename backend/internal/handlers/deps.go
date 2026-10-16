@@ -473,12 +473,20 @@ var (
 	// own account of itself. Two authorities on purpose.
 	svcDormantAccounts = services.DormantAccounts
 	// Insights (I2): read-only findings and the who-has-without question.
-	svcInsightsFindings   = services.InsightsFindings
-	svcInsightsWho        = services.InsightsWho
-	svcInsightsWhatIf     = services.InsightsWhatIf
-	svcInsightsTrends     = services.InsightsTrends
-	svcInsightsAsOf       = services.InsightsAsOf
-	svcInsightsTimeline   = services.InsightsTimeline
+	svcInsightsFindings = services.InsightsFindings
+	svcInsightsWho      = services.InsightsWho
+	svcInsightsWhatIf   = services.InsightsWhatIf
+	svcInsightsTrends   = services.InsightsTrends
+	svcInsightsAsOf     = services.InsightsAsOf
+	svcInsightsTimeline = services.InsightsTimeline
+	svcInsightsUsage    = services.InsightsUsage
+	dbGetUserUsage      = db.GetUserUsage
+	// Sign-in usage (I6): the webhook records, and resolves an application to
+	// its project through the directory.
+	dbRecordUsage         = db.RecordUsage
+	directoryApplications = func(ctx context.Context) ([]models.ApplicationCatalog, error) {
+		return directory.Default.Applications(ctx)
+	}
 	dbListMappingHistory  = db.ListMappingHistory
 	dbForgetTargetBinding = db.ForgetTargetBinding
 	// The merge base goes with the binding, always. One left behind is a claim

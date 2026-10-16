@@ -19,6 +19,8 @@ type ZitadelApplication struct {
 	// Type is derived from which *Config block the Zitadel response carries.
 	// Values: "OIDC", "API", "SAML", or "" when the shape is unrecognized.
 	Type string `json:"-"`
+	// ClientID is the oidcConfig/apiConfig clientId ("" for SAML or when absent).
+	ClientID string `json:"-"`
 }
 
 // HumanizeAppType maps the derived Type onto a short label for the "consumer"
@@ -75,13 +77,29 @@ func (c *managementClient) ListApplications(ctx context.Context, projectID strin
 	apps := make([]ZitadelApplication, len(result.Result))
 	for i, r := range result.Result {
 		apps[i] = ZitadelApplication{
-			ID:    r.ID,
-			Name:  r.Name,
-			State: r.State,
-			Type:  deriveAppType(r.OIDCConfig, r.APIConfig, r.SAMLConfig),
+			ID:       r.ID,
+			Name:     r.Name,
+			State:    r.State,
+			Type:     deriveAppType(r.OIDCConfig, r.APIConfig, r.SAMLConfig),
+			ClientID: clientIDOf(r.OIDCConfig, r.APIConfig),
 		}
 	}
 	return &SearchResult[ZitadelApplication]{Items: apps, Total: result.Details.totalInt()}, nil
+}
+
+// clientIDOf reads clientId from whichever of the OIDC or API config blocks is
+// present. A block that does not parse yields "", never an error: the client id
+// only helps attribute a sign-in to a project.
+func clientIDOf(blocks ...json.RawMessage) string {
+	for _, b := range blocks {
+		var c struct {
+			ClientID string `json:"clientId"`
+		}
+		if len(b) > 0 && json.Unmarshal(b, &c) == nil && c.ClientID != "" {
+			return c.ClientID
+		}
+	}
+	return ""
 }
 
 func deriveAppType(oidc, api, saml json.RawMessage) string {

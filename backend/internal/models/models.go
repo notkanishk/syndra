@@ -191,6 +191,10 @@ type ApplicationCatalog struct {
 	Consumer    string `json:"consumer"`
 	ClaimName   string `json:"claim_name"`
 	FormatType  string `json:"format_type"`
+	// ClientID is the OIDC/API client id, which is what a token's events name
+	// (the application id is a different string). Not part of any response; it is
+	// here so a sign-in can be traced to the project its application belongs to.
+	ClientID string `json:"-"`
 }
 
 type RoleGrant struct {

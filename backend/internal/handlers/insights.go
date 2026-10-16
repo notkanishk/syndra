@@ -139,3 +139,37 @@ func handleInsightsTimeline(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, http.StatusOK, res)
 }
+
+// handleInsightsUsage answers ?days=1..365 (default 90): whether sign-ins are
+// being received at all, and which roles are held by people who have not used
+// their project in that time. Anything else for days is a 400.
+func handleInsightsUsage(w http.ResponseWriter, r *http.Request) {
+	days, err := services.ParseUsageDays(r.URL.Query().Get("days"))
+	if err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"days": "must be a whole number from 1 to 365"})
+		return
+	}
+	res, err := svcInsightsUsage(r.Context(), days)
+	if err != nil {
+		viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
+		return
+	}
+	jsonResponse(w, http.StatusOK, res)
+}
+
+// handleGetUserUsage is one person's last use of each project, by kind. A person
+// nothing has been seen for gets [], not a 404: absence of a row is not absence
+// of the person.
+func handleGetUserUsage(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	if !trimmedNonEmpty(userID) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+	rows, err := dbGetUserUsage(r.Context(), userID)
+	if err != nil {
+		viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
+		return
+	}
+	jsonResponse(w, http.StatusOK, rows)
+}

@@ -465,6 +465,7 @@ func (z *zitadelSource) Applications(ctx context.Context) ([]models.ApplicationC
 				Name:        coalesce(app.Name, app.ID),
 				ProjectID:   p.ID,
 				Description: "",
+				ClientID:    app.ClientID,
 				Consumer:    zitadel.HumanizeAppType(app.Type),
 				ClaimName:   claimName,
 				FormatType:  formatType,

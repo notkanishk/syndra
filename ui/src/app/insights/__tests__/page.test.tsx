@@ -427,8 +427,8 @@ function richMap() {
   reads.pending = [];
   reads.catalog = [role("p1", "operator", 51), role("p1", "door", 22), role("p2", "weaving", 0)];
   people.users = [
-    { id: "u1", name: "Priya Nair", title: "Research assistant", email: "priya@x.edu" },
-    { id: "u2", name: "Aanya Rao", title: "Student", email: "aanya@x.edu" },
+    { id: "u1", name: "Priya Nair", title: "Research assistant", email: "priya@example.edu" },
+    { id: "u2", name: "Aanya Rao", title: "Student", email: "aanya@example.edu" },
   ];
 }
 const panelOf = (name: string | RegExp) => screen.getByRole("region", { name });
