@@ -25,3 +25,6 @@ The row keeps its seat until the next read; no toast; the result never travels; 
 
 ## Used by
 Requests (operator and member), and every row action that reports in place: People, a person, Drift, Expiring access.
+
+## Block form with a word (A-04 §11, 17 Oct)
+The dialog result uses the same `word` instead of the "Applied" pill: dot + word in --font-display 22px/600, one sentence in ink 15px, one faint 13px line. Tone: healthy done now, warn queued (adds Waiting for you to send →), neutral asked / not sent, danger failed. Footer: Close only. Board: route-asking (Results).
