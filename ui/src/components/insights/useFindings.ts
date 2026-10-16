@@ -3,9 +3,12 @@
 import { useMemo } from "react";
 
 import type { Panel } from "@/components/insights/AnswerPanel";
-import { listOf, openOf, type Model } from "@/components/insights/model";
+import { glancePanel, overlapView, singleRoutesView, unusedView, type Lit } from "@/components/insights/findingsPanels";
+import type { Mark } from "@/components/insights/LaneMap";
+import { listOf, type Model } from "@/components/insights/model";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useDriftItems } from "@/lib/queries/useDrift";
+import { useInsightsFindings } from "@/lib/queries/useInsights";
 import { usePendingPropagations } from "@/lib/queries/usePropagation";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 
@@ -22,14 +25,16 @@ export interface RestCard {
 const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
 
 /**
- * The three things worth a look, read from the reads that already exist:
- * Drift, the pending changes, the role catalogue. A finding that has not been
- * read has no count, so its chip is not drawn (never a zero for "unknown").
+ * What is worth a look. Drift and the pending changes come from the reads
+ * that already exist; single routes, unused things and overlaps are one read
+ * of their own (`/insights/findings`). A finding that has not been read has
+ * no count, so its chip is not drawn (never a zero for "unknown").
  */
 export function useFindings(m: Model | null) {
   const drift = useDriftItems();
   const pending = usePendingPropagations();
   const catalog = useGlobalRoleCatalog();
+  const found = useInsightsFindings();
 
   return useMemo(() => {
     const roleName = (projectId: string, key: string, fallback?: string) => {
@@ -37,7 +42,7 @@ export function useFindings(m: Model | null) {
       return id && m ? m.nameOf(id) : fallback || humanizeKey(key);
     };
     const roleNode = (projectId: string, key: string) => m?.roleId(projectId, key) ?? null;
-    const nodes: Record<Finding, string[]> = { drift: [], send: [], unused: [] };
+    const nodes: { drift: string[]; send: string[] } = { drift: [], send: [] };
 
     // A person count is what Zitadel shows; absent when it has never been read.
     const held = new Map<string, number>();
@@ -62,7 +67,7 @@ export function useFindings(m: Model | null) {
     const driftCount = driftRows?.length ?? 0;
     const everyone = new Set((driftRows ?? []).map((i) => i.user_id)).size;
     const groupList = Array.from(groups.values());
-    const found = (driftRows ?? []).map((i) => i.detected_at).sort()[0];
+    const firstFound = (driftRows ?? []).map((i) => i.detected_at).sort()[0];
     const heldHere = groupList.filter((g) => g.type !== "syndra_only");
 
     // Waiting for you to send: rows that always wait, or whose send stopped.
@@ -89,18 +94,19 @@ export function useFindings(m: Model | null) {
     }
     const sendLines = Array.from(sendGroups.values()).map((g) => g.text(g.users.size));
 
-    // Unused: roles nobody has.
-    const unusedRoles = (catalog.data ?? [])
-      .filter((r) => r.assigned_user_count === 0)
-      .map((r) => {
-        const id = roleNode(r.project_id, r.role_key);
-        if (id) nodes.unused.push(id);
-        return { id, name: id && m ? m.nameOf(id) : `${r.project_name} · ${r.display_name}`, projectId: r.project_id };
-      });
-    const firstUnused = m && unusedRoles[0]?.id ? openOf(m, unusedRoles[0].id) : null;
-    const unusedOpen = firstUnused ?? { label: "See them in Roles", href: "/roles?unused=1" };
+    // The findings Syndra reads from how access is arranged.
+    const arrangement = found.data;
+    const unused = m && arrangement ? unusedView(m, arrangement.unused) : null;
+    const single = m && arrangement?.single_routes.length ? singleRoutesView(m, arrangement.single_routes) : null;
+    const overlap = m && arrangement?.overlaps.length ? overlapView(m, arrangement.overlaps) : null;
 
-    const counts = { drift: driftCount, send: waiting.length, unused: unusedRoles.length };
+    const counts: Record<Finding, number> = {
+      drift: driftCount,
+      send: waiting.length,
+      single: arrangement?.single_routes.length ?? 0,
+      unused: unused?.count ?? 0,
+      overlap: arrangement?.overlaps.length ?? 0,
+    };
     const driftTitle = "Held in Zitadel, not given by Syndra";
 
     const panel = (f: Finding): Panel => {
@@ -109,7 +115,7 @@ export function useFindings(m: Model | null) {
           tone: "danger",
           eyebrow: "Drift",
           title: driftTitle,
-          meta: `${people(everyone)}${found ? ` · found ${formatShortDate(found)}` : ""}`,
+          meta: `${people(everyone)}${firstFound ? ` · found ${formatShortDate(firstFound)}` : ""}`,
           lines: [
             ...groupList.slice(0, 4).map((g) => ({
               tone: "danger" as const,
@@ -135,19 +141,25 @@ export function useFindings(m: Model | null) {
           lines: sendLines.slice(0, 4).map((text) => ({ tone: "warn" as const, text })),
           open: { label: "Waiting for you to send", href: "/governance/pending" },
         };
-      const n = unusedRoles.length;
-      return {
-        tone: "neutral",
-        eyebrow: "Unused",
-        title: `${n} ${n === 1 ? "thing gives" : "things give"} nothing`,
-        meta: "Dotted on the map",
-        lines: [
-          ...unusedRoles.slice(0, 6).map((r) => ({ tone: "ink" as const, text: `Nobody has ${r.name}.` })),
-          ...(n > 6 ? [{ tone: "ink" as const, text: `And ${n - 6} more.` }] : []),
-        ],
-        open: unusedOpen,
-      };
+      if (f === "single" && single) return single.panel;
+      if (f === "overlap" && overlap) return overlap.panel;
+      return unused!.panel;
     };
+
+    const lit = (f: Finding): Lit => {
+      const down = (ids: string[], tone: "danger" | "warn") => ({ nodes: ids.map((id) => ({ id, tone, down: true })), threads: [] });
+      if (f === "drift") return down(nodes.drift, "danger");
+      if (f === "send") return down(nodes.send, "warn");
+      if (f === "single") return single?.lit ?? { nodes: [], threads: [] };
+      if (f === "overlap") return overlap?.lit ?? { nodes: [], threads: [] };
+      return { nodes: (unused?.ids ?? []).map((id) => ({ id, tone: "ink" as const })), threads: [] };
+    };
+
+    const marks = new Map<string, Mark[]>();
+    const put = (id: string, mark: Mark) => marks.set(id, [...(marks.get(id) ?? []), mark]);
+    nodes.drift.forEach((id) => put(id, "drift"));
+    nodes.send.forEach((id) => put(id, "send"));
+    single?.marked.forEach((id) => put(id, "single"));
 
     const rest: RestCard[] = [];
     if (driftCount)
@@ -160,7 +172,7 @@ export function useFindings(m: Model | null) {
             : `Syndra and Zitadel disagree in ${groups.size} ${groups.size === 1 ? "place" : "places"}`,
         line:
           groups.size === 1 && heldHere.length === 1
-            ? `${people(everyone)}${found ? ` · found ${formatShortDate(found)}` : ""}. They keep it until you decide.`
+            ? `${people(everyone)}${firstFound ? ` · found ${formatShortDate(firstFound)}` : ""}. They keep it until you decide.`
             : `${people(everyone)}. Open Drift to decide each one.`,
         open: { label: "Open on Drift", href: "/governance/drift" },
       });
@@ -172,15 +184,42 @@ export function useFindings(m: Model | null) {
         line: sendLines.slice(0, 2).join(" "),
         open: { label: "Waiting for you to send", href: "/governance/pending" },
       });
-    if (unusedRoles.length)
+    if (single)
+      rest.push({
+        finding: "single",
+        kind: "Single route",
+        title: single.panel.title,
+        line: `${single.panel.meta}.`,
+        open: single.panel.open!,
+      });
+    if (unused && unused.count)
       rest.push({
         finding: "unused",
         kind: "Unused",
-        title: panel("unused").title,
-        line: `${listOf(unusedRoles.slice(0, 2).map((r) => r.name))}${unusedRoles.length > 2 ? ` and ${unusedRoles.length - 2} more` : ""}.`,
-        open: unusedOpen,
+        title: unused.panel.title,
+        line: `${listOf(unused.names.slice(0, 2))}${unused.names.length > 2 ? ` and ${unused.names.length - 2} more` : ""}.`,
+        open: unused.panel.open!,
+      });
+    if (overlap)
+      rest.push({
+        finding: "overlap",
+        kind: "Overlap",
+        title: overlap.panel.title,
+        line: `${overlap.panel.meta}.`,
+        open: overlap.panel.open!,
       });
 
-    return { counts, nodes, panel, rest, held, ready: Boolean(drift.data && pending.data && catalog.data) };
-  }, [m, drift.data, pending.data, catalog.data]);
+    const glance = m ? glancePanel(m, held, arrangement?.unused.projects ?? []) : null;
+    return {
+      counts,
+      lit,
+      marks,
+      unused: new Set(unused?.ids ?? []),
+      panel,
+      rest,
+      glance,
+      held,
+      ready: Boolean(drift.data && pending.data && catalog.data && (found.data || found.isError)),
+    };
+  }, [m, drift.data, pending.data, catalog.data, found.data, found.isError]);
 }

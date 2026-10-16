@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnswerPanel, type Panel } from "@/components/insights/AnswerPanel";
-import { LaneMap, type Mark } from "@/components/insights/LaneMap";
+import { LaneMap } from "@/components/insights/LaneMap";
 import { NodeList } from "@/components/insights/NodeList";
 import {
   buildModel,
@@ -17,21 +17,30 @@ import {
   reach,
   type Highlight,
 } from "@/components/insights/model";
+import { nodeIds, sentence, sentenceText, toParams, type Entity, type Question } from "@/components/insights/question";
+import { QuestionSeat } from "@/components/insights/QuestionSeat";
 import { RestCards } from "@/components/insights/RestCards";
-import { NodeGlyph } from "@/components/insights/tone";
-import { MAX_PINS, type Finding, type InsightsUrl } from "@/components/insights/useInsightsUrl";
+import { useAnswer } from "@/components/insights/useAnswer";
+import { FINDINGS, MAX_PINS, type Finding, type InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { useFindings } from "@/components/insights/useFindings";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { AnchoredPanel } from "@/components/ui/Anchored";
 import { PILL } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills, Segmented, Select } from "@/components/ui/Select";
 import { Unfold } from "@/components/ui/Unfold";
+import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
 import { useTopology } from "@/lib/queries/useTopology";
 import { useIsPhone, useIsTouch } from "@/lib/useViewport";
 
-const DOT: Record<Finding, string> = { drift: "bg-danger", send: "bg-warn", unused: "bg-muted" };
+const DOT: Record<Finding, string> = { drift: "bg-danger", send: "bg-warn", single: "bg-warn", unused: "bg-muted", overlap: "bg-muted" };
+const CHIP_WORDS: Record<Finding, [string, string]> = {
+  drift: ["drift", "drift"],
+  send: ["waiting for you to send", "waiting for you to send"],
+  single: ["single route", "single routes"],
+  unused: ["unused", "unused"],
+  overlap: ["overlap", "overlaps"],
+};
+const PHONE_NOTE = "The map draws this on a wider screen. The link keeps the question, so it opens there as you left it.";
 const THREADS = ["", "One thread", "Two threads, side by side", "Three threads, side by side"];
 
 /**
@@ -45,31 +54,47 @@ export function MapTab({ url }: { url: InsightsUrl }) {
   const phone = useIsPhone();
   const model = useMemo(() => (topology.data ? buildModel(topology.data) : null), [topology.data]);
   const findings = useFindings(model);
+  const catalog = useCatalogUsers();
   const [keysOpen, setKeysOpen] = useState(false);
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement | null>(null);
-  const seat = useRef<HTMLDivElement | null>(null);
+  const wantInput = useRef(false);
 
-  const focus = model && url.q && model.byId.has(url.q) ? url.q : null;
+  const people = useMemo(() => new Map(catalog.data.map((u) => [u.id, u])), [catalog.data]);
+  const entities = useMemo<Entity[]>(
+    () => [
+      ...(model ? Array.from(model.byId.values(), (n) => ({ id: n.id, kind: n.kind, label: model.nameOf(n.id) })) : []),
+      ...catalog.data.map((u) => ({ id: u.id, kind: "person" as const, label: u.name })),
+    ],
+    [model, catalog.data],
+  );
+  const nodeName = (id: string) => model?.nameOf(id) ?? id;
+  const personName = (id: string) => people.get(id)?.name ?? "Unknown account";
+
+  // A question naming something that is not on the map is not a question.
+  const question: Question | null = model && url.question && nodeIds(url.question).every((id) => model.byId.has(id)) ? url.question : null;
+  const focus = question?.kind === "follow" ? question.node : null;
+  const asked = question && question.kind !== "follow" ? question : null;
+  const answer = useAnswer(model, asked, people, asked ? sentenceText(sentence(asked, nodeName, personName)) : "");
+  const target = focus ?? answer.pin;
   const pins = model ? url.pins.filter((id) => model.byId.has(id)) : [];
   const finding = url.finding && findings.counts[url.finding] > 0 ? url.finding : null;
   const tones = pinTones(pins, focus);
-
-  const unused = useMemo(() => new Set(findings.nodes.unused), [findings.nodes.unused]);
-  const marks = useMemo(() => {
-    const out = new Map<string, Mark[]>();
-    for (const mark of ["drift", "send"] as const)
-      for (const id of findings.nodes[mark]) out.set(id, [...(out.get(id) ?? []), mark]);
-    return out;
-  }, [findings.nodes]);
 
   const highlight = useMemo<Highlight | null>(() => {
     if (!model) return null;
     const h: Highlight = { nodes: new Map(), threads: new Map() };
     if (finding) {
-      const tone = finding === "drift" ? "danger" : finding === "send" ? "warn" : "ink";
-      for (const id of findings.nodes[finding]) h.nodes.set(id, tone);
-      if (finding !== "unused") for (const id of findings.nodes[finding]) paint(h, reach(model, id, ["down"]), "ink");
+      const lit = findings.lit(finding);
+      for (const n of lit.nodes) h.nodes.set(n.id, n.tone);
+      for (const t of lit.threads) h.threads.set(t.id, t.tone);
+      for (const n of lit.nodes) if (n.down) paint(h, reach(model, n.id, ["down"]), "ink");
+    } else if (asked) {
+      if (answer.answer?.highlight) {
+        answer.answer.highlight.nodes.forEach((tone, id) => h.nodes.set(id, tone));
+        answer.answer.highlight.threads.forEach((tone, id) => h.threads.set(id, tone));
+      }
+      for (const p of pins) paint(h, reach(model, p), tones.get(p)!);
     } else if (focus) {
       paint(h, reach(model, focus), "accent");
       for (const p of pins) if (p !== focus) paint(h, reach(model, p), tones.get(p)!);
@@ -78,11 +103,12 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     }
     return h.nodes.size ? h : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, finding, focus, pins.join(), findings.nodes]);
+  }, [model, finding, findings.lit, focus, asked, answer.answer, pins.join()]);
 
   const held = (id: string) => findings.held.get(id) ?? null;
   let panel: Panel | null = null;
   if (model && finding) panel = findings.panel(finding);
+  else if (model && asked) panel = answer.answer?.panel ?? answer.status;
   else if (model && focus)
     panel = {
       tone: "accent",
@@ -104,17 +130,18 @@ export function MapTab({ url }: { url: InsightsUrl }) {
         ...(cross ? [{ tone: "ink" as const, text: cross }] : []),
       ],
     };
-  }
+  } else if (model && !phone && findings.ready) panel = findings.glance;
 
-  const pick = (id: string | null) => url.set({ q: id, finding: null });
+  const ask = (q: Question | null) => url.set({ ...toParams(q), finding: null });
+  const pick = (id: string | null) => ask(id ? { kind: "follow", node: id } : null);
   const back = () => {
     if (finding) url.set({ finding: null });
-    else if (focus) url.set({ q: null });
+    else if (question) ask(null);
     else if (pins.length) url.set({ pin: null });
   };
-  const pin = () => focus && pins.length < MAX_PINS && url.set({ pin: [...pins, focus].join(",") });
+  const pin = () => target && !pins.includes(target) && pins.length < MAX_PINS && url.set({ pin: [...pins, target].join(",") });
   const unpin = (id: string) => url.set({ pin: pins.filter((p) => p !== id).join(",") || null });
-  const togglePin = () => (focus && pins.includes(focus) ? unpin(focus) : pin());
+  const togglePin = () => (target && pins.includes(target) ? unpin(target) : pin());
 
   // The keys act on whatever is current, so the listener is rebound each render.
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -130,9 +157,13 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     const k = e.key.toLowerCase();
     if (e.key === "/") {
       e.preventDefault();
-      input.current?.focus();
+      // A question holds the seat as chips; asking again clears it first.
+      if (question) {
+        wantInput.current = true;
+        ask(null);
+      } else input.current?.focus();
     } else if (e.key === "?") setKeysOpen((o) => !o);
-    else if (k === "p" && focus) togglePin();
+    else if (k === "p" && target) togglePin();
     else if (model && focus && e.key.startsWith("Arrow")) {
       const node = model.byId.get(focus)!;
       const lane = model.lanes[node.kind];
@@ -147,55 +178,35 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     }
   };
   useEffect(() => {
+    if (wantInput.current && input.current) {
+      wantInput.current = false;
+      input.current.focus();
+    }
+  });
+  useEffect(() => {
     const on = (e: KeyboardEvent) => keyRef.current(e);
     document.addEventListener("keydown", on);
     return () => document.removeEventListener("keydown", on);
   }, []);
 
-  const needle = text.trim().toLowerCase();
-  const matches = model && needle ? Array.from(model.byId.keys()).filter((id) => model.nameOf(id).toLowerCase().includes(needle)).slice(0, 8) : [];
-  const choose = (id: string) => {
-    pick(id);
-    setText("");
-  };
-
   const view = touch ? "list" : url.view;
-  const chips = (["drift", "send", "unused"] as const).filter((f) => findings.counts[f] > 0);
-  const chipWords: Record<Finding, string> = { drift: "drift", send: "waiting for you to send", unused: "unused" };
+  const chips = FINDINGS.filter((f) => findings.counts[f] > 0);
 
   return (
     <>
       <div className="flex flex-col gap-2.5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
-          <div ref={seat} className="relative min-w-0 flex-[1_1_320px]">
-            <Input
-              ref={input}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && matches[0] && choose(matches[0])}
-              placeholder="Ask about a person, a door, a role, or find anything"
-              aria-label="Ask the map"
-            />
-            <AnchoredPanel
-              anchor={seat}
-              open={matches.length > 0}
-              width="anchor"
-              expectHeight={360}
-              className="settle-in overflow-hidden rounded-panel border border-line-strong bg-surface-2 shadow-popover"
-            >
-              {matches.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => choose(id)}
-                  className="motion-tint flex min-h-[44px] w-full items-center gap-2.5 px-3 text-left text-[13.5px] hover:bg-[var(--hover)] desktop:min-h-0 desktop:py-2"
-                >
-                  <NodeGlyph kind={model!.byId.get(id)!.kind} />
-                  <span className="truncate">{model!.nameOf(id)}</span>
-                </button>
-              ))}
-            </AnchoredPanel>
-          </div>
+          <QuestionSeat
+            entities={entities}
+            question={question}
+            node={nodeName}
+            person={personName}
+            text={text}
+            onText={setText}
+            onAsk={ask}
+            onClear={() => ask(null)}
+            inputRef={input}
+          />
           {phone ? (
             <div className="w-full">
               <Select aria-label="Lens" defaultValue="people">
@@ -238,11 +249,11 @@ export function MapTab({ url }: { url: InsightsUrl }) {
                 key={f}
                 type="button"
                 aria-pressed={finding === f}
-                onClick={() => url.set({ finding: finding === f ? null : f, q: null })}
+                onClick={() => url.set({ ...toParams(null), finding: finding === f ? null : f })}
                 className={`motion-tint inline-flex items-center gap-2 rounded-pill font-semibold ${PILL.sm} ${finding === f ? "bg-tint-3" : "bg-tint-2"}`}
               >
                 <span aria-hidden className={`size-1.5 rounded-pill ${DOT[f]}`} />
-                {findings.counts[f]} {chipWords[f]}
+                {findings.counts[f]} {CHIP_WORDS[f][findings.counts[f] === 1 ? 0 : 1]}
               </button>
             ))}
         </div>
@@ -251,16 +262,18 @@ export function MapTab({ url }: { url: InsightsUrl }) {
       <Unfold open={Boolean(panel)}>
         {panel && (
           <AnswerPanel
-            key={`${finding}|${focus}|${pins.join()}`}
+            key={`${finding}|${JSON.stringify(question)}|${pins.join()}`}
             panel={panel}
-            onBack={back}
+            phone={phone}
+            onBack={question || finding || pins.length ? back : undefined}
             pins={pins.map((id) => ({ id, name: model!.nameOf(id), tone: tones.get(id)! }))}
             onUnpin={unpin}
-            onPin={focus && !pins.includes(focus) && pins.length < MAX_PINS ? pin : undefined}
-            onlyPinned={focus && pins.length >= 2 ? () => url.set({ q: null }) : undefined}
+            onPin={!finding && target && !pins.includes(target) && pins.length < MAX_PINS ? pin : undefined}
+            onlyPinned={focus && pins.length >= 2 ? () => ask(null) : undefined}
           />
         )}
       </Unfold>
+      {phone && panel && question && !finding && <p className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">{PHONE_NOTE}</p>}
 
       {phone && !panel && findings.ready && <RestCards cards={findings.rest} />}
 
@@ -284,15 +297,15 @@ export function MapTab({ url }: { url: InsightsUrl }) {
             highlight={highlight}
             focusId={focus}
             count={held}
-            unused={unused}
-            marks={marks}
+            unused={findings.unused}
+            marks={findings.marks}
             keysOpen={keysOpen}
             onKeys={() => setKeysOpen((o) => !o)}
             onPick={pick}
           />
         )}
         {model && !phone && view === "list" && (
-          <NodeList model={model} highlight={highlight} focusId={focus} unused={unused} onPick={pick} />
+          <NodeList model={model} highlight={highlight} focusId={focus} unused={findings.unused} onPick={pick} />
         )}
       </ListStates>
     </>

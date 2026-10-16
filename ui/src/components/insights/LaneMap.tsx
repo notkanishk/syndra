@@ -7,7 +7,7 @@ import { NodeGlyph, TONE_COLOUR, nodeSurface } from "@/components/insights/tone"
 import { AnchoredPanel } from "@/components/ui/Anchored";
 import { PILL } from "@/components/ui/Button";
 
-export type Mark = "drift" | "send";
+export type Mark = "drift" | "send" | "single";
 
 const CAP = 12;
 const ROW = 46;
@@ -30,6 +30,7 @@ const KEYS: Array<[string, string]> = [
 export const MARK_WORDS: Record<Mark, { tone: Tone; words: string }> = {
   drift: { tone: "danger", words: "Held in Zitadel, not given by Syndra" },
   send: { tone: "warn", words: "Waiting for you to send" },
+  single: { tone: "warn", words: "Single route" },
 };
 
 /**
@@ -235,7 +236,7 @@ export function LaneMap({
             <span aria-hidden className="w-[22px] flex-none border-t-2 border-dashed border-line-strong" />
             Automatic
           </span>
-          {(["drift", "send"] as const)
+          {(["drift", "send", "single"] as const)
             .filter(marked)
             .map((mark) => (
               <span key={mark} className="inline-flex items-center gap-2 text-[12.5px] text-muted">
