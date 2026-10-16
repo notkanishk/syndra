@@ -16,6 +16,8 @@ export interface AccessRequest {
   reviewer_id?: string;
   review_note?: string;
   created_at: string;
+  /** "extend" asks to keep a role they hold longer; absent means an ordinary ask. */
+  kind?: "access" | "extend";
   /** What the requester already has of the role, read for a waiting request. */
   holding?: RequestHolding;
 }
@@ -36,6 +38,8 @@ export interface CreateRequestInput {
   role_key: string;
   justification: string;
   duration_days: number;
+  /** Derived from what the member holds: "extend" for a role with an end date. */
+  kind?: "access" | "extend";
 }
 
 export interface DecisionInput {
@@ -47,6 +51,9 @@ export interface DecisionInput {
 export interface DecisionResult {
   message?: string;
   wait_reason?: string;
+  /** given, the end moved (extended), or it had ended while waiting (given_again). */
+  effect?: "given" | "extended" | "given_again";
+  until?: string;
 }
 
 const KEYS = {

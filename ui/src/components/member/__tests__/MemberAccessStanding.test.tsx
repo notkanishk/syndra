@@ -148,7 +148,7 @@ describe("MemberAccess expiry lives on its row", () => {
     expect(rows[0].className).toContain("bg-warn-soft");
     expect(rows[0].textContent).toMatch(/Given to you until .+ · 10 days left/);
     const keep = screen.getByText("Ask to keep it longer").closest("a")!;
-    expect(keep.getAttribute("href")).toBe("/requests?project=p1&role=mill");
+    expect(keep.getAttribute("href")).toBe("/requests?project=p1&role=mill&extend=1");
     expect(rows[1].getAttribute("data-ends")).toBeNull();
     // No separate warning box any more.
     expect(container.querySelector(".warn-note")).toBeNull();

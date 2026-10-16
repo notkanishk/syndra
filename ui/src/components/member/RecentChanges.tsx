@@ -42,8 +42,8 @@ export function waitClause(waitReason: string | undefined): string {
     : "makerspace staff check this role before it reaches you, and nothing more is needed from you.";
 }
 
-export function askHref(projectId: string, roleKey: string): string {
-  return `/requests?project=${encodeURIComponent(projectId)}&role=${encodeURIComponent(roleKey)}`;
+export function askHref(projectId: string, roleKey: string, extend = false): string {
+  return `/requests?project=${encodeURIComponent(projectId)}&role=${encodeURIComponent(roleKey)}${extend ? "&extend=1" : ""}`;
 }
 
 /** "Today", otherwise "8 Oct". */
@@ -81,7 +81,7 @@ function ChangeRow({ change, role }: { change: MyChange; role: string }) {
           </span>
         )}
         {change.kind === "request_declined" && (
-          <ArrowLink href={askHref(change.project_id, change.role_key)} className="self-start">
+          <ArrowLink href={askHref(change.project_id, change.role_key, change.request_kind === "extend")} className="self-start">
             Ask again
           </ArrowLink>
         )}
@@ -93,20 +93,24 @@ function ChangeRow({ change, role }: { change: MyChange; role: string }) {
 
 function describe(change: MyChange): { word: string; tone: StatusTone; pre: string; post: ReactNode } {
   const until = change.until ? `, until ${formatShortDate(change.until)}` : "";
+  // A request to keep a role longer reads "keep {role} longer", not "for {role}".
+  const keep = change.request_kind === "extend";
+  const pre = keep ? "Your request to keep " : "Your request for ";
+  const longer = keep ? " longer" : "";
   switch (change.kind) {
     case "request_approved":
       return change.waiting
         ? {
             word: "Approved",
             tone: "warn",
-            pre: "Your request for ",
-            post: ` was approved${until}. It isn't on your account yet: ${waitClause(change.wait_reason)}`,
+            pre,
+            post: `${longer} was approved${until}. It isn't on your account yet: ${waitClause(change.wait_reason)}`,
           }
-        : { word: "Approved", tone: "healthy", pre: "Your request for ", post: ` was approved${until}.` };
+        : { word: "Approved", tone: "healthy", pre, post: `${longer} was approved${until}.` };
     case "request_declined":
-      return { word: "Not approved", tone: "neutral", pre: "Your request for ", post: " was not approved." };
+      return { word: "Not approved", tone: "neutral", pre, post: `${longer} was not approved.` };
     case "request_withdrawn":
-      return { word: "Withdrawn", tone: "neutral", pre: "Your request for ", post: " was withdrawn." };
+      return { word: "Withdrawn", tone: "neutral", pre, post: `${longer} was withdrawn.` };
     case "taken_away":
       // The board says "Taken away"; the copy guide's one word for ending
       // someone's access is "revoke" (plain-language-copy §6), and its guard

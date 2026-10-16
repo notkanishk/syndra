@@ -19,6 +19,8 @@ export interface MyChange {
   /** An approval not on their account yet (N19), and why: role_waits or halted:<reason>. */
   waiting?: boolean;
   wait_reason?: string;
+  /** "extend" for a request to keep a role longer. */
+  request_kind?: "access" | "extend";
 }
 
 /** The last 30 days of changes to your own access, newest first. */

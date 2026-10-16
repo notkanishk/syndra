@@ -1,7 +1,7 @@
 "use client";
 
 import { StatusDot } from "@/components/ui/Badge";
-import { formatShortDate } from "@/lib/format";
+import { describeDuration, formatShortDate } from "@/lib/format";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
@@ -19,7 +19,19 @@ import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 
 /** Whether the requester already has the role: approving is then off. */
 export function alreadyHeld(request: AccessRequest): boolean {
-  return Boolean(request.holding && request.holding.kind !== "none");
+  const kind = request.holding?.kind;
+  // Keeping a role longer is asked of a role with an end: only one with none is settled.
+  if (request.kind === "extend") return kind === "for_good";
+  return Boolean(kind && kind !== "none");
+}
+
+/** The ask's duration line: how long, and whether it is for the role or for more of it. */
+export function describeAsk(request: AccessRequest): string {
+  const days = request.duration_days ?? 0;
+  if (request.kind !== "extend") return describeDuration(days);
+  return `Asks to keep it longer · ${
+    days < 1 ? "with no end date" : `for ${days} more ${days === 1 ? "day" : "days"}`
+  }`;
 }
 
 /**
@@ -29,6 +41,15 @@ export function alreadyHeld(request: AccessRequest): boolean {
  */
 export function HoldingNote({ request }: { request: AccessRequest }) {
   const holding = request.holding;
+  if (request.kind === "extend" && holding && holding.kind !== "for_good") {
+    return (
+      <span className="w-full text-[13px] text-muted">
+        {holding.kind === "until"
+          ? `Has it until ${formatShortDate(holding.until)}.`
+          : "It ended while this waited. Approving gives it back for the time asked."}
+      </span>
+    );
+  }
   if (!holding || holding.kind === "none") return null;
   return (
     <span className="flex w-full items-baseline gap-2 text-[13px] text-warn-text">
