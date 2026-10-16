@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { confirmedNote, describeDuration, describeExpiry, humanizeKey, roleLabel } from "@/lib/format";
+import { confirmedNote, describeDuration, describeExpiry, humanizeKey, personLine, roleLabel } from "@/lib/format";
+
+describe("personLine", () => {
+  it("reads title · team", () => {
+    expect(personLine({ title: "Student", team: "Operations" })).toBe("Student · Operations");
+  });
+
+  it("leaves out an empty half, never a dash", () => {
+    expect(personLine({ title: "Student", team: "" })).toBe("Student");
+    expect(personLine({ title: "  ", team: "Operations" })).toBe("Operations");
+    expect(personLine({ title: "", team: undefined })).toBe("");
+  });
+});
 
 describe("roleLabel", () => {
   it("names a role as the pair it is", () => {

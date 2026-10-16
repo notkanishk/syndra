@@ -16,7 +16,7 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
 - [x] 1.11 Session-ended detail no longer repeats "Nothing was changed." (Login 3)
 - [x] 1.12 Freshness: the provisional dot is an amber ring (Mobile 1)
 - [ ] 1.13 [ready-for-agent] `PlanReview` rows still show "Waiting for you to send" as a plain pill; a plan row is a forecast, so it keeps the word without a link. Confirm with design whether plan rows link too
-- [ ] 1.14 [ready-for-agent] People "title · team, then email" in pickers (People everywhere 1)
+- [x] 1.14 People "title · team, then email" in pickers (People everywhere 1): one `personLine()` in `lib/format`, used by the Assign dialog (TargetOverview) and Start from a person (Bundles); an empty half is left out, never "—" (People's own Team column keeps its "—"). Tests
 
 ## 2. Never sample data (N23, B11, States 5)
 - [x] 2.1 Zitadel source keeps the last good read: entries expire, never vanish; invalidation expires; a failed list read serves the last good read (held one TTL) and marks the directory not current
@@ -42,7 +42,7 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
 - [ ] 3.10 [ready-for-agent] Bundle editor: When given per role and its summary sentence; publish review grouped Straight away · Waits for you · Unchanged (with step 4, Bundles v2)
 - [ ] 3.11 [ready-for-agent] My access 5 (N19): a member's waiting approval in Recent changes (needs B10's member-scoped read)
 - [ ] 3.12 [ready-for-agent] Next step reads per user, rule, request and bundle version (one query keyed by `source_ref`), so the status stays on the changed thing after a reload; today it shows on the outcome and in Pending changes
-- [ ] 3.13 [needs-triage] Home and a person's Requests tab still show the old approval text (they call `useDecideRequest` without `approvalOutcome`)
+- [x] 3.13 Home and a person's Requests tab decide through the queue's own `useRequestDecisions()` (`lib/request-decisions`, with `approvalOutcome()`), so every approval says the same thing per `wait_reason`, in the row's Decision seat. Home's decided row also keeps its seat now (it vanished on the tap, outcome and all, and named the requester by id). Tests
 
 ## 4. Screens
 - [x] 4.1 Bundles v2 (1c):

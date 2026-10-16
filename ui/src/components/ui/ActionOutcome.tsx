@@ -69,15 +69,14 @@ export function ActionOutcome({
           <StatusDot tone={SEAT_DOT[outcome.kind]} />
           {word ?? OUTCOME_LABEL[outcome.kind]}
         </span>
-        {outcome.kind === "queued" ? (
-          <NextStep className="pl-[14px]" />
-        ) : (
-          (grave ? outcome.message : outcome.detail) && (
-            <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">
-              {grave ? sentence(outcome.message) : outcome.detail}
-            </span>
-          )
+        {/* Queued: why it waits, then the step left — the word above already
+            wears the amber dot, so the link doesn't repeat it (route-requests). */}
+        {(grave ? outcome.message : outcome.detail) && (
+          <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">
+            {grave ? sentence(outcome.message) : outcome.detail}
+          </span>
         )}
+        {outcome.kind === "queued" && <NextStep dot={false} className="pl-[14px]" />}
         {outcome.kind === "failed" && outcome.requestId && (
           <CopyableValue value={outcome.requestId} label="Reference" className="pl-[14px]" />
         )}

@@ -75,6 +75,11 @@ function renderQueue() {
   );
 }
 
+/** The Decision seat, once a decision is in it: the one `role="status"` in the row. */
+async function decisionSeat() {
+  return await screen.findByRole("status");
+}
+
 describe("a decided request names its person and its next step", () => {
   it("renders the requester's name, not their id", () => {
     renderQueue();
@@ -87,48 +92,59 @@ describe("a decided request names its person and its next step", () => {
     expect(screen.getByRole("img", { name: "Waits for you" })).toBeTruthy();
   });
 
-  it("approving with nothing waiting says they can use it now", async () => {
+  // #96: the row reports in its own Decision seat — dot, word, what happened —
+  // in place of the buttons, never a pill reading "Applied".
+  it("approving with nothing waiting says Approved, sent and not yet seen", async () => {
     renderQueue();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(decide).toHaveBeenCalledWith({ id: "r1", status: "approved" }));
-    expect(await screen.findByText(/Approved\. They can use it now\./)).toBeTruthy();
+    const seat = await decisionSeat();
+    expect(seat.textContent).toBe("ApprovedSent · not yet seen in Zitadel");
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.queryByText("Applied")).toBeNull();
   });
 
-  it("approving a role that always waits points at Pending changes", async () => {
+  it("approving a role that always waits says why and points at Pending changes", async () => {
     decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "role_waits" });
     renderQueue();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    expect(
-      await screen.findByText("Approved. This role always waits for you, so it's in Pending changes."),
-    ).toBeTruthy();
+    const seat = await decisionSeat();
+    expect(seat.textContent).toContain("Approved");
+    expect(seat.textContent).toContain("Trained always waits for you");
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeTruthy();
   });
 
-  it("approving while Zitadel was offline says when, and that it goes when sent", async () => {
+  it("approving while Zitadel was offline says so, in the board's words", async () => {
     decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "halted:zitadel_offline" });
     renderQueue();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    expect(
-      await screen.findByText(
-        /^Approved\. Not in Zitadel yet: Zitadel didn't answer at \d\d:\d\d\. It goes when you send it\.$/,
-      ),
-    ).toBeTruthy();
+    const seat = await decisionSeat();
+    expect(seat.textContent).toContain("Zitadel didn't answer when it was approved");
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeTruthy();
   });
 
   it("approving after another stop uses that stop's words", async () => {
     decide.mockResolvedValueOnce({ message: "Request resolved", wait_reason: "halted:drain_in_progress" });
     renderQueue();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    expect(
-      await screen.findByText(/Approved\. Not in Zitadel yet: Another send was running at \d\d:\d\d\./),
-    ).toBeTruthy();
+    const seat = await decisionSeat();
+    expect(seat.textContent).toMatch(/Another send was running at \d\d:\d\d/);
   });
 
-  it("declining carries no Zitadel caveat — nothing was ever sent there", async () => {
+  it("declining says Nothing was sent — it never reached Zitadel", async () => {
     renderQueue();
     fireEvent.click(screen.getByRole("button", { name: "Decline" }));
     await waitFor(() => expect(decide).toHaveBeenCalledWith({ id: "r1", status: "rejected" }));
-    expect(screen.getByText("Declined")).toBeTruthy();
-    expect(screen.queryByText(/Zitadel/)).toBeNull();
+    const seat = await decisionSeat();
+    expect(seat.textContent).toBe("DeclinedNothing was sent");
+    expect(seat.textContent).not.toMatch(/Zitadel/);
+  });
+
+  it("a failed decision puts the buttons back and says why under them", async () => {
+    decide.mockRejectedValueOnce(new Error("boom"));
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
   });
 });

@@ -13,6 +13,7 @@ import { Segmented, Select } from "@/components/ui/Select";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { personLine } from "@/lib/format";
 import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useBundleRoles, useBundles, useCreateBundle, type BundleRow } from "@/lib/queries/useBundles";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
@@ -362,7 +363,13 @@ function StartFrom({
               selected={false}
               onToggle={() => setPersonId(p.id)}
               title={p.name}
-              description={[p.title, p.email].filter(Boolean).join(" · ")}
+              // Who they are, then how to reach them (People everywhere 1).
+              description={
+                <>
+                  {personLine(p) && <span className="block">{personLine(p)}</span>}
+                  <span className="block text-faint">{p.email}</span>
+                </>
+              }
             />
           ))}
         </div>
