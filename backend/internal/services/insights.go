@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"syndra/internal/directory"
 	"syndra/internal/models"
 )
 
@@ -383,4 +384,280 @@ func InsightsWho(ctx context.Context, has, without InsightRef) (models.InsightsW
 		return a.UserID < b.UserID
 	})
 	return out, nil
+}
+
+// --- what if ------------------------------------------------------------
+
+var (
+	// ErrInvalidWhatIf is a hypothetical that is not well formed: unknown kind,
+	// a missing or malformed field. The handler answers 400.
+	ErrInvalidWhatIf = errors.New("invalid what-if")
+	// ErrWhatIfNotFound is a hypothetical about a bundle or rule that does not
+	// exist. The handler answers 404.
+	ErrWhatIfNotFound = errors.New("what-if subject not found")
+)
+
+func whatIfInvalid(field, why string) error {
+	return fmt.Errorf("%w: %s %s", ErrInvalidWhatIf, field, why)
+}
+
+// validateWhatIf checks every field the kind needs, and every one it does not
+// (a stray field is a request that does not mean what its sender thinks).
+// Identifiers must be plain, so nothing odd reaches a query — a malformed uuid
+// would otherwise surface as a 500.
+func validateWhatIf(c models.InsightsWhatIfChange) error {
+	need := map[string]string{}
+	switch c.Kind {
+	case "bundle_gives_also", "bundle_gives_not":
+		need = map[string]string{"bundle_id": c.BundleID, "project_id": c.ProjectID, "role_key": c.RoleKey}
+	case "bundle_gone":
+		need = map[string]string{"bundle_id": c.BundleID}
+	case "rule_gone":
+		need = map[string]string{"rule_id": c.RuleID}
+	default:
+		return whatIfInvalid("kind", fmt.Sprintf("%q is not one of bundle_gives_also, bundle_gives_not, bundle_gone, rule_gone", c.Kind))
+	}
+	all := map[string]string{"bundle_id": c.BundleID, "project_id": c.ProjectID, "role_key": c.RoleKey, "rule_id": c.RuleID}
+	for _, f := range []string{"bundle_id", "project_id", "role_key", "rule_id"} {
+		v, wanted := need[f]
+		switch {
+		case wanted && v == "":
+			return whatIfInvalid(f, "is required")
+		case wanted && !insightRefPart.MatchString(v):
+			return whatIfInvalid(f, "is malformed")
+		case !wanted && all[f] != "":
+			return whatIfInvalid(f, "does not apply to "+c.Kind)
+		}
+	}
+	return nil
+}
+
+// InsightsWhatIf answers who would gain and who would lose which roles if the
+// change were made, without making it: no plan, no outbox, no lock.
+//
+// Every number is computed the way the real cascade computes it — the same
+// userBase* readers and the same effectiveClosure over the same rules — so the
+// preview can't disagree with the change it previews.
+//
+// Reads run inside one read-only repeatable-read snapshot (svcInReadSnapshot),
+// which does NOT take the access-mutation lock: a concurrent change can commit,
+// the answer is simply of the world as it was when the snapshot opened.
+//
+// bundle_gives_also / bundle_gives_not are judged against each holder's OWN
+// pinned version plus/minus the role, not against "the latest version", because
+// that is what each of them would actually hold. People holding the bundle at a
+// version that already has the role are therefore unchanged by gives_also.
+//
+// ponytail: per-person queries (a handful each) over the bundle's holders, or
+// over every known user for rule_gone — the same cost as the cascade itself, at
+// this deployment's ~200 users. A set-based read is the upgrade if it bites.
+// gives_not keeps a role that an include of the holder's pinned version still
+// gives (svcGetVersionIncludes, read once per distinct pinned version).
+func InsightsWhatIf(ctx context.Context, change models.InsightsWhatIfChange) (models.InsightsWhatIf, error) {
+	if err := validateWhatIf(change); err != nil {
+		return models.InsightsWhatIf{}, err
+	}
+	// The directory is Zitadel over HTTP: read it before opening the snapshot
+	// so a slow answer doesn't hold a transaction open.
+	dirUsers, err := directory.Default.Users(ctx)
+	if err != nil {
+		return models.InsightsWhatIf{}, err
+	}
+	names := make(map[string]string, len(dirUsers))
+	for _, u := range dirUsers {
+		names[u.ID] = u.Name
+	}
+
+	out := models.InsightsWhatIf{Change: change, Gains: []models.InsightWhatIfPerson{}, Losses: []models.InsightWhatIfPerson{}}
+	err = svcInReadSnapshot(ctx, func(ctx context.Context) error {
+		basis, err := observationBasis(ctx)
+		if err != nil {
+			return err
+		}
+		out.ReadAt = basis.ReadAt
+
+		rules, err := svcGetActiveMappingRules(ctx)
+		if err != nil {
+			return err
+		}
+		var people []string
+		// holderChange returns a person's closure before and after the hypothetical.
+		var holderChange func(ctx context.Context, userID string) (before, after map[roleKey]bool, err error)
+
+		switch change.Kind {
+		case "rule_gone":
+			if _, err := svcGetMappingRuleByID(ctx, change.RuleID); err != nil {
+				return whatIfNotFound(err, "rule")
+			}
+			without := make([]models.MappingRule, 0, len(rules))
+			for _, r := range rules {
+				if r.ID != change.RuleID {
+					without = append(without, r)
+				}
+			}
+			if people, err = svcGetAllKnownUserIDs(ctx); err != nil {
+				return err
+			}
+			holderChange = func(ctx context.Context, u string) (map[roleKey]bool, map[roleKey]bool, error) {
+				base, err := userBaseHoldings(ctx, u)
+				if err != nil {
+					return nil, nil, err
+				}
+				return effectiveClosure(base, rules), effectiveClosure(base, without), nil
+			}
+		default: // the three bundle kinds
+			if _, err := svcGetBundleByID(ctx, change.BundleID); err != nil {
+				return whatIfNotFound(err, "bundle")
+			}
+			holders, err := svcGetBundleHoldersByVersion(ctx, change.BundleID)
+			if err != nil {
+				return err
+			}
+			pin := make(map[string]string, len(holders)) // user -> pinned version id
+			for _, h := range holders {
+				people = append(people, h.UserID)
+				pin[h.UserID] = h.VersionID
+			}
+			// Whether some include of a pinned version still gives the role,
+			// read once per distinct version rather than once per holder.
+			includeGives := map[string]bool{}
+			target := roleKey{projectID: change.ProjectID, roleKey: change.RoleKey}
+			holderChange = func(ctx context.Context, u string) (map[roleKey]bool, map[roleKey]bool, error) {
+				before, err := userBaseHoldings(ctx, u)
+				if err != nil {
+					return nil, nil, err
+				}
+				var after map[roleKey]bool
+				switch change.Kind {
+				case "bundle_gone":
+					after, err = userBaseHoldingsExcludingBundle(ctx, u, change.BundleID)
+				default:
+					add := change.Kind == "bundle_gives_also"
+					var pinned []models.BundleRole
+					if pinned, err = pinnedBundleRoles(ctx, u, change.BundleID); err != nil {
+						break
+					}
+					keep := false
+					if !add {
+						if keep, err = anIncludeGives(ctx, includeGives, pin[u], target); err != nil {
+							break
+						}
+					}
+					after, err = userBaseHoldingsWithBundleAt(ctx, u, change.BundleID, withOrWithout(pinned, target, add, keep))
+				}
+				if err != nil {
+					return nil, nil, err
+				}
+				return effectiveClosure(before, rules), effectiveClosure(after, rules), nil
+			}
+		}
+
+		for _, u := range people {
+			name, known := names[u]
+			if !known {
+				// Not in the directory: nobody to show, and nothing a change
+				// would do to them that an operator could act on.
+				continue
+			}
+			before, after, err := holderChange(ctx, u)
+			if err != nil {
+				return err
+			}
+			adds, revokes := closureDelta(before, after)
+			if len(adds) == 0 && len(revokes) == 0 {
+				out.Unchanged++
+				continue
+			}
+			if len(adds) > 0 {
+				out.Gains = append(out.Gains, whatIfPerson(u, name, adds))
+			}
+			if len(revokes) > 0 {
+				out.Losses = append(out.Losses, whatIfPerson(u, name, revokes))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return models.InsightsWhatIf{}, err
+	}
+	sortWhatIfPeople(out.Gains)
+	sortWhatIfPeople(out.Losses)
+	return out, nil
+}
+
+func whatIfNotFound(err error, what string) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%w: no such %s", ErrWhatIfNotFound, what)
+	}
+	return err
+}
+
+// pinnedBundleRoles is what the bundle gives this person at the version they
+// are pinned to (included bundles' roles too).
+func pinnedBundleRoles(ctx context.Context, userID, bundleID string) ([]models.BundleRole, error) {
+	grouped, err := svcGetUserBundleRolesGrouped(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return grouped[bundleID], nil
+}
+
+// anIncludeGives reports whether any bundle included by this pinned version
+// gives the role, memoised in seen by version id. If one does, removing the role
+// from the bundle itself takes nothing from the holder.
+func anIncludeGives(ctx context.Context, seen map[string]bool, versionID string, k roleKey) (bool, error) {
+	if v, ok := seen[versionID]; ok {
+		return v, nil
+	}
+	includes, err := svcGetVersionIncludes(ctx, versionID)
+	if err != nil {
+		return false, err
+	}
+	gives := false
+	for _, in := range includes {
+		roles, err := svcGetRolesForVersion(ctx, in.ChildVersionID)
+		if err != nil {
+			return false, err
+		}
+		for _, r := range roles {
+			if r.ProjectID == k.projectID && r.RoleKey == k.roleKey {
+				gives = true
+			}
+		}
+	}
+	seen[versionID] = gives
+	return gives, nil
+}
+
+// withOrWithout returns roles with the one role added (add), or with it removed
+// unless keep says an include still gives it.
+func withOrWithout(roles []models.BundleRole, k roleKey, add, keep bool) []models.BundleRole {
+	out := make([]models.BundleRole, 0, len(roles)+1)
+	for _, r := range roles {
+		if !add && !keep && r.ProjectID == k.projectID && r.RoleKey == k.roleKey {
+			continue
+		}
+		out = append(out, r)
+	}
+	if add {
+		out = append(out, models.BundleRole{ProjectID: k.projectID, RoleKey: k.roleKey})
+	}
+	return out
+}
+
+func whatIfPerson(id, name string, keys []roleKey) models.InsightWhatIfPerson {
+	p := models.InsightWhatIfPerson{UserID: id, Name: name, Roles: make([]models.RoleGrant, 0, len(keys))}
+	for _, k := range keys { // closureDelta already sorted them
+		p.Roles = append(p.Roles, models.RoleGrant{ProjectID: k.projectID, RoleKey: k.roleKey})
+	}
+	return p
+}
+
+func sortWhatIfPeople(ps []models.InsightWhatIfPerson) {
+	sort.Slice(ps, func(i, j int) bool {
+		if ps[i].Name != ps[j].Name {
+			return ps[i].Name < ps[j].Name
+		}
+		return ps[i].UserID < ps[j].UserID
+	})
 }

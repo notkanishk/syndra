@@ -37,9 +37,9 @@ type Bundle struct {
 	// HasIncludes: it includes other bundles (B8), so it can't go inside
 	// another. IncludedIn names the bundles that include it, so it can't take
 	// others in.
-	HasIncludes bool     `json:"has_includes"`
-	IncludedIn  []string `json:"included_in,omitempty"`
-	StaleHolders  int `json:"stale_holders"`
+	HasIncludes  bool     `json:"has_includes"`
+	IncludedIn   []string `json:"included_in,omitempty"`
+	StaleHolders int      `json:"stale_holders"`
 
 	// UnpublishedChanges is how many role additions or removals sit in the
 	// working copy and have not been published. Zero means the bundle and its
@@ -1044,4 +1044,31 @@ type InsightPerson struct {
 	Name   string       `json:"name"`
 	Email  string       `json:"email"`
 	How    []RoleReason `json:"how"`
+}
+
+// InsightsWhatIf is the answer to "if this changed, who would gain and lose
+// what" (Insights I3). Nothing was changed to produce it.
+type InsightsWhatIf struct {
+	Change    InsightsWhatIfChange  `json:"change"`
+	Gains     []InsightWhatIfPerson `json:"gains"`
+	Losses    []InsightWhatIfPerson `json:"losses"`
+	Unchanged int                   `json:"unchanged"`
+	// ReadAt is when Zitadel was last observed; nil when it never has been.
+	ReadAt *time.Time `json:"read_at,omitempty"`
+}
+
+// InsightsWhatIfChange is the hypothetical, and also the request body's
+// "change". Which fields apply depends on Kind.
+type InsightsWhatIfChange struct {
+	Kind      string `json:"kind"`
+	BundleID  string `json:"bundle_id,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
+	RoleKey   string `json:"role_key,omitempty"`
+	RuleID    string `json:"rule_id,omitempty"`
+}
+
+type InsightWhatIfPerson struct {
+	UserID string      `json:"user_id"`
+	Name   string      `json:"name"`
+	Roles  []RoleGrant `json:"roles"`
 }

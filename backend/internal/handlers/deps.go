@@ -475,6 +475,7 @@ var (
 	// Insights (I2): read-only findings and the who-has-without question.
 	svcInsightsFindings   = services.InsightsFindings
 	svcInsightsWho        = services.InsightsWho
+	svcInsightsWhatIf     = services.InsightsWhatIf
 	dbListMappingHistory  = db.ListMappingHistory
 	dbForgetTargetBinding = db.ForgetTargetBinding
 	// The merge base goes with the binding, always. One left behind is a claim
