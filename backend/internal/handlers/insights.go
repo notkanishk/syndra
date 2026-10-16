@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"syndra/internal/models"
 	"syndra/internal/services"
@@ -155,6 +156,52 @@ func handleInsightsUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)
+}
+
+// handleInsightsLens answers ?kind=ending[&days=1..365] (default 30; outside the
+// range is clamped) or ?kind=group&group=left|new_term|team:<name>. A parameter
+// that does not belong to the kind is a 400, not a quiet ignore.
+func handleInsightsLens(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	bad := func(err error, field string) {
+		jsonValidationErrorResponse(w, strings.TrimPrefix(err.Error(), services.ErrInvalidLens.Error()+": "), map[string]string{field: "invalid"})
+	}
+	switch q.Get("kind") {
+	case "ending":
+		if q.Has("group") {
+			jsonValidationErrorResponse(w, "group only goes with kind=group", map[string]string{"group": "does not apply to ending"})
+			return
+		}
+		days, err := services.ParseLensDays(q.Get("days"))
+		if err != nil {
+			bad(err, "days")
+			return
+		}
+		res, err := svcInsightsLensEnding(r.Context(), days)
+		if err != nil {
+			viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
+			return
+		}
+		jsonResponse(w, http.StatusOK, res)
+	case "group":
+		if q.Has("days") {
+			jsonValidationErrorResponse(w, "days only goes with kind=ending", map[string]string{"days": "does not apply to group"})
+			return
+		}
+		g, err := services.ParseLensGroup(q.Get("group"))
+		if err != nil {
+			bad(err, "group")
+			return
+		}
+		res, err := svcInsightsLensGroup(r.Context(), g)
+		if err != nil {
+			viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
+			return
+		}
+		jsonResponse(w, http.StatusOK, res)
+	default:
+		jsonValidationErrorResponse(w, "kind must be ending or group", map[string]string{"kind": "must be ending or group"})
+	}
 }
 
 // handleGetUserUsage is one person's last use of each project, by kind. A person

@@ -473,14 +473,16 @@ var (
 	// own account of itself. Two authorities on purpose.
 	svcDormantAccounts = services.DormantAccounts
 	// Insights (I2): read-only findings and the who-has-without question.
-	svcInsightsFindings = services.InsightsFindings
-	svcInsightsWho      = services.InsightsWho
-	svcInsightsWhatIf   = services.InsightsWhatIf
-	svcInsightsTrends   = services.InsightsTrends
-	svcInsightsAsOf     = services.InsightsAsOf
-	svcInsightsTimeline = services.InsightsTimeline
-	svcInsightsUsage    = services.InsightsUsage
-	dbGetUserUsage      = db.GetUserUsage
+	svcInsightsFindings   = services.InsightsFindings
+	svcInsightsWho        = services.InsightsWho
+	svcInsightsWhatIf     = services.InsightsWhatIf
+	svcInsightsTrends     = services.InsightsTrends
+	svcInsightsAsOf       = services.InsightsAsOf
+	svcInsightsTimeline   = services.InsightsTimeline
+	svcInsightsUsage      = services.InsightsUsage
+	svcInsightsLensEnding = services.InsightsLensEnding
+	svcInsightsLensGroup  = services.InsightsLensGroup
+	dbGetUserUsage        = db.GetUserUsage
 	// Sign-in usage (I6): the webhook records, and resolves an application to
 	// its project through the directory.
 	dbRecordUsage         = db.RecordUsage
