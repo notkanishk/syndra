@@ -18,8 +18,8 @@ import (
 
 func stubInsights(t *testing.T) {
 	t.Helper()
-	f, w, i := svcInsightsFindings, svcInsightsWho, svcInsightsWhatIf
-	t.Cleanup(func() { svcInsightsFindings, svcInsightsWho, svcInsightsWhatIf = f, w, i })
+	f, w, i, tr := svcInsightsFindings, svcInsightsWho, svcInsightsWhatIf, svcInsightsTrends
+	t.Cleanup(func() { svcInsightsFindings, svcInsightsWho, svcInsightsWhatIf, svcInsightsTrends = f, w, i, tr })
 }
 
 func getWho(query url.Values) *httptest.ResponseRecorder {
@@ -150,7 +150,11 @@ func TestRouter_InsightsAreOperatorOnly(t *testing.T) {
 		return models.InsightsWhatIf{}, nil
 	}
 
-	paths := []string{"/api/v1/insights/findings", "/api/v1/insights/who?has=role:p1:x"}
+	svcInsightsTrends = func(context.Context, services.TrendPeriod) (models.InsightsTrends, error) {
+		return models.InsightsTrends{}, nil
+	}
+
+	paths := []string{"/api/v1/insights/findings", "/api/v1/insights/who?has=role:p1:x", "/api/v1/insights/trends"}
 	for role, want := range map[string]int{"member": http.StatusForbidden, "admin": http.StatusOK} {
 		jwtValidate = func(context.Context, string, string, string) (*auth.Principal, error) {
 			return &auth.Principal{Subject: "u", ProjectRoles: map[string]struct{}{role: {}}}, nil

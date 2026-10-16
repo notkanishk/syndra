@@ -76,3 +76,19 @@ func handleInsightsWhatIf(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, http.StatusOK, res)
 }
+
+// handleInsightsTrends answers ?period=30d|term|year (default term): how access
+// has been moving over that window. Anything else is a 400, not a quiet default.
+func handleInsightsTrends(w http.ResponseWriter, r *http.Request) {
+	period, err := services.ParseTrendPeriod(r.URL.Query().Get("period"))
+	if err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"period": "must be 30d, term or year"})
+		return
+	}
+	res, err := svcInsightsTrends(r.Context(), period)
+	if err != nil {
+		viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
+		return
+	}
+	jsonResponse(w, http.StatusOK, res)
+}
