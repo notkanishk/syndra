@@ -93,6 +93,8 @@ export default function RolesPage() {
       <FilterBar
         filters={
           <FilterPanel
+            resultCount={rows.length}
+            noun={["role", "roles"]}
             activeCount={[project, group, unusedOnly ? "1" : ""].filter(Boolean).length}
             onClear={() => {
               setProject("");

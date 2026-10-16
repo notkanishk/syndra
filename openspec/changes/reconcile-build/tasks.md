@@ -55,10 +55,13 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
   - [x] B6 backend: `DELETE /bundles/{id}/draft` resets `bundle_roles` to the latest version's roles in one tx, audited `bundle.draft_discarded`, no outbox rows; returns the fresh draft
   - [x] B7 backend: migration 000057 adds `assigned_by`, `source`, `moved_from_version` to `user_bundle_assignments`; assign = `direct` + actor, welcome = `welcome` + nobody, publish-migrate and move = `moved` + actor + the version left. `request` is reserved: an access request asks for one role, never a bundle. Older rows stay NULL and the API omits the fields
 - [ ] 4.2 Insights (N12)
+  - [x] 4.2.1 Access map is Insights at /insights (nav leaf, title); /graph redirects
+  - [ ] 4.2.2 [needs-info] The Insights board's questions, lenses, findings, as-of-a-date and trends need new backend reads (per-person traces, graph snapshots from the audit log, overlap and unused analysis) and one new dependency (usage events from badge taps and app sign-ins). Owner to say which come first; the single-route threshold is also unsettled (drawn at ≥ 90%)
 - [ ] 4.3 My access (B10, 52b, 52c)
 - [x] 4.4 People bulk (B4): a bulk revoke leaves the requester out (`excluded`), the bar says "Includes you · you are left out of anything that revokes access" (the copy guard replaced the board's "takes access away" with "revokes"), and the review row says "Left out · this is you"
 
 ## 5. Phone and login
-- [ ] 5.1 Filters below tablet as a Modal sm sheet (87c)
-- [ ] 5.2 Insights below tablet as sentences (20a)
-- [ ] 5.3 Login: "Sign in again in a new tab" (21b)
+- [x] 5.1 Filters below tablet: a Modal sm sheet titled Filters, ending in "Clear all" and one accent "Show {n} {noun}" with the list's live count (87c); popover unchanged from tablet up
+- [ ] 5.2 [ready-for-agent] Insights below tablet as sentences (20a), with 4.2
+- [x] 5.3 Login N21 (21b): a SESSION_ENDED outcome offers "Sign in again in a new tab →" (`/auth/zitadel?then=close`) and "This tab stays as it is. Come back here when you're signed in."; `then` rides the PKCE cookie like `next`; the door opens on "You're signed in again." with no action, and middleware leaves it there
+- [x] 5.4 Mobile 1 (amber provisional ring, step 1), Mobile 4 (the ledger now matches main's grabber copy), Mobile 5 (no "holders" in stacked rows), Login 3 (step 1)

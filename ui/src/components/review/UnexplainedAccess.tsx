@@ -281,6 +281,8 @@ export function UnexplainedAccess() {
         <span className="flex-1" />
         {tab === "triage" && (
           <FilterPanel
+            resultCount={items.length}
+            noun={["finding", "findings"]}
             activeCount={activeFilterCount}
             onClear={() => setFilters(EMPTY_DRIFT_FILTERS)}
           >
