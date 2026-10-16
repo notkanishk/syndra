@@ -1101,3 +1101,53 @@ func TestWaitingRequestsSayWhatTheRequesterAlreadyHas(t *testing.T) {
 		t.Errorf("a decided request reads nothing: %+v", got[1].Holding)
 	}
 }
+
+// An operator's own requests (A-04 §8): ?mine=1 narrows the org-wide read to
+// the ones they asked for, and without it the operator still sees everyone's.
+func TestHandleGetAccessRequests_MineNarrowsAnOperatorToTheirOwn(t *testing.T) {
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	t.Setenv("ZITADEL_ADMIN_ROLE_KEY", "admin")
+	origGet := dbGetAccessRequests
+	t.Cleanup(func() { dbGetAccessRequests = origGet })
+	dbGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) {
+		return []models.AccessRequest{
+			{ID: "r-mine", RequesterID: "op-1"},
+			{ID: "r-other", RequesterID: "someone-else"},
+		}, nil
+	}
+	operator := func(url string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		return req.WithContext(withPrincipal(req.Context(), &auth.Principal{
+			Subject:      "op-1",
+			ProjectRoles: map[string]struct{}{"admin": {}},
+		}))
+	}
+	ids := func(req *http.Request) []string {
+		rr := httptest.NewRecorder()
+		handleGetAccessRequests(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%d: %s", rr.Code, rr.Body)
+		}
+		var got []models.AccessRequest
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, r := range got {
+			out = append(out, r.ID)
+		}
+		return out
+	}
+	if got := ids(operator("/api/v1/requests?mine=1")); len(got) != 1 || got[0] != "r-mine" {
+		t.Fatalf("mine=1: %v", got)
+	}
+	if got := ids(operator("/api/v1/requests")); len(got) != 2 {
+		t.Fatalf("without mine: %v", got)
+	}
+	// A member gets their own either way, and cannot widen it.
+	for _, url := range []string{"/api/v1/requests", "/api/v1/requests?mine=1", "/api/v1/requests?mine=0"} {
+		if got := ids(memberContext(httptest.NewRequest(http.MethodGet, url, nil), "someone-else")); len(got) != 1 || got[0] != "r-other" {
+			t.Fatalf("member %s: %v", url, got)
+		}
+	}
+}

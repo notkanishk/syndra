@@ -206,8 +206,9 @@ func handleGetAccessRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Members see only their own requests — the org-wide list (with
-	// justifications) is operator-scoped (SC3).
-	if !isOperator(r) {
+	// justifications) is operator-scoped (SC3). An operator's ?mine=1 asks for
+	// the same narrowing: the requests they asked for themselves.
+	if !isOperator(r) || r.URL.Query().Get("mine") == "1" {
 		self := getAdminUserID(r.Context())
 		own := make([]models.AccessRequest, 0, len(requests))
 		for _, req := range requests {
