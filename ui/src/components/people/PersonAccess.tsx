@@ -299,7 +299,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 onClick={() => setBundlesOpen(true)}
                 className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6"
               >
-                Manage bundles →
+                Manage bundles
               </button>
             )}
           </div>
@@ -785,7 +785,7 @@ function RoleGroup({
                   </span>
                   {expires ? (
                     <span className="font-semibold text-warn-text">
-                      Expires {formatShortDate(expires)}
+                      Ends {formatShortDate(expires)}
                       {remaining !== null && remaining >= 0 ? ` · ${remaining} days` : ""}
                     </span>
                   ) : sources.length > 1 ? (
@@ -793,7 +793,7 @@ function RoleGroup({
                   ) : strongest?.kind === "mapping" ? (
                     <span className="text-faint">Nobody clicked this</span>
                   ) : (
-                    <span className="text-faint">No expiry</span>
+                    <span className="text-faint">No end date</span>
                   )}
                 </>
               )}

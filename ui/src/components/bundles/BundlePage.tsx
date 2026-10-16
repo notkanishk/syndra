@@ -732,11 +732,11 @@ function DeleteBundleDialog({
       labelledBy="delete-bundle"
     >
       <ModalHeader
-        title={`Delete ${name}?`}
+        title={`Retire ${name}?`}
         titleId="delete-bundle"
         lede={
           holders === 0
-            ? "Nobody holds it. Deleting it takes nothing away from anybody."
+            ? "Nobody holds it. Retiring it takes nothing away from anybody."
             : `${holders} ${holders === 1 ? "person holds" : "people hold"} it right now.`
         }
       />
@@ -773,7 +773,7 @@ function DeleteBundleDialog({
       >
         {/* `Keep it` precedes the destructive button in DOM order so the
             focus trap's initial focus (first focusable element) never lands
-            on `Delete and revoke`; `order-1`/`order-2` keep it visually
+            on `Retire and revoke`; `order-1`/`order-2` keep it visually
             second, matching every other confirm dialog.
             `onDeleted` clears the parent's selection, and the parent's own
             comment says why it must: the deleted bundle stays selected
@@ -809,12 +809,12 @@ function DeleteBundleDialog({
                 n === 0
                   ? {
                       kind: "applied",
-                      message: `${name} deleted`,
+                      message: `${name} retired`,
                       detail: `Nobody's access changed — it carried nothing anybody held.${orphaned}`,
                     }
                   : {
                       kind: auto ? "applied" : "queued",
-                      message: `${name} deleted — ${n} ${n === 1 ? "change" : "changes"} ${
+                      message: `${name} retired — ${n} ${n === 1 ? "change" : "changes"} ${
                         auto ? "applied" : "waiting"
                       }`,
                       detail: auto
@@ -827,7 +827,7 @@ function DeleteBundleDialog({
             }
           }}
         >
-          Delete and revoke
+          Retire and revoke
         </Button>
         )}
       </ModalFooter>

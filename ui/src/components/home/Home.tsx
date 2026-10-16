@@ -162,7 +162,7 @@ export function Home({ session }: { session: SessionUser }) {
           <span className="text-[14.5px]">
             <strong className="font-semibold">Nothing here needs you.</strong>{" "}
             <span className="text-muted">
-              No open requests, and no access expiring in the next 14 days. Checked <ClockTime />.
+              No open requests, and no access ending in the next 14 days. Checked <ClockTime />.
             </span>
           </span>
         </div>
@@ -293,7 +293,7 @@ function ExpiringSoon({
   return (
     <Card>
       <CardHeader
-        title="Direct access expiring soon"
+        title="Direct access ending soon"
         count={grants.length}
         tone="warn"
         note="Extending is the only action — doing nothing lets it lapse."

@@ -173,7 +173,7 @@ export const GLOSSARY = {
   hold: {
     title: "Hold",
     definition:
-      "A deliberate block on access a role still grants, with a date to look at it again. It stays in force until somebody lifts it — the review date is a reminder, not an expiry.",
+      "A deliberate block on access a role still grants, with a date to look at it again. It stays in force until somebody lifts it — the review date is a reminder, not an end date.",
     kind: "syndra",
   },
   mapping: {

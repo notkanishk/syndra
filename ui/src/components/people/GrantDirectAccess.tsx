@@ -14,7 +14,7 @@ import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, formatLongDate, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 /**
@@ -169,7 +169,7 @@ function GrantDirectAccessOpen({
         </div>
 
         <div>
-          <FieldLabel htmlFor="grant-expiry-date">Expires</FieldLabel>
+          <FieldLabel htmlFor="grant-expiry-date">Ends</FieldLabel>
           <div className="mb-2.5 flex flex-wrap gap-2">
             {(
               [
@@ -209,13 +209,13 @@ function GrantDirectAccessOpen({
             <div className="flex items-center gap-2.5 rounded-inner border border-line-strong px-[15px] py-3 text-[15px]">
               {resolved.date ? (
                 <>
-                  {formatLongDate(resolved.date)}
+                  {formatShortDate(resolved.date)}
                   <span className="text-[14px] text-faint">
                     — in {daysUntil(resolved.date)} days
                   </span>
                 </>
               ) : (
-                <span className="text-muted">No expiry — this access does not lapse</span>
+                <span className="text-muted">No end date — this access does not end on its own</span>
               )}
             </div>
           )}
@@ -235,13 +235,13 @@ function GrantDirectAccessOpen({
       <div className="accent-note mx-6 mt-4 px-4 py-3.5 text-[14px] leading-[1.55] text-ink/80">
         {resolved.date ? (
           <>
-            On {formatLongDate(resolved.date)} the sweep removes this automatically. They&rsquo;ll
+            It ends on {formatShortDate(resolved.date)}, and the sweep removes it automatically. They&rsquo;ll
             show up under <strong className="font-semibold text-ink">Expiring access</strong> two
             weeks before, where the only action is to extend.
           </>
         ) : (
           <>
-            This access will not lapse on its own. It stays until someone removes it — which is
+            This access will not end on its own. It stays until someone removes it — which is
             what &ldquo;Never&rdquo; means here.
           </>
         )}

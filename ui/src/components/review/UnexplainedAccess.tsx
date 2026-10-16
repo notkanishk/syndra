@@ -41,7 +41,7 @@ import {
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { Relative } from "@/components/ui/Time";
-import { formatLongDate, formatRelative, humanizeKey } from "@/lib/format";
+import { formatShortDate, formatRelative, humanizeKey } from "@/lib/format";
 import {
   AGE_LABELS,
   EMPTY_DRIFT_FILTERS,
@@ -702,13 +702,13 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
           <dt className="text-faint">Zitadel id</dt>
           <dd className="truncate">{item.zitadel_grant_id || "—"}</dd>
           <dt className="text-faint">Created</dt>
-          <dd>{item.upstream_created_at ? formatLongDate(item.upstream_created_at) : "unknown"}</dd>
+          <dd>{item.upstream_created_at ? formatShortDate(item.upstream_created_at) : "unknown"}</dd>
           <dt className="text-faint">Made by</dt>
           <dd className="truncate">
             {item.upstream_actor ? <UserName id={item.upstream_actor} /> : "unknown"}
           </dd>
           <dt className="text-faint">Last seen</dt>
-          <dd>{item.last_seen_at ? formatLongDate(item.last_seen_at) : "—"}</dd>
+          <dd>{item.last_seen_at ? formatShortDate(item.last_seen_at) : "—"}</dd>
         </dl>
       </div>
     </div>
@@ -748,7 +748,7 @@ function ResolutionDialog({
   const copy = {
     attribute: {
       title: "Adopt this access in Syndra?",
-      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, expire or revoke it like any other access.",
+      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, end or revoke it like any other access.",
       confirm: "Adopt in Syndra",
       variant: "accent" as const,
     },
@@ -977,30 +977,30 @@ function explainDrift(item: DriftTriageItem): string {
       const who = p.granted_by ? ` by ${p.granted_by}` : "";
       const why = p.reason ? ` — ${p.reason}` : "";
       const held = p.last_observed_at
-        ? ` Zitadel was still holding it on ${formatLongDate(p.last_observed_at)}.`
+        ? ` Zitadel was still holding it on ${formatShortDate(p.last_observed_at)}.`
         : "";
       const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
-      return `Granted${who}${why}. Syndra applied it on ${formatLongDate(
+      return `Granted${who}${why}. Syndra applied it on ${formatShortDate(
         p.applied_at,
       )} and Zitadel accepted it.${held} It is not there now, so somebody removed it.${removedBy}`;
     }
     if (p?.last_observed_at) {
       const who = p.granted_by ? ` by ${p.granted_by}` : "";
-      const when = p.granted_at ? ` on ${formatLongDate(p.granted_at)}` : "";
+      const when = p.granted_at ? ` on ${formatShortDate(p.granted_at)}` : "";
       const why = p.reason ? ` — ${p.reason}` : "";
       const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
-      return `Granted${who}${when}${why}. Zitadel was still holding it on ${formatLongDate(
+      return `Granted${who}${when}${why}. Zitadel was still holding it on ${formatShortDate(
         p.last_observed_at,
       )} and does not now, so somebody removed it there.${removedBy}`;
     }
     if (p?.granted_at) {
-      return `Granted${p.granted_by ? ` by ${p.granted_by}` : ""} on ${formatLongDate(
+      return `Granted${p.granted_by ? ` by ${p.granted_by}` : ""} on ${formatShortDate(
         p.granted_at,
       )}. Zitadel has never been seen holding it, so the change most likely never went through. Check Pending changes.`;
     }
     return "Syndra expects this access but Zitadel does not have it, and there is no record of it ever being held there.";
   }
-  const when = item.upstream_created_at ? ` on ${formatLongDate(item.upstream_created_at)}` : "";
+  const when = item.upstream_created_at ? ` on ${formatShortDate(item.upstream_created_at)}` : "";
   const who = item.upstream_actor ? ` by ${item.upstream_actor}` : "";
   if (when || who) {
     return `Created in Zitadel${when}${who}. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.`;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { formatLongDate, humanizeKey } from "@/lib/format";
+import { formatShortDate, humanizeKey } from "@/lib/format";
 import { outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
@@ -22,7 +22,7 @@ export function approvalOutcome(
   result?: Pick<DecisionResult, "effect" | "until">,
 ): ActionOutcome {
   if (!waitReason) {
-    const ends = result?.until ? `until ${formatLongDate(result.until)}` : "with no end date";
+    const ends = result?.until ? `until ${formatShortDate(result.until)}` : "with no end date";
     return {
       kind: "applied",
       message:

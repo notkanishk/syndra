@@ -106,14 +106,14 @@ describe("retiring a bundle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
 
     expect(document.activeElement).not.toBe(
-      screen.getByRole("button", { name: "Delete and revoke" }),
+      screen.getByRole("button", { name: "Retire and revoke" }),
     );
   });
 
   it("deletes only on the confirming button", async () => {
     render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
 
     await waitFor(() => expect(state.remove).toHaveBeenCalledWith("b1"));
   });
@@ -183,7 +183,7 @@ describe("after a bundle is retired", () => {
   async function retireTheSecondBundle() {
     render(<BundlePage bundleId="b2" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
     await waitFor(() => expect(state.remove).toHaveBeenCalledWith("b2"));
     // The refetch the mutation triggers, which the mocked list cannot do itself.
     state.bundles = [bundle()];
@@ -193,10 +193,10 @@ describe("after a bundle is retired", () => {
     await retireTheSecondBundle();
 
     await waitFor(() =>
-      expect(document.body.textContent).toMatch(/Mill Certified deleted/),
+      expect(document.body.textContent).toMatch(/Mill Certified retired/),
     );
     // Nothing left to destroy, so nothing offers to.
-    expect(screen.queryByRole("button", { name: "Delete and revoke" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retire and revoke" })).toBeNull();
     // And the way out stops being a refusal, because there is nothing to refuse.
     expect(screen.queryByRole("button", { name: "Keep it" })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
@@ -217,12 +217,12 @@ describe("after a bundle is retired", () => {
     state.remove = vi.fn().mockRejectedValue(new Error("the identity provider is unreachable"));
     render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
 
     await waitFor(() => expect(document.body.textContent).toMatch(/unreachable/i));
     // Nothing was deleted, so the offer stands and the way out is still a
     // refusal. Relabelling here would tell the operator it worked.
-    expect(screen.getByRole("button", { name: "Delete and revoke" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retire and revoke" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Keep it" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     expect(state.push).not.toHaveBeenCalled();

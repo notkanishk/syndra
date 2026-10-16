@@ -185,7 +185,7 @@ export function describeBulkOp(op: BulkOp): string {
     case "remove_bundle":
       return "Remove from a bundle";
     case "extend":
-      return "Extend expiring access";
+      return "Extend access";
     case "create_mapping":
       return "Add a mapping";
     case "edit_mapping":

@@ -255,7 +255,7 @@ describe("retiring, refused by the server", () => {
     );
     render(<BundlePage bundleId="sb" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
 
     expect(await screen.findByText(/Refused while New members and Staff include it\. Nothing was changed\./)).toBeInTheDocument();
   });

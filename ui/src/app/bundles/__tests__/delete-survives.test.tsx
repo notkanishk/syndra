@@ -72,7 +72,7 @@ describe("deleting a bundle", () => {
     const { rerender } = render(<BundlePage bundleId="b1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
 
     await waitFor(() => expect(state.remove).toHaveBeenCalled());
 
@@ -89,7 +89,7 @@ describe("deleting a bundle", () => {
     const { rerender } = render(<BundlePage bundleId="b1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
     await waitFor(() => expect(state.remove).toHaveBeenCalled());
 
     state.bundles = [];

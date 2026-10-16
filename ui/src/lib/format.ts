@@ -50,7 +50,7 @@ export function describeDuration(days: number | null | undefined): string {
 export type UrgencyTone = "critical" | "warning" | "neutral" | "expired";
 
 /**
- * Compute a human countdown ("in 3 days", "in 2 hours", "expired") plus a
+ * Compute a human countdown ("ends in 3 days", "ends in 2 hours", "ended") plus a
  * semantic tone the UI can use to color-code urgency. Returns `null` for an
  * absent expiry (permanent grants).
  */
@@ -64,27 +64,27 @@ export function describeExpiry(expiresAt: string | null | undefined, now: Date =
   const daysLeft = Math.ceil(ms / (1000 * 60 * 60 * 24));
 
   if (ms <= 0) {
-    return { countdown: "expired", tone: "expired", daysLeft };
+    return { countdown: "ended", tone: "expired", daysLeft };
   }
   if (daysLeft <= 1) {
     const hours = Math.max(1, Math.round(ms / (1000 * 60 * 60)));
     return {
-      countdown: `expires in ${hours} hour${hours === 1 ? "" : "s"}`,
+      countdown: `ends in ${hours} hour${hours === 1 ? "" : "s"}`,
       tone: "critical",
       daysLeft,
     };
   }
   if (daysLeft <= 7) {
     return {
-      countdown: `expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
+      countdown: `ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
       tone: "critical",
       daysLeft,
     };
   }
   if (daysLeft <= 14) {
-    return { countdown: `expires in ${daysLeft} days`, tone: "warning", daysLeft };
+    return { countdown: `ends in ${daysLeft} days`, tone: "warning", daysLeft };
   }
-  return { countdown: `expires in ${daysLeft} days`, tone: "neutral", daysLeft };
+  return { countdown: `ends in ${daysLeft} days`, tone: "neutral", daysLeft };
 }
 
 /**
@@ -105,7 +105,7 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
   if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
   const days = Math.round(hours / 24);
   if (days < 30) return `${days} ${days === 1 ? "day" : "days"} ago`;
-  return formatShortDate(iso);
+  return formatShortDate(iso, now);
 }
 
 /**
@@ -118,12 +118,23 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
  */
 const DATE_LOCALE = "en-GB";
 
-/** "2 Aug" — the form a deadline is spoken in. */
-export function formatShortDate(iso: string | null | undefined): string {
+/**
+ * "2 Aug" — the form a deadline is spoken in. The year appears only when the
+ * date is not in this year ("2 Aug 2027"): a year on every date is noise, and
+ * a missing year on a date a year away is a false statement (A-04 §7.9).
+ */
+export function formatShortDate(
+  iso: string | null | undefined,
+  now: Date = new Date(),
+): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(DATE_LOCALE, { day: "numeric", month: "short" });
+  return date.toLocaleDateString(DATE_LOCALE, {
+    day: "numeric",
+    month: "short",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
 }
 
 /**
@@ -148,15 +159,7 @@ export function formatWhen(iso: string | null | undefined, now: Date = new Date(
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
   const clock = formatClock(iso);
-  return date.toDateString() === now.toDateString() ? clock : `${formatShortDate(iso)} ${clock}`;
-}
-
-/** "18 Dec 2026" — the form a resolved expiry date is confirmed in. */
-export function formatLongDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(DATE_LOCALE, { day: "numeric", month: "short", year: "numeric" });
+  return date.toDateString() === now.toDateString() ? clock : `${formatShortDate(iso, now)} ${clock}`;
 }
 
 /** "Friday 31 July" — the line under a greeting. */

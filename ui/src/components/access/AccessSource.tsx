@@ -294,7 +294,7 @@ export function SourcePopover({
   const rows: Array<[string, React.ReactNode]> = [];
   if (by) rows.push(["By", by]);
   if (when) rows.push(["When", when]);
-  if (expires) rows.push(["Expires", expires]);
+  if (expires) rows.push(["Ends", expires]);
   if (note) rows.push(["Note", <span key="note" className="text-muted">{note}</span>]);
   const hasBody = rows.length > 0 || Boolean(footer);
 

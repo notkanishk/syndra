@@ -12,7 +12,7 @@ import { formatClock } from "@/lib/format";
  * The page builds access from the assignment tables, which say what somebody
  * has been GIVEN. In manual mode nothing reaches Zitadel until an operator
  * confirms Pending changes, and for that whole window a queued role rendered
- * with the same chip, the same section and the same "No expiry" as one that
+ * with the same chip, the same section and the same "No end date" as one that
  * landed a month ago. The operator who reported it took the page as
  * confirmation the work was done.
  */
@@ -107,7 +107,7 @@ describe("a role whose grant has not been sent", () => {
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
     // An expiry on access that does not exist yet answers a question nobody
     // can ask, so the marker takes the slot rather than sitting beside it.
-    expect(screen.queryByText("No expiry")).toBeNull();
+    expect(screen.queryByText("No end date")).toBeNull();
   });
 
   it("says nothing once the grant has been delivered", () => {
@@ -118,7 +118,7 @@ describe("a role whose grant has not been sent", () => {
     renderPerson();
 
     expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
-    expect(screen.getByText("No expiry")).toBeInTheDocument();
+    expect(screen.getByText("No end date")).toBeInTheDocument();
   });
 
   // The half that would be wrong in the other direction.
@@ -175,7 +175,7 @@ describe("a role Syndra records that Zitadel does not have", () => {
     renderPerson();
 
     expect(screen.getByText("Not in Zitadel")).toBeInTheDocument();
-    expect(screen.queryByText("No expiry")).toBeNull();
+    expect(screen.queryByText("No end date")).toBeNull();
   });
 
   // An outage is not an absence. Reading it as one, on this screen, costs
