@@ -3,6 +3,7 @@ import {
   confirmedNote,
   describeDuration,
   describeExpiry,
+  formatAgoShort,
   askLengthForMember,
   askLengthForOperator,
   formatShortDate,
@@ -181,5 +182,17 @@ describe("a pending ask's length", () => {
 
   it("names the year when that date falls in the next one", () => {
     expect(askLengthForOperator(90, now)).toBe("For 90 days · until 15 Jan 2027");
+  });
+});
+
+describe("formatAgoShort", () => {
+  const now = new Date("2026-10-17T12:00:00Z");
+  it("is as short as a note seat needs", () => {
+    expect(formatAgoShort("2026-10-17T11:59:40Z", now)).toBe("just now");
+    expect(formatAgoShort("2026-10-17T11:30:00Z", now)).toBe("30m ago");
+    expect(formatAgoShort("2026-10-17T10:00:00Z", now)).toBe("2h ago");
+    expect(formatAgoShort("2026-10-14T12:00:00Z", now)).toBe("3d ago");
+    expect(formatAgoShort("2026-08-01T12:00:00Z", now)).toBe("1 Aug");
+    expect(formatAgoShort(undefined, now)).toBe("");
   });
 });

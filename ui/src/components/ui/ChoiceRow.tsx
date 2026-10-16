@@ -23,6 +23,8 @@ export function ChoiceRow({
   meta,
   description,
   aside,
+  note: seatNote,
+  outlined = false,
 }: {
   selected: boolean;
   onToggle: () => void;
@@ -40,6 +42,13 @@ export function ChoiceRow({
   description?: ReactNode;
   /** The row's right seat, e.g. a Waits-for-you mark with words. */
   aside?: ReactNode;
+  /**
+   * What the row says about itself on the right (max 170, right-aligned, 12.5px):
+   * "You have this", "Yours until 18 Dec". The description stays under the name.
+   */
+  note?: ReactNode;
+  /** Draws an edge so the eye lands here: the row a link named that can't be chosen. */
+  outlined?: boolean;
 }) {
   const inert = locked || blocked || disabled;
   const chosen = selected && !locked && !blocked;
@@ -48,7 +57,7 @@ export function ChoiceRow({
   return (
     <label
       className={`flex min-h-[44px] items-start gap-3 rounded-inner border px-3.5 py-2.5 motion-tint ${
-        chosen ? "border-accent-line bg-accent-soft" : "border-transparent"
+        chosen ? "border-accent-line bg-accent-soft" : outlined ? "border-line-strong" : "border-transparent"
       } ${inert ? "" : "cursor-pointer hover:bg-[var(--hover)]"} ${chosen ? "hover:bg-accent-soft" : ""}`}
     >
       <Seat
@@ -71,6 +80,11 @@ export function ChoiceRow({
           </span>
         )}
       </span>
+      {seatNote && (
+        <span className="mt-0.5 flex max-w-[170px] flex-none flex-col items-end gap-0.5 text-right text-[12.5px] leading-[1.4] text-muted">
+          {seatNote}
+        </span>
+      )}
       {aside && <span className="mt-0.5 flex-none">{aside}</span>}
     </label>
   );

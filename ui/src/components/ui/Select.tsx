@@ -45,7 +45,7 @@ export function Segmented<T extends string>({
   fill = false,
 }: {
   /** `title` is the segment's own hover text, for a choice that needs a sentence beside its word. */
-  options: Array<{ value: T; label: string; title?: string }>;
+  options: Array<{ value: T; label: string; title?: string; disabled?: boolean }>;
   value: T;
   onChange: (next: T) => void;
   size?: "sm" | "md";
@@ -78,10 +78,11 @@ export function Segmented<T extends string>({
             role="radio"
             aria-checked={active}
             title={option.title}
+            disabled={option.disabled}
             onClick={() => onChange(option.value)}
             className={`rounded-pill font-semibold control ${fill ? "flex-1" : ""} ${pad} ${
               active ? "bg-accent-dense text-accent-ink" : "text-muted hover:text-ink"
-            }`}
+            } ${option.disabled ? "cursor-not-allowed opacity-50" : ""}`}
           >
             {option.label}
           </button>

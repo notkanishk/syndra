@@ -27,7 +27,8 @@ export function Radio({ className = "", ...props }: ChoiceProps) {
  * checkbox wherever a row is chosen. Still a real input: Space toggles it, a
  * label names it, and shift-click and drag-paint read it as before. `single`
  * draws a dot instead of a check, for one-of-many. `locked` is chosen by
- * something elsewhere and can't change here.
+ * something elsewhere and can't change here, and is ticked grey in both forms:
+ * held is a tick, never a dot (A-04 §5).
  */
 export function Seat({
   single = false,
@@ -43,7 +44,7 @@ export function Seat({
         {...(locked ? { checked: true, disabled: true, readOnly: true } : {})}
       />
       <span aria-hidden>
-        {single ? (
+        {single && !locked ? (
           <svg className="seat-mark" width="10" height="10" viewBox="0 0 10 10">
             <circle cx="5" cy="5" r="4" fill="currentColor" />
           </svg>

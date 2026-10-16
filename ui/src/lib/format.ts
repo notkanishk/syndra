@@ -145,6 +145,24 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
 }
 
 /**
+ * "2h ago": the short stamp a note seat has room for (A-04 §10). Past a month it
+ * is the date, the year only when it isn't this year.
+ */
+export function formatAgoShort(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const minutes = Math.max(0, Math.round((now.getTime() - then) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return formatShortDate(iso, now);
+}
+
+/**
  * Dates are formatted in a FIXED locale, not the ambient one.
  *
  * A date rendered on the server in one locale and re-rendered in the browser in

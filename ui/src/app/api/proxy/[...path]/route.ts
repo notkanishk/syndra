@@ -54,7 +54,7 @@ function isOwnShadowCredential(path: string[], userId: string) {
 
 function isMemberAllowed(method: "GET" | "POST" | "PUT" | "DELETE", path: string[], userId: string) {
   if (method === "GET") {
-    if (path.length === 1 && (path[0] === "catalog" || path[0] === "applications" || path[0] === "requests")) {
+    if (path.length === 1 && (path[0] === "catalog" || path[0] === "applications" || path[0] === "requests" || path[0] === "terms")) {
       return true;
     }
     if (isOwnMemberRoute("GET", path)) return true;
