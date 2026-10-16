@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnswerPanel, type Panel } from "@/components/insights/AnswerPanel";
+import { asOfPanel, pastHeld } from "@/components/insights/asof";
+import { addDays, dayLabel, today as todayDay } from "@/components/insights/days";
 import { LaneMap } from "@/components/insights/LaneMap";
 import { NodeList } from "@/components/insights/NodeList";
 import {
@@ -20,15 +22,18 @@ import {
 import { nodeIds, sentence, sentenceText, toParams, type Entity, type Question } from "@/components/insights/question";
 import { QuestionSeat } from "@/components/insights/QuestionSeat";
 import { RestCards } from "@/components/insights/RestCards";
+import { Timeline } from "@/components/insights/Timeline";
 import { useAnswer } from "@/components/insights/useAnswer";
 import { FINDINGS, MAX_PINS, type Finding, type InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { useFindings } from "@/components/insights/useFindings";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { PILL } from "@/components/ui/Button";
+import { Button, PILL } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills, Segmented, Select } from "@/components/ui/Select";
 import { Unfold } from "@/components/ui/Unfold";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
+import { useInsightsAsOf, useInsightsTimeline } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
 import { useIsPhone, useIsTouch } from "@/lib/useViewport";
 
@@ -41,6 +46,9 @@ const CHIP_WORDS: Record<Finding, [string, string]> = {
   overlap: ["overlap", "overlaps"],
 };
 const PHONE_NOTE = "The map draws this on a wider screen. The link keeps the question, so it opens there as you left it.";
+const TIMELINE_DAYS = 120;
+const NO_MARKS = new Map<string, never[]>();
+const NO_IDS = new Set<string>();
 const THREADS = ["", "One thread", "Two threads, side by side", "Three threads, side by side"];
 
 /**
@@ -56,6 +64,13 @@ export function MapTab({ url }: { url: InsightsUrl }) {
   const findings = useFindings(model);
   const catalog = useCatalogUsers();
   const [keysOpen, setKeysOpen] = useState(false);
+  const [scrubOpen, setScrubOpen] = useState(false);
+  const [today] = useState(todayDay);
+  const asOn = Boolean(url.asof);
+  const scrubbing = scrubOpen || asOn;
+  const from = addDays(today, 1 - TIMELINE_DAYS);
+  const asof = useInsightsAsOf(url.asof);
+  const timeline = useInsightsTimeline(from, today, scrubbing);
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement | null>(null);
   const wantInput = useRef(false);
@@ -72,13 +87,20 @@ export function MapTab({ url }: { url: InsightsUrl }) {
   const personName = (id: string) => people.get(id)?.name ?? "Unknown account";
 
   // A question naming something that is not on the map is not a question.
-  const question: Question | null = model && url.question && nodeIds(url.question).every((id) => model.byId.has(id)) ? url.question : null;
+  // A question is about today: while an earlier date is shown there is none.
+  const question: Question | null = model && !asOn && url.question && nodeIds(url.question).every((id) => model.byId.has(id)) ? url.question : null;
   const focus = question?.kind === "follow" ? question.node : null;
   const asked = question && question.kind !== "follow" ? question : null;
   const answer = useAnswer(model, asked, people, asked ? sentenceText(sentence(asked, nodeName, personName)) : "");
   const target = focus ?? answer.pin;
-  const pins = model ? url.pins.filter((id) => model.byId.has(id)) : [];
-  const finding = url.finding && findings.counts[url.finding] > 0 ? url.finding : null;
+  const pins = model && !asOn ? url.pins.filter((id) => model.byId.has(id)) : [];
+  const finding = url.finding && !asOn && findings.counts[url.finding] > 0 ? url.finding : null;
+
+  // The map as it was: the picture's own graph, with the people it held that day.
+  const picture = asof.data?.kind === "picture" ? asof.data : null;
+  const past = useMemo(() => (picture ? buildModel(picture.topology) : null), [picture]);
+  const thenHeld = useMemo(() => (past && picture ? pastHeld(past, picture.role_people) : new Map<string, number>()), [past, picture]);
+  const shown = asOn ? past : model;
   const tones = pinTones(pins, focus);
 
   const highlight = useMemo<Highlight | null>(() => {
@@ -107,7 +129,9 @@ export function MapTab({ url }: { url: InsightsUrl }) {
 
   const held = (id: string) => findings.held.get(id) ?? null;
   let panel: Panel | null = null;
-  if (model && finding) panel = findings.panel(finding);
+  if (asOn) {
+    if (asof.data && url.asof) panel = asOfPanel(url.asof, asof.data, { model, held: findings.held }, thenHeld);
+  } else if (model && finding) panel = findings.panel(finding);
   else if (model && asked) panel = answer.answer?.panel ?? answer.status;
   else if (model && focus)
     panel = {
@@ -132,7 +156,15 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     };
   } else if (model && !phone && findings.ready) panel = findings.glance;
 
-  const ask = (q: Question | null) => url.set({ ...toParams(q), finding: null });
+  const ask = (q: Question | null) => url.set({ ...toParams(q), finding: null, asof: null });
+  const toToday = () => {
+    setScrubOpen(false);
+    url.set({ asof: null });
+  };
+  const earlier = () => {
+    setScrubOpen(true);
+    url.set({ ...toParams(null), finding: null, pin: null });
+  };
   const pick = (id: string | null) => ask(id ? { kind: "follow", node: id } : null);
   const back = () => {
     if (finding) url.set({ finding: null });
@@ -150,6 +182,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     if (e.key === "Escape") {
       if (keysOpen) setKeysOpen(false);
       else if (text) setText("");
+      else if (scrubbing) toToday();
       else back();
       return;
     }
@@ -233,7 +266,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          {topology.data && (
+          {topology.data && !asOn && (
             <ReadFreshness
               subject="The access map"
               state={{
@@ -242,8 +275,25 @@ export function MapTab({ url }: { url: InsightsUrl }) {
               }}
             />
           )}
+          {asOn ? (
+            <>
+              <span className={`rounded-pill border border-accent-line bg-accent-soft font-semibold ${PILL.sm}`}>
+                Showing {dayLabel(url.asof!)}
+              </span>
+              <Button variant="ghost" size="sm" onClick={toToday}>
+                Back to now
+              </Button>
+            </>
+          ) : (
+            !phone && (
+              <Button variant="ghost" size="sm" onClick={earlier}>
+                Earlier date
+              </Button>
+            )
+          )}
           <span className="flex-1" />
           {!phone &&
+            !asOn &&
             chips.map((f) => (
               <button
                 key={f}
@@ -258,6 +308,21 @@ export function MapTab({ url }: { url: InsightsUrl }) {
             ))}
         </div>
       </div>
+
+      {!phone && scrubbing && (
+        <Timeline
+          from={from}
+          to={today}
+          value={url.asof}
+          changeDays={(timeline.data?.days ?? []).filter((d) => d.changes > 0).map((d) => d.day)}
+          onChange={(day) => url.set(day ? { asof: day, ...toParams(null), finding: null } : { asof: null })}
+        />
+      )}
+      {asOn && asof.isError && !asof.data && (
+        <Notice tone="danger" title="Couldn’t load that day.">
+          Syndra couldn’t read the picture for {dayLabel(url.asof!)}. Choose the date again.
+        </Notice>
+      )}
 
       <Unfold open={Boolean(panel)}>
         {panel && (
@@ -291,21 +356,28 @@ export function MapTab({ url }: { url: InsightsUrl }) {
           />
         }
       >
-        {model && !phone && view === "map" && (
+        {shown && !phone && view === "map" && (
           <LaneMap
-            model={model}
+            model={shown}
             highlight={highlight}
             focusId={focus}
-            count={held}
-            unused={findings.unused}
-            marks={findings.marks}
+            count={asOn ? (id) => thenHeld.get(id) ?? null : held}
+            unused={asOn ? NO_IDS : findings.unused}
+            marks={asOn ? NO_MARKS : findings.marks}
             keysOpen={keysOpen}
             onKeys={() => setKeysOpen((o) => !o)}
-            onPick={pick}
+            // ponytail: an earlier map is read, not followed; questions are about today.
+            onPick={asOn ? () => {} : pick}
           />
         )}
-        {model && !phone && view === "list" && (
-          <NodeList model={model} highlight={highlight} focusId={focus} unused={findings.unused} onPick={pick} />
+        {shown && !phone && view === "list" && (
+          <NodeList
+            model={shown}
+            highlight={highlight}
+            focusId={focus}
+            unused={asOn ? NO_IDS : findings.unused}
+            onPick={asOn ? () => {} : pick}
+          />
         )}
       </ListStates>
     </>

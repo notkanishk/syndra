@@ -22,6 +22,8 @@ const insights = vi.hoisted(() => ({
   findings: { data: undefined as unknown, isError: false },
   who: { data: undefined as unknown, isError: false },
   whatIf: { data: undefined as unknown, isError: false },
+  asof: { data: undefined as unknown, isError: false },
+  trends: { data: undefined as unknown, isLoading: false, error: null as unknown, refetch: () => {} },
   calls: {} as { who?: [string | null, string | null]; change?: unknown },
 }));
 const people = vi.hoisted(() => ({
@@ -85,6 +87,9 @@ vi.mock("@/lib/queries/useInsights", () => ({
     insights.calls.change = change;
     return change ? insights.whatIf : { data: undefined, isError: false };
   },
+  useInsightsTrends: () => insights.trends,
+  useInsightsAsOf: () => insights.asof,
+  useInsightsTimeline: () => ({ data: undefined }),
 }));
 vi.mock("@/lib/queries/useCatalogUsers", () => ({
   useCatalogUsers: () => ({ data: people.users }),
@@ -151,6 +156,7 @@ beforeEach(() => {
   insights.findings = { data: { ...noFindings, unused: { ...noFindings.unused, roles: [{ project_id: "p2", role_key: "welder" }] } }, isError: false };
   insights.who = { data: undefined, isError: false };
   insights.whatIf = { data: undefined, isError: false };
+  insights.asof = { data: undefined, isError: false };
   insights.calls = {};
   people.users = [];
   people.access = {};
@@ -168,7 +174,7 @@ describe("tabs and the link", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Trends" }));
     expect(nav.state.search).toBe("tab=trends");
-    expect(screen.getByText("Trends are being built.")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Period" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "Access map" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Map" }));
@@ -180,7 +186,7 @@ describe("tabs and the link", () => {
     nav.set("tab=trends");
     renderPage();
     expect(screen.getByRole("button", { name: "Trends" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByText("They’ll show here.")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Period" })).toBeInTheDocument();
   });
 
   it("switches Map and List in the link, and only offers the switch on a desktop", () => {
@@ -216,6 +222,29 @@ describe("tabs and the link", () => {
     renderPage();
     expect(screen.queryByText(/was read/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /drift/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("an earlier date", () => {
+  it("hides the finding chips, says there is no picture, and the way back to today clears the link", () => {
+    nav.set("asof=2020-02-29");
+    insights.asof = { data: { kind: "none", first_day: "2026-10-16" }, isError: false };
+    renderPage();
+    expect(screen.getByText("Showing 29 Feb")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "2 drift" })).not.toBeInTheDocument();
+    expect(screen.getByText("Syndra keeps one picture a day, starting 16 Oct 2026. There's none for that date.")).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Date shown" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to now" }));
+    expect(nav.state.search).toBe("");
+    expect(screen.getByRole("button", { name: "2 drift" })).toBeInTheDocument();
+  });
+
+  it("opens the date slider from the map without leaving today", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Earlier date" }));
+    expect(screen.getByRole("slider", { name: "Date shown" })).toBeInTheDocument();
+    expect(nav.state.search).toBe("");
   });
 });
 

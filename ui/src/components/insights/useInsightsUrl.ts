@@ -3,7 +3,9 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
+import { isDay, today } from "@/components/insights/days";
 import { fromParams } from "@/components/insights/question";
+import type { TrendPeriod } from "@/lib/queries/useInsights";
 
 export type Finding = "drift" | "send" | "single" | "unused" | "overlap";
 export const FINDINGS: Finding[] = ["drift", "send", "single", "unused", "overlap"];
@@ -38,7 +40,13 @@ export function useInsightsUrl() {
     [raw, pathname, router],
   );
 
+  const period = (["30d", "year"] as const).find((p) => p === params.get("period")) ?? ("term" as const);
+  // A date in the link is only a date if it is one, and not one that has not happened.
+  const asof = isDay(params.get("asof")) && params.get("asof")! <= today() ? params.get("asof") : null;
+
   return {
+    period: period as TrendPeriod,
+    asof,
     tab: params.get("tab") === "trends" ? ("trends" as const) : ("map" as const),
     question: fromParams((k) => params.get(k)),
     view: params.get("view") === "list" ? ("list" as const) : ("map" as const),

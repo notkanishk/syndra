@@ -2,7 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { request } from "@/lib/api-client";
+import { ApiError, request } from "@/lib/api-client";
+import type { TopologyGraph } from "@/lib/queries/useTopology";
 import type { AccessRoleReason } from "@/lib/queries/useUsers";
 
 /** Mirrors the backend's `Insight*` types. Every read here is operator-only and changes nothing. */
@@ -112,6 +113,115 @@ export function useInsightsWhatIf(change: WhatIfChange | null) {
         body: { change },
       });
       return { gains: list(d?.gains), losses: list(d?.losses), unchanged: d?.unchanged ?? 0, read_at: d?.read_at };
+    },
+  });
+}
+
+export type TrendPeriod = "30d" | "term" | "year";
+
+export interface TrendWeek {
+  week_start: string;
+  through_bundle: number;
+  by_request: number;
+  by_hand: number;
+  taken_away: number;
+}
+
+export interface InsightsTrends {
+  window: { from: string; to: string; label: string };
+  weekly: TrendWeek[];
+  totals: { given: number; taken_away: number };
+  requests: {
+    came_in: number;
+    approved: number;
+    declined: number;
+    withdrawn: number;
+    declined_reasons: Array<{ reason: string; n: number }>;
+    median_hours_to_decide: number | null;
+    outside_bundles: Array<RoleRef & { n: number }>;
+  };
+  sending: { median_minutes_approval_to_sent: number | null; sample: number };
+  drift: { found: number; cleared: number; median_hours_to_clear: number | null };
+  ending_soon: Array<{ project_id: string; project_name: string; d30: number; d60: number; d90: number }>;
+  upkeep: {
+    people_who_left_holding: number;
+    drift_open: number;
+    roles_nobody_has: number;
+    bundles_nothing_new: number;
+    overlaps: number;
+  };
+}
+
+export function useInsightsTrends(period: TrendPeriod) {
+  return useQuery({
+    queryKey: ["insights", "trends", period],
+    queryFn: async (): Promise<InsightsTrends> => {
+      const d = await request<InsightsTrends>(`/insights/trends?period=${period}`);
+      return {
+        ...d,
+        weekly: list(d.weekly),
+        requests: {
+          ...d.requests,
+          declined_reasons: list(d.requests?.declined_reasons),
+          outside_bundles: list(d.requests?.outside_bundles),
+        },
+        ending_soon: list(d.ending_soon),
+      };
+    },
+  });
+}
+
+/** The graph as Syndra last pictured it, or the date it has none for. */
+export type InsightsAsOf =
+  | {
+      kind: "picture";
+      day: string;
+      topology: TopologyGraph;
+      /** "project_id:role_key" to the people holding it that day. */
+      role_people: Record<string, number>;
+      first_day: string | null;
+      changes_since: number;
+    }
+  | { kind: "none"; first_day: string | null };
+
+/** "No picture" is an answer, not a failure, so it comes back as data. */
+export function useInsightsAsOf(date: string | null) {
+  return useQuery({
+    queryKey: ["insights", "asof", date],
+    enabled: Boolean(date),
+    placeholderData: (previous) => previous,
+    queryFn: async (): Promise<InsightsAsOf> => {
+      try {
+        const d = await request<Omit<Extract<InsightsAsOf, { kind: "picture" }>, "kind">>(`/insights/asof?date=${date}`);
+        return {
+          kind: "picture",
+          ...d,
+          topology: { nodes: list(d.topology?.nodes), edges: list(d.topology?.edges) },
+          role_people: d.role_people ?? {},
+        };
+      } catch (e) {
+        if (e instanceof ApiError && e.code === "NO_SNAPSHOT") {
+          return { kind: "none", first_day: (e.details as { first_day?: string | null } | undefined)?.first_day ?? null };
+        }
+        throw e;
+      }
+    },
+  });
+}
+
+export interface InsightsTimeline {
+  days: Array<{ day: string; changes: number }>;
+  snapshot_days: [string | null, string | null];
+}
+
+/** The scrubber's ticks: days with changes, and the first and last day with a picture. */
+export function useInsightsTimeline(from: string, to: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["insights", "timeline", from, to],
+    enabled,
+    queryFn: async (): Promise<InsightsTimeline> => {
+      const d = await request<Partial<InsightsTimeline>>(`/insights/timeline?from=${from}&to=${to}`);
+      return { days: list(d?.days), snapshot_days: d?.snapshot_days ?? [null, null] };
     },
   });
 }

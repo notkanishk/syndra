@@ -1,15 +1,15 @@
 "use client";
 
+import { TrendsTab } from "@/components/insights/TrendsTab";
 import { MapTab } from "@/components/insights/MapTab";
 import { useInsightsUrl } from "@/components/insights/useInsightsUrl";
-import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 
 /**
  * Insights (N12): how access travels through the makerspace, and how that is
  * changing. Map opens first; Trends holds what a map cannot draw. The link
- * holds all of it (tab, question, view, pins, finding), so a link is an answer.
+ * holds all of it (tab, period, date, question, view, pins, finding), so a link is an answer.
  */
 export default function InsightsPage() {
   const url = useInsightsUrl();
@@ -32,13 +32,7 @@ export default function InsightsPage() {
         />
       </div>
 
-      {url.tab === "trends" ? (
-        <Notice tone="neutral" title="Trends are being built.">
-          They’ll show here.
-        </Notice>
-      ) : (
-        <MapTab url={url} />
-      )}
+      {url.tab === "trends" ? <TrendsTab url={url} /> : <MapTab url={url} />}
     </div>
   );
 }
