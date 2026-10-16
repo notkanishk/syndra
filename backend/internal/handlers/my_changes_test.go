@@ -11,6 +11,7 @@ import (
 
 	"syndra/internal/auth"
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 func stubMyChanges(t *testing.T, rows []db.MyChangeRow) (gotUser *string, gotDays *int) {
@@ -88,7 +89,7 @@ func TestShapeMyChanges(t *testing.T) {
 		{Kind: "given", At: at, ProjectID: "p", RoleKey: "r", Actor: "kanishk", Source: "rule", SourceRef: "r1"},
 		{Kind: "taken_away", At: at, ProjectID: "p", RoleKey: "t", Actor: "system:expiry", Source: "direct", Pending: true},
 		{Kind: "taken_away", At: at, ProjectID: "p", RoleKey: "l", Actor: "kanishk", Source: "lifecycle_cascade"},
-	})
+	}, nil)
 	if len(got) != 9 {
 		t.Fatalf("got %d items", len(got))
 	}
@@ -120,5 +121,56 @@ func TestShapeMyChanges(t *testing.T) {
 	body, _ := json.Marshal(got[4])
 	if !strings.Contains(string(body), `"via":null`) || strings.Contains(string(body), `"by"`) || strings.Contains(string(body), "waiting") {
 		t.Fatalf("via is null, by and waiting absent: %s", body)
+	}
+}
+
+// A rule's role trigger rides on via so the feed can say "because you have X";
+// a rule with no known trigger, and a bundle, carry none.
+func TestMyChanges_ViaRuleCarriesItsTriggerRole(t *testing.T) {
+	at := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
+	rows := []db.MyChangeRow{
+		{Kind: "given", At: at, ProjectID: "p", RoleKey: "r", Source: "rule", SourceRef: "r1"},
+		{Kind: "given", At: at, ProjectID: "p", RoleKey: "r", Source: "rule", SourceRef: "gone"},
+		{Kind: "given", At: at, ProjectID: "p", RoleKey: "b", Source: "bundle", SourceRef: "b1"},
+	}
+	orig := dbGetActiveMappingRules
+	t.Cleanup(func() { dbGetActiveMappingRules = orig })
+	dbGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) {
+		return []models.MappingRule{{ID: "r1", SourceProject: "sp", SourceRole: "member", TargetProject: "p", TargetRole: "r"}}, nil
+	}
+	stubMyChanges(t, rows)
+	w := httptest.NewRecorder()
+	handleMyChanges(w, myChangesRequest("priya", ""))
+	var resp struct {
+		Items []struct {
+			Via map[string]any `json:"via"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if tr, _ := resp.Items[0].Via["trigger"].(map[string]any); tr["project_id"] != "sp" || tr["role_key"] != "member" {
+		t.Fatalf("rule via: %s", w.Body)
+	}
+	for _, i := range []int{1, 2} {
+		if _, has := resp.Items[i].Via["trigger"]; has {
+			t.Fatalf("item %d must carry no trigger: %s", i, w.Body)
+		}
+	}
+	if resp.Items[2].Via["bundle_id"] != "b1" {
+		t.Fatalf("bundle via unchanged: %s", w.Body)
+	}
+}
+
+// A failed rules read leaves the trigger off; the feed still loads.
+func TestMyChanges_RulesReadFailureKeepsTheFeed(t *testing.T) {
+	orig := dbGetActiveMappingRules
+	t.Cleanup(func() { dbGetActiveMappingRules = orig })
+	dbGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return nil, context.DeadlineExceeded }
+	stubMyChanges(t, []db.MyChangeRow{{Kind: "given", ProjectID: "p", RoleKey: "r", Source: "rule", SourceRef: "r1"}})
+	w := httptest.NewRecorder()
+	handleMyChanges(w, myChangesRequest("priya", ""))
+	if w.Code != http.StatusOK || strings.Contains(w.Body.String(), "trigger") {
+		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 }

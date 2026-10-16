@@ -36,6 +36,15 @@ type myChange struct {
 type myViaRef struct {
 	BundleID string `json:"bundle_id,omitempty"`
 	RuleID   string `json:"rule_id,omitempty"`
+	// Trigger is the role whose holders a rule gives this role to, so the
+	// feed can say "came automatically, because you have {trigger}". A rule's
+	// trigger is a role (never somebody's data); absent when the rule is gone.
+	Trigger *myTrigger `json:"trigger,omitempty"`
+}
+
+type myTrigger struct {
+	ProjectID string `json:"project_id"`
+	RoleKey   string `json:"role_key"`
 }
 
 const myChangesDefaultDays, myChangesMaxDays = 30, 90
@@ -60,11 +69,32 @@ func handleMyChanges(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", "Couldn't read your recent changes.")
 		return
 	}
-	jsonResponse(w, http.StatusOK, map[string]any{"items": shapeMyChanges(rows)})
+	jsonResponse(w, http.StatusOK, map[string]any{"items": shapeMyChanges(rows, ruleTriggers(r, rows))})
+}
+
+// ruleTriggers maps rule id to its trigger role in one read of the (few)
+// mapping rules, only when the feed has a rule row. Best-effort: a failed
+// read just leaves the trigger off, never fails the feed.
+func ruleTriggers(r *http.Request, rows []db.MyChangeRow) map[string]myTrigger {
+	for _, row := range rows {
+		if row.Source != "rule" || row.SourceRef == "" {
+			continue
+		}
+		rules, err := dbGetActiveMappingRules(r.Context())
+		if err != nil {
+			return nil
+		}
+		out := make(map[string]myTrigger, len(rules))
+		for _, ru := range rules {
+			out[ru.ID] = myTrigger{ProjectID: ru.SourceProject, RoleKey: ru.SourceRole}
+		}
+		return out
+	}
+	return nil
 }
 
 // shapeMyChanges turns Syndra's records into what a member is told.
-func shapeMyChanges(rows []db.MyChangeRow) []myChange {
+func shapeMyChanges(rows []db.MyChangeRow, triggers map[string]myTrigger) []myChange {
 	out := make([]myChange, 0, len(rows))
 	for _, row := range rows {
 		c := myChange{
@@ -79,6 +109,9 @@ func shapeMyChanges(rows []db.MyChangeRow) []myChange {
 		case "rule":
 			if row.SourceRef != "" {
 				c.Via = &myViaRef{RuleID: row.SourceRef}
+				if t, ok := triggers[row.SourceRef]; ok {
+					c.Via.Trigger = &t
+				}
 			}
 		}
 		// Absent when automatic: a rule, a lifecycle step, or Syndra itself.
