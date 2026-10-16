@@ -50,7 +50,14 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
   - [x] New bundle: lg, name and purpose side by side, Start from (Nothing · A person · Another bundle) as a one-time copy into the picker. B5's `copy_from` on the backend was not needed: the picker ticks what it copies, so the request already carries the roles
   - [x] Role picker (2a, 3a): chosen roles as removable chips, a fold per project with "k of n" / "n roles"
   - [x] Publish dialog: a dropped role's "−" is amber
-  - [ ] 4.1a [needs-info] B8 included bundles needs the owner's yes before building (and B9's bundles in the picker with it)
+  - [x] 4.1a B8 included bundles (owner's pick 2e) and B9 bundles in the picker:
+    - [x] Backend: `bundle_includes`, one level deep (409 `BUNDLE_NESTING`), includes in the working copy, `/includers`, publish asks each includer update/leave (409 `INCLUDERS_UNANSWERED`), retire refused (409 `BUNDLE_INCLUDED`), "Via {parent}, from {child}"
+    - [x] Picker (3a): a "Bundles" fold first, only where `bundles` is passed (New bundle, Add roles); a chosen or included bundle's roles ticked and locked "In {bundle}"; blocked rows say why ("Includes …, so it can't go inside another bundle" / "{this} is inside …, so it can't include other bundles"); never lists itself; chips "· bundle · n roles"
+    - [x] New bundle sends `includes`; footer note "{bundles} and n roles of your own · m roles in all"
+    - [x] What it gives: an "Included bundle" card per include (Remove from {parent}, "Comes with {child}", "Change what's in {child} →"), "{child} vN is out … Add to next version"; include changes in the unpublished panel and the publish dialog
+    - [x] An included bundle's page: Directly / Through bundles / Behind vN StatCards (StatCard gains `href`) jumping to the People groups; the dashed "Through other bundles" card with "Update to vN"
+    - [x] Publish asks each including bundle Update or Leave, no default, and sends `includers`; Retire's end card says "Refused while … include it." and disables the button; a person's bundle role reads "Via {parent}, from {child}"
+    - Tests: picker blocking and locking, New bundle includes, include card and Add to next version, publish includer gating, Through other bundles, retire refusal, the via line
   - [ ] 4.1b [ready-for-agent] The unpublished panel's "−" line could say what dropping would cost ("If people move, 9 of the 11 lose …"); today that is in the row's Remove panel
   - [x] B6 backend: `DELETE /bundles/{id}/draft` resets `bundle_roles` to the latest version's roles in one tx, audited `bundle.draft_discarded`, no outbox rows; returns the fresh draft
   - [x] B7 backend: migration 000057 adds `assigned_by`, `source`, `moved_from_version` to `user_bundle_assignments`; assign = `direct` + actor, welcome = `welcome` + nobody, publish-migrate and move = `moved` + actor + the version left. `request` is reserved: an access request asks for one role, never a bundle. Older rows stay NULL and the API omits the fields

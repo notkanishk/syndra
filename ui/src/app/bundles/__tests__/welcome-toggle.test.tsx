@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
+  useBundleRolesByBundle: () => ({ byId: {}, allLoaded: true }),
+  useSetBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({ data: state.bundles, isLoading: false, error: null, refetch: () => {} }),
   useBundleRoles: () => ({ data: [], isLoading: false, error: null, refetch: () => {} }),
   useBundleImpact: () => ({ data: { role_count: 0, users: [] }, isLoading: false }),
@@ -24,6 +27,9 @@ vi.mock("@/lib/queries/useBundles", () => ({
 }));
 
 vi.mock("@/lib/queries/useBundleVersions", () => ({
+  useVersionsByBundle: () => ({}),
+  useBundleIncluders: () => ({ data: [] }),
+  useBundleHolders: () => ({ data: [] }),
   useBundleDraft: () => ({ data: undefined }),
   useBundleVersions: () => ({ data: [], isLoading: false, refetch: () => {} }),
   useDiscardBundleDraft: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -32,7 +38,7 @@ vi.mock("@/lib/queries/useBundleVersions", () => ({
 
 vi.mock("@/lib/queries/useMappingRules", () => ({ useMappingRules: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useRoles", () => ({ useGlobalRoleCatalog: () => ({ data: [] }) }));
-vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => null }));
+vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => null, ThroughOtherBundles: () => null }));
 vi.mock("@/components/names", () => ({ RoleRef: () => null, UserName: () => null }));
 
 function bundle(overrides: Partial<BundleRow> = {}): BundleRow {

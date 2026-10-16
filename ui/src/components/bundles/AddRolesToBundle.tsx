@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { type ActionOutcome as Outcome } from "@/lib/outcome";
-import { useAddBundleRole, useBundleRoles } from "@/lib/queries/useBundles";
+import { useBundleDraft } from "@/lib/queries/useBundleVersions";
+import { useAddBundleRole, useBundleRoles, useSetBundleInclude } from "@/lib/queries/useBundles";
 
 /**
  * Adding roles to a bundle, as the job it actually is.
@@ -39,8 +40,16 @@ export function AddRolesToBundle({
 }) {
   const existing = useBundleRoles(bundleId);
   const addRole = useAddBundleRole(bundleId);
+  const include = useSetBundleInclude(bundleId);
+  const draft = useBundleDraft(bundleId);
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  // Bundles to include (B9): each goes into the working copy at its latest version.
+  const [bundles, setBundles] = useState<ReadonlySet<string>>(() => new Set());
+  const includedNow = useMemo(
+    () => new Set((draft.data?.includes ?? []).map((i) => i.child_bundle_id)),
+    [draft.data?.includes],
+  );
   const [failure, setFailure] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -56,19 +65,24 @@ export function AddRolesToBundle({
   );
 
   const chosen = Array.from(selected);
+  const chosenBundles = Array.from(bundles);
+  const count = chosen.length + chosenBundles.length;
+  const what = [
+    chosenBundles.length ? `${chosenBundles.length} ${chosenBundles.length === 1 ? "bundle" : "bundles"}` : null,
+    chosen.length ? `${chosen.length} ${chosen.length === 1 ? "role" : "roles"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
 
   function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
+    setSelected((prev) => toggled(prev, id));
   }
 
   async function apply() {
     setApplying(true);
     setFailure(null);
     let added = 0;
+    let included = 0;
     // Sequential, not concurrent. Each add is its own write against the
     // working copy, and six at once would interleave into a draft nobody
     // asked for if one of them failed halfway.
@@ -93,15 +107,43 @@ export function AddRolesToBundle({
         break;
       }
     }
+    // Then the bundles, the same way: one write each, stopping at a refusal
+    // (a bundle can be refused for nesting) with the rest still chosen.
+    for (const id of added === chosen.length ? chosenBundles : []) {
+      try {
+        await include.mutateAsync({ child: id });
+        included += 1;
+        setBundles((prev) => toggled(prev, id));
+      } catch (error) {
+        setFailure(sentence(describeFailure(error)));
+        break;
+      }
+    }
     setApplying(false);
 
-    if (added > 0) {
+    if (included > 0 && added === 0) {
+      setOutcome({
+        kind: "no_change",
+        message: `${included} ${included === 1 ? "bundle" : "bundles"} added to the ${name} draft`,
+        detail:
+          holders > 0
+            ? `Nobody has what ${included === 1 ? "it gives" : "they give"} yet. Publish a version to decide whether the ${holders} ${
+                holders === 1 ? "person" : "people"
+              } holding ${name} ${holders === 1 ? "gets" : "get"} it.`
+            : "Publish a version to give it to people.",
+      });
+    } else if (added > 0) {
       setOutcome({
         // `no_change` about access, deliberately: the working copy moved and
         // nobody's access did. Reporting this as `applied` is the misreading
         // the removal panel used to invite, in the opposite direction.
         kind: "no_change",
-        message: `${added} ${added === 1 ? "role" : "roles"} added to the ${name} draft`,
+        message: `${[
+          included ? `${included} ${included === 1 ? "bundle" : "bundles"}` : null,
+          `${added} ${added === 1 ? "role" : "roles"}`,
+        ]
+          .filter(Boolean)
+          .join(" and ")} added to the ${name} draft`,
         detail:
           holders > 0
             ? `Nobody has them yet. Publish a version to decide whether the ${holders} ${
@@ -133,6 +175,13 @@ export function AddRolesToBundle({
           lockedIds={held}
           lockedNote={`already in ${name}`}
           disabled={applying}
+          bundles={{
+            selfId: bundleId,
+            selected: bundles,
+            onToggle: (id) => setBundles((prev) => toggled(prev, id)),
+            locked: includedNow,
+            lockedNote: `already in ${name}`,
+          }}
         />
       </div>
 
@@ -141,8 +190,7 @@ export function AddRolesToBundle({
         // "something went wrong" leaves the operator unable to tell which of
         // the six landed.
         <div className="danger-note mx-6 mt-3 px-4 py-3 text-[14px] leading-[1.5]">
-          {failure} The roles still ticked were not added — press Add {chosen.length}{" "}
-          {chosen.length === 1 ? "role" : "roles"} again to add the rest.
+          {failure} What is still ticked was not added — press Add {what} again to add the rest.
         </div>
       )}
 
@@ -151,16 +199,20 @@ export function AddRolesToBundle({
       <ModalFooter>
         <Button
           variant="accent"
-          disabled={chosen.length === 0 || applying}
+          disabled={count === 0 || applying}
           isPending={applying}
           onClick={apply}
         >
-          {chosen.length === 0
-            ? "Add roles"
-            : `Add ${chosen.length} ${chosen.length === 1 ? "role" : "roles"}`}
+          {count === 0 ? "Add roles" : `Add ${what}`}
         </Button>
         <Button onClick={onClose}>Close</Button>
       </ModalFooter>
     </Modal>
   );
+}
+
+function toggled(prev: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  const next = new Set(prev);
+  if (!next.delete(id)) next.add(id);
+  return next;
 }

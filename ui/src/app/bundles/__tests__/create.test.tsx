@@ -33,6 +33,12 @@ vi.mock("@/lib/queries/useCatalogUsers", () => ({ useCatalogUsers: () => ({ data
 vi.mock("@/lib/queries/useUsers", () => ({ useUserAccess: () => ({ data: undefined }) }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
+  useBundleRolesByBundle: (ids: string[]) => ({
+    byId: Object.fromEntries(ids.map((id) => [id, source.roles])),
+    allLoaded: true,
+  }),
+  useSetBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({ data: source.bundles, isLoading: false, refetch: vi.fn() }),
   useBundleRoles: (id: string | null) => ({ data: id ? source.roles : undefined, isLoading: false, refetch: vi.fn() }),
   useBundleImpact: () => ({ data: null, isLoading: false }),
@@ -44,6 +50,9 @@ vi.mock("@/lib/queries/useBundles", () => ({
 }));
 
 vi.mock("@/lib/queries/useBundleVersions", () => ({
+  useVersionsByBundle: () => ({}),
+  useBundleIncluders: () => ({ data: [] }),
+  useBundleHolders: () => ({ data: [] }),
   useBundleDraft: () => ({ data: undefined }),
   draftChangeCount: () => 0,
 }));
@@ -74,7 +83,7 @@ vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
 }));
 
-vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => null }));
+vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => null, ThroughOtherBundles: () => null }));
 
 beforeEach(() => {
   state.create = vi.fn().mockResolvedValue({ id: "b1" });
@@ -193,5 +202,29 @@ describe("starting a new bundle from a person", () => {
     // Nothing known but the email: no empty line, no dash.
     const omar = screen.getByText("Omar Haddad").closest("label")!;
     expect(omar.textContent).toBe("Omar Haddadomar@example.edu");
+  });
+});
+
+// B8/B9: New bundle may include bundles from v1; the footer says what v1 will hold.
+describe("creating a bundle that includes another", () => {
+  it("says what v1 holds in the footer", () => {
+    openDialog();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Laser trained/ }));
+    expect(screen.getByText("1 role from 1 project")).toBeInTheDocument();
+  });
+
+  it("sends the chosen bundles as includes, and needs no roles of its own", async () => {
+    openDialog();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "New members" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Bundles/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /^Mill Certified/ }));
+
+    // Its roles are ticked and locked where they live, and the footer counts them.
+    expect(screen.getByRole("checkbox", { name: /^Laser trained.*In Mill Certified/ })).toBeDisabled();
+    expect(screen.getByText("Mill Certified · 2 roles in all")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Create with 2 roles$/ }));
+    await waitFor(() => expect(state.create).toHaveBeenCalled());
+    expect(state.create.mock.calls[0][0]).toMatchObject({ name: "New members", roles: [], includes: ["b-src"] });
   });
 });

@@ -1,25 +1,28 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
-import { BundlePeople, BundleVersions } from "@/components/bundles/BundleVersions";
-import { PublishVersionDialog } from "@/components/bundles/PublishVersionDialog";
+import { BundlePeople, BundleVersions, ThroughOtherBundles } from "@/components/bundles/BundleVersions";
+import { IncludeChangeLine, PublishVersionDialog } from "@/components/bundles/PublishVersionDialog";
 import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Mono } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { Chip, Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
 import { Unfold } from "@/components/ui/Unfold";
 import { WaitsMark } from "@/components/ui/WaitsMark";
-import { formatShortDate, humanizeKey } from "@/lib/format";
+import { formatList, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
 import {
   outcomeFromError,
   statesNothingChanged,
@@ -29,8 +32,15 @@ import { useCrumb } from "@/lib/page-crumb";
 import {
   draftChangeCount,
   useBundleDraft,
+  useBundleHolders,
+  useBundleIncluders,
   useBundleVersions,
   useDiscardBundleDraft,
+  useVersionsByBundle,
+  type BundleHolder,
+  type BundleInclude,
+  type BundleIncluder,
+  type BundleVersion,
 } from "@/lib/queries/useBundleVersions";
 import {
   useAddBundleRole,
@@ -38,7 +48,9 @@ import {
   useBundleRoles,
   useBundles,
   useDeleteBundle,
+  useRemoveBundleInclude,
   useRemoveBundleRole,
+  useSetBundleInclude,
   useSetWelcomeBundle,
   useUpdateBundle,
   type BundleRoleRow,
@@ -84,6 +96,22 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
   const draft = useBundleDraft(bundleId);
   const versions = useBundleVersions(bundleId);
   const pending = draftChangeCount(draft.data);
+  // Included bundles (B8): what this one takes in, and who takes this one in.
+  const includes = useMemo(() => draft.data?.includes ?? [], [draft.data?.includes]);
+  const childVersions = useVersionsByBundle(includes.map((i) => i.child_bundle_id));
+  const includers = useBundleIncluders(bundleId);
+  const holderRows = useBundleHolders(bundleId);
+
+  // A stat jumps to its group on the People tab, opening the tab on the way.
+  function jump(event: React.MouseEvent) {
+    const link = (event.target as HTMLElement).closest("a");
+    if (!link?.hash) return;
+    event.preventDefault();
+    setTab("people");
+    requestAnimationFrame(() =>
+      document.getElementById(link.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }
 
   if (!bundle) {
     return (
@@ -118,7 +146,12 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
     (best, v) => (!best || v.version > best.version ? v : best),
     null,
   );
-  const roleCount = (roles.data ?? []).length;
+  // What it gives: its own roles and each included bundle's, a role held both ways counted once.
+  const roleCount = new Set([
+    ...(roles.data ?? []).map(idOf),
+    ...includes.flatMap((i) => pinnedRoles(i, childVersions[i.child_bundle_id]).map(idOf)),
+  ]).size;
+  const includedBy = includers.data ?? [];
   const people = `${holders} ${holders === 1 ? "person" : "people"}`;
   const welcome = (bundles.data ?? []).find((b) => b.is_welcome);
 
@@ -147,6 +180,12 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
           </>
         }
       />
+
+      {includedBy.length > 0 && latest && (
+        <div onClickCapture={jump}>
+          <IncludedStats latest={latest.version} holders={holderRows.data ?? []} includers={includedBy} />
+        </div>
+      )}
 
       <Unfold open={pending > 0 && Boolean(draft.data)}>
         {draft.data && (
@@ -178,10 +217,24 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
             name={name}
             roles={roles}
             draft={draft.data}
+            childVersions={childVersions}
             onAdd={() => setAdding(true)}
           />
         )}
-        {tab === "people" && <BundlePeople bundleId={bundleId} name={name} />}
+        {tab === "people" && (
+          <>
+            <BundlePeople bundleId={bundleId} name={name} />
+            {includedBy.length > 0 && latest && (
+              <ThroughOtherBundles
+                name={name}
+                bundleId={bundleId}
+                latest={latest.version}
+                includers={includedBy}
+                bundles={bundles.data ?? []}
+              />
+            )}
+          </>
+        )}
         {tab === "history" && <BundleVersions bundleId={bundleId} name={name} />}
       </div>
 
@@ -191,6 +244,7 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
         holders={holders}
         isWelcome={bundle.is_welcome ?? false}
         welcomeName={welcome?.name}
+        includedIn={bundle.included_in ?? []}
         onRetire={() => setDeleting(true)}
       />
 
@@ -199,6 +253,8 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
           bundleId={bundleId}
           name={name}
           draft={draft.data}
+          // Every bundle whose working copy includes this one must be answered.
+          includers={includedBy.filter((i) => i.included_version > 0 || (i.draft_version ?? 0) > 0)}
           onClose={() => setPublishing(false)}
         />
       )}
@@ -281,6 +337,11 @@ function UnpublishedPanel({
         </Button>
       </div>
       <ul className="flex flex-col gap-1.5 text-[14px]">
+        {(draft.include_changes ?? []).map((change) => (
+          <li key={`i${change.child_bundle_id}`} className="flex items-baseline gap-2">
+            <IncludeChangeLine change={change} />
+          </li>
+        ))}
         {draft.added.map((role) => (
           <li key={`+${idOf(role)}`} className="flex items-baseline gap-2">
             <span aria-label="Adds" className="w-3 font-semibold text-accent-text">
@@ -316,12 +377,14 @@ function WhatItGives({
   name,
   roles,
   draft,
+  childVersions,
   onAdd,
 }: {
   bundleId: string;
   name: string;
   roles: ReturnType<typeof useBundleRoles>;
   draft: ReturnType<typeof useBundleDraft>["data"];
+  childVersions: Record<string, BundleVersion[] | undefined>;
   onAdd: () => void;
 }) {
   const catalog = useGlobalRoleCatalog();
@@ -346,6 +409,7 @@ function WhatItGives({
   }, [rows, byId]);
   const next = draft?.next_version;
   const leavingIds = new Set(leaving.map(idOf));
+  const includes = draft?.includes ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -363,7 +427,7 @@ function WhatItGives({
       <ListStates
         isLoading={roles.isLoading}
         error={roles.error}
-        isEmpty={rows.length === 0}
+        isEmpty={rows.length === 0 && includes.length === 0}
         onRetry={() => roles.refetch()}
         errorTitle={`Couldn't load what ${name} gives.`}
         skeleton={
@@ -381,6 +445,16 @@ function WhatItGives({
           </Card>
         }
       >
+        {includes.map((include) => (
+          <IncludedBundleCard
+            key={include.child_bundle_id}
+            parentId={bundleId}
+            parentName={name}
+            include={include}
+            versions={childVersions[include.child_bundle_id]}
+            catalog={byId}
+          />
+        ))}
         {groups.map(([project, list]) => (
           <Card key={project}>
             <CardHeader title={project} note={`${list.length} ${list.length === 1 ? "role" : "roles"}`} />
@@ -459,6 +533,7 @@ function EndCards({
   holders,
   isWelcome,
   welcomeName,
+  includedIn,
   onRetire,
 }: {
   bundleId: string;
@@ -466,8 +541,11 @@ function EndCards({
   holders: number;
   isWelcome: boolean;
   welcomeName?: string;
+  /** Bundles that include it: retiring is refused while there are any (B8). */
+  includedIn: string[];
   onRetire: () => void;
 }) {
+  const refused = includedIn.length > 0 ? `Refused while ${formatList(includedIn)} include it.` : undefined;
   const setWelcome = useSetWelcomeBundle();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   return (
@@ -508,12 +586,14 @@ function EndCards({
         <div className="min-w-[240px] flex-1">
           <div className="text-[14.5px] font-semibold">Retire {name}</div>
           <p className="mt-0.5 text-[13px] text-muted">
-            {holders === 0
-              ? "Nobody has it, so retiring it takes nothing from anyone."
-              : `The ${holders} ${holders === 1 ? "person" : "people"} with it lose whatever only ${name} gave them. You see who and what before anything is sent.`}
+            {refused ??
+              (holders === 0
+                ? "Nobody has it, so retiring it takes nothing from anyone."
+                : `The ${holders} ${holders === 1 ? "person" : "people"} with it lose whatever only ${name} gave them. You see who and what before anything is sent.`)}
           </p>
         </div>
-        <Button variant="danger" onClick={onRetire}>
+        {/* The line beside it is the reason; Button's own would say it twice. */}
+        <Button variant="danger" disabled={Boolean(refused)} onClick={onRetire}>
           Retire bundle
         </Button>
       </div>
@@ -914,6 +994,189 @@ function RemovalImpact({
           {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** The roles an include's pinned version gives, once its versions are read. */
+function pinnedRoles(include: BundleInclude, versions: BundleVersion[] | undefined): BundleRoleRow[] {
+  return versions?.find((v) => v.version === include.child_version)?.roles ?? [];
+}
+
+/**
+ * An included bundle on its parent's What it gives tab (B8, 2e): pinned to a
+ * version, each role saying where it comes from, changed on its own page. A
+ * newer version is offered here and reaches nobody until the parent publishes.
+ */
+function IncludedBundleCard({
+  parentId,
+  parentName,
+  include,
+  versions,
+  catalog,
+}: {
+  parentId: string;
+  parentName: string;
+  include: BundleInclude;
+  versions: BundleVersion[] | undefined;
+  catalog: Map<string, CatalogRole>;
+}) {
+  const remove = useRemoveBundleInclude(parentId);
+  const update = useSetBundleInclude(parentId);
+  const [failure, setFailure] = useState<Outcome | null>(null);
+  const child = include.child_name;
+  const childHref = `/bundles/${encodeURIComponent(include.child_bundle_id)}`;
+  const roles = pinnedRoles(include, versions);
+  const newer = include.child_latest_version > include.child_version;
+  const have = new Set(roles.map(idOf));
+  const adds = newer
+    ? (versions?.find((v) => v.version === include.child_latest_version)?.roles ?? []).filter(
+        (r) => !have.has(idOf(r)),
+      )
+    : [];
+  const label = (r: BundleRoleRow) => {
+    const entry = catalog.get(idOf(r));
+    return roleLabel(entry?.project_name || r.zitadel_project_id, r.zitadel_role_key, entry?.display_name);
+  };
+  async function run(act: () => Promise<unknown>) {
+    setFailure(null);
+    try {
+      await act();
+    } catch (error) {
+      setFailure(outcomeFromError(error));
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-4">
+        <Link
+          href={childHref}
+          className="type-card-title text-ink motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+        >
+          {child}
+        </Link>
+        <Chip>Included bundle</Chip>
+        <span className="text-[13.5px] text-faint">
+          v{include.child_version} · {roles.length} {roles.length === 1 ? "role" : "roles"}
+        </span>
+        <span className="flex-1" />
+        <Button
+          size="sm"
+          isPending={remove.isPending}
+          onClick={() => run(() => remove.mutateAsync(include.child_bundle_id))}
+        >
+          Remove from {parentName}
+        </Button>
+      </div>
+      {newer && (
+        <div className="accent-note row-divider flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
+          <span className="min-w-[min(300px,100%)] flex-1 text-[14px] leading-[1.5] [text-wrap:pretty]">
+            <strong className="font-semibold">
+              {child} v{include.child_latest_version} is out.
+            </strong>{" "}
+            {adds.length > 0 && `It adds ${formatList(adds.map(label))}. `}
+            Nothing changes for {parentName} until you add it and publish.
+          </span>
+          <Button
+            size="sm"
+            isPending={update.isPending}
+            onClick={() =>
+              run(() => update.mutateAsync({ child: include.child_bundle_id, version: include.child_latest_version }))
+            }
+          >
+            Add to next version
+          </Button>
+        </div>
+      )}
+      {failure && <ActionOutcome outcome={failure} className="mx-5 my-3" />}
+      {roles.map((role) => {
+        const entry = catalog.get(idOf(role));
+        return (
+          <div key={idOf(role)} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3">
+            <div className="min-w-[min(260px,100%)] flex-1">
+              <span className="text-[15px] font-semibold">
+                {entry?.display_name || humanizeKey(role.zitadel_role_key)}
+              </span>
+              {entry?.waits_for_send && <WaitsMark className="ml-2" />}{" "}
+              <span className="text-[13.5px] text-muted">
+                ·{" "}
+                <Link
+                  href={`/projects/${encodeURIComponent(role.zitadel_project_id)}`}
+                  className="motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+                >
+                  {entry?.project_name || role.zitadel_project_id}
+                </Link>
+              </span>
+              {entry?.description && (
+                <p className="mt-0.5 max-w-[80ch] text-[13.5px] text-muted [text-wrap:pretty]">{entry.description}</p>
+              )}
+            </div>
+            <span className="text-[13px] text-faint">Comes with {child}</span>
+          </div>
+        );
+      })}
+      <div className="row-divider px-5 py-3">
+        <ArrowLink href={childHref}>Change what&rsquo;s in {child}</ArrowLink>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * An included bundle's three counts (Bundles 6): who has it directly, who has
+ * it through the bundles that include it, and who is behind the latest either
+ * way. Each jumps to its group on the People tab.
+ */
+function IncludedStats({
+  latest,
+  holders,
+  includers,
+}: {
+  latest: number;
+  holders: BundleHolder[];
+  includers: BundleIncluder[];
+}) {
+  const byVersion = new Map<number, number>();
+  for (const h of holders) byVersion.set(h.version, (byVersion.get(h.version) ?? 0) + 1);
+  const versions = Array.from(byVersion.entries()).sort((a, b) => b[0] - a[0]);
+  const through = includers.reduce((n, i) => n + i.people, 0);
+  const directBehind = holders.filter((h) => h.version < latest).length;
+  const lagging = includers.filter((i) => i.included_version > 0 && i.included_version < latest);
+  const throughBehind = lagging.reduce((n, i) => n + i.people, 0);
+  const behind = directBehind + throughBehind;
+  const oldest = versions.find(([v]) => v < latest)?.[0];
+
+  return (
+    <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+      <StatCard
+        label="Directly"
+        value={String(holders.length)}
+        detail={versions.length ? versions.map(([v, n]) => `${n} on v${v}`).join(" · ") : "Nobody has it directly"}
+        href={`#on-v${versions[0]?.[0] ?? latest}`}
+      />
+      <StatCard
+        label="Through bundles"
+        value={String(through)}
+        detail={`In ${formatList(includers.map((i) => i.name))}`}
+        href="#through-bundles"
+      />
+      <StatCard
+        label={`Behind v${latest}`}
+        value={String(behind)}
+        tone={behind > 0 ? "warn" : "neutral"}
+        detail={
+          behind === 0
+            ? `Everyone is on v${latest}`
+            : [
+                directBehind ? `${directBehind} directly` : null,
+                throughBehind ? `${throughBehind} through ${formatList(lagging.map((i) => i.name))}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+        }
+        href={oldest !== undefined ? `#on-v${oldest}` : "#through-bundles"}
+      />
     </div>
   );
 }

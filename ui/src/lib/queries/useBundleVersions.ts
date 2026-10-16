@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -48,7 +48,39 @@ export interface BundleDraft {
   added: BundleRoleRow[];
   removed: BundleRoleRow[];
   holder_count: number;
+  /** The bundles the working copy includes, each pinned to a version (B8). */
+  includes: BundleInclude[];
+  /** Includes the next version adds (from 0), drops (to 0) or moves. */
+  include_changes: IncludeChange[];
 }
+
+export interface BundleInclude {
+  child_bundle_id: string;
+  child_name: string;
+  child_version_id: string;
+  child_version: number;
+  child_latest_version: number;
+}
+
+export interface IncludeChange {
+  child_bundle_id: string;
+  child_name: string;
+  from_version: number;
+  to_version: number;
+}
+
+/** A bundle that includes this one (B8). */
+export interface BundleIncluder {
+  bundle_id: string;
+  name: string;
+  /** The version its latest published version includes; 0 if only its working copy does. */
+  included_version: number;
+  /** Set when its working copy includes a different version. */
+  draft_version?: number;
+  people: number;
+}
+
+export type IncluderAction = "update" | "leave";
 
 /**
  * How many unpublished changes a draft carries.
@@ -59,21 +91,48 @@ export interface BundleDraft {
  * page down, with `?? 0` sitting right there looking like it handled the case.
  */
 export function draftChangeCount(draft: BundleDraft | undefined): number {
-  return (draft?.added?.length ?? 0) + (draft?.removed?.length ?? 0);
+  return (draft?.added?.length ?? 0) + (draft?.removed?.length ?? 0) + (draft?.include_changes?.length ?? 0);
 }
 
 const KEYS = {
   versions: (bundleId: string) => ["bundles", bundleId, "versions"] as const,
   holders: (bundleId: string) => ["bundles", bundleId, "holders"] as const,
   draft: (bundleId: string) => ["bundles", bundleId, "draft"] as const,
+  includers: (bundleId: string) => ["bundles", bundleId, "includers"] as const,
 };
+
+async function fetchVersions(bundleId: string): Promise<BundleVersion[]> {
+  const data = await request<unknown>(`/bundles/${bundleId}/versions`);
+  return Array.isArray(data) ? (data as BundleVersion[]) : [];
+}
 
 export function useBundleVersions(bundleId: string | null | undefined) {
   return useQuery({
     queryKey: KEYS.versions(bundleId ?? ""),
-    queryFn: async (): Promise<BundleVersion[]> => {
-      const data = await request<unknown>(`/bundles/${bundleId}/versions`);
-      return Array.isArray(data) ? (data as BundleVersion[]) : [];
+    queryFn: () => fetchVersions(bundleId ?? ""),
+    enabled: Boolean(bundleId),
+  });
+}
+
+/**
+ * Every version of several bundles at once, keyed by bundle: what an included
+ * bundle's pinned version gives, and what its newer one would add. Shares the
+ * cache with `useBundleVersions`.
+ */
+export function useVersionsByBundle(bundleIds: string[]): Record<string, BundleVersion[] | undefined> {
+  const results = useQueries({
+    queries: bundleIds.map((id) => ({ queryKey: KEYS.versions(id), queryFn: () => fetchVersions(id) })),
+  });
+  return Object.fromEntries(bundleIds.map((id, i) => [id, results[i].data]));
+}
+
+/** The bundles that include this one, with the version each is pinned to (B8). */
+export function useBundleIncluders(bundleId: string | null | undefined) {
+  return useQuery({
+    queryKey: KEYS.includers(bundleId ?? ""),
+    queryFn: async (): Promise<BundleIncluder[]> => {
+      const data = await request<unknown>(`/bundles/${bundleId}/includers`);
+      return Array.isArray(data) ? (data as BundleIncluder[]) : [];
     },
     enabled: Boolean(bundleId),
   });
@@ -102,11 +161,22 @@ export function useBundleDraft(bundleId: string | null | undefined) {
       const draft = await request<BundleDraft>(`/bundles/${bundleId}/draft`);
       return {
         ...draft,
-        added: draft?.added ?? [],
-        removed: draft?.removed ?? [],
+        // A role both own and included comes back once per way in; it is one change.
+        added: once(draft?.added ?? []),
+        removed: once(draft?.removed ?? []),
+        includes: draft?.includes ?? [],
+        include_changes: draft?.include_changes ?? [],
       };
     },
     enabled: Boolean(bundleId),
+  });
+}
+
+function once(rows: BundleRoleRow[]): BundleRoleRow[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const id = `${r.zitadel_project_id}:${r.zitadel_role_key}`;
+    return !seen.has(id) && Boolean(seen.add(id));
   });
 }
 
@@ -126,6 +196,11 @@ interface PublishInput {
    * what the approval does.
    */
   acknowledge_scope?: boolean;
+  /**
+   * Each bundle that includes this one, answered (B8). Required for every one,
+   * with no default: "update" puts the new version in its working copy only.
+   */
+  includers?: Array<{ bundle_id: string; action: IncluderAction }>;
 }
 
 /**

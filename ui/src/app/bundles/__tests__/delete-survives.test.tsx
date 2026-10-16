@@ -25,6 +25,9 @@ const state = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }) }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
+  useBundleRolesByBundle: () => ({ byId: {}, allLoaded: true }),
+  useSetBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({ data: state.bundles, isLoading: false, refetch: vi.fn() }),
   useBundleRoles: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
   useBundleImpact: () => ({ data: null, isLoading: false }),
@@ -37,6 +40,9 @@ vi.mock("@/lib/queries/useBundles", () => ({
 }));
 
 vi.mock("@/lib/queries/useBundleVersions", () => ({
+  useVersionsByBundle: () => ({}),
+  useBundleIncluders: () => ({ data: [] }),
+  useBundleHolders: () => ({ data: [] }),
   useBundleDraft: () => ({ data: undefined }),
   useBundleVersions: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
   useDiscardBundleDraft: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -49,7 +55,7 @@ vi.mock("@/components/names", () => ({
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
 }));
-vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => null }));
+vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => null, ThroughOtherBundles: () => null }));
 
 beforeEach(() => {
   state.push = vi.fn();
