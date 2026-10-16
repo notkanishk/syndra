@@ -126,6 +126,11 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/roles-that-wait/{project_id}/{role_key}", withCORS(withOperatorAuth(handleUnmarkRoleWaits)))
 	mux.HandleFunc("PUT /api/v1/config/confirmation-model", withCORS(withOperatorAuth(handleSwitchToRolesThatWait)))
 
+	// Term dates: one setting. Any signed-in user reads it (members need it for
+	// "To the end of next term"); only an operator changes it.
+	mux.HandleFunc("GET /api/v1/terms", withCORS(withUserAuth(handleGetTerms)))
+	mux.HandleFunc("PUT /api/v1/terms", withCORS(withOperatorAuth(handlePutTerms)))
+
 	// Audit log exposes every actor/target pair org-wide — operator-only (SC3).
 	mux.HandleFunc("GET /api/v1/audit", withCORS(withOperatorAuth(handleGetAuditLogs)))
 	// Members may list (own only — handler filters) and create (own only —

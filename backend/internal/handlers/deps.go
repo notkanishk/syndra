@@ -482,6 +482,7 @@ var (
 	svcInsightsUsage      = services.InsightsUsage
 	svcInsightsLensEnding = services.InsightsLensEnding
 	svcInsightsLensGroup  = services.InsightsLensGroup
+	svcLoadTerms          = services.LoadTerms
 	dbGetUserUsage        = db.GetUserUsage
 	// Sign-in usage (I6): the webhook records, and resolves an application to
 	// its project through the directory.

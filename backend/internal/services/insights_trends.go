@@ -39,20 +39,6 @@ func ParseTrendPeriod(s string) (TrendPeriod, error) {
 	return "", fmt.Errorf("%w: %q", ErrInvalidTrendPeriod, s)
 }
 
-// academicTerms is the year cut into terms, first day to last, inclusive and
-// gapless (a date is in exactly one). Month and day are the server's local date.
-//
-// ponytail: academic terms assumed; owner to confirm.
-var academicTerms = []struct {
-	name                 string
-	startMonth, startDay int
-	endMonth, endDay     int
-}{
-	{"Spring", 1, 1, 5, 31},
-	{"Summer", 6, 1, 7, 31},
-	{"Monsoon", 8, 1, 12, 31},
-}
-
 // trendWindow is a period resolved to instants: From is local midnight of the
 // first day, To local midnight of the last day (both inclusive days).
 type trendWindow struct {
@@ -62,29 +48,20 @@ type trendWindow struct {
 
 const dateLayout = "2006-01-02"
 
-// windowFor resolves a period at `now`, in now's own location.
-func windowFor(p TrendPeriod, now time.Time) trendWindow {
+// windowFor resolves a period at `now`, in now's own location. terms are the
+// term dates (LoadTerms); only the term period reads them.
+func windowFor(p TrendPeriod, now time.Time, terms []Term) trendWindow {
 	loc := now.Location()
-	day := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, loc) }
 	y, m, d := now.Date()
-	today := day(y, m, d)
+	today := time.Date(y, m, d, 0, 0, 0, 0, loc)
 	switch p {
 	case Trend30Days:
 		return trendWindow{From: today.AddDate(0, 0, -29), To: today, Label: "Last 30 days"}
 	case TrendYear:
 		return trendWindow{From: today.AddDate(0, 0, -364), To: today, Label: "Last 12 months"}
 	}
-	md := int(m)*100 + d
-	for _, t := range academicTerms {
-		if md >= t.startMonth*100+t.startDay && md <= t.endMonth*100+t.endDay {
-			return trendWindow{
-				From:  day(y, time.Month(t.startMonth), t.startDay),
-				To:    day(y, time.Month(t.endMonth), t.endDay),
-				Label: fmt.Sprintf("%s %d", t.name, y),
-			}
-		}
-	}
-	return trendWindow{From: today, To: today, Label: "Today"} // unreachable: terms cover the year
+	from, to, label := termAround(terms, now)
+	return trendWindow{From: from, To: to, Label: label}
 }
 
 // Audit actions, grouped by what a change MEANS for a person. Every name is one
@@ -129,6 +106,7 @@ const (
 // them, and a test should not need a database to move any one.
 var (
 	trendNow         = time.Now
+	trendTerms       = LoadTerms
 	trendFindings    = InsightsFindings
 	trendAuditDays   = db.AuditDayCounts
 	trendRequests    = db.RequestsInWindow
@@ -148,7 +126,15 @@ var (
 // doesn't hold a transaction.
 func InsightsTrends(ctx context.Context, period TrendPeriod) (models.InsightsTrends, error) {
 	now := trendNow()
-	w := windowFor(period, now)
+	var terms []Term
+	if period == TrendTerm {
+		tv, err := trendTerms(ctx, now)
+		if err != nil {
+			return models.InsightsTrends{}, err
+		}
+		terms = tv.Terms
+	}
+	w := windowFor(period, now, terms)
 	from, to := w.From, w.To.AddDate(0, 0, 1) // [from, to): To is an inclusive day
 
 	findings, err := trendFindings(ctx)

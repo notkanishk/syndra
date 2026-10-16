@@ -43,7 +43,7 @@ func TestWindowFor_TermsAndBoundaries(t *testing.T) {
 		{at(2026, 10, 16, 10, 0), "2026-08-01", "2026-12-31", "Monsoon 2026"},
 		{at(2026, 12, 31, 23, 59), "2026-08-01", "2026-12-31", "Monsoon 2026"}, // Monsoon never spills into next year
 	} {
-		w := windowFor(TrendTerm, tc.now)
+		w := windowFor(TrendTerm, tc.now, DefaultTerms(tc.now.Year()))
 		if w.From.Format(dateLayout) != tc.from || w.To.Format(dateLayout) != tc.to || w.Label != tc.label {
 			t.Errorf("%s: got %s..%s %q, want %s..%s %q", tc.now.Format(time.RFC3339),
 				w.From.Format(dateLayout), w.To.Format(dateLayout), w.Label, tc.from, tc.to, tc.label)
@@ -56,16 +56,16 @@ func TestWindowFor_TermsAndBoundaries(t *testing.T) {
 
 func TestWindowFor_RollingPeriodsEndToday(t *testing.T) {
 	now := at(2026, 10, 16, 10, 0)
-	w := windowFor(Trend30Days, now)
+	w := windowFor(Trend30Days, now, nil)
 	if w.From.Format(dateLayout) != "2026-09-17" || w.To.Format(dateLayout) != "2026-10-16" || w.Label != "Last 30 days" {
 		t.Errorf("30d = %v", w)
 	}
-	w = windowFor(TrendYear, now)
+	w = windowFor(TrendYear, now, nil)
 	if w.From.Format(dateLayout) != "2025-10-17" || w.To.Format(dateLayout) != "2026-10-16" {
 		t.Errorf("year = %v", w)
 	}
 	// 365 days counted inclusively, across a leap day.
-	w = windowFor(TrendYear, at(2028, 3, 1, 9, 0))
+	w = windowFor(TrendYear, at(2028, 3, 1, 9, 0), nil)
 	if got := w.To.Sub(w.From).Hours() / 24; got != 364 {
 		t.Errorf("year spans %v days apart, want 364 (365 inclusive)", got)
 	}
