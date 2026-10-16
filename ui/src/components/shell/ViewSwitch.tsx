@@ -49,7 +49,7 @@ export function ViewSwitch() {
             // what the whole application shows. The board draws it at 34,
             // which is ten under the floor and the one place a drawn value
             // could not be followed.
-            className={`rounded-pill motion-tint ${PILL.md} ${
+            className={`rounded-pill control ${PILL.md} ${
               active
                 ? "bg-accent-dense font-semibold text-accent-ink"
                 : "text-muted hover:text-ink"

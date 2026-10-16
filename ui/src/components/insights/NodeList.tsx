@@ -1,5 +1,6 @@
 "use client";
 
+import { ArriveList } from "@/components/ui/ArriveList";
 import { LANES, type Highlight, type Model } from "@/components/insights/model";
 import { NodeGlyph, nodeSurface } from "@/components/insights/tone";
 
@@ -45,7 +46,7 @@ export function NodeList({
               {model.lanes[lane.kind].length} · {BLURB[lane.kind]}
             </span>
           </div>
-          <div className="arrive-list grid gap-2.5 tablet:grid-cols-2 desktop:grid-cols-3">
+          <ArriveList className="grid gap-2.5 tablet:grid-cols-2 desktop:grid-cols-3">
             {model.lanes[lane.kind].map((node) => {
               const tone = highlight?.nodes.get(node.id);
               return (
@@ -66,7 +67,7 @@ export function NodeList({
                 </div>
               );
             })}
-          </div>
+          </ArriveList>
         </section>
       ))}
     </div>

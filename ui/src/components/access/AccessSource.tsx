@@ -314,7 +314,7 @@ export function SourcePopover({
         open={open}
         width={380}
         panelRef={panel}
-        className="settle-in rounded-panel border border-line-strong bg-surface-2 shadow-popover"
+        className="popover-in rounded-panel border border-line-strong bg-surface-2 shadow-popover"
       >
           <span className="flex items-center gap-2.5 border-b border-line px-[18px] py-4">
             <SourceChip kind={kind} />

@@ -128,7 +128,7 @@ export function FilterPanel({
           align="end"
           width={352}
           expectHeight={420}
-          className="settle-in flex max-h-[min(72vh,34rem)] flex-col rounded-panel border border-line-strong bg-surface-2 p-4 shadow-popover"
+          className="popover-in flex max-h-[min(72vh,34rem)] flex-col rounded-panel border border-line-strong bg-surface-2 p-4 shadow-popover"
         >
           {/* The fields scroll, the footer does not. Six of them run past the
               bottom of a laptop window, and Clear and Done are the two

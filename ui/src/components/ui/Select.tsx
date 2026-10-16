@@ -66,7 +66,7 @@ export function Segmented<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(option.value)}
-            className={`rounded-pill font-semibold motion-tint ${pad} ${
+            className={`rounded-pill font-semibold control ${pad} ${
               active ? "bg-accent-dense text-accent-ink" : "text-muted hover:text-ink"
             }`}
           >
@@ -111,7 +111,7 @@ export function FilterPills<T extends string>({
             // within 120px of each other, where three sizes read as three
             // accidents. Shape and fill carry the difference between them now,
             // which is what was meant to carry it.
-            className={`rounded-pill motion-tint ${PILL.md} ${
+            className={`rounded-pill control ${PILL.md} ${
               active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             } disabled:cursor-not-allowed disabled:text-faint disabled:hover:text-faint`}
           >

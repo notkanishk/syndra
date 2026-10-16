@@ -29,6 +29,7 @@ import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
+import { ArriveList } from "@/components/ui/ArriveList";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
 
@@ -223,7 +224,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
       {/* `arrive`, the same stagger every list in the product gets from
           `ListStates`. These two lists compose their own rows and so had none:
           the dashboard was the one screen whose rows appeared all at once. */}
-      <div className="contents arrive-list">
+      <ArriveList>
         {requests.map((entry) => (
           <CardRow key={entry.id}>
             <UserAvatar id={entry.requester_id} size="list" />
@@ -275,7 +276,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
           {!resolved.has(entry.id) && <HoldingNote request={entry} />}
         </CardRow>
       ))}
-      </div>
+      </ArriveList>
     </Card>
   );
 }
@@ -503,7 +504,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
           </span>
         </div>
       </CardRow>
-      <div className="contents arrive-list">
+      <ArriveList>
         {rows.map((row, i) => (
           <CardRow key={row.id} first={i === 0}>
             <UserAvatar id={row.user_id} size="list" />
@@ -530,7 +531,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
             </ButtonLink>
           </CardRow>
         ))}
-      </div>
+      </ArriveList>
     </Card>
   );
 }
@@ -590,7 +591,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>
       <CardHeader title="Systems Syndra could not check" count={targets.length} tone="danger" />
-      <div className="contents arrive-list">
+      <ArriveList>
         {targets.map((t, i) => (
           <CardRow key={t.target} first={i === 0} className="flex-wrap">
             <div className="flex-1 text-[14.5px]">
@@ -609,7 +610,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
           </ButtonLink>
         </CardRow>
       ))}
-      </div>
+      </ArriveList>
     </Card>
   );
 }

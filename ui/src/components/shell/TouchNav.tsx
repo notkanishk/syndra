@@ -109,7 +109,7 @@ function Tab({
     <Link
       href={destination.href}
       aria-current={active ? "page" : undefined}
-      className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 motion-press ${
+      className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 motion-press press-scale ${
         active ? "bg-accent-soft" : ""
       }`}
     >
@@ -181,7 +181,7 @@ function SheetTrigger({
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-[44px] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink motion-press"
+        className="flex min-h-[44px] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink motion-press press-scale"
       >
         <span aria-hidden className="text-faint">
           •••
@@ -319,7 +319,7 @@ function NavSheet({
                 onClick={() => setView(option)}
                 aria-pressed={view === option}
                 title={VIEW_HINT[option]}
-                className={`min-h-[44px] flex-1 rounded-pill text-[13.5px] capitalize motion-press ${
+                className={`min-h-[44px] flex-1 rounded-pill text-[13.5px] capitalize motion-press press-scale ${
                   // Dense, not bright: the label is 13.5px and the bright
                   // accent fails AA under 18.5px.
                   view === option ? "bg-accent-dense font-semibold text-accent-ink" : "text-muted"
@@ -444,7 +444,7 @@ function SheetRow({
       href={href}
       onClick={onPick}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] motion-press ${
+      className={`flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] motion-press press-scale ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
       } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-ink/80"}`}
     >
