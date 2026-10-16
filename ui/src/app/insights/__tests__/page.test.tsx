@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import AccessMapPage from "@/app/graph/page";
+import AccessMapPage from "@/app/insights/page";
 import type { TopologyGraph } from "@/lib/queries/useTopology";
 
 const topology = vi.hoisted(() => ({

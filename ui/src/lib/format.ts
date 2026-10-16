@@ -226,3 +226,16 @@ export function confirmedNote(recorded: number, confirmed: number | undefined): 
   if (confirmed === recorded) return "confirmed";
   return `${confirmed} confirmed`;
 }
+
+/**
+ * Who someone is, in a picker (People everywhere 1): "title · team", read
+ * before the email under it. Team is free-text Zitadel metadata, so either
+ * half may be missing; an empty line is "", never "—" — the em dash belongs
+ * to People's own Team column, where a seat holds its place.
+ */
+export function personLine(user: { title?: string | null; team?: string | null }): string {
+  return [user.title, user.team]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(" · ");
+}

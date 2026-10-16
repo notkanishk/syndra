@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
+import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button, PILL } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -27,16 +27,19 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
+import { WaitsMark } from "@/components/ui/WaitsMark";
+import { useRequestDecisions } from "@/lib/request-decisions";
 import {
   useCreateRequest,
-  useDecideRequest,
   useRequestsAdmin,
   useRequestsMine,
   useWithdrawRequest,
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
-import { describeDuration, formatLongDate, formatShortDate } from "@/lib/format";
+import { describeDuration, formatLongDate, formatShortDate, humanizeKey } from "@/lib/format";
 import { HoldingNote, alreadyHeld, useAskState } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { daysUntilTermEnd } from "@/lib/term";
@@ -53,13 +56,13 @@ type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
  * must never read as a decision.
  */
 export function requestOutcome(status: string): {
-  tone: "accent" | "neutral" | "warn";
+  tone: StatusTone;
   operator: string;
   member: string;
 } {
   switch (status) {
     case "approved":
-      return { tone: "accent", operator: "Approved", member: "Approved" };
+      return { tone: "healthy", operator: "Approved", member: "Approved" };
     case "rejected":
       return { tone: "neutral", operator: "Declined", member: "Not approved" };
     case "withdrawn":
@@ -67,13 +70,33 @@ export function requestOutcome(status: string): {
     // Given another way while it waited (directly, or by a bundle), so closed
     // by Syndra: a resolution, not a decision. The note says how.
     case "fulfilled":
-      return { tone: "accent", operator: "Given another way", member: "You have this" };
+      return { tone: "healthy", operator: "Given another way", member: "You have this" };
     case "pending":
-      return { tone: "warn", operator: "Open", member: "Waiting" };
+      return { tone: "neutral", operator: "Open", member: "Waiting" };
     default:
       return { tone: "warn", operator: status, member: status };
   }
 }
+
+/**
+ * A settled request's status seat (route-requests): dot, word, and at most one
+ * faint note under it. The same seat a decision just made reports in, so a row
+ * never changes shape between the tap and the next read.
+ */
+export function StatusSeat({ tone, word, note }: { tone: StatusTone; word: string; note?: string }) {
+  return (
+    <span className="flex flex-col gap-1">
+      <span
+        className={`inline-flex items-center gap-2 whitespace-nowrap text-[13.5px] font-semibold ${STATUS_TONE[tone].label}`}
+      >
+        <StatusDot tone={tone} />
+        {word}
+      </span>
+      {note && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{note}</span>}
+    </span>
+  );
+}
+
 /** What a member asks for, in the units a member thinks in. */
 type HowLong = "7" | "30" | "term";
 
@@ -88,9 +111,8 @@ export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; us
 function OperatorQueue({ userId }: { userId?: string }) {
   const [status, setStatus] = useState<StatusFilter>("pending");
   const requests = useRequestsAdmin(status);
-  const decide = useDecideRequest();
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
-  const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
+  const { act, resolved, outcomes } = useRequestDecisions();
+  const catalog = useGlobalRoleCatalog();
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
   const ask = useAskOnArrival();
 
@@ -127,36 +149,6 @@ function OperatorQueue({ userId }: { userId?: string }) {
   // are the exception, so they arrive behind a named control rather than a
   // column of checkboxes that is always in front of every row.
   const [selecting, setSelecting] = useState(false);
-
-  async function act(entry: AccessRequest, next: "approved" | "rejected") {
-    setResolved((prev) => new Set(prev).add(entry.id));
-    try {
-      await decide.mutateAsync({ id: entry.id, status: next });
-      setOutcomes((prev) => ({
-        ...prev,
-        [entry.id]: {
-          kind: "applied",
-          // One sentence, not message+detail: this renders `placement="inline"`,
-          // which shows only `message`. Approving enqueues a grant and drains it
-          // inline best-effort, but the response (`{"message": "Request
-          // resolved"}`) never says whether that drain landed — so this cannot
-          // claim Zitadel has it. Declining never touches Zitadel at all, so it
-          // gets no such caveat.
-          message:
-            next === "approved"
-              ? "Approved. Sent; Zitadel has not been read back yet."
-              : "Declined",
-        },
-      }));
-    } catch (error) {
-      setResolved((prev) => {
-        const copy = new Set(prev);
-        copy.delete(entry.id);
-        return copy;
-      });
-      setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
-    }
-  }
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -198,7 +190,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
             <span className="w-[250px]">What they asked for</span>
             <span className="flex-1">Why</span>
             <span className="w-[66px]">When</span>
-            <span className="w-[150px] text-right">Decision</span>
+            <span className="w-[196px]">Decision</span>
           </CardColumns>
         )}
         {/* Only open requests can be selected; a decided one is not part of the
@@ -240,7 +232,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
             <div
               key={entry.id}
               className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px] ${
-                selection.isSelected(entry.id) ? "bg-accent-soft/30" : ""
+                selection.isSelected(entry.id) ? "bg-accent-soft" : ""
               }`}
               {...selection.rowProps(entry.id)}
             >
@@ -260,6 +252,12 @@ function OperatorQueue({ userId }: { userId?: string }) {
               </div>
               <div className="w-full text-[14.5px] text-ink/80 tablet:w-[250px] tablet:shrink-0 tablet:truncate">
                 <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+                {catalog.data?.some(
+                  (r) =>
+                    r.project_id === entry.project_id &&
+                    r.role_key === entry.role_key &&
+                    r.waits_for_send,
+                ) && <WaitsMark className="ml-2" />}
                 {/* Half of the ask. A decision made without it is a decision
                     about a different request. */}
                 <span className="block text-[12.5px] text-faint">
@@ -272,38 +270,52 @@ function OperatorQueue({ userId }: { userId?: string }) {
               <div className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
                 <Relative iso={entry.created_at} />
               </div>
-              {entry.status === "pending" && !resolved.has(entry.id) ? (
-                <div className="flex w-full flex-row-reverse gap-3 tablet:w-auto tablet:shrink-0 tablet:flex-row tablet:gap-2">
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    className="flex-1 tablet:flex-none"
-                    disabled={alreadyHeld(entry)}
-                    reason={alreadyHeld(entry) ? "They already have this." : undefined}
-                    onClick={() => act(entry, "approved")}
-                  >
-                    Approve
-                  </Button>
-                  <Button size="sm" onClick={() => act(entry, "rejected")}>
-                    Decline
-                  </Button>
-                </div>
-              ) : resolved.has(entry.id) ? null : (
-                // A settled row from the data itself (viewing a non-"Open"
-                // filter) — not one just decided this session, which reports
-                // through its own ActionOutcome below instead. Showing this
-                // badge for a just-decided row would read its stale cached
-                // status ("Open") against the ActionOutcome's fresh one
-                // ("Approved") at the same time.
-                <span className="flex flex-col items-start gap-1">
-                  <Badge tone={requestOutcome(entry.status).tone}>
-                    {requestOutcome(entry.status).operator}
-                  </Badge>
-                  {entry.status === "approved" && entry.reviewer_id && entry.reviewer_id === entry.requester_id && (
-                    <span className="text-[12.5px] text-faint">by the person who asked</span>
-                  )}
-                </span>
-              )}
+              {/* The Decision seat (#96): the buttons, then the decision in
+                  their place — one seat, so no column moves on the tap. The
+                  row keeps it until the next read; no toast. */}
+              <div className="w-full tablet:w-[196px] tablet:shrink-0">
+                {entry.status === "pending" && !resolved.has(entry.id) ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex w-full flex-row-reverse gap-3 tablet:flex-row tablet:gap-2">
+                      <Button
+                        variant="accent"
+                        size="sm"
+                        className="flex-1 tablet:flex-none"
+                        disabled={alreadyHeld(entry)}
+                        reason={alreadyHeld(entry) ? "They already have this." : undefined}
+                        onClick={() => act(entry, "approved")}
+                      >
+                        Approve
+                      </Button>
+                      <Button size="sm" onClick={() => act(entry, "rejected")}>
+                        Decline
+                      </Button>
+                    </div>
+                    {/* A failed write puts the buttons back and says why under them. */}
+                    {outcomes[entry.id] && (
+                      <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
+                    )}
+                  </div>
+                ) : outcomes[entry.id] ? (
+                  <ActionOutcome
+                    placement="seat"
+                    word={outcomes[entry.id].word}
+                    outcome={outcomes[entry.id].outcome}
+                  />
+                ) : resolved.has(entry.id) ? null : (
+                  <StatusSeat
+                    tone={requestOutcome(entry.status).tone}
+                    word={requestOutcome(entry.status).operator}
+                    note={
+                      entry.status === "approved" &&
+                      entry.reviewer_id &&
+                      entry.reviewer_id === entry.requester_id
+                        ? "by the person who asked"
+                        : undefined
+                    }
+                  />
+                )}
+              </div>
               {/* Allowed, and said before it happens (owner, 15 Oct): an
                   operator can approve their own request, and it is recorded
                   as exactly that. */}
@@ -312,14 +324,6 @@ function OperatorQueue({ userId }: { userId?: string }) {
                 <span className="w-full text-[13px] text-faint">
                   Your own request. Approving it is allowed, and Change history records that you approved your own.
                 </span>
-              )}
-
-              {/* The row reports its own decision and keeps its seat. It
-                  leaves on the next read, not under the thumb that decided
-                  it — a row that vanishes on the tap takes the evidence of
-                  what just happened with it. */}
-              {outcomes[entry.id] && (
-                <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
               )}
             </div>
           ))}
@@ -360,7 +364,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
             nobody has the access yet. The per-row Decline above (default
             variant) already gets this right; the bulk twin did not. */}
         <SelectionAction onClick={() => setBulkStatus("rejected")}>
-          Review denying these
+          Review declining these
         </SelectionAction>
       </SelectionBar>
 
@@ -415,6 +419,7 @@ function useAskOnArrival() {
 function MemberRequests({ userId }: { userId: string }) {
   const requests = useRequestsMine();
   const withdraw = useWithdrawRequest();
+  const resolver = useNameResolver();
   const { open, setOpen, close: closeDialog, linkedProject, linkedRole } = useAskOnArrival();
   // A member's own rows report their own withdrawals, in the row.
   const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
@@ -430,11 +435,11 @@ function MemberRequests({ userId }: { userId: string }) {
       await withdraw.mutateAsync(entry.id);
       setOutcomes((prev) => ({
         ...prev,
+        // Neutral, not applied: nothing was given or taken (#51).
         [entry.id]: {
-          kind: "applied",
-          // One sentence: this renders `placement="inline"` below, which shows
-          // only `message` — a `detail` here would be written and never seen.
+          kind: "no_change",
           message: "You withdrew this. Nobody will be asked to decide it.",
+          detail: "Nobody will be asked to decide it",
         },
       }));
     } catch (error) {
@@ -483,40 +488,59 @@ function MemberRequests({ userId }: { userId: string }) {
               key={entry.id}
               className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[15px] font-semibold">
-                  <ProjectName id={entry.project_id} />
+              <div className="w-full min-w-0 tablet:flex-1">
+                {/* The role, not only the place: two asks on one project were
+                    two identical rows. */}
+                <div className="text-[15px] font-semibold [text-wrap:pretty]">
+                  <ProjectName id={entry.project_id} /> ·{" "}
+                  {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
+                    humanizeKey(entry.role_key)}
                 </div>
-                <div className="truncate text-[13.5px] text-faint">
+                <div className="text-[13.5px] text-faint [text-wrap:pretty]">
                   {describeDuration(entry.duration_days)} ·{" "}
                   {entry.justification || "No reason given"}
                 </div>
               </div>
-              <div className="w-[110px] shrink-0 text-[13px] text-faint">
+              <div className="w-[110px] shrink-0 text-[13px] text-faint tablet:text-right">
                 <Relative iso={entry.created_at} />
               </div>
+              {/* One status seat: dot, word, note. A withdrawal reports here,
+                  in the member's own word, and keeps it until the next read. */}
+              <div className="w-full tablet:w-auto tablet:min-w-[220px] tablet:shrink-0">
+                {outcomes[entry.id] && resolved.has(entry.id) ? (
+                  <ActionOutcome
+                    placement="seat"
+                    word="You withdrew this"
+                    outcome={outcomes[entry.id]!}
+                  />
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <StatusSeat
+                      tone={requestOutcome(entry.status).tone}
+                      word={requestOutcome(entry.status).member}
+                    />
+                    {outcomes[entry.id] && <ActionOutcome placement="seat" outcome={outcomes[entry.id]!} />}
+                  </div>
+                )}
+              </div>
               {/*
-                Withdraw sits on the row rather than behind a dialog. Nothing is destroyed by it
-                and nobody else's access moves — it takes an ask out of somebody's queue, which
-                is the one thing here a member is entitled to do without being asked twice.
+                Withdraw sits on the row rather than behind a dialog, outline and last (#109).
+                Nothing is destroyed by it and nobody else's access moves — it takes an ask out
+                of somebody's queue, which is the one thing here a member is entitled to do
+                without being asked twice.
               */}
-              {entry.status === "pending" && !resolved.has(entry.id) && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={withdraw.isPending}
-                  onClick={() => withdrawOne(entry)}
-                >
-                  Withdraw
-                </Button>
-              )}
-              <Badge tone={requestOutcome(entry.status).tone}>
-                {requestOutcome(entry.status).member}
-              </Badge>
-
-              {outcomes[entry.id] && (
-                <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
-              )}
+              <div className="flex shrink-0 tablet:min-w-[96px] tablet:justify-end">
+                {entry.status === "pending" && !resolved.has(entry.id) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={withdraw.isPending}
+                    onClick={() => withdrawOne(entry)}
+                  >
+                    Withdraw
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </ListStates>
@@ -718,8 +742,8 @@ function RequestDialogOpen({
 
       <ModalFooter>
         {sent ? (
-          <Button variant="accent" onClick={onClose}>
-            Done
+          <Button variant="outline" onClick={onClose}>
+            Close
           </Button>
         ) : (
         <>

@@ -74,7 +74,7 @@ func TriggerOnboarding(ctx context.Context, userID, source, idempotencyKey strin
 	//
 	// Idempotence is preserved by the cascade, which reports an existing
 	// assignment as a no-op rather than re-pinning it.
-	if _, err := svcCascadeWelcomeBundle(ctx, "system:onboarding", userID, bundleID); err != nil {
+	if _, err := svcCascadeWelcomeBundle(ctx, db.WelcomeActor, userID, bundleID); err != nil {
 		log.Printf("[ONBOARDING] Bundle assignment failed: user=%s bundle=%s: %v", userID, bundleID, err)
 		if failErr := svcFailOnboardingTrigger(ctx, triggerID, err.Error()); failErr != nil {
 			log.Printf("[ONBOARDING] Failed to record failure for trigger=%s: %v", triggerID, failErr)
@@ -83,7 +83,7 @@ func TriggerOnboarding(ctx context.Context, userID, source, idempotencyKey strin
 	}
 
 	// 4. Write audit log attributed to the system (automated action)
-	if err := svcInsertAuditLog(ctx, "system:onboarding", userID, "welcome_bundle_assigned", bundleID); err != nil {
+	if err := svcInsertAuditLog(ctx, db.WelcomeActor, userID, "welcome_bundle_assigned", bundleID); err != nil {
 		// Audit failure is non-fatal but should be visible
 		log.Printf("[ONBOARDING] Audit log failed for user=%s bundle=%s: %v", userID, bundleID, err)
 	}

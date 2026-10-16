@@ -78,7 +78,7 @@ function Health() {
         note={reachable ? "Changes are getting through" : "Changes wait here — nothing is lost"}
       />
       <HealthCell
-        label="Waiting to be sent"
+        label="Waiting for you to send"
         value={String(queued)}
         tone={queued > 0 ? "accent" : "calm"}
         // Pending changes, not Incoming events. `/operations` is the feed of

@@ -247,13 +247,17 @@ describe("BulkDialog", () => {
     await waitFor(() => expect(api.applied).toHaveLength(1));
 
     // Summary: queued outranks a clean apply, so the headline pill reads
-    // "Waiting to be sent" — never "Applied" while a row is still queued.
-    // Ada's own row carries the same pill, so both mentions agree rather
-    // than one saying "applied" over a row still marked queued.
-    expect(screen.getAllByText("Waiting to be sent").length).toBeGreaterThanOrEqual(2);
+    // Summary: queued outranks a clean apply, so the headline is the step
+    // left, the link to Pending changes where the operator sends it from —
+    // never "Applied" while a row is still queued.
+    const summary = screen.getByRole("link", { name: /Waiting for you to send/ });
+    expect(summary.getAttribute("href")).toBe("/governance/pending");
+    // Ada's own row says the same words, so the two agree rather than one
+    // saying "applied" over a row still marked queued.
+    const sayings = screen.getAllByText("Waiting for you to send");
+    expect(sayings.length).toBeGreaterThanOrEqual(2);
+    expect(sayings.filter((el) => !el.closest("a"))).toHaveLength(1);
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
-    // Pending changes is where the operator sends it from — the next step.
-    expect(screen.getAllByText(/pending changes/i).length).toBeGreaterThanOrEqual(1);
     // Named rather than by id.
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.queryByText("u1")).not.toBeInTheDocument();

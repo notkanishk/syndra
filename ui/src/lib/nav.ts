@@ -86,15 +86,19 @@ export const BASIC_NAV: NavEntry[] = [
 export const ADVANCED_NAV: NavEntry[] = [
   ...BASIC_NAV,
   leaf("Bundles", "/bundles", { pattern: /^\/bundles(\/|$)/ }),
-  group("Automation", [
-    leaf("Automatic rules", "/policies"),
+  // N18, 3a: the things that give access at top level; a Changes group for
+  // what Syndra sends, what it sent, and which roles wait for you.
+  leaf("Automatic rules", "/policies"),
+  leaf("Insights", "/insights", { pattern: /^\/(insights|graph)(\/|$)/ }),
+  group("Changes", [
     leaf("Pending changes", "/governance/pending", {
       indicator: "pending_propagation",
       tone: "accent",
     }),
     leaf("Change history", "/operations/cascades"),
-    leaf("Access map", "/graph"),
-    leaf("Settings", "/automation/settings"),
+    leaf("Roles that wait", "/changes/roles-that-wait", {
+      pattern: /^(\/changes\/roles-that-wait|\/automation\/settings)(\/|$)/,
+    }),
   ]),
   group("Review", [
     leaf("Drift", "/governance/drift", { indicator: "drift", tone: "danger" }),

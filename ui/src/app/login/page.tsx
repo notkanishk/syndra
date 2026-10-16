@@ -36,7 +36,8 @@ export default async function LoginPage({
   // in a second tab. Send them to it rather than to the landing. Not when the
   // backend has just refused that session: middleware clears the cookie on
   // the way out, and sending them on would meet the refusal again.
-  if (session && code !== SESSION_ENDED) redirect(next);
+  const returned = params.then === "close" && Boolean(session);
+  if (session && code !== SESSION_ENDED && !returned) redirect(next);
 
   const identities: DemoIdentity[] = getDemoUsers().map((user) => ({
     id: user.id,
@@ -48,8 +49,9 @@ export default async function LoginPage({
     <LoginDoor
       mode={process.env.ZITADEL_DOMAIN ? "oidc" : "demo"}
       identities={identities}
-      failure={loginFailure(code)}
+      failure={returned ? null : loginFailure(code)}
       next={next}
+      returned={returned}
     />
   );
 }

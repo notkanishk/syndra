@@ -229,6 +229,9 @@ func scanUserIDs(ctx context.Context, q string, args ...any) ([]string, error) {
 	return users, rows.Err()
 }
 
+// WelcomeActor is who the new-member welcome bundle is assigned as.
+const WelcomeActor = "system:onboarding"
+
 // AssignBundleAndEnqueue assigns a bundle to a user and enqueues its cascade outbox rows in
 // ONE tx, so a committed assignment always has its projection rows (design pivot: NO
 // direct_role_grants write — bundle membership already lives in user_bundle_assignments).
@@ -259,11 +262,20 @@ func AssignBundleAndEnqueue(ctx context.Context, actor, userID, bundleID, versio
 	// v2's access and the records said v1. The conflict has to be ANSWERED, in
 	// the transaction, before anything else is written; asking beforehand would
 	// only move the race.
+	//
+	// How they got it rides along: the welcome flow is the only caller acting
+	// as WelcomeActor, and it is automatic, so nobody is named as giving it.
+	// ponytail: source derived from the actor; pass it explicitly once a second
+	// automatic path assigns bundles.
+	source, assignedBy := "direct", &actor
+	if actor == WelcomeActor {
+		source, assignedBy = "welcome", nil
+	}
 	var pinned string
 	switch err := tx.QueryRow(ctx,
-		`INSERT INTO user_bundle_assignments (user_id, bundle_id, version_id)
-		 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
-		 RETURNING version_id`, userID, bundleID, versionID).Scan(&pinned); {
+		`INSERT INTO user_bundle_assignments (user_id, bundle_id, version_id, source, assigned_by)
+		 VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING
+		 RETURNING version_id`, userID, bundleID, versionID, source, assignedBy).Scan(&pinned); {
 	case errors.Is(err, pgx.ErrNoRows):
 		// Already a holder. Re-assigning is a no-op, not a re-pin: moving
 		// somebody between versions is its own rehearsed action, and doing it

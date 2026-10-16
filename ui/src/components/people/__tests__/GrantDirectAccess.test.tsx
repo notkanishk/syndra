@@ -27,6 +27,14 @@ vi.mock("@/lib/queries/useRoles", () => ({
         display_name: "Operator",
         assigned_user_count: 3,
       },
+      {
+        project_id: "p1",
+        role_key: "supervisor",
+        project_name: "Printing Lab",
+        display_name: "Supervisor",
+        assigned_user_count: 1,
+        waits_for_send: true,
+      },
     ],
   }),
 }));
@@ -43,15 +51,15 @@ function open() {
   );
 }
 
-async function grant() {
+async function grant(role = "operator") {
   fireEvent.change(screen.getByLabelText("Project"), { target: { value: "p1" } });
-  fireEvent.change(screen.getByLabelText("Role"), { target: { value: "operator" } });
+  fireEvent.change(screen.getByLabelText("Role"), { target: { value: role } });
   fireEvent.change(screen.getByPlaceholderText(/Capstone build/), { target: { value: "test" } });
   fireEvent.click(screen.getByRole("button", { name: "Grant access" }));
-  // "Done" only replaces "Grant access"/"Cancel" once an outcome (either kind)
+  // "Close" only replaces "Grant access"/"Cancel" once an outcome (either kind)
   // is set — a wait condition that holds regardless of which message the
   // outcome carries.
-  await screen.findByRole("button", { name: "Done" });
+  await screen.findByRole("button", { name: "Close" });
 }
 
 describe("GrantDirectAccess", () => {
@@ -66,25 +74,51 @@ describe("GrantDirectAccess", () => {
     state.grants = [];
   });
 
-  it("reports queued, not applied, when the grant is still in the outbox", async () => {
-    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "pending" });
+  it("says before the give that a waiting role waits, and a plain one doesn't", () => {
+    open();
+    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "p1" } });
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "operator" } });
+    expect(screen.getByText("Ada can use it as soon as you give it.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "supervisor" } });
+    expect(
+      screen.getByText("Supervisor always waits for you, so Ada gets it once you send it."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Waits for you" })).toBeInTheDocument();
+  });
+
+  it("a role that always waits is queued, with why and what that means for them", async () => {
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "pending", wait_reason: "role_waits" });
+    open();
+    await grant("supervisor");
+
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
+    expect(screen.getByText(/Given in Syndra/)).toBeInTheDocument();
+    expect(screen.getByText("Supervisor always waits for you, so Ada can't use it yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Applied")).not.toBeInTheDocument();
+  });
+
+  it("a send that stopped is queued with the stop named, and goes when sent", async () => {
+    state.mutateAsync.mockResolvedValue({
+      outbox_id: "o1",
+      status: "pending",
+      wait_reason: "halted:zitadel_offline",
+    });
     open();
     await grant();
 
-    expect(screen.getByText("Waiting to be sent")).toBeInTheDocument();
-    expect(screen.getByText(/nothing has reached zitadel yet/i)).toBeInTheDocument();
-    // Future tense while queued — "now holds" here would contradict the
-    // "nothing has reached Zitadel yet" line right beside it.
-    expect(screen.getByText(/Ada Lovelace will hold/)).toBeInTheDocument();
+    expect(screen.getByText(/Given in Syndra/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Zitadel didn't answer at \d\d:\d\d, so it goes when you send it\.$/),
+    ).toBeInTheDocument();
   });
 
-  it("reports applied when the response says the grant is not pending", async () => {
+  it("reports applied, in their first name, when nothing waits", async () => {
     state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied" });
     open();
     await grant();
 
     expect(screen.getByText("Applied")).toBeInTheDocument();
-    expect(screen.getByText(/Ada Lovelace now holds/)).toBeInTheDocument();
+    expect(screen.getByText(/Ada can use Operator now/)).toBeInTheDocument();
   });
 
   it("names the project and role, never the bare id", () => {

@@ -86,4 +86,14 @@ describe("LoginDoor", () => {
     expect(alice).toHaveFocus();
     expect(screen.getByRole("button", { name: /sam patel · member/i })).toBeInTheDocument();
   });
+
+  // N21: signed in again in a tab opened for it. The door stands open, says
+  // to go back, and offers nothing to press.
+  it("says to go back to the other tab after signing in again there", () => {
+    render(<LoginDoor mode="oidc" identities={[]} failure={null} returned />);
+    expect(stage()).toHaveAttribute("data-scene", "opening");
+    expect(screen.getByText("You’re signed in again.")).toBeInTheDocument();
+    expect(screen.getByText(/Go back to the tab you were working in and press the same button/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /sign in with zitadel/i })).toBeNull();
+  });
 });
