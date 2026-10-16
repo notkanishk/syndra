@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -950,7 +950,6 @@ func TestApprovingYourOwnRequestIsRecordedAsSelfApproved(t *testing.T) {
 		}
 	}
 }
-
 
 // Found on production, 15 Oct: a member asked five times for a role they held
 // for good. Each copy reached the queue, and approving any of them would have

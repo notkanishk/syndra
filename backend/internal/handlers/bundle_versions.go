@@ -120,6 +120,9 @@ type PublishBundleVersionRequest struct {
 	// changes nothing, and it is the safe default for a request that forgot to
 	// say.
 	Migrate bool `json:"migrate"`
+	// Includers answers, for every bundle whose working copy includes this
+	// one, "update" or "leave" (B8). Required for each, no default.
+	Includers []services.IncluderChoice `json:"includers,omitempty"`
 	// PlanID cites the rehearsal being applied. Required with ?apply=true
 	// whenever the rehearsal reached anybody.
 	PlanID string `json:"plan_id,omitempty"`
@@ -157,9 +160,10 @@ func handlePublishBundleVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	call := services.PublishRequest{
-		BundleID: bundleID,
-		Note:     strings.TrimSpace(req.Note),
-		Migrate:  req.Migrate,
+		BundleID:  bundleID,
+		Note:      strings.TrimSpace(req.Note),
+		Migrate:   req.Migrate,
+		Includers: req.Includers,
 	}
 	actor := getAdminUserID(r.Context())
 	if actor == "" {
@@ -200,6 +204,12 @@ func handlePublishBundleVersion(w http.ResponseWriter, r *http.Request) {
 		// draft was discarded.
 		if strings.HasPrefix(err.Error(), "nothing to publish") {
 			jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_PUBLISH", err.Error())
+			return
+		}
+		var unanswered *services.ErrIncludersUnanswered
+		if errors.As(err, &unanswered) {
+			jsonErrorResponse(w, http.StatusConflict, "INCLUDERS_UNANSWERED",
+				"Say whether each bundle that includes this one takes the new version: "+strings.Join(unanswered.Names, ", ")+". Nothing was changed.")
 			return
 		}
 		jsonErrorResponse(w, http.StatusInternalServerError, "APPLY_ERROR", err.Error())

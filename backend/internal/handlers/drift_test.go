@@ -770,7 +770,6 @@ func driftApplyRequest(t *testing.T, path, body string) *http.Request {
 	return httptest.NewRequest("POST", path+"?apply=true", strings.NewReader(string(cited)))
 }
 
-
 // Adopting records access Zitadel has; a syndra_only row has none to record.
 func TestAdoptingAFindingZitadelDoesNotHoldIsRefused(t *testing.T) {
 	resetDriftDeps(t)

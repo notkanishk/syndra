@@ -21,6 +21,10 @@ func TestMain(m *testing.M) {
 	dbTargetProjects = func(context.Context) (map[string]string, error) { return map[string]string{}, nil }
 	checkRoleOffered = func(context.Context, string, string) error { return nil }
 	dbWouldCancel = func(context.Context, db.EnqueueParams) ([]models.QueuedChange, error) { return nil, nil }
+	// No bundle includes another unless a test says so (B8).
+	dbBundleIncludesAnything = func(context.Context, string) (bool, error) { return false, nil }
+	dbRetireBlockers = func(context.Context, string) ([]string, error) { return nil, nil }
+	dbInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 	// No role waits and nobody has switched over: a change held by its own
 	// mode waits, anything else is sent row by row through the stubbable
 	// DrainOne, as before roles that wait. delivery tests stub their own.

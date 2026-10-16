@@ -19,5 +19,14 @@ func TestMain(m *testing.M) {
 	svcSetWaitReason = func(context.Context, []string, string) error { return nil }
 	svcGetConfigSetting = func(context.Context, string) (string, error) { return "", nil }
 	svcListRoleWaits = func(context.Context) ([]db.RoleWait, error) { return nil, nil }
+	// No bundle includes another unless a test says so (B8).
+	svcGetWorkingIncludes = func(context.Context, string) ([]models.BundleInclude, error) { return nil, nil }
+	svcGetVersionIncludes = func(context.Context, string) ([]models.BundleInclude, error) { return nil, nil }
+	svcListIncluders = func(context.Context, string) ([]db.Includer, error) { return nil, nil }
+	svcRetireBlockers = func(context.Context, string) ([]string, error) { return nil, nil }
+	svcSnapshotVersionIncludes = func(context.Context, string, []models.BundleInclude) error { return nil }
+	svcSetWorkingInclude = func(context.Context, string, string, string, int) (models.BundleInclude, error) {
+		return models.BundleInclude{}, nil
+	}
 	os.Exit(m.Run())
 }

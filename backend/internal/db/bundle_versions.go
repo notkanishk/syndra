@@ -82,11 +82,12 @@ func LatestVersionRoles(ctx context.Context, bundleID string) (models.BundleVers
 	}
 
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT bv.bundle_id, r.zitadel_project_id, r.zitadel_role_key
-		FROM bundle_version_roles r
+		SELECT DISTINCT ON (r.zitadel_project_id, r.zitadel_role_key)
+		       bv.bundle_id, r.zitadel_project_id, r.zitadel_role_key, COALESCE(r.via_bundle_id::text, '')
+		FROM bundle_version_effective_roles r
 		JOIN bundle_versions bv ON bv.id = r.version_id
 		WHERE r.version_id = $1
-		ORDER BY r.zitadel_project_id, r.zitadel_role_key`, version.ID)
+		ORDER BY r.zitadel_project_id, r.zitadel_role_key, r.via_bundle_id NULLS FIRST`, version.ID)
 	if err != nil {
 		return version, nil, fmt.Errorf("latest version roles: %w", err)
 	}
@@ -95,7 +96,7 @@ func LatestVersionRoles(ctx context.Context, bundleID string) (models.BundleVers
 	var out []models.BundleRole
 	for rows.Next() {
 		var r models.BundleRole
-		if err := rows.Scan(&r.BundleID, &r.ProjectID, &r.RoleKey); err != nil {
+		if err := rows.Scan(&r.BundleID, &r.ProjectID, &r.RoleKey, &r.ViaBundleID); err != nil {
 			return version, nil, fmt.Errorf("scan latest version role: %w", err)
 		}
 		out = append(out, r)
@@ -115,11 +116,12 @@ func VersionBelongsTo(ctx context.Context, bundleID, versionID string) (bool, er
 // GetRolesForVersion returns what one published snapshot contained.
 func GetRolesForVersion(ctx context.Context, versionID string) ([]models.BundleRole, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT bv.bundle_id, r.zitadel_project_id, r.zitadel_role_key
-		FROM bundle_version_roles r
+		SELECT DISTINCT ON (r.zitadel_project_id, r.zitadel_role_key)
+		       bv.bundle_id, r.zitadel_project_id, r.zitadel_role_key, COALESCE(r.via_bundle_id::text, '')
+		FROM bundle_version_effective_roles r
 		JOIN bundle_versions bv ON bv.id = r.version_id
 		WHERE r.version_id = $1
-		ORDER BY r.zitadel_project_id, r.zitadel_role_key`, versionID)
+		ORDER BY r.zitadel_project_id, r.zitadel_role_key, r.via_bundle_id NULLS FIRST`, versionID)
 	if err != nil {
 		return nil, fmt.Errorf("roles for version: %w", err)
 	}
@@ -128,7 +130,7 @@ func GetRolesForVersion(ctx context.Context, versionID string) ([]models.BundleR
 	var out []models.BundleRole
 	for rows.Next() {
 		var r models.BundleRole
-		if err := rows.Scan(&r.BundleID, &r.ProjectID, &r.RoleKey); err != nil {
+		if err := rows.Scan(&r.BundleID, &r.ProjectID, &r.RoleKey, &r.ViaBundleID); err != nil {
 			return nil, fmt.Errorf("scan version role: %w", err)
 		}
 		out = append(out, r)
@@ -147,10 +149,12 @@ func GetRolesForVersion(ctx context.Context, versionID string) ([]models.BundleR
 // version holds.
 func GetUserBundleRolesGrouped(ctx context.Context, userID string) (map[string][]models.BundleRole, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key
+		SELECT DISTINCT ON (uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key)
+		       uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key, COALESCE(r.via_bundle_id::text, '')
 		FROM user_bundle_assignments uba
-		JOIN bundle_version_roles r ON r.version_id = uba.version_id
-		WHERE uba.user_id = $1`, userID)
+		JOIN bundle_version_effective_roles r ON r.version_id = uba.version_id
+		WHERE uba.user_id = $1
+		ORDER BY uba.bundle_id, r.zitadel_project_id, r.zitadel_role_key, r.via_bundle_id NULLS FIRST`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("user bundle roles: %w", err)
 	}
@@ -159,7 +163,7 @@ func GetUserBundleRolesGrouped(ctx context.Context, userID string) (map[string][
 	out := make(map[string][]models.BundleRole)
 	for rows.Next() {
 		var r models.BundleRole
-		if err := rows.Scan(&r.BundleID, &r.ProjectID, &r.RoleKey); err != nil {
+		if err := rows.Scan(&r.BundleID, &r.ProjectID, &r.RoleKey, &r.ViaBundleID); err != nil {
 			return nil, fmt.Errorf("scan user bundle role: %w", err)
 		}
 		out[r.BundleID] = append(out[r.BundleID], r)
@@ -371,6 +375,16 @@ func DiscardBundleDraft(ctx context.Context, actor, bundleID string) error {
 		FROM bundle_version_roles WHERE version_id = $2`, bundleID, latestID); err != nil {
 		return fmt.Errorf("restore working copy: %w", err)
 	}
+	// Includes are part of the working copy too (B8).
+	if _, err := tx.Exec(ctx, `DELETE FROM bundle_includes WHERE parent_bundle_id = $1`, bundleID); err != nil {
+		return fmt.Errorf("clear working includes: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO bundle_includes (parent_bundle_id, child_bundle_id, child_version_id)
+		SELECT $1, child_bundle_id, child_version_id
+		FROM bundle_version_includes WHERE version_id = $2`, bundleID, latestID); err != nil {
+		return fmt.Errorf("restore working includes: %w", err)
+	}
 	// The audit row through the one cascade writer, with no params: no outbox
 	// rows, no cascade id — this reached nobody.
 	if _, err := enqueueCascadeRows(ctx, tx, []CascadeAudit{{
@@ -470,9 +484,9 @@ type BundleDerivedGrant struct {
 // becomes a five-minute one.
 func GetAllBundleDerivedGrants(ctx context.Context) ([]BundleDerivedGrant, error) {
 	rows, err := querier(ctx).Query(ctx, `
-		SELECT a.user_id, r.zitadel_project_id, r.zitadel_role_key
+		SELECT DISTINCT a.user_id, r.zitadel_project_id, r.zitadel_role_key
 		FROM user_bundle_assignments a
-		JOIN bundle_version_roles r ON r.version_id = a.version_id
+		JOIN bundle_version_effective_roles r ON r.version_id = a.version_id
 		ORDER BY a.user_id, r.zitadel_project_id, r.zitadel_role_key`)
 	if err != nil {
 		return nil, fmt.Errorf("all bundle-derived grants: %w", err)
