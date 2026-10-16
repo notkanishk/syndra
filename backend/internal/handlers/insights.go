@@ -92,3 +92,50 @@ func handleInsightsTrends(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, http.StatusOK, res)
 }
+
+// handleInsightsAsOf answers ?date=YYYY-MM-DD with the latest daily snapshot on
+// or before it. A date before the first snapshot is a 404 that says when the
+// record begins (first_day is null when there is no snapshot at all).
+func handleInsightsAsOf(w http.ResponseWriter, r *http.Request) {
+	day, err := services.ParseAsOfDate(r.URL.Query().Get("date"))
+	if err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"date": "must be YYYY-MM-DD, no later than today"})
+		return
+	}
+	res, err := svcInsightsAsOf(r.Context(), day)
+	var none *services.NoSnapshotError
+	if errors.As(err, &none) {
+		// Its own shape: ErrorResponse.Details is string-only and first_day can be null.
+		type details struct {
+			FirstDay *string `json:"first_day"`
+		}
+		jsonResponse(w, http.StatusNotFound, struct {
+			Error   string  `json:"error"`
+			Message string  `json:"message"`
+			Details details `json:"details"`
+		}{"NO_SNAPSHOT", err.Error(), details{none.FirstDay}})
+		return
+	}
+	if err != nil {
+		viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
+		return
+	}
+	jsonResponse(w, http.StatusOK, res)
+}
+
+// handleInsightsTimeline answers ?from=&to= (inclusive days, at most 400): the
+// scrubber's per-day change counts and the first and last snapshot day.
+func handleInsightsTimeline(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	from, to, err := services.ParseTimelineRange(q.Get("from"), q.Get("to"))
+	if err != nil {
+		jsonValidationErrorResponse(w, err.Error(), map[string]string{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"})
+		return
+	}
+	res, err := svcInsightsTimeline(r.Context(), from, to)
+	if err != nil {
+		viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
+		return
+	}
+	jsonResponse(w, http.StatusOK, res)
+}
