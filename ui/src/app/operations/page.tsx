@@ -92,6 +92,8 @@ export default function EventActivityPage() {
       <FilterBar
         filters={
           <FilterPanel
+            resultCount={stream.length}
+            noun={["event", "events"]}
             activeCount={[source !== "all", outcome !== "all"].filter(Boolean).length}
             onClear={() => {
               setSource("all");

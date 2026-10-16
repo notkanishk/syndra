@@ -115,25 +115,6 @@ export function useDeleteMappingRule() {
 }
 
 /**
- * Change when a rule's writes reach the identity provider. Uses the bulk
- * endpoint with a single id — there is no per-rule route, and inventing one
- * for a set of size one would be a second way to do the same thing.
- */
-export function useSetRuleConfirmationMode() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, mode }: { id: string; mode: "auto" | "manual" }) =>
-      request("/policies/confirmation-mode", {
-        method: "POST",
-        body: { kind: "rule", ids: [id], mode },
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
-    },
-  });
-}
-
-/**
  * Validate a draft rule. Returns cycle / self-reference flags so the create
  * form can warn before submission. Stateless on the backend — no cache.
  */

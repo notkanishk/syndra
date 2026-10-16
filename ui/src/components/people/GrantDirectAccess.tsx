@@ -7,12 +7,14 @@ import { Button, PILL } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
+import { WaitsMark } from "@/components/ui/WaitsMark";
+import { waitReasonLine } from "@/lib/wait-reason";
 import { holdersLine } from "@/lib/holders";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, formatLongDate, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
+import { daysUntil, formatLongDate, formatShortDate, humanizeKey } from "@/lib/format";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 /**
@@ -71,13 +73,6 @@ function GrantDirectAccessOpen({
     [roles.data, projectId],
   );
   const selectedRole = projectRoles.find((role) => role.role_key === roleKey);
-  // Named as a pair, because that is what was written: the project lives in a
-  // select the operator is about to stop looking at, and the sentence
-  // reporting what happened has to stand on its own.
-  const selectedLabel = selectedRole
-    ? roleLabel(selectedRole.project_name, selectedRole.role_key, selectedRole.display_name)
-    : roleKey;
-
   const resolved = resolveExpiry(preset, customDate);
 
   // What the person holds already, so giving it again is said before the click.
@@ -99,6 +94,8 @@ function GrantDirectAccessOpen({
   const heldUntil = heldGrant?.expires_at ?? null;
   const heldNoEnd = alreadyHeld && !heldUntil;
   const who = userName || "They";
+  const first = userName.trim().split(/\s+/)[0] || "They";
+  const roleName = selectedRole?.display_name || humanizeKey(roleKey);
 
 
   const ready = Boolean(projectId && roleKey) && (preset !== "date" || Boolean(customDate)) && !alreadyHeld;
@@ -143,11 +140,17 @@ function GrantDirectAccessOpen({
               return (
                 <option key={role.role_key} value={role.role_key} disabled={held !== undefined}>
                   {role.display_name || humanizeKey(role.role_key)} · {role.role_key}
+                  {role.waits_for_send ? " · waits for you" : ""}
                   {held === undefined ? "" : held === null ? " · has this" : ` · has this until ${formatShortDate(held)}`}
                 </option>
               );
             })}
           </Select>
+          {selectedRole?.waits_for_send && (
+            // An <option> can't hold the mark, so the chosen role carries it
+            // beside the select, where the operator is looking.
+            <WaitsMark withLabel className="mt-1.5" />
+          )}
           {selectedRole && (
             // Plain language, not a spec: what this role unlocks and how many
             // people already carry it.
@@ -250,10 +253,20 @@ function GrantDirectAccessOpen({
           closes itself takes that with it. */}
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
-      <ModalFooter>
+      <ModalFooter
+        note={
+          outcome || !selectedRole ? undefined : selectedRole.waits_for_send ? (
+            <span className="rounded-inner bg-warn-soft px-2.5 py-1.5 text-warn-text">
+              {roleName} always waits for you, so {first} gets it once you send it.
+            </span>
+          ) : (
+            `${first} can use it as soon as you give it.`
+          )
+        }
+      >
         {outcome?.kind === "applied" || outcome?.kind === "queued" ? (
-          <Button variant="accent" onClick={onClose}>
-            Done
+          <Button variant="outline" onClick={onClose}>
+            Close
           </Button>
         ) : (
           <>
@@ -282,23 +295,23 @@ function GrantDirectAccessOpen({
                     reason,
                     duration_days: resolved.days,
                   });
-                  // This endpoint never applies inline — it always enqueues to
-                  // the outbox for the operator-triggered drain (`status`
-                  // defaults to "pending"). Reporting "applied" here would say
-                  // Zitadel has this when only Syndra's own ledger does.
-                  const waiting = result.status === "pending";
-                  setOutcome({
-                    kind: waiting ? "queued" : "applied",
-                    // Present tense only once Zitadel actually has it — "now
-                    // holds" beside "nothing has reached Zitadel yet" is the
-                    // dialog contradicting itself in its own two sentences.
-                    message: waiting
-                      ? `${userName} will hold ${selectedLabel} once this is sent`
-                      : `${userName} now holds ${selectedLabel}`,
-                    detail: waiting
-                      ? "Nothing has reached Zitadel yet. It waits under Pending changes until you send it."
-                      : undefined,
-                  });
+                  // `wait_reason` is the backend's account of why this isn't
+                  // in Zitadel yet; without one the grant went straight through.
+                  const why = waitReasonLine(result.wait_reason, roleName, new Date().toISOString());
+                  if (result.status !== "applied" || result.wait_reason) {
+                    setOutcome({
+                      kind: "queued",
+                      message: "Given in Syndra",
+                      detail:
+                        result.wait_reason === "role_waits"
+                          ? `${why}, so ${first} can't use it yet.`
+                          : why
+                            ? `${why}, so it goes when you send it.`
+                            : "It goes when you send it.",
+                    });
+                  } else {
+                    setOutcome({ kind: "applied", message: `${first} can use ${roleName} now` });
+                  }
                 } catch (error) {
                   setOutcome(outcomeFromError(error));
                 }

@@ -140,7 +140,7 @@ describe("breadcrumbs", () => {
   // being unknown rather than the sidebar simply not showing it in this view.
   it("names an Advanced-only page for a Basic operator, from the full operator nav", () => {
     expect(crumbsFor("/governance/pending", "basic")).toEqual([
-      { label: "Automation" },
+      { label: "Changes" },
       { label: "Pending changes", href: "/governance/pending" },
     ]);
   });

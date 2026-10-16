@@ -39,6 +39,9 @@ var (
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne
+	// svcDeliver is the one rule for whether a just-written change goes now
+	// or waits for the operator (roles that wait, N14 B).
+	svcDeliver = services.Deliver
 	svcDrainAddon                   = propagation.DrainAddon
 
 	dbCreateAccessRequest  = db.CreateAccessRequest
@@ -108,6 +111,7 @@ var (
 	svcListBundleVersions = db.ListBundleVersions
 	svcGetRolesForVersion = db.GetRolesForVersion
 	svcBundleHolders      = db.GetBundleHoldersByVersion
+	svcDiscardBundleDraft = db.DiscardBundleDraft
 	// Decoration happens here rather than inside the rehearsal: the apply path
 	// runs the same rehearsal under the access lock, and looking a name up in
 	// the directory there would hold that lock across a call to Zitadel.

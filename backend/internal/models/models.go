@@ -80,6 +80,11 @@ type BundleHolder struct {
 	VersionID  string    `json:"version_id"`
 	Version    int       `json:"version"`
 	AssignedAt time.Time `json:"assigned_at"`
+	// How they came to hold it. All three are absent for rows written before
+	// they were recorded; AssignedBy is also absent for automatic assignments.
+	AssignedBy       *string `json:"assigned_by,omitempty"`
+	Source           *string `json:"source,omitempty"` // direct | request | moved | welcome
+	MovedFromVersion *int    `json:"moved_from_version,omitempty"`
 }
 
 // BundleRole represents a specific Zitadel role mapped to a bundle
@@ -459,6 +464,11 @@ type PendingPropagation struct {
 	// Reason is why it was queued, for a row whose project and roles say
 	// nothing: an add-on convergence. Empty on rows queued before it was kept.
 	Reason string `json:"reason,omitempty"`
+	// WaitReason is why it waits for the operator: role_waits (the role
+	// always waits), halted:<reason> (meant to go, and the send stopped), or
+	// manual (a bundle or rule set to wait, before the switch over). Empty for
+	// rows from before roles that wait.
+	WaitReason string `json:"wait_reason,omitempty"`
 }
 
 // CascadeSummary is one cascade-originated outbox write, as it appears inside
@@ -907,6 +917,10 @@ type ObservationBasis struct {
 // operator knows two similar roles are deliberately related rather than an
 // accidental duplicate.
 type CatalogRole struct {
+	// WaitsForSend: anyone gaining or losing this role waits in Pending
+	// changes until the operator sends it (Roles that wait, N14 B).
+	WaitsForSend bool `json:"waits_for_send"`
+
 	ProjectID         string `json:"project_id"`
 	ProjectName       string `json:"project_name"`
 	RoleKey           string `json:"role_key"`

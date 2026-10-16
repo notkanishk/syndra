@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
+
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { use, useMemo, useState } from "react";
 
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
+import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -25,27 +28,41 @@ import { humanizeKey } from "@/lib/format";
  * unsupervised" versus "may enter and watch" is the entire decision an operator
  * is making, and a role key alone never conveys it.
  */
-export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ProjectDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = use(params);
   const projects = useProjects();
   const roles = useGlobalRoleCatalog();
   const apps = useApplications();
 
-  const project = (projects.data ?? []).find((entry) => entry.project.id === id);
+  const project = (projects.data ?? []).find(
+    (entry) => entry.project.id === id,
+  );
   useCrumb(project?.project.name);
 
   const projectRoles = useMemo(
     () => (roles.data ?? []).filter((role) => role.project_id === id),
     [roles.data, id],
   );
-  const served = (apps.data ?? []).filter((entry) => entry.application.project_id === id);
+  const waiting = projectRoles.filter((role) => role.waits_for_send).length;
+  const projectName = project?.project.name ?? "this project";
+  const served = (apps.data ?? []).filter(
+    (entry) => entry.application.project_id === id,
+  );
   const [creating, setCreating] = useState(false);
 
   // Only once the project itself is in hand. `member_count ?? 0` rendered
   // "0 people" for a project still loading — and for ever, for an id that
   // resolves to nothing — which is a fabricated zero, not a count.
   const people = project
-    ? holdersLine(project.member_count, project.confirmed_member_count, project.observed_member_count)
+    ? holdersLine(
+        project.member_count,
+        project.confirmed_member_count,
+        project.observed_member_count,
+      )
     : null;
   const readState: ReadState = {
     readAt: project?.observation?.read_at,
@@ -62,7 +79,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         meta={
           <span className="flex flex-wrap items-center gap-2">
             <span>
-              {people ? `${people.headline} ${people.headline === "1" ? "person" : "people"} · ` : ""}
+              {people
+                ? `${people.headline} ${people.headline === "1" ? "person" : "people"} · `
+                : ""}
               {projectRoles.length}{" "}
               {projectRoles.length === 1 ? "role" : "roles"}
               {served.length > 0
@@ -70,11 +89,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 : " · no app reads this yet"}
             </span>
             {people?.note && (
-              <span className={`text-[13.5px] ${holdersToneClass[people.tone]}`}>
+              <span
+                className={`text-[13.5px] ${holdersToneClass[people.tone]}`}
+              >
                 {people.note}
               </span>
             )}
-            {project && <ReadFreshness state={readState} subject="What Zitadel confirmed" />}
+            {project && (
+              <ReadFreshness
+                state={readState}
+                subject="What Zitadel confirmed"
+              />
+            )}
             <Mono className="text-faint">{id}</Mono>
           </span>
         }
@@ -103,7 +129,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <CardColumns>
           <span className="flex-1">Role</span>
           <span className="w-[130px]">Group</span>
-          <span className="w-[96px] text-right">Members</span>
+          <span className="w-[130px]">When given</span>
+          <span className="w-[96px] text-right">People</span>
         </CardColumns>
 
         <ListStates
@@ -112,12 +139,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           isEmpty={projectRoles.length === 0}
           onRetry={() => roles.refetch()}
           errorTitle="Couldn't load this project's roles."
-          skeleton={<RowSkeleton rows={4} avatar={false} label="Loading roles" />}
+          skeleton={
+            <RowSkeleton rows={4} avatar={false} label="Loading roles" />
+          }
           empty={
             <EmptyState
               title="No roles listed in this project."
               guidance="Create one here, or check Zitadel — roles created directly there may not be listed yet."
-              action={{ label: "Create a role", onClick: () => setCreating(true) }}
+              action={{
+                label: "Create a role",
+                onClick: () => setCreating(true),
+              }}
             />
           }
         >
@@ -128,51 +160,80 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               role.observed_user_count,
             );
             return (
-            <div
-              key={role.role_key}
-              className="row-divider flex flex-wrap items-start gap-[18px] px-5 py-3.5"
-            >
-              <div className="min-w-[min(220px,100%)] flex-1">
-                <div className="text-[15px] font-semibold">
-                  {role.display_name || humanizeKey(role.role_key)}{" "}
-                  <Mono className="font-normal text-faint">{role.role_key}</Mono>
-                </div>
-                {role.description && (
-                  <p className="mt-1 max-w-[80ch] text-[13.5px] leading-[1.5] text-ink/50">
-                    {role.description}
-                  </p>
-                )}
-                {role.cloned_from_role && (
-                  <p className="mt-1 text-[12.5px] text-faint">
-                    cloned from {role.cloned_from_project} / {role.cloned_from_role}
-                  </p>
-                )}
-              </div>
-
-              <span className="w-[130px] shrink-0 truncate text-[13.5px] text-muted">
-                {role.group || "—"}
-              </span>
-
-              <Link
-                href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
-                className="flex min-h-11 w-[96px] shrink-0 flex-col items-end justify-center gap-0.5 text-[15px] font-semibold text-accent-text desktop:min-h-6"
+              <div
+                key={role.role_key}
+                className="row-divider flex flex-wrap items-start gap-[18px] px-5 py-3.5"
               >
-                <span>{members.headline} →</span>
-                {members.note && (
-                  <span
-                    className={`text-[12.5px] font-normal ${holdersToneClass[members.tone]}`}
-                  >
-                    {members.note}
-                  </span>
-                )}
-              </Link>
-            </div>
+                <div className="min-w-[min(220px,100%)] flex-1">
+                  <div className="text-[15px] font-semibold">
+                    {role.display_name || humanizeKey(role.role_key)}{" "}
+                    <Mono className="font-normal text-faint">
+                      {role.role_key}
+                    </Mono>
+                  </div>
+                  {role.description && (
+                    <p className="mt-1 max-w-[80ch] text-[13.5px] leading-[1.5] text-ink/50">
+                      {role.description}
+                    </p>
+                  )}
+                  {role.cloned_from_role && (
+                    <p className="mt-1 text-[12.5px] text-faint">
+                      cloned from {role.cloned_from_project} /{" "}
+                      {role.cloned_from_role}
+                    </p>
+                  )}
+                </div>
+
+                <span className="w-[130px] shrink-0 truncate text-[13.5px] text-muted">
+                  {role.group || "—"}
+                </span>
+
+                {/* Read-only (N16): set only in Roles that wait. */}
+                <span className="w-[130px] shrink-0 text-[13.5px]">
+                  {role.waits_for_send ? (
+                    <WaitsMark
+                      withLabel
+                      className="[&>span:nth-child(2)]:text-ink"
+                    />
+                  ) : (
+                    <span className="text-faint">Straight away</span>
+                  )}
+                </span>
+
+                <Link
+                  href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
+                  className="flex min-h-11 w-[96px] shrink-0 flex-col items-end justify-center gap-0.5 text-[15px] font-semibold text-accent-text desktop:min-h-6"
+                >
+                  <span>{members.headline} →</span>
+                  {members.note && (
+                    <span
+                      className={`text-[12.5px] font-normal ${holdersToneClass[members.tone]}`}
+                    >
+                      {members.note}
+                    </span>
+                  )}
+                </Link>
+              </div>
             );
           })}
         </ListStates>
       </Card>
 
-      {creating && <CreateRoleDialog pinnedProjectId={id} onClose={() => setCreating(false)} />}
+      {projectRoles.length > 0 && (
+        <p className="-mt-1 flex flex-wrap items-center gap-x-2 px-5 text-[13px] text-muted">
+          {waiting === 0
+            ? `None of ${projectName}'s roles wait for you.`
+            : `${waiting === projectRoles.length ? "All" : waiting} of ${projectName}'s roles always wait for you.`}
+          <ArrowLink href="/changes/roles-that-wait">Set in Roles that wait</ArrowLink>
+        </p>
+      )}
+
+      {creating && (
+        <CreateRoleDialog
+          pinnedProjectId={id}
+          onClose={() => setCreating(false)}
+        />
+      )}
     </div>
   );
 }

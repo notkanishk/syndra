@@ -16,9 +16,21 @@ import BundlesPage from "@/app/bundles/page";
 
 const state = vi.hoisted(() => ({ create: vi.fn() }));
 
+// "Start from" reads another bundle's published roles; these two are what Mill Certified v2 carries.
+const source = vi.hoisted(() => ({
+  bundles: [{ id: "b-src", name: "Mill Certified", latest_version: 2 }],
+  roles: [
+    { bundle_id: "b-src", zitadel_project_id: "p1", zitadel_role_key: "laser_trained" },
+    { bundle_id: "b-src", zitadel_project_id: "p1", zitadel_role_key: "cnc_trained" },
+  ],
+}));
+
+vi.mock("@/lib/queries/useCatalogUsers", () => ({ useCatalogUsers: () => ({ data: [] }) }));
+vi.mock("@/lib/queries/useUsers", () => ({ useUserAccess: () => ({ data: undefined }) }));
+
 vi.mock("@/lib/queries/useBundles", () => ({
-  useBundles: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
-  useBundleRoles: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
+  useBundles: () => ({ data: source.bundles, isLoading: false, refetch: vi.fn() }),
+  useBundleRoles: (id: string | null) => ({ data: id ? source.roles : undefined, isLoading: false, refetch: vi.fn() }),
   useBundleImpact: () => ({ data: null, isLoading: false }),
   useCreateBundle: () => ({ mutateAsync: state.create, isPending: false }),
   useDeleteBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -64,9 +76,11 @@ beforeEach(() => {
   state.create = vi.fn().mockResolvedValue({ id: "b1" });
 });
 
+// RolePicker folds each project, closed until searched in or something in it is chosen.
 function openDialog() {
   render(<BundlesPage />);
   fireEvent.click(screen.getByRole("button", { name: "New bundle" }));
+  fireEvent.click(screen.getByRole("button", { name: /Fabrication/ }));
 }
 
 describe("creating a bundle", () => {
@@ -111,9 +125,9 @@ describe("creating a bundle", () => {
    * `setOutcome` used to fire in the same breath as `onClose`, which unmounts
    * the dialog before "Lab Tech created" is ever painted — the operator never
    * saw it landed, let alone what it carries. The dialog now stays open on
-   * success until Done is pressed.
+   * success until Close is pressed.
    */
-  it("shows what was created and stays open until Done is pressed", async () => {
+  it("shows what was created and stays open until Close is pressed", async () => {
     openDialog();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lab Tech" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Laser trained/ }));
@@ -124,7 +138,39 @@ describe("creating a bundle", () => {
     // The create action retires — a second click must not create it twice.
     expect(screen.queryByRole("button", { name: /^Create with 1 role$/ })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByText(/Lab Tech created/)).toBeNull();
+  });
+});
+
+describe("starting a new bundle from another", () => {
+  function copyFromMillCertified() {
+    openDialog();
+    fireEvent.click(screen.getByRole("radio", { name: "Another bundle" }));
+    fireEvent.change(screen.getByLabelText("Copy from which bundle"), { target: { value: "b-src" } });
+  }
+
+  it("ticks the published roles and says what was copied", async () => {
+    copyFromMillCertified();
+
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /Laser trained/ })).toBeChecked());
+    expect(screen.getByRole("checkbox", { name: /CNC trained/ })).toBeChecked();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "P" && /Copied Mill Certified v2: its 2 roles are ticked below\./.test(el.textContent ?? ""),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("unticks them again with Start empty", async () => {
+    copyFromMillCertified();
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /Laser trained/ })).toBeChecked());
+
+    fireEvent.click(screen.getByRole("button", { name: "Start empty" }));
+
+    expect(screen.getByRole("checkbox", { name: /Laser trained/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /CNC trained/ })).not.toBeChecked();
+    expect(screen.queryByText(/Copied Mill Certified/)).toBeNull();
   });
 });

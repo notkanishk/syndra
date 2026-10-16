@@ -43,6 +43,12 @@ export interface DecisionInput {
   review_note?: string;
 }
 
+/** What deciding returns: an approval that isn't in Zitadel yet says why. */
+export interface DecisionResult {
+  message?: string;
+  wait_reason?: string;
+}
+
 const KEYS = {
   byStatus: (status: string) => ["requests", { status }] as const,
   all: ["requests"] as const,
@@ -97,7 +103,7 @@ export function useDecideRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...input }: DecisionInput & { id: string }) => {
-      return await request<AccessRequest>(`/requests/${id}/decision`, {
+      return await request<DecisionResult>(`/requests/${id}/decision`, {
         method: "POST",
         body: input,
       });

@@ -62,7 +62,7 @@ describe("the upstream role dialog becomes its own result", () => {
   // means closing and reopening. Deliberate, in this direction: this is the
   // least undoable write in the product and the second tap is far more often
   // a double-tap than a correction.
-  it("writes once and then stops, offering Done instead", async () => {
+  it("writes once and then stops, offering Close instead", async () => {
     state.create.mockResolvedValue(undefined);
     openTheDialog();
 
@@ -70,7 +70,7 @@ describe("the upstream role dialog becomes its own result", () => {
     await within(screen.getByRole("dialog")).findByRole("status");
 
     expect(screen.getByRole("button", { name: "Create in Zitadel" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
     expect(state.create).toHaveBeenCalledTimes(1);
   });
 

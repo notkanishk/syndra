@@ -3,7 +3,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import { AnchoredPanel } from "@/components/ui/Anchored";
-import { PILL } from "@/components/ui/Button";
+import { Button, PILL } from "@/components/ui/Button";
+import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { useIsPhone } from "@/lib/useViewport";
 
 const PILL_BOX = `inline-flex items-center justify-center rounded-pill font-semibold motion-tint ${PILL.md}`;
 
@@ -27,14 +29,20 @@ const PILL_BOX = `inline-flex items-center justify-center rounded-pill font-semi
 export function FilterPanel({
   activeCount,
   onClear,
+  resultCount,
+  noun,
   children,
 }: {
   /** How many filters are narrowing the list right now. */
   activeCount: number;
   onClear: () => void;
+  /** The list's live count after these filters, so the phone sheet's button names the result. */
+  resultCount?: number;
+  noun?: [string, string];
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const phone = useIsPhone();
   const ref = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement | null>(null);
   const id = useId();
@@ -44,7 +52,8 @@ export function FilterPanel({
     function onDocument(event: MouseEvent) {
       // The panel is under <body>, outside the button's wrapper.
       const target = event.target as Node;
-      if (ref.current?.contains(target) || panel.current?.contains(target)) return;
+      if (ref.current?.contains(target) || panel.current?.contains(target))
+        return;
       setOpen(false);
     }
     function onKey(event: KeyboardEvent) {
@@ -66,7 +75,9 @@ export function FilterPanel({
         aria-controls={id}
         onClick={() => setOpen((value) => !value)}
         className={`${PILL_BOX} border bg-transparent hover:text-ink ${
-          activeCount > 0 ? "border-accent-line text-ink" : "border-line-strong text-muted"
+          activeCount > 0
+            ? "border-accent-line text-ink"
+            : "border-line-strong text-muted"
         }`}
       >
         Filters
@@ -77,23 +88,54 @@ export function FilterPanel({
         )}
       </button>
 
-      <AnchoredPanel
-        anchor={ref}
-        open={open}
-        id={id}
-        panelRef={panel}
-        // Right-aligned: the button sits at the end of its row on wide
-        // screens, and a panel hanging off the left of it would run past the
-        // window edge.
-        align="end"
-        width={352}
-        expectHeight={420}
-        className="settle-in flex max-h-[min(72vh,34rem)] flex-col rounded-panel border border-line-strong bg-surface-2 p-4 shadow-popover"
-      >
+      {/* Below tablet (87c): a sheet ending in one accent button that names
+          the result, so the count answers "why so few" before it closes. */}
+      {phone ? (
+        <Modal
+          open={open}
+          onClose={() => setOpen(false)}
+          size="sm"
+          labelledBy={`${id}-title`}
+        >
+          <ModalHeader title="Filters" titleId={`${id}-title`} />
+          <div id={id} className="flex flex-col gap-3.5 px-6">
+            {children}
+          </div>
+          <ModalFooter>
+            <Button variant="accent" onClick={() => setOpen(false)}>
+              {resultCount !== undefined && noun
+                ? `Show ${resultCount} ${resultCount === 1 ? noun[0] : noun[1]}`
+                : "Done"}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={onClear}
+              disabled={activeCount === 0}
+            >
+              Clear all
+            </Button>
+          </ModalFooter>
+        </Modal>
+      ) : (
+        <AnchoredPanel
+          anchor={ref}
+          open={open}
+          id={id}
+          panelRef={panel}
+          // Right-aligned: the button sits at the end of its row on wide
+          // screens, and a panel hanging off the left of it would run past the
+          // window edge.
+          align="end"
+          width={352}
+          expectHeight={420}
+          className="settle-in flex max-h-[min(72vh,34rem)] flex-col rounded-panel border border-line-strong bg-surface-2 p-4 shadow-popover"
+        >
           {/* The fields scroll, the footer does not. Six of them run past the
               bottom of a laptop window, and Clear and Done are the two
               controls somebody needs once they have finished choosing. */}
-          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">{children}</div>
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
+            {children}
+          </div>
           <div className="mt-4 flex shrink-0 items-center justify-between border-t border-line pt-3.5">
             <button
               type="button"
@@ -111,7 +153,8 @@ export function FilterPanel({
               Done
             </button>
           </div>
-      </AnchoredPanel>
+        </AnchoredPanel>
+      )}
     </div>
   );
 }
@@ -121,7 +164,13 @@ export function FilterPanel({
  * control is a single field, and a group label when it is a set of pills —
  * which is why it takes the rendered control rather than rendering one itself.
  */
-export function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+export function FilterField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="type-label text-[12.5px] text-label">{label}</span>
