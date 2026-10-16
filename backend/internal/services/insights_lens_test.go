@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -217,5 +218,29 @@ func TestInsightsLensGroup_ObservedHoldersAndNames(t *testing.T) {
 	// q:x is not in the directory: it is named by its key, not dropped.
 	if term.Roles[0].ProjectName != "Laser" || term.Roles[1].ProjectName != "q" || term.Roles[1].RoleLabel != "x" {
 		t.Errorf("roles = %+v", term.Roles)
+	}
+}
+
+func TestPickGroup_NewTermReadsZitadelCreation(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	at := func(d time.Time) *time.Time { return &d }
+	people := []lensPerson{
+		{ID: "fresh-no-records", Joined: at(start.AddDate(0, 0, 10))},
+		{ID: "old-backfilled", Joined: at(start.AddDate(-1, 0, 0))},
+		{ID: "no-date-seen-new"},
+		{ID: "no-date-seen-old"},
+		{ID: "no-date-never-seen"},
+	}
+	seen := map[string]time.Time{
+		"old-backfilled":   start.AddDate(0, 0, 3), // records written at the deploy
+		"no-date-seen-new": start.AddDate(0, 0, 5),
+		"no-date-seen-old": start.AddDate(0, -3, 0),
+	}
+	var ids []string
+	for _, p := range pickGroup(LensGroup{Kind: LensNewTerm}, people, seen, start) {
+		ids = append(ids, p.ID)
+	}
+	if got := strings.Join(ids, ","); got != "fresh-no-records,no-date-seen-new" {
+		t.Errorf("new_term = %s", got)
 	}
 }

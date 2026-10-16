@@ -239,7 +239,10 @@ func (c *managementClient) GetUser(ctx context.Context, userID string) (*Zitadel
 			ID       string `json:"id"`
 			UserName string `json:"userName"`
 			State    string `json:"state"`
-			Human    struct {
+			Details  struct {
+				CreationDate string `json:"creationDate"`
+			} `json:"details"`
+			Human struct {
 				Profile struct {
 					DisplayName string `json:"displayName"`
 				} `json:"profile"`
@@ -259,7 +262,19 @@ func (c *managementClient) GetUser(ctx context.Context, userID string) (*Zitadel
 		DisplayName: raw.User.Human.Profile.DisplayName,
 		Email:       raw.User.Human.Email.Email,
 		State:       raw.User.State,
+		Created:     parseCreationDate(raw.User.Details.CreationDate),
 	}, nil
+}
+
+// parseCreationDate reads Zitadel's details.creationDate. An absent or
+// unreadable value is the zero time, not an error: one odd user must not
+// fail the whole directory read.
+func parseCreationDate(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 func (c *managementClient) ListUsers(ctx context.Context, p SearchParams) (*SearchResult[ZitadelUser], error) {
@@ -286,7 +301,10 @@ func (c *managementClient) ListUsers(ctx context.Context, p SearchParams) (*Sear
 			ID       string `json:"id"`
 			UserName string `json:"userName"`
 			State    string `json:"state"`
-			Human    struct {
+			Details  struct {
+				CreationDate string `json:"creationDate"`
+			} `json:"details"`
+			Human struct {
 				Profile struct {
 					DisplayName string `json:"displayName"`
 				} `json:"profile"`
@@ -308,6 +326,7 @@ func (c *managementClient) ListUsers(ctx context.Context, p SearchParams) (*Sear
 			DisplayName: r.Human.Profile.DisplayName,
 			Email:       r.Human.Email.Email,
 			State:       r.State,
+			Created:     parseCreationDate(r.Details.CreationDate),
 		}
 	}
 	return &SearchResult[ZitadelUser]{Items: users, Total: result.Details.totalInt()}, nil

@@ -575,7 +575,12 @@ func toUserProfile(u zitadel.ZitadelUser) models.UserProfile {
 	if name == "" {
 		name = u.ID
 	}
+	var joined *time.Time
+	if !u.Created.IsZero() {
+		joined = &u.Created
+	}
 	return models.UserProfile{
+		Joined: joined,
 		ID:     u.ID,
 		Name:   name,
 		Email:  u.Email,
