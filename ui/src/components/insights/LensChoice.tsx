@@ -2,21 +2,18 @@
 
 import { ENDING_DAYS, type InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
+import { FilterPills, Select } from "@/components/ui/Select";
 
 /** The choice a lens carries with it: how far ahead, or which group. People and Recent use carry none. */
 export function LensChoice({ url, lens }: { url: InsightsUrl; lens: string }) {
   if (lens === "ending")
     return (
-      <div className="w-full tablet:w-44">
-        <Select aria-label="How far ahead" value={url.days} onChange={(e) => url.set({ days: e.target.value === "30" ? null : e.target.value })}>
-          {ENDING_DAYS.map((d) => (
-            <option key={d} value={d}>
-              Next {d} days
-            </option>
-          ))}
-        </Select>
-      </div>
+      <FilterPills
+        label="How far ahead"
+        value={String(url.days)}
+        options={ENDING_DAYS.map((d) => ({ value: String(d), label: `${d} days` }))}
+        onChange={(next) => url.set({ days: next === String(ENDING_DAYS[0]) ? null : next })}
+      />
     );
   if (lens !== "group") return null;
 

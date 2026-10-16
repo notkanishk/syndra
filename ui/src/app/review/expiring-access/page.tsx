@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 
@@ -9,6 +9,8 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns } from "@/components/ui/Card";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterPills } from "@/components/ui/Select";
 import {
   RowCheckbox,
   SelectAllRow,
@@ -62,15 +64,20 @@ const EXTEND_DAYS = 90;
  * person read the row.
  */
 /**
- * The window, from `?within=`: Home's tile counts the next 14 days and links
- * here with it, so the number on the tile is the number of rows. 30 by default.
+ * The one expiring window, from `?within=`: 14 or 30 days, 14 first (A-04 §4,
+ * A-06 §7). Home's tile and the rail open on 14, so the number you tapped is the
+ * number you land on, and Insights' Ending soon uses the same two. Anything else
+ * in the link, 7 or 90 included, is 14.
  */
-function windowDays(raw: string | null): number {
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 1 && n <= 90 ? n : 30;
+const WINDOWS = [14, 30] as const;
+type Window = (typeof WINDOWS)[number];
+
+function windowDays(raw: string | null): Window {
+  return WINDOWS.find((d) => String(d) === raw) ?? WINDOWS[0];
 }
 
 export default function ExpiringAccessPage() {
+  const router = useRouter();
   const within = windowDays(useSearchParams().get("within"));
   const grants = useExpiringGrants(within);
   const rows = useMemo(() => [...(grants.data ?? [])].sort(sortBySoonest), [grants.data]);
@@ -117,6 +124,26 @@ export default function ExpiringAccessPage() {
           undecided.length > 0 ? (
             <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
           ) : undefined
+        }
+      />
+
+      {/* A filter, not an action, so FilterPills and not a Segmented. The default
+          window keeps the link clean. */}
+      <FilterBar
+        leading={
+          <FilterPills
+            label="How far ahead"
+            value={String(within)}
+            options={WINDOWS.map((d) => ({ value: String(d), label: `${d} days` }))}
+            onChange={(next) =>
+              router.replace(
+                next === String(WINDOWS[0])
+                  ? "/review/expiring-access"
+                  : `/review/expiring-access?within=${next}`,
+                { scroll: false },
+              )
+            }
+          />
         }
       />
 

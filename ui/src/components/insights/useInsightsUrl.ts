@@ -17,7 +17,8 @@ export const LENSES: Array<{ value: Lens; label: string }> = [
   { value: "ending", label: "Ending soon" },
   { value: "group", label: "A group" },
 ];
-export const ENDING_DAYS = [7, 30, 90];
+/** One window across the product, 14 first: Expiring access, Home and this lens (A-06 §7). */
+export const ENDING_DAYS = [14, 30];
 
 /**
  * Everything Insights remembers is in the link: the tab, the question (`q`
@@ -33,7 +34,7 @@ export function useInsightsUrl() {
   // ponytail: ids are joined with commas; a node id with a comma would split. Real ids never carry one.
   const pins = Array.from(new Set((params.get("pin") ?? "").split(",").filter(Boolean))).slice(0, MAX_PINS);
   const lens = LENSES.find((l) => l.value === params.get("lens"))?.value ?? "people";
-  const days = ENDING_DAYS.find((d) => String(d) === params.get("days")) ?? 30;
+  const days = ENDING_DAYS.find((d) => String(d) === params.get("days")) ?? ENDING_DAYS[0];
   // left, new_term or team:<name>; anything else is the default.
   const g = params.get("group") ?? "";
   const group = g === "new_term" || g.startsWith("team:") ? g : "left";

@@ -883,7 +883,7 @@ describe("lenses", () => {
       "A group",
     ]);
     expect(lensPill("People")).toBeChecked();
-    expect(screen.queryByLabelText("How far ahead")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "How far ahead" })).not.toBeInTheDocument();
   });
 
   it("Ending soon lights the roles that lose access, counts them, and holds days in the link", () => {
@@ -894,31 +894,45 @@ describe("lenses", () => {
     renderPage();
     fireEvent.click(lensPill("Ending soon"));
     expect(nav.state.search).toBe("lens=ending");
-    expect(insights.calls.lens).toEqual({ kind: "ending", days: 30 });
+    // One window across the product (A-06 §7): 14 first, the same as Expiring access and Home.
+    expect(insights.calls.lens).toEqual({ kind: "ending", days: 14 });
+    expect(within(screen.getByRole("radiogroup", { name: "How far ahead" })).getAllByRole("radio").map((r) => r.textContent)).toEqual(["14 days", "30 days"]);
+    expect(screen.getByRole("radio", { name: "14 days" })).toBeChecked();
 
     expect(screen.getByRole("heading", { name: "Access ends in 1 role" })).toBeInTheDocument();
     expect(screen.getByText("The first ends on 30 Oct")).toBeInTheDocument();
     expect(screen.getByText("ends for 3 people, the first on 30 Oct.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open Expiring access/ })).toHaveAttribute("href", "/review/expiring-access");
+    expect(screen.getByRole("link", { name: /Open Expiring access/ })).toHaveAttribute("href", "/review/expiring-access?within=14");
     // The count sits on the role, which is lit; everything else steps back.
-    expect(node("Laser Lab · trained, 3 people lose it within 30 days")).toHaveTextContent("3");
-    expect(opacityOf("Laser Lab · trained, 3 people lose it within 30 days")).toBe("1");
+    expect(node("Laser Lab · trained, 3 people lose it within 14 days")).toHaveTextContent("3");
+    expect(opacityOf("Laser Lab · trained, 3 people lose it within 14 days")).toBe("1");
     expect(opacityOf(/Metal Shop · welder/)).toBe("0.35");
-    expect(screen.getByText("Lit roles have access ending within 30 days. The number is how many people lose it.")).toBeInTheDocument();
+    expect(screen.getByText("Lit roles have access ending within 14 days. The number is how many people lose it.")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("How far ahead"), { target: { value: "7" } });
-    expect(nav.state.search).toBe("lens=ending&days=7");
-    expect(insights.calls.lens).toEqual({ kind: "ending", days: 7 });
-    fireEvent.change(screen.getByLabelText("How far ahead"), { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("radio", { name: "30 days" }));
+    expect(nav.state.search).toBe("lens=ending&days=30");
+    expect(insights.calls.lens).toEqual({ kind: "ending", days: 30 });
+    expect(screen.getByRole("link", { name: /Open Expiring access/ })).toHaveAttribute("href", "/review/expiring-access?within=30");
+    fireEvent.click(screen.getByRole("radio", { name: "14 days" }));
     expect(nav.state.search).toBe("lens=ending");
   });
 
   it("opens from the link as it was left, and ignores a lens it does not know", () => {
-    nav.set("lens=ending&days=90");
+    nav.set("lens=ending&days=30");
     renderPage();
     expect(lensPill("Ending soon")).toBeChecked();
-    expect(screen.getByLabelText("How far ahead")).toHaveValue("90");
-    expect(insights.calls.lens).toEqual({ kind: "ending", days: 90 });
+    expect(screen.getByRole("radio", { name: "30 days" })).toBeChecked();
+    expect(insights.calls.lens).toEqual({ kind: "ending", days: 30 });
+  });
+
+  it("drops 7 and 90 from the window: a link that names them lands on 14", () => {
+    for (const days of ["7", "90"]) {
+      nav.set(`lens=ending&days=${days}`);
+      const { unmount } = renderPage();
+      expect(screen.getByRole("radio", { name: "14 days" })).toBeChecked();
+      expect(insights.calls.lens).toEqual({ kind: "ending", days: 14 });
+      unmount();
+    }
   });
 
   it("falls back to People for a lens or a number the link invents", () => {
@@ -931,7 +945,7 @@ describe("lenses", () => {
     insights.lens = { data: { kind: "ending", window_days: 30, holders_observed: true, roles: [] }, isError: false };
     nav.set("lens=ending");
     const { unmount } = renderPage();
-    expect(screen.getByRole("heading", { name: "Nothing ends in the next 30 days" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nothing ends in the next 14 days" })).toBeInTheDocument();
     unmount();
 
     insights.lens = { data: { kind: "ending", window_days: 30, holders_observed: false, roles: [] }, isError: false };
