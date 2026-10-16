@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // zitadelEventPayload mirrors Zitadel's ContextInfoEvent wire format
@@ -140,6 +142,21 @@ func translateEventName(ev zitadelEventPayload) WebhookPayload {
 		return mapGrantEvent("grant_changed", ev)
 	case "user.grant.removed", "user.user.grant.removed":
 		return mapGrantEvent("grant_removed", ev)
+	case "user.token.added", "user.token.v2.added":
+		// A user aggregate: the aggregate ID is the person, as for user.human.*.
+		if ev.AggregateType != "" && ev.AggregateType != "user" {
+			log.Printf("[WEBHOOK] %s on aggregate type %q — ignoring", ev.EventType, ev.AggregateType)
+			return WebhookPayload{}
+		}
+		return mapSignInEvent(ev, ev.AggregateID)
+	case "oidc_session.added":
+		// The aggregate is the OIDC SESSION, not the person: the only place this
+		// event names the user is its own payload. Trusted exactly as far as the
+		// grant events' payload userId already is — the delivery is signed — and
+		// bounded like every other id taken from a payload.
+		var p signInPayload
+		_ = json.Unmarshal(ev.EventPayload, &p)
+		return mapSignInEvent(ev, p.UserID)
 	default:
 		log.Printf("[WEBHOOK] unknown event=%s aggregate=%s — ignoring", ev.EventType, ev.AggregateID)
 		return WebhookPayload{}
@@ -175,4 +192,89 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// signInPayload is what a sign-in event's event_payload may say about who and
+// where. oidc_session.added: userID, clientID, audience. user.token.added:
+// applicationId, audience. encoding/json matches keys case-insensitively, so
+// `clientId` also takes `clientID`.
+type signInPayload struct {
+	UserID        string          `json:"userID"`
+	ApplicationID string          `json:"applicationId"`
+	ClientID      string          `json:"clientId"`
+	ClientIDSnake string          `json:"client_id"`
+	Audience      json.RawMessage `json:"audience"`
+}
+
+// Bounds for everything read out of a sign-in payload. The delivery is signed,
+// but a bound costs nothing and keeps one odd event from becoming a row or a
+// log line of arbitrary size.
+const (
+	maxSignInUserIDLen = 128
+	maxSignInRefLen    = 256
+	maxSignInAudience  = 8
+)
+
+// mapSignInEvent builds the user_signed_in payload. No user id, or one that
+// fails the bounds, means "not usable": the event is ignored like an unknown
+// one rather than recorded against a made-up person.
+func mapSignInEvent(ev zitadelEventPayload, userID string) WebhookPayload {
+	if !validSignInUserID(userID) {
+		log.Printf("[WEBHOOK] %s without a usable user id aggregate=%s — ignoring", ev.EventType, ev.AggregateID)
+		return WebhookPayload{}
+	}
+	var p signInPayload
+	_ = json.Unmarshal(ev.EventPayload, &p)
+	var refs []string
+	add := func(s string) {
+		if validSignInRef(s) {
+			refs = append(refs, s)
+		}
+	}
+	// The explicit application first; the audience only as a fallback, since a
+	// token's audience can name more than the application that asked for it.
+	add(p.ApplicationID)
+	add(p.ClientID)
+	add(p.ClientIDSnake)
+	var aud []string
+	if json.Unmarshal(p.Audience, &aud) != nil {
+		var one string
+		if json.Unmarshal(p.Audience, &one) == nil {
+			aud = []string{one}
+		}
+	}
+	for i, a := range aud {
+		if i == maxSignInAudience {
+			break
+		}
+		add(a)
+	}
+	return WebhookPayload{EventType: "user_signed_in", UserID: userID, ClientRefs: refs}
+}
+
+// validSignInUserID is a non-empty run of visible ASCII, at most 128 bytes.
+func validSignInUserID(s string) bool {
+	if s == "" || len(s) > maxSignInUserIDLen {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x21 || s[i] > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+// validSignInRef is a non-empty, valid-UTF-8 string without control characters,
+// at most 256 bytes. Spaces are allowed: a client id ends in a project name.
+func validSignInRef(s string) bool {
+	if s == "" || len(s) > maxSignInRefLen || !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }

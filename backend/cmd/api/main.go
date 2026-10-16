@@ -394,6 +394,11 @@ func main() {
 		r.Start(ctx)
 	}(insightsSched)
 
+	// Insights usage: drop "last seen" rows nobody has refreshed in 400 days. Once
+	// a day, at once on boot; a failure is logged and retried on the next tick.
+	usagePruneSched := periodic.New("FINDINGS", 24*time.Hour, 24*time.Hour, services.PruneUsageLastSeen)
+	go usagePruneSched.Start(ctx)
+
 	// Start server in background
 	go func() {
 		fmt.Println("Control Plane Backend Listening on :8080")
@@ -461,6 +466,12 @@ func main() {
 	case <-insightsSched.Done():
 	case <-shutdownCtx.Done():
 		log.Println("[FINDINGS] Shutdown deadline exceeded waiting for the snapshot; closing anyway")
+	}
+
+	select {
+	case <-usagePruneSched.Done():
+	case <-shutdownCtx.Done():
+		log.Println("[FINDINGS] Shutdown deadline exceeded waiting for the usage prune; closing anyway")
 	}
 
 	db.PG.Close()
