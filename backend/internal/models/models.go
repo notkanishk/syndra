@@ -34,6 +34,11 @@ type Bundle struct {
 	// are different objects, and only one of them means "the edit you made
 	// last term never reached anyone".
 	LatestVersion int `json:"latest_version"`
+	// HasIncludes: it includes other bundles (B8), so it can't go inside
+	// another. IncludedIn names the bundles that include it, so it can't take
+	// others in.
+	HasIncludes bool     `json:"has_includes"`
+	IncludedIn  []string `json:"included_in,omitempty"`
 	StaleHolders  int `json:"stale_holders"`
 
 	// UnpublishedChanges is how many role additions or removals sit in the
@@ -92,6 +97,20 @@ type BundleRole struct {
 	BundleID  string `json:"bundle_id"`
 	ProjectID string `json:"zitadel_project_id"`
 	RoleKey   string `json:"zitadel_role_key"`
+	// ViaBundleID is the included bundle this role comes through, when it
+	// isn't the bundle's own (B8). A role both own and included is own.
+	ViaBundleID string `json:"via_bundle_id,omitempty"`
+}
+
+// BundleInclude is one bundle included in another, pinned to a version (B8).
+type BundleInclude struct {
+	ChildBundleID  string `json:"child_bundle_id"`
+	ChildName      string `json:"child_name"`
+	ChildVersionID string `json:"child_version_id"`
+	ChildVersion   int    `json:"child_version"`
+	// ChildLatest is the child's newest published version, so a parent can
+	// say "v4 is out" when it still includes v3.
+	ChildLatest int `json:"child_latest_version"`
 }
 
 // MappingRule defines absolute policy logic
@@ -180,10 +199,14 @@ type RoleGrant struct {
 }
 
 type RoleReason struct {
-	Kind           string `json:"kind"`
-	Description    string `json:"description"`
-	BundleID       string `json:"bundle_id,omitempty"`
-	BundleName     string `json:"bundle_name,omitempty"`
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	BundleID    string `json:"bundle_id,omitempty"`
+	BundleName  string `json:"bundle_name,omitempty"`
+	// ViaBundleID and ViaBundleName name the included bundle a bundle role
+	// comes through (B8): "Via New members, from Safety basics".
+	ViaBundleID    string `json:"via_bundle_id,omitempty"`
+	ViaBundleName  string `json:"via_bundle_name,omitempty"`
 	TriggerProject string `json:"trigger_project,omitempty"`
 	TriggerRole    string `json:"trigger_role,omitempty"`
 	// Queued says this source has been recorded and not yet sent: the change
@@ -680,7 +703,7 @@ type ExternalGrantExclusion struct {
 type AccessRequest struct {
 	// Kind is "access" (a role they don't have) or "extend" (keep one that
 	// ends for longer: the grant's end moves, the role is never given twice).
-	Kind string `json:"kind"`
+	Kind          string     `json:"kind"`
 	ID            string     `json:"id"`
 	RequesterID   string     `json:"requester_id"`
 	ProjectID     string     `json:"project_id"`

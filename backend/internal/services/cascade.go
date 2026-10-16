@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -50,6 +51,12 @@ var (
 	svcGetAllKnownUserIDs        = db.GetAllKnownUserIDs
 	svcGetMappingRuleByID        = db.GetMappingRuleByID
 	svcDrainBatch                = propagation.DrainBatch
+	svcGetWorkingIncludes        = db.GetWorkingIncludes
+	svcGetVersionIncludes        = db.GetVersionIncludes
+	svcSnapshotVersionIncludes   = db.SnapshotVersionIncludes
+	svcSetWorkingInclude         = db.SetWorkingInclude
+	svcListIncluders             = db.ListIncluders
+	svcRetireBlockers            = db.RetireBlockers
 
 	// atomic mutation+enqueue (one tx each — see design pivot: cascades write no
 	// direct_role_grants row).
@@ -68,6 +75,15 @@ var (
 	// injectables already declared in deps.go (svcGetDirectGrantsForUser, svcGetBundlesForUser,
 	// svcGetActiveMappingRules) — redeclaring them here would be a duplicate package-level var.
 )
+
+// ErrBundleIncluded refuses retiring a bundle other bundles include, naming them.
+type ErrBundleIncluded struct{ Includers []string }
+
+func (e *ErrBundleIncluded) Error() string {
+	return "refused while " + strings.Join(e.Includers, " and ") + " include it"
+}
+
+func (e *ErrBundleIncluded) Unwrap() error { return db.ErrBundleIncluded }
 
 // applyMode delivers the JUST-enqueued rows (Deliver): each goes to Zitadel
 // now unless its role waits, or, before the switch over, the bundle's or
@@ -492,6 +508,15 @@ func CascadeBundleDeleted(ctx context.Context, actor, bundleID string) (CascadeR
 		bundle, err = svcGetBundleByID(ctx, bundleID)
 		if err != nil {
 			return err
+		}
+		// Refused while another bundle includes it (B8): its people get these
+		// roles through that bundle, and retiring would strip them unasked.
+		blockers, err := svcRetireBlockers(ctx, bundleID)
+		if err != nil {
+			return err
+		}
+		if len(blockers) > 0 {
+			return &ErrBundleIncluded{Includers: blockers}
 		}
 		rules, err := svcGetActiveMappingRules(ctx)
 		if err != nil {

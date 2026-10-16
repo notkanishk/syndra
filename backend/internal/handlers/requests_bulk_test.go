@@ -234,7 +234,6 @@ func TestBulkDecide_RejectsInvalidRequests(t *testing.T) {
 	}
 }
 
-
 // The plan agrees with the decision: a request for a role they have come to
 // hold since asking is blocked for approval, never approved over what they have.
 func TestBulkDecide_BlocksApprovingARoleTheyAlreadyHave(t *testing.T) {

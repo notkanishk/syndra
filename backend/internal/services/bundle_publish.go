@@ -40,11 +40,32 @@ type DraftDiff struct {
 	// downstream is how the outbox ends up describing a different version from
 	// the one holders are pinned to.
 	Working []models.BundleRole `json:"-"`
+
+	// Includes are the bundles the working copy includes (B8), and
+	// WorkingEffective is what the next version would give: its own roles and
+	// each included version's, from the same read. Added and Removed compare
+	// what people get, so a role present both ways is held once.
+	Includes         []models.BundleInclude `json:"includes"`
+	WorkingEffective []models.BundleRole    `json:"-"`
+	// IncludeChanges are the includes the next version adds, drops or moves
+	// to another version of the included bundle.
+	IncludeChanges []IncludeChange `json:"include_changes"`
+}
+
+// IncludeChange is one include the next version changes. From 0: added. To 0:
+// removed. Both set: moved to another version of the included bundle.
+type IncludeChange struct {
+	ChildBundleID string `json:"child_bundle_id"`
+	ChildName     string `json:"child_name"`
+	From          int    `json:"from_version"`
+	To            int    `json:"to_version"`
 }
 
 // Empty reports whether the working copy and the latest version agree, in which
 // case there is nothing to publish.
-func (d DraftDiff) Empty() bool { return len(d.Added) == 0 && len(d.Removed) == 0 }
+func (d DraftDiff) Empty() bool {
+	return len(d.Added) == 0 && len(d.Removed) == 0 && len(d.IncludeChanges) == 0
+}
 
 // BundleDraft computes the unpublished difference for one bundle.
 func BundleDraft(ctx context.Context, bundleID string) (DraftDiff, error) {
@@ -65,8 +86,30 @@ func BundleDraft(ctx context.Context, bundleID string) (DraftDiff, error) {
 	if err != nil {
 		return out, err
 	}
+	includes, err := svcGetWorkingIncludes(ctx, bundleID)
+	if err != nil {
+		return out, err
+	}
+	effective := append([]models.BundleRole(nil), working...)
+	for _, in := range includes {
+		childRoles, err := svcGetRolesForVersion(ctx, in.ChildVersionID)
+		if err != nil {
+			return out, err
+		}
+		for _, r := range childRoles {
+			r.BundleID, r.ViaBundleID = bundleID, in.ChildBundleID
+			effective = append(effective, r)
+		}
+	}
+	publishedIncludes, err := svcGetVersionIncludes(ctx, latest.ID)
+	if err != nil {
+		return out, err
+	}
 	out.Working = working
-	out.Added, out.Removed = diffRoles(published, working)
+	out.Includes = includes
+	out.WorkingEffective = effective
+	out.Added, out.Removed = diffRoles(published, effective)
+	out.IncludeChanges = diffIncludes(publishedIncludes, includes)
 
 	holders, err := svcGetUsersForBundle(ctx, bundleID)
 	if err != nil {
@@ -108,6 +151,31 @@ func diffRoles(prev, next []models.BundleRole) (added, removed []models.BundleRo
 	return added, removed
 }
 
+// diffIncludes reports what the working copy's includes change against the
+// published version's. Never nil, for the same reason as diffRoles.
+func diffIncludes(prev, next []models.BundleInclude) []IncludeChange {
+	out := []IncludeChange{}
+	was := map[string]models.BundleInclude{}
+	for _, p := range prev {
+		was[p.ChildBundleID] = p
+	}
+	for _, n := range next {
+		p, ok := was[n.ChildBundleID]
+		switch {
+		case !ok:
+			out = append(out, IncludeChange{ChildBundleID: n.ChildBundleID, ChildName: n.ChildName, To: n.ChildVersion})
+		case p.ChildVersionID != n.ChildVersionID:
+			out = append(out, IncludeChange{ChildBundleID: n.ChildBundleID, ChildName: n.ChildName, From: p.ChildVersion, To: n.ChildVersion})
+		}
+		delete(was, n.ChildBundleID)
+	}
+	for _, p := range was {
+		out = append(out, IncludeChange{ChildBundleID: p.ChildBundleID, ChildName: p.ChildName, From: p.ChildVersion})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ChildName < out[j].ChildName })
+	return out
+}
+
 func sortRoles(rs []models.BundleRole) {
 	sort.Slice(rs, func(i, j int) bool {
 		if rs[i].ProjectID != rs[j].ProjectID {
@@ -126,6 +194,61 @@ type PublishRequest struct {
 	// the version for new assignments only and leaves existing holders exactly
 	// where they are — which is a deliberate answer, not a deferral.
 	Migrate bool
+	// Includers answers, for every bundle whose working copy includes this
+	// one, whether its next version takes the new one (B8). No default: each
+	// must be answered, or the publish is refused naming those left.
+	Includers []IncluderChoice
+}
+
+// IncluderChoice is "update" or "leave" for one bundle that includes this one.
+type IncluderChoice struct {
+	BundleID string `json:"bundle_id"`
+	Action   string `json:"action"`
+}
+
+// ErrIncludersUnanswered names the including bundles a publish didn't answer for.
+type ErrIncludersUnanswered struct{ Names []string }
+
+func (e *ErrIncludersUnanswered) Error() string {
+	return "say whether each bundle that includes this one takes the new version: " + strings.Join(e.Names, ", ")
+}
+
+// checkIncluderChoices returns the parents to update, refusing a publish that
+// leaves any including bundle unanswered or answers one that doesn't include it.
+func checkIncluderChoices(ctx context.Context, req PublishRequest) ([]string, error) {
+	includers, err := svcListIncluders(ctx, req.BundleID)
+	if err != nil {
+		return nil, err
+	}
+	asked := map[string]string{}
+	for _, c := range req.Includers {
+		if c.Action != "update" && c.Action != "leave" {
+			return nil, fmt.Errorf(`includer %s: action must be "update" or "leave"`, c.BundleID)
+		}
+		asked[c.BundleID] = c.Action
+	}
+	var missing, update []string
+	for _, in := range includers {
+		// Only a working copy that includes it can take a new version.
+		if in.DraftVersion == 0 && in.IncludedVersion == 0 {
+			continue
+		}
+		switch asked[in.BundleID] {
+		case "update":
+			update = append(update, in.BundleID)
+		case "leave":
+		default:
+			missing = append(missing, in.Name)
+		}
+		delete(asked, in.BundleID)
+	}
+	if len(missing) > 0 {
+		return nil, &ErrIncludersUnanswered{Names: missing}
+	}
+	for id := range asked {
+		return nil, fmt.Errorf("bundle %s doesn't include this one", id)
+	}
+	return update, nil
 }
 
 // RehearseBundlePublish computes, per holder, what publishing would do to them.
@@ -141,7 +264,12 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 		return plan, draft, err
 	}
 
-	next := draft.Working
+	// What the next version gives, includes and all: the same set the apply
+	// computes its writes from, so the plan read is the plan applied.
+	next := draft.WorkingEffective
+	if next == nil {
+		next = draft.Working
+	}
 	rules, err := svcGetActiveMappingRules(ctx)
 	if err != nil {
 		return plan, draft, err
@@ -184,7 +312,7 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 	}
 
 	plan.Summary = SummarizeOutcomes(plan.Outcomes)
-	plan.RequestFingerprint = FingerprintBundlePublish(req.BundleID, req.Migrate, draft.Working, holders)
+	plan.RequestFingerprint = FingerprintBundlePublish(req.BundleID, req.Migrate, publishedContents(draft), holders)
 	return plan, draft, nil
 }
 
@@ -201,6 +329,21 @@ func RehearseBundlePublish(ctx context.Context, req PublishRequest) (BulkPlan, D
 // The cohort belongs here for the reason RequestFingerprint exists: a person
 // assigned the bundle after the review is not a subject on the approval, so no
 // amount of per-subject verification will notice them.
+// publishedContents is what the version being approved contains, for its
+// fingerprint: what it gives, and which version of each bundle it includes
+// (B8). Moving an include to another version is a different version even when
+// the roles come out the same.
+func publishedContents(draft DraftDiff) []models.BundleRole {
+	out := append([]models.BundleRole(nil), draft.WorkingEffective...)
+	if draft.WorkingEffective == nil {
+		out = append(out, draft.Working...)
+	}
+	for _, in := range draft.Includes {
+		out = append(out, models.BundleRole{ProjectID: "include:" + in.ChildBundleID, RoleKey: in.ChildVersionID})
+	}
+	return out
+}
+
 func FingerprintBundlePublish(
 	bundleID string,
 	migrate bool,
@@ -354,7 +497,14 @@ func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest)
 		// One read, from the rehearsal. Reading the working copy a second time here
 		// would let an edit land in between: the deltas would describe one set of
 		// roles and the snapshot would contain another.
-		next := draft.Working
+		next := draft.WorkingEffective
+		if next == nil {
+			next = draft.Working
+		}
+		includers, err := checkIncluderChoices(ctx, req)
+		if err != nil {
+			return err
+		}
 		rules, err := svcGetActiveMappingRules(ctx)
 		if err != nil {
 			return err
@@ -386,9 +536,21 @@ func PublishBundleVersion(ctx context.Context, actor string, req PublishRequest)
 		// the version contains exactly what the plan was computed from. An edit that
 		// lands mid-publish is simply not in this version — it stays a draft for the
 		// next one, which is the honest outcome.
-		version, ids, err = svcPublishVersionAndEnqueue(ctx, actor, req.BundleID, req.Note, next, moved, params)
+		version, ids, err = svcPublishVersionAndEnqueue(ctx, actor, req.BundleID, req.Note, draft.Working, moved, params)
 		if err != nil {
 			return err
+		}
+		// Same transaction: the version's includes are snapshotted with it.
+		if err := svcSnapshotVersionIncludes(ctx, version.ID, draft.Includes); err != nil {
+			return err
+		}
+		// A child's publish never changes a parent's people: "Update" puts the
+		// new version into the parent's working copy, and the parent's own
+		// publish moves its people, rehearsed as usual (B8).
+		for _, parent := range includers {
+			if _, err := svcSetWorkingInclude(ctx, actor, parent, req.BundleID, version.Version); err != nil {
+				return err
+			}
 		}
 		return nil
 	}); err != nil {
