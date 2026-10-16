@@ -10,10 +10,16 @@ import type { TrendPeriod } from "@/lib/queries/useInsights";
 export type Finding = "drift" | "send" | "single" | "unused" | "overlap";
 export const FINDINGS: Finding[] = ["drift", "send", "single", "unused", "overlap"];
 export const MAX_PINS = 3;
+/**
+ * What the usage lens and its Trends card are called. Sign-ins are the only
+ * source today, so the name says so; the day a badge source connects this
+ * becomes "Recent use" (A-06 §7). One constant, so it flips in one place.
+ */
+export const RECENT_USE = "Recent sign-ins";
 export type Lens = "people" | "use" | "ending" | "group";
 export const LENSES: Array<{ value: Lens; label: string }> = [
   { value: "people", label: "People" },
-  { value: "use", label: "Recent use" },
+  { value: "use", label: RECENT_USE },
   { value: "ending", label: "Ending soon" },
   { value: "group", label: "A group" },
 ];

@@ -878,7 +878,7 @@ describe("lenses", () => {
     renderPage();
     expect(within(screen.getByRole("radiogroup", { name: "Lens" })).getAllByRole("radio").map((r) => r.textContent)).toEqual([
       "People",
-      "Recent use",
+      "Recent sign-ins",
       "Ending soon",
       "A group",
     ]);
@@ -991,7 +991,7 @@ describe("lenses", () => {
     expect(screen.getByLabelText("Team name")).toHaveValue("Design");
   });
 
-  it("Recent use lights the roles held but not used, once sign-ins are arriving", () => {
+  it("Recent sign-ins lights the roles held but not used, once sign-ins are arriving", () => {
     insights.usage = { data: usage(), isError: false };
     nav.set("lens=use");
     renderPage();
@@ -1002,11 +1002,11 @@ describe("lenses", () => {
     expect(screen.getByText("Lit roles are held by people who haven't used them in 90 days. The number is how many.")).toBeInTheDocument();
   });
 
-  it("Recent use says it fills in once sign-ins arrive, and lights nothing", () => {
+  it("Recent sign-ins says it fills in once sign-ins arrive, and lights nothing", () => {
     insights.usage = { data: usage({ sources: { sign_in: { receiving: false }, badge: { receiving: false } }, held_not_used: [] }), isError: false };
     nav.set("lens=use");
     renderPage();
-    expect(screen.getByText("Recent use fills in once sign-ins arrive.")).toBeInTheDocument();
+    expect(screen.getByText("This fills in once sign-ins arrive.")).toBeInTheDocument();
     expect(opacityOf(/Metal Shop · welder/)).toBe("1");
     expect(screen.queryByText(/held but not used/)).not.toBeInTheDocument();
   });
@@ -1028,7 +1028,7 @@ describe("lenses", () => {
     expect(nav.state.search).toBe("lens=use");
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
       "Lens: People",
-      "Lens: Recent use",
+      "Lens: Recent sign-ins",
       "Lens: Ending soon",
       "Lens: A group",
     ]);
@@ -1085,7 +1085,7 @@ describe("lenses", () => {
     insights.asof = { data: { kind: "none", first_day: "2026-10-16" }, isError: false };
     renderPage();
     expect(lensPill("People")).toBeChecked();
-    for (const name of ["Recent use", "Ending soon", "A group"]) expect(lensPill(name)).toBeDisabled();
+    for (const name of ["Recent sign-ins", "Ending soon", "A group"]) expect(lensPill(name)).toBeDisabled();
     expect(screen.getByText("Other lenses read today's access.")).toBeInTheDocument();
     expect(screen.queryByLabelText("How far ahead")).not.toBeInTheDocument();
     expect(insights.calls.lens).toBeNull();
@@ -1103,17 +1103,17 @@ describe("lenses", () => {
     nav.set("tab=trends");
     renderPage();
     const card = screen.getByText("Held but not used").closest(".card") as HTMLElement;
-    expect(within(card).getByText("Not used in 90 days")).toBeInTheDocument();
+    expect(within(card).getByText("No sign-in to its app in 90 days.")).toBeInTheDocument();
     expect(within(card).getByText("Laser Lab · trained")).toBeInTheDocument();
     expect(within(card).getByText("4 people")).toBeInTheDocument();
     expect(within(card).getByRole("link", { name: /Show on the map/ })).toHaveAttribute("href", "/insights?lens=use");
   });
 
-  it("on Trends, says recent use fills in once sign-ins arrive, and lists nothing", () => {
+  it("on Trends, says it fills in once sign-ins arrive, and lists nothing", () => {
     insights.usage = { data: usage({ sources: { sign_in: { receiving: false }, badge: { receiving: false } }, held_not_used: [] }), isError: false };
     insights.trends = { ...insights.trends, data: trendsData };
     nav.set("tab=trends");
     renderPage();
-    expect(screen.getByText("Recent use fills in once sign-ins arrive.")).toBeInTheDocument();
+    expect(screen.getByText("This fills in once sign-ins arrive.")).toBeInTheDocument();
   });
 });
