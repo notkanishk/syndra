@@ -114,6 +114,13 @@ func NewRouter() http.Handler {
 	// bundles in one statement. Operator-gated — a cross-cutting policy mutation.
 	mux.HandleFunc("POST /api/v1/policies/confirmation-mode", withCORS(withOperatorAuth(handleBulkSetConfirmationMode)))
 
+	// Roles that wait for you (N14 B): the one write place for which roles
+	// wait in Pending changes. Operator-gated, like every makerspace-wide setting.
+	mux.HandleFunc("GET /api/v1/roles-that-wait", withCORS(withOperatorAuth(handleListRolesThatWait)))
+	mux.HandleFunc("PUT /api/v1/roles-that-wait/{project_id}/{role_key}", withCORS(withOperatorAuth(handleMarkRoleWaits)))
+	mux.HandleFunc("DELETE /api/v1/roles-that-wait/{project_id}/{role_key}", withCORS(withOperatorAuth(handleUnmarkRoleWaits)))
+	mux.HandleFunc("PUT /api/v1/config/confirmation-model", withCORS(withOperatorAuth(handleSwitchToRolesThatWait)))
+
 	// Audit log exposes every actor/target pair org-wide — operator-only (SC3).
 	mux.HandleFunc("GET /api/v1/audit", withCORS(withOperatorAuth(handleGetAuditLogs)))
 	// Members may list (own only — handler filters) and create (own only —
@@ -266,6 +273,7 @@ func NewRouter() http.Handler {
 	// from the request, because a member-scoped operation must bind who it acts
 	// ON and not only who may call it.
 	mux.HandleFunc("GET /api/v1/me/targets", withCORS(withUserAuth(handleMyTargets)))
+	mux.HandleFunc("GET /api/v1/me/changes", withCORS(withUserAuth(handleMyChanges)))
 	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(handleSetMyCredential)))
 
 	// The add-on roster. Deployment configuration, not data: an operator on a

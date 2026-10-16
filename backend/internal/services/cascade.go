@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"log"
 	"sort"
 
 	"syndra/internal/db"
@@ -15,6 +14,12 @@ type CascadeResult struct {
 	Enqueued int                     `json:"enqueued"`
 	Mode     string                  `json:"mode"`
 	Drain    propagation.DrainResult `json:"drain"`
+
+	// Waiting counts rows held for the operator (a role that waits, or a
+	// mode set to wait), and WaitReason says why the change isn't in Zitadel
+	// yet: role_waits, manual, or halted:<reason>. Empty when it all went.
+	Waiting    int    `json:"waiting"`
+	WaitReason string `json:"wait_reason,omitempty"`
 
 	// NoOp means the mutation did not happen because it was already true —
 	// today, only "they already hold this bundle". Distinct from
@@ -64,28 +69,25 @@ var (
 	// svcGetActiveMappingRules) — redeclaring them here would be a duplicate package-level var.
 )
 
-// applyMode drains the JUST-enqueued rows when the source is auto; manual leaves them pending.
-// The rows were already persisted atomically with the source mutation by the caller, so a drain
-// failure is NON-FATAL: it is captured in res.Drain (Halted/Reason) and applyMode returns nil,
-// so the handler still responds 200 — the rows sit pending in the worklist, recoverable via
-// "Resume now". (Returning derr here would 500 AFTER the mutation committed, inviting a retry
-// that re-runs the whole cascade and mints duplicate outbox rows.)
+// applyMode delivers the JUST-enqueued rows (Deliver): each goes to Zitadel
+// now unless its role waits, or, before the switch over, the bundle's or
+// rule's own mode is "manual". The rows were already persisted atomically
+// with the source mutation by the caller, so a send failure is NON-FATAL: it
+// is captured in res.Drain (Halted/Reason) and applyMode returns nil, so the
+// handler still responds 200 and the rows sit pending in the worklist,
+// recoverable via "Resume now". (Returning an error here would 500 AFTER the
+// mutation committed, inviting a retry that re-runs the whole cascade and
+// mints duplicate outbox rows.)
 func applyMode(ctx context.Context, mode string, ids []string) (CascadeResult, error) {
 	mode = db.NormalizeConfirmationMode(mode)
-	res := CascadeResult{Mode: mode, Enqueued: len(ids)}
-	if mode == "auto" && len(ids) > 0 {
-		dr, derr := svcDrainBatch(ctx, ids)
-		res.Drain = dr
-		if derr != nil {
-			// non-fatal: log and surface via res.Drain; rows remain pending
-			log.Printf("[CASCADE] auto-drain of %d row(s) failed (left pending): %v", len(ids), derr)
-			res.Drain.Halted = true
-			if res.Drain.Reason == "" {
-				res.Drain.Reason = "drain_error"
-			}
-		}
-	}
-	return res, nil
+	d := Deliver(ctx, ids, mode == "manual")
+	return CascadeResult{
+		Enqueued:   len(ids),
+		Mode:       mode,
+		Drain:      d.Drain,
+		Waiting:    len(d.Waiting),
+		WaitReason: d.WaitReason(),
+	}, nil
 }
 
 // --- closure-diff helpers (P1a/P1b fix) ---

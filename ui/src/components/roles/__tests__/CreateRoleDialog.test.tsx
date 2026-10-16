@@ -47,10 +47,10 @@ describe("the new-role dialog pinned to a project", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create role" }));
 
     await waitFor(() => expect(create).toHaveBeenCalled());
-    expect(await screen.findByText(/Laser Cutter \/ Laser trained created/)).toBeInTheDocument();
+    expect(await screen.findByText(/Laser trained is in Laser Cutter/)).toBeInTheDocument();
     expect(screen.queryByText(/p-laser/)).toBeNull();
     // Says what happens next, matching the endpoint's confirmed synchronous
     // create (rolled back locally if Zitadel refuses — nothing left queued).
-    expect(screen.getByText(/Nobody holds it yet/)).toBeInTheDocument();
+    expect(screen.getByText(/Nobody has it yet\. When it.s given, it goes straight to Zitadel\./)).toBeInTheDocument();
   });
 });

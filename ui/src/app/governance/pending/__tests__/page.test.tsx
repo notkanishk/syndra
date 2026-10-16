@@ -66,6 +66,20 @@ beforeEach(() => {
 });
 
 describe("Pending changes", () => {
+  it("says why each row waits, warning only when a send stopped", () => {
+    pending.data = [
+      row({ id: "o1", role_keys: ["supervisor"], wait_reason: "role_waits", cascade_id: "c1" }),
+      row({ id: "o2", role_keys: ["trained"], wait_reason: "halted:zitadel_offline", cascade_id: "c2" }),
+      row({ id: "o3", cascade_id: "c3" }),
+    ];
+    renderPending();
+    expect(screen.getByText("Why it\u2019s waiting")).toBeInTheDocument();
+    const chosen = screen.getByText("Supervisor always waits for you");
+    expect(chosen).toHaveClass("text-muted");
+    const stopped = screen.getByText(/^Zitadel didn't answer at \d\d:\d\d$/);
+    expect(stopped).toHaveClass("text-warn-text");
+  });
+
   it("says two writes belong to one cascade rather than leaving them looking unrelated", () => {
     pending.data = [row({ id: "o1" }), row({ id: "o2", role_keys: ["door"] })];
     renderPending();

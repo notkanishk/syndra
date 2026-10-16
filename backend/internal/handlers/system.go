@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"syndra/internal/db"
 	"syndra/internal/demo"
@@ -17,8 +18,9 @@ import (
 // render a quiet "Live"/"Demo"/"Degraded" indicator in the chrome.
 type SystemModeResponse struct {
 	// Directory is the source backing /users, /projects, /applications, /catalog.
-	// "zitadel" when the live Management API is reachable; "demo" when the
-	// hardcoded fallback catalog is being served.
+	// "zitadel" for the live Management API; "unreachable" when Zitadel is
+	// configured but its client couldn't be built; "demo" only when Zitadel
+	// isn't configured (local development).
 	Directory string `json:"directory"`
 
 	// SeedActive reports whether demo seed data (bundles, mapping rules, audit
@@ -48,10 +50,14 @@ type SystemModeResponse struct {
 	// /zitadel/action-rotation-status.
 	ResetCommand string `json:"reset_command"`
 
-	// Degraded is true iff ZitadelConfigured is true but Directory is not
-	// "zitadel" — a configured-but-unreachable Zitadel client. The UI surfaces
-	// this prominently so admins notice a silent fallback.
+	// Degraded is true when Zitadel is configured and isn't answering: its
+	// client couldn't be built ("unreachable"), or its last read failed.
 	Degraded bool `json:"degraded"`
+
+	// LastReadAt is when Zitadel last answered a directory read; null when it
+	// never has. While Degraded, pages show that read, labelled with its age,
+	// and with none they show nothing. Never sample data (N23).
+	LastReadAt *time.Time `json:"last_read_at"`
 }
 
 // directorySource is injectable for tests.
@@ -77,6 +83,7 @@ const resetCommand = "make reset-demo-data"
 func handleSystemMode(w http.ResponseWriter, r *http.Request) {
 	tag := directorySource().Tag()
 	configured := systemZitadelConfigured()
+	lastRead, current := directory.FreshnessOf(directorySource())
 
 	// A failed count must not read as a clean database. Log it and report
 	// zero — the banner then stays quiet rather than announcing residue that
@@ -94,7 +101,13 @@ func handleSystemMode(w http.ResponseWriter, r *http.Request) {
 		SeedResidue:       residue,
 		ResetCommand:      resetCommand,
 		ZitadelConfigured: configured,
-		Degraded:          configured && tag != "zitadel",
+		// Degraded is Zitadel not answering now, whether or not Syndra has
+		// a last good read to show in its place. LastReadAt tells the two
+		// apart: set, the page shows that read with its age; null, nothing.
+		Degraded: configured && (tag != "zitadel" || !current),
+	}
+	if !lastRead.IsZero() {
+		resp.LastReadAt = &lastRead
 	}
 	jsonResponse(w, http.StatusOK, resp)
 }

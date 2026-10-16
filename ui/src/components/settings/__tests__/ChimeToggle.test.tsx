@@ -1,47 +1,115 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChimeToggle } from "@/components/settings/ChimeToggle";
-import { setChimeEnabled } from "@/lib/driftChime";
+import { isChimeEnabled, setChimeEnabled } from "@/lib/driftChime";
 import { setMediaQuery } from "@/test-utils/media";
 
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
+const SILENT = /Silent in this browser/;
+const BLOCKED = /Can't play yet/;
+const PLAYS = /Plays here/;
+
 /**
- * The chime is silenced for anybody who asked for less motion — a sound
- * arriving on its own is movement in the room. That is the right behaviour,
- * and it leaves this control able to say "Sound on" while guaranteeing
- * silence. A toggle that claims to be on while nothing can be heard is a lie
- * the page is in a position to catch, so it catches it.
+ * A WebAudio stub whose `state` the test chooses, counting what plays. The
+ * chime keeps one context for the page, so this is one object too, re-armed
+ * per test rather than replaced.
+ */
+const start = vi.fn();
+const resume = vi.fn();
+const ctx = {
+  state: "running" as string,
+  currentTime: 0,
+  destination: {},
+  resume,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  createOscillator: () => ({
+    type: "",
+    frequency: { value: 0 },
+    connect: (node: unknown) => node,
+    start,
+    stop: () => {},
+  }),
+  createGain: () => ({
+    gain: { setValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} },
+    connect: (node: unknown) => node,
+  }),
+};
+(window as unknown as { AudioContext: unknown }).AudioContext = vi.fn(function () {
+  return ctx;
+});
+
+function stubAudio(state: "suspended" | "running") {
+  ctx.state = state;
+  start.mockClear();
+  resume.mockClear();
+  return { start, resume };
+}
+
+/**
+ * Off · On, and one line under it saying whether On will be heard. A toggle
+ * that claims to be on while nothing can be heard is a lie the page is in a
+ * position to catch, so it catches it.
  */
 describe("the chime toggle", () => {
-  it("admits it will not play when the browser asked for less motion", async () => {
-    setChimeEnabled(true);
-    setMediaQuery(REDUCED, true);
-    render(<ChimeToggle />);
-
-    expect(await screen.findByRole("switch", { name: /Sound on|Play a sound/i })).toBeTruthy();
-    expect(screen.getByText(/Nothing will play/)).toBeTruthy();
-  });
-
-  it("says nothing extra when it will play", async () => {
-    setChimeEnabled(true);
+  beforeEach(() => {
     setMediaQuery(REDUCED, false);
-    render(<ChimeToggle />);
-
-    await waitFor(() => expect(screen.getByRole("switch")).toBeTruthy());
-    expect(screen.queryByText(/Nothing will play/)).toBeNull();
+    stubAudio("running");
   });
 
-  // Off is off. The reduced-motion note explains why an ON toggle is silent,
-  // and on an off one it would be explaining something nobody asked.
-  it("does not explain the silence of a toggle that is already off", async () => {
+  it("is Off · On and keeps its stored preference", async () => {
+    setChimeEnabled(false);
+    render(<ChimeToggle />);
+
+    const on = await screen.findByRole("radio", { name: "On" });
+    expect(screen.getByRole("radio", { name: "Off" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(on);
+    expect(isChimeEnabled()).toBe(true);
+    expect(localStorage.getItem("syndra-drift-chime")).toBe("on");
+  });
+
+  it("says nothing while off", async () => {
     setChimeEnabled(false);
     setMediaQuery(REDUCED, true);
     render(<ChimeToggle />);
 
-    await waitFor(() => expect(screen.getByRole("switch")).toBeTruthy());
-    expect(screen.queryByText(/Nothing will play/)).toBeNull();
+    await screen.findByRole("radio", { name: "On" });
+    expect(screen.queryByText(SILENT)).toBeNull();
+    expect(screen.queryByText(PLAYS)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Play it once" })).toBeNull();
+  });
+
+  it("admits it is silent under reduced motion, with no button", async () => {
+    setChimeEnabled(true);
+    setMediaQuery(REDUCED, true);
+    render(<ChimeToggle />);
+
+    expect(await screen.findByText(SILENT)).toBeTruthy();
+    expect(screen.getByText(/Nothing will play while that is set/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Play it once" })).toBeNull();
+  });
+
+  it("says it cannot play yet while the browser holds the sound back", async () => {
+    setChimeEnabled(true);
+    stubAudio("suspended");
+    render(<ChimeToggle />);
+
+    expect(await screen.findByText(BLOCKED)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Play it once" })).toBeTruthy();
+  });
+
+  it("says it plays here otherwise, and plays the tone on request", async () => {
+    setChimeEnabled(true);
+    const audio = stubAudio("running");
+    render(<ChimeToggle />);
+
+    expect(await screen.findByText(PLAYS)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Play it once" }));
+    await waitFor(() => expect(audio.start).toHaveBeenCalledTimes(1));
+    expect(audio.resume).toHaveBeenCalled();
+    expect(screen.queryByText("That was this.")).toBeNull();
   });
 });

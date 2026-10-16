@@ -565,7 +565,7 @@ function TriageRow({
     <div className={leading ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}>
       <div
         className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
-          selection.isSelected(item.id) ? "bg-accent-soft/30" : ""
+          selection.isSelected(item.id) ? "bg-accent-soft" : ""
         }`}
         {...selection.rowProps(item.id)}
       >
@@ -814,11 +814,11 @@ function ResolutionDialog({
             cursor to. `order-2` puts it back on the right, where the confirm
             action has always sat. */}
         <Button
-          variant={succeeded(outcome) ? "accent" : "outline"}
+          variant={succeeded(outcome) ? "outline" : "ghost"}
           className="order-2"
           onClick={onClose}
         >
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
         {/* This is the highest-stakes revoke in the product, and it stayed
             armed after it ran: a second click on the same "Revoke access"

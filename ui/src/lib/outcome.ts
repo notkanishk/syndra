@@ -56,7 +56,7 @@ export const OUTCOME_TONE: Record<OutcomeKind, string> = {
 
 export const OUTCOME_LABEL: Record<OutcomeKind, string> = {
   applied: "Applied",
-  queued: "Waiting to be sent",
+  queued: "Waiting for you to send",
   no_change: "No change",
   refused: "Refused",
   failed: "Failed",
@@ -69,7 +69,7 @@ export const PLAN_EFFECT_LABEL: Record<PlanEffect, string> = {
   no_change: "No change",
   blocked: "Refused",
   failed: "Failed",
-  queued: "Waiting to be sent",
+  queued: "Waiting for you to send",
 };
 
 export const PLAN_EFFECT_TONE: Record<PlanEffect, string> = {
@@ -128,10 +128,10 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     detail: offline
       ? "Nothing was sent. Try again once you are back online."
       : sessionEnded
-        // Both halves, and neither may be dropped. "Nothing was changed" is
-        // what an operator needs before anything else; "still here" is what
-        // stops them abandoning a plan they had already read and approved.
-        ? "Nothing was changed, and what you were doing is still here. Sign in again, then press the same button once more."
+        // "Nothing was changed" is not repeated here: every refusal already
+        // ends with it. "Still here" is what stops an operator abandoning a
+        // plan they had already read and approved.
+        ? "What you were doing is still here. Sign in again, then press the same button once more."
         : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
   };

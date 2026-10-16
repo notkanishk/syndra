@@ -107,7 +107,7 @@ describe("ManageBundles", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
     expect(await screen.findByText("Applied")).toBeInTheDocument();
-    expect(screen.queryByText("Waiting to be sent")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
     expect(screen.getByText(/nothing is waiting to be sent/i)).toBeInTheDocument();
   });
 
@@ -117,7 +117,10 @@ describe("ManageBundles", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
-    expect(await screen.findByText("Waiting to be sent")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute(
+      "href",
+      "/governance/pending",
+    );
     expect(screen.getByText(/2 changes wait under pending changes/i)).toBeInTheDocument();
   });
 });

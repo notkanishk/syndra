@@ -39,6 +39,9 @@ var (
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne
+	// svcDeliver is the one rule for whether a just-written change goes now
+	// or waits for the operator (roles that wait, N14 B).
+	svcDeliver = services.Deliver
 	svcDrainAddon                   = propagation.DrainAddon
 
 	dbCreateAccessRequest  = db.CreateAccessRequest
@@ -48,6 +51,8 @@ var (
 	dbWithdrawAccessRequest = db.WithdrawAccessRequest
 	dbResolveAccessRequest  = db.ResolveAccessRequest
 	dbInsertAuditLog        = db.InsertAuditLog
+	// A member's own recent changes (B10). Their own records only.
+	dbListMyChanges = db.ListMyChanges
 
 	// Bundle handler injectable vars. dbAddRoleToBundle/dbAssignBundleToUser were removed
 	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see

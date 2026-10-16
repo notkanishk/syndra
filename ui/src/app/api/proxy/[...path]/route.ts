@@ -36,11 +36,9 @@ function isOwnMemberRoute(method: "GET" | "POST" | "PUT" | "DELETE", path: strin
   if (path[0] !== "me") return false;
   const rest = path.slice(1);
   if (method === "GET") {
-    // Their own name and team, and their own view of every target.
-    return (
-      (rest.length === 1 && rest[0] === "profile") ||
-      (rest.length === 1 && rest[0] === "targets")
-    );
+    // Their own name and team, their own view of every target, and what
+    // changed in their own access lately.
+    return rest.length === 1 && ["profile", "targets", "changes"].includes(rest[0]);
   }
   if (method === "POST") {
     // POST /me/targets/{target}/credential, and nothing else under the prefix.

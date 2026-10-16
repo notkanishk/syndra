@@ -607,18 +607,18 @@ describe("design system", () => {
     expect(shell).toMatch(/<div className="flex min-h-0 min-w-0 flex-1 flex-col">/);
   });
 
-  // Two banners each sticking to `top-0` at the same z-index do not stack —
-  // the later one paints over the earlier, which put the degraded banner on
-  // top of the offline banner and inverted the ordering AppShell argues for.
-  // One sticky slot holding both is the fix, so neither may reclaim its own.
-  it("gives the two banners one sticky slot between them", () => {
+  // Every dysfunction is a Notice in the content column (6a), never a band
+  // under the top bar: the two system Notices open inside <main>, above the
+  // page, offline first because it qualifies degraded.
+  it("says the two system Notices inside the content column, offline first", () => {
     for (const name of ["states/OfflineBanner.tsx", "states/DegradedBanner.tsx"]) {
       const source = readFileSync(resolve(SRC_ROOT, "components", name), "utf8");
-      expect(source, `${name} must not stick on its own`).not.toContain("sticky top-0");
+      expect(source, `${name} must not stick on its own`).not.toContain("sticky");
+      expect(source, `${name} must use the Notice anatomy`).toContain("<Notice");
     }
     const shell = readFileSync(resolve(SRC_ROOT, "components/shell/AppShell.tsx"), "utf8");
-    const slot = /<div className="sticky top-0 z-40">\s*<OfflineBanner \/>\s*<DegradedBanner \/>/;
-    expect(slot.test(shell), "AppShell must hold both banners in one sticky slot").toBe(true);
+    const slot = /<main[^>]*>\s*<OfflineBanner \/>\s*<DegradedBanner \/>\s*\{children\}/;
+    expect(slot.test(shell), "AppShell must open both Notices inside <main>, above the page").toBe(true);
   });
 
   // iOS ignores manifest icons entirely and rasterises nothing, so without a
