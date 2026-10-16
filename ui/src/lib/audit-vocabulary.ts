@@ -54,6 +54,8 @@ export const AUDIT_ACTIONS: Record<
   // find it under the verb they read.
   "bundle.deleted": { verb: "Retired a bundle", destructive: true },
   "bundle.draft_discarded": { verb: "Discarded a bundle's unpublished changes", template: "Discarded the unpublished changes to the {} bundle" },
+  "bundle.include_set": { verb: "Included a bundle in another", template: "Changed what the {} bundle includes" },
+  "bundle.include_removed": { verb: "Took a bundle out of another", template: "Took a bundle out of the {} bundle" },
   "bundle.version_published": { verb: "Published a bundle version", template: "Published a version of the {} bundle" },
   "bundle.holder_moved": { verb: "Moved somebody to a different bundle version", template: "Moved {} to a different bundle version", passive: "Moved to a different bundle version" },
   welcome_bundle_assigned: { verb: "Gave a new member the default bundle", template: "Gave {} the default bundle, as a new member", passive: "Given the default bundle, as a new member" },
@@ -193,7 +195,14 @@ export function shortId(id: string | undefined, prefix: string): string {
  * resolver here has ever been asked to explain.
  */
 export function targetKind(action: string): "user" | "bundle" | "rule" {
-  if (action === "bundle.role_added" || action === "bundle.role_removed" || action === "bundle.draft_discarded") return "bundle";
+  if (
+    action === "bundle.role_added" ||
+    action === "bundle.role_removed" ||
+    action === "bundle.draft_discarded" ||
+    action === "bundle.include_set" ||
+    action === "bundle.include_removed"
+  )
+    return "bundle";
   if (action.startsWith("mapping_rule.")) return "rule";
   return "user";
 }

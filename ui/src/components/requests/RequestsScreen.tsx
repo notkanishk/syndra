@@ -39,8 +39,8 @@ import {
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
-import { describeDuration, formatLongDate, formatShortDate, humanizeKey } from "@/lib/format";
-import { HoldingNote, alreadyHeld, useAskState } from "@/components/requests/Holding";
+import { formatLongDate, formatShortDate, humanizeKey } from "@/lib/format";
+import { HoldingNote, alreadyHeld, describeAsk, useAskState } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { daysUntilTermEnd } from "@/lib/term";
 
@@ -261,7 +261,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                 {/* Half of the ask. A decision made without it is a decision
                     about a different request. */}
                 <span className="block text-[12.5px] text-faint">
-                  {describeDuration(entry.duration_days)}
+                  {describeAsk(entry)}
                 </span>
               </div>
               <div className="w-full min-w-0 text-[14px] text-muted tablet:flex-1 tablet:truncate">
@@ -406,7 +406,7 @@ function useAskOnArrival() {
   const params = useSearchParams();
   const linkedProject = params.get("project") ?? "";
   const linkedRole = params.get("role") ?? "";
-  const linked = Boolean(linkedProject) || params.has("ask");
+  const linked = Boolean(linkedProject) || params.has("ask") || params.has("extend");
   const [open, setOpen] = useState(linked);
   function close() {
     setOpen(false);
@@ -497,7 +497,7 @@ function MemberRequests({ userId }: { userId: string }) {
                     humanizeKey(entry.role_key)}
                 </div>
                 <div className="text-[13.5px] text-faint [text-wrap:pretty]">
-                  {describeDuration(entry.duration_days)} ·{" "}
+                  {describeAsk(entry)} ·{" "}
                   {entry.justification || "No reason given"}
                 </div>
               </div>
@@ -591,13 +591,15 @@ function RequestDialogOpen({
   // Sent: the sheet becomes its result and nothing can be sent twice from it.
   const sent = askOutcome?.kind === "applied";
   // A request is for a role they lack, one per role (owner, 15 Oct).
-  const blocked = chosen.kind !== "none";
-
+  // What they hold of the role decides the ask: with an end date, it is a request to keep it longer.
+  const extend = chosen.kind === "until";
+  const blocked = chosen.kind !== "none" && !extend;
+  const chosenRole = projectRoles.find((role) => role.key === roleKey)?.label || roleKey;
 
   return (
     <Modal open onClose={onClose} busy={create.isPending} size="sm" labelledBy="request-title">
       <ModalHeader
-        title="Ask for access"
+        title={extend ? `Keep ${chosenRole} longer` : "Ask for access"}
         titleId="request-title"
         lede="Say what you need and why. Makerspace staff decide — you'll see the answer here."
       />
@@ -637,7 +639,7 @@ function RequestDialogOpen({
                 <option
                   key={role.key}
                   value={role.key}
-                  disabled={state.kind !== "none"}
+                  disabled={state.kind !== "none" && state.kind !== "until"}
                 >
                   {role.label || role.key}
                   {state.kind === "for_good"
@@ -669,8 +671,7 @@ function RequestDialogOpen({
             </FieldHint>
           ) : chosen.kind === "until" ? (
             <FieldHint>
-              You have this until {formatShortDate(chosen.until)}. To keep it longer, ask makerspace
-              staff: they extend it from their side.
+              You have this until {formatShortDate(chosen.until)}.
             </FieldHint>
           ) : projectId && projectRoles.length === 0 ? (
             <FieldHint>
@@ -695,7 +696,7 @@ function RequestDialogOpen({
             terms, not in days, and the resolved date underneath turns the
             choice back into something concrete.
           */}
-          <FieldLabel>How long do you need it?</FieldLabel>
+          <FieldLabel>{extend ? "How much longer" : "How long do you need it?"}</FieldLabel>
           <div className="mb-2 flex flex-wrap gap-2">
             {(
               [
@@ -767,12 +768,14 @@ function RequestDialogOpen({
                 role_key: roleKey,
                 justification: why,
                 duration_days: days,
+                kind: extend ? "extend" : "access",
               });
-              const roleName = projectRoles.find((role) => role.key === roleKey)?.label || roleKey;
               const placeName = catalog.data.find((project) => project.id === projectId)?.name ?? "";
               setAskOutcome({
                 kind: "applied",
-                message: `Asked for ${roleName}${placeName ? ` on ${placeName}` : ""}`,
+                message: extend
+                  ? `Asked to keep ${chosenRole}${placeName ? ` on ${placeName}` : ""} longer`
+                  : `Asked for ${chosenRole}${placeName ? ` on ${placeName}` : ""}`,
                 detail: "You'll see the answer on this page — nothing else is needed from you.",
               });
             } catch (error) {
@@ -780,7 +783,7 @@ function RequestDialogOpen({
             }
           }}
         >
-          Send request
+          {extend ? "Ask to keep it longer" : "Send request"}
         </Button>
         <Button onClick={onClose}>Cancel</Button>
         </>

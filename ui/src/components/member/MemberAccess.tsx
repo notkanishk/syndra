@@ -279,7 +279,7 @@ function RoleRow({
           )}
         </span>
       </span>
-      {ends && <ArrowLink href={askHref(projectId, roleKey)}>Ask to keep it longer</ArrowLink>}
+      {ends && <ArrowLink href={askHref(projectId, roleKey, true)}>Ask to keep it longer</ArrowLink>}
     </div>
   );
 }

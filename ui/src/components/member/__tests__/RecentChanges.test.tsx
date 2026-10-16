@@ -45,6 +45,20 @@ describe("Recent changes rows", () => {
     expect(screen.queryByText("Ask again")).toBeNull();
   });
 
+  it("a request to keep a role longer says so, and Ask again keeps it", () => {
+    expect(row({ kind: "request_approved", request_kind: "extend" }).textContent).toContain(
+      "Your request to keep Laser cutter · Operator longer was approved.",
+    );
+    expect(row({ kind: "request_withdrawn", request_kind: "extend" }).textContent).toContain(
+      "Your request to keep Laser cutter · Operator longer was withdrawn.",
+    );
+    const r = row({ kind: "request_declined", request_kind: "extend" });
+    expect(r.textContent).toContain("Your request to keep Laser cutter · Operator longer was not approved.");
+    expect(screen.getAllByText("Ask again").at(-1)!.closest("a")!.getAttribute("href")).toBe(
+      "/requests?project=p1&role=op&extend=1",
+    );
+  });
+
   it("Given, by hand, through a bundle, and automatically", () => {
     expect(row({ by: "op" }).textContent).toContain("Laser cutter · Operator was given to you.");
     expect(row({ via: { bundle_id: "b1" } }).textContent).toContain(

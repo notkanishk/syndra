@@ -15,7 +15,7 @@ const held = vi.hoisted(() => ({
   grants: [] as Array<{ id: string; project_id: string; role_key: string; expires_at?: string | null }>,
   observed: [] as string[],
 }));
-const create = vi.hoisted(() => ({ calls: 0 }));
+const create = vi.hoisted(() => ({ calls: 0, last: null as Record<string, unknown> | null }));
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(search.value),
@@ -26,8 +26,9 @@ vi.mock("@/lib/queries/useRequests", async (importOriginal) => ({
   useRequestsMine: () => ({ data: mine.data, isLoading: false, error: null, refetch: () => {} }),
   useRequestsAdmin: () => ({ data: mine.data, isLoading: false, error: null, refetch: () => {} }),
   useCreateRequest: () => ({
-    mutateAsync: async () => {
+    mutateAsync: async (input: Record<string, unknown>) => {
       create.calls++;
+      create.last = input;
       return { id: "r-new" };
     },
     isPending: false,
@@ -80,6 +81,7 @@ beforeEach(() => {
   held.grants = [];
   held.observed = [];
   create.calls = 0;
+  create.last = null;
 });
 
 describe("Ask for access", () => {
@@ -124,12 +126,34 @@ describe("Ask for access · only what they lack, once", () => {
     expect(screen.getByRole("button", { name: /Send request/ })).toBeDisabled();
   });
 
-  it("won't offer one that ends either: staff extend it", () => {
+  it("turns one that ends into a request to keep it longer", async () => {
     held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: "2026-12-18T12:00:00Z" }];
     search.value = "project=pLaser&role=trained";
     renderAs(false);
-    expect(screen.getByText(/To keep it longer, ask makerspace/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Send request/ })).toBeDisabled();
+    expect(screen.getByRole("heading", { name: "Keep Trained operator longer" })).toBeInTheDocument();
+    expect(screen.getByText(/You have this until/)).toBeInTheDocument();
+    expect(screen.getByText("How much longer")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Send request/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ask to keep it longer" }));
+    expect(await screen.findByText(/Asked to keep Trained operator on Laser Lab longer/)).toBeInTheDocument();
+    expect(create.last).toMatchObject({ kind: "extend", project_id: "pLaser", role_key: "trained" });
+  });
+
+  it("opens on keep-it-longer from ?extend=1", () => {
+    held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: "2026-12-18T12:00:00Z" }];
+    search.value = "project=pLaser&role=trained&extend=1";
+    renderAs(false);
+    expect(screen.getByRole("heading", { name: "Keep Trained operator longer" })).toBeInTheDocument();
+    expect(screen.getByLabelText("What do you need to do there?")).toHaveValue("trained");
+  });
+
+  it("stays an ordinary ask for a role they lack, and says so", async () => {
+    search.value = "project=pLaser&role=trained&extend=1";
+    renderAs(false);
+    expect(screen.getByRole("heading", { name: "Ask for access" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+    await screen.findByText(/Asked for Trained operator/);
+    expect(create.last).toMatchObject({ kind: "access" });
   });
 
   it("won't offer one they've already asked for", () => {
@@ -163,6 +187,40 @@ describe("The queue · a request for a role they have since come to hold", () =>
     renderAs(true);
     expect(screen.getByText(/Already has this, with no end/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+  });
+});
+
+describe("The queue · a request to keep a role longer", () => {
+  const extendRow = (holding: Record<string, unknown>) => [
+    {
+      id: "r2", requester_id: "u9", project_id: "pLaser", role_key: "trained", status: "pending",
+      justification: "capstone", created_at: "2026-10-15T12:00:00Z", kind: "extend", duration_days: 30, holding,
+    },
+  ];
+
+  it("reads as an extension, and can be approved while they hold it until a date", () => {
+    mine.data = extendRow({ kind: "until", until: "2026-11-03T12:00:00Z" });
+    renderAs(true);
+    expect(screen.getByText("Asks to keep it longer · for 30 more days")).toBeInTheDocument();
+    expect(screen.getByText("Has it until 3 Nov.")).toBeInTheDocument();
+    expect(screen.queryByText(/Already has this/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled();
+  });
+
+  it("can't be approved once they hold it with no end", () => {
+    mine.data = extendRow({ kind: "for_good" });
+    renderAs(true);
+    expect(screen.getByText(/Already has this, with no end/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Approve/ })).toBeDisabled();
+  });
+
+  it("says it ended while it waited", () => {
+    mine.data = extendRow({ kind: "none" });
+    renderAs(true);
+    expect(
+      screen.getByText("It ended while this waited. Approving gives it back for the time asked."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled();
   });
 });
 
