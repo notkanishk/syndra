@@ -749,6 +749,12 @@
   animation: popover-in var(--duration-settle) var(--ease-settle) both;
 }
 
+/* A chosen chip tints in and rises 4px (A-06 §5, S15): flash-value's own
+   movement, on tint's duration and curve. */
+@utility chip-in {
+  animation: flash-value var(--duration-tint) var(--ease-tint) both;
+}
+
 /* A result that went well: lifts 6px on settle. Failure never uses this; it
    appears in place on tint and stays steady. */
 @utility lift-in {
