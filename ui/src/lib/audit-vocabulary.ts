@@ -39,7 +39,7 @@ export const AUDIT_ACTIONS: Record<
   // The record itself was deleted by hand, as opposed to a revoke that a rule,
   // an expiry or a review set off.
   "direct_grant.removed": { verb: "Revoked direct access by hand", template: "Revoked {}'s direct access by hand", passive: "Their direct access was revoked by hand", destructive: true },
-  "direct_grant.revoked_by_expiry": { verb: "Ended access on its expiry date", template: "Ended {}'s access on its expiry date", passive: "Their access ended on its expiry date", destructive: true },
+  "direct_grant.revoked_by_expiry": { verb: "Ended access on its end date", template: "Ended {}'s access on its end date", passive: "Their access ended on its end date", destructive: true },
   "bundle.created": { verb: "Created a bundle", template: "Created the {} bundle" },
   "bundle.assigned": { verb: "Gave somebody a bundle", template: "Gave {} a bundle", passive: "Given a bundle" },
   "bundle.unassigned": { verb: "Removed somebody from a bundle", template: "Removed {} from a bundle", passive: "Removed from a bundle", destructive: true },
@@ -67,6 +67,8 @@ export const AUDIT_ACTIONS: Record<
   // Roles that wait for you (N14 B): settings, not access, so no passive.
   "role.waits_marked": { verb: "Marked a role to wait for you" },
   "role.waits_unmarked": { verb: "Stopped a role waiting for you" },
+  // Term dates (A-06 §7): one makerspace-wide setting.
+  "terms.updated": { verb: "Changed the term dates" },
   "confirmation.switched_to_roles": { verb: "Switched to roles that wait" },
   "access_request.approved": { verb: "Approved a request", template: "Approved {}'s request", passive: "Their request was approved" },
   // Allowed and said (owner, 15 Oct): an operator approving their own request.
@@ -100,6 +102,7 @@ export const AUDIT_ACTIONS: Record<
   "grant_expiry.acknowledged": { verb: "Recorded that expiring access should be left to lapse" },
   "grant_expiry.acknowledgement_cleared": { verb: "Put expiring access back in the undecided list" },
   "claim_profile.updated": { verb: "Changed a project's token format" },
+  "terms.updated": { verb: "Changed the term dates" },
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
 };
