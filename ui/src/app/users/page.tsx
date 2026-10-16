@@ -220,6 +220,8 @@ export default function PeoplePage() {
         }
         filters={
           <FilterPanel
+            resultCount={rows.length}
+            noun={["person", "people"]}
             activeCount={narrowingCount}
             onClear={() => setParams(EMPTY_FILTERS)}
           >

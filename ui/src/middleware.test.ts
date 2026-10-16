@@ -15,6 +15,8 @@ const ADMIN_ONLY_PATHS = [
   "/audit",
   "/bundles",
   "/graph",
+  "/insights",
+  "/changes/roles-that-wait",
   "/policies",
   "/projects",
   "/users",
@@ -136,6 +138,15 @@ describe("middleware admin/member boundary", () => {
     const res = await middleware(req("/login?error=session_ended&next=%2Fstorage", c));
     expect(res.headers.get("location")).toBeNull();
     expect(res.headers.get("set-cookie")).toMatch(/syndra_session=;.*Max-Age=0/i);
+  });
+
+  // N21: signed in again in a tab opened for it, the door says to go back,
+  // so the session is kept and the visit is not sent anywhere.
+  it("keeps a signed-in visit on the door when it was opened to sign in again", async () => {
+    const c = cookie({ type: "oidc", userId: "u1", role: "user", expiresAt: future() });
+    const res = await middleware(req("/login?then=close", c));
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("set-cookie")).toBeNull();
   });
 
   it("lets a valid admin through an admin-only path (no redirect)", async () => {

@@ -89,7 +89,7 @@ export const ADVANCED_NAV: NavEntry[] = [
   // N18, 3a: the things that give access at top level; a Changes group for
   // what Syndra sends, what it sent, and which roles wait for you.
   leaf("Automatic rules", "/policies"),
-  leaf("Access map", "/graph"),
+  leaf("Insights", "/insights", { pattern: /^\/(insights|graph)(\/|$)/ }),
   group("Changes", [
     leaf("Pending changes", "/governance/pending", {
       indicator: "pending_propagation",

@@ -27,6 +27,12 @@ interface PkceCookie {
    * path.
    */
   next?: string;
+  /**
+   * "close": this sign-in was opened in a new tab to recover a session that
+   * ended mid-action (N21). It ends on the door saying "go back to the tab
+   * you were working in", not on a page, so the work in the other tab stays.
+   */
+  then?: "close";
 }
 
 export function encodePkce(payload: PkceCookie): string {
@@ -45,6 +51,7 @@ export function decodePkce(value: string): PkceCookie | null {
       return null;
     }
     if (parsed.next !== undefined && typeof parsed.next !== "string") return null;
+    if (parsed.then !== undefined && parsed.then !== "close") return null;
     return parsed as PkceCookie;
   } catch {
     return null;

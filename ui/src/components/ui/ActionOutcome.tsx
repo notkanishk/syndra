@@ -1,6 +1,7 @@
 "use client";
 
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { ARROW_LINK } from "@/components/ui/ArrowLink";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { NextStep } from "@/components/ui/NextStep";
 import {
@@ -118,6 +119,24 @@ export function ActionOutcome({
 
       {outcome.detail && (
         <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
+      )}
+
+      {/* N21, 21b: sign in again without leaving this tab, so the plan, the
+          reason typed and the dialog itself are all still here after. */}
+      {outcome.sessionEnded && (
+        <div className="flex flex-col gap-1">
+          <a
+            href="/auth/zitadel?then=close"
+            target="_blank"
+            rel="noopener"
+            className={`${ARROW_LINK} self-start`}
+          >
+            Sign in again in a new tab <span aria-hidden>→</span>
+          </a>
+          <p className="text-[12.5px] text-faint">
+            This tab stays as it is. Come back here when you&rsquo;re signed in.
+          </p>
+        </div>
       )}
 
       {/* Labelled, because an operator pasting this into a message needs to

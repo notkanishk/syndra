@@ -48,3 +48,18 @@ describe("ActionOutcome", () => {
     );
   });
 });
+
+// N21: a session that ended mid-action is recovered in a new tab, so this one keeps its work.
+describe("a session that ended before the action ran", () => {
+  it("offers to sign in again in a new tab, and says this tab stays", () => {
+    render(
+      <ActionOutcome
+        outcome={{ kind: "refused", message: "Your session ended before this ran", sessionEnded: true }}
+      />,
+    );
+    const link = screen.getByRole("link", { name: /Sign in again in a new tab/ });
+    expect(link).toHaveAttribute("href", "/auth/zitadel?then=close");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(screen.getByText(/This tab stays as it is/)).toBeInTheDocument();
+  });
+});

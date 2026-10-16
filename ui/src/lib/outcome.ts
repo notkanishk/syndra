@@ -36,6 +36,8 @@ export interface ActionOutcome {
   detail?: string;
   /** Present on refused and failed, so it can be quoted to whoever runs this. */
   requestId?: string;
+  /** The session ended before this ran: offer to sign in again in a new tab (N21). */
+  sessionEnded?: boolean;
 }
 
 /**
@@ -134,6 +136,7 @@ export function outcomeFromError(error: unknown): ActionOutcome {
         ? "What you were doing is still here. Sign in again, then press the same button once more."
         : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
+    sessionEnded: sessionEnded || undefined,
   };
 }
 
