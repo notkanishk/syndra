@@ -243,7 +243,7 @@ None of these are code. All need a live instance and a human.
 
   Still open: what routes sit behind *apply it again* / *stop wanting it*; which index readings can co-occur; and that a member reads nothing when an operator sets read-only — `MyStorage` carries no lifecycle field, in neither backend nor UI.
 - **Insights and extend-request live-DB tests have never run.** The Insights reads (trends, snapshots, usage, lens, includes) and extend requests are unit-tested only. With migrations through `000062` on a test database, run `insights_trends_live_test.go`, `insights_snapshots_live_test.go`, `usage_live_test.go`, `insights_lens_live_test.go`, `bundle_includes_live_test.go` and `requests_live_test.go` with `SYNDRA_TEST_DATABASE_URL` set. [ready-for-human] (`reconcile-build` 4.2.11)
-- **Zitadel does not send sign-in events yet.** Recent use stays empty until an Actions v2 target points at the existing event webhook, signed with the existing event signing key, with executions for `oidc_session.added`, `user.token.added` and `user.token.v2.added`. The webhook already reads them (`webhook_translate.go`). [ready-for-human] (`reconcile-build` 4.2.12)
+- **Sign-in events are on (17 Oct 2026).** Zitadel sends `oidc_session.added` and `user.token.added` to the event webhook; Recent use fills in once #46 is deployed. (`reconcile-build` 4.2.12)
 - **Obsidian-clarity UI checklists** (`OCR-S2-19`, `OCR-S3-10`) — per-route manual pass over empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast. Browser-driven, can't be automated as specified.
 
 ---

@@ -37,7 +37,7 @@ func TestTranslate_OIDCSessionAdded_UserComesFromPayloadNotAggregate(t *testing.
 }
 
 func TestTranslate_UserTokenAdded_AggregateIsTheUser_BothNames(t *testing.T) {
-	for _, name := range []string{"user.token.added", "user.token.v2.added"} {
+	for _, name := range []string{"user.token.added"} {
 		body := realZitadelBody("user-9", "user", name, "user-9", `{"applicationId":"app-3","audience":"app-3"}`)
 		got, ok, err := translateZitadelEvent(body)
 		if err != nil || !ok {
@@ -182,7 +182,7 @@ func TestWebhook_SignIn_RecordsUsageAndTouchesNothingElse(t *testing.T) {
 func TestWebhook_SignIn_ResolvesByAppIDAndFallsBackToAudience(t *testing.T) {
 	calls := setupSignInDeps(t)
 	postWebhook(t, realZitadelBody("u1", "user", "user.token.added", "u1", `{"applicationId":"app-1"}`))
-	postWebhook(t, realZitadelBody("u2", "user", "user.token.v2.added", "u2", `{"applicationId":"unknown","audience":["nope","111@portal"]}`))
+	postWebhook(t, realZitadelBody("u2", "user", "user.token.added", "u2", `{"applicationId":"unknown","audience":["nope","111@portal"]}`))
 	if len(*calls) != 2 || (*calls)[0].project != "proj-A" || (*calls)[1].project != "proj-A" {
 		t.Errorf("calls = %v", *calls)
 	}
