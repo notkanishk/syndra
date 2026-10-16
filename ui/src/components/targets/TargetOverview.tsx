@@ -25,7 +25,7 @@ import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/Projec
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
-import { formatBytes, formatRelative } from "@/lib/format";
+import { formatBytes, formatRelative, personLine } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
@@ -1524,7 +1524,7 @@ function AdoptPanel({
               {matches.map(({ user }) => {
                 const already = has.get(user.id);
                 const on = chosen?.id === user.id;
-                const sub = [user.title, user.team].filter(Boolean).join(" · ");
+                const sub = personLine(user);
                 return (
                   <button
                     key={user.id}

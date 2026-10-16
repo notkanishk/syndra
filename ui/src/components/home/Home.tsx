@@ -17,11 +17,8 @@ import {
   type UnreconciledTarget,
   type UnconfirmedWriteSummary,
 } from "@/lib/queries/useGovernance";
-import {
-  useDecideRequest,
-  useRequestsAdmin,
-  type AccessRequest,
-} from "@/lib/queries/useRequests";
+import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
+import { useRequestDecisions } from "@/lib/request-decisions";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -208,48 +205,26 @@ export function Home({ session }: { session: SessionUser }) {
 
 /** Approve / Deny resolve in place, on the row. They never navigate. */
 function OpenRequests({ requests }: { requests: AccessRequest[] }) {
-  const decide = useDecideRequest();
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
-  const [outcomes, setOutcomes] = useState<Record<string, Outcome | null>>({});
+  // The queue's own decide, so an approval here says what it says there.
+  const { act, resolved, outcomes } = useRequestDecisions();
 
-  const visible = requests.filter((entry) => !resolved.has(entry.id));
-  if (visible.length === 0) return null;
-
-  async function act(id: string, status: "approved" | "rejected", who: string) {
-    setResolved((prev) => new Set(prev).add(id));
-    try {
-      await decide.mutateAsync({ id, status });
-      setOutcomes((prev) => ({
-        ...prev,
-        [id]: {
-          kind: "applied",
-          message: status === "approved" ? `Approved for ${who}` : `Declined for ${who}`,
-        },
-      }));
-    } catch (error) {
-      // Put the row back: a row that vanished on a failed write would read as
-      // a decision that was recorded.
-      setResolved((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-      setOutcomes((prev) => ({ ...prev, [id]: outcomeFromError(error) }));
-    }
-  }
+  // Decided rows keep their seat until the next read; they used to vanish on
+  // the tap, taking their own outcome with them.
+  const open = requests.filter((entry) => !resolved.has(entry.id)).length;
+  if (requests.length === 0) return null;
 
   return (
     <Card>
       <CardHeader
         title="Open requests"
-        count={visible.length}
+        count={open}
         action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>}
       />
       {/* `arrive`, the same stagger every list in the product gets from
           `ListStates`. These two lists compose their own rows and so had none:
           the dashboard was the one screen whose rows appeared all at once. */}
       <div className="contents arrive-list">
-        {visible.map((entry) => (
+        {requests.map((entry) => (
           <CardRow key={entry.id}>
             <UserAvatar id={entry.requester_id} size="list" />
             <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
@@ -264,25 +239,40 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
           <div className="w-[66px] shrink-0 text-[13px] text-faint">
             <Relative iso={entry.created_at} />
           </div>
-          <div className="flex shrink-0 gap-2">
-            <Button
-              variant="accent"
-              size="sm"
-              disabled={alreadyHeld(entry)}
-              reason={alreadyHeld(entry) ? "They already have this." : undefined}
-              onClick={() => act(entry.id, "approved", entry.requester_id)}
-            >
-              Approve
-            </Button>
-            <Button size="sm" onClick={() => act(entry.id, "rejected", entry.requester_id)}>
-              Decline
-            </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
+            {resolved.has(entry.id) ? (
+              outcomes[entry.id] && (
+                <ActionOutcome
+                  placement="seat"
+                  word={outcomes[entry.id].word}
+                  outcome={outcomes[entry.id].outcome}
+                />
+              )
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    disabled={alreadyHeld(entry)}
+                    reason={alreadyHeld(entry) ? "They already have this." : undefined}
+                    onClick={() => act(entry, "approved")}
+                  >
+                    Approve
+                  </Button>
+                  <Button size="sm" onClick={() => act(entry, "rejected")}>
+                    Decline
+                  </Button>
+                </div>
+                {/* A failed write puts the buttons back and says why under them. */}
+                {outcomes[entry.id] && (
+                  <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
+                )}
+              </>
+            )}
           </div>
 
-          {!outcomes[entry.id] && <HoldingNote request={entry} />}
-          {outcomes[entry.id] && (
-            <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
-          )}
+          {!resolved.has(entry.id) && <HoldingNote request={entry} />}
         </CardRow>
       ))}
       </div>

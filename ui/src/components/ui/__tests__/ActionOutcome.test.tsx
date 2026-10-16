@@ -39,9 +39,11 @@ describe("ActionOutcome", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("That plan is no longer current.");
   });
 
-  it("seat: queued shows the link to Pending changes", () => {
+  it("seat: queued says why it waits, then the link to Pending changes", () => {
     render(<ActionOutcome placement="seat" word="Approved" outcome={queued} />);
     expect(screen.getByText("Approved")).toBeInTheDocument();
+    // The faint why line the board draws between the word and the link.
+    expect(screen.getByText("It waits.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute(
       "href",
       "/governance/pending",

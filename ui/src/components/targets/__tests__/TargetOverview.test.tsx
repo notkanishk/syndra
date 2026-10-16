@@ -915,6 +915,9 @@ describe("adopting an account", () => {
     const kabir = screen.getByRole("radio", { name: /Kabir Rao/ });
     expect(kabir.hasAttribute("disabled")).toBe(true);
     expect(kabir.textContent).toContain("Already has kabir.r on TrueNAS");
+    // No team: the line is the title alone, never a dangling "·" or a "—".
+    expect(kabir.textContent).toContain("Studentkabir@example.edu");
+    expect(kabir.textContent).not.toMatch(/Student ·|—/);
   });
 
   it("says what changes and what stays, once someone is chosen", () => {

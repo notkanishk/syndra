@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonActivity } from "@/components/people/PersonActivity";
@@ -9,7 +9,7 @@ import type { AuditEntry } from "@/lib/queries/useAudit";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 
 const audit = vi.hoisted(() => ({ data: [] as AuditEntry[], filter: null as unknown }));
-const requests = vi.hoisted(() => ({ data: [] as AccessRequest[] }));
+const requests = vi.hoisted(() => ({ data: [] as AccessRequest[], decide: vi.fn() }));
 
 vi.mock("@/lib/queries/useAudit", () => ({
   useAuditEntries: (filter: unknown) => {
@@ -20,7 +20,7 @@ vi.mock("@/lib/queries/useAudit", () => ({
 
 vi.mock("@/lib/queries/useRequests", () => ({
   useRequestsAdmin: () => ({ data: requests.data, isLoading: false, error: null, refetch: () => {} }),
-  useDecideRequest: () => ({ isPending: false, mutateAsync: vi.fn() }),
+  useDecideRequest: () => ({ isPending: false, mutateAsync: requests.decide }),
 }));
 
 vi.mock("@/components/names", () => ({
@@ -157,6 +157,19 @@ describe("PersonRequests", () => {
     renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
     expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Decline" })).toBeInTheDocument();
+  });
+
+  // 3.13: the queue's own approval text, per wait_reason — not "Approved for Ada".
+  it("reports an approval in the queue's words, in the Outcome seat", async () => {
+    requests.data = [request()];
+    requests.decide.mockResolvedValueOnce({ message: "ok", wait_reason: "role_waits" });
+    renderIn(<PersonRequests userId="u1" name="Ada" isOperator />);
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    const seat = await screen.findByRole("status");
+    expect(seat.textContent).toContain("Approved");
+    expect(seat.textContent).toContain("Trained always waits for you");
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Approved for Ada/)).not.toBeInTheDocument();
   });
 
   it("shows a member the outcome but never the decision buttons", () => {

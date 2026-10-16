@@ -1,25 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { requestOutcome } from "@/components/requests/RequestsScreen";
+import { StatusSeat, requestOutcome } from "@/components/requests/RequestsScreen";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { STATUS_TONE } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
 import { describeDuration } from "@/lib/format";
-// Aliased: this file already has an `Outcome`, which is the decision a request
-// received. This one is what the write did.
-import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
-import {
-  useDecideRequest,
-  useRequestsAdmin,
-  type AccessRequest,
-} from "@/lib/queries/useRequests";
+import { useRequestDecisions, type Decided } from "@/lib/request-decisions";
+import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 
 /**
  * A person's requests, on their record.
@@ -45,9 +38,8 @@ export function PersonRequests({
   // request table is small enough that narrowing here is honest — unlike the
   // audit tail, nothing is truncated on the way.
   const requests = useRequestsAdmin("all");
-  const decide = useDecideRequest();
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
-  const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
+  // The queue's own decide: an approval here says what it says there.
+  const { act, resolved, outcomes, isPending } = useRequestDecisions();
 
   const mine = useMemo(
     () =>
@@ -59,39 +51,13 @@ export function PersonRequests({
 
   const pending = mine.filter((entry) => entry.status === "pending" && !resolved.has(entry.id));
 
-  async function act(id: string, status: "approved" | "rejected") {
-    setResolved((prev) => new Set(prev).add(id));
-    setOutcomes((prev) => ({ ...prev, [id]: null }));
-    try {
-      await decide.mutateAsync({ id, status });
-      // Reported on the row that ran it, and the row keeps its seat: it leaves
-      // on the next read rather than under the thumb that decided it.
-      setOutcomes((prev) => ({
-        ...prev,
-        [id]: {
-          kind: "applied",
-          message: status === "approved" ? `Approved for ${name}` : `Declined for ${name}`,
-        },
-      }));
-    } catch (error) {
-      // Put it back: a row that vanished on a failed write would read as a
-      // decision that was recorded.
-      setResolved((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-      setOutcomes((prev) => ({ ...prev, [id]: outcomeFromError(error) }));
-    }
-  }
-
   return (
     <Card>
       <CardColumns>
         <span className="w-[250px]">What they asked for</span>
         <span className="flex-1">Why</span>
         <span className="w-[110px]">When</span>
-        <span className="w-[190px] text-right">Outcome</span>
+        <span className="w-[196px]">Outcome</span>
       </CardColumns>
 
       <ListStates
@@ -114,7 +80,7 @@ export function PersonRequests({
             entry={entry}
             isOperator={isOperator}
             optimisticallyResolved={resolved.has(entry.id)}
-            isPending={decide.isPending}
+            isPending={isPending}
             onDecide={act}
             outcome={outcomes[entry.id] ?? null}
           />
@@ -146,8 +112,8 @@ function RequestRow({
   isOperator: boolean;
   optimisticallyResolved: boolean;
   isPending: boolean;
-  onDecide: (id: string, status: "approved" | "rejected") => void;
-  outcome: ActionResult | null;
+  onDecide: (entry: AccessRequest, status: "approved" | "rejected") => void;
+  outcome: Decided | null;
 }) {
   const open = entry.status === "pending" && !optimisticallyResolved;
 
@@ -165,27 +131,32 @@ function RequestRow({
       <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0">
         <Relative iso={entry.created_at} />
       </span>
-      <span className="flex w-full items-center gap-3 tablet:w-[190px] tablet:shrink-0 tablet:justify-end tablet:gap-2">
+      {/* One seat: the buttons, then the decision in their place (#96). */}
+      <span className="flex w-full flex-col gap-2 tablet:w-[196px] tablet:shrink-0">
         {open && isOperator ? (
-          <>
+          <span className="flex items-center gap-3 tablet:gap-2">
             <Button
               variant="accent"
               size="sm"
               isPending={isPending}
-              onClick={() => onDecide(entry.id, "approved")}
+              onClick={() => onDecide(entry, "approved")}
             >
               Approve
             </Button>
-            <Button size="sm" isPending={isPending} onClick={() => onDecide(entry.id, "rejected")}>
+            <Button size="sm" isPending={isPending} onClick={() => onDecide(entry, "rejected")}>
               Decline
             </Button>
-          </>
-        ) : (
-          <Outcome status={optimisticallyResolved ? "approved" : entry.status} note={entry.review_note} />
+          </span>
+        ) : outcome && optimisticallyResolved ? (
+          <ActionOutcome placement="seat" word={outcome.word} outcome={outcome.outcome} />
+        ) : optimisticallyResolved ? null : (
+          <Outcome status={entry.status} note={entry.review_note} />
+        )}
+        {/* A failed write puts the buttons back and says why under them. */}
+        {outcome && !optimisticallyResolved && (
+          <ActionOutcome placement="seat" outcome={outcome.outcome} />
         )}
       </span>
-
-      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </div>
   );
 }
@@ -198,13 +169,6 @@ function Outcome({ status, note }: { status: string; note?: string }) {
   // The queue's own words, so a withdrawn or fulfilled request never reads as
   // "Waiting on a decision" here, as a withdrawn one did.
   const said = requestOutcome(status);
-  const style = STATUS_TONE[said.tone].label;
   const label = status === "pending" ? "Waiting on a decision" : said.operator;
-
-  return (
-    <span className="text-right">
-      <span className={`text-[13.5px] font-semibold ${style}`}>{label}</span>
-      {note ? <span className="block text-[12.5px] text-faint">{note}</span> : null}
-    </span>
-  );
+  return <StatusSeat tone={said.tone} word={label} note={note || undefined} />;
 }
