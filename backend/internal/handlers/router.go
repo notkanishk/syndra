@@ -274,6 +274,7 @@ func NewRouter() http.Handler {
 	// from the request, because a member-scoped operation must bind who it acts
 	// ON and not only who may call it.
 	mux.HandleFunc("GET /api/v1/me/targets", withCORS(withUserAuth(handleMyTargets)))
+	mux.HandleFunc("GET /api/v1/me/changes", withCORS(withUserAuth(handleMyChanges)))
 	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(handleSetMyCredential)))
 
 	// The add-on roster. Deployment configuration, not data: an operator on a
