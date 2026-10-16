@@ -1,5 +1,6 @@
 "use client";
 
+import { ArriveList } from "@/components/ui/ArriveList";
 import { useRef, useState } from "react";
 
 import { LANES, type Highlight, type Model, type Tone } from "@/components/insights/model";
@@ -182,7 +183,7 @@ export function LaneMap({
         </svg>
 
         {lanes.map((lane) => (
-          <div key={lane.kind} className="arrive-list">
+          <ArriveList key={lane.kind} className="">
             {lane.shown.map((node) => {
               const p = pos.get(node.id)!;
               const tone = highlight?.nodes.get(node.id);
@@ -232,7 +233,7 @@ export function LaneMap({
                 </button>
               </div>
             )}
-          </div>
+          </ArriveList>
         ))}
 
         <div className="absolute inset-x-5 bottom-3 flex flex-wrap items-center gap-x-[18px] gap-y-2">
@@ -271,7 +272,7 @@ export function LaneMap({
           width={290}
           align="end"
           expectHeight={290}
-          className="settle-in rounded-block border border-line-strong bg-surface-2 p-4 shadow-popover"
+          className="popover-in rounded-block border border-line-strong bg-surface-2 p-4 shadow-popover"
         >
           <div role="dialog" aria-label="Keys" className="flex flex-col gap-[7px]">
             <span className="type-label pb-0.5">Keys</span>

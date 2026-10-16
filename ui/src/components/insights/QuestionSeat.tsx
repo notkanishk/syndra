@@ -106,7 +106,7 @@ export function QuestionSeat({
         open={options.length > 0}
         width="anchor"
         expectHeight={360}
-        className="settle-in overflow-hidden rounded-panel border border-line-strong bg-surface-2 shadow-popover"
+        className="popover-in overflow-hidden rounded-panel border border-line-strong bg-surface-2 shadow-popover"
       >
         <div role="listbox" id="insights-questions" aria-label="Questions" className="flex flex-col gap-0.5 p-2">
           {options.map((q, i) => (

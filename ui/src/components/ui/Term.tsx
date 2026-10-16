@@ -88,7 +88,7 @@ export function Term({ name, children }: { name: TermName; children?: React.Reac
       id={id}
       role="note"
       style={anchoredStyle(box)}
-      className="settle-in rounded-panel border border-line-strong bg-surface-2 px-3.5 py-3 text-left shadow-popover"
+      className="popover-in rounded-panel border border-line-strong bg-surface-2 px-3.5 py-3 text-left shadow-popover"
     >
       <span className="block type-label">{entry.title}</span>
       <span className="mt-1 block text-[13.5px] font-normal leading-[1.55] text-muted">

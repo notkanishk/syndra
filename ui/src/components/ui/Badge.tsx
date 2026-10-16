@@ -106,11 +106,20 @@ export const STATUS_TONE = {
 
 export type StatusTone = keyof typeof STATUS_TONE;
 
-export function StatusDot({ tone, className = "" }: { tone: StatusTone; className?: string }) {
+export function StatusDot({
+  tone,
+  bloom = false,
+  className = "",
+}: {
+  tone: StatusTone;
+  /** One ring of the dot's own colour, once: only for something that just went well because of the reader (A-05). */
+  bloom?: boolean;
+  className?: string;
+}) {
   return (
     <span
       aria-hidden
-      className={`size-1.5 shrink-0 rounded-pill ${STATUS_TONE[tone].dot} ${className}`}
+      className={`size-1.5 shrink-0 rounded-pill ${STATUS_TONE[tone].dot} ${bloom ? "bloom" : ""} ${className}`}
     />
   );
 }

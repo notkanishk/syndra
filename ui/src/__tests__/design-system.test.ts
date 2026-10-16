@@ -378,6 +378,71 @@ describe("design system", () => {
     expect(constant![1], "FLASH_MS must equal --duration-flash").toBe(declared![1]);
   });
 
+  // A-05: the motion vocabulary is tokens, so a change to a curve or a cap is a
+  // decision in one place. Each of these has a consumer in globals.css.
+  it("declares the motion tokens Motion v2 names", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    for (const token of [
+      "--ease-arrive: cubic-bezier(0.16, 1, 0.3, 1)",
+      "--ease-breathe: cubic-bezier(0.37, 0, 0.63, 1)",
+      "--ease-flash: cubic-bezier(0.33, 1, 0.68, 1)",
+      "--duration-glide: 520ms",
+      "--travel-cap: 10px",
+      "--arrive-step: 40ms",
+      "--arrive-cap: 5",
+    ]) {
+      expect(css, `globals.css must declare ${token}`).toContain(token);
+    }
+  });
+
+  // "Nothing in the page travels more than 10px." The phone sheet and a
+  // control's own indicator are outside it and are not keyframes here.
+  it("keeps every page keyframe inside the travel cap", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const cap = Number(/--travel-cap:\s*(\d+)px/.exec(css)?.[1]);
+    expect(cap).toBe(10);
+    for (const name of ["arrive", "settle-in", "popover-in", "lift", "flash-value"]) {
+      const frames = namedAtRuleBody(css, "@keyframes", name);
+      expect(frames, `@keyframes ${name} must exist`).not.toBe("");
+      for (const [, px] of frames.matchAll(/translateY\((\d+)px\)/g)) {
+        expect(Number(px), `@keyframes ${name} travels ${px}px`).toBeLessThanOrEqual(cap);
+      }
+    }
+    // The dialog's own rise, and a success's lift (S1, S6).
+    expect(namedAtRuleBody(css, "@keyframes", "settle-in")).toContain("translateY(8px) scale(0.98)");
+    expect(namedAtRuleBody(css, "@keyframes", "lift")).toContain("translateY(6px)");
+  });
+
+  // Delays the answer removed: unfold's content waits one tint, not 140ms, and
+  // nothing waits 280ms for a glide to end.
+  it("waits one tint, not an ad-hoc delay, for an unfold's contents", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(css).not.toMatch(/\b(140|280)ms/);
+    expect(atRuleBody(css, "@utility unfold")).toContain(
+      "animation: fade var(--duration-settle) var(--ease-tint) var(--duration-tint) both",
+    );
+  });
+
+  // Reduced motion keeps what answers the person or carries state, and drops
+  // what is only movement (A-05 §2.8).
+  it("lets press and flash survive reduced motion, drops the bloom, rests the breathing", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const reduce = atRuleBody(css, "@media (prefers-reduced-motion: reduce)");
+    expect(reduce).toMatch(/\.control,\s*\.press-scale\s*{[^}]*transition-duration: var\(--duration-press\)/);
+    expect(reduce).toMatch(/\.flash\s*{[^}]*animation-duration: var\(--duration-flash\)/);
+    expect(reduce).toMatch(/\.bloom::after\s*{[^}]*animation: none/);
+    expect(reduce).toMatch(/\.breathe,\s*\.skeleton-bar\s*{[^}]*animation: none[^}]*opacity: 1/);
+  });
+
+  // Hover is colour only; controls press, rows never scale.
+  it("lets only a control scale when pressed", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(atRuleBody(css, "@utility control")).toContain("scale(0.97)");
+    const hover = atRuleBody(css, "@utility hover-tint");
+    expect(hover).not.toContain("transform");
+    expect(hover).toContain("var(--surface-2)");
+  });
+
   // ── Colour roles ────────────────────────────────────────────────────────
 
   // --accent-ink on --accent is 4.18:1, which fails AA for anything smaller

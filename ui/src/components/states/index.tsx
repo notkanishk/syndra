@@ -2,9 +2,10 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api-client";
+import { ArriveList } from "@/components/ui/ArriveList";
 import { Notice } from "@/components/ui/Notice";
 // The prose a failure wears lives in one place, shared with every surface that
 // reports a mutation. A read that fails and a write that fails were describing
@@ -53,6 +54,26 @@ export function RowSkeleton({
   );
 }
 
+/** A read that lands inside this never shows a skeleton at all (A-05 S7). */
+export const SKELETON_DELAY_MS = 200;
+
+/**
+ * Shows its skeleton only if the read is still going after 200ms.
+ *
+ * A fast read used to flash a skeleton for a few frames and then replace it:
+ * movement that said "loading" about something that was never slow. `ListStates`
+ * is the one gate every list passes through, so the rule lives here and no
+ * screen can opt out of it.
+ */
+export function SkeletonAfterDelay({ children }: { children: React.ReactNode }) {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLate(true), SKELETON_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  return late ? <>{children}</> : null;
+}
+
 /**
  * Empty — a sentence naming what is absent, one line of guidance, one link to
  * the next move. No illustration, no "you're all caught up!".
@@ -90,7 +111,7 @@ export function EmptyState({
             href={action.href}
             className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline"
           >
-            {action.label} <span aria-hidden="true">→</span>
+            {action.label}
           </Link>
         ) : (
           <button
@@ -98,7 +119,7 @@ export function EmptyState({
             onClick={action.onClick}
             className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline"
           >
-            {action.label} <span aria-hidden="true">→</span>
+            {action.label}
           </button>
         ))}
     </div>
@@ -208,7 +229,7 @@ export function ListStates({
   skeleton?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  if (isLoading) return <>{skeleton ?? <RowSkeleton />}</>;
+  if (isLoading) return <SkeletonAfterDelay>{skeleton ?? <RowSkeleton />}</SkeletonAfterDelay>;
   // Never read (N23): no skeleton, no empty state, no rows.
   if (isNeverRead(error)) return <NeverRead />;
   if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} bare />;
@@ -220,5 +241,5 @@ export function ListStates({
   // `contents` keeps the wrapper out of the layout entirely: this sits inside
   // flex and grid parents everywhere, and a real box here would collapse the
   // gaps between rows.
-  return <div className="contents arrive-list">{children}</div>;
+  return <ArriveList>{children}</ArriveList>;
 }

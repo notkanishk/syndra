@@ -43,10 +43,10 @@ describe("Term", () => {
 
   it("opens on hover for a mouse, without needing a click", () => {
     render(<Term name="outbox">outbox</Term>);
-    expect(document.querySelector(".settle-in")).toBeNull();
+    expect(document.querySelector(".popover-in")).toBeNull();
 
     fireEvent.mouseEnter(screen.getByRole("button", { name: "outbox" }).parentElement!);
-    expect(document.querySelector(".settle-in")).not.toBeNull();
+    expect(document.querySelector(".popover-in")).not.toBeNull();
   });
 
   it("closes on Escape, so a sticky definition is never a trap", () => {
