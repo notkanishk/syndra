@@ -7,7 +7,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Button, PILL } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
@@ -19,20 +19,16 @@ import {
 } from "@/components/ui/SelectionBar";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection } from "@/lib/useRowSelection";
-import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { FilterPills, Select } from "@/components/ui/Select";
-import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
+import { FilterPills } from "@/components/ui/Select";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
-import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { useRequestDecisions } from "@/lib/request-decisions";
 import {
-  useCreateRequest,
   useRequestsAdmin,
   useRequestsMine,
   useWithdrawRequest,
@@ -40,9 +36,9 @@ import {
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate, humanizeKey } from "@/lib/format";
-import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember, useAskState } from "@/components/requests/Holding";
+import { AskForAccess } from "@/components/requests/AskForAccess";
+import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
-import { daysUntilTermEnd } from "@/lib/term";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
 
@@ -117,9 +113,6 @@ export function StatusSeat({ tone, word, note }: { tone: StatusTone; word: strin
     </span>
   );
 }
-
-/** What a member asks for, in the units a member thinks in. */
-type HowLong = "7" | "30" | "term";
 
 /** Explicit pagination. The queue must have a visible end. */
 const PAGE = 25;
@@ -400,12 +393,13 @@ function OperatorQueue({ userId }: { userId?: string }) {
 
       {/* An operator's own ask, arriving from My access. It used to land on
           this queue with the dialog shut and the choice lost. */}
-      <RequestDialog
+      <AskForAccess
         key={`${ask.linkedProject}:${ask.linkedRole}`}
         open={ask.open}
         onClose={ask.close}
         initial={{ projectId: ask.linkedProject, roleKey: ask.linkedRole }}
         userId={userId ?? ""}
+        selfDecides
       />
     </div>
   );
@@ -570,7 +564,7 @@ function MemberRequests({ userId }: { userId: string }) {
         </ListStates>
       </Card>
 
-      <RequestDialog
+      <AskForAccess
         // Remounted per link so the prefill applies to whichever role was
         // clicked, not only the first.
         key={`${linkedProject}:${linkedRole}`}
@@ -580,240 +574,6 @@ function MemberRequests({ userId }: { userId: string }) {
         userId={userId}
       />
     </div>
-  );
-}
-
-function RequestDialogOpen({
-  onClose,
-  initial,
-  userId,
-}: {
-  open: boolean;
-  onClose: () => void;
-  /** Prefill from a "Ask for this" link in the catalogue. */
-  initial?: { projectId?: string; roleKey?: string };
-  /** Who is asking: what they have and have asked for is read for them. */
-  userId: string;
-}) {
-  // `/catalog`, the one list of what exists that a member may read. The
-  // operator lists (`/projects`, `/roles`) are refused to a member by the
-  // proxy, so the dialog offered them nothing but "Choose…".
-  const catalog = useCatalogProjects();
-  const create = useCreateRequest();
-  const [askOutcome, setAskOutcome] = useState<ActionResult | null>(null);
-
-  const [projectId, setProjectId] = useState(initial?.projectId ?? "");
-  const [roleKey, setRoleKey] = useState(initial?.roleKey ?? "");
-  const [why, setWhy] = useState("");
-  const [howLong, setHowLong] = useState<HowLong>("term");
-
-  const projectRoles = catalog.data.find((project) => project.id === projectId)?.roles ?? [];
-  const days = howLong === "term" ? daysUntilTermEnd() : Number(howLong);
-  const askState = useAskState(userId);
-  const chosen = askState(projectId, roleKey);
-  const until = new Date(Date.now() + days * 86_400_000).toISOString();
-  // Sent: the sheet becomes its result and nothing can be sent twice from it.
-  const sent = askOutcome?.kind === "applied";
-  // A request is for a role they lack, one per role (owner, 15 Oct).
-  // What they hold of the role decides the ask: with an end date, it is a request to keep it longer.
-  const extend = chosen.kind === "until";
-  const blocked = chosen.kind !== "none" && !extend;
-  const chosenRole = projectRoles.find((role) => role.key === roleKey)?.label || roleKey;
-
-  return (
-    <Modal open onClose={onClose} busy={create.isPending} size="sm" labelledBy="request-title">
-      <ModalHeader
-        title={extend ? `Keep ${chosenRole} longer` : "Ask for access"}
-        titleId="request-title"
-        lede="Say what you need and why. Makerspace staff decide — you'll see the answer here."
-      />
-      <div className="flex flex-col gap-3.5 px-6">
-        {!sent && (
-        <>
-        <div>
-          <FieldLabel htmlFor="req-project">What do you need to use?</FieldLabel>
-          <Select
-            id="req-project"
-            value={projectId}
-            onChange={(event) => {
-              setProjectId(event.target.value);
-              setRoleKey("");
-            }}
-          >
-            <option value="">Choose…</option>
-            {catalog.data.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <FieldLabel htmlFor="req-role">What do you need to do there?</FieldLabel>
-          <Select
-            id="req-role"
-            value={roleKey}
-            disabled={!projectId}
-            onChange={(event) => setRoleKey(event.target.value)}
-          >
-            <option value="">{projectId ? "Choose…" : "Pick a place first"}</option>
-            {projectRoles.map((role) => {
-              const state = askState(projectId, role.key);
-              return (
-                <option
-                  key={role.key}
-                  value={role.key}
-                  disabled={state.kind !== "none" && state.kind !== "until"}
-                >
-                  {role.label || role.key}
-                  {state.kind === "for_good"
-                    ? " · you have this"
-                    : state.kind === "asked"
-                      ? " · already asked"
-                      : state.kind === "until"
-                        ? ` · yours until ${formatShortDate(state.until)}`
-                        : ""}
-                </option>
-              );
-            })}
-          </Select>
-          {/* Design asked for a free-text escape here — "Can't find it?
-              Describe what you need and we'll route it." A request without a
-              project and a role is not something this API can carry, and a
-              form that accepts one would be dropping members' words on the
-              floor. What is true is that Why reaches the person deciding
-              verbatim, so the escape points at the field that already works.
-              A place with nothing defined in it is its own dead end and gets
-              its own sentence rather than an empty menu. */}
-          {chosen.kind === "for_good" ? (
-            <FieldHint>
-              You already have this, with no end date, so there&rsquo;s nothing to ask for.
-            </FieldHint>
-          ) : chosen.kind === "asked" ? (
-            <FieldHint>
-              You&rsquo;ve already asked for this. It&rsquo;s waiting, and the answer appears on this page.
-            </FieldHint>
-          ) : chosen.kind === "until" ? (
-            <FieldHint>
-              You have this until {formatShortDate(chosen.until)}.
-            </FieldHint>
-          ) : projectId && projectRoles.length === 0 ? (
-            <FieldHint>
-              Nothing is defined here yet, so there is nothing to ask for. Pick another place, or
-              ask makerspace staff to set this one up.
-            </FieldHint>
-          ) : (
-            <FieldHint>
-              Can&rsquo;t find it? Pick the closest one and describe what you actually need in
-              Why — makerspace staff read that before deciding.
-            </FieldHint>
-          )}
-        </div>
-        <div>
-          {/*
-            Every request used to be filed as ninety days regardless of what
-            was asked for, so a student who needed the laser for one week was
-            recorded as wanting it for a quarter — and the operator deciding it
-            had no way to know the difference.
-
-            Three options, no free-form number: a member thinks in weeks and
-            terms, not in days, and the resolved date underneath turns the
-            choice back into something concrete.
-          */}
-          <FieldLabel>{extend ? "How much longer" : "How long do you need it?"}</FieldLabel>
-          <div className="mb-2 flex flex-wrap gap-2">
-            {(
-              [
-                ["7", "A week"],
-                ["30", "A month"],
-                ["term", "Until the end of term"],
-              ] as Array<[HowLong, string]>
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={howLong === value}
-                onClick={() => setHowLong(value)}
-                className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
-                  howLong === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <FieldHint>
-            If it&rsquo;s approved, you have it until {formatShortDate(until)}, and then it
-            ends. You can ask again.
-          </FieldHint>
-        </div>
-        <div>
-          <FieldLabel htmlFor="req-why">Why?</FieldLabel>
-          <Input
-            id="req-why"
-            value={why}
-            onChange={(event) => setWhy(event.target.value)}
-            placeholder="Running the Trotec for my capstone build"
-          />
-        </div>
-        </>
-        )}
-        {/* The sheet becomes its own result. A member is being told who decides
-            and that nothing else is needed from them, and a dialog that closes
-            itself takes both sentences with it. Once sent, the form goes:
-            left in place, it sent the same request again on every click. */}
-        {askOutcome && <ActionOutcome outcome={askOutcome} />}
-      </div>
-
-      <ModalFooter>
-        {sent ? (
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        ) : (
-        <>
-        <Button
-          variant="accent"
-          disabled={!projectId || !roleKey || blocked}
-          reason={
-            !projectId || !roleKey
-              ? "Choose a project and a role."
-              : chosen.kind === "asked"
-                ? "You've already asked for this."
-                : chosen.kind !== "none"
-                  ? "You already have this."
-                  : undefined
-          }
-          isPending={create.isPending}
-          onClick={async () => {
-            try {
-              await create.mutateAsync({
-                project_id: projectId,
-                role_key: roleKey,
-                justification: why,
-                duration_days: days,
-                kind: extend ? "extend" : "access",
-              });
-              const placeName = catalog.data.find((project) => project.id === projectId)?.name ?? "";
-              setAskOutcome({
-                kind: "applied",
-                message: extend
-                  ? `Asked to keep ${chosenRole}${placeName ? ` on ${placeName}` : ""} longer`
-                  : `Asked for ${chosenRole}${placeName ? ` on ${placeName}` : ""}`,
-                detail: "You'll see the answer on this page — nothing else is needed from you.",
-              });
-            } catch (error) {
-              setAskOutcome(outcomeFromError(error));
-            }
-          }}
-        >
-          {extend ? "Ask to keep it longer" : "Send request"}
-        </Button>
-        <Button onClick={onClose}>Cancel</Button>
-        </>
-        )}
-      </ModalFooter>
-    </Modal>
   );
 }
 
@@ -858,4 +618,3 @@ function BulkDecisionDialog({
   );
 }
 
-const RequestDialog = mountedWhileOpen(RequestDialogOpen);
