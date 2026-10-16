@@ -275,9 +275,10 @@ func TestGrantsEndingSoon_AgainstTheSchema(t *testing.T) {
 	days := func(n int) *time.Time { return ptr(now.AddDate(0, 0, n)) }
 	grant := func(user, project, role string, expires *time.Time) {
 		t.Helper()
+		// Made a year before now: the schema refuses an end before the grant was made.
 		if _, err := PG.Exec(ctx, `
-			INSERT INTO direct_role_grants (user_id, zitadel_project_id, zitadel_role_key, granted_by, expires_at)
-			VALUES ($1, $2, $3, 'op', $4)`, user+sfx, project, role, expires); err != nil {
+			INSERT INTO direct_role_grants (user_id, zitadel_project_id, zitadel_role_key, granted_by, expires_at, created_at)
+			VALUES ($1, $2, $3, 'op', $4, $5)`, user+sfx, project, role, expires, now.AddDate(-1, 0, 0)); err != nil {
 			t.Fatal(err)
 		}
 	}
