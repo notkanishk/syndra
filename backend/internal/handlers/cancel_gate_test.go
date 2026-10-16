@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"syndra/internal/db"
@@ -89,5 +92,74 @@ func TestAMembersOwnRequestIsNotAsked(t *testing.T) {
 	withCancelGate(cancellingHandler(&admitted))(rr, memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/me/onboard", nil), "member-1"))
 	if !admitted || rr.Code != http.StatusAccepted {
 		t.Fatalf("a member is never asked: %d (admitted %v)", rr.Code, admitted)
+	}
+}
+
+const laterQueuedID = "7d1e5f90-3a2b-4c6d-8e7f-1a2b3c4d5e6f"
+
+// A retry can be refused again because more was queued since (A-04 §8): the
+// refusal says which entries are new, so the confirmation can say so.
+func TestARepeatedRefusalMarksWhatWasQueuedSinceAndNamesWhoStartedIt(t *testing.T) {
+	orig := directoryUsers
+	t.Cleanup(func() { directoryUsers = orig })
+	directoryUsers = func(context.Context) ([]models.UserProfile, error) {
+		return []models.UserProfile{{ID: "op-2", Name: "Sam Example"}}, nil
+	}
+	two := func(w http.ResponseWriter, r *http.Request) {
+		db.AdmitCancellations(r.Context(), []models.QueuedChange{
+			{ID: queuedID, OpType: "revoke", InitiatedBy: "op-2"},
+			{ID: laterQueuedID, OpType: "revoke", InitiatedBy: "op-9"},
+		})
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", db.ErrWouldCancel.Error())
+	}
+	refusal := func(ack string) []map[string]any {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants", nil)
+		if ack != "" {
+			req.Header.Set(cancelAckHeader, ack)
+		}
+		rr := httptest.NewRecorder()
+		withCancelGate(two)(rr, req)
+		var body struct {
+			Cancels []map[string]any `json:"cancels"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil || rr.Code != http.StatusConflict {
+			t.Fatalf("%d %v %s", rr.Code, err, rr.Body)
+		}
+		return body.Cancels
+	}
+
+	// First refusal: nothing was acknowledged, so nothing is new.
+	for _, c := range refusal("") {
+		if c["new"] == true {
+			t.Fatalf("on a first refusal nothing is new: %v", c)
+		}
+	}
+	// Retry having seen only the first: the second is new, the first is not.
+	byID := map[string]map[string]any{}
+	for _, c := range refusal(queuedID) {
+		byID[c["id"].(string)] = c
+	}
+	if byID[laterQueuedID]["new"] != true || byID[queuedID]["new"] == true {
+		t.Fatalf("only the one not acknowledged is new: %v", byID)
+	}
+	// A name where the directory has one, and none where it doesn't.
+	if byID[queuedID]["initiated_by_name"] != "Sam Example" {
+		t.Fatalf("name: %v", byID[queuedID])
+	}
+	if _, has := byID[laterQueuedID]["initiated_by_name"]; has {
+		t.Fatalf("an unknown person gets no name: %v", byID[laterQueuedID])
+	}
+}
+
+// A directory that can't answer never costs the operator their refusal.
+func TestARefusalStillComesWhenTheDirectoryCannotAnswer(t *testing.T) {
+	orig := directoryUsers
+	t.Cleanup(func() { directoryUsers = orig })
+	directoryUsers = func(context.Context) ([]models.UserProfile, error) { return nil, errors.New("down") }
+	var admitted bool
+	rr := httptest.NewRecorder()
+	withCancelGate(cancellingHandler(&admitted))(rr, httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/grants", nil))
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "WOULD_CANCEL_QUEUED") {
+		t.Fatalf("%d %s", rr.Code, rr.Body)
 	}
 }
