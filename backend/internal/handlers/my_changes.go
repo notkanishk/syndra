@@ -29,6 +29,8 @@ type myChange struct {
 	// a member's business.
 	Waiting    bool   `json:"waiting,omitempty"`
 	WaitReason string `json:"wait_reason,omitempty"`
+	// RequestKind is "extend" for a request to keep a role longer.
+	RequestKind string `json:"request_kind,omitempty"`
 }
 
 type myViaRef struct {
@@ -66,7 +68,7 @@ func shapeMyChanges(rows []db.MyChangeRow) []myChange {
 	out := make([]myChange, 0, len(rows))
 	for _, row := range rows {
 		c := myChange{
-			Kind: row.Kind, At: row.At, ProjectID: row.ProjectID, RoleKey: row.RoleKey,
+			Kind: row.Kind, At: row.At, ProjectID: row.ProjectID, RoleKey: row.RoleKey, RequestKind: row.RequestKind,
 			Note: strings.TrimSpace(row.Note), Until: row.Until,
 		}
 		switch row.Source {
