@@ -521,6 +521,7 @@ var (
 	svcConvergeProjectChange   = services.ConvergeProjectChange
 	svcConvergeSubjectOn       = services.ConvergeSubjectOn
 	dbWouldCancel              = db.WouldCancel
+	directoryUsers             = func(ctx context.Context) ([]models.UserProfile, error) { return directory.Default.Users(ctx) }
 	directoryProjects          = func(ctx context.Context) ([]models.ProjectCatalog, error) { return directory.Default.Projects(ctx) }
 	dbStandingBindingConflicts = db.StandingBindingConflicts
 	dbResolveBindingConflict   = db.ResolveBindingConflict
