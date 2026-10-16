@@ -235,6 +235,13 @@ func withHolding(ctx context.Context, requests []models.AccessRequest) []models.
 			continue
 		}
 		requests[i].Holding = &h
+		if requests[i].Kind == requestKindExtend {
+			// The same end approving will set (planApproval), for the queue.
+			requests[i].CurrentUntil = h.Until
+			if p, err := planApproval(requests[i], h, time.Now()); err == nil {
+				requests[i].Until = p.ExpiresAt
+			}
+		}
 	}
 	return requests
 }

@@ -98,3 +98,6 @@ Order and copy: `design_handoff_syndra/reconcile-2026-10/README.md`, `BUILD-LIST
 - [x] 5.2 Insights below tablet as sentences (20a): rest cards, the answer in sentences with outline Pin and Copy, lens as a Select, chips that wrap, no rest cards on an earlier date; an earlier date is reached by link only (no board draws the control on a phone)
 - [x] 5.3 Login N21 (21b): a SESSION_ENDED outcome offers "Sign in again in a new tab →" (`/auth/zitadel?then=close`) and "This tab stays as it is. Come back here when you're signed in."; `then` rides the PKCE cookie like `next`; the door opens on "You're signed in again." with no action, and middleware leaves it there
 - [x] 5.4 Mobile 1 (amber provisional ring, step 1), Mobile 4 (the ledger now matches main's grabber copy), Mobile 5 (no "holders" in stacked rows), Login 3 (step 1)
+
+## 6 · Design answers A-04 to A-06 (17 Oct 2026)
+- [x] 6.1 Keeping a role longer counts from the end they have: "another month" on a role that ends 18 Dec now means 18 Jan, and from today only when the end has passed. Asking and approving use the same rule, and the queue shows "current_until" and "until" on each waiting extension so it matches what Approve will do (A-04 §2)

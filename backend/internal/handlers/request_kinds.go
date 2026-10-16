@@ -14,7 +14,8 @@ import (
 //   - access: for a role they don't have. Anything they hold refuses it.
 //   - extend: "Ask to keep it longer" on a role that ends. It changes the end
 //     of the grant they have, the same change Expiring access makes, and never
-//     gives the role a second time.
+//     gives the role a second time. The time asked counts from the end they
+//     have while it is still ahead, not from today.
 //
 // The rules live here, as plain functions of what is held, so asking,
 // approving one, approving in bulk and an operator's own extension all decide
@@ -27,7 +28,8 @@ const (
 var (
 	// errNothingToExtend: an extension asked of a role held with no end.
 	errNothingToExtend = errors.New("there is no end to extend: they have this with no end date")
-	// errExtensionShortens: the new end would come before the one they have.
+	// errExtensionShortens: the new end would not be later than the one they
+	// have. Counting from the current end, only a malformed ask can reach it.
 	errExtensionShortens = errors.New("it already runs past that date, so extending would shorten it")
 )
 
@@ -55,6 +57,18 @@ func endAfter(now time.Time, days *int) *time.Time {
 	return &t
 }
 
+// extendEnd is the end an extension gives: the days asked, counted from the end
+// they have while it is still ahead ("another month" on a role that ends
+// 18 Dec means 18 Jan), and from now when it has passed or there is none.
+// Zero days or fewer means no end. (A-04 §2)
+func extendEnd(now time.Time, h models.RequestHolding, days *int) *time.Time {
+	base := now
+	if h.Kind == models.HoldingUntil && h.Until != nil && h.Until.After(now) {
+		base = *h.Until
+	}
+	return endAfter(base, days)
+}
+
 // checkExtension says whether a new end extends what is held: there must be an
 // end to move, and the new one must be later (or none at all).
 func checkExtension(h models.RequestHolding, newEnd *time.Time) error {
@@ -75,7 +89,7 @@ func checkRequestKind(kind string, h models.RequestHolding, days *int, now time.
 		if h.Kind == models.HoldingNone {
 			return errNothingHeldToExtend
 		}
-		return checkExtension(h, endAfter(now, days))
+		return checkExtension(h, extendEnd(now, h, days))
 	default:
 		if h.Kind != models.HoldingNone {
 			return errRequestAlreadyHeld
@@ -95,6 +109,9 @@ var errNothingHeldToExtend = errors.New("you don't have this, so there's nothing
 // nothing left to extend.
 func planApproval(r models.AccessRequest, h models.RequestHolding, now time.Time) (approvalPlan, error) {
 	end := endAfter(now, r.DurationDays)
+	if r.Kind == requestKindExtend {
+		end = extendEnd(now, h, r.DurationDays)
+	}
 	if r.Kind != requestKindExtend {
 		if h.Kind != models.HoldingNone {
 			return approvalPlan{}, errRequestAlreadyHeld

@@ -35,6 +35,12 @@ The backend MUST NOT mutate a Zitadel `user_grant` through any Syndra-mediated p
 - **AND** it MUST then apply inline by draining ONLY this request's own outbox row (never the global batch); a drain failure MUST be non-fatal, leaving the row pending for a later resume
 - **AND** a rejected request MUST NOT enqueue or upsert any grant, MUST resolve conditionally on `pending`, and MUST also return `409` on a lost race
 
+#### Scenario: Keeping a role longer counts from the end they have
+
+- **WHEN** a request of `kind=extend` is asked or approved for a grant that ends in the future
+- **THEN** the new end MUST be the time asked added to the end they have now ("another month" on a role ending 18 Dec means 18 Jan), and from now when that end has passed or the grant has lapsed
+- **AND** each waiting extension in `GET /api/v1/requests` MUST carry `current_until` (the end they have, absent when none) and `until` (the end approving will set), computed by the same plan the decision runs
+
 ### Requirement: Buffered propagations MUST drain only on explicit operator action, and `applied` MUST be the terminal success state
 
 The drain MUST be triggered by the operator (`POST /api/v1/propagations/drain`), MUST pre-flight Zitadel reachability, and MUST treat a `2xx` Management API response as terminal confirmation (`status='applied'`). There MUST be no dependence on a webhook return-trip to confirm a Syndra-originated grant, because such events are dropped by the self-mutation guard.
