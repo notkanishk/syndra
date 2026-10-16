@@ -13,9 +13,9 @@ const Parts = ({ parts }: { parts: Part[] }) => (
     {parts.map((p, i) => (
       <Fragment key={i}>
         {"word" in p ? (
-          <span className="whitespace-nowrap text-[14px] text-muted">{p.word}</span>
+          <span className="text-[14px] text-muted tablet:whitespace-nowrap">{p.word}</span>
         ) : (
-          <span className="whitespace-nowrap rounded-pill bg-tint-2 px-3 py-[3px] text-[13.5px] font-semibold">{p.token}</span>
+          <span className="max-w-full rounded-pill bg-tint-2 px-3 py-[3px] text-[13.5px] font-semibold [overflow-wrap:anywhere] tablet:whitespace-nowrap">{p.token}</span>
         )}{" "}
       </Fragment>
     ))}
