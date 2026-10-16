@@ -324,12 +324,18 @@ func InsightsLensGroup(ctx context.Context, g LensGroup) (models.InsightsLensGro
 		return models.InsightsLensGroup{}, err
 	}
 	var seen map[string]time.Time
+	var termStart time.Time
 	if g.Kind == LensNewTerm {
 		if seen, err = lensFirstSeen(ctx); err != nil {
 			return models.InsightsLensGroup{}, err
 		}
+		tv, err := trendTerms(ctx, now)
+		if err != nil {
+			return models.InsightsLensGroup{}, err
+		}
+		termStart = windowFor(TrendTerm, now, tv.Terms).From
 	}
-	members := pickGroup(g, world.People, seen, windowFor(TrendTerm, now).From)
+	members := pickGroup(g, world.People, seen, termStart)
 	return models.InsightsLensGroup{
 		Kind: "group", Group: g.String(), Size: len(members), HoldersObserved: world.Observed,
 		Roles: tallyGroup(members, lensNamer(projects)),
