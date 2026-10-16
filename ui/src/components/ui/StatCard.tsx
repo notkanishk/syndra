@@ -15,11 +15,17 @@ export function StatCard({
   value,
   detail,
   tone = "neutral",
+  href,
 }: {
   label: string;
   value: string;
   detail: string;
   tone?: "neutral" | "accent" | "warn" | "danger";
+  /**
+   * The list this number counts (proposed/StatCard-href.md): the whole card is
+   * the link, named by its label, with a 1px accent ring on hover and no arrow.
+   */
+  href?: string;
 }) {
   const valueTone =
     tone === "warn"
@@ -30,11 +36,23 @@ export function StatCard({
           ? "text-accent-text"
           : "";
 
-  return (
-    <div className="card min-w-[260px] flex-1 px-5 py-4">
+  const body = (
+    <>
       <div className="type-label mb-2">{label}</div>
       <div className={`font-display text-[24px] font-semibold ${valueTone}`}>{value}</div>
       <p className="mt-1.5 max-w-[42ch] text-[13px] leading-[1.5] text-muted">{detail}</p>
-    </div>
+    </>
+  );
+  const frame = "card min-w-[260px] flex-1 px-5 py-4";
+  return href ? (
+    <a
+      href={href}
+      aria-label={label}
+      className={`${frame} block text-inherit no-underline motion-tint hover:shadow-[0_0_0_1px_var(--accent-line)]`}
+    >
+      {body}
+    </a>
+  ) : (
+    <div className={frame}>{body}</div>
   );
 }

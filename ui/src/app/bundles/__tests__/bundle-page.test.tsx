@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 vi.mock("@/lib/queries/useBundles", () => ({
+  useBundleRolesByBundle: () => ({ byId: {}, allLoaded: true }),
+  useSetBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({
     data: [{ id: "b1", name: "Lab Tech", holder_count: 3 }],
     isLoading: false,
@@ -29,6 +32,9 @@ vi.mock("@/lib/queries/useBundles", () => ({
 }));
 
 vi.mock("@/lib/queries/useBundleVersions", () => ({
+  useVersionsByBundle: () => ({}),
+  useBundleIncluders: () => ({ data: [] }),
+  useBundleHolders: () => ({ data: [] }),
   useBundleDraft: () => ({ data: state.draft }),
   useBundleVersions: () => ({ data: state.versions, isLoading: false, error: null, refetch: () => {} }),
   useDiscardBundleDraft: () => ({ mutateAsync: state.discard, isPending: false }),

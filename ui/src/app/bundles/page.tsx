@@ -13,9 +13,15 @@ import { Segmented, Select } from "@/components/ui/Select";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { personLine } from "@/lib/format";
+import { formatList, personLine } from "@/lib/format";
 import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { useBundleRoles, useBundles, useCreateBundle, type BundleRow } from "@/lib/queries/useBundles";
+import {
+  useBundleRoles,
+  useBundleRolesByBundle,
+  useBundles,
+  useCreateBundle,
+  type BundleRow,
+} from "@/lib/queries/useBundles";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
 import { useUserAccess } from "@/lib/queries/useUsers";
 
@@ -132,13 +138,34 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
   const [description, setDescription] = useState("");
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const copyInto = useCallback((ids: string[]) => setSelected(new Set(ids)), []);
-
+  // Bundles to include (B8): each comes in at its latest version, as part of v1.
+  const [included, setIncluded] = useState<ReadonlySet<string>>(() => new Set());
+  const bundles = useBundles();
+  const includedIds = Array.from(included);
+  const includedRoles = useBundleRolesByBundle(includedIds, { published: true });
 
   const trimmed = name.trim();
   const chosen = Array.from(selected);
+  const total = new Set([
+    ...chosen,
+    ...includedIds.flatMap((id) =>
+      (includedRoles.byId[id] ?? []).map((r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`),
+    ),
+  ]).size;
+  const roles = (n: number) => `${n} ${n === 1 ? "role" : "roles"}`;
+  const names = (bundles.data ?? []).filter((b) => included.has(b.id)).map((b) => b.name);
+  const projects = new Set(chosen.map((id) => splitRoleId(id)[0])).size;
+  const footNote =
+    names.length > 0
+      ? chosen.length > 0
+        ? `${formatList(names)} and ${roles(chosen.length)} of your own · ${roles(total)} in all`
+        : `${formatList(names)} · ${roles(total)} in all`
+      : chosen.length > 0
+        ? `${roles(chosen.length)} from ${projects} ${projects === 1 ? "project" : "projects"}`
+        : undefined;
   const blocked = !trimmed
     ? "A bundle needs a name."
-    : chosen.length === 0
+    : chosen.length === 0 && included.size === 0
       ? "Pick at least one role. A bundle that grants nothing has nothing to hand out, and its first version would describe nothing."
       : undefined;
 
@@ -181,19 +208,14 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
             labelledBy="new-bundle-roles"
             selected={selected}
             disabled={create.isPending}
-            onToggle={(id) =>
-              setSelected((prev) => {
-                const next = new Set(prev);
-                if (!next.delete(id)) next.add(id);
-                return next;
-              })
-            }
+            onToggle={(id) => setSelected((prev) => toggled(prev, id))}
+            bundles={{ selected: included, onToggle: (id) => setIncluded((prev) => toggled(prev, id)) }}
           />
         </div>
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
-      <ModalFooter>
+      <ModalFooter note={succeeded(outcome) ? undefined : footNote}>
         {/* Closing on success used to fire alongside `setOutcome`, which
             unmounts this dialog before "X created" is ever painted — same
             fix as the rename dialog: hold it open, let Close close it. */}
@@ -212,22 +234,19 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
                     const [project_id, role_key] = splitRoleId(id);
                     return { project_id, role_key };
                   }),
+                  ...(includedIds.length > 0 ? { includes: includedIds } : {}),
                 });
                 setOutcome({
                   kind: "applied",
                   message: `${trimmed} created`,
-                  detail: `Its first version carries ${chosen.length} ${
-                    chosen.length === 1 ? "role" : "roles"
-                  }, so it can be assigned now. Nobody holds it yet.`,
+                  detail: `Its first version carries ${roles(total)}, so it can be assigned now. Nobody holds it yet.`,
                 });
               } catch (error) {
                 setOutcome(outcomeFromError(error));
               }
             }}
           >
-            {chosen.length === 0
-              ? "Create bundle"
-              : `Create with ${chosen.length} ${chosen.length === 1 ? "role" : "roles"}`}
+            {total === 0 ? "Create bundle" : `Create with ${roles(total)}`}
           </Button>
         )}
         <Button
@@ -237,6 +256,7 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
               setName("");
               setDescription("");
               setSelected(new Set());
+              setIncluded(new Set());
               setOutcome(null);
             }
           }}
@@ -249,6 +269,12 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
 }
 
 const CreateBundleDialog = mountedWhileOpen(CreateBundleDialogOpen);
+
+function toggled(prev: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  const next = new Set(prev);
+  if (!next.delete(id)) next.add(id);
+  return next;
+}
 
 /** Whether the action ran; a failed attempt keeps its button so it can be tried again. */
 function succeeded(outcome: Outcome | null): boolean {
