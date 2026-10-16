@@ -17,9 +17,17 @@ import type { MyChange } from "@/lib/queries/useMyChanges";
 export function RecentChanges({
   items,
   roleName,
+  triggerRole,
 }: {
   items: MyChange[];
   roleName: (projectId: string, roleKey: string) => string;
+  /**
+   * The role a rule gives this one for, when the page can tell. /me/changes
+   * says only that a rule gave it (`via.rule_id`), so the page reads the
+   * trigger off the access it already holds; undefined falls back to "a
+   * makerspace rule" (A-06 §2).
+   */
+  triggerRole?: (projectId: string, roleKey: string) => string | undefined;
 }) {
   return (
     <Card>
@@ -29,7 +37,12 @@ export function RecentChanges({
         action={<CardHeaderLink href="/requests">All your requests →</CardHeaderLink>}
       />
       {items.map((change, i) => (
-        <ChangeRow key={`${change.kind}-${change.at}-${change.project_id}-${change.role_key}-${i}`} change={change} role={roleName(change.project_id, change.role_key)} />
+        <ChangeRow
+          key={`${change.kind}-${change.at}-${change.project_id}-${change.role_key}-${i}`}
+          change={change}
+          role={roleName(change.project_id, change.role_key)}
+          trigger={triggerRole?.(change.project_id, change.role_key)}
+        />
       ))}
     </Card>
   );
@@ -51,8 +64,8 @@ export function dayLabel(iso: string, now: Date = new Date()): string {
   return new Date(iso).toDateString() === now.toDateString() ? "Today" : formatShortDate(iso);
 }
 
-function ChangeRow({ change, role }: { change: MyChange; role: string }) {
-  const { word, tone, pre, post } = describe(change);
+function ChangeRow({ change, role, trigger }: { change: MyChange; role: string; trigger?: string }) {
+  const { word, tone, pre, post } = describe(change, trigger);
   return (
     <div className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1.5 px-5 py-3.5">
       <span
@@ -91,7 +104,7 @@ function ChangeRow({ change, role }: { change: MyChange; role: string }) {
   );
 }
 
-function describe(change: MyChange): { word: string; tone: StatusTone; pre: string; post: ReactNode } {
+function describe(change: MyChange, trigger?: string): { word: string; tone: StatusTone; pre: string; post: ReactNode } {
   const until = change.until ? `, until ${formatShortDate(change.until)}` : "";
   // A request to keep a role longer reads "keep {role} longer", not "for {role}".
   const keep = change.request_kind === "extend";
@@ -110,7 +123,13 @@ function describe(change: MyChange): { word: string; tone: StatusTone; pre: stri
     case "request_declined":
       return { word: "Not approved", tone: "neutral", pre, post: `${longer} was not approved.` };
     case "request_withdrawn":
-      return { word: "Withdrawn", tone: "neutral", pre, post: `${longer} was withdrawn.` };
+      // Said in the first person, like the request row's "You withdrew this".
+      return {
+        word: "Withdrawn",
+        tone: "neutral",
+        pre: keep ? "You withdrew your request to keep " : "You withdrew your request for ",
+        post: `${longer}.`,
+      };
     case "taken_away":
       // The board says "Taken away"; the copy guide's one word for ending
       // someone's access is "revoke" (plain-language-copy §6), and its guard
@@ -131,7 +150,14 @@ function describe(change: MyChange): { word: string; tone: StatusTone; pre: stri
         };
       }
       if (change.via?.rule_id) {
-        return { word: "Given", tone: "healthy", pre: "", post: " came with your other access, automatically." };
+        return {
+          word: "Given",
+          tone: "healthy",
+          pre: "",
+          post: trigger
+            ? ` came automatically, because you have ${trigger}.`
+            : " was given automatically by a makerspace rule.",
+        };
       }
       return { word: "Given", tone: "healthy", pre: "", post: ` was given to you${until}.` };
   }

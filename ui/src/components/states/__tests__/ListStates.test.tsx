@@ -40,7 +40,7 @@ describe("ListStates", () => {
   });
 
   // A member has no degraded Notice above the page, so the list says it once.
-  it("tells a member, in one neutral line, that the sign-in system can't be reached", () => {
+  it("tells a member, in an amber Notice, that the sign-in system can't be reached", () => {
     renderList(
       new ApiError(503, {
         error: "DIRECTORY_UNREACHABLE",
@@ -48,9 +48,15 @@ describe("ListStates", () => {
       }),
       false,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      /can't reach the sign-in system/,
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Syndra can't reach the sign-in system.");
+    expect(status).not.toHaveTextContent("right now");
+    expect(status).toHaveTextContent(
+      "Nothing about your access has changed. This page tries again on its own.",
     );
+    // Amber, with the dot breathing: not the neutral of a network that is gone.
+    expect(status.className).toContain("warn");
+    expect(status.querySelector(".breathe")).not.toBeNull();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText("Aanya Rao")).not.toBeInTheDocument();
   });

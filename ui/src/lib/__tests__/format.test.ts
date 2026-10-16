@@ -3,7 +3,10 @@ import {
   confirmedNote,
   describeDuration,
   describeExpiry,
+  askLengthForMember,
+  askLengthForOperator,
   formatShortDate,
+  lengthWords,
   formatWhen,
   humanizeKey,
   personLine,
@@ -152,5 +155,31 @@ describe("formatShortDate", () => {
 
   it("carries the year into a feed stamp too", () => {
     expect(formatWhen("2027-01-18T12:00:00Z", now)).toMatch(/^18 Jan 2027 /);
+  });
+});
+
+describe("a pending ask's length", () => {
+  const now = new Date("2026-10-17T12:00:00Z");
+
+  it("says the common lengths as words", () => {
+    expect(lengthWords(7)).toBe("a week");
+    expect(lengthWords(30)).toBe("a month");
+    expect(lengthWords(45)).toBe("45 days");
+    expect(lengthWords(1)).toBe("1 day");
+  });
+
+  it("tells the member the length only, never a date", () => {
+    expect(askLengthForMember(30)).toBe("For a month, from when it's approved.");
+    expect(askLengthForMember(7)).toBe("For a week, from when it's approved.");
+    expect(askLengthForMember(0)).toBe("With no end date.");
+  });
+
+  it("tells the operator the length and the date approving now would end it", () => {
+    expect(askLengthForOperator(30, now)).toBe("For a month · until 16 Nov");
+    expect(askLengthForOperator(null, now)).toBe("With no end date");
+  });
+
+  it("names the year when that date falls in the next one", () => {
+    expect(askLengthForOperator(90, now)).toBe("For 90 days · until 15 Jan 2027");
   });
 });

@@ -181,8 +181,10 @@ export function isNeverRead(error: unknown): boolean {
 /**
  * In the place of a read Zitadel has never answered (N23). An operator has
  * the degraded Notice above the page and sees nothing more here; a member,
- * who doesn't, gets one neutral line. Either way the page asks again every
- * minute on its own, so it fills in when Zitadel answers.
+ * who doesn't, gets the same amber Notice with the breathing dot: neutral
+ * means the network is gone, and Zitadel not answering is amber for operators
+ * too (A-06 §2). Either way the page asks again every minute on its own, so
+ * it fills in when Zitadel answers.
  */
 function NeverRead() {
   const { isOperator } = useUiView();
@@ -198,7 +200,7 @@ function NeverRead() {
   if (isOperator) return null;
   return (
     <div className="px-4 py-4 tablet:px-5">
-      <Notice tone="neutral" title="Syndra can't reach the sign-in system right now.">
+      <Notice tone="warn" live title="Syndra can't reach the sign-in system.">
         Nothing about your access has changed. This page tries again on its own.
       </Notice>
     </div>

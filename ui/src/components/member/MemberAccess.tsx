@@ -5,6 +5,7 @@ import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { RecentChanges, askHref } from "@/components/member/RecentChanges";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { StatusDot } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import {
   nothingSentYet,
@@ -84,6 +85,24 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       .find((project) => project.id === projectId)
       ?.roles.find((role) => role.key === roleKey)?.label || humanizeKey(roleKey);
 
+  // The role a rule gives each role for, read off the access already on the
+  // page: /me/changes says a rule gave it, not which role it follows. Two
+  // different triggers for one role is ambiguous, so it says "a rule" instead.
+  const triggerRole = (projectId: string, roleKey: string) => {
+    const project = projects.find((p) => p.project_id === projectId);
+    const role = [...(project?.source_roles ?? []), ...(project?.derived_roles ?? [])].find(
+      (r) => r.role_key === roleKey,
+    );
+    const triggers = new Set(
+      (role?.reasons ?? [])
+        .filter((reason) => reason.kind === "mapping" && reason.trigger_project && reason.trigger_role)
+        .map((reason) => `${reason.trigger_project}\u0000${reason.trigger_role}`),
+    );
+    if (triggers.size !== 1) return undefined;
+    const [triggerProject, trigger] = [...triggers][0].split("\u0000");
+    return roleName(triggerProject, trigger);
+  };
+
   // An approval still on its way (N19), so its role's row can say so.
   const feed = changes.data ?? [];
   const waiting = new Map(
@@ -119,7 +138,9 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 
       {/* Leads when there's news; gives up its seat on a quiet month. Not
           drawn until the read lands, so nothing unread is shown. */}
-      {feed.length > 0 && <RecentChanges items={feed} roleName={roleName} />}
+      {feed.length > 0 && (
+        <RecentChanges items={feed} roleName={roleName} triggerRole={triggerRole} />
+      )}
 
       {inForce.length > 0 && (
         <Card>
@@ -157,7 +178,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                 ...role,
                 expiresAt: expiryFor(grants.data, project.project_id, role.role_key),
               }))
-              // The role that runs out leads its card.
+              // The role that ends leads its card.
               .sort((a, b) => {
                 const [x, y] = [a.expiresAt ?? "~", b.expiresAt ?? "~"];
                 return x < y ? -1 : x > y ? 1 : 0;
@@ -265,12 +286,8 @@ function RoleRow({
       <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
         <span className="text-[15px] font-semibold">{name}</span>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {waiting ? (
-            <span className="text-[13.5px] font-semibold text-warn-text">
-              Not there yet · approved {approvedWhen(waiting.at)}, and {rowReason(waiting.wait_reason)}
-            </span>
-          ) : nothingSentYet(reasons) ? (
-            <span className="text-[13.5px] font-semibold text-warn-text">Not there yet</span>
+          {waiting || nothingSentYet(reasons) ? (
+            <OnItsWay at={waiting?.at} />
           ) : (
             <>
               <Reason strongest={strongest} expiresAt={ends ? expiresAt : null} />
@@ -284,14 +301,30 @@ function RoleRow({
   );
 }
 
-function approvedWhen(iso: string): string {
-  return new Date(iso).toDateString() === new Date().toDateString() ? "today" : `on ${formatShortDate(iso)}`;
+/**
+ * A role that was given and hasn't been sent (A-04 §7.3). A member reads "On
+ * its way" with a neutral dot, never the operator's "Waiting for you to send",
+ * which a member can't do, and never "waiting to be sent", which reads as
+ * automatic. The reason it is held (a role that always waits, or Syndra not
+ * reaching the sign-in system) is the operator's to read; the member's
+ * question is only whether to expect it.
+ */
+function OnItsWay({ at }: { at?: string }) {
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-muted">
+        <StatusDot tone="neutral" />
+        On its way
+      </span>
+      <span className="pl-[15px] text-[12.5px] text-faint">
+        {at ? `Given ${givenWhen(at)}. ` : ""}It starts working once makerspace staff send it.
+      </span>
+    </span>
+  );
 }
 
-function rowReason(waitReason: string | undefined): string {
-  return waitReason?.startsWith("halted:")
-    ? "Syndra couldn't reach the sign-in system; staff will send it"
-    : "makerspace staff check this role before it reaches you";
+function givenWhen(iso: string): string {
+  return new Date(iso).toDateString() === new Date().toDateString() ? "today" : formatShortDate(iso);
 }
 
 /**
@@ -348,7 +381,7 @@ function firstName(name: string): string {
 }
 
 /**
- * "Four roles across two rooms. One runs out on 20 Oct." It counts what
+ * "Four roles across two rooms. One ends on 20 Oct." It counts what
  * Zitadel holds and names the date. `roles` is undefined while nothing has
  * been observed, and then no number is named.
  */
@@ -361,8 +394,8 @@ export function summarySentence(roles: number | undefined, rooms: number, ending
   if (ending.length === 0) return base;
   const first = formatShortDate(ending[0]);
   return ending.length === 1
-    ? `${base} One runs out on ${first}.`
-    : `${base} ${capitalise(countWord(ending.length))} run out, the first on ${first}.`;
+    ? `${base} One ends on ${first}.`
+    : `${base} ${ending.length} roles end, the first on ${first}.`;
 }
 
 const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];

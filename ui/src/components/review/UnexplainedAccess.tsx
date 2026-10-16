@@ -847,7 +847,7 @@ function ResolutionDialog({
                         kind: "queued",
                         message: "Revocation recorded",
                         detail:
-                          "Waiting to be sent to Zitadel; revocations send on their own, every few minutes. Until then the person still has the access.",
+                          "Not sent to Zitadel yet; revocations send on their own, every few minutes. Until then the person still has the access.",
                       }
                     : {
                         kind: "applied",
