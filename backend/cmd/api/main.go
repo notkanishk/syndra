@@ -19,6 +19,7 @@ import (
 	"syndra/internal/handlers"
 	"syndra/internal/observe"
 	"syndra/internal/seed"
+	"syndra/internal/services"
 	"syndra/internal/services/drift"
 	"syndra/internal/services/expiry"
 	"syndra/internal/services/periodic"
@@ -382,6 +383,17 @@ func main() {
 		go observeSched.Start(ctx)
 	}
 
+	// Insights "As of a date": one snapshot of the access graph per local day,
+	// kept from now on because the audit log cannot rebuild a past graph. Runs at
+	// once and every six hours; it only builds when today has no row, and a failed
+	// build is logged and retried on the next tick. Started after the first
+	// observation so the day's holder counts are Zitadel's, not the fallback.
+	insightsSched := periodic.New("FINDINGS", 6*time.Hour, 6*time.Hour, services.TakeDailyInsightsSnapshot)
+	go func(r *periodic.Runner) {
+		awaitFirstObservation(ctx)
+		r.Start(ctx)
+	}(insightsSched)
+
 	// Start server in background
 	go func() {
 		fmt.Println("Control Plane Backend Listening on :8080")
@@ -443,6 +455,12 @@ func main() {
 		case <-shutdownCtx.Done():
 			log.Println("[ADDON] Shutdown deadline exceeded waiting for refresh; closing anyway")
 		}
+	}
+
+	select {
+	case <-insightsSched.Done():
+	case <-shutdownCtx.Done():
+		log.Println("[FINDINGS] Shutdown deadline exceeded waiting for the snapshot; closing anyway")
 	}
 
 	db.PG.Close()

@@ -108,6 +108,12 @@ var (
 	actionsTakenAway     = []string{"direct_grant.removed", "direct_grant.revoked", "direct_grant.revoked_by_expiry", "bundle.unassigned"}
 )
 
+// accessChangeActions is every action that gives or takes away access, the set
+// trends, the as-of change count and the timeline all count.
+func accessChangeActions() []string {
+	return append(append(append(append([]string{}, actionsThroughBundle...), actionsByRequest...), actionsByHand...), actionsTakenAway...)
+}
+
 // leftStatuses are the directory states that mean a person is no longer a
 // member: the ones the entitlement path already treats as "not a member"
 // (applyDirectoryStanding), plus "departed", the word the drift queue uses.
@@ -192,7 +198,7 @@ func InsightsTrends(ctx context.Context, period TrendPeriod) (models.InsightsTre
 		ending   []db.EndingSoonRow
 		driftOpn int
 	)
-	all := append(append(append(append([]string{}, actionsThroughBundle...), actionsByRequest...), actionsByHand...), actionsTakenAway...)
+	all := accessChangeActions()
 	_, offset := now.Zone()
 	err = svcInReadSnapshot(ctx, func(ctx context.Context) error {
 		var err error

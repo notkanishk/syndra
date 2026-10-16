@@ -154,7 +154,15 @@ func TestRouter_InsightsAreOperatorOnly(t *testing.T) {
 		return models.InsightsTrends{}, nil
 	}
 
-	paths := []string{"/api/v1/insights/findings", "/api/v1/insights/who?has=role:p1:x", "/api/v1/insights/trends"}
+	a, tl := svcInsightsAsOf, svcInsightsTimeline
+	t.Cleanup(func() { svcInsightsAsOf, svcInsightsTimeline = a, tl })
+	svcInsightsAsOf = func(context.Context, string) (models.InsightsAsOf, error) { return models.InsightsAsOf{}, nil }
+	svcInsightsTimeline = func(context.Context, string, string) (models.InsightsTimeline, error) {
+		return models.InsightsTimeline{}, nil
+	}
+
+	paths := []string{"/api/v1/insights/findings", "/api/v1/insights/who?has=role:p1:x", "/api/v1/insights/trends",
+		"/api/v1/insights/asof?date=2020-10-01", "/api/v1/insights/timeline?from=2020-10-01&to=2020-10-02"}
 	for role, want := range map[string]int{"member": http.StatusForbidden, "admin": http.StatusOK} {
 		jwtValidate = func(context.Context, string, string, string) (*auth.Principal, error) {
 			return &auth.Principal{Subject: "u", ProjectRoles: map[string]struct{}{role: {}}}, nil

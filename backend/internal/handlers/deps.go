@@ -477,6 +477,8 @@ var (
 	svcInsightsWho        = services.InsightsWho
 	svcInsightsWhatIf     = services.InsightsWhatIf
 	svcInsightsTrends     = services.InsightsTrends
+	svcInsightsAsOf       = services.InsightsAsOf
+	svcInsightsTimeline   = services.InsightsTimeline
 	dbListMappingHistory  = db.ListMappingHistory
 	dbForgetTargetBinding = db.ForgetTargetBinding
 	// The merge base goes with the binding, always. One left behind is a claim

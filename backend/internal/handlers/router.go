@@ -313,6 +313,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/insights/who", withCORS(withOperatorAuth(handleInsightsWho)))
 	mux.HandleFunc("POST /api/v1/insights/whatif", withCORS(withOperatorAuth(handleInsightsWhatIf)))
 	mux.HandleFunc("GET /api/v1/insights/trends", withCORS(withOperatorAuth(handleInsightsTrends)))
+	mux.HandleFunc("GET /api/v1/insights/asof", withCORS(withOperatorAuth(handleInsightsAsOf)))
+	mux.HandleFunc("GET /api/v1/insights/timeline", withCORS(withOperatorAuth(handleInsightsTimeline)))
 	// Accounts Syndra created whose reason for existing has gone. A read; the
 	// removal runs through the ordinary plan-then-apply path.
 	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))
