@@ -53,7 +53,11 @@ export function ActionOutcome({
 }: {
   outcome: Outcome;
   placement?: "inline" | "block" | "seat";
-  /** The decision in the row's own vocabulary ("Approved", "You withdrew this"). Seat only. */
+  /**
+   * The decision in the act's own vocabulary ("Approved", "Given", "Given to 12 people").
+   * Seat: required in practice. Block: given, the result is dot + word + one sentence + one
+   * faint line (A-04 §11); omitted, the block keeps its "Applied" pill so callers can migrate.
+   */
   word?: string;
   className?: string;
 }) {
@@ -100,6 +104,38 @@ export function ActionOutcome({
     );
   }
 
+  if (word) {
+    // Done now lifts and blooms once (S6). Everything else appears in place and
+    // stays steady: a failure is under control, and a queued change has not
+    // happened yet, so neither celebrates.
+    const celebrates = outcome.kind === "applied";
+    return (
+      <div
+        role={grave ? "alert" : "status"}
+        className={`${celebrates ? "lift-in" : "tint-in"} flex flex-col gap-2.5 rounded-inner border px-5 py-4 ${
+          grave ? "border-danger-line bg-surface-1" : "border-line-strong bg-surface-1"
+        } ${className}`}
+      >
+        <div className="flex items-center gap-2.5">
+          <StatusDot tone={SEAT_DOT[outcome.kind]} bloom={celebrates} />
+          <span className="font-display text-[22px] font-semibold leading-[1.2] text-ink">
+            {word}
+          </span>
+        </div>
+        <p className="text-[15px] leading-[1.55] text-ink">
+          {sentence(outcome.message)}
+          {statesNothingChanged(outcome.kind) ? ` ${NOTHING_CHANGED}` : ""}
+        </p>
+        {outcome.detail && (
+          <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
+        )}
+        {outcome.kind === "queued" && <NextStep dot={false} />}
+        {outcome.sessionEnded && <SignInAgain />}
+        {outcome.requestId && <QuoteThis id={outcome.requestId} />}
+      </div>
+    );
+  }
+
   return (
     <div
       role={grave ? "alert" : "status"}
@@ -120,33 +156,8 @@ export function ActionOutcome({
         <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
       )}
 
-      {/* N21, 21b: sign in again without leaving this tab, so the plan, the
-          reason typed and the dialog itself are all still here after. */}
-      {outcome.sessionEnded && (
-        <div className="flex flex-col gap-1">
-          <a
-            href="/auth/zitadel?then=close"
-            target="_blank"
-            rel="noopener"
-            className={`${ARROW_LINK} self-start`}
-          >
-            Sign in again in a new tab <span aria-hidden>→</span>
-          </a>
-          <p className="text-[12.5px] text-faint">
-            This tab stays as it is. Come back here when you&rsquo;re signed in.
-          </p>
-        </div>
-      )}
-
-      {/* Labelled, because an operator pasting this into a message needs to
-          say what it is, and a bare hex string in a chat window is a riddle
-          for whoever receives it. */}
-      {outcome.requestId && (
-        <div className="flex flex-col gap-1.5">
-          <span className="type-label">Quote this if you ask for help</span>
-          <CopyableValue value={outcome.requestId} label="Reference" />
-        </div>
-      )}
+      {outcome.sessionEnded && <SignInAgain />}
+      {outcome.requestId && <QuoteThis id={outcome.requestId} />}
     </div>
   );
 }
@@ -158,5 +169,38 @@ function OutcomeMark({ kind }: { kind: Outcome["kind"] }) {
     <span className={`rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${OUTCOME_TONE[kind]}`}>
       {OUTCOME_LABEL[kind]}
     </span>
+  );
+}
+
+/** N21, 21b: sign in again without leaving this tab, so the plan, the reason typed and the dialog itself are all still here after. */
+function SignInAgain() {
+  return (
+    <div className="flex flex-col gap-1">
+      <a
+        href="/auth/zitadel?then=close"
+        target="_blank"
+        rel="noopener"
+        className={`${ARROW_LINK} self-start`}
+      >
+        Sign in again in a new tab <span aria-hidden>→</span>
+      </a>
+      <p className="text-[12.5px] text-faint">
+        This tab stays as it is. Come back here when you&rsquo;re signed in.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Labelled, because an operator pasting this into a message needs to say what
+ * it is, and a bare hex string in a chat window is a riddle for whoever
+ * receives it.
+ */
+function QuoteThis({ id }: { id: string }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="type-label">Quote this if you ask for help</span>
+      <CopyableValue value={id} label="Reference" />
+    </div>
   );
 }
