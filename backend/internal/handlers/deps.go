@@ -41,12 +41,12 @@ var (
 	svcDrainPropagationRow          = propagation.DrainOne
 	// svcDeliver is the one rule for whether a just-written change goes now
 	// or waits for the operator (roles that wait, N14 B).
-	svcDeliver = services.Deliver
-	svcDrainAddon                   = propagation.DrainAddon
+	svcDeliver    = services.Deliver
+	svcDrainAddon = propagation.DrainAddon
 
-	dbCreateAccessRequest  = db.CreateAccessRequest
-	dbGetAccessRequestByID = db.GetAccessRequestByID
-	dbRequestHolding       = db.RequestHolding
+	dbCreateAccessRequestOfKind = db.CreateAccessRequestOfKind
+	dbGetAccessRequestByID      = db.GetAccessRequestByID
+	dbRequestHolding            = db.RequestHolding
 	// Taking back your own ask. Scoped to the requester inside the statement, not just here.
 	dbWithdrawAccessRequest = db.WithdrawAccessRequest
 	dbResolveAccessRequest  = db.ResolveAccessRequest

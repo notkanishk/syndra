@@ -678,6 +678,9 @@ type ExternalGrantExclusion struct {
 }
 
 type AccessRequest struct {
+	// Kind is "access" (a role they don't have) or "extend" (keep one that
+	// ends for longer: the grant's end moves, the role is never given twice).
+	Kind string `json:"kind"`
 	ID            string     `json:"id"`
 	RequesterID   string     `json:"requester_id"`
 	ProjectID     string     `json:"project_id"`
