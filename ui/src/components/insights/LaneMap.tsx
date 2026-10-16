@@ -24,6 +24,8 @@ const KEYS: Array<[string, string]> = [
   ["↑ ↓", "Up and down a lane"],
   ["P", "Pin what you follow"],
   ["?", "Show or hide these"],
+  ["T", "Choose a date"],
+  ["L", "Next lens"],
   ["Esc", "Back one question"],
 ];
 
@@ -47,6 +49,8 @@ export function LaneMap({
   highlight,
   focusId,
   count,
+  unit = "",
+  note,
   unused,
   marks,
   keysOpen,
@@ -58,6 +62,10 @@ export function LaneMap({
   focusId: string | null;
   /** People holding a role, as Zitadel shows it; absent when never read. */
   count: (id: string) => number | null;
+  /** What a lens's count counts, after "4 people"; empty for the people holding a role. */
+  unit?: string;
+  /** A lens's legend, one quiet sentence. */
+  note?: string;
   unused: Set<string>;
   marks: Map<string, Mark[]>;
   keysOpen: boolean;
@@ -190,7 +198,7 @@ export function LaneMap({
                     type="button"
                     data-node={node.id}
                     aria-pressed={node.id === focusId}
-                    aria-label={people != null ? `${name}, ${people} ${people === 1 ? "person" : "people"}` : name}
+                    aria-label={people != null ? `${name}, ${people} ${people === 1 ? "person" : "people"} ${unit}`.trim() : name}
                     onClick={() => onPick(node.id === focusId ? null : node.id)}
                     className="motion-tint flex min-h-[44px] desktop:min-h-[38px] w-full items-center gap-2 rounded-nav border px-3 py-1.5 text-left"
                     style={nodeSurface(tone, node.id === focusId, unused.has(node.id), Boolean(highlight) && !tone)}
@@ -236,6 +244,7 @@ export function LaneMap({
             <span aria-hidden className="w-[22px] flex-none border-t-2 border-dashed border-line-strong" />
             Automatic
           </span>
+          {note && <span className="text-[12.5px] text-muted">{note}</span>}
           {(["drift", "send", "single"] as const)
             .filter(marked)
             .map((mark) => (
@@ -261,7 +270,7 @@ export function LaneMap({
           open={keysOpen}
           width={290}
           align="end"
-          expectHeight={240}
+          expectHeight={290}
           className="settle-in rounded-block border border-line-strong bg-surface-2 p-4 shadow-popover"
         >
           <div role="dialog" aria-label="Keys" className="flex flex-col gap-[7px]">

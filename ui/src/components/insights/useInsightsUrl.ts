@@ -10,10 +10,18 @@ import type { TrendPeriod } from "@/lib/queries/useInsights";
 export type Finding = "drift" | "send" | "single" | "unused" | "overlap";
 export const FINDINGS: Finding[] = ["drift", "send", "single", "unused", "overlap"];
 export const MAX_PINS = 3;
+export type Lens = "people" | "use" | "ending" | "group";
+export const LENSES: Array<{ value: Lens; label: string }> = [
+  { value: "people", label: "People" },
+  { value: "use", label: "Recent use" },
+  { value: "ending", label: "Ending soon" },
+  { value: "group", label: "A group" },
+];
+export const ENDING_DAYS = [7, 30, 90];
 
 /**
  * Everything Insights remembers is in the link: the tab, the question (`q`
- * and the parts it names), Map or List, the pins and the finding. Nothing here is component state, so
+ * and the parts it names), Map or List, the pins, the finding and the lens (`lens`, with `days` or `group` where it needs one). Nothing here is component state, so
  * a link opened on a desktop is the map as it was left on a phone.
  */
 export function useInsightsUrl() {
@@ -24,6 +32,11 @@ export function useInsightsUrl() {
 
   // ponytail: ids are joined with commas; a node id with a comma would split. Real ids never carry one.
   const pins = Array.from(new Set((params.get("pin") ?? "").split(",").filter(Boolean))).slice(0, MAX_PINS);
+  const lens = LENSES.find((l) => l.value === params.get("lens"))?.value ?? "people";
+  const days = ENDING_DAYS.find((d) => String(d) === params.get("days")) ?? 30;
+  // left, new_term or team:<name>; anything else is the default.
+  const g = params.get("group") ?? "";
+  const group = g === "new_term" || g.startsWith("team:") ? g : "left";
   const finding = FINDINGS.find((f) => f === params.get("finding")) ?? null;
 
   /** One call changes everything it names, so a click is one history entry. */
@@ -52,6 +65,9 @@ export function useInsightsUrl() {
     view: params.get("view") === "list" ? ("list" as const) : ("map" as const),
     pins,
     finding,
+    lens,
+    days,
+    group,
     set,
   };
 }

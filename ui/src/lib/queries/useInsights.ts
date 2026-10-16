@@ -225,3 +225,69 @@ export function useInsightsTimeline(from: string, to: string, enabled: boolean) 
     },
   });
 }
+
+/** One role as a lens counts it, named the way a person would say it. */
+export interface LensRole extends RoleRef {
+  project_name: string;
+  role_label: string;
+  people: number;
+  /** Only the "ending" lens: when the first of them loses it. */
+  earliest_end?: string | null;
+}
+
+export type LensAsk = { kind: "ending"; days: number } | { kind: "group"; group: string };
+
+export interface InsightsLens {
+  kind: "ending" | "group";
+  window_days?: number;
+  group?: string;
+  /** Head count of the group itself, whether or not anything was read. */
+  size?: number;
+  /** False until Syndra has read who holds what: an empty `roles` then says nothing. */
+  holders_observed: boolean;
+  roles: LensRole[];
+}
+
+/** Ending soon, or what a group holds. Read-only; null asks for nothing. */
+export function useInsightsLens(ask: LensAsk | null) {
+  return useQuery({
+    queryKey: ["insights", "lens", ask],
+    enabled: Boolean(ask),
+    queryFn: async (): Promise<InsightsLens> => {
+      const qs = new URLSearchParams(ask!.kind === "ending" ? { kind: "ending", days: String(ask!.days) } : { kind: "group", group: ask!.group });
+      const d = await request<InsightsLens>(`/insights/lens?${qs}`);
+      return { ...d, roles: list(d?.roles) };
+    },
+  });
+}
+
+export interface UsageSource {
+  receiving: boolean;
+  last_at?: string | null;
+}
+
+export interface InsightsUsage {
+  sources: { sign_in: UsageSource; badge: UsageSource };
+  /** Empty, never a guess, unless sign-ins are being received. */
+  held_not_used: Array<RoleRef & { people: number }>;
+  holders_observed: boolean;
+  window_days: number;
+}
+
+/** Recent use, from sign-ins. The map's lens and Trends' card read the same answer. */
+export function useInsightsUsage(enabled = true) {
+  return useQuery({
+    queryKey: ["insights", "usage"],
+    enabled,
+    queryFn: async (): Promise<InsightsUsage> => {
+      const d = await request<InsightsUsage>("/insights/usage");
+      const src = (x?: UsageSource): UsageSource => ({ receiving: Boolean(x?.receiving), last_at: x?.last_at });
+      return {
+        sources: { sign_in: src(d?.sources?.sign_in), badge: src(d?.sources?.badge) },
+        held_not_used: list(d?.held_not_used),
+        holders_observed: Boolean(d?.holders_observed),
+        window_days: d?.window_days ?? 90,
+      };
+    },
+  });
+}

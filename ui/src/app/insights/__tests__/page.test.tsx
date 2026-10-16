@@ -24,7 +24,9 @@ const insights = vi.hoisted(() => ({
   whatIf: { data: undefined as unknown, isError: false },
   asof: { data: undefined as unknown, isError: false },
   trends: { data: undefined as unknown, isLoading: false, error: null as unknown, refetch: () => {} },
-  calls: {} as { who?: [string | null, string | null]; change?: unknown },
+  lens: { data: undefined as unknown, isError: false },
+  usage: { data: undefined as unknown, isError: false },
+  calls: {} as { who?: [string | null, string | null]; change?: unknown; lens?: unknown },
 }));
 const people = vi.hoisted(() => ({
   users: [] as Array<{ id: string; name: string; title: string; email: string }>,
@@ -89,6 +91,11 @@ vi.mock("@/lib/queries/useInsights", () => ({
   },
   useInsightsTrends: () => insights.trends,
   useInsightsAsOf: () => insights.asof,
+  useInsightsLens: (ask: unknown) => {
+    insights.calls.lens = ask;
+    return ask ? insights.lens : { data: undefined, isError: false };
+  },
+  useInsightsUsage: () => insights.usage,
   useInsightsTimeline: () => ({ data: undefined }),
 }));
 vi.mock("@/lib/queries/useCatalogUsers", () => ({
@@ -157,6 +164,8 @@ beforeEach(() => {
   insights.who = { data: undefined, isError: false };
   insights.whatIf = { data: undefined, isError: false };
   insights.asof = { data: undefined, isError: false };
+  insights.lens = { data: undefined, isError: false };
+  insights.usage = { data: undefined, isError: false };
   insights.calls = {};
   people.users = [];
   people.access = {};
@@ -835,3 +844,262 @@ describe("the answers", () => {
 function renderPage() {
   return render(<InsightsPage />);
 }
+
+const lensRole = (people: number, over: Record<string, unknown> = {}) => ({
+  project_id: "p1",
+  project_name: "Laser Lab",
+  role_key: "trained",
+  role_label: "trained",
+  people,
+  ...over,
+});
+const usage = (over: Record<string, unknown> = {}) => ({
+  sources: { sign_in: { receiving: true }, badge: { receiving: false } },
+  held_not_used: [{ project_id: "p1", role_key: "trained", people: 4 }],
+  holders_observed: true,
+  window_days: 90,
+  ...over,
+});
+const trendsData = {
+  window: { from: "2026-08-01", to: "2026-12-31", label: "Monsoon 2026" },
+  weekly: [],
+  totals: { given: 0, taken_away: 0 },
+  requests: { came_in: 0, approved: 0, declined: 0, withdrawn: 0, declined_reasons: [], median_hours_to_decide: null, outside_bundles: [] },
+  sending: { median_minutes_approval_to_sent: null, sample: 0 },
+  drift: { found: 0, cleared: 0, median_hours_to_clear: null },
+  ending_soon: [],
+  upkeep: { people_who_left_holding: 0, drift_open: 0, roles_nobody_has: 0, bundles_nothing_new: 0, overlaps: 0 },
+};
+const lensPill = (name: string) => screen.getByRole("radio", { name });
+const params = () => new URLSearchParams(nav.state.search);
+
+describe("lenses", () => {
+  it("offers four lenses, always, with People first", () => {
+    renderPage();
+    expect(within(screen.getByRole("radiogroup", { name: "Lens" })).getAllByRole("radio").map((r) => r.textContent)).toEqual([
+      "People",
+      "Recent use",
+      "Ending soon",
+      "A group",
+    ]);
+    expect(lensPill("People")).toBeChecked();
+    expect(screen.queryByLabelText("How far ahead")).not.toBeInTheDocument();
+  });
+
+  it("Ending soon lights the roles that lose access, counts them, and holds days in the link", () => {
+    insights.lens = {
+      data: { kind: "ending", window_days: 30, holders_observed: true, roles: [lensRole(3, { earliest_end: "2026-10-30T12:00:00Z" })] },
+      isError: false,
+    };
+    renderPage();
+    fireEvent.click(lensPill("Ending soon"));
+    expect(nav.state.search).toBe("lens=ending");
+    expect(insights.calls.lens).toEqual({ kind: "ending", days: 30 });
+
+    expect(screen.getByRole("heading", { name: "Access ends in 1 role" })).toBeInTheDocument();
+    expect(screen.getByText("The first ends on 30 Oct")).toBeInTheDocument();
+    expect(screen.getByText("ends for 3 people, the first on 30 Oct.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open Expiring access/ })).toHaveAttribute("href", "/review/expiring-access");
+    // The count sits on the role, which is lit; everything else steps back.
+    expect(node("Laser Lab · trained, 3 people lose it within 30 days")).toHaveTextContent("3");
+    expect(opacityOf("Laser Lab · trained, 3 people lose it within 30 days")).toBe("1");
+    expect(opacityOf(/Metal Shop · welder/)).toBe("0.35");
+    expect(screen.getByText("Lit roles have access ending within 30 days. The number is how many people lose it.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("How far ahead"), { target: { value: "7" } });
+    expect(nav.state.search).toBe("lens=ending&days=7");
+    expect(insights.calls.lens).toEqual({ kind: "ending", days: 7 });
+    fireEvent.change(screen.getByLabelText("How far ahead"), { target: { value: "30" } });
+    expect(nav.state.search).toBe("lens=ending");
+  });
+
+  it("opens from the link as it was left, and ignores a lens it does not know", () => {
+    nav.set("lens=ending&days=90");
+    renderPage();
+    expect(lensPill("Ending soon")).toBeChecked();
+    expect(screen.getByLabelText("How far ahead")).toHaveValue("90");
+    expect(insights.calls.lens).toEqual({ kind: "ending", days: 90 });
+  });
+
+  it("falls back to People for a lens or a number the link invents", () => {
+    nav.set("lens=nonsense&days=5");
+    renderPage();
+    expect(lensPill("People")).toBeChecked();
+  });
+
+  it("says plainly when nothing ends, and when nothing has been read yet", () => {
+    insights.lens = { data: { kind: "ending", window_days: 30, holders_observed: true, roles: [] }, isError: false };
+    nav.set("lens=ending");
+    const { unmount } = renderPage();
+    expect(screen.getByRole("heading", { name: "Nothing ends in the next 30 days" })).toBeInTheDocument();
+    unmount();
+
+    insights.lens = { data: { kind: "ending", window_days: 30, holders_observed: false, roles: [] }, isError: false };
+    renderPage();
+    expect(screen.getByText(/hasn't read who holds what from Zitadel yet/)).toBeInTheDocument();
+  });
+
+  it("A group starts at people who left, and says the access probably should be revoked in words, not a colour", () => {
+    insights.lens = { data: { kind: "group", group: "left", size: 4, holders_observed: true, roles: [lensRole(2)] }, isError: false };
+    renderPage();
+    fireEvent.click(lensPill("A group"));
+    expect(nav.state.search).toBe("lens=group");
+    expect(insights.calls.lens).toEqual({ kind: "group", group: "left" });
+    expect(screen.getByLabelText("Which group")).toHaveValue("left");
+    expect(screen.getByRole("heading", { name: "People who left the makerspace" })).toBeInTheDocument();
+    expect(screen.getByText("4 people · still holding 1 role")).toBeInTheDocument();
+    expect(screen.getByText("2 of 4 still hold it.")).toBeInTheDocument();
+    expect(node("Laser Lab · trained, 2 people in this group")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open People/ })).toHaveAttribute("href", "/users");
+  });
+
+  it("A group can be new this term, or a team named in the link", () => {
+    insights.lens = { data: { kind: "group", group: "new_term", size: 6, holders_observed: true, roles: [lensRole(5)] }, isError: false };
+    nav.set("lens=group");
+    renderPage();
+    fireEvent.change(screen.getByLabelText("Which group"), { target: { value: "new_term" } });
+    expect(nav.state.search).toBe("lens=group&group=new_term");
+    expect(insights.calls.lens).toEqual({ kind: "group", group: "new_term" });
+    expect(screen.getByRole("heading", { name: "People new this term" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Open People/ })).not.toBeInTheDocument();
+
+    // A team has no name yet: nothing is asked of the server.
+    fireEvent.change(screen.getByLabelText("Which group"), { target: { value: "team" } });
+    expect(nav.state.search).toBe("lens=group&group=team%3A");
+    expect(insights.calls.lens).toBeNull();
+    expect(screen.getByRole("heading", { name: "Which team?" })).toBeInTheDocument();
+
+    const name = screen.getByLabelText("Team name");
+    fireEvent.change(name, { target: { value: " Design " } });
+    fireEvent.blur(name);
+    expect(params().get("group")).toBe("team:Design");
+    expect(insights.calls.lens).toEqual({ kind: "group", group: "team:Design" });
+    expect(screen.getByLabelText("Team name")).toHaveValue("Design");
+  });
+
+  it("Recent use lights the roles held but not used, once sign-ins are arriving", () => {
+    insights.usage = { data: usage(), isError: false };
+    nav.set("lens=use");
+    renderPage();
+    expect(screen.getByRole("heading", { name: "1 role held but not used in 90 days" })).toBeInTheDocument();
+    expect(screen.getByText("is held by 4 people, and none has used it.")).toBeInTheDocument();
+    expect(node("Laser Lab · trained, 4 people held but not used")).toBeInTheDocument();
+    expect(opacityOf(/Metal Shop · welder/)).toBe("0.35");
+    expect(screen.getByText("Lit roles are held by people who haven't used them in 90 days. The number is how many.")).toBeInTheDocument();
+  });
+
+  it("Recent use says it fills in once sign-ins arrive, and lights nothing", () => {
+    insights.usage = { data: usage({ sources: { sign_in: { receiving: false }, badge: { receiving: false } }, held_not_used: [] }), isError: false };
+    nav.set("lens=use");
+    renderPage();
+    expect(screen.getByText("Recent use fills in once sign-ins arrive.")).toBeInTheDocument();
+    expect(opacityOf(/Metal Shop · welder/)).toBe("1");
+    expect(screen.queryByText(/held but not used/)).not.toBeInTheDocument();
+  });
+
+  it("a lens that could not be read says so and changes nothing", () => {
+    insights.lens = { data: undefined, isError: true };
+    nav.set("lens=ending");
+    renderPage();
+    expect(screen.getByText("Syndra couldn't read it just now. Nothing was changed.")).toBeInTheDocument();
+  });
+
+  it("is a Select below tablet, with the same four lenses", () => {
+    viewport.phone = true;
+    viewport.touch = true;
+    insights.usage = { data: usage(), isError: false };
+    renderPage();
+    const select = screen.getByRole("combobox", { name: "Lens" });
+    fireEvent.change(select, { target: { value: "use" } });
+    expect(nav.state.search).toBe("lens=use");
+    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Lens: People",
+      "Lens: Recent use",
+      "Lens: Ending soon",
+      "Lens: A group",
+    ]);
+    expect(screen.getByRole("heading", { name: "1 role held but not used in 90 days" })).toBeInTheDocument();
+  });
+
+  it("steps back to People with Back, and when a finding or a question is chosen", () => {
+    insights.usage = { data: usage(), isError: false };
+    nav.set("lens=use");
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(nav.state.search).toBe("");
+
+    fireEvent.click(lensPill("Ending soon"));
+    fireEvent.click(screen.getByRole("button", { name: "2 drift" }));
+    expect(nav.state.search).toBe("finding=drift");
+    expect(lensPill("People")).toBeChecked();
+
+    fireEvent.click(lensPill("Ending soon"));
+    fireEvent.click(node(/Laser Lab · trained/));
+    expect(params().get("lens")).toBeNull();
+    expect(params().get("q")).toBe("r1");
+  });
+
+  it("L moves to the next lens and round again, but not while typing", () => {
+    renderPage();
+    const order = ["use", "ending", "group", null];
+    for (const want of order) {
+      fireEvent.keyDown(document.body, { key: "l" });
+      expect(params().get("lens")).toBe(want);
+    }
+    fireEvent.keyDown(screen.getByLabelText("Ask the map"), { key: "L" });
+    expect(params().get("lens")).toBeNull();
+  });
+
+  it("T opens the date, and again returns to today", () => {
+    renderPage();
+    fireEvent.keyDown(document.body, { key: "t" });
+    expect(screen.getByRole("slider", { name: "Date shown" })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "T" });
+    expect(screen.queryByRole("slider", { name: "Date shown" })).not.toBeInTheDocument();
+  });
+
+  it("lists T and L among the keys", () => {
+    renderPage();
+    fireEvent.keyDown(document.body, { key: "?" });
+    const keys = within(screen.getByRole("dialog", { name: "Keys" }));
+    expect(keys.getByText("Choose a date")).toBeInTheDocument();
+    expect(keys.getByText("Next lens")).toBeInTheDocument();
+  });
+
+  it("on an earlier date, only People can be chosen, and the others come back with today", () => {
+    nav.set("lens=ending&asof=2020-02-29");
+    insights.asof = { data: { kind: "none", first_day: "2026-10-16" }, isError: false };
+    renderPage();
+    expect(lensPill("People")).toBeChecked();
+    for (const name of ["Recent use", "Ending soon", "A group"]) expect(lensPill(name)).toBeDisabled();
+    expect(screen.getByText("Other lenses read today's access.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("How far ahead")).not.toBeInTheDocument();
+    expect(insights.calls.lens).toBeNull();
+
+    fireEvent.keyDown(document.body, { key: "l" });
+    expect(params().get("lens")).toBe("ending");
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to now" }));
+    expect(lensPill("Ending soon")).toBeChecked();
+  });
+
+  it("on Trends, Held but not used lists roles and links to the lens", () => {
+    insights.usage = { data: usage(), isError: false };
+    insights.trends = { ...insights.trends, data: trendsData };
+    nav.set("tab=trends");
+    renderPage();
+    const card = screen.getByText("Held but not used").closest(".card") as HTMLElement;
+    expect(within(card).getByText("Not used in 90 days")).toBeInTheDocument();
+    expect(within(card).getByText("Laser Lab · trained")).toBeInTheDocument();
+    expect(within(card).getByText("4 people")).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: /Show on the map/ })).toHaveAttribute("href", "/insights?lens=use");
+  });
+
+  it("on Trends, says recent use fills in once sign-ins arrive, and lists nothing", () => {
+    insights.usage = { data: usage({ sources: { sign_in: { receiving: false }, badge: { receiving: false } }, held_not_used: [] }), isError: false };
+    insights.trends = { ...insights.trends, data: trendsData };
+    nav.set("tab=trends");
+    renderPage();
+    expect(screen.getByText("Recent use fills in once sign-ins arrive.")).toBeInTheDocument();
+  });
+});
