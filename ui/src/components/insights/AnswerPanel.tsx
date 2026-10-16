@@ -123,17 +123,17 @@ export function AnswerPanel({
         )}
         <span className="flex-1" />
         {onPin && (
-          <Button variant="ghost" size="sm" onClick={onPin}>
+          <Button variant={phone ? "outline" : "ghost"} size="sm" onClick={onPin}>
             {phone ? "Pin this" : "Pin"}
           </Button>
         )}
         {onlyPinned && (
-          <Button variant="ghost" size="sm" onClick={onlyPinned}>
+          <Button variant={phone ? "outline" : "ghost"} size="sm" onClick={onlyPinned}>
             Show pinned only
           </Button>
         )}
         {clipboard && (
-          <Button variant="ghost" size="sm" onClick={copy}>
+          <Button variant={phone ? "outline" : "ghost"} size="sm" onClick={copy}>
             {copied ? "Copied" : "Copy as sentences"}
           </Button>
         )}

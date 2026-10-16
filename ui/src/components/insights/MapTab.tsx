@@ -375,7 +375,8 @@ export function MapTab({ url }: { url: InsightsUrl }) {
       </Unfold>
       {phone && panel && question && !finding && <p className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">{PHONE_NOTE}</p>}
 
-      {phone && !panel && findings.ready && <RestCards cards={findings.rest} />}
+      {/* ponytail: an earlier date has no rest: today's findings under "Showing 3 Oct" would say the wrong day. */}
+      {phone && !panel && !asOn && findings.ready && <RestCards cards={findings.rest} />}
 
       <ListStates
         isLoading={topology.isLoading}
