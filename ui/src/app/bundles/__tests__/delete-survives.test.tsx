@@ -81,7 +81,7 @@ describe("deleting a bundle", () => {
     rerender(<BundlePage bundleId="b1" />);
 
     // The report survives, and names the queued revocations.
-    expect(screen.getByText(/4 changes waiting/)).toBeInTheDocument();
+    expect(screen.getByText(/4 changes wait for you to send/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 

@@ -698,8 +698,8 @@ function RenameBundleDialog({
  * And if this is the welcome bundle, onboarding stops handing anything out, which has no other
  * place to be said once the row is gone.
  *
- * The version history goes with it. That is worth stating plainly rather than discovering: it is
- * the one part of a deletion nothing can restore.
+ * Retire keeps its history (owner, 19 Oct 2026): the bundle stops being given, and its versions
+ * stay readable on its page. The confirm says "and revoke" only when someone would lose something.
  */
 function DeleteBundleDialog({
   bundleId,
@@ -768,7 +768,7 @@ function DeleteBundleDialog({
         </div>
       </div>
 
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={gone ? "Retired" : undefined} className="mx-6 mb-1" />}
       {gone && step.after}
 
       <ModalFooter
@@ -816,14 +816,14 @@ function DeleteBundleDialog({
                 n === 0
                   ? {
                       kind: "applied",
-                      message: `${name} retired`,
-                      detail: `Nobody's access changed — it carried nothing anybody held.${orphaned}`,
+                      message: `Nobody's access changed. It carried nothing anybody held.`,
+                      detail: `Its history stays readable.${orphaned}`,
                     }
                   : {
                       kind: auto ? "applied" : "queued",
-                      message: `${name} retired — ${n} ${n === 1 ? "change" : "changes"} ${
-                        auto ? "applied" : "waiting"
-                      }`,
+                      message: auto
+                        ? `${n} ${n === 1 ? "change went" : "changes went"} to Zitadel.`
+                        : `${n} ${n === 1 ? "change waits" : "changes wait"} for you to send.`,
                       detail: auto
                         ? `The revocations it set off went with it.${orphaned}`
                         : `The revocations it set off wait under Pending changes until you send them.${orphaned}`,
@@ -834,7 +834,7 @@ function DeleteBundleDialog({
             }
           }}
         >
-          Retire and revoke
+          {holders === 0 ? `Retire ${name}` : "Retire and revoke"}
         </Button>
         )}
       </ModalFooter>

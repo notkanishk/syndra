@@ -255,7 +255,8 @@ describe("retiring, refused by the server", () => {
     );
     render(<BundlePage bundleId="sb" />);
     fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
+    // Nobody holds it, so the confirm names the bundle rather than a revoke.
+    fireEvent.click(screen.getByRole("button", { name: /^Retire (?!bundle$)/ }));
 
     expect(await screen.findByText(/Refused while New members and Staff include it\. Nothing was changed\./)).toBeInTheDocument();
   });
