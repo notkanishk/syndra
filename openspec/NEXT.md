@@ -123,6 +123,8 @@ The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built 
 
 Steps 1 (foundations), 2 (never sample data) and 3 (roles that wait for you) are built in [`changes/reconcile-build`](changes/reconcile-build/tasks.md). Step 4 (screens) is under way: Bundles v2 with included bundles, My access with extend requests, and Insights (reads, trends, as-of dates, lenses, recent use). Migration 000056 ships with step 3. Migration 000058 switches every deployment to `confirmation.model = roles`; production's roles stay as they are, and the owner marks which ones wait later. The open tasks there carry their triage tags. Insights' open questions are in `design_handoff_syndra/reconcile-2026-10/to-design/Q-06-from-the-build.md` §7.
 
+Design answers A-04 to A-06 (17 Oct 2026) are built on `feat/design-answers-04-06`, stacked on #46: one role picker for asking and giving, Ask to keep it, the cancel step inside the sheet, dialog results with a word, AnchoredPanel and controls, motion v2, copy sweeps (Retire, ends, On its way), term dates as one setting. Open: 6.64 (live-DB run, gated on the LAN), 6.65 (owner questions), unwired cancel-step writes (holds, target revoke/sweep, mapping writes refuse safely), phone sheet rise from edge, Extend from a person's page for grants beyond 30 days.
+
 ### Architecture deepening — the 16 Oct review
 
 Seven candidates where one question is answered by several copies, ranked, in [`changes/architecture-deepening`](changes/architecture-deepening/tasks.md) with the review page beside them. Top: one access-change planner, so a plan's preview and its apply are the same code.
