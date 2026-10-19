@@ -40,6 +40,7 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useSetBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({ data: source.bundles, isLoading: false, refetch: vi.fn() }),
+  useRetiredBundles: () => ({ data: [] }),
   useBundleRoles: (id: string | null) => ({ data: id ? source.roles : undefined, isLoading: false, refetch: vi.fn() }),
   useBundleImpact: () => ({ data: null, isLoading: false }),
   useCreateBundle: () => ({ mutateAsync: state.create, isPending: false }),

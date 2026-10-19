@@ -43,10 +43,9 @@ describe("the retired rules fold", () => {
     expect(screen.queryByRole("button", { name: /Edit|Retire rule/ })).toBeNull();
   });
 
-  it("says plainly when nothing has been retired", () => {
+  it("is not there at all when nothing has been retired", () => {
     state.retired = [];
-    render(<RetiredRulesFold />);
-    fireEvent.click(screen.getByRole("button", { name: /Retired rules/ }));
-    expect(screen.getByText("Nothing has been retired.")).toBeInTheDocument();
+    const { container } = render(<RetiredRulesFold />);
+    expect(container).toBeEmptyDOMElement();
   });
 });
