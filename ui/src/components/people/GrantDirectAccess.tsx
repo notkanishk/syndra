@@ -183,20 +183,21 @@ function GrantDirectAccessOpen({
       </div>
 
       {!done && (
-      <div className="accent-note mx-6 mt-4 px-4 py-3.5 text-[14px] leading-[1.55] text-ink/80">
-        {resolved.date ? (
-          <>
-            It ends on {formatShortDate(resolved.date)}, and the sweep removes it automatically. They&rsquo;ll
-            show up under <strong className="font-semibold text-ink">Expiring access</strong> two
-            weeks before, where the only action is to extend.
-          </>
-        ) : (
-          <>
-            This access will not end on its own. It stays until someone removes it — which is
-            what &ldquo;Never&rdquo; means here.
-          </>
-        )}
-      </div>
+        // An explanation, not a fault: a caption under the date, not a box.
+        <p className="mx-6 mt-4 max-w-[72ch] text-[13.5px] leading-[1.55] text-muted">
+          {resolved.date ? (
+            <>
+              It ends on {formatShortDate(resolved.date)}, and the sweep removes it automatically. They&rsquo;ll
+              show up under <strong className="font-semibold text-ink">Expiring access</strong> two
+              weeks before, where the only action is to extend.
+            </>
+          ) : (
+            <>
+              This access will not end on its own. It stays until someone removes it — which is
+              what &ldquo;Never&rdquo; means here.
+            </>
+          )}
+        </p>
       )}
 
       {/* The sheet becomes its own result rather than handing it to a corner,

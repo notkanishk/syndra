@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   rules: [] as MappingRuleRow[],
   update: vi.fn(),
   targetWaits: false,
+  validate: vi.fn(),
 }));
 
 vi.mock("@/lib/queries/useMappingRules", () => ({
@@ -16,7 +17,7 @@ vi.mock("@/lib/queries/useMappingRules", () => ({
   useCreateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateMappingRule: () => ({ mutateAsync: state.update, isPending: false }),
   useDeleteMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useValidateMappingRule: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useValidateMappingRule: () => ({ mutateAsync: state.validate, isPending: false }),
 }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
@@ -36,6 +37,7 @@ vi.mock("@/lib/queries/useRoles", () => ({
         role_key: "trained",
         display_name: "Trained",
         waits_for_send: state.targetWaits,
+        assigned_user_count: 3,
       },
     ],
   }),
@@ -73,6 +75,7 @@ beforeEach(() => {
   state.rules = [rule()];
   state.update = vi.fn().mockResolvedValue({});
   state.targetWaits = false;
+  state.validate = vi.fn().mockResolvedValue({});
 });
 
 afterEach(cleanup);
@@ -148,5 +151,40 @@ describe("the before-line", () => {
       "Trained always waits for you, so what this rule gives will wait for you to send.",
     );
     expect(screen.getAllByRole("img", { name: "Waits for you" }).length).toBeGreaterThan(0);
+  });
+});
+
+/** A box means something is wrong (A-04 §7.1a): the check's findings are a Notice, its all-clear is not. */
+describe("the rule check's result", () => {
+  async function check(result: unknown) {
+    state.validate = vi.fn().mockResolvedValue(result);
+    render(<AutomaticRulesPage />);
+    fireEvent.click(screen.getByText(/^R-/));
+    fireEvent.click(screen.getByRole("button", { name: "Check rule" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy());
+  }
+
+  it("says a rule that can't be saved in a red Notice that blocks", async () => {
+    await check({ would_cycle: true, reason: "It would give a role to itself." });
+    const notice = screen.getByRole("alert");
+    expect(notice).toHaveTextContent("This rule can't be saved");
+    expect(notice).toHaveClass("bg-danger-soft");
+    expect(notice).toHaveTextContent("It would give a role to itself.");
+  });
+
+  it("says things to know in an amber Notice", async () => {
+    state.rules = [rule({ source_project: "pLaser", source_role: "trained" })];
+    await check({});
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("Checked — 1 thing to know");
+    expect(notice).toHaveTextContent("3 people already hold the first role");
+    expect(notice).toHaveClass("bg-warn-soft");
+  });
+
+  it("says an all-clear as a caption, with no box", async () => {
+    await check({});
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText("Checked.")).toBeInTheDocument();
   });
 });

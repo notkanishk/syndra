@@ -1070,9 +1070,11 @@ function IncludedBundleCard({
         </Button>
       </div>
       {newer && (
-        <div className="accent-note row-divider flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
-          <span className="min-w-[min(300px,100%)] flex-1 text-[14px] leading-[1.5] [text-wrap:pretty]">
-            <strong className="font-semibold">
+        // A next step, not a fault: the lead and its caption sit on the row with
+        // the action, with no box around them.
+        <div className="row-divider flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
+          <span className="min-w-[min(300px,100%)] flex-1 text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
+            <strong className="font-semibold text-ink">
               {child} v{include.child_latest_version} is out.
             </strong>{" "}
             {adds.length > 0 && `It adds ${formatList(adds.map(label))}. `}

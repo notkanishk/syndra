@@ -9,6 +9,7 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { FieldLabel } from "@/components/ui/Input";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Notice } from "@/components/ui/Notice";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
@@ -410,47 +411,38 @@ function RuleEditor({
         </div>
 
         {sourceRole && targetRole && (
-          <p
-            className={
-              targetWaits
-                ? "warn-note px-4 py-3 text-[14px] leading-[1.55] text-warn-text"
-                : "text-[14px] leading-[1.55] text-muted"
-            }
-          >
+          <p className="text-[14px] leading-[1.55] text-muted">
             {targetWaits
               ? `${targetName} always waits for you, so what this rule gives will wait for you to send.`
               : "What this rule gives goes straight to Zitadel."}
           </p>
         )}
 
-        {validated && (
-          <div
-            className={`${validated.ok ? "warn-note" : "danger-note"} px-4 py-3.5 text-[14px] leading-[1.55]`}
-          >
-            <div
-              className={`type-label mb-1 ${validated.ok ? "text-warn-text" : "text-danger-text"}`}
-            >
-              {validated.ok
-                ? validated.notes.length
+        {validated &&
+          (validated.ok && validated.notes.length === 0 ? (
+            // Nothing is wrong: a result, said as a caption, not a box.
+            <p className="text-[14px] leading-[1.55] text-muted">
+              <strong className="font-semibold text-ink">Checked.</strong> Nobody holds the first role,
+              directly or through a bundle. Somebody given it by another rule is not counted here, so
+              this could still reach people.
+            </p>
+          ) : (
+            <Notice
+              tone={validated.ok ? "warn" : "danger"}
+              blocking={!validated.ok}
+              title={
+                validated.ok
                   ? `Checked — ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
-                  : "Checked"
-                : "This rule can't be saved"}
-            </div>
-            {validated.notes.length ? (
-              <ul className="flex flex-col gap-1 text-muted">
+                  : "This rule can't be saved"
+              }
+            >
+              <ul className="flex flex-col gap-1">
                 {validated.notes.map((note) => (
                   <li key={note}>{note}</li>
                 ))}
               </ul>
-            ) : (
-              <p className="text-muted">
-                Nobody holds the first role, directly or through a bundle.
-                Somebody given it by another rule is not counted here, so this
-                could still reach people.
-              </p>
-            )}
-          </div>
-        )}
+            </Notice>
+          ))}
       </div>
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
