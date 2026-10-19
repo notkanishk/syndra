@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { StatCard } from "@/components/ui/StatCard";
@@ -619,14 +620,11 @@ function StatusVerdict({
 
   if (transportError || health?.status === "cannot_connect") {
     return (
-      <div className="danger-note px-5 py-4">
-        <div className="text-[15px] font-semibold text-danger-text">Cannot connect.</div>
-        <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-          Syndra cannot read the key it uses to talk to {name}, so it cannot make any request.
-          This is a problem on <strong className="font-semibold">the Syndra server</strong>, not
-          on {name}{transportError ? `: ${transportError}` : "."}
-        </p>
-      </div>
+      <Notice tone="danger" blocking title="Cannot connect.">
+        Syndra cannot read the key it uses to talk to {name}, so it cannot make any request. This is
+        a problem on <strong className="font-semibold">the Syndra server</strong>, not on {name}
+        {transportError ? `: ${transportError}` : "."}
+      </Notice>
     );
   }
 
@@ -635,16 +633,19 @@ function StatusVerdict({
   if (health?.status === "offline" || health?.status === "waiting_to_retry") {
     const offline = health.status === "offline";
     return (
-      <div className="warn-note px-5 py-4">
-        <div className="flex flex-wrap items-center gap-2.5 text-[15px] font-semibold text-warn-text">
-          {offline ? `${name} isn't answering.` : `Syndra is waiting before it calls ${name} again.`}
-          {offline && <CheckPips recent={recent} />}
-        </div>
-        <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-          {reading.sentence} {offline && reading.look}
-        </p>
+      <Notice
+        tone="warn"
+        live={offline}
+        title={offline ? `${name} isn't answering.` : `Syndra is waiting before it calls ${name} again.`}
+      >
+        {reading.sentence} {offline && reading.look}
+        {offline && (
+          <span className="mt-2 flex flex-wrap items-center gap-2.5">
+            <CheckPips recent={recent} />
+          </span>
+        )}
         {!health.reachable && <LastKnown name={name} readAt={health.snapshot_taken_at} />}
-      </div>
+      </Notice>
     );
   }
 

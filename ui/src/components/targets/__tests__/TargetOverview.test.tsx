@@ -352,6 +352,8 @@ describe("one target's page", () => {
     renderTarget();
 
     expect(screen.getByText("Cannot connect.")).toBeTruthy();
+    // A box means something is wrong (A-04 §7.1a): the Notice, and a blocking one.
+    expect(screen.getByRole("alert")).toHaveTextContent("Cannot connect.");
     expect(screen.getByText(/a problem on/)).toBeTruthy();
     // The path, because "no secret configured" and "the mount is missing" are
     // the same symptom and different fixes.
@@ -469,6 +471,8 @@ describe("one target's page", () => {
     };
     renderTarget();
     expect(screen.getByText("TrueNAS isn't answering.")).toBeInTheDocument();
+    // A Notice, amber: Syndra can't reach it, and nothing is in doubt.
+    expect(screen.getByText("TrueNAS isn't answering.").closest('[role="status"]')).toHaveClass("bg-warn-soft");
     expect(screen.getByText(/Look at TrueNAS\./)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Last 3 checks: missed, missed, missed" })).toBeInTheDocument();
   });
