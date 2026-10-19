@@ -24,6 +24,11 @@ interface Props {
    * has no destination, and the door must not invent one.
    */
   next?: string;
+  /**
+   * Signed in again in a tab opened for it (N21): the door stands open and
+   * says to go back to the tab with the work in it. No action.
+   */
+  returned?: boolean;
 }
 
 /**
@@ -33,14 +38,22 @@ interface Props {
  * sign-up and no password reset: Zitadel is the sole identity provider and
  * owns all of that. What is left is a door, and whether it opens.
  */
-export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
+export function LoginDoor({
+  mode,
+  identities,
+  failure,
+  next = "/",
+  returned = false,
+}: Props) {
   const stage = useRef<HTMLElement>(null);
   const door = useRef<Door | null>(null);
 
   // The failure is the state the page arrives in, not something it transitions
   // to — so it is already in the server-rendered HTML and there is no frame
   // where the arch is open before it shuts.
-  const [scene, setScene] = useState<Scene>(failure ? "unreachable" : "idle");
+  const [scene, setScene] = useState<Scene>(
+    returned ? "opening" : failure ? "unreachable" : "idle",
+  );
   const [handedOff, setHandedOff] = useState(false);
 
   useEffect(() => {
@@ -59,16 +72,16 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
 
   // The label lags the press by 200ms so the button's own dip reads first.
   useEffect(() => {
-    if (mode !== "oidc" || scene !== "opening") return;
+    if (mode !== "oidc" || scene !== "opening" || returned) return;
     const timer = setTimeout(() => setHandedOff(true), 200);
     return () => clearTimeout(timer);
-  }, [mode, scene]);
+  }, [mode, scene, returned]);
 
   // The action moved out of the button and into the list, so the focus does too.
   useEffect(() => {
-    if (mode !== "demo" || scene !== "opening") return;
+    if (mode !== "demo" || scene !== "opening" || returned) return;
     stage.current?.querySelector<HTMLElement>("[data-door-identity]")?.focus();
-  }, [mode, scene]);
+  }, [mode, scene, returned]);
 
   function act(event: React.MouseEvent<HTMLElement>) {
     if (scene === "unreachable") {
@@ -83,7 +96,10 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
       return;
     }
     // A modified click opens a new tab; this page stays as it was.
-    if (mode === "oidc" && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
+    if (
+      mode === "oidc" &&
+      (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    ) {
       return;
     }
     // Deliberately not prevented in `oidc` mode: /auth/zitadel is a real link,
@@ -123,7 +139,11 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
       {/* Light, noise, and the arch are the room. None of it is content. */}
       <div className="login-floor" aria-hidden="true" />
       <div className="login-pool" data-door="pool" aria-hidden="true" />
-      <div className="login-pool-amber" data-door="pool-amber" aria-hidden="true" />
+      <div
+        className="login-pool-amber"
+        data-door="pool-amber"
+        aria-hidden="true"
+      />
       <div className="login-grain" aria-hidden="true" />
 
       <p className="login-eyebrow" data-door="eyebrow">
@@ -131,7 +151,11 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
       </p>
 
       <div className="login-group">
-        <span className="login-arch-clip" data-door="arch-clip" aria-hidden="true">
+        <span
+          className="login-arch-clip"
+          data-door="arch-clip"
+          aria-hidden="true"
+        >
           <span className="login-arch" data-door="arch" />
         </span>
         <span className="login-wash" data-door="wash" aria-hidden="true" />
@@ -149,8 +173,15 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
           Syndra
         </h1>
 
-        {mode === "oidc" ? (
-          <a href={next === "/" ? "/auth/zitadel" : `/auth/zitadel?next=${encodeURIComponent(next)}`} {...handlers}>
+        {returned ? null : mode === "oidc" ? (
+          <a
+            href={
+              next === "/"
+                ? "/auth/zitadel"
+                : `/auth/zitadel?next=${encodeURIComponent(next)}`
+            }
+            {...handlers}
+          >
             {action}
           </a>
         ) : (
@@ -166,8 +197,8 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
             not more of Syn's biography — the voice is a doorkeeper, not a
             character, and a grant here always carries the reason it exists. */}
         <p className="login-syn" data-door="syn">
-          Syn — the goddess who keeps the door. Syndra keeps the list, and the reason for every
-          name on it.
+          Syn — the goddess who keeps the door. Syndra keeps the list, and the
+          reason for every name on it.
         </p>
         <p className="login-credit" data-door="credit">
           <span>Built in the lab it runs.</span>
@@ -181,11 +212,22 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
           contents do not: opacity is not hidden, and a screen reader would
           otherwise read a message the page is not showing. */}
       <div className="login-message" data-door="handoff" role="status">
-        {scene === "opening" &&
+        {returned ? (
+          <>
+            <p className="login-message-head">You&rsquo;re signed in again.</p>
+            <p className="login-message-sub">
+              Go back to the tab you were working in and press the same button.
+              You can close this one.
+            </p>
+          </>
+        ) : (
+          scene === "opening" &&
           (mode === "oidc" ? (
             <>
               <p className="login-message-head">Handing you to Zitadel.</p>
-              <p className="login-message-sub">You&rsquo;ll come back here signed in.</p>
+              <p className="login-message-sub">
+                You&rsquo;ll come back here signed in.
+              </p>
             </>
           ) : (
             <>
@@ -195,7 +237,11 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
                   <form key={identity.id} action="/auth/login" method="post">
                     <input type="hidden" name="userId" value={identity.id} />
                     <input type="hidden" name="next" value={next} />
-                    <button type="submit" className="login-identity" data-door-identity>
+                    <button
+                      type="submit"
+                      className="login-identity"
+                      data-door-identity
+                    >
                       {identity.name}{" "}
                       <span className="login-identity-role">
                         · {identity.role === "admin" ? "Operator" : "Member"}
@@ -205,7 +251,8 @@ export function LoginDoor({ mode, identities, failure, next = "/" }: Props) {
                 ))}
               </div>
             </>
-          ))}
+          ))
+        )}
       </div>
 
       <div className="login-message login-error" data-door="error" role="alert">

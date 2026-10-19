@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,7 +42,7 @@ func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *test
 		return "", nil
 	}
 	plainResolveCalled := false
-	dbResolveAccessRequest = func(context.Context, string, string, string, string) error {
+	dbResolveAccessRequest = func(context.Context, string, string, string, string, *time.Time) error {
 		plainResolveCalled = true
 		return nil
 	}
@@ -51,7 +51,7 @@ func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *test
 	// the combined path, not resolve-then-enqueue across two transactions.
 	var gotID, gotReviewer, gotNote string
 	var gotParams db.EnqueueParams
-	dbApproveRequestAndEnqueue = func(_ context.Context, id, reviewer, note string, p db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(_ context.Context, id, reviewer, note string, p db.EnqueueParams, _, _ *time.Time) (db.EnqueueResult, error) {
 		gotID, gotReviewer, gotNote, gotParams = id, reviewer, note, p
 		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
 	}
@@ -148,7 +148,7 @@ func TestHandleResolveAccessRequest_ApproveRace_Returns409(t *testing.T) {
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		return db.EnqueueResult{}, db.ErrRequestNotPending
 	}
 	drainCalled := false
@@ -183,7 +183,7 @@ func TestHandleResolveAccessRequest_RebuildsCacheBeforeInlineDrain(t *testing.T)
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
 	}
 	var order []string
@@ -213,7 +213,7 @@ func TestHandleResolveAccessRequest_RebuildDetachedFromClientCancel(t *testing.T
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
 	}
 	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
@@ -249,7 +249,7 @@ func TestHandleResolveAccessRequest_RejectRace_Returns409(t *testing.T) {
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbResolveAccessRequest = func(context.Context, string, string, string, string) error {
+	dbResolveAccessRequest = func(context.Context, string, string, string, string, *time.Time) error {
 		return db.ErrRequestNotPending
 	}
 	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
@@ -272,7 +272,7 @@ func resetAccessDeps(t *testing.T) {
 	origResolve := dbResolveAccessRequest
 	origWithdraw := dbWithdrawAccessRequest
 	origUpsert := dbUpsertDirectGrant
-	origCreate := dbCreateAccessRequest
+	origCreate := dbCreateAccessRequestOfKind
 	origAudit := dbInsertAuditLog
 	origRebuild := cacheRebuildUser
 	origEnqueue := dbEnqueueDirectGrantPropagation
@@ -291,7 +291,7 @@ func resetAccessDeps(t *testing.T) {
 		dbResolveAccessRequest = origResolve
 		dbWithdrawAccessRequest = origWithdraw
 		dbUpsertDirectGrant = origUpsert
-		dbCreateAccessRequest = origCreate
+		dbCreateAccessRequestOfKind = origCreate
 		dbInsertAuditLog = origAudit
 		cacheRebuildUser = origRebuild
 		dbEnqueueDirectGrantPropagation = origEnqueue
@@ -349,7 +349,7 @@ func TestHandleCreateAccessRequest_BindsRequesterToPrincipal(t *testing.T) {
 	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
 
 	var gotRequester string
-	dbCreateAccessRequest = func(_ context.Context, requesterID, _, _, _ string, _ *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(_ context.Context, _ string, requesterID, _, _, _ string, _ *int) (string, error) {
 		gotRequester = requesterID
 		return "req-1", nil
 	}
@@ -622,7 +622,7 @@ func TestHandleUpsertUserDirectGrant_ApplyReportsThisRowNotBatch(t *testing.T) {
 func TestHandleCreateAccessRequest_PersistenceAndAudit(t *testing.T) {
 	resetAccessDeps(t)
 
-	dbCreateAccessRequest = func(ctx context.Context, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(ctx context.Context, _ string, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
 		return "req-1", nil
 	}
 	auditAction := ""
@@ -655,7 +655,7 @@ func TestHandleCreateAccessRequest_ZeroDuration_NilPointer(t *testing.T) {
 	resetAccessDeps(t)
 
 	var capturedDuration *int
-	dbCreateAccessRequest = func(ctx context.Context, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(ctx context.Context, _ string, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
 		capturedDuration = durationDays
 		return "req-2", nil
 	}
@@ -750,7 +750,7 @@ func TestHandleResolveAccessRequestRejectedDoesNotCreateGrant(t *testing.T) {
 			Status:      "pending",
 		}, nil
 	}
-	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string) error {
+	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string, _ *time.Time) error {
 		return nil
 	}
 
@@ -893,7 +893,7 @@ func TestHandleResolveAccessRequest_WithdrawnCannotBeDecided(t *testing.T) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin",
 			Status: "withdrawn"}, nil
 	}
-	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string) error {
+	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string, _ *time.Time) error {
 		t.Fatal("a withdrawn request must not be decidable")
 		return nil
 	}
@@ -919,7 +919,7 @@ func TestApprovingYourOwnRequestIsRecordedAsSelfApproved(t *testing.T) {
 	dbGetAccessRequestByID = func(_ context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "op-1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		return db.EnqueueResult{OutboxID: "ob", Status: "pending"}, nil
 	}
 	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
@@ -951,7 +951,6 @@ func TestApprovingYourOwnRequestIsRecordedAsSelfApproved(t *testing.T) {
 	}
 }
 
-
 // Found on production, 15 Oct: a member asked five times for a role they held
 // for good. Each copy reached the queue, and approving any of them would have
 // cut their access to 64 days.
@@ -963,7 +962,7 @@ func TestACreateForARoleHeldForGoodIsRefused(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingForGood}, nil
 	}
 	created := false
-	dbCreateAccessRequest = func(context.Context, string, string, string, string, *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int) (string, error) {
 		created = true
 		return "req-1", nil
 	}
@@ -986,7 +985,7 @@ func TestACreateForARoleThatEndsIsRefusedToo(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingUntil, Until: &until}, nil
 	}
 	created := false
-	dbCreateAccessRequest = func(context.Context, string, string, string, string, *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int) (string, error) {
 		created = true
 		return "req-1", nil
 	}
@@ -1002,7 +1001,7 @@ func TestASecondIdenticalAskPointsAtTheWaitingOne(t *testing.T) {
 	resetAccessDeps(t)
 	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
 	audited := false
-	dbCreateAccessRequest = func(context.Context, string, string, string, string, *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int) (string, error) {
 		return "req-first", db.ErrAlreadyAsked
 	}
 	dbInsertAuditLog = func(context.Context, string, string, string, string) error { audited = true; return nil }
@@ -1027,7 +1026,7 @@ func TestApprovingARoleTheyHaveSinceComeToHoldIsRefused(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingForGood}, nil
 	}
 	granted := false
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		granted = true
 		return db.EnqueueResult{}, nil
 	}
@@ -1100,5 +1099,67 @@ func TestWaitingRequestsSayWhatTheRequesterAlreadyHas(t *testing.T) {
 	}
 	if got[1].Holding != nil {
 		t.Errorf("a decided request reads nothing: %+v", got[1].Holding)
+	}
+}
+
+// An operator's own requests (A-04 §8): ?mine=1 narrows the org-wide read to
+// the ones they asked for, and without it the operator still sees everyone's.
+func TestHandleGetAccessRequests_MineNarrowsAnOperatorToTheirOwn(t *testing.T) {
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	t.Setenv("ZITADEL_ADMIN_ROLE_KEY", "admin")
+	origGet := dbGetAccessRequests
+	t.Cleanup(func() { dbGetAccessRequests = origGet })
+	dbGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) {
+		return []models.AccessRequest{
+			{ID: "r-mine", RequesterID: "op-1"},
+			{ID: "r-other", RequesterID: "someone-else"},
+		}, nil
+	}
+	operator := func(url string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		return req.WithContext(withPrincipal(req.Context(), &auth.Principal{
+			Subject:      "op-1",
+			ProjectRoles: map[string]struct{}{"admin": {}},
+		}))
+	}
+	ids := func(req *http.Request) []string {
+		rr := httptest.NewRecorder()
+		handleGetAccessRequests(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%d: %s", rr.Code, rr.Body)
+		}
+		var got []models.AccessRequest
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, r := range got {
+			out = append(out, r.ID)
+		}
+		return out
+	}
+	if got := ids(operator("/api/v1/requests?mine=1")); len(got) != 1 || got[0] != "r-mine" {
+		t.Fatalf("mine=1: %v", got)
+	}
+	if got := ids(operator("/api/v1/requests")); len(got) != 2 {
+		t.Fatalf("without mine: %v", got)
+	}
+	// A member gets their own either way, and cannot widen it.
+	for _, url := range []string{"/api/v1/requests", "/api/v1/requests?mine=1", "/api/v1/requests?mine=0"} {
+		if got := ids(memberContext(httptest.NewRequest(http.MethodGet, url, nil), "someone-else")); len(got) != 1 || got[0] != "r-other" {
+			t.Fatalf("member %s: %v", url, got)
+		}
+	}
+}
+
+// A change queued for the operator waits for them to send; the member only
+// learns that staff haven't sent it.
+func TestAlreadyHeldMessage_WaitingIsWordedForWhoReadsIt(t *testing.T) {
+	h := models.RequestHolding{Kind: models.HoldingForGood, Waiting: true}
+	if got := alreadyHeldMessage(h, "They"); !strings.Contains(got, "waiting for you to send") || strings.Contains(got, "to be sent") {
+		t.Errorf("operator: %q", got)
+	}
+	if got := alreadyHeldMessage(h, "You"); strings.Contains(got, "waiting") || strings.Contains(got, "to be sent") {
+		t.Errorf("member: %q", got)
 	}
 }

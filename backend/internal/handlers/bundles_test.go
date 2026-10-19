@@ -27,7 +27,7 @@ func resetBundleDeps(t *testing.T) {
 	origSetWelcome := dbSetWelcomeBundle
 	origUpdate := dbUpdateBundle
 	origGetByID := dbGetBundleByID
-	origCascadeDelete := svcCascadeBundleDeleted
+	origCascadeDelete := svcCascadeBundleRetired
 	origAudit := dbInsertAuditLog
 	origGetConfig := dbGetConfigSetting
 	// Default: no configured global default (resolveConfirmationMode normalizes "" to "auto") —
@@ -42,7 +42,7 @@ func resetBundleDeps(t *testing.T) {
 		dbSetWelcomeBundle = origSetWelcome
 		dbUpdateBundle = origUpdate
 		dbGetBundleByID = origGetByID
-		svcCascadeBundleDeleted = origCascadeDelete
+		svcCascadeBundleRetired = origCascadeDelete
 		dbInsertAuditLog = origAudit
 		dbGetConfigSetting = origGetConfig
 	})
@@ -716,7 +716,7 @@ func TestHandleUpdateBundle_TrimsAndDoesNotCascade(t *testing.T) {
 		gotName, gotDesc = name, description
 		return nil
 	}
-	svcCascadeBundleDeleted = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
+	svcCascadeBundleRetired = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
 		t.Fatal("a rename must not cascade")
 		return services.CascadeResult{}, nil
 	}
@@ -742,15 +742,15 @@ func TestHandleUpdateBundle_TrimsAndDoesNotCascade(t *testing.T) {
 	}
 }
 
-// --- handleDeleteBundle ---
+// --- handleRetireBundle ---
 
-func TestHandleDeleteBundle_UnknownIDIs404(t *testing.T) {
+func TestHandleRetireBundle_UnknownIDIs404(t *testing.T) {
 	resetBundleDeps(t)
 
 	dbGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{}, pgx.ErrNoRows
 	}
-	svcCascadeBundleDeleted = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
+	svcCascadeBundleRetired = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
 		t.Fatal("must not cascade for a bundle that does not exist")
 		return services.CascadeResult{}, nil
 	}
@@ -758,7 +758,7 @@ func TestHandleDeleteBundle_UnknownIDIs404(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/nope", nil)
 	req.SetPathValue("id", "nope")
 	rr := httptest.NewRecorder()
-	handleDeleteBundle(rr, req)
+	handleRetireBundle(rr, req)
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
@@ -767,20 +767,20 @@ func TestHandleDeleteBundle_UnknownIDIs404(t *testing.T) {
 
 // Deleting the welcome bundle silently stops onboarding granting anything. The flag is read
 // before the row goes and reported back, because afterwards there is nothing left to ask.
-func TestHandleDeleteBundle_ReportsThatItWasTheWelcomeBundle(t *testing.T) {
+func TestHandleRetireBundle_ReportsThatItWasTheWelcomeBundle(t *testing.T) {
 	resetBundleDeps(t)
 
 	dbGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, Name: "Newcomer", IsWelcome: true}, nil
 	}
-	svcCascadeBundleDeleted = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
+	svcCascadeBundleRetired = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
 		return services.CascadeResult{Enqueued: 2, Mode: "auto"}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/b1", nil)
 	req.SetPathValue("id", "b1")
 	rr := httptest.NewRecorder()
-	handleDeleteBundle(rr, req)
+	handleRetireBundle(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -800,20 +800,20 @@ func TestHandleDeleteBundle_ReportsThatItWasTheWelcomeBundle(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteBundle_OrdinaryBundleIsNotFlaggedAsWelcome(t *testing.T) {
+func TestHandleRetireBundle_OrdinaryBundleIsNotFlaggedAsWelcome(t *testing.T) {
 	resetBundleDeps(t)
 
 	dbGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
 		return models.Bundle{ID: id, Name: "Lab Tech"}, nil
 	}
-	svcCascadeBundleDeleted = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
+	svcCascadeBundleRetired = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
 		return services.CascadeResult{}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/b1", nil)
 	req.SetPathValue("id", "b1")
 	rr := httptest.NewRecorder()
-	handleDeleteBundle(rr, req)
+	handleRetireBundle(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())

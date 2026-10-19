@@ -1,10 +1,14 @@
 "use client";
 
-import { Term } from "@/components/ui/Term";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { CommandBlock } from "@/components/ui/CommandBlock";
+import { Notice } from "@/components/ui/Notice";
+import { Relative } from "@/components/ui/Time";
+import { Unfold } from "@/components/ui/Unfold";
 import { request } from "@/lib/api-client";
+import { formatWhen } from "@/lib/format";
 import { useUiView } from "@/lib/ui-view";
 
 interface SystemMode {
@@ -28,6 +32,8 @@ interface SystemMode {
   reset_command?: string;
   zitadel_configured?: boolean;
   degraded?: boolean;
+  /** When Zitadel last answered a directory read; null when it never has. */
+  last_read_at?: string | null;
   reason?: string;
 }
 
@@ -35,12 +41,14 @@ interface SystemMode {
  * Degraded — the fourth state, and the one that matters.
  *
  * GET /api/v1/system/mode reports degraded: true when Zitadel is configured
- * but the backend fell back to demo data. At that point every number on screen
- * is fiction, so the banner is persistent and cannot be dismissed, and the
- * content behind it is dimmed.
+ * and isn't answering. Syndra never shows sample data in its place (N23): with
+ * a last good read (`last_read_at`) the page shows that, real and labelled
+ * with its age; with none it shows nothing. The Notice sits in the content
+ * column above the page (proposed/Notice.md, Motion 6a), the page is not
+ * dimmed, and it leaves the same way when Zitadel answers.
  *
- * Amber rather than red: the data is wrong, not dangerous. And the sentence
- * says so in words — colour is never the only signal.
+ * Amber rather than red: the data is old, not wrong. And the sentence says so
+ * in words — colour is never the only signal.
  */
 export function DegradedBanner() {
   // An operator's read: a member's proxy refuses /system/mode, every minute.
@@ -67,83 +75,90 @@ export function DegradedBanner() {
   // already seeded, and now reports itself as clean — the banner disappearing
   // reads as confirmation that the fix worked. Counting the rows is the only
   // signal that survives the restart.
+  const [serverOpen, setServerOpen] = useState(false);
+  const client = useQueryClient();
+  const degraded = Boolean(data?.degraded);
+  const wasDegraded = useRef(degraded);
+  // Zitadel answering again: every list read while it was down asks again,
+  // rather than waiting out its stale time.
+  useEffect(() => {
+    if (wasDegraded.current && !degraded) void client.invalidateQueries();
+    wasDegraded.current = degraded;
+  }, [client, degraded]);
   const residue = data?.seed_residue ?? 0;
   const seededOverLive = residue > 0 && data?.directory === "zitadel";
-
-  if (!data?.degraded && !seededOverLive) return null;
+  const open = Boolean(data?.degraded || seededOverLive);
 
   return (
-    <div
-      role="alert"
-      className="flex items-start gap-3.5 bg-warn px-4 py-4 text-warn-ink tablet:px-[26px]"
-    >
-      {/* The mark breathes, not the banner. This is one of the product's two
-          licensed loops and it means "still happening" — a whole amber field
-          pulsing behind text would be unreadable, and would be decoration
-          rather than the statement that the provider is still unreachable. */}
-      <span
-        aria-hidden
-        className="breathe mt-0.5 flex h-[22px] w-[22px] flex-none items-center justify-center rounded-pill bg-warn-ink text-[13px] font-bold text-warn"
-      >
-        !
-      </span>
-      <div>
+    <Unfold open={open}>
+      <div className="pb-4">
         {data?.degraded ? (
-          <>
-            <div className="font-display text-[19px] font-bold">These numbers are not real.</div>
-            <p className="max-w-[70ch] text-[14px] font-medium">
-              Syndra cannot reach <Term name="zitadel">Zitadel</Term>, so it is showing
-              sample data instead of real people and access. Do not give or revoke (end) any access
-              until this banner goes away.
-            </p>
-            {data.reason ? (
-              <p className="mt-1.5 max-w-[70ch] text-[13px]">
-                For the person who runs the Syndra server: {data.reason}
-              </p>
-            ) : null}
-          </>
+          data.last_read_at ? (
+            <Notice
+              tone="warn"
+              live
+              title={`Zitadel isn't answering. This is what it held at ${formatWhen(data.last_read_at)}.`}
+            >
+              Everything below is real, read <Relative iso={data.last_read_at} />, and may have
+              changed since. Giving and revoking access is paused until Zitadel answers, because a
+              decision made on an old read can be wrong.
+            </Notice>
+          ) : (
+            <Notice
+              tone="warn"
+              live
+              blocking
+              title="Zitadel isn't answering, and Syndra hasn't read it yet."
+            >
+              There is nothing to show until it answers. This page tries again every minute on its
+              own, and giving and revoking access waits until then.
+            </Notice>
+          )
         ) : (
-          <>
-            <div className="font-display text-[19px] font-bold">
-              {residue} items on these screens are sample data.
-            </div>
-            <p className="max-w-[74ch] text-[14px] font-medium">
-              People and projects are real. Some bundles, rules, access and history entries are
-              sample data, and nothing else on screen tells them apart. Ask the person who runs
-              the Syndra server to clear the sample data. Until then, treat anything you cannot
-              confirm as sample.
-            </p>
-            {/* Marked as theirs, so staff know the paragraph below is not for them. */}
-            <div className="mt-3 max-w-[86ch]">
-              <div className="mb-1.5 type-label">For the person who runs the Syndra server</div>
-              <p className="mb-2 max-w-[74ch] text-[13.5px]">
-                {data?.seed_active
-                  ? "Sample data is still switched on, so a restart would put it back after you clear it. Set SYNDRA_SEED_DEMO=false first."
-                  : "Sample data is switched off, so what remains is left over from an earlier run. Switching it off never removes what was already written."}
-              </p>
-              <CommandBlock
-                tone="onWarn"
-                command={data?.reset_command ?? "make reset-demo-data"}
-                caption="Run this on the server that hosts Syndra. It prints what it would delete and stops. Add APPLY=1 to delete."
-                steps={[
-                  "Only sample data is deleted. Real people, real projects and every decision you made stay exactly as they are.",
-                  "Zitadel is not changed. Anything left over there is reported under Drift at the next check.",
-                  "For a blank slate instead — no bundles, no rules, no history — use make reset-all-data APPLY=1.",
-                ]}
-              />
-            </div>
-          </>
+          <Notice tone="warn" title={`${residue} things on these screens are sample data.`}>
+            People and projects are real. Some bundles, rules, access and history are sample data,
+            and nothing else on screen tells them apart, so treat anything you can&apos;t confirm
+            as sample until it&apos;s cleared.
+            <button
+              type="button"
+              aria-expanded={serverOpen}
+              onClick={() => setServerOpen((v) => !v)}
+              className="mt-2 flex min-h-[44px] items-center gap-1.5 text-[13.5px] font-semibold text-ink motion-tint hover:text-accent-text desktop:min-h-[32px]"
+            >
+              <span
+                aria-hidden
+                className={`inline-block motion-press ${serverOpen ? "rotate-90" : ""}`}
+              >
+                ›
+              </span>
+              For whoever runs the Syndra server
+            </button>
+            <Unfold open={serverOpen}>
+              <div className="flex max-w-[86ch] flex-col gap-2 pt-1">
+                <p className="text-[13.5px] text-muted">
+                  {data?.seed_active
+                    ? "Sample data is still switched on, so a restart would put it back after you clear it. Set SYNDRA_SEED_DEMO=false first."
+                    : "Sample data is switched off, so what remains is left over from an earlier run. Switching it off never removes what was already written."}
+                </p>
+                <CommandBlock
+                  tone="warn"
+                  command={data?.reset_command ?? "make reset-demo-data"}
+                  caption="Run this on the server that hosts Syndra. It prints what it would delete and stops. Add APPLY=1 to delete."
+                  steps={[
+                    "Only sample data is deleted. Real people, real projects and every decision you made stay exactly as they are.",
+                    "Zitadel is not changed. Anything left over there is reported under Drift at the next check.",
+                    "For a blank slate instead, with no bundles, rules or history, use make reset-all-data APPLY=1.",
+                  ]}
+                />
+              </div>
+            </Unfold>
+          </Notice>
         )}
       </div>
-    </div>
+    </Unfold>
   );
 }
 
-/**
- * Wraps page content while degraded so it reads as the fiction it is. Kept
- * separate from the banner because the banner is mounted once in the shell and
- * this is applied per page.
- */
 export function useDegraded(): boolean {
   const { data } = useQuery({
     queryKey: ["system", "mode"],

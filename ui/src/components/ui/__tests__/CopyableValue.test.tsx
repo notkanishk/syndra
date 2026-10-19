@@ -37,6 +37,21 @@ describe("a value somebody has to transport", () => {
     expect(writeText).toHaveBeenCalledWith("smb://fileserver-01/studio");
   });
 
+  // S18: the seat answers with a lime dot that blooms once. A selection (the
+  // insecure-origin form) did not go anywhere, so it doesn't bloom.
+  it("blooms a healthy dot in its own seat once it has copied", async () => {
+    withClipboard(vi.fn().mockResolvedValue(undefined));
+    render(<CopyableValue value="smb://fileserver-01/studio" label="Share path" />);
+
+    const button = await screen.findByRole("button", { name: "Copy share path" });
+    expect(button.querySelector(".bloom")).toBeNull();
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Copied share path" })).toBeTruthy());
+    const done = screen.getByRole("button", { name: "Copied share path" });
+    expect(done.querySelector(".bloom.bg-healthy")).not.toBeNull();
+    expect(done).toHaveTextContent("Copied");
+  });
+
   // The row knows before it is tapped, because the answer is knowable before
   // it is tapped. Offering Copy and failing on the tap teaches a member that
   // the page is broken.

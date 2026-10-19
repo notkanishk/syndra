@@ -36,6 +36,8 @@ export interface ActionOutcome {
   detail?: string;
   /** Present on refused and failed, so it can be quoted to whoever runs this. */
   requestId?: string;
+  /** The session ended before this ran: offer to sign in again in a new tab (N21). */
+  sessionEnded?: boolean;
 }
 
 /**
@@ -56,7 +58,7 @@ export const OUTCOME_TONE: Record<OutcomeKind, string> = {
 
 export const OUTCOME_LABEL: Record<OutcomeKind, string> = {
   applied: "Applied",
-  queued: "Waiting to be sent",
+  queued: "Waiting for you to send",
   no_change: "No change",
   refused: "Refused",
   failed: "Failed",
@@ -69,7 +71,10 @@ export const PLAN_EFFECT_LABEL: Record<PlanEffect, string> = {
   no_change: "No change",
   blocked: "Refused",
   failed: "Failed",
-  queued: "Waiting to be sent",
+  // The future tense, like "Will change": nothing has been queued yet, so a
+  // plan row can't wear the link a queued result does (A-06 §4). It becomes
+  // "Waiting for you to send →" in the result, once it is true.
+  queued: "Will wait for you to send",
 };
 
 export const PLAN_EFFECT_TONE: Record<PlanEffect, string> = {
@@ -128,12 +133,13 @@ export function outcomeFromError(error: unknown): ActionOutcome {
     detail: offline
       ? "Nothing was sent. Try again once you are back online."
       : sessionEnded
-        // Both halves, and neither may be dropped. "Nothing was changed" is
-        // what an operator needs before anything else; "still here" is what
-        // stops them abandoning a plan they had already read and approved.
-        ? "Nothing was changed, and what you were doing is still here. Sign in again, then press the same button once more."
+        // "Nothing was changed" is not repeated here: every refusal already
+        // ends with it. "Still here" is what stops an operator abandoning a
+        // plan they had already read and approved.
+        ? "What you were doing is still here. Sign in again, then press the same button once more."
         : undefined,
     requestId: typeof requestId === "string" ? requestId : undefined,
+    sessionEnded: sessionEnded || undefined,
   };
 }
 

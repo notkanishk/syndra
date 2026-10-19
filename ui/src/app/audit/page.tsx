@@ -10,6 +10,7 @@ import { FilterChip } from "@/components/ui/FilterChip";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { Select } from "@/components/ui/Select";
 import { UserName } from "@/components/names";
 import { EventSentence } from "@/components/audit/EventLine";
@@ -18,7 +19,7 @@ import { describeAction, machineName, targetKind, shortId } from "@/lib/audit-vo
 import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDebounce } from "@/lib/useDebounce";
-import { formatWhen } from "@/lib/format";
+import { formatShortDate, formatWhen } from "@/lib/format";
 
 type Window = "7" | "30" | "all";
 
@@ -70,6 +71,22 @@ export default function AuditPage() {
         .includes(debounced);
     });
   }, [all, debounced, window, resolver]);
+
+  // One row of paging for a list the server hands over a page at a time: it
+  // knows how many it has, never how many there are (A-04 section 7.4).
+  const paging = usePaging();
+  const visible = rows.slice(0, paging.limit);
+  const cutoff = window === "all" ? null : Date.now() - Number(window) * 24 * 60 * 60 * 1000;
+  // A window needs nothing older than itself, so once the loaded tail is past it
+  // there is no more to ask for.
+  const oldest = all[all.length - 1]?.created_at;
+  const passedWindow = cutoff !== null && oldest !== undefined && new Date(oldest).getTime() < cutoff;
+  const hasMore = rows.length > paging.limit || (Boolean(entries.hasNextPage) && !passedWindow);
+  const showMore = () => {
+    paging.more();
+    if (rows.length < paging.limit + paging.step && entries.hasNextPage && !passedWindow) entries.fetchNextPage();
+  };
+  const since = cutoff !== null ? formatShortDate(new Date(cutoff).toISOString()) : oldest ? formatShortDate(oldest) : null;
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -152,19 +169,19 @@ export default function AuditPage() {
               guidance={
                 debounced || window !== "all"
                   ? entries.hasNextPage
-                    ? "These filters search what is loaded. Load more to search further back."
+                    ? "These filters search what is loaded. Show more to search further back."
                     : "The whole log is loaded — nothing in it matches."
                   : "Access given, access revoked, and rule changes are written here as they happen."
               }
               action={
                 entries.hasNextPage
-                  ? { label: "Load more", onClick: () => entries.fetchNextPage() }
+                  ? { label: `Show ${paging.step} more`, onClick: showMore }
                   : undefined
               }
             />
           }
         >
-          {rows.map((entry) => (
+          {visible.map((entry) => (
             <div
               key={entry.id}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-4"
@@ -182,33 +199,18 @@ export default function AuditPage() {
             </div>
           ))}
 
-          {/*
-            The end of the log is stated, not implied by a button that stops
-            appearing. "Nothing older" and "there is more but you have to ask"
-            are different facts about a record you are consulting to answer a
-            question, and only one of them means you can stop looking.
-          */}
-          <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-            {entries.hasNextPage ? (
-              <>
-                <Button
-                  size="sm"
-                  isPending={entries.isFetchingNextPage}
-                  onClick={() => entries.fetchNextPage()}
-                >
-                  Load more
-                </Button>
-                <span className="text-[13px] text-faint">
-                  {all.length} loaded — older entries are further back
-                </span>
-              </>
-            ) : (
-              <span className="text-[13px] text-faint">
-                That is the whole log — {all.length}{" "}
-                {all.length === 1 ? "entry" : "entries"}, nothing older.
-              </span>
-            )}
-          </div>
+          {/* The end of the log is stated, not implied by a button that stops
+              appearing. "Nothing older" and "there is more but you have to ask"
+              are different facts about a record consulted to answer a question,
+              and only one of them means you can stop looking. */}
+          <PaginationRow
+            shown={visible.length}
+            hasMore={hasMore}
+            since={since}
+            pending={entries.isFetchingNextPage}
+            onMore={showMore}
+            onBack={paging.back}
+          />
         </ListStates>
       </Card>
     </div>

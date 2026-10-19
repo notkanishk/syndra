@@ -253,7 +253,7 @@ func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, e
 			UNION
 			SELECT ba.user_id, bvr.zitadel_project_id, bvr.zitadel_role_key
 			  FROM user_bundle_assignments ba
-			  JOIN bundle_version_roles bvr ON bvr.version_id = ba.version_id
+			  JOIN bundle_version_effective_roles bvr ON bvr.version_id = ba.version_id
 		)
 		SELECT DISTINCT user_id FROM (
 			SELECT user_id FROM held WHERE project_id = $1 AND role_key = $2
@@ -264,6 +264,7 @@ func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, e
 			    ON r.source_zitadel_project_id = h.project_id
 			   AND r.source_zitadel_role_key = h.role_key
 			 WHERE r.target_zitadel_project_id = $1 AND r.target_zitadel_role_key = $2
+			   AND r.retired_at IS NULL
 		) holders
 		ORDER BY user_id`
 	rows, err := querier(ctx).Query(ctx, q, projectID, roleKey)

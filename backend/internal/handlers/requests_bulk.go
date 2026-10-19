@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"syndra/internal/db"
-	"syndra/internal/models"
 	"syndra/internal/services"
 )
 
@@ -143,6 +143,7 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 		// The plan agrees with the decision: a request for a role they have
 		// come to hold since asking can't be approved (resolveOneAccessRequest
 		// refuses it), only declined.
+		var approval approvalPlan
 		if status == "approved" {
 			h, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey)
 			switch {
@@ -150,9 +151,20 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 				// Unread is not "doesn't have it": the decision would refuse.
 				out.Effect = services.EffectBlocked
 				out.Detail = "Syndra couldn't read what they already have, so it won't approve this blind. Try again."
-			case h.Kind != models.HoldingNone:
-				out.Effect = services.EffectBlocked
-				out.Detail = "Already has this, so approving would change nothing. Decline it to close the request."
+			default:
+				// The same plan the decision runs (planApproval), so the
+				// rehearsal says what approving will do, kind for kind.
+				plan, perr := planApproval(request, h, time.Now())
+				switch {
+				case errors.Is(perr, errRequestAlreadyHeld):
+					out.Effect = services.EffectBlocked
+					out.Detail = "Already has this, so approving would change nothing. Decline it to close the request."
+				case errors.Is(perr, errExtensionShortens):
+					out.Effect = services.EffectBlocked
+					out.Detail = "Already has this past the end this asks for, so approving would shorten it. Decline it to close the request."
+				case perr == nil:
+					approval = plan
+				}
 			}
 			if out.Effect == "" {
 				if err := checkRoleOffered(ctx, request.ProjectID, request.RoleKey); errors.Is(err, errRoleNotOffered) {
@@ -179,13 +191,21 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 					"Approving mints a direct grant for %d days, the same as granting it by hand.",
 					*request.DurationDays)
 			}
+			switch approval.Effect {
+			case effectExtend:
+				out.Detail = fmt.Sprintf("Keeps %s longer, %s.", request.RoleKey, endPhrase(approval.ExpiresAt))
+				out.Consequence = "Approving moves the end of the grant they have, the same as extending it from Expiring access."
+			case effectGiveAgain:
+				out.Detail = fmt.Sprintf("Gets %s back, %s.", request.RoleKey, endPhrase(approval.ExpiresAt))
+				out.Consequence = "It ended while this waited, so approving gives it again for the time asked."
+			}
 			// Never invisibly (owner, 15 Oct): a queued removal this approval
 			// would cancel is named here, since the apply is marked reviewed.
 			cancels, err := dbWouldCancel(ctx, db.EnqueueParams{UserID: request.RequesterID, ProjectID: request.ProjectID,
 				RoleKeys: []string{request.RoleKey}, OpType: "add", Source: "direct"})
 			if err != nil {
 				out.Effect = services.EffectBlocked
-				out.Detail = "Syndra couldn't read what's waiting to be sent for them, so it won't approve this blind. Try again."
+				out.Detail = "Syndra couldn't read the changes waiting for you to send for them, so it won't approve this blind. Try again."
 				plan.Outcomes = append(plan.Outcomes, out)
 				continue
 			}

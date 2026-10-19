@@ -11,6 +11,7 @@ import {
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
 import { useRemoveBundle } from "@/lib/queries/useBundles";
@@ -203,9 +204,17 @@ function DirectDialog({
   // operator needs to be told which one they are looking at.
   const grantListPending = removal.grantsResolved === false;
   const blocked = !removal.grantId || !userId;
+  // Taking back a grant that is still waiting cancels it: the sheet turns to the
+  // step first (A-04 §14), and Keep it comes back to this dialog as it was.
+  const step = useCancelStep({
+    host: `Revoke direct access to ${roleLabel}`,
+    goAhead: "revoke",
+    tone: source?.queued ? "accent" : "danger",
+  });
 
   return (
     <Modal open onClose={onClose} busy={remove.isPending} size="sm" labelledBy="removal-title">
+      <PushedStep step={step}>
       <ModalHeader
         chip={<SourceChip kind="direct" />}
         title={`Revoke direct access to ${roleLabel}?`}
@@ -235,7 +244,7 @@ function DirectDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                This grant is still waiting to be sent, so {subject} never received it. Removing it withdraws the queued change; nothing reaches Zitadel.
+                This grant is still waiting for you to send, so {subject} never received it. Removing it withdraws the queued change; nothing reaches Zitadel.
               </span>
             </>
           ) : (
@@ -252,9 +261,11 @@ function DirectDialog({
         </div>
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
         note={
+          step.note ??
           // Two causes, and they were reported as one. "This role was not given
           // directly" is true when the grant id is missing; it is a fabrication
           // when the real problem is that the caller passed no person, which is
@@ -270,14 +281,14 @@ function DirectDialog({
                 : undefined
         }
       >
-        {/* Cancel/Done comes FIRST in the markup, not just visually — the
+        {/* Cancel/Close comes FIRST in the markup, not just visually — the
             dialog's focus trap (Modal.tsx) focuses the first focusable
             element in the panel on open, and a destructive confirm rendered
             first got that focus for free: Enter, pressed on reflex to close
             a dialog that just opened, revoked access instead. The safe exit
             takes the initial focus; the destructive action never does. */}
-        <Button variant={succeeded(outcome) ? "accent" : "outline"} onClick={onClose}>
-          {succeeded(outcome) ? "Done" : "Cancel"}
+        <Button variant={succeeded(outcome) ? "outline" : "ghost"} onClick={onClose}>
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
         {/* Same rule as the bundle dialog: an action that has run is not an
             action any more, and leaving it armed lets a second click revoke
@@ -289,10 +300,13 @@ function DirectDialog({
             isPending={remove.isPending}
             onClick={async () => {
               try {
-                const result = await remove.mutateAsync({
-                  userId: userId!,
-                  grantId: removal.grantId!,
-                });
+                const result = await step.run(() =>
+                  remove.mutateAsync({
+                    userId: userId!,
+                    grantId: removal.grantId!,
+                  }),
+                );
+                if (result === KEPT) return;
                 // The residual outcome, from the backend that computed it. A
                 // role this person also holds through a bundle or a rule
                 // survives the removal, and which ones those are is a closure
@@ -315,6 +329,7 @@ function DirectDialog({
           </Button>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }
@@ -341,16 +356,22 @@ function BundleDialog({
   const bundleName = source.bundle_name ?? "this bundle";
   const removeBundle = useRemoveBundle(userId ?? "");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const step = useCancelStep({
+    host: `Remove the ${bundleName} bundle from ${subject}`,
+    goAhead: "remove",
+    tone: source.queued ? "accent" : "danger",
+  });
 
   return (
     <Modal open onClose={onClose} busy={removeBundle.isPending} size="sm" labelledBy="removal-title">
+      <PushedStep step={step}>
       <ModalHeader
         chip={<SourceChip kind="bundle" />}
         title={`Remove the ${bundleName} bundle from ${subject}?`}
         titleId="removal-title"
         lede={
           source.queued
-            ? `${bundleName} is still waiting to be sent, so nothing it carries has reached ${subject} yet.`
+            ? `${bundleName} is still waiting for you to send, so nothing it carries has reached ${subject} yet.`
             : `Everything ${bundleName} carries goes with it, except what another source also gives them.`
         }
       />
@@ -393,12 +414,17 @@ function BundleDialog({
         )}
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
+        // A bundle whose grants are still waiting says nothing about them here:
+        // the step is the one place that is said, because only it carries who
+        // queued each change and why (A-04 §13.4).
         note={
-          source.queued
-            ? "Every other role this bundle carries is withdrawn too, and none of them had been sent. Pending changes will be empty afterwards, not full of reversals."
-            : "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."
+          step.note ??
+          (source.queued
+            ? undefined
+            : "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit.")
         }
       >
         {/* First in the markup, same reason as the direct dialog: the focus
@@ -406,10 +432,10 @@ function BundleDialog({
             exit must be the one that gets it, never the destructive confirm
             below. */}
         <Button
-          variant={succeeded(outcome) ? "accent" : "outline"}
+          variant={succeeded(outcome) ? "outline" : "ghost"}
           onClick={onClose}
         >
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
         {/* Gone once it has run. A destructive confirm that stays armed after
             it succeeded fires again on the next click — which is what a person
@@ -437,10 +463,11 @@ function BundleDialog({
             }
             onClick={async () => {
               try {
-                const result = await removeBundle.mutateAsync(source.bundle_id!);
+                const result = await step.run(() => removeBundle.mutateAsync(source.bundle_id!));
+                if (result === KEPT) return;
                 const waiting = result?.cascade?.enqueued ?? 0;
                 setOutcome({
-                  // `queued` paints an amber "Waiting to be sent" badge, and a
+                  // `queued` paints an amber "Waiting for you to send" badge, and a
                   // withdrawal leaves nothing waiting — the badge sat directly
                   // above "Nothing is waiting under Pending changes" and
                   // contradicted it. The record DID change, so this is not
@@ -466,6 +493,7 @@ function BundleDialog({
           </Button>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }

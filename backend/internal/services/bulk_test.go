@@ -546,10 +546,54 @@ func TestABulkRowNamesWhatItWouldCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := outcomeFor(t, plan, "u1").Consequence
-	if !strings.Contains(got, "Cancels a change waiting to be sent: the removal of trained queued 15 Oct 2026 (left the course).") {
+	if !strings.Contains(got, "Cancels a change waiting for you to send: the removal of trained queued 15 Oct 2026 (left the course).") {
 		t.Fatalf("the row names the queued removal it cancels, got %q", got)
 	}
 	if c := outcomeFor(t, plan, "u2").Consequence; strings.Contains(c, "Cancels") {
 		t.Fatalf("nothing queued, nothing said, got %q", c)
+	}
+}
+
+// #32, B4: an operator never takes access from themselves in bulk. The plan
+// leaves them out and says so; giving access in bulk still includes them.
+func TestRehearseBulk_NeverTakesAccessFromTheRequester(t *testing.T) {
+	setupBulk(t, bulkFixture{
+		users: []models.UserProfile{
+			{ID: "u_me", Name: "Kanishk", Status: "active"},
+			{ID: "u_ada", Name: "Ada", Status: "active"},
+		},
+		grants: map[string][]models.DirectGrant{
+			"u_me":  {{ID: "g1", ProjectID: "pLaser", RoleKey: "trained"}},
+			"u_ada": {{ID: "g2", ProjectID: "pLaser", RoleKey: "trained"}},
+		},
+		roles: map[string]map[roleKey]*models.EffectiveRole{
+			"u_me":  {laser("trained"): {Reasons: []models.RoleReason{{Kind: "direct"}}}},
+			"u_ada": {laser("trained"): {Reasons: []models.RoleReason{{Kind: "direct"}}}},
+		},
+	})
+
+	plan, err := RehearseBulk(context.Background(), BulkRequest{
+		Op: BulkOpRemoveRole, UserIDs: []string{"u_me", "u_ada"},
+		ProjectID: "pLaser", RoleKey: "trained", Actor: "u_me",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Outcomes) != 1 || plan.Outcomes[0].UserID != "u_ada" {
+		t.Fatalf("only the others are in the plan: %+v", plan.Outcomes)
+	}
+	if len(plan.Excluded) != 1 || plan.Excluded[0] != (BulkExclusion{UserID: "u_me", Reason: "self"}) {
+		t.Fatalf("the requester is named as left out: %+v", plan.Excluded)
+	}
+
+	give, err := RehearseBulk(context.Background(), BulkRequest{
+		Op: BulkOpAssignRole, UserIDs: []string{"u_me", "u_ada"},
+		ProjectID: "pLaser", RoleKey: "other", Actor: "u_me",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(give.Excluded) != 0 || len(give.Outcomes) != 2 {
+		t.Fatalf("giving in bulk leaves nobody out: %+v %+v", give.Outcomes, give.Excluded)
 	}
 }

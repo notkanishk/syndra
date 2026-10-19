@@ -66,7 +66,10 @@ describe("audit action vocabulary", () => {
     const written = auditActionsWrittenByTheBackend();
     // The two concatenated families, and the one action written by the onboarding path under a
     // name with no dot in it.
-    const composed = /^(access_request\.|direct_grant\.)|^welcome_bundle_assigned$/;
+    // Plus the two the backend stopped writing when Retire began keeping its history (19 Oct
+    // 2026): rows already in the log still carry them.
+    const composed =
+      /^(access_request\.|direct_grant\.)|^welcome_bundle_assigned$|^(bundle|mapping_rule)\.deleted$/;
 
     const stale = Object.keys(AUDIT_ACTIONS).filter(
       (action) => !written.has(action) && !composed.test(action),

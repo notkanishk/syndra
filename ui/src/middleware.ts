@@ -139,6 +139,9 @@ export async function middleware(request: NextRequest) {
       response.cookies.set(SESSION_COOKIE_NAME, "", { maxAge: 0, path: "/" });
       return response;
     }
+    // Signed in again in a tab opened for it (N21): the door says to go back
+    // to the tab with the work in it, so this one is not sent anywhere.
+    if (request.nextUrl.searchParams.get("then") === "close") return NextResponse.next();
     // Already signed in, usually a link opened in a second tab: on to where
     // they were going, not the landing.
     const next = new URL(safeReturnPath(request.nextUrl.searchParams.get("next")), "http://next.invalid");

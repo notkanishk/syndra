@@ -1,6 +1,6 @@
 "use client";
 
-import { Checkbox } from "@/components/ui/Choice";
+import { Seat } from "@/components/ui/Choice";
 
 /**
  * The one selection bar.
@@ -199,7 +199,7 @@ export function RowCheckbox({
 } & Record<string, unknown>) {
   return (
     <span className={GLYPH_BOX}>
-      <Checkbox aria-label={label} {...props} />
+      <Seat aria-label={label} {...props} />
     </span>
   );
 }
@@ -289,7 +289,7 @@ export function SelectAllRow({
   return (
     <label className="row-divider flex min-h-[44px] cursor-pointer select-none items-center gap-2 px-5 py-2">
       <span className={GLYPH_BOX}>
-        <Checkbox {...props} />
+        <Seat {...props} />
       </span>
       <span className="flex flex-col">
         <span className="text-[14px] font-semibold">{label}</span>

@@ -32,17 +32,23 @@ var ErrAlreadyAsked = errors.New("the same request is already waiting")
 // (idx_access_requests_one_waiting), so a second click, a second tab and a
 // retried POST all meet the same row rather than adding to the queue.
 func CreateAccessRequest(ctx context.Context, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
+	return CreateAccessRequestOfKind(ctx, "access", requesterID, projectID, roleKey, justification, durationDays)
+}
+
+// CreateAccessRequestOfKind files a request of a kind: "access" for a role
+// they don't have, "extend" to keep one that ends for longer.
+func CreateAccessRequestOfKind(ctx context.Context, kind, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
 	const insert = `
 		INSERT INTO access_requests (
-			requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days
+			requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, kind
 		)
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (requester_user_id, zitadel_project_id, zitadel_role_key) WHERE status = 'pending'
 		DO NOTHING
 		RETURNING id`
 
 	var id string
-	err := querier(ctx).QueryRow(ctx, insert, requesterID, projectID, roleKey, justification, durationDays).Scan(&id)
+	err := querier(ctx).QueryRow(ctx, insert, requesterID, projectID, roleKey, justification, durationDays, kind).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
@@ -152,7 +158,7 @@ func givenNote(source string) string {
 
 func GetAccessRequests(ctx context.Context, status string) ([]models.AccessRequest, error) {
 	query := `
-		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at
+		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at, kind, ended_before, ends_after
 		FROM access_requests`
 	args := []interface{}{}
 	if status != "" {
@@ -170,7 +176,7 @@ func GetAccessRequests(ctx context.Context, status string) ([]models.AccessReque
 	var requests []models.AccessRequest
 	for rows.Next() {
 		var req models.AccessRequest
-		if err := rows.Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt); err != nil {
+		if err := rows.Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt, &req.Kind, &req.EndedBefore, &req.EndsAfter); err != nil {
 			return nil, err
 		}
 		requests = append(requests, req)
@@ -180,12 +186,12 @@ func GetAccessRequests(ctx context.Context, status string) ([]models.AccessReque
 
 func GetAccessRequestByID(ctx context.Context, id string) (models.AccessRequest, error) {
 	query := `
-		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at
+		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at, kind, ended_before, ends_after
 		FROM access_requests
 		WHERE id = $1`
 
 	var req models.AccessRequest
-	if err := querier(ctx).QueryRow(ctx, query, id).Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt); err != nil {
+	if err := querier(ctx).QueryRow(ctx, query, id).Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt, &req.Kind, &req.EndedBefore, &req.EndsAfter); err != nil {
 		return req, fmt.Errorf("failed to fetch access request: %w", err)
 	}
 	return req, nil
@@ -197,16 +203,20 @@ func GetAccessRequestByID(ctx context.Context, id string) (models.AccessRequest,
 // affects 0 rows and gets ErrRequestNotPending. Used for the reject path;
 // approvals go through ApproveRequestAndEnqueue so the grant is atomic with the
 // resolution.
-func ResolveAccessRequest(ctx context.Context, id, status, reviewerID, reviewNote string) error {
+//
+// endedBefore is the end the person had, kept on a declined extension so the
+// request can say what it left alone; nil for any other request.
+func ResolveAccessRequest(ctx context.Context, id, status, reviewerID, reviewNote string, endedBefore *time.Time) error {
 	const query = `
 		UPDATE access_requests
 		SET status = $2,
 			reviewer_user_id = $3,
 			review_note = $4,
+			ended_before = $5,
 			resolved_at = CURRENT_TIMESTAMP
 		WHERE id = $1 AND status = 'pending'`
 
-	tag, err := querier(ctx).Exec(ctx, query, id, status, reviewerID, reviewNote)
+	tag, err := querier(ctx).Exec(ctx, query, id, status, reviewerID, reviewNote, endedBefore)
 	if err != nil {
 		return fmt.Errorf("failed to resolve access request: %w", err)
 	}
@@ -249,7 +259,10 @@ func WithdrawAccessRequest(ctx context.Context, id, requesterID string) error {
 // enqueue can no longer strand an approved-but-ungranted request, and the
 // `status='pending'` guard closes the concurrent approve/reject race. Returns
 // ErrRequestNotPending if the request was already resolved.
-func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNote string, p EnqueueParams) (EnqueueResult, error) {
+//
+// endedBefore and endsAfter are an extension's two ends, written with the
+// resolution (nil, nil for any other request).
+func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNote string, p EnqueueParams, endedBefore, endsAfter *time.Time) (EnqueueResult, error) {
 	key, err := newOutboxIdempotencyKey()
 	if err != nil {
 		return EnqueueResult{}, err
@@ -264,9 +277,10 @@ func ApproveRequestAndEnqueue(ctx context.Context, requestID, reviewer, reviewNo
 
 	const resolveQ = `
 		UPDATE access_requests
-		SET status = 'approved', reviewer_user_id = $2, review_note = $3, resolved_at = CURRENT_TIMESTAMP
+		SET status = 'approved', reviewer_user_id = $2, review_note = $3, resolved_at = CURRENT_TIMESTAMP,
+		    ended_before = $4, ends_after = $5
 		WHERE id = $1 AND status = 'pending'`
-	tag, err := tx.Exec(ctx, resolveQ, requestID, reviewer, reviewNote)
+	tag, err := tx.Exec(ctx, resolveQ, requestID, reviewer, reviewNote, endedBefore, endsAfter)
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("resolve access request: %w", err)
 	}

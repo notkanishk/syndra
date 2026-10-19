@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import type { RoleReason } from "@/components/access/AccessSource";
+import { WouldCancelQueued } from "@/lib/api-client";
+import { takeAck } from "@/lib/cancel-confirm";
 
 const removeDirect = vi.hoisted(() => vi.fn());
 const removeBundle = vi.hoisted(() => vi.fn());
@@ -122,5 +124,50 @@ describe("initial focus", () => {
     open({ sources: [bundle] });
 
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+});
+
+describe("a removal that would cancel a grant still waiting", () => {
+  const waiting = {
+    id: "00000000-0000-0000-0000-000000000009",
+    op_type: "add",
+    user_id: "u_2f81",
+    project_id: "pLaser",
+    role_keys: ["trained"],
+    source: "bundle",
+    initiated_by: "op-2",
+    initiated_by_name: "Sam Iyer",
+    reason: "joined the course",
+    queued_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+  };
+  const refusal = () => new WouldCancelQueued([waiting], "DELETE", "/users/u_2f81/bundles/b1");
+
+  it("turns the sheet to the step inside itself; Keep it comes back to the dialog and nothing was removed", async () => {
+    removeBundle.mockReset();
+    removeBundle.mockRejectedValueOnce(refusal());
+    open({ sources: [bundle] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
+    expect(await screen.findByRole("heading", { name: "This cancels a grant that's waiting" })).toBeInTheDocument();
+    // One sheet, never two.
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Cancel it and remove" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Remove bundle" })).toBeInTheDocument());
+    expect(removeBundle).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Nothing changed. Sam's grant is still waiting.")).toBeInTheDocument();
+  });
+
+  it("going ahead sends the removal again, naming what was shown", async () => {
+    removeBundle.mockReset();
+    removeBundle.mockRejectedValueOnce(refusal()).mockResolvedValueOnce({ cascade: { enqueued: 0, mode: "manual" } });
+    open({ sources: [bundle] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and remove" }));
+    await waitFor(() => expect(removeBundle).toHaveBeenCalledTimes(2));
+    expect(takeAck("DELETE", "/users/u_2f81/bundles/b1")).toEqual([waiting.id]);
+    expect(await screen.findByText(/The grant Sam queued 2h ago is cancelled, so nothing goes to Zitadel/)).toBeInTheDocument();
   });
 });

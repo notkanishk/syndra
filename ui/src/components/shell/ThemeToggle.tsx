@@ -6,6 +6,8 @@ import { useTheme } from "@/lib/theme";
  * Dark is home; light is daylight. The toggle is a quiet neighbour of the
  * account chip — it changes how the room looks, never what is in it.
  */
+const GLIDE = "transition-[opacity,transform] duration-[var(--duration-settle)] ease-[var(--ease-settle)]";
+
 export function ThemeToggle() {
   const { theme, toggle } = useTheme();
   const next = theme === "dark" ? "light" : "dark";
@@ -15,15 +17,26 @@ export function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label={`Switch to ${next} appearance`}
+      // The theme lives in this browser; the server renders its default, and the
+      // first client render corrects the label and glyph. Only these differ.
+      suppressHydrationWarning
       // A 32px ring inside a 44px box until desktop. The ring is the drawing;
       // the box is what a thumb on a tablet has to hit.
       className="flex h-11 w-11 items-center justify-center text-muted motion-tint hover:text-ink desktop:h-8 desktop:w-8"
     >
       <span
         aria-hidden
-        className="flex h-8 w-8 items-center justify-center rounded-pill border border-line-strong"
+        data-thumb
+        className="relative flex h-8 w-8 items-center justify-center rounded-pill border border-line-strong"
       >
-        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+        {/* Both glyphs are always drawn; the one for now fades in on settle and
+            turns a quarter as it arrives (S14). Nothing else in the page moves. */}
+        <span suppressHydrationWarning className={`absolute ${GLIDE} ${theme === "dark" ? "opacity-100 rotate-0" : "opacity-0 -rotate-45"}`}>
+          <SunIcon />
+        </span>
+        <span suppressHydrationWarning className={`absolute ${GLIDE} ${theme === "dark" ? "opacity-0 rotate-45" : "opacity-100 rotate-0"}`}>
+          <MoonIcon />
+        </span>
       </span>
     </button>
   );

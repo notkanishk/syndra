@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DegradedBanner } from "@/components/states/DegradedBanner";
@@ -18,6 +18,14 @@ vi.mock("@/lib/api-client", () => ({
     return mode.value;
   },
 }));
+
+/** The server steps sit behind a disclosure, closed until asked for. */
+function openServerSteps() {
+  const toggle = screen.getByRole("button", { name: /For whoever runs the Syndra server/ });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
 
 function renderBanner(isOperator = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -58,10 +66,25 @@ describe("Degraded banner", () => {
     });
   });
 
-  it("says the numbers are fiction when the directory fell back", async () => {
-    mode.value = { directory: "demo", degraded: true, zitadel_configured: true };
+  // N23: never sample data. With a last good read, the page shows it with
+  // its age; with none, nothing, and the Notice says so.
+  it("shows the last known read, with its age, when Zitadel stops answering", async () => {
+    const at = new Date(Date.now() - 14 * 60_000).toISOString();
+    mode.value = { directory: "zitadel", degraded: true, zitadel_configured: true, last_read_at: at };
     renderBanner();
-    expect(await screen.findByText("These numbers are not real.")).toBeInTheDocument();
+    expect(await screen.findByText(/^Zitadel isn't answering\. This is what it held at /)).toBeInTheDocument();
+    expect(screen.getByText(/Everything below is real, read/)).toBeInTheDocument();
+    expect(screen.getByText(/14 min ago/)).toBeInTheDocument();
+    expect(screen.queryByText(/not real|sample data/)).not.toBeInTheDocument();
+  });
+
+  it("shows nothing at all when Zitadel has never been read", async () => {
+    mode.value = { directory: "unreachable", degraded: true, zitadel_configured: true, last_read_at: null };
+    renderBanner();
+    expect(
+      await screen.findByText("Zitadel isn't answering, and Syndra hasn't read it yet."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/There is nothing to show until it answers/);
   });
 
   it("warns when demo fixtures sit underneath a live directory", async () => {
@@ -74,7 +97,14 @@ describe("Degraded banner", () => {
       degraded: false,
     };
     renderBanner();
-    expect(await screen.findByText("12 items on these screens are sample data.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("12 things on these screens are sample data."),
+    ).toBeInTheDocument();
+    // The operator-facing body says what is true for anyone reading it; the
+    // server-side steps stay out of sight until asked for.
+    expect(screen.getByText(/People and projects are real\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Set SYNDRA_SEED_DEMO=false first/)).not.toBeInTheDocument();
+    openServerSteps();
     expect(screen.getByText(/Set SYNDRA_SEED_DEMO=false first/)).toBeInTheDocument();
   });
 
@@ -90,7 +120,11 @@ describe("Degraded banner", () => {
       degraded: false,
     };
     renderBanner();
-    expect(await screen.findByText("31 items on these screens are sample data.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("31 things on these screens are sample data."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Sample data is switched off/)).not.toBeInTheDocument();
+    openServerSteps();
     expect(screen.getByText(/Sample data is switched off/)).toBeInTheDocument();
   });
 
@@ -102,7 +136,10 @@ describe("Degraded banner", () => {
       degraded: false,
     };
     renderBanner();
-    expect(await screen.findByText("make reset-demo-data")).toBeInTheDocument();
+    await screen.findByText("4 things on these screens are sample data.");
+    expect(screen.queryByText("make reset-demo-data")).not.toBeInTheDocument();
+    openServerSteps();
+    expect(screen.getByText("make reset-demo-data")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Copy command: make reset-demo-data/ }),
     ).toBeInTheDocument();
@@ -119,7 +156,9 @@ describe("Degraded banner", () => {
       degraded: true,
     };
     renderBanner();
-    expect(await screen.findByText("These numbers are not real.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Zitadel isn't answering, and Syndra hasn't read it yet."),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/are sample data\./)).not.toBeInTheDocument();
   });
 });

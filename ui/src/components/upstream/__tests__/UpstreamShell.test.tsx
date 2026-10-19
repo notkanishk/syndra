@@ -21,6 +21,18 @@ describe("a write that goes straight to the provider", () => {
     ).toBeTruthy();
   });
 
+  // A box means something is wrong (A-04 §7.1a). The path that skips Syndra's
+  // record is a fault in the making: a Notice. The traced path is explained,
+  // not warned about: a caption.
+  it("is a Notice when Syndra keeps no record, and a caption when it does", () => {
+    const { unmount } = render(<DirectWriteWarning what="Anything." />);
+    expect(screen.getByRole("status")).toHaveTextContent(/Syndra keeps no record of them/);
+    unmount();
+    render(<DirectWriteWarning traced what="Anything." />);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText(/writes to Zitadel through Syndra/)).toBeInTheDocument();
+  });
+
   it("is a tick, so it can gate the button", () => {
     const onAcknowledge = vi.fn();
     render(<DirectWriteWarning what="Anything." acknowledged={false} onAcknowledge={onAcknowledge} />);

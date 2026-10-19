@@ -2,63 +2,89 @@
 
 import { useEffect, useState } from "react";
 
-import { PILL } from "@/components/ui/Button";
+import { StatusDot } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Segmented } from "@/components/ui/Select";
 
-import { CHIME_FIRST_PLAY_EVENT, isChimeEnabled, setChimeEnabled } from "@/lib/driftChime";
+import { getChimeContext, isChimeEnabled, playDriftChime, setChimeEnabled } from "@/lib/driftChime";
 import { useReducedMotion } from "@/lib/useViewport";
 
 /**
- * The drift chime.
+ * The drift chime, as a per-browser preference: Off · On, and under it one
+ * line that says whether On will actually be heard.
  *
- * It used to live in the sidebar footer, next to an org-wide policy control —
- * a browser preference and a policy sitting in the same box is how somebody
- * changes the wrong one. It now lives in Automation settings, labelled as the
- * per-browser preference it is.
+ * Two things can silence it while it reads "On" — a browser set to reduce
+ * motion, and a browser that allows sound only after a click on the page — and
+ * a control that claims to be on while guaranteeing silence is a lie it is in
+ * a position to catch.
  */
 export function ChimeToggle() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [heard, setHeard] = useState(false);
-  // The chime is silenced for anybody who has asked for less motion — a sound
-  // that arrives unbidden is movement in the room. That is correct, and it
-  // means this control can otherwise say "Sound on" while guaranteeing
-  // silence, which is a lie the page is in a position to catch.
+  const [suspended, setSuspended] = useState(false);
   const quieted = useReducedMotion();
 
+  useEffect(() => setEnabled(isChimeEnabled()), []);
+
+  // Only worth a context while it is on and could play.
   useEffect(() => {
-    setEnabled(isChimeEnabled());
-    const onFirstPlay = () => setHeard(true);
-    window.addEventListener(CHIME_FIRST_PLAY_EVENT, onFirstPlay);
-    return () => window.removeEventListener(CHIME_FIRST_PLAY_EVENT, onFirstPlay);
-  }, []);
+    if (!enabled || quieted) return;
+    const ctx = getChimeContext();
+    if (!ctx) return;
+    const read = () => setSuspended(ctx.state === "suspended");
+    read();
+    ctx.addEventListener?.("statechange", read);
+    return () => ctx.removeEventListener?.("statechange", read);
+  }, [enabled, quieted]);
 
   // Render nothing until the stored preference is read: a toggle that flips
   // itself after hydration reads as the setting having changed.
-  if (enabled === null) return <span aria-hidden className="h-8 w-[104px]" />;
+  if (enabled === null) return <span aria-hidden className="block h-8" />;
+
+  const line = quieted
+    ? "Silent in this browser. It asks for less motion, and a sound that arrives on its own is movement in the room. Nothing will play while that is set."
+    : suspended
+      ? "Can't play yet. This browser allows sound only after a click on the page. Play it once to allow it for this visit."
+      : "Plays here. This is the tone you'll hear.";
 
   return (
-    <span className="flex flex-col items-end gap-1.5">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        aria-label="Sound on new drift"
-        onClick={() => {
-          setChimeEnabled(!enabled);
-          setEnabled(!enabled);
+    <div className="flex flex-col items-start gap-2">
+      <Segmented
+        size="sm"
+        label="Sound when drift is found"
+        options={[
+          { value: "off", label: "Off" },
+          { value: "on", label: "On" },
+        ]}
+        value={enabled ? "on" : "off"}
+        onChange={(next) => {
+          setChimeEnabled(next === "on");
+          setEnabled(next === "on");
         }}
-        className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
-          enabled ? "bg-accent-dense text-accent-ink" : "border border-line-strong text-muted"
-        }`}
-      >
-        {enabled ? "Sound on" : "Sound off"}
-      </button>
-      {enabled && quieted && (
-        <span className="text-[12.5px] leading-[1.5] text-faint">
-          Nothing will play: this browser is set to reduce motion, and a sound arriving on its
-          own is movement.
-        </span>
+      />
+      {enabled && (
+        <>
+          <span className="inline-flex items-start gap-2 text-[13px] text-muted">
+            <StatusDot
+              tone={quieted ? "neutral" : suspended ? "warn" : "healthy"}
+              className="mt-[7px]"
+            />
+            {line}
+          </span>
+          {!quieted && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                playDriftChime();
+                const ctx = getChimeContext();
+                if (ctx) setSuspended(ctx.state === "suspended");
+              }}
+            >
+              Play it once
+            </Button>
+          )}
+        </>
       )}
-      {heard && <span className="text-[12.5px] text-faint">That was this.</span>}
-    </span>
+    </div>
   );
 }

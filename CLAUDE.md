@@ -52,6 +52,20 @@ cd addons/truenas && go test ./... && go vet ./...
 
 Scale depth to the task: a one-line typo fix does not need a full spec revision, but any behavioral or contract change does. When in doubt, do more, not less.
 
+## Agent skills
+
+### Issue tracker
+
+Work is tracked in OpenSpec (`openspec/NEXT.md` + `changes/*/tasks.md`), never public GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) as inline tags on `tasks.md` items. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: OpenSpec specs, `docs/adr/`, and the plain-language copy guide. See `docs/agents/domain.md`.
+
 <!-- BEGIN OPENLORE (managed — edits inside this block will be overwritten) -->
 <!-- openlore-fingerprint: 25cdd746ebf39b56 -->
 This project uses OpenLore for persistent architectural memory.

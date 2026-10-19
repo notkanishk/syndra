@@ -1,11 +1,12 @@
 "use client";
 
+import { useBundles } from "@/lib/queries/useBundles";
+import { useUiView } from "@/lib/ui-view";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { RoleRef } from "@/components/names";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
@@ -14,6 +15,7 @@ import { FilterChip } from "@/components/ui/FilterChip";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { Select } from "@/components/ui/Select";
@@ -47,7 +49,6 @@ import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
 
 /** Explicit pagination, never infinite scroll: a queue you can reach the end of. */
-const PAGE = 50;
 
 /**
  * People — the index.
@@ -74,18 +75,24 @@ export default function PeoplePage() {
   // What a bulk pick is FOR, apart from who is listed: "Add people to this
   // role" sent the role as a filter, which listed only the people who already
   // held it. It travels as `give_*` instead, and prefills the dialog.
-  const give = { projectId: params.get("give_project") ?? "", roleKey: params.get("give_role") ?? "" };
+  const give = {
+    projectId: params.get("give_project") ?? "",
+    roleKey: params.get("give_role") ?? "",
+    bundleId: params.get("give_bundle") ?? "",
+  };
 
   // The search box is typed into, so it holds local state and syncs to the URL
   // on a debounce — writing a history entry per keystroke would make the back
   // button useless.
   const [queryDraft, setQueryDraft] = useState(filters.q);
   const debounced = useDebounce(queryDraft, 250);
-  const [limit, setLimit] = useState(PAGE);
+  const paging = usePaging();
+  const limit = paging.limit;
   const [wholeFilter, setWholeFilter] = useState(false);
   const [bulkOp, setBulkOp] = useState<BulkOp | null>(null);
 
   const users = useUsers(filters.q);
+  const bundles = useBundles();
   const projects = useProjects();
   // A role filter is only meaningful inside a project, and membership comes
   // from the role-members endpoint so "who holds this" cannot mean two
@@ -95,11 +102,15 @@ export default function PeoplePage() {
   const setParams = useCallback(
     (next: Partial<PeopleFilters>, extra: Record<string, string> = {}) => {
       const merged = { ...filters, ...next };
-      const giving: Record<string, string> = give.roleKey ? { give_project: give.projectId, give_role: give.roleKey } : {};
+      const giving: Record<string, string> = give.roleKey
+        ? { give_project: give.projectId, give_role: give.roleKey }
+        : give.bundleId
+          ? { give_bundle: give.bundleId }
+          : {};
       const carried = bulkMode ? { bulk: "1", ...giving, ...extra } : extra;
       router.replace(`/users${serializeFilters(merged, carried)}`, { scroll: false });
     },
-    [filters, bulkMode, router, give.projectId, give.roleKey],
+    [filters, bulkMode, router, give.projectId, give.roleKey, give.bundleId],
   );
 
   useEffect(() => {
@@ -115,9 +126,9 @@ export default function PeoplePage() {
   // re-aim the pending action at a different set of people. Drop it, and reset
   // the page window with it.
   useEffect(() => {
-    setLimit(PAGE);
+    paging.back();
     setWholeFilter(false);
-  }, [filterKey]);
+  }, [filterKey, paging.back]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving the mode keeps the selection — an operator who taps Done to read
   // one person's row properly has not changed their mind about the other
@@ -137,6 +148,7 @@ export default function PeoplePage() {
   const visible = rows.slice(0, limit);
   // Selection spans the whole filter, not the rendered page.
   const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
+  const { selfId } = useUiView();
   const expiringSoon = all.filter((entry) => entry.expiring_count > 0).length;
 
   const projectName = useMemo(
@@ -186,7 +198,7 @@ export default function PeoplePage() {
         meta={
           all.length > 0
             ? `${all.length} ${all.length === 1 ? "person" : "people"}${
-                expiringSoon > 0 ? ` · ${expiringSoon} with access expiring inside 30 days` : ""
+                expiringSoon > 0 ? ` · ${expiringSoon} with access ending inside 30 days` : ""
               }`
             : undefined
         }
@@ -208,6 +220,8 @@ export default function PeoplePage() {
         }
         filters={
           <FilterPanel
+            resultCount={rows.length}
+            noun={["person", "people"]}
             activeCount={narrowingCount}
             onClear={() => setParams(EMPTY_FILTERS)}
           >
@@ -255,6 +269,12 @@ export default function PeoplePage() {
         <p className="text-[14px] text-muted">
           Pick who should get <RoleRef projectId={give.projectId} roleKey={give.roleKey} />, then choose
           Give a role. Everyone is listed, including people who already hold it.
+        </p>
+      )}
+      {bulkMode && give.bundleId && (
+        <p className="text-[14px] text-muted">
+          Pick who should get {bundles.data?.find((b) => b.id === give.bundleId)?.name ?? "the bundle"}, then
+          choose Add to a bundle.
         </p>
       )}
 
@@ -350,14 +370,13 @@ export default function PeoplePage() {
             />
           ))}
 
-          {rows.length > visible.length && (
-            <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-              <span className="text-[13.5px] text-faint">{rows.length - visible.length} more</span>
-              <Button onClick={() => setLimit((current) => current + PAGE)}>
-                Load next {Math.min(PAGE, rows.length - visible.length)}
-              </Button>
-            </div>
-          )}
+          <PaginationRow
+            shown={visible.length}
+            total={rows.length}
+            onMore={paging.more}
+            onAll={() => paging.all(rows.length)}
+            onBack={paging.back}
+          />
         </ListStates>
         </div>
       </Card>
@@ -367,6 +386,12 @@ export default function PeoplePage() {
           count={selection.count}
           noun={["person", "people"]}
           scope={scope}
+          // #32: never take access from yourself in bulk, and say so before.
+          composition={
+            selfId && selection.isSelected(selfId)
+              ? "Includes you · you are left out of anything that revokes access"
+              : undefined
+          }
           wholeScope={wholeFilter}
           visibleCount={visible.length}
           onSelectVisibleOnly={() => {
@@ -401,7 +426,7 @@ export default function PeoplePage() {
             Add to a bundle
           </SelectionAction>
           <SelectionAction onClick={() => setBulkOp("extend")}>
-            Extend what expires
+            Extend what ends
           </SelectionAction>
           <SelectionAction tone="danger" onClick={() => setBulkOp("remove_bundle")}>
             Remove from a bundle
@@ -417,7 +442,9 @@ export default function PeoplePage() {
           op={bulkOp}
           userIds={Array.from(selection.selected)}
           scope={scope}
-          initial={give.roleKey ? give : { projectId: filters.project, roleKey: filters.role }}
+          initial={
+            give.roleKey || give.bundleId ? give : { projectId: filters.project, roleKey: filters.role }
+          }
           onClose={() => setBulkOp(null)}
         />
       )}
@@ -523,7 +550,7 @@ function PersonRow({
     // A label rather than a div: the whole row becomes the checkbox's hit area
     // for free, keyboard and screen reader included.
     <label
-      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft/40" : ""}`}
+      className={`${shared} cursor-pointer select-none ${selected ? "bg-accent-soft" : ""}`}
       {...selection.rowProps(entry.user.id)}
     >
       <span className="w-11 desktop:w-[26px]">
@@ -554,7 +581,7 @@ function NeedsAttention({ entry }: { entry: UserListEntry }) {
     const days = daysUntil(entry.soonest_expiry);
     return (
       <span className="text-[13.5px] font-semibold text-warn-text">
-        {entry.expiring_count} expires{" "}
+        {entry.expiring_count} {entry.expiring_count === 1 ? "ends" : "end"}{" "}
         {days === null ? "soon" : days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`}
       </span>
     );

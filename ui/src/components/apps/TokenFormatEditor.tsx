@@ -8,6 +8,7 @@ import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { Notice } from "@/components/ui/Notice";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Segmented, Select } from "@/components/ui/Select";
 import { RowSkeleton, ErrorState } from "@/components/states";
@@ -561,15 +562,17 @@ function TokenKeyInventory({
       </div>
 
       {conflicts.length > 0 && (
-        <div className="warn-note mt-3 px-4 py-3 text-[13.5px] text-warn-text">
-          {conflicts.map((conflict) => (
-            <div key={conflict.claim_key}>
-              <Mono>{conflict.claim_key}</Mono> is used by both {conflict.owner} and{" "}
-              {conflict.other}. A token carries one value per name, so one of these apps is reading
-              the other&rsquo;s roles. Give one of them a different claim name.
-            </div>
-          ))}
-        </div>
+        <Notice tone="warn" title="Two apps share a claim name." className="mt-3">
+          <div className="flex flex-col gap-1">
+            {conflicts.map((conflict) => (
+              <p key={conflict.claim_key}>
+                <Mono>{conflict.claim_key}</Mono> is used by both {conflict.owner} and {conflict.other}. A
+                token carries one value per name, so one of these apps is reading the other&rsquo;s
+                roles. Give one of them a different claim name.
+              </p>
+            ))}
+          </div>
+        </Notice>
       )}
     </div>
   );

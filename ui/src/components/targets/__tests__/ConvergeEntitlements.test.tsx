@@ -108,7 +108,7 @@ describe("converging a cohort", () => {
 
     const body = document.body.textContent ?? "";
     expect(body).not.toMatch(/\bdone\b/i);
-    expect(body).toMatch(/waiting to be sent/i);
+    expect(body).toMatch(/waiting for you to send/i);
   });
 
   // Labelled with the AGE, not merely with the word: "computed against

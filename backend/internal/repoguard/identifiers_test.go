@@ -91,6 +91,8 @@ var permittedDomains = map[string]bool{
 	"zitadel.com": true, "zitadel.cloud": true, "truenas.com": true,
 	"ixsystems.com": true, "golang.org": true, "go.dev": true, "docker.io": true,
 	"docker.com": true, "npmjs.com": true, "bun.sh": true, "nextjs.org": true,
+	// The CDNs a self-contained review page loads its styles and diagrams from.
+	"tailwindcss.com": true, "jsdelivr.net": true,
 	"nodejs.org": true, "letsencrypt.org": true, "ietf.org": true, "rfc-editor.org": true,
 	"apache.org": true, "mozilla.org": true, "w3.org": true, "postgresql.org": true,
 	"redis.io": true, "gnu.org": true, "cloudflare.com": true, "google.com": true,

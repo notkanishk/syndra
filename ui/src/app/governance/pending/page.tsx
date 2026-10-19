@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { Term } from "@/components/ui/Term";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
+import { Unfold } from "@/components/ui/Unfold";
+import { formatClock } from "@/lib/format";
+import { useQueueCleared } from "@/lib/useQueueCleared";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -24,12 +28,14 @@ import {
   usePendingPropagations,
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
+import { Notice } from "@/components/ui/Notice";
 import { ClockTime, Relative } from "@/components/ui/Time";
+import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
 /**
  * S3 · Automation › Pending changes.
  *
- * Changes waiting to be sent to Zitadel or a connected system. The queue is the
+ * Changes waiting for you to send to Zitadel or a connected system. The queue is the
  * safety property, not a defect: a change sitting here is a change that has not
  * happened yet and can still be examined.
  *
@@ -57,7 +63,18 @@ export default function PendingChangesPage() {
   // is what is still outstanding.
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  const groups = useMemo(() => groupByCascade(rows), [rows]);
+  // S5: a row that goes on a later read (cancelled by someone, sent by someone)
+  // fades where it was and closes its gap after, and not under the pointer.
+  const leaving = useLeavingRows(rows, (row) => row.id, !pending.isLoading && !pending.error);
+  const groups = groupByCascade(leaving.rows);
+  // S13: a queue that empties while you watch says so once.
+  const { cleared, beginSend, failedSend } = useQueueCleared(
+    rows,
+    !pending.isLoading && !pending.error,
+  );
+  const [folded, setFolded] = useState(false);
+  if (!cleared && folded) setFolded(false);
+  const sentCount = cleared ? cleared.items.length : rows.length;
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -71,21 +88,28 @@ export default function PendingChangesPage() {
           </>
         }
         actions={
-          <Button
-            variant="accent"
-            disabled={!reachable || rows.length === 0}
-            isPending={drain.isPending}
-            onClick={async () => {
-              setOutcome(null);
-              try {
-                setOutcome(outcomeFromDrain(await drain.mutateAsync()));
-              } catch (error) {
-                setOutcome(outcomeFromError(error));
-              }
-            }}
-          >
-            Send {rows.length} {rows.length === 1 ? "change" : "changes"}
-          </Button>
+          // With nothing left to send it fades out, then goes.
+          cleared && folded ? null : (
+            <span className={cleared ? "tint-out inline-flex" : "inline-flex"} inert={cleared ? true : undefined}>
+              <Button
+                variant="accent"
+                disabled={!reachable || rows.length === 0}
+                isPending={drain.isPending}
+                onClick={async () => {
+                  setOutcome(null);
+                  beginSend(rows.length);
+                  try {
+                    setOutcome(outcomeFromDrain(await drain.mutateAsync()));
+                  } catch (error) {
+                    failedSend();
+                    setOutcome(outcomeFromError(error));
+                  }
+                }}
+              >
+                Send {sentCount} {sentCount === 1 ? "change" : "changes"}
+              </Button>
+            </span>
+          )
         }
       />
 
@@ -103,23 +127,10 @@ export default function PendingChangesPage() {
         colleague — and the point of this copy is that nothing is broken.
       */}
       {!reachable && (
-        <div className="warn-note flex items-start gap-3.5 px-5 py-4">
-          <span
-            aria-hidden
-            className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-warn-soft text-[12px] font-bold text-warn-text"
-          >
-            !
-          </span>
-          <div>
-            <div className="text-[15px] font-semibold text-warn-text">
-              Zitadel is not answering, as of <ClockTime />.
-            </div>
-            <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-              Sending waits until Zitadel answers. Nothing is lost: the changes wait in order, and nothing has
-              reached any system. Send them once Zitadel is back.
-            </p>
-          </div>
-        </div>
+        <Notice tone="warn" live title="Zitadel is not answering.">
+          As of <ClockTime />. Sending waits until Zitadel answers. Nothing is lost: the changes wait in
+          order, and nothing has reached any system. Send them once Zitadel is back.
+        </Notice>
       )}
 
       <Card>
@@ -127,82 +138,168 @@ export default function PendingChangesPage() {
           <span className="w-[150px]">Who</span>
           <span className="flex-1">Change</span>
           <span className="w-[160px]">Caused by</span>
+          <span className="w-[200px]">Why it&rsquo;s waiting</span>
           <span className="w-[78px] text-right">Waiting</span>
         </CardColumns>
 
-        <ListStates
-          isLoading={pending.isLoading}
-          error={pending.error}
-          isEmpty={rows.length === 0}
-          onRetry={() => pending.refetch()}
-          errorTitle="Couldn't load pending changes."
-          skeleton={<RowSkeleton rows={4} label="Loading pending changes" />}
-          empty={
-            <EmptyState
-              title="Nothing is waiting to be sent."
-              guidance="Every change Syndra has decided on has reached the system it was for."
-              resolved
+        {cleared ? (
+          <>
+            <ClearedGroups
+              groups={groupByCascade(cleared.items)}
+              bundles={bundles.data}
+              rules={rules.data}
+              onFolded={() => setFolded(true)}
             />
-          }
-        >
-          {groups.map((group) => (
-            <div key={group.key}>
-              {group.rows.map((row) => (
-                <div
-                  key={row.id}
-                  className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
-                >
-                  <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
-                    <UserName id={row.user_id} />
-                  </span>
-
-                  <span className="w-full text-[14px] tablet:min-w-[220px] tablet:flex-1">
-                    {row.op_type === "apply" ? (
-                      <SystemChange row={row} />
-                    ) : (
-                      <>
-                        <span className="text-muted">{verb(row.op_type)}</span>{" "}
-                        <ProjectName id={row.project_id} /> /{" "}
-                        {(row.role_keys ?? []).map((key) => (
-                          <Mono key={key} className="mr-1.5">
-                            {key}
-                          </Mono>
-                        ))}
-                      </>
-                    )}
-                  </span>
-
-                  <span className="w-full text-[13px] tablet:w-[160px] tablet:shrink-0">
-                    <CausedBy row={row} bundles={bundles.data} rules={rules.data} />
-                  </span>
-
-                  <span className="text-[13px] text-faint tablet:w-[78px] tablet:shrink-0 tablet:text-right">
-                    <Relative iso={row.created_at} />
-                  </span>
-
-                  {row.status === "failed" && (
-                    <div className="w-full text-[13px] text-danger-text [overflow-wrap:anywhere]">
-                      Failed, and Syndra will try again
-                      {row.last_error ? `: ${row.last_error}` : "."}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {group.rows.length > 1 && (
-                <p className="row-divider bg-surface-0 px-5 py-2.5 text-[13.5px] leading-[1.5] text-muted">
-                  These {group.rows.length} changes come from one edit (
-                  <Mono className="text-faint">{shortId(group.key, "c")}</Mono>). They are
-                  sent together or not at all.
-                </p>
-              )}
-            </div>
-          ))}
-        </ListStates>
+            {folded && <EverythingSent mine={cleared.mine} />}
+          </>
+        ) : (
+          <div {...leaving.listProps}>
+            <ListStates
+              isLoading={pending.isLoading}
+              error={pending.error}
+              isEmpty={rows.length === 0}
+              onRetry={() => pending.refetch()}
+              errorTitle="Couldn't load pending changes."
+              skeleton={<RowSkeleton rows={4} label="Loading pending changes" />}
+              empty={
+                <EmptyState
+                  title="Nothing is waiting for you to send."
+                  guidance="Every change Syndra has decided on has reached the system it was for."
+                  resolved
+                />
+              }
+            >
+              <PendingGroups groups={groups} bundles={bundles.data} rules={rules.data} leave={leaving.props} />
+            </ListStates>
+          </div>
+        )}
         <p className="px-5 py-3 text-[13px] text-faint">
           Handles: R_ is an automatic rule, b_ a bundle, c_ one edit&rsquo;s set of changes.
         </p>
       </Card>
+    </div>
+  );
+}
+
+/** The queue's rows, grouped by the edit that produced them. */
+function PendingGroups({
+  groups,
+  bundles,
+  rules,
+  leave,
+}: {
+  groups: CascadeGroup[];
+  bundles?: BundleRow[];
+  rules?: MappingRuleRow[];
+  /** Each row's seat in a read that is taking it away (S5). */
+  leave: (id: string) => LeaveProps;
+}) {
+  // A row on its way out is not one of "these N changes".
+  const waiting = (group: CascadeGroup) => group.rows.filter((row) => !leave(row.id).leaving).length;
+  return (
+    <>
+      {groups.map((group) => (
+        <div key={group.key}>
+          {group.rows.map((row) => (
+            <LeavingRow key={row.id} {...leave(row.id)}>
+            <div
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
+            >
+              <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
+                <UserName id={row.user_id} />
+              </span>
+
+              <span className="w-full text-[14px] tablet:min-w-[220px] tablet:flex-1">
+                {row.op_type === "apply" ? (
+                  <SystemChange row={row} />
+                ) : (
+                  <>
+                    <span className="text-muted">{verb(row.op_type)}</span>{" "}
+                    <ProjectName id={row.project_id} /> /{" "}
+                    {(row.role_keys ?? []).map((key) => (
+                      <Mono key={key} className="mr-1.5">
+                        {key}
+                      </Mono>
+                    ))}
+                  </>
+                )}
+              </span>
+
+              <span className="w-full text-[13px] tablet:w-[160px] tablet:shrink-0">
+                <CausedBy row={row} bundles={bundles} rules={rules} />
+              </span>
+
+              <WhyWaiting row={row} />
+
+              <span className="text-[13px] text-faint tablet:w-[78px] tablet:shrink-0 tablet:text-right">
+                <Relative iso={row.created_at} />
+              </span>
+
+              {row.status === "failed" && (
+                <div className="w-full text-[13px] text-danger-text [overflow-wrap:anywhere]">
+                  Failed, and Syndra will try again
+                  {row.last_error ? `: ${row.last_error}` : "."}
+                </div>
+              )}
+            </div>
+            </LeavingRow>
+          ))}
+
+          {waiting(group) > 1 && (
+            <p className="row-divider bg-surface-0 px-5 py-2.5 text-[13.5px] leading-[1.5] text-muted">
+              These {waiting(group)} changes come from one edit (
+              <Mono className="text-faint">{shortId(group.key, "c")}</Mono>). They are
+              sent together or not at all.
+            </p>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+const STAYING: (id: string) => LeaveProps = () => ({ leaving: false, held: false, onGone: () => {} });
+
+/** What was sent, fading first and then folding shut (S13); `onFolded` says the gap has closed. */
+function ClearedGroups({
+  groups,
+  bundles,
+  rules,
+  onFolded,
+}: {
+  groups: CascadeGroup[];
+  bundles?: BundleRow[];
+  rules?: MappingRuleRow[];
+  onFolded: () => void;
+}) {
+  // Mounted open, then closed: the first frame is the list as it was.
+  const [open, setOpen] = useState(true);
+  useEffect(() => setOpen(false), []);
+  return (
+    <Unfold open={open} onClosed={onFolded}>
+      <PendingGroups groups={groups} bundles={bundles} rules={rules} leave={STAYING} />
+    </Unfold>
+  );
+}
+
+/**
+ * The queue has emptied (S13). One line rises 6px into the list's place; its dot
+ * blooms once only when this operator's send did it. A queue someone else sent
+ * (or that was cancelled away) says the line without the bloom and without a
+ * count or a time it cannot know.
+ */
+function EverythingSent({ mine }: { mine: { count: number; at: string } | null }) {
+  return (
+    <div role="status" className="lift-in flex flex-col justify-center gap-2.5 px-6 py-8">
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden className={`h-2 w-2 flex-none rounded-pill bg-healthy ${mine ? "bloom" : ""}`} />
+        <div className="type-empty-title">Everything has reached Zitadel</div>
+      </div>
+      <p className="max-w-[60ch] text-[14px] text-faint">
+        {mine
+          ? `${mine.count} ${mine.count === 1 ? "change" : "changes"} sent at ${formatClock(mine.at)} · nothing is waiting for you`
+          : "Nothing is waiting for you to send"}
+      </p>
     </div>
   );
 }
@@ -247,6 +344,21 @@ function SystemChange({ row }: { row: PendingPropagationRow }) {
       <span className="text-muted">{targetLabel(row.target ?? "")} account:</span>{" "}
       {row.reason || "brought in line with their roles."}
     </>
+  );
+}
+
+/** Empty when the row carries no reason; warn only for a send that stopped. */
+function WhyWaiting({ row }: { row: PendingPropagationRow }) {
+  const role = (row.role_keys ?? []).map(humanizeKey).join(", ") || "It";
+  const line = waitReasonLine(row.wait_reason, role, row.created_at);
+  return (
+    <span
+      className={`w-full text-[13px] tablet:w-[200px] tablet:shrink-0 ${
+        waitIsChosen(row.wait_reason) ? "text-muted" : "text-warn-text"
+      }`}
+    >
+      {line}
+    </span>
   );
 }
 

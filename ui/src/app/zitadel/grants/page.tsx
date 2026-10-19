@@ -5,16 +5,14 @@ import { useMemo, useState } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { UpstreamShell } from "@/components/upstream/UpstreamShell";
 import { Mono } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ProjectName, UserName } from "@/components/names";
 import { useUpstreamGrants } from "@/lib/queries/useUpstream";
 import { useDebounce } from "@/lib/useDebounce";
-
-const PAGE = 100;
 
 /**
  * Every grant the identity provider holds.
@@ -27,7 +25,8 @@ const PAGE = 100;
 export default function UpstreamGrantsPage() {
   const grants = useUpstreamGrants();
   const [query, setQuery] = useState("");
-  const [limit, setLimit] = useState(PAGE);
+  const paging = usePaging();
+  const limit = paging.limit;
   const search = useDebounce(query, 200).trim().toLowerCase();
 
   const rows = useMemo(() => {
@@ -70,7 +69,7 @@ export default function UpstreamGrantsPage() {
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
-              setLimit(PAGE);
+              paging.back();
             }}
             placeholder="Role key or id"
             aria-label="Filter roles held by role key or id"
@@ -131,19 +130,13 @@ export default function UpstreamGrantsPage() {
             </div>
           ))}
 
-          {rows.length > visible.length && (
-            <div className="row-divider flex items-center gap-4 px-5 py-3">
-              <span className="text-[13.5px] text-faint">
-                {rows.length - visible.length} more of {rows.length}
-              </span>
-              {/* The fourth copy of this pill. Three were found and replaced
-                  by `one-control-surface`; this one was outside the sweep and
-                  had already lost the touch floor. */}
-              <Button size="sm" onClick={() => setLimit((current) => current + PAGE)}>
-                Load next {Math.min(PAGE, rows.length - visible.length)}
-              </Button>
-            </div>
-          )}
+          <PaginationRow
+            shown={visible.length}
+            total={rows.length}
+            onMore={paging.more}
+            onAll={() => paging.all(rows.length)}
+            onBack={paging.back}
+          />
         </ListStates>
       </Card>
     </UpstreamShell>

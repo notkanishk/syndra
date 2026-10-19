@@ -1,14 +1,17 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
+import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns } from "@/components/ui/Card";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterPills } from "@/components/ui/Select";
 import {
   RowCheckbox,
   SelectAllRow,
@@ -48,7 +51,7 @@ const EXTEND_DAYS = 90;
  * point at a destination rather than a tab.
  *
  * Two actions, and they are not symmetrical. **Extend** changes the access.
- * **Let it lapse** changes nothing about the access — it records that somebody
+ * **Let it end** changes nothing about the access — it records that somebody
  * looked and decided, which is the only thing this queue could not previously
  * say. The sweep removes the grant on its date either way.
  *
@@ -62,15 +65,20 @@ const EXTEND_DAYS = 90;
  * person read the row.
  */
 /**
- * The window, from `?within=`: Home's tile counts the next 14 days and links
- * here with it, so the number on the tile is the number of rows. 30 by default.
+ * The one expiring window, from `?within=`: 14 or 30 days, 14 first (A-04 §4,
+ * A-06 §7). Home's tile and the rail open on 14, so the number you tapped is the
+ * number you land on, and Insights' Ending soon uses the same two. Anything else
+ * in the link, 7 or 90 included, is 14.
  */
-function windowDays(raw: string | null): number {
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 1 && n <= 90 ? n : 30;
+const WINDOWS = [14, 30] as const;
+type Window = (typeof WINDOWS)[number];
+
+function windowDays(raw: string | null): Window {
+  return WINDOWS.find((d) => String(d) === raw) ?? WINDOWS[0];
 }
 
 export default function ExpiringAccessPage() {
+  const router = useRouter();
   const within = windowDays(useSearchParams().get("within"));
   const grants = useExpiringGrants(within);
   const rows = useMemo(() => [...(grants.data ?? [])].sort(sortBySoonest), [grants.data]);
@@ -120,6 +128,26 @@ export default function ExpiringAccessPage() {
         }
       />
 
+      {/* A filter, not an action, so FilterPills and not a Segmented. The default
+          window keeps the link clean. */}
+      <FilterBar
+        leading={
+          <FilterPills
+            label="How far ahead"
+            value={String(within)}
+            options={WINDOWS.map((d) => ({ value: String(d), label: `${d} days` }))}
+            onChange={(next) =>
+              router.replace(
+                next === String(WINDOWS[0])
+                  ? "/review/expiring-access"
+                  : `/review/expiring-access?within=${next}`,
+                { scroll: false },
+              )
+            }
+          />
+        }
+      />
+
       <Card>
         <CardColumns>
           {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
@@ -149,11 +177,11 @@ export default function ExpiringAccessPage() {
           error={grants.error}
           isEmpty={rows.length === 0}
           onRetry={() => grants.refetch()}
-          errorTitle="Couldn't load expiring access."
-          skeleton={<RowSkeleton rows={4} label="Loading expiring access" />}
+          errorTitle="Couldn't load access that ends."
+          skeleton={<RowSkeleton rows={4} label="Loading access that ends" />}
           empty={
             <EmptyState
-              title={`Nothing expires in the next ${within} days.`}
+              title={`Nothing ends in the next ${within} days.`}
               guidance="Direct grants appear here a month before they end."
               resolved
             />
@@ -186,7 +214,7 @@ export default function ExpiringAccessPage() {
             <>
               <div className="row-divider bg-tint-1 px-5 py-2.5">
                 <span className="type-label">
-                  Let lapse · {acknowledged.length}{" "}
+                  Left to end · {acknowledged.length}{" "}
                   {acknowledged.length === 1 ? "role" : "roles"}
                 </span>
               </div>
@@ -250,7 +278,7 @@ export default function ExpiringAccessPage() {
           op="extend"
           userIds={selectedUsers}
           grantIds={selectedGrantIds}
-          scope="with access expiring"
+          scope="with access that ends"
           onClose={() => {
             setExtending(false);
             selection.clear();
@@ -263,7 +291,7 @@ export default function ExpiringAccessPage() {
       <div className="flex flex-wrap gap-[18px]">
         <div className="card min-w-[min(320px,100%)] flex-1 px-5 py-4">
           <h2 className="type-card-title mb-2">
-            What &ldquo;Let it lapse&rdquo; does, and what it doesn&rsquo;t
+            What &ldquo;Let it end&rdquo; does, and what it doesn&rsquo;t
           </h2>
           <p className="max-w-[60ch] text-[14px] leading-[1.55] text-muted">
             It records that you read the row and decided. It changes nothing about the access — the
@@ -303,6 +331,9 @@ function ExpiringRow({
   // (user, project, role) and overwrites expires_at, so this renews in place
   // rather than creating a duplicate.
   const extend = useCreateGrant(grant.user_id);
+  // No sheet of its own: a small one holds the step if extending would cancel
+  // a change still waiting for you to send (A-04 §14).
+  const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const clearAck = useClearExpiryAcknowledgement();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Extending again would add another stretch to the same grant.
@@ -321,7 +352,7 @@ function ExpiringRow({
               // is nothing to be ineligible for, and the edge would be noise.
               "border-l-[3px] border-dashed border-line-strong"
             : "border-l-[3px] border-transparent"
-      } ${ack ? "opacity-[.72]" : ""} ${selection.isSelected(grant.id) ? "bg-accent-soft/30" : ""}`}
+      } ${ack ? "opacity-[.72]" : ""} ${selection.isSelected(grant.id) ? "bg-accent-soft" : ""}`}
       {...(ack ? {} : selection.rowProps(grant.id))}
     >
       {selecting && (
@@ -362,7 +393,7 @@ function ExpiringRow({
             <span className="font-semibold text-ink/80">
               <UserName id={ack.by} fallback="somebody no longer listed" />
             </span>{" "}
-            let this lapse on {formatShortDate(ack.at)}
+            let this end on {formatShortDate(ack.at)}
             {ack.note ? ` — ${ack.note}` : ""}
           </span>
         ) : (
@@ -391,13 +422,16 @@ function ExpiringRow({
           disabled={extended}
           onClick={async () => {
             try {
-              const result = await extend.mutateAsync({
-                project_id: grant.project_id,
-                role_key: grant.role_key,
-                reason: "Extended from Expiring access",
-                duration_days: EXTEND_DAYS,
-                extend: true,
-              });
+              const result = await step.run(() =>
+                extend.mutateAsync({
+                  project_id: grant.project_id,
+                  role_key: grant.role_key,
+                  reason: "Extended from Expiring access",
+                  duration_days: EXTEND_DAYS,
+                  extend: true,
+                }),
+              );
+              if (result === KEPT) return;
               setExtended(true);
               // This endpoint enqueues to the outbox in manual mode ("pending")
               // rather than applying inline — see CreateGrantResult. Reporting
@@ -409,9 +443,7 @@ function ExpiringRow({
                 message: waiting
                   ? `Will extend by ${EXTEND_DAYS} days once sent`
                   : `Extended by ${EXTEND_DAYS} days`,
-                detail: waiting
-                  ? "Waiting to be sent — see Pending changes."
-                  : "It leaves this list when the page next refreshes.",
+                detail: waiting ? undefined : "It leaves this list when the page next refreshes.",
               });
             } catch (error) {
               setOutcome(outcomeFromError(error));
@@ -420,6 +452,7 @@ function ExpiringRow({
         >
           Extend {EXTEND_DAYS} days
         </Button>
+        {step.element}
 
         {ack ? (
           <Button
@@ -439,11 +472,11 @@ function ExpiringRow({
               }
             }}
           >
-            Undo letting it lapse
+            Undo letting it end
           </Button>
         ) : (
           <Button variant="ghost" size="sm" onClick={onLetLapse}>
-            Let it lapse
+            Let it end
           </Button>
         )}
       </div>
@@ -485,12 +518,12 @@ function LetItLapseDialog({
   return (
     <Modal open onClose={onClose} busy={acknowledge.isPending} size="md" labelledBy="lapse-title">
       <ModalHeader
-        title="Let this lapse?"
+        title="Let this end?"
         titleId="lapse-title"
         lede={
           <>
             <RoleRef projectId={grant.project_id} roleKey={grant.role_key} /> for{" "}
-            <UserName id={grant.user_id} />, expiring {formatShortDate(expiresAt)}.
+            <UserName id={grant.user_id} />, ending {formatShortDate(expiresAt)}.
           </>
         }
       />
@@ -500,7 +533,7 @@ function LetItLapseDialog({
           <div className="type-label mb-1">What this does</div>
           <ul className="flex flex-col gap-1 text-muted">
             <li>
-              Nothing to the access. It already lapses on {formatShortDate(expiresAt)} and it still
+              Nothing to the access. It already ends on {formatShortDate(expiresAt)} and it still
               will — this records that you looked.
             </li>
             <li>The queue stops asking, and shows your name against the decision.</li>
@@ -549,9 +582,9 @@ function LetItLapseDialog({
                 });
                 setOutcome({
                   kind: "applied",
-                  message: "Recorded — it will lapse on its date",
+                  message: "Recorded — it will end on its date",
                   detail:
-                    "Nothing about the access changed — it still lapses on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
+                    "Nothing about the access changed — it still ends on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
                 });
               } catch (error) {
                 // A 409 here is the reopen rule arriving early: the grant was
@@ -566,11 +599,11 @@ function LetItLapseDialog({
           </Button>
         )}
         <Button
-          variant={succeeded(outcome) ? "accent" : "ghost"}
+          variant={succeeded(outcome) ? "outline" : "ghost"}
           onClick={onClose}
           disabled={acknowledge.isPending}
         >
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
       </ModalFooter>
     </Modal>

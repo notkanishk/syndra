@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -45,6 +47,11 @@ func liveDB(t *testing.T) context.Context {
 		config, err := pgxpool.ParseConfig(dsn)
 		if err != nil {
 			liveErr = err
+			return
+		}
+		// The harness truncates tables: a mistyped URL must never reach a real one.
+		if !strings.HasSuffix(config.ConnConfig.Database, "_test") {
+			liveErr = fmt.Errorf("refusing database %q: SYNDRA_TEST_DATABASE_URL must name a throwaway database ending in _test", config.ConnConfig.Database)
 			return
 		}
 		livePool, liveErr = pgxpool.NewWithConfig(context.Background(), config)

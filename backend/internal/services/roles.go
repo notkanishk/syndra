@@ -143,25 +143,28 @@ type roleMetadata struct {
 	Description string
 }
 
-// GlobalRoleCatalog builds a consolidated view of all roles across all sources.
-func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
-	// Collect roles from all sources into a deduplicated map.
-	type catalogEntry struct {
-		projectID   string
-		roleKey     string
-		displayName string
-		description string
-		group       string
-		clonedFromP string
-		clonedFromR string
-		source      string
-	}
+type catalogEntry struct {
+	projectID   string
+	roleKey     string
+	displayName string
+	description string
+	group       string
+	clonedFromP string
+	clonedFromR string
+	source      string
+}
+
+// collectCatalogEntries is the one definition of "a role the catalogue knows":
+// the union of local, directory and referenced roles, keyed "projectID:roleKey".
+// GlobalRoleCatalog enriches it; Insights reads it bare, so neither can mean a
+// different set by "every role".
+func collectCatalogEntries(ctx context.Context) (map[string]*catalogEntry, []models.ProjectCatalog, error) {
 	seen := make(map[string]*catalogEntry) // key: "projectID:roleKey"
 
 	// 1. Local DB roles (highest priority source label).
 	localRoles, err := svcDbGetAllLocalRoles(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load local roles: %w", err)
+		return nil, nil, fmt.Errorf("load local roles: %w", err)
 	}
 	for _, r := range localRoles {
 		key := r.ProjectID + ":" + r.RoleKey
@@ -180,7 +183,7 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	// ("syndra") ones and from persisted references.
 	dirProjects, err := directory.Default.Projects(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load projects from directory: %w", err)
+		return nil, nil, fmt.Errorf("load projects from directory: %w", err)
 	}
 	dirSource := directory.Default.Tag()
 	for _, proj := range dirProjects {
@@ -200,7 +203,7 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	// 3. Referenced roles from DB (bundle_roles, mapping_rules, direct_role_grants).
 	refs, err := svcDbGetAllReferencedRoleKeys(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("load referenced role keys: %w", err)
+		return nil, nil, fmt.Errorf("load referenced role keys: %w", err)
 	}
 	for _, ref := range refs {
 		key := ref[0] + ":" + ref[1]
@@ -211,6 +214,16 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 				source: "referenced",
 			}
 		}
+	}
+
+	return seen, dirProjects, nil
+}
+
+// GlobalRoleCatalog builds a consolidated view of all roles across all sources.
+func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
+	seen, dirProjects, err := collectCatalogEntries(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// Load usage counts.
@@ -225,6 +238,17 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 	facts, err := svcRoleHolderFacts(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("count holders: %w", err)
+	}
+
+	// Roles that wait for you (N14 B): the catalogue carries the mark, so
+	// every picker and before-line reads it from the one read.
+	waitRows, err := svcListRoleWaits(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load roles that wait: %w", err)
+	}
+	waits := make(map[string]bool, len(waitRows))
+	for _, w := range waitRows {
+		waits[w.ProjectID+":"+w.RoleKey] = true
 	}
 
 	// Pre-index directory project names so building the catalog doesn't fan
@@ -256,6 +280,7 @@ func GlobalRoleCatalog(ctx context.Context) ([]models.CatalogRole, error) {
 			Group:             entry.group,
 			ClonedFromProject: entry.clonedFromP,
 			ClonedFromRole:    entry.clonedFromR,
+			WaitsForSend:      waits[key],
 			BundleCount:       usage.BundleCount,
 			RuleCount:         usage.RuleCount,
 			AssignedUserCount: assignedUsers,

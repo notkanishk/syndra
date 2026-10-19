@@ -601,7 +601,7 @@ function VersionRow({
                     kind: "queued",
                     message: `Rolled back to version ${version.version} — account changes for ${
                       result.queued_convergences
-                    } ${result.queued_convergences === 1 ? "person are" : "people are"} waiting to be sent`,
+                    } ${result.queued_convergences === 1 ? "person are" : "people are"} waiting for you to send`,
                     detail: `Nothing has reached ${targetLabel(target)} yet — send them from Pending changes.`,
                   });
                   // The plan the dialog showed is the one being reported back,

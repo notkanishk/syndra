@@ -153,6 +153,11 @@
   /* settle and arrive share an easing — the same decelerating curve, told
      over a different distance. */
   --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  /* A-05 §2.2: arrive is the same curve as settle, named for its own job so a
+     change to one is a decision rather than an accident. */
+  --ease-arrive: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-breathe: cubic-bezier(0.37, 0, 0.63, 1);
+  --ease-flash: cubic-bezier(0.33, 1, 0.68, 1);
 
   --duration-tint: 120ms;
   --duration-press: 180ms;
@@ -160,6 +165,13 @@
   --duration-arrive: 420ms;
   --duration-flash: 900ms;
   --duration-breathe: 2400ms;
+  /* Scrolling only, on settle's curve: the one glide the page performs. */
+  --duration-glide: 520ms;
+
+  /* Nothing in the page content travels further than this. A phone sheet
+     entering from the screen's edge and a control's own indicator (Segmented's
+     fill, Tabs' underline) are not page content and fall outside it. */
+  --travel-cap: 10px;
 
   /* Rows stagger 40ms apart, and the stagger caps at six: a queue of forty
      must not take two seconds to become readable. */
@@ -191,16 +203,94 @@
     }
   }
 
-  /* Things you opened scale from where you clicked, so the dialog grows into
-     the place it is going to live rather than zooming out of screen centre. */
+  /* Closing is tint, quicker than opening (S1): a thing only fades... */
+  @keyframes fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  /* ...and a dialog's card also sinks 4px as it goes. */
+  @keyframes sink-out {
+    from {
+      opacity: 1;
+      transform: none;
+    }
+    to {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  /* Things you opened scale from where you clicked (rising 8px from 98%), so the
+     dialog grows into the place it is going to live rather than zooming out of screen centre. */
   @keyframes settle-in {
     from {
       opacity: 0;
-      transform: translateY(10px) scale(0.97);
+      transform: translateY(8px) scale(0.98);
     }
     to {
       opacity: 1;
       transform: none;
+    }
+  }
+
+  /* A popover opens on settle, rising 4px and nothing else: it is a small
+     thing next to a trigger, so it must not look like a dialog. */
+  @keyframes popover-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Something went well because of you: it lifts 6px on settle (S6). */
+  @keyframes lift {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* One ring of the dot's own colour opens 9px out from a 6px dot (scale 4
+     is 6px + 2 x 9px) and fades. The shared bloom effect (S4, S6, S13, S17, S18). */
+  @keyframes bloom {
+    from {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(4);
+    }
+  }
+
+  @keyframes unfold {
+    from {
+      grid-template-rows: 0fr;
+    }
+    to {
+      grid-template-rows: 1fr;
+    }
+  }
+
+  @keyframes fold {
+    from {
+      grid-template-rows: 1fr;
+    }
+    to {
+      grid-template-rows: 0fr;
     }
   }
 
@@ -457,13 +547,26 @@
   /* Every interactive element gets a themed focus ring. The default browser
      ring is never acceptable — it vanishes against the dark ground. The
      4px offset is what lets the ring clear a violet button instead of
-     merging with it, and it moves on `press` timing like everything else
-     that answers a keystroke or a click. */
+     merging with it. The ring appears instantly, because a keyboard user is waiting on it, and
+     fades out on tint (A-05 S9): the fade lives on the resting state, so it
+     governs leaving, and the focused state carries no transition. */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex] {
+    outline: 2px solid transparent;
+    outline-offset: 4px;
+    transition: outline-color var(--duration-tint) var(--ease-tint);
+  }
+
   :focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 4px;
     border-radius: 4px;
-    transition: outline-color var(--duration-press) var(--ease-press);
+    transition: none;
   }
 
   ::selection {
@@ -486,6 +589,31 @@
          preference is asking us not to do. */
       animation-delay: 0.01ms !important;
       transition-delay: 0.01ms !important;
+    }
+
+    /* What survives, and why (A-05 §2.8). Glides become jumps, which the rule
+       above already does. The rest answer the person or carry state:
+         press   a 3% scale under the finger; it travels nowhere.
+         flash   colour only; the wash still says "this changed".
+         bloom   goes: it is the one thing that is only movement.
+         breathe rests at full strength rather than pulsing. */
+    .control,
+    .press-scale {
+      transition-duration: var(--duration-press) !important;
+      transition-delay: 0s !important;
+    }
+    .flash {
+      animation-duration: var(--duration-flash) !important;
+      animation-delay: 0s !important;
+    }
+    .bloom::after {
+      animation: none !important;
+      opacity: 0 !important;
+    }
+    .breathe,
+    .skeleton-bar {
+      animation: none !important;
+      opacity: 1 !important;
     }
   }
 }
@@ -631,15 +759,227 @@
   transition-timing-function: var(--ease-settle);
 }
 
-/* Dialogs and popovers: the card rises 10px from 97%, 40ms behind its scrim.
+/* Dialogs: the card rises 8px from 98%, 40ms behind its scrim.
    It never zooms from screen centre — the destination is where the dialog
    will live, so the eye lands there and stays. */
 @utility settle-in {
   animation: settle-in var(--duration-settle) var(--ease-settle) 40ms both;
 }
 
+/* Popovers: opens on settle, rising 4px. No scrim, so no delay. */
+@utility popover-in {
+  animation: popover-in var(--duration-settle) var(--ease-settle) both;
+}
+
+/* A chosen chip tints in and rises 4px (A-06 §5, S15): flash-value's own
+   movement, on tint's duration and curve. */
+@utility chip-in {
+  animation: flash-value var(--duration-tint) var(--ease-tint) both;
+}
+
+/* A result that went well: lifts 6px on settle. Failure never uses this; it
+   appears in place on tint and stays steady. */
+@utility lift-in {
+  animation: lift var(--duration-settle) var(--ease-settle) both;
+}
+
+/* The shared bloom: a 9px ring of the dot's own colour, on flash's duration
+   and curve, once. It is a pseudo-element that inherits the dot's fill, so it
+   needs no colour of its own. Reduced motion removes it (flash survives as
+   colour only). */
+@utility bloom {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    pointer-events: none;
+    animation: bloom var(--duration-flash) var(--ease-flash) 1 both;
+  }
+}
+
+/* S14 · Daylight. For the 300ms after the reader switches theme, every colour
+   crossfades on settle's duration and tint's curve; nothing moves. The class
+   is added and removed by `fadeThemeSwitch` (lib/theme.tsx), never left on, and
+   not added at all under reduced motion. */
+html.theme-fading,
+html.theme-fading *,
+html.theme-fading *::before,
+html.theme-fading *::after {
+  transition-property: background-color, color, border-color, fill, stroke;
+  transition-duration: var(--duration-settle);
+  transition-timing-function: var(--ease-tint);
+}
+
+/* A control: colour answers the pointer on tint, and a press scales it to
+   97% and nothing else (A-05 S8). Buttons, chips, nav items and segments are
+   controls. Rows and cards are NOT: they never scale, and a pressed row
+   darkens one step instead (hover-tint). */
+@utility control {
+  transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow,
+    transform;
+  transition-duration:
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-press);
+  transition-timing-function:
+    var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-tint),
+    var(--ease-tint), var(--ease-tint), var(--ease-press);
+
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* The scrim tints first (S1); the card follows 40ms behind it. */
 @utility settle-scrim {
-  animation: fade var(--duration-settle) var(--ease-tint) both;
+  animation: fade var(--duration-tint) var(--ease-tint) both;
+}
+
+/* Closing (S1): the card fades and sinks 4px on tint, then the scrim follows
+   40ms behind. Worn by the copy Modal leaves behind while it goes. */
+@utility leave-panel {
+  animation: sink-out var(--duration-tint) var(--ease-tint) both;
+}
+@utility leave-scrim {
+  animation: fade-out var(--duration-tint) var(--ease-tint) var(--arrive-step) both;
+}
+
+/* Anything that fades out and nothing else: a popover, a skeleton, a row. */
+@utility tint-out {
+  animation: fade-out var(--duration-tint) var(--ease-tint) both;
+}
+
+/* The selection seat (proposed/SelectionSeat.md): how a choice is marked
+   everywhere. A real input, transparent over a 24px round seat it styles.
+   Chosen fills accent and the mark settles in from 60%; some chosen is the
+   same fill with a dash; locked is grey, ticked, and can't change here. */
+@utility seat {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 24px;
+  height: 24px;
+
+  & > input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  & > span {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 1.5px solid var(--line-strong);
+    color: var(--accent-ink);
+    /* The fill changes on tint; press is the 3% gesture only (A-06 §5). */
+    transition-property: background-color, border-color, transform;
+    transition-duration: var(--duration-tint), var(--duration-tint), var(--duration-press);
+    transition-timing-function: var(--ease-tint), var(--ease-tint), var(--ease-press);
+  }
+  /* The tick settles in from 60%, 40ms behind the fill. */
+  & > span > svg {
+    opacity: 0;
+    transform: scale(0.6);
+    transition-property: opacity, transform;
+    transition-duration: var(--duration-settle);
+    transition-timing-function: var(--ease-settle);
+    transition-delay: 40ms;
+  }
+  /* Only a checkbox is ever "some chosen": a radio group with nothing picked
+     matches :indeterminate too, and would paint every seat chosen. */
+  & > input:checked + span,
+  & > input[type="checkbox"]:indeterminate + span {
+    background-color: var(--accent);
+    border-color: var(--accent);
+  }
+  & > input:checked:not([type="checkbox"]:indeterminate) + span > .seat-mark,
+  & > input[type="checkbox"]:indeterminate + span > .seat-dash {
+    opacity: 1;
+    transform: none;
+  }
+  & > input:active:not(:disabled) + span {
+    transform: scale(0.97);
+  }
+  & > input:focus-visible + span {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 3px;
+  }
+  & > input:disabled {
+    cursor: not-allowed;
+  }
+  & > input:disabled + span {
+    opacity: 0.45;
+  }
+  /* Declared last, at the same specificity as checked and disabled, so a
+     locked seat is grey and full strength rather than violet or faded. */
+  &[data-locked] > input + span {
+    background-color: var(--surface-2);
+    border-color: var(--line-strong);
+    color: var(--faint);
+    opacity: 1;
+  }
+  &[data-locked] > input + span > .seat-mark {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The outcome fading into the slot the button left (Motion 2a): colour and
+   opacity only, so the row's height never changes. */
+@utility tint-in {
+  animation: fade var(--duration-tint) var(--ease-tint) both;
+}
+
+/* settle, pushed (Motion 6a, 8a): a region opens to its height and pushes
+   the page down, its contents fading in one tint (120ms) behind; closing fades first,
+   then the gap closes. Leaving is quicker than arriving. The grid row is what
+   travels, so the height is the content's own and never a guessed max-height.
+   `Unfold` drives the states. */
+@utility unfold {
+  display: grid;
+  grid-template-rows: 1fr;
+
+  > * {
+    min-height: 0;
+  }
+
+  &[data-phase="opening"] {
+    animation: unfold var(--duration-settle) var(--ease-settle) both;
+  }
+  &[data-phase="opening"] > * {
+    overflow: hidden;
+    animation: fade var(--duration-settle) var(--ease-tint) var(--duration-tint) both;
+  }
+  &[data-phase="closing"] {
+    /* Its own keyframes, not `unfold reverse`: reversing also reverses the
+       easing, and the gap would start slow and snap shut. */
+    animation: fold var(--duration-settle) var(--ease-settle) var(--duration-tint) both;
+  }
+  &[data-phase="closing"] > * {
+    overflow: hidden;
+    animation: fade var(--duration-tint) var(--ease-tint) reverse both;
+  }
+}
+
+/* A row that left on a later read (S5): it has already faded, and now its gap
+   closes on settle. The grid row is what shrinks, so the height is the row's
+   own. Worn by `LeavingRow`. */
+@utility close-gap {
+  display: grid;
+  animation: fold var(--duration-settle) var(--ease-settle) var(--duration-tint) both;
+
+  > * {
+    min-height: 0;
+    overflow: hidden;
+  }
 }
 
 /* arrive · 420ms — first paint of a screen or a list. Rows rise 8px in
@@ -653,8 +993,15 @@
  * seconds to become readable, so the sixth row and everything after it arrive
  * together — the whole list is resolved inside 620ms however long it is. */
 @utility arrive-list {
+  /* Plays on the list's first paint only. `ArriveList` sets data-settled once
+     the stagger has run, and from then on a child that mounts (a refresh, a
+     filter, a search) simply appears: rows that stay hold still (A-05 §2.10). */
+  &[data-settled] > * {
+    animation: none;
+  }
+
   > * {
-    animation: arrive var(--duration-arrive) var(--ease-settle) both;
+    animation: arrive var(--duration-arrive) var(--ease-arrive) both;
     animation-delay: calc(var(--arrive-cap) * var(--arrive-step));
   }
 
@@ -679,7 +1026,7 @@
    load: a page that flashes everything on arrival has told you nothing about
    what moved. */
 @utility flash {
-  animation: flash var(--duration-flash) ease-out 1;
+  animation: flash var(--duration-flash) var(--ease-flash) 1;
 }
 
 @utility flash-value {
@@ -689,7 +1036,7 @@
 /* breathe · 2.4s — the only licensed loop, and it means "still happening".
    Degraded mode and skeletons, nothing else. */
 @utility breathe {
-  animation: breathe var(--duration-breathe) ease-in-out infinite alternate;
+  animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
 }
 
 /* ── The mark ─────────────────────────────────────────────────────────────
@@ -825,6 +1172,10 @@
   &:hover {
     background-color: var(--hover);
   }
+  /* A pressed row darkens one step and never scales (A-05 S8). */
+  &:active {
+    background-color: var(--surface-2);
+  }
 }
 
 /* ── Skeletons ────────────────────────────────────────────────────────────
@@ -836,7 +1187,7 @@
   border-radius: var(--radius-pill);
   /* One of the product's two licensed loops. It says "still loading", and it
      stops the moment the row it stands in becomes real. */
-  animation: breathe var(--duration-breathe) ease-in-out infinite alternate;
+  animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
 }
 
 /* ── Avatar ───────────────────────────────────────────────────────────────

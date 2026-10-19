@@ -12,6 +12,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterPills, Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
@@ -41,7 +42,7 @@ import {
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { Relative } from "@/components/ui/Time";
-import { formatLongDate, formatRelative, humanizeKey } from "@/lib/format";
+import { formatShortDate, formatRelative, humanizeKey } from "@/lib/format";
 import {
   AGE_LABELS,
   EMPTY_DRIFT_FILTERS,
@@ -64,8 +65,6 @@ import {
 type Tab = "triage" | "reconciliation";
 type Resolution = "attribute" | "revoke" | "external";
 
-/** Explicit pagination. The queue must have a visible end. */
-const PAGE = 12;
 
 /**
  * S6 · Review › Unexplained access — the highest-stakes screen in the product.
@@ -124,7 +123,7 @@ export function UnexplainedAccess() {
     null,
   );
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [limit, setLimit] = useState(PAGE);
+  const paging = usePaging();
   const [bulkOp, setBulkOp] = useState<"adopt" | "external" | null>(null);
 
   // What the request returned, before this page's own three filters — the
@@ -156,7 +155,7 @@ export function UnexplainedAccess() {
     [returned, filters],
   );
 
-  const visible = items.slice(0, limit);
+  const visible = items.slice(0, paging.limit);
   // Selection spans the whole queue, not the rendered page: a triage backlog is
   // exactly the case where paging four times before you can act is the tedium
   // worth removing.
@@ -281,6 +280,8 @@ export function UnexplainedAccess() {
         <span className="flex-1" />
         {tab === "triage" && (
           <FilterPanel
+            resultCount={items.length}
+            noun={["finding", "findings"]}
             activeCount={activeFilterCount}
             onClear={() => setFilters(EMPTY_DRIFT_FILTERS)}
           >
@@ -444,21 +445,13 @@ export function UnexplainedAccess() {
                 />
               ))}
 
-              {items.length > visible.length && (
-                <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-                  <span className="text-[13.5px] text-faint">
-                    {items.length - visible.length} more
-                  </span>
-                  {/* `Button`, not a hand-rolled pill. This was a `<button>`
-                      carrying a copy of the outline variant's classes, and the
-                      copy had already drifted: it pressed with `motion-tint`
-                      instead of `motion-press press-scale`, and sat a pixel
-                      short of every other control on the page. */}
-                  <Button onClick={() => setLimit(items.length)}>
-                    Show all {items.length}
-                  </Button>
-                </div>
-              )}
+              <PaginationRow
+                shown={visible.length}
+                total={items.length}
+                onMore={paging.more}
+                onAll={() => paging.all(items.length)}
+                onBack={paging.back}
+              />
             </ListStates>
             </div>
           </Card>
@@ -495,22 +488,13 @@ export function UnexplainedAccess() {
             who cannot find bulk revoke should learn it was a decision rather
             than assume the feature is broken.
           */}
-          <div className="danger-note flex items-start gap-3.5 px-[18px] py-4">
-            <span
-              aria-hidden
-              className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-danger-soft text-[12px] font-bold text-danger-text"
-            >
-              !
-            </span>
-            <p className="max-w-[92ch] text-[14px] leading-[1.55] text-muted">
-              <strong className="font-semibold text-ink">
-                You can adopt several rows at once, or mark several as owned elsewhere. Revoking
-                is always one row at a time.
-              </strong>{" "}
-              Revoking ends real access on real machines, and each revocation deserves its own
-              look.
-            </p>
-          </div>
+          <p className="max-w-[92ch] text-[14px] leading-[1.55] text-muted">
+            <strong className="font-semibold text-ink">
+              You can adopt several rows at once, or mark several as owned elsewhere. Revoking is
+              always one row at a time.
+            </strong>{" "}
+            Revoking ends real access on real machines, and each revocation deserves its own look.
+          </p>
         </>
       ) : (
         <Reconciliation />
@@ -565,7 +549,7 @@ function TriageRow({
     <div className={leading ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}>
       <div
         className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
-          selection.isSelected(item.id) ? "bg-accent-soft/30" : ""
+          selection.isSelected(item.id) ? "bg-accent-soft" : ""
         }`}
         {...selection.rowProps(item.id)}
       >
@@ -700,13 +684,13 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
           <dt className="text-faint">Zitadel id</dt>
           <dd className="truncate">{item.zitadel_grant_id || "—"}</dd>
           <dt className="text-faint">Created</dt>
-          <dd>{item.upstream_created_at ? formatLongDate(item.upstream_created_at) : "unknown"}</dd>
+          <dd>{item.upstream_created_at ? formatShortDate(item.upstream_created_at) : "unknown"}</dd>
           <dt className="text-faint">Made by</dt>
           <dd className="truncate">
             {item.upstream_actor ? <UserName id={item.upstream_actor} /> : "unknown"}
           </dd>
           <dt className="text-faint">Last seen</dt>
-          <dd>{item.last_seen_at ? formatLongDate(item.last_seen_at) : "—"}</dd>
+          <dd>{item.last_seen_at ? formatShortDate(item.last_seen_at) : "—"}</dd>
         </dl>
       </div>
     </div>
@@ -746,7 +730,7 @@ function ResolutionDialog({
   const copy = {
     attribute: {
       title: "Adopt this access in Syndra?",
-      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, expire or revoke it like any other access.",
+      lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, end or revoke it like any other access.",
       confirm: "Adopt in Syndra",
       variant: "accent" as const,
     },
@@ -814,11 +798,11 @@ function ResolutionDialog({
             cursor to. `order-2` puts it back on the right, where the confirm
             action has always sat. */}
         <Button
-          variant={succeeded(outcome) ? "accent" : "outline"}
+          variant={succeeded(outcome) ? "outline" : "ghost"}
           className="order-2"
           onClick={onClose}
         >
-          {succeeded(outcome) ? "Done" : "Cancel"}
+          {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
         {/* This is the highest-stakes revoke in the product, and it stayed
             armed after it ran: a second click on the same "Revoke access"
@@ -845,7 +829,7 @@ function ResolutionDialog({
                         kind: "queued",
                         message: "Revocation recorded",
                         detail:
-                          "Waiting to be sent to Zitadel; revocations send on their own, every few minutes. Until then the person still has the access.",
+                          "Not sent to Zitadel yet; revocations send on their own, every few minutes. Until then the person still has the access.",
                       }
                     : {
                         kind: "applied",
@@ -975,30 +959,30 @@ function explainDrift(item: DriftTriageItem): string {
       const who = p.granted_by ? ` by ${p.granted_by}` : "";
       const why = p.reason ? ` — ${p.reason}` : "";
       const held = p.last_observed_at
-        ? ` Zitadel was still holding it on ${formatLongDate(p.last_observed_at)}.`
+        ? ` Zitadel was still holding it on ${formatShortDate(p.last_observed_at)}.`
         : "";
       const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
-      return `Granted${who}${why}. Syndra applied it on ${formatLongDate(
+      return `Granted${who}${why}. Syndra applied it on ${formatShortDate(
         p.applied_at,
       )} and Zitadel accepted it.${held} It is not there now, so somebody removed it.${removedBy}`;
     }
     if (p?.last_observed_at) {
       const who = p.granted_by ? ` by ${p.granted_by}` : "";
-      const when = p.granted_at ? ` on ${formatLongDate(p.granted_at)}` : "";
+      const when = p.granted_at ? ` on ${formatShortDate(p.granted_at)}` : "";
       const why = p.reason ? ` — ${p.reason}` : "";
       const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
-      return `Granted${who}${when}${why}. Zitadel was still holding it on ${formatLongDate(
+      return `Granted${who}${when}${why}. Zitadel was still holding it on ${formatShortDate(
         p.last_observed_at,
       )} and does not now, so somebody removed it there.${removedBy}`;
     }
     if (p?.granted_at) {
-      return `Granted${p.granted_by ? ` by ${p.granted_by}` : ""} on ${formatLongDate(
+      return `Granted${p.granted_by ? ` by ${p.granted_by}` : ""} on ${formatShortDate(
         p.granted_at,
       )}. Zitadel has never been seen holding it, so the change most likely never went through. Check Pending changes.`;
     }
     return "Syndra expects this access but Zitadel does not have it, and there is no record of it ever being held there.";
   }
-  const when = item.upstream_created_at ? ` on ${formatLongDate(item.upstream_created_at)}` : "";
+  const when = item.upstream_created_at ? ` on ${formatShortDate(item.upstream_created_at)}` : "";
   const who = item.upstream_actor ? ` by ${item.upstream_actor}` : "";
   if (when || who) {
     return `Created in Zitadel${when}${who}. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.`;

@@ -31,7 +31,9 @@ func stubDrainDeps(t *testing.T) {
 		swap(&grantIndexHasRole, func(context.Context, string, string, string) (bool, error) { return false, nil }),
 		// One seam for "what does Zitadel hold for this pair". Empty id means no
 		// grant yet, which is what a drain test that has not said otherwise means.
-		swap(&liveUserGrant, func(context.Context, string, string) (string, map[string]bool, error) { return "", map[string]bool{}, nil }),
+		swap(&liveUserGrant, func(context.Context, string, string) (string, map[string]bool, error) {
+			return "", map[string]bool{}, nil
+		}),
 		swap(&pruneTerminal, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&prunePlans, func(context.Context, int) (int64, error) { return 0, nil }),
 		swap(&awaitingDispatch, func(context.Context, string) ([]string, error) { return nil, nil }),
@@ -280,7 +282,9 @@ func TestDrain_RevokeShortCircuitsWhenAbsent(t *testing.T) {
 		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// Live grants don't contain role "r" → nothing to revoke → applied without a call.
-	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{}, nil
+	}
 	var removeCalled bool
 	zitadelRemoveUserGrant = func(context.Context, string, string) error { removeCalled = true; return nil }
 	var appliedID string
@@ -538,7 +542,9 @@ func TestDrain_RevokeReconcilesLedgerOnApplied(t *testing.T) {
 	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "direct"}}, nil
 	}
-	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{"r": true}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil
+	}
 	var gotID string
 	reconcileLedger = func(_ context.Context, outboxID string) error {
 		gotID = outboxID
@@ -570,7 +576,9 @@ func TestDrain_CascadeRevokeReconcilesScopedToItsOwnSource(t *testing.T) {
 	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv-b", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1", Source: "bundle", SourceRef: "b1"}}, nil
 	}
-	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{"r": true}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil
+	}
 	var gotID string
 	reconcileLedger = func(_ context.Context, outboxID string) error {
 		gotID = outboxID
@@ -592,7 +600,9 @@ func TestDrain_RevokeShortCircuitAlsoReconcilesLedger(t *testing.T) {
 		return []models.PendingPropagation{{ID: "rv2", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
 	// Already absent in Zitadel → short-circuit. The stale ledger row must still go.
-	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{}, nil
+	}
 	var reconciled bool
 	reconcileLedger = func(context.Context, string) error { reconciled = true; return nil }
 
@@ -623,7 +633,9 @@ func TestDrain_LedgerReconcileFailureLeavesRowForRetry(t *testing.T) {
 	claimPending = func(context.Context, string, int) ([]models.PendingPropagation, error) {
 		return []models.PendingPropagation{{ID: "rv3", OpType: "revoke", UserID: "u", ProjectID: "p", RoleKeys: []string{"r"}, ZitadelGrantID: "g1"}}, nil
 	}
-	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) { return "g1", map[string]bool{"r": true}, nil }
+	liveUserGrant = func(context.Context, string, string) (string, map[string]bool, error) {
+		return "g1", map[string]bool{"r": true}, nil
+	}
 	reconcileLedger = func(context.Context, string) error {
 		return errors.New("db unavailable")
 	}

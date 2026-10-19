@@ -14,6 +14,10 @@ export interface MappingRuleRow {
   /** How many people hold the input role — i.e. how many this rule acts on. */
   holder_count: number;
   created_at: string;
+  /** Retired: no longer applied, kept in the history. Only the retired list carries it. */
+  retired_at?: string | null;
+  /** Who retired it (a person's id, or "system"). */
+  retired_by?: string;
 }
 
 export interface CreateMappingRuleInput {
@@ -43,6 +47,18 @@ export function useMappingRules() {
       const data = await request<unknown>("/rules/mapping");
       return Array.isArray(data) ? (data as MappingRuleRow[]) : [];
     },
+  });
+}
+
+/** The retired rules, most recent first. Read-only history. */
+export function useRetiredMappingRules(enabled = true) {
+  return useQuery({
+    queryKey: ["mapping-rules", "retired"] as const,
+    queryFn: async (): Promise<MappingRuleRow[]> => {
+      const data = await request<unknown>("/rules/mapping?retired=true");
+      return Array.isArray(data) ? (data as MappingRuleRow[]) : [];
+    },
+    enabled,
   });
 }
 
@@ -110,25 +126,6 @@ export function useDeleteMappingRule() {
       qc.invalidateQueries({ queryKey: KEYS.list });
       qc.invalidateQueries({ queryKey: ["users"] });
       qc.invalidateQueries({ queryKey: ["governance"] });
-    },
-  });
-}
-
-/**
- * Change when a rule's writes reach the identity provider. Uses the bulk
- * endpoint with a single id — there is no per-rule route, and inventing one
- * for a set of size one would be a second way to do the same thing.
- */
-export function useSetRuleConfirmationMode() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, mode }: { id: string; mode: "auto" | "manual" }) =>
-      request("/policies/confirmation-mode", {
-        method: "POST",
-        body: { kind: "rule", ids: [id], mode },
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: KEYS.list });
     },
   });
 }

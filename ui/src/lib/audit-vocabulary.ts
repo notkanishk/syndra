@@ -39,7 +39,7 @@ export const AUDIT_ACTIONS: Record<
   // The record itself was deleted by hand, as opposed to a revoke that a rule,
   // an expiry or a review set off.
   "direct_grant.removed": { verb: "Revoked direct access by hand", template: "Revoked {}'s direct access by hand", passive: "Their direct access was revoked by hand", destructive: true },
-  "direct_grant.revoked_by_expiry": { verb: "Ended access on its expiry date", template: "Ended {}'s access on its expiry date", passive: "Their access ended on its expiry date", destructive: true },
+  "direct_grant.revoked_by_expiry": { verb: "Ended access on its end date", template: "Ended {}'s access on its end date", passive: "Their access ended on its end date", destructive: true },
   "bundle.created": { verb: "Created a bundle", template: "Created the {} bundle" },
   "bundle.assigned": { verb: "Gave somebody a bundle", template: "Gave {} a bundle", passive: "Given a bundle" },
   "bundle.unassigned": { verb: "Removed somebody from a bundle", template: "Removed {} from a bundle", passive: "Removed from a bundle", destructive: true },
@@ -52,15 +52,29 @@ export const AUDIT_ACTIONS: Record<
   "bundle.updated": { verb: "Changed a bundle's name or description" },
   // Same word the console puts on the button. An operator looking for what they just did should
   // find it under the verb they read.
+  // `bundle.deleted` is the entry from before Retire kept its history (19 Oct 2026): those rows
+  // are still in the log, and now say what happened to the bundle in the same words.
   "bundle.deleted": { verb: "Retired a bundle", destructive: true },
+  "bundle.retired": { verb: "Retired a bundle", template: "Retired the {} bundle", destructive: true },
+  "bundle.draft_discarded": { verb: "Discarded a bundle's unpublished changes", template: "Discarded the unpublished changes to the {} bundle" },
+  "bundle.include_set": { verb: "Included a bundle in another", template: "Changed what the {} bundle includes" },
+  "bundle.include_removed": { verb: "Took a bundle out of another", template: "Took a bundle out of the {} bundle" },
   "bundle.version_published": { verb: "Published a bundle version", template: "Published a version of the {} bundle" },
   "bundle.holder_moved": { verb: "Moved somebody to a different bundle version", template: "Moved {} to a different bundle version", passive: "Moved to a different bundle version" },
   welcome_bundle_assigned: { verb: "Gave a new member the default bundle", template: "Gave {} the default bundle, as a new member", passive: "Given the default bundle, as a new member" },
   "mapping_rule.created": { verb: "Created an automatic rule" },
   "mapping_rule.updated": { verb: "Changed an automatic rule" },
+  // `mapping_rule.deleted` is the entry from before Retire kept its history: those rows stay.
   "mapping_rule.deleted": { verb: "Deleted an automatic rule", destructive: true },
+  "mapping_rule.retired": { verb: "Retired an automatic rule", destructive: true },
   "role.created": { verb: "Created a role" },
   "access_request.created": { verb: "Asked for access" },
+  // Roles that wait for you (N14 B): settings, not access, so no passive.
+  "role.waits_marked": { verb: "Marked a role to wait for you" },
+  "role.waits_unmarked": { verb: "Stopped a role waiting for you" },
+  // Term dates (A-06 §7): one makerspace-wide setting.
+  "terms.updated": { verb: "Changed the term dates" },
+  "confirmation.switched_to_roles": { verb: "Switched to roles that wait" },
   "access_request.approved": { verb: "Approved a request", template: "Approved {}'s request", passive: "Their request was approved" },
   // Allowed and said (owner, 15 Oct): an operator approving their own request.
   "access_request.self_approved": { verb: "Approved their own request", passive: "They approved their own request" },
@@ -74,11 +88,15 @@ export const AUDIT_ACTIONS: Record<
     verb: "Closed a copy of a waiting request",
     passive: "A copy of their waiting request was closed",
   },
-  // An action cancelled a change still waiting to be sent, after the operator
+  // An action cancelled a change still waiting for you to send, after the operator
   // was shown it (owner, 15 Oct: never invisibly). resource_id is the outbox row.
+  // Worded the operator's way (A-04 §14.8). The row carries who caused it, the person
+  // and the outbox row, but not what the change was, who queued it or why: those are
+  // on the superseded outbox row, which no read returns yet.
   "propagation.cancelled_unsent": {
-    verb: "Cancelled a change that was waiting to be sent",
-    passive: "A change waiting to be sent for them was cancelled",
+    verb: "Cancelled a change that was waiting for you to send",
+    template: "Cancelled a change that was waiting for you to send, for {}",
+    passive: "A change that was waiting for you to send was cancelled",
   },
   "access_request.closed_as_given": {
     verb: "Closed a request for a role given another way",
@@ -90,8 +108,8 @@ export const AUDIT_ACTIONS: Record<
   },
   // Not destructive: the access was already going to lapse. What was recorded is that somebody
   // looked, which is the opposite of something being taken away unnoticed.
-  "grant_expiry.acknowledged": { verb: "Recorded that expiring access should be left to lapse" },
-  "grant_expiry.acknowledgement_cleared": { verb: "Put expiring access back in the undecided list" },
+  "grant_expiry.acknowledged": { verb: "Recorded that access that ends should be left to end" },
+  "grant_expiry.acknowledgement_cleared": { verb: "Put access that ends back in the undecided list" },
   "claim_profile.updated": { verb: "Changed a project's token format" },
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
@@ -100,7 +118,7 @@ export const AUDIT_ACTIONS: Record<
 /**
  * The two families the backend builds by concatenation, with the connected
  * system's name in the middle: a change to somebody's account on TrueNAS
- * recorded and waiting to be sent, and a hold that lifted itself on its date.
+ * recorded and waiting for you to send, and a hold that lifted itself on its date.
  * Neither can be a static key above, so they are matched by shape.
  */
 const ACCOUNT_CHANGE = /^entitlement\.([a-z0-9_-]+)\.enqueued$/;
@@ -121,7 +139,7 @@ export function describeAction(
   const account = action.match(ACCOUNT_CHANGE);
   if (account) {
     return {
-      verb: `Recorded a change to their ${targetLabel(account[1])} account, waiting to be sent`,
+      verb: `Recorded a change to their ${targetLabel(account[1])} account, waiting for makerspace staff to send it`,
       destructive: false,
     };
   }
@@ -179,8 +197,8 @@ export function shortId(id: string | undefined, prefix: string): string {
  * What kind of thing `entry.target_id` names, so the audit row asks the right
  * resolver for it.
  *
- * `target_id` is not always a person: `bundle.role_added`/`role_removed`
- * record the bundle itself there (see db.CascadeAudit), and a raw bundle uuid
+ * `target_id` is not always a person: `bundle.role_added`/`role_removed`/
+ * `draft_discarded` record the bundle itself there (see db.CascadeAudit), and a raw bundle uuid
  * handed to the person resolver renders as "Unknown account <uuid>" — a
  * confident lie about an id that was never a person's in the first place.
  * `mapping_rule.*` writes no target today, but is matched here too so that
@@ -188,7 +206,14 @@ export function shortId(id: string | undefined, prefix: string): string {
  * resolver here has ever been asked to explain.
  */
 export function targetKind(action: string): "user" | "bundle" | "rule" {
-  if (action === "bundle.role_added" || action === "bundle.role_removed") return "bundle";
+  if (
+    action === "bundle.role_added" ||
+    action === "bundle.role_removed" ||
+    action === "bundle.draft_discarded" ||
+    action === "bundle.include_set" ||
+    action === "bundle.include_removed"
+  )
+    return "bundle";
   if (action.startsWith("mapping_rule.")) return "rule";
   return "user";
 }

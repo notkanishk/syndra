@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { StatCard } from "@/components/ui/StatCard";
@@ -25,7 +26,7 @@ import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/Projec
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
-import { formatBytes, formatRelative } from "@/lib/format";
+import { formatBytes, formatRelative, personLine } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
@@ -435,7 +436,7 @@ function ReconcileControl({ target }: { target: string }) {
     <Card>
       <CardHeader
         title="Check for differences"
-        note={`Compares ${name} with what Syndra expects and records any fixes as changes waiting to be sent. Nothing is applied until somebody sends them from Pending changes.`}
+        note={`Compares ${name} with what Syndra expects and records any fixes as changes waiting for you to send. Nothing is applied until somebody sends them from Pending changes.`}
       />
       <CardRow>
         <div className="flex-1 text-[14.5px] text-muted">
@@ -448,7 +449,7 @@ function ReconcileControl({ target }: { target: string }) {
               again once it is reachable.
             </span>
           ) : (
-            `${result.bound} accounts managed · ${result.queued} fixes waiting to be sent · ${result.stale?.length ?? 0} accounts missing from ${name}`
+            `${result.bound} accounts managed · ${result.queued} fixes waiting for you to send · ${result.stale?.length ?? 0} accounts missing from ${name}`
           )}
         </div>
         <Button
@@ -619,14 +620,11 @@ function StatusVerdict({
 
   if (transportError || health?.status === "cannot_connect") {
     return (
-      <div className="danger-note px-5 py-4">
-        <div className="text-[15px] font-semibold text-danger-text">Cannot connect.</div>
-        <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-          Syndra cannot read the key it uses to talk to {name}, so it cannot make any request.
-          This is a problem on <strong className="font-semibold">the Syndra server</strong>, not
-          on {name}{transportError ? `: ${transportError}` : "."}
-        </p>
-      </div>
+      <Notice tone="danger" blocking title="Cannot connect.">
+        Syndra cannot read the key it uses to talk to {name}, so it cannot make any request. This is
+        a problem on <strong className="font-semibold">the Syndra server</strong>, not on {name}
+        {transportError ? `: ${transportError}` : "."}
+      </Notice>
     );
   }
 
@@ -635,16 +633,19 @@ function StatusVerdict({
   if (health?.status === "offline" || health?.status === "waiting_to_retry") {
     const offline = health.status === "offline";
     return (
-      <div className="warn-note px-5 py-4">
-        <div className="flex flex-wrap items-center gap-2.5 text-[15px] font-semibold text-warn-text">
-          {offline ? `${name} isn't answering.` : `Syndra is waiting before it calls ${name} again.`}
-          {offline && <CheckPips recent={recent} />}
-        </div>
-        <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-          {reading.sentence} {offline && reading.look}
-        </p>
+      <Notice
+        tone="warn"
+        live={offline}
+        title={offline ? `${name} isn't answering.` : `Syndra is waiting before it calls ${name} again.`}
+      >
+        {reading.sentence} {offline && reading.look}
+        {offline && (
+          <span className="mt-2 flex flex-wrap items-center gap-2.5">
+            <CheckPips recent={recent} />
+          </span>
+        )}
         {!health.reachable && <LastKnown name={name} readAt={health.snapshot_taken_at} />}
-      </div>
+      </Notice>
     );
   }
 
@@ -1083,7 +1084,7 @@ function ResolveConflictDialog({
             The other person stops holding this account in Syndra, at once and without being
             told. Their data on {name} is untouched — this changes who Syndra says it belongs
             to, which is what every later action on it goes by. Account fixes for both people
-            are recorded as changes waiting to be sent, because the change that caused this
+            are recorded as changes waiting for you to send, because the change that caused this
             gave one person the other&rsquo;s settings.
           </p>
         </div>
@@ -1524,7 +1525,7 @@ function AdoptPanel({
               {matches.map(({ user }) => {
                 const already = has.get(user.id);
                 const on = chosen?.id === user.id;
-                const sub = [user.title, user.team].filter(Boolean).join(" · ");
+                const sub = personLine(user);
                 return (
                   <button
                     key={user.id}

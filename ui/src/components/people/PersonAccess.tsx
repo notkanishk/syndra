@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import {
   AccessSourceList,
   NotSentYet,
+  givenAt,
   nothingSentYet,
   orderedSources,
   sourceQualifier,
@@ -27,13 +28,15 @@ import { Card } from "@/components/ui/Card";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
+import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Withheld } from "@/components/ui/Withheld";
+import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { daysUntil, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, formatAgoShort, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
 type Tab = "access" | "requests" | "activity";
@@ -297,26 +300,19 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 onClick={() => setBundlesOpen(true)}
                 className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6"
               >
-                Manage bundles →
+                Manage bundles
               </button>
             )}
           </div>
 
           {multiSource && (
-            <div className="accent-note flex items-start gap-3 px-5 py-4">
-              <span
-                aria-hidden
-                className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-accent-soft text-[12px] font-bold text-accent-text"
-              >
-                i
-              </span>
-              <p className="text-[14.5px] leading-[1.55] text-ink/80">
-                <strong className="font-semibold text-ink">
-                  {multiSource.projectName} / {multiSource.roleKey} is held twice
-                </strong>{" "}
-                — {multiSource.explanation}. Removing one would not remove this role.
-              </p>
-            </div>
+            // An explanation, so a caption under the heading and not a box (A-04 §7.1a).
+            <p className="text-[14px] leading-[1.55] text-muted">
+              <strong className="font-semibold text-ink">
+                {multiSource.projectName} / {multiSource.roleKey} is held twice
+              </strong>{" "}
+              — {multiSource.explanation}. Removing one would not remove this role.
+            </p>
           )}
 
           {/*
@@ -679,7 +675,7 @@ function RoleGroup({
 }: {
   // "Given" (source_roles), not "Granted": the per-row state below is what
   // carries the truth about whether it landed. A hardcoded "Granted" sitting
-  // above a row that says "Waiting to be sent" contradicted it directly.
+  // above a row that says "Waiting for you to send" contradicted it directly.
   label: "Given" | "Automatic";
   /** Whether Zitadel could be asked at all, and what it said. */
   confirmation: Confirmation;
@@ -696,7 +692,10 @@ function RoleGroup({
   onRemove: (removal: Removal) => void;
   onReveal: (panelId: string) => void;
 }) {
+  const catalog = useGlobalRoleCatalog();
   if (roles.length === 0) return null;
+  const waitsFor = (key: string) =>
+    catalog.data?.some((r) => r.project_id === projectId && r.role_key === key && r.waits_for_send);
 
   return (
     <>
@@ -727,6 +726,7 @@ function RoleGroup({
           >
             <div className="w-[230px] shrink-0 text-[15px] font-semibold">
               {humanizeKey(role.role_key)}
+              {waitsFor(role.role_key) && <WaitsMark className="ml-2" />}
               {/* The raw key is an operator's handle for this role — a member
                   reading their own access has no use for it, and MemberAccess's
                   whole premise is that this screen carries no role keys. */}
@@ -744,7 +744,12 @@ function RoleGroup({
 
             <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]">
               {waiting ? (
-                <NotSentYet />
+                <>
+                  {givenAt(role.reasons) && (
+                    <span className="text-muted">Given {formatAgoShort(givenAt(role.reasons))}</span>
+                  )}
+                  <NotSentYet />
+                </>
               ) : standing === false ? (
                 // Recorded here, absent there, and nothing queued to carry it.
                 // This is the state the whole page exists to make visible: the
@@ -779,7 +784,7 @@ function RoleGroup({
                   </span>
                   {expires ? (
                     <span className="font-semibold text-warn-text">
-                      Expires {formatShortDate(expires)}
+                      Ends {formatShortDate(expires)}
                       {remaining !== null && remaining >= 0 ? ` · ${remaining} days` : ""}
                     </span>
                   ) : sources.length > 1 ? (
@@ -787,7 +792,7 @@ function RoleGroup({
                   ) : strongest?.kind === "mapping" ? (
                     <span className="text-faint">Nobody clicked this</span>
                   ) : (
-                    <span className="text-faint">No expiry</span>
+                    <span className="text-faint">No end date</span>
                   )}
                 </>
               )}

@@ -553,3 +553,21 @@ describe("filters are not page-header actions", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Anything queued for the operator says "Waiting for you to send" (A-04 §7.3).
+ * "Waiting to be sent" reads as though it goes by itself, which a queued
+ * change doesn't: the operator is the one who has to send it. The member's
+ * own word for the same state is "On its way".
+ *
+ * Swept over raw source, comments and all, so the phrase can't be copied
+ * back into a sentence from a comment that still carries it.
+ */
+describe("a queued change never 'waits to be sent'", () => {
+  it("keeps the phrase out of every source file", () => {
+    const offenders = sources()
+      .filter(({ source }) => /waiting\s+to\s+be\s+sent/i.test(source))
+      .map(({ path }) => path);
+    expect(offenders, 'say "waiting for you to send" (operator) or "on its way" (member)').toEqual([]);
+  });
+});

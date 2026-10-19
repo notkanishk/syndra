@@ -1422,16 +1422,34 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 		return nil, nil, err
 	}
 
+	// Included bundles are named once per person, not once per role.
+	viaNames := map[string]string{}
+	viaName := func(id string) string {
+		if name, ok := viaNames[id]; ok {
+			return name
+		}
+		name := id
+		if b, err := svcGetBundleByID(ctx, id); err == nil {
+			name = b.Name
+		}
+		viaNames[id] = name
+		return name
+	}
 	for _, bundle := range bundles {
 		roles := byBundle[bundle.ID]
 		for _, role := range roles {
 			key := roleKey{projectID: role.ProjectID, roleKey: role.RoleKey}
-			upsertRole(ctx, roleMap, key, true, models.RoleReason{
+			reason := models.RoleReason{
 				Kind:        "bundle",
 				Description: fmt.Sprintf("Granted by bundle %s v%d", bundle.Name, bundle.PinnedVersion),
 				BundleID:    bundle.ID,
 				BundleName:  bundle.Name,
-			})
+			}
+			if role.ViaBundleID != "" {
+				reason.ViaBundleID, reason.ViaBundleName = role.ViaBundleID, viaName(role.ViaBundleID)
+				reason.Description = fmt.Sprintf("Via %s, from %s", bundle.Name, reason.ViaBundleName)
+			}
+			upsertRole(ctx, roleMap, key, true, reason)
 		}
 	}
 
@@ -1494,10 +1512,17 @@ func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKe
 	}
 
 	type deliveryKey struct{ projectID, roleKey, source, sourceRef string }
-	queued := make(map[deliveryKey]bool, len(pending))
+	// The earliest queue time wins: "Given 2h ago" dates the oldest unsent change.
+	queued := make(map[deliveryKey]time.Time, len(pending))
 	for _, d := range pending {
-		queued[deliveryKey{d.ProjectID, d.RoleKey, d.Source, d.SourceRef}] = true
-		queued[deliveryKey{d.ProjectID, d.RoleKey, d.Source, ""}] = true
+		for _, k := range []deliveryKey{
+			{d.ProjectID, d.RoleKey, d.Source, d.SourceRef},
+			{d.ProjectID, d.RoleKey, d.Source, ""},
+		} {
+			if at, ok := queued[k]; !ok || d.QueuedAt.Before(at) {
+				queued[k] = d.QueuedAt
+			}
+		}
 	}
 
 	for key, role := range roleMap {
@@ -1516,8 +1541,12 @@ func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKe
 			default:
 				continue
 			}
-			if queued[deliveryKey{key.projectID, key.roleKey, source, ref}] {
+			if at, ok := queued[deliveryKey{key.projectID, key.roleKey, source, ref}]; ok {
 				role.Reasons[i].Queued = true
+				if !at.IsZero() {
+					at := at
+					role.Reasons[i].QueuedAt = &at
+				}
 			}
 		}
 	}

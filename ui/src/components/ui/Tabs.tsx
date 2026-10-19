@@ -52,7 +52,7 @@ export function Tabs<T extends string>({
             type="button"
             onClick={() => onSelect(option.value)}
             aria-current={active ? "page" : undefined}
-            className={`rounded-pill motion-tint ${PILL.md} ${
+            className={`rounded-pill control ${PILL.md} ${
               active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >

@@ -29,6 +29,8 @@ Reachability is therefore exactly the rule the rail highlights with, including a
 
 `/projects/{id}` belongs to Projects while `/projects/{id}/roles/{key}` belongs to Roles, which a prefix match gets wrong — nav entries therefore carry a `pattern` regex rather than a prefix list.
 
+The last Advanced entry is a leaf of its own, `Makerspace settings` (`/settings`): choices that belong to the whole makerspace rather than to a group, today the term dates (reconcile-build 6.67). Advanced only; operator-only by omission from `MEMBER_NAV`, which makes middleware refuse a member it. Nothing above it moves.
+
 ## 2. Claim shaping — where the shape lives
 
 ### The defect

@@ -32,7 +32,9 @@ High fidelity. Copy is final and verbatim: use the exact strings on the boards a
 - Automation and changes: route-automation-settings-v5 (Roles that wait; v2 kept for option A of N14 in full, not built), route-insights
 - System: route-systems, route-system-targets-id, route-system-targets-id-mappings, route-zitadel, route-events
 - Member: route-me, route-storage
-- Across the product: route-mobile, route-login, route-states, Motion (long-list motion 8a–8d), Cohesion
+- Across the product: route-mobile, route-login, route-states, Motion (long-list motion 8a–8d), Motion v2 (A-05), Cohesion, Controls (A-04)
+- Asking and undoing (A-04): route-asking, flow-cancel-queued
+- New proposed components (A-04): AnchoredPanel, ChoiceRow (with Checkbox and Radio), CancelQueuedStep; ActionOutcome's block form gains a word
 
 ## Suggested build order
 Each step ships on its own.

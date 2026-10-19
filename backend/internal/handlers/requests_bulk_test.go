@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/auth"
 	"syndra/internal/db"
@@ -93,11 +94,11 @@ func stubRequestLookup(t *testing.T, byID map[string]models.AccessRequest) *int 
 		return req, nil
 	}
 	writes := 0
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		writes++
 		return db.EnqueueResult{OutboxID: "ob_1", Status: "pending"}, nil
 	}
-	dbResolveAccessRequest = func(context.Context, string, string, string, string) error {
+	dbResolveAccessRequest = func(context.Context, string, string, string, string, *time.Time) error {
 		writes++
 		return nil
 	}
@@ -233,7 +234,6 @@ func TestBulkDecide_RejectsInvalidRequests(t *testing.T) {
 		t.Errorf("a rejected request must not write, got %d", *writes)
 	}
 }
-
 
 // The plan agrees with the decision: a request for a role they have come to
 // hold since asking is blocked for approval, never approved over what they have.

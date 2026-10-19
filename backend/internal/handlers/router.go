@@ -32,8 +32,11 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/bundles", withCORS(withOperatorAuth(handleCreateBundle)))
 	// Renaming is not versioned and reaches nobody. Deleting revokes what only this bundle was
 	// granting, per holder, in the transaction that removes it.
-	mux.HandleFunc("PUT /api/v1/bundles/{id}", withCORS(withOperatorAuth(handleUpdateBundle)))
-	mux.HandleFunc("DELETE /api/v1/bundles/{id}", withCORS(withOperatorAuth(handleDeleteBundle)))
+	// Retiring keeps the bundle and its history; every write to a retired one is refused 409
+	// RETIRED (withLiveBundle), reads stay open.
+	mux.HandleFunc("GET /api/v1/bundles/{id}", withCORS(withUserAuth(handleGetBundle)))
+	mux.HandleFunc("PUT /api/v1/bundles/{id}", withCORS(withOperatorAuth(withLiveBundle(handleUpdateBundle))))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}", withCORS(withOperatorAuth(withLiveBundle(handleRetireBundle))))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/roles", withCORS(withUserAuth(handleGetBundleRoles)))
 
 	// Bundle versioning. Editing a bundle changes its working copy and reaches
@@ -41,14 +44,19 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/bundles/{id}/versions", withCORS(withUserAuth(handleGetBundleVersions)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/holders", withCORS(withOperatorAuth(handleGetBundleHolders)))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(handleGetBundleDraft)))
-	mux.HandleFunc("POST /api/v1/bundles/{id}/publish", withCORS(withOperatorAuth(handlePublishBundleVersion)))
-	mux.HandleFunc("POST /api/v1/bundles/{id}/holders/move", withCORS(withOperatorAuth(handleMoveBundleHolders)))
+	// Included bundles (B8): working-copy edits, and who includes a bundle.
+	mux.HandleFunc("PUT /api/v1/bundles/{id}/draft/includes/{child}", withCORS(withOperatorAuth(withLiveBundle(handleSetBundleInclude))))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}/draft/includes/{child}", withCORS(withOperatorAuth(withLiveBundle(handleRemoveBundleInclude))))
+	mux.HandleFunc("GET /api/v1/bundles/{id}/includers", withCORS(withOperatorAuth(handleGetBundleIncluders)))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(withLiveBundle(handleDiscardBundleDraft))))
+	mux.HandleFunc("POST /api/v1/bundles/{id}/publish", withCORS(withOperatorAuth(withLiveBundle(handlePublishBundleVersion))))
+	mux.HandleFunc("POST /api/v1/bundles/{id}/holders/move", withCORS(withOperatorAuth(withLiveBundle(handleMoveBundleHolders))))
 	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withUserAuth(handleGetBundleImpact)))
-	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withOperatorAuth(handleAddRoleToBundle)))
+	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withOperatorAuth(withLiveBundle(handleAddRoleToBundle))))
 	// Welcome bundle toggle changes global onboarding policy (every newly-created
 	// Zitadel user gets the flagged bundle), so it requires operator role —
 	// withUserAuth alone would let any authenticated Zitadel user flip it.
-	mux.HandleFunc("PUT /api/v1/bundles/{id}/welcome", withCORS(withOperatorAuth(handleSetWelcomeBundle)))
+	mux.HandleFunc("PUT /api/v1/bundles/{id}/welcome", withCORS(withOperatorAuth(withLiveBundle(handleSetWelcomeBundle))))
 
 	// Explorer Views
 	mux.HandleFunc("GET /api/v1/catalog", withCORS(withUserAuth(handleGetCatalog)))
@@ -71,7 +79,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/users/{id}/bundles", withCORS(withSelfOrOperatorAuth(handleGetUserBundles)))
 	mux.HandleFunc("POST /api/v1/users/{id}/bundles", withCORS(withOperatorAuth(handleAssignBundleToUser)))
 	mux.HandleFunc("DELETE /api/v1/users/{id}/bundles/{bundleId}", withCORS(withOperatorAuth(handleRemoveBundleFromUser)))
-	mux.HandleFunc("DELETE /api/v1/bundles/{id}/roles/{projectId}/{roleKey}", withCORS(withOperatorAuth(handleRemoveRoleFromBundle)))
+	mux.HandleFunc("DELETE /api/v1/bundles/{id}/roles/{projectId}/{roleKey}", withCORS(withOperatorAuth(withLiveBundle(handleRemoveRoleFromBundle))))
 	mux.HandleFunc("GET /api/v1/users/{id}/access", withCORS(withSelfOrOperatorAuth(handleGetUserAccess)))
 
 	// Application Views
@@ -98,10 +106,12 @@ func NewRouter() http.Handler {
 	// Rules Routes
 	mux.HandleFunc("GET /api/v1/rules/mapping", withCORS(withUserAuth(handleGetMappingRules)))
 	mux.HandleFunc("POST /api/v1/rules/mapping", withCORS(withOperatorAuth(handleCreateMappingRule)))
+	mux.HandleFunc("GET /api/v1/rules/mapping/{id}", withCORS(withUserAuth(handleGetMappingRule)))
 	mux.HandleFunc("PUT /api/v1/rules/mapping/{id}", withCORS(withOperatorAuth(handleUpdateMappingRule)))
-	// Deleting a rule revokes what only that rule was granting, in the same transaction that
-	// removes it — so a retired rule never leaves access behind that nothing explains.
-	mux.HandleFunc("DELETE /api/v1/rules/mapping/{id}", withCORS(withOperatorAuth(handleDeleteMappingRule)))
+	// Retiring a rule revokes what only that rule was granting, in the same transaction that
+	// retires it — so a retired rule never leaves access behind that nothing explains. The rule
+	// stays, readable; a write to a retired one is refused 409 RETIRED.
+	mux.HandleFunc("DELETE /api/v1/rules/mapping/{id}", withCORS(withOperatorAuth(handleRetireMappingRule)))
 	mux.HandleFunc("POST /api/v1/rules/mapping/validate", withCORS(withUserAuth(handleValidateMappingRule)))
 
 	// Global confirmation-mode default (Task 22): every create-bundle/create-rule form reads this
@@ -113,6 +123,18 @@ func NewRouter() http.Handler {
 	// Bulk confirmation-mode toggle (Task 22): flips confirmation_mode on a set of rules or
 	// bundles in one statement. Operator-gated — a cross-cutting policy mutation.
 	mux.HandleFunc("POST /api/v1/policies/confirmation-mode", withCORS(withOperatorAuth(handleBulkSetConfirmationMode)))
+
+	// Roles that wait for you (N14 B): the one write place for which roles
+	// wait in Pending changes. Operator-gated, like every makerspace-wide setting.
+	mux.HandleFunc("GET /api/v1/roles-that-wait", withCORS(withOperatorAuth(handleListRolesThatWait)))
+	mux.HandleFunc("PUT /api/v1/roles-that-wait/{project_id}/{role_key}", withCORS(withOperatorAuth(handleMarkRoleWaits)))
+	mux.HandleFunc("DELETE /api/v1/roles-that-wait/{project_id}/{role_key}", withCORS(withOperatorAuth(handleUnmarkRoleWaits)))
+	mux.HandleFunc("PUT /api/v1/config/confirmation-model", withCORS(withOperatorAuth(handleSwitchToRolesThatWait)))
+
+	// Term dates: one setting. Any signed-in user reads it (members need it for
+	// "To the end of next term"); only an operator changes it.
+	mux.HandleFunc("GET /api/v1/terms", withCORS(withUserAuth(handleGetTerms)))
+	mux.HandleFunc("PUT /api/v1/terms", withCORS(withOperatorAuth(handlePutTerms)))
 
 	// Audit log exposes every actor/target pair org-wide — operator-only (SC3).
 	mux.HandleFunc("GET /api/v1/audit", withCORS(withOperatorAuth(handleGetAuditLogs)))
@@ -266,6 +288,7 @@ func NewRouter() http.Handler {
 	// from the request, because a member-scoped operation must bind who it acts
 	// ON and not only who may call it.
 	mux.HandleFunc("GET /api/v1/me/targets", withCORS(withUserAuth(handleMyTargets)))
+	mux.HandleFunc("GET /api/v1/me/changes", withCORS(withUserAuth(handleMyChanges)))
 	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(handleSetMyCredential)))
 
 	// The add-on roster. Deployment configuration, not data: an operator on a
@@ -295,6 +318,16 @@ func NewRouter() http.Handler {
 	// only. Operator-gated and idempotent: it reads the target and queues what
 	// is already owed, and queueing is not applying.
 	mux.HandleFunc("POST /api/v1/targets/{target}/reconcile", withCORS(withOperatorAuth(withTargetProject(handleReconcileTarget))))
+	// Insights: read-only analytics over the one access snapshot.
+	mux.HandleFunc("GET /api/v1/insights/findings", withCORS(withOperatorAuth(handleInsightsFindings)))
+	mux.HandleFunc("GET /api/v1/insights/who", withCORS(withOperatorAuth(handleInsightsWho)))
+	mux.HandleFunc("POST /api/v1/insights/whatif", withCORS(withOperatorAuth(handleInsightsWhatIf)))
+	mux.HandleFunc("GET /api/v1/insights/trends", withCORS(withOperatorAuth(handleInsightsTrends)))
+	mux.HandleFunc("GET /api/v1/insights/asof", withCORS(withOperatorAuth(handleInsightsAsOf)))
+	mux.HandleFunc("GET /api/v1/insights/timeline", withCORS(withOperatorAuth(handleInsightsTimeline)))
+	mux.HandleFunc("GET /api/v1/insights/usage", withCORS(withOperatorAuth(handleInsightsUsage)))
+	mux.HandleFunc("GET /api/v1/insights/lens", withCORS(withOperatorAuth(handleInsightsLens)))
+	mux.HandleFunc("GET /api/v1/users/{id}/usage", withCORS(withOperatorAuth(handleGetUserUsage)))
 	// Accounts Syndra created whose reason for existing has gone. A read; the
 	// removal runs through the ordinary plan-then-apply path.
 	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))

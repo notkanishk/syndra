@@ -9,7 +9,7 @@
  * code (`error.code`) or human message (`error.message`).
  */
 
-import { CANCEL_ACK_HEADER, confirmCancellations, type QueuedChange } from "@/lib/cancel-confirm";
+import { CANCEL_ACK_HEADER, takeAck, type QueuedChange } from "@/lib/cancel-confirm";
 import { SESSION_ENDED } from "@/lib/login-error";
 
 const API_BASE = "/api/proxy";
@@ -34,6 +34,31 @@ export class ApiError extends Error {
     this.status = status;
     this.code = parsed.error ?? "UNKNOWN_ERROR";
     this.details = parsed.details;
+  }
+}
+
+/**
+ * The backend refused because this write would cancel changes still waiting for
+ * you to send (409 WOULD_CANCEL_QUEUED). Nothing was changed. The dialog that
+ * made the write shows `cancels` as a step inside itself, then sends the same
+ * request again after `armAck(method, path, ids)`. Any other caller reads it
+ * as the refusal it is.
+ */
+export class WouldCancelQueued extends ApiError {
+  readonly cancels: QueuedChange[];
+  readonly method: string;
+  readonly path: string;
+
+  constructor(cancels: QueuedChange[], method: string, path: string) {
+    const many = cancels.length !== 1;
+    super(409, {
+      error: "WOULD_CANCEL_QUEUED",
+      message: `This would cancel ${cancels.length} ${many ? "changes that are" : "change that is"} waiting for you to send. Nothing was changed`,
+    });
+    this.name = "WouldCancelQueued";
+    this.cancels = cancels;
+    this.method = method;
+    this.path = path;
   }
 }
 
@@ -88,6 +113,8 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
   }
 
   const headers = new Headers(init?.headers);
+  const acked = method === "GET" ? undefined : takeAck(method, path);
+  if (acked?.length) headers.set(CANCEL_ACK_HEADER, acked.join(","));
   let body: BodyInit | undefined;
   if (init?.body !== undefined) {
     body = JSON.stringify(init.body);
@@ -145,20 +172,12 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
         });
       }
     }
-    // The action would cancel changes still waiting to be sent. Ask, then send
-    // again naming exactly what was shown: if more was queued meanwhile, the
-    // backend refuses again with the longer list and this asks again.
+    // The action would cancel changes still waiting for you to send. The caller
+    // shows them; its retry names exactly the ids it showed (see armAck), and if
+    // more was queued meanwhile the backend refuses again with the longer list.
     const refusal = parsed as ApiErrorBody;
     if (res.status === 409 && refusal?.error === "WOULD_CANCEL_QUEUED" && refusal.cancels?.length) {
-      if (await confirmCancellations(refusal.cancels)) {
-        const again = new Headers(init?.headers);
-        again.set(CANCEL_ACK_HEADER, refusal.cancels.map((change) => change.id).join(","));
-        return request<T>(path, { ...init, headers: again });
-      }
-      throw new ApiError(409, {
-        error: "KEPT_QUEUED",
-        message: "Nothing was changed. The changes waiting to be sent are still waiting",
-      });
+      throw new WouldCancelQueued(refusal.cancels, method, path);
     }
     throw new ApiError(res.status, parsed as ApiErrorBody | string);
   }

@@ -54,7 +54,7 @@ export function PeopleOnTarget({ target }: { target: string }) {
         empty={
           <EmptyState
             title="Nobody yet"
-            guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting to be sent from Pending changes.`}
+            guidance={`No role is mapped to ${name} yet, or the changes that would create accounts are still waiting for you to send from Pending changes.`}
           />
         }
       >

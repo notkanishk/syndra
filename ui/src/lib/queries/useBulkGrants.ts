@@ -110,6 +110,8 @@ export interface BulkPlan {
   plan_id?: string;
   applied: boolean;
   outcomes: BulkOutcome[];
+  /** Selected people the plan leaves out: the requester, from anything that takes access away (#32). */
+  excluded?: { user_id: string; reason: "self" }[];
   summary: BulkSummary;
 }
 
@@ -183,7 +185,7 @@ export function describeBulkOp(op: BulkOp): string {
     case "remove_bundle":
       return "Remove from a bundle";
     case "extend":
-      return "Extend expiring access";
+      return "Extend access";
     case "create_mapping":
       return "Add a mapping";
     case "edit_mapping":

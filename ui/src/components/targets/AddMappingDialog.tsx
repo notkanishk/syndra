@@ -5,6 +5,7 @@ import { Fragment, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { Notice } from "@/components/ui/Notice";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
@@ -211,13 +212,10 @@ export function RoleMappingDialog({
                 </FieldHint>
                 {value && <OpensLine name={name} places={reach.data?.read ? reach.data.groups?.[value] : undefined} />}
                 {!list.current && (
-                  <div role="status" className="warn-note flex flex-col gap-1 px-3.5 py-3 text-[14px] leading-[1.55]">
-                    <span className="font-semibold text-warn-text">This list is from {formatClock(list.read_at)}.</span>
-                    <span>
-                      Syndra can&apos;t read {name}&apos;s groups right now. You can still preview. A group deleted since{" "}
-                      {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
-                    </span>
-                  </div>
+                  <Notice tone="warn" title={`This list is from ${formatClock(list.read_at)}.`}>
+                    Syndra can&apos;t read {name}&apos;s groups right now. You can still preview. A group deleted since{" "}
+                    {formatClock(list.read_at)} fails when the mapping is applied, and the failure is reported.
+                  </Notice>
                 )}
               </>
             )}

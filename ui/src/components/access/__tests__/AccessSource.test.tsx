@@ -97,3 +97,30 @@ describe("<AccessSourceList/>", () => {
     expect(more.className).toContain("h-11");
   });
 });
+
+// B8: a role that reaches a person through an included bundle names both
+// bundles on their page, the one they hold first.
+describe("a role through an included bundle", () => {
+  it("reads Via {parent}, from {child}", () => {
+    render(
+      <AccessSourceList
+        reasons={[
+          {
+            kind: "bundle",
+            bundle_id: "nm",
+            bundle_name: "New members",
+            via_bundle_id: "sb",
+            via_bundle_name: "Safety basics",
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("Via New members, from Safety basics")).toBeInTheDocument();
+  });
+
+  it("names just the bundle when the role is its own", () => {
+    render(<AccessSourceList reasons={[bundle]} />);
+    expect(screen.getByText("Lab Tech")).toBeInTheDocument();
+    expect(screen.queryByText(/, from /)).toBeNull();
+  });
+});

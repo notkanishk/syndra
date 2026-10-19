@@ -3,6 +3,7 @@ package propagation
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"syndra/internal/db"
 )
@@ -37,6 +38,13 @@ func DrainBatch(ctx context.Context, ids []string) (DrainResult, error) {
 	for _, id := range ids {
 		row, found, err := claimOne(ctx, db.TargetZitadel, id)
 		if err != nil {
+			// Said, not skipped: a caller reporting this row as sent because
+			// nothing halted would be reporting a door locked that still opens.
+			log.Printf("[PROPAGATION] claim %s: %v (left pending)", id, err)
+			res.Halted = true
+			if res.Reason == "" {
+				res.Reason = "claim_error"
+			}
 			continue
 		}
 		if !found {

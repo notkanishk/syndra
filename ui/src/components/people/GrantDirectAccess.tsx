@@ -1,18 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
+import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
+import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePickerOne";
+import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button, PILL } from "@/components/ui/Button";
-import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
+import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
-import { Select } from "@/components/ui/Select";
-import { holdersLine } from "@/lib/holders";
+import { waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, formatLongDate, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
+import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 /**
@@ -30,21 +34,6 @@ import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 type Preset = "30" | "term" | "date" | "never";
 
-/**
- * How many people hold the role, from what Zitadel shows — never from
- * Syndra's own count, which hides everyone Syndra did not give it to.
- */
-function holdersHint(role: {
-  assigned_user_count: number;
-  confirmed_user_count?: number;
-  observed_user_count?: number;
-}): string {
-  const line = holdersLine(role.assigned_user_count, role.confirmed_user_count, role.observed_user_count);
-  const n = Number(line.headline);
-  const who = `${line.headline} ${n === 1 ? "person holds" : "people hold"} it`;
-  return line.note && line.note !== "confirmed" ? `${who} (${line.note})` : who;
-}
-
 function GrantDirectAccessOpen({
   userId,
   userName,
@@ -58,115 +47,83 @@ function GrantDirectAccessOpen({
   const projects = useProjects();
   const roles = useGlobalRoleCatalog();
   const grant = useCreateGrant(userId);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const terms = useTerms();
 
-  const [projectId, setProjectId] = useState("");
-  const [roleKey, setRoleKey] = useState("");
+  const [value, setValue] = useState<string | null>(null);
+  const [projectId, roleKey] = value ? splitRoleId(value) : ["", ""];
   const [preset, setPreset] = useState<Preset>("30");
   const [customDate, setCustomDate] = useState("");
   const [reason, setReason] = useState("");
+  const [result, setResult] = useState<{ word: string; outcome: Outcome } | null>(null);
 
-  const projectRoles = useMemo(
-    () => (roles.data ?? []).filter((role) => role.project_id === projectId),
-    [roles.data, projectId],
-  );
-  const selectedRole = projectRoles.find((role) => role.role_key === roleKey);
-  // Named as a pair, because that is what was written: the project lives in a
-  // select the operator is about to stop looking at, and the sentence
-  // reporting what happened has to stand on its own.
-  const selectedLabel = selectedRole
-    ? roleLabel(selectedRole.project_name, selectedRole.role_key, selectedRole.display_name)
-    : roleKey;
+  const selectedRole = (roles.data ?? []).find((role) => role.project_id === projectId && role.role_key === roleKey);
+  const resolved = resolveExpiry(preset, customDate, terms.data);
 
-  const resolved = resolveExpiry(preset, customDate);
-
-  // What the person holds already, so giving it again is said before the click.
-  // A direct grant's own end wins; otherwise what Zitadel shows is held with
-  // no end Syndra knows of.
+  // What the person holds already, so giving it again is said before the click,
+  // in the row's note seat. A role given and not yet sent is on its way first:
+  // it isn't theirs in Zitadel yet, so an end or an Extend would describe a
+  // grant that hasn't arrived (A-04 §12.4). Then a direct grant's own end; then
+  // what Zitadel shows is held with no end Syndra knows of.
   const heldGrants = useUserGrants(userId);
   const heldAccess = useUserAccess(userId);
-  // What they hold of a role in this project: its end, null for none, or
-  // undefined when they don't hold it. The picker marks each role with it, the
-  // same way Ask for access marks the asker's.
-  const holdingOf = (key: string): string | null | undefined => {
-    const g = (heldGrants.data ?? []).find((x) => x.project_id === projectId && x.role_key === key);
-    if (g) return g.expires_at ?? null;
-    const seen = (heldAccess.data?.projects ?? []).find((p) => p.project_id === projectId)?.observed_role_keys?.includes(key);
-    return seen ? null : undefined;
+  const noteOf = (project: string, key: string): RoleNote => {
+    const g = (heldGrants.data ?? []).find((x) => x.project_id === project && x.role_key === key);
+    const entry = (heldAccess.data?.projects ?? []).find((p) => p.project_id === project);
+    const queued = [...(entry?.source_roles ?? []), ...(entry?.derived_roles ?? [])].find((r) => r.role_key === key);
+    if (queued && nothingSentYet(queued.reasons)) return { kind: "onway", at: givenAt(queued.reasons) };
+    if (g?.expires_at) return { kind: "until", until: g.expires_at };
+    if (g || entry?.observed_role_keys?.includes(key)) return { kind: "held" };
+    return { kind: "none" };
   };
-  const heldGrant = (heldGrants.data ?? []).find((g) => g.project_id === projectId && g.role_key === roleKey);
-  const alreadyHeld = roleKey !== "" && holdingOf(roleKey) !== undefined;
-  const heldUntil = heldGrant?.expires_at ?? null;
-  const heldNoEnd = alreadyHeld && !heldUntil;
-  const who = userName || "They";
+  const places: PickerPlace[] = (projects.data ?? []).map((entry) => ({
+    id: entry.project.id,
+    name: entry.project.name,
+    roles: (roles.data ?? [])
+      .filter((role) => role.project_id === entry.project.id)
+      .map((role) => ({
+        key: role.role_key,
+        name: role.display_name || humanizeKey(role.role_key),
+        description: role.description || undefined,
+        // Observed in Zitadel, or nothing: a count that was never read isn't zero.
+        people: role.observed_user_count,
+        waits: role.waits_for_send,
+        note: noteOf(entry.project.id, role.role_key),
+      })),
+  }));
+  const first = userName.trim().split(/\s+/)[0] || "They";
+  const roleName = selectedRole?.display_name || humanizeKey(roleKey);
+  // A grant that would cancel a removal still waiting for you to send turns the
+  // sheet to a step first (A-04 §14); Keep it comes back here as it was.
+  const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${roleName}` });
 
-
-  const ready = Boolean(projectId && roleKey) && (preset !== "date" || Boolean(customDate)) && !alreadyHeld;
+  const ready = Boolean(value) && (preset !== "date" || Boolean(customDate));
+  // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
+  const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued";
 
   return (
     <Modal open onClose={onClose} busy={grant.isPending} size="md" labelledBy="grant-title">
+      <PushedStep step={step}>
       <ModalHeader title="Grant direct access" titleId="grant-title" />
       <div className="-mt-2 px-6 pb-3 text-[13px] text-faint">{userName}</div>
 
       <div className="flex flex-col gap-3.5 px-6">
-        <div>
-          <FieldLabel htmlFor="grant-project">Project</FieldLabel>
-          <Select
-            id="grant-project"
-            value={projectId}
-            onChange={(event) => {
-              setProjectId(event.target.value);
-              setRoleKey("");
-            }}
-          >
-            <option value="">Choose a project…</option>
-            {(projects.data ?? []).map((entry) => (
-              <option key={entry.project.id} value={entry.project.id}>
-                {entry.project.name}
-              </option>
-            ))}
-          </Select>
-        </div>
+        {!done && (
+          <>
+            <div>
+              <FieldLabel id="grant-role-label">Role</FieldLabel>
+              <RolePicker
+                mode="one"
+                audience="operator"
+                places={places}
+                value={value}
+                onChange={setValue}
+                disabled={grant.isPending}
+                labelledBy="grant-role-label"
+              />
+            </div>
 
         <div>
-          <FieldLabel htmlFor="grant-role">Role</FieldLabel>
-          <Select
-            id="grant-role"
-            emphasis={Boolean(roleKey)}
-            value={roleKey}
-            disabled={!projectId}
-            onChange={(event) => setRoleKey(event.target.value)}
-          >
-            <option value="">{projectId ? "Choose a role…" : "Pick a project first"}</option>
-            {projectRoles.map((role) => {
-              const held = holdingOf(role.role_key);
-              return (
-                <option key={role.role_key} value={role.role_key} disabled={held !== undefined}>
-                  {role.display_name || humanizeKey(role.role_key)} · {role.role_key}
-                  {held === undefined ? "" : held === null ? " · has this" : ` · has this until ${formatShortDate(held)}`}
-                </option>
-              );
-            })}
-          </Select>
-          {selectedRole && (
-            // Plain language, not a spec: what this role unlocks and how many
-            // people already carry it.
-            <FieldHint>
-              {holdersHint(selectedRole)}
-              {selectedRole.description ? ` · ${selectedRole.description}` : ""}
-            </FieldHint>
-          )}
-          {alreadyHeld && (
-            <FieldHint>
-              {heldNoEnd
-                ? `${who} already has this, with no end.`
-                : `${who} has this until ${formatShortDate(heldUntil)}. To keep it longer, extend it from Expiring access.`}
-            </FieldHint>
-          )}
-        </div>
-
-        <div>
-          <FieldLabel htmlFor="grant-expiry-date">Expires</FieldLabel>
+          <FieldLabel htmlFor="grant-expiry-date">Ends</FieldLabel>
           <div className="mb-2.5 flex flex-wrap gap-2">
             {(
               [
@@ -175,17 +132,17 @@ function GrantDirectAccessOpen({
                 ["date", "Pick a date"],
                 ["never", "Never"],
               ] as Array<[Preset, string]>
-            ).map(([value, label]) => (
+            ).map(([choice, label]) => (
               // The same control as the request form's "how long", and now the
               // same box: it had restated the pill by hand at 13px/7px, which
               // is both a drifted surface and a 30px target on a phone.
               <button
-                key={value}
+                key={choice}
                 type="button"
-                aria-pressed={preset === value}
-                onClick={() => setPreset(value)}
+                aria-pressed={preset === choice}
+                onClick={() => setPreset(choice)}
                 className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
-                  preset === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
+                  preset === choice ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
                 }`}
               >
                 {label}
@@ -206,13 +163,13 @@ function GrantDirectAccessOpen({
             <div className="flex items-center gap-2.5 rounded-inner border border-line-strong px-[15px] py-3 text-[15px]">
               {resolved.date ? (
                 <>
-                  {formatLongDate(resolved.date)}
+                  {formatShortDate(resolved.date)}
                   <span className="text-[14px] text-faint">
                     — in {daysUntil(resolved.date)} days
                   </span>
                 </>
               ) : (
-                <span className="text-muted">No expiry — this access does not lapse</span>
+                <span className="text-muted">No end date — this access does not end on its own</span>
               )}
             </div>
           )}
@@ -227,33 +184,49 @@ function GrantDirectAccessOpen({
             placeholder="Capstone build, through end of term"
           />
         </div>
-      </div>
-
-      <div className="accent-note mx-6 mt-4 px-4 py-3.5 text-[14px] leading-[1.55] text-ink/80">
-        {resolved.date ? (
-          <>
-            On {formatLongDate(resolved.date)} the sweep removes this automatically. They&rsquo;ll
-            show up under <strong className="font-semibold text-ink">Expiring access</strong> two
-            weeks before, where the only action is to extend.
-          </>
-        ) : (
-          <>
-            This access will not lapse on its own. It stays until someone removes it — which is
-            what &ldquo;Never&rdquo; means here.
           </>
         )}
       </div>
 
-      {/* The sheet becomes its own result rather than handing it to a corner.
-          It stays open on success too: what an operator wants next is to read
-          what happened to the person they just acted on, and a dialog that
-          closes itself takes that with it. */}
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {!done && (
+        // An explanation, not a fault: a caption under the date, not a box.
+        <p className="mx-6 mt-4 max-w-[72ch] text-[13.5px] leading-[1.55] text-muted">
+          {resolved.date ? (
+            <>
+              It ends on {formatShortDate(resolved.date)}, and the sweep removes it automatically. They&rsquo;ll
+              show up under <strong className="font-semibold text-ink">Expiring access</strong> two
+              weeks before, where the only action is to extend.
+            </>
+          ) : (
+            <>
+              This access will not end on its own. It stays until someone removes it — which is
+              what &ldquo;Never&rdquo; means here.
+            </>
+          )}
+        </p>
+      )}
 
-      <ModalFooter>
-        {outcome?.kind === "applied" || outcome?.kind === "queued" ? (
-          <Button variant="accent" onClick={onClose}>
-            Done
+      {/* The sheet becomes its own result rather than handing it to a corner,
+          in the act's own word. It stays open on success too: what an operator
+          wants next is to read what happened to the person they just acted on,
+          and a dialog that closes itself takes that with it. */}
+      {result && <ActionOutcome outcome={result.outcome} word={result.word} className="mx-6 mb-1" />}
+      {result && step.after}
+
+      <ModalFooter
+        note={
+          step.note ?? (result || !selectedRole ? undefined : selectedRole.waits_for_send ? (
+            <span className="rounded-inner bg-warn-soft px-2.5 py-1.5 text-warn-text">
+              {roleName} always waits for you, so {first} gets it once you send it.
+            </span>
+          ) : (
+            `${first} can use it as soon as you give it.`
+          ))
+        }
+      >
+        {done ? (
+          <Button variant="outline" onClick={onClose}>
+            Close
           </Button>
         ) : (
           <>
@@ -265,42 +238,50 @@ function GrantDirectAccessOpen({
               // said.
               reason={
                 !ready
-                  ? !projectId || !roleKey
-                    ? "Choose a project and a role."
-                    : alreadyHeld
-                      ? "They already have this."
-                      : "Pick the date the access should end."
+                  ? !value
+                    ? "Choose a role to give."
+                    : "Pick the date the access should end."
                   : undefined
               }
               isPending={grant.isPending}
               onClick={async () => {
-                setOutcome(null);
+                setResult(null);
                 try {
-                  const result = await grant.mutateAsync({
-                    project_id: projectId,
-                    role_key: roleKey,
-                    reason,
-                    duration_days: resolved.days,
-                  });
-                  // This endpoint never applies inline — it always enqueues to
-                  // the outbox for the operator-triggered drain (`status`
-                  // defaults to "pending"). Reporting "applied" here would say
-                  // Zitadel has this when only Syndra's own ledger does.
-                  const waiting = result.status === "pending";
-                  setOutcome({
-                    kind: waiting ? "queued" : "applied",
-                    // Present tense only once Zitadel actually has it — "now
-                    // holds" beside "nothing has reached Zitadel yet" is the
-                    // dialog contradicting itself in its own two sentences.
-                    message: waiting
-                      ? `${userName} will hold ${selectedLabel} once this is sent`
-                      : `${userName} now holds ${selectedLabel}`,
-                    detail: waiting
-                      ? "Nothing has reached Zitadel yet. It waits under Pending changes until you send it."
-                      : undefined,
-                  });
+                  const made = await step.run(() =>
+                    grant.mutateAsync({
+                      project_id: projectId,
+                      role_key: roleKey,
+                      reason,
+                      duration_days: resolved.days,
+                    }),
+                  );
+                  // Kept: the form is back as it was and nothing changed.
+                  if (made === KEPT) return;
+                  // `wait_reason` is the backend's account of why this isn't
+                  // in Zitadel yet; without one the grant went straight through.
+                  const why = waitReasonLine(made.wait_reason, roleName, new Date().toISOString());
+                  if (made.status !== "applied" || made.wait_reason) {
+                    setResult({
+                      word: "Given",
+                      outcome: {
+                        kind: "queued",
+                        message: `${roleName} is given to ${first}`,
+                        detail:
+                          made.wait_reason === "role_waits"
+                            ? `${why}, so ${first} can't use it yet.`
+                            : why
+                              ? `${why}, so it goes when you send it.`
+                              : "It goes when you send it.",
+                      },
+                    });
+                  } else {
+                    setResult({
+                      word: "Given",
+                      outcome: { kind: "applied", message: `${first} can use ${roleName} on their own now` },
+                    });
+                  }
                 } catch (error) {
-                  setOutcome(outcomeFromError(error));
+                  setResult({ word: "Not given", outcome: outcomeFromError(error) });
                 }
               }}
             >
@@ -310,16 +291,17 @@ function GrantDirectAccessOpen({
           </>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }
 
 /**
  * Presets resolve to a concrete date so the panel can show it with its
- * distance. "End of term" is 18 December or 18 May, whichever comes next —
- * the makerspace's own calendar, not a generic 90 days.
+ * distance. "End of term" is the end of the term holding today (or the next to
+ * start), from the term setting; 18 May / 18 December only when it can't be read.
  */
-function resolveExpiry(preset: Preset, custom: string): { date: string | null; days: number } {
+function resolveExpiry(preset: Preset, custom: string, terms?: Term[]): { date: string | null; days: number } {
   const now = new Date();
   if (preset === "never") return { date: null, days: 0 };
   if (preset === "30") {
@@ -331,8 +313,8 @@ function resolveExpiry(preset: Preset, custom: string): { date: string | null; d
     const days = daysUntil(custom) ?? 0;
     return { date: new Date(custom).toISOString(), days: Math.max(1, days) };
   }
-  const endOfTerm = nextTermEnd(now);
-  return { date: endOfTerm.toISOString(), days: daysUntilTermEnd(now) };
+  const endOfTerm = nextTermEnd(now, terms);
+  return { date: endOfTerm.toISOString(), days: daysUntilTermEnd(now, terms) };
 }
 
 export const GrantDirectAccess = mountedWhileOpen(GrantDirectAccessOpen);

@@ -135,7 +135,7 @@ describe("pending changes says one true thing, once", () => {
   it("does not say nothing changed right next to a nonzero count", () => {
     state.governance.pending_propagation = { count: 4, zitadel_reachable: true };
     renderHome();
-    expect(screen.getByText(/4 changes waiting to be sent to Zitadel/)).toBeTruthy();
+    expect(screen.getByText(/4 changes are waiting for you to send to Zitadel/)).toBeTruthy();
     expect(screen.getByText(/none of it has reached Zitadel yet/)).toBeTruthy();
     expect(screen.queryByText(/nothing (there )?has changed/i)).toBeNull();
   });

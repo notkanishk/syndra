@@ -596,7 +596,7 @@ describe("the revoke confirm, once it has run", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Revoke access" }));
 
     await waitFor(() =>
-      expect(within(dialog).getByRole("button", { name: "Done" })).toBeInTheDocument(),
+      expect(within(dialog).getByRole("button", { name: "Close" })).toBeInTheDocument(),
     );
     // Gone, not just relabelled — a second click must have nothing left to hit.
     expect(within(dialog).queryByRole("button", { name: "Revoke access" })).toBeNull();
@@ -614,7 +614,7 @@ describe("the revoke confirm, once it has run", () => {
 
     await waitFor(() => expect(within(dialog).getByText(/Nothing was changed/i)).toBeInTheDocument());
     expect(within(dialog).getByRole("button", { name: "Revoke access" })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: "Done" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
   });
 
   it("opens with Cancel focused, not the destructive Revoke access button", () => {

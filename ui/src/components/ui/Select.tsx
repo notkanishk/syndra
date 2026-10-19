@@ -41,12 +41,19 @@ export function Segmented<T extends string>({
   onChange,
   size = "md",
   label,
+  describedBy,
+  fill = false,
 }: {
-  options: Array<{ value: T; label: string }>;
+  /** `title` is the segment's own hover text, for a choice that needs a sentence beside its word. */
+  options: Array<{ value: T; label: string; title?: string; disabled?: boolean }>;
   value: T;
   onChange: (next: T) => void;
   size?: "sm" | "md";
   label: string;
+  /** The id of a sentence that explains the whole choice. */
+  describedBy?: string;
+  /** Spans its container, each segment an equal share: the phone sheet's form. */
+  fill?: boolean;
 }) {
   // Segments are controls, and on touch they carry the same floor every other
   // control does. The compact padding returns above the desktop breakpoint,
@@ -56,7 +63,12 @@ export function Segmented<T extends string>({
       ? "min-h-[44px] px-3 text-[12.5px] desktop:min-h-0 desktop:py-1"
       : "min-h-[44px] px-4 text-[13px] desktop:min-h-0 desktop:py-1.5";
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-pill bg-tint-2 p-[3px]">
+    <div
+      role="radiogroup"
+      aria-label={label}
+      aria-describedby={describedBy}
+      className={`${fill ? "flex w-full" : "inline-flex"} rounded-pill bg-tint-2 p-[3px]`}
+    >
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -65,10 +77,12 @@ export function Segmented<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
+            title={option.title}
+            disabled={option.disabled}
             onClick={() => onChange(option.value)}
-            className={`rounded-pill font-semibold motion-tint ${pad} ${
+            className={`rounded-pill font-semibold control ${fill ? "flex-1" : ""} ${pad} ${
               active ? "bg-accent-dense text-accent-ink" : "text-muted hover:text-ink"
-            }`}
+            } ${option.disabled ? "cursor-not-allowed opacity-50" : ""}`}
           >
             {option.label}
           </button>
@@ -85,7 +99,8 @@ export function FilterPills<T extends string>({
   onChange,
   label,
 }: {
-  options: Array<{ value: T; label: string }>;
+  /** A disabled option stays where it is, with `title` saying why. */
+  options: Array<{ value: T; label: string; disabled?: boolean; title?: string }>;
   value: T;
   onChange: (next: T) => void;
   label: string;
@@ -100,6 +115,8 @@ export function FilterPills<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
+            disabled={option.disabled}
+            title={option.title}
             onClick={() => onChange(option.value)}
             // The same box as `Button` size="md" minus its border: 44px floor
             // through the tablet range, then px-4 / 13.5px / py-[7px]. The
@@ -108,9 +125,9 @@ export function FilterPills<T extends string>({
             // within 120px of each other, where three sizes read as three
             // accidents. Shape and fill carry the difference between them now,
             // which is what was meant to carry it.
-            className={`rounded-pill motion-tint ${PILL.md} ${
+            className={`rounded-pill control ${PILL.md} ${
               active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
-            }`}
+            } disabled:cursor-not-allowed disabled:text-faint disabled:hover:text-faint`}
           >
             {option.label}
           </button>

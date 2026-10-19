@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnchoredPanel } from "@/components/ui/Anchored";
 
 import { Badge } from "@/components/ui/Badge";
+import { NextStep } from "@/components/ui/NextStep";
 
 /**
  * Access source — the signature component.
@@ -34,6 +35,9 @@ export interface RoleReason {
   description?: string;
   bundle_id?: string;
   bundle_name?: string;
+  /** The included bundle a bundle role comes through (B8). */
+  via_bundle_id?: string;
+  via_bundle_name?: string;
   trigger_project?: string;
   trigger_role?: string;
   /**
@@ -44,6 +48,8 @@ export interface RoleReason {
    * nothing has carried it to Zitadel yet.
    */
   queued?: boolean;
+  /** When it was queued: "Given 2h ago". Present only with `queued`. */
+  queued_at?: string;
 }
 
 const ORDER: Record<SourceKind, number> = { direct: 0, bundle: 1, mapping: 2 };
@@ -145,16 +151,25 @@ export function nothingSentYet(reasons: RoleReason[] | undefined | null): boolea
 }
 
 /**
+ * When the role was given and queued: the earliest time among the sources still
+ * waiting, which is when someone decided it. Absent when none carries one.
+ */
+export function givenAt(reasons: RoleReason[] | undefined | null): string | undefined {
+  return orderedSources(reasons)
+    .map((reason) => reason.queued_at)
+    .filter((at): at is string => Boolean(at))
+    .sort()[0];
+}
+
+/**
  * The marker itself, one wording everywhere.
  *
  * Amber rather than red: nobody has made a mistake, and a change waiting for
  * the confirmation the deployment asked for is the system working. What it must
  * not do is read as delivered.
  */
-export function NotSentYet({ className = "" }: { className?: string }) {
-  return (
-    <span className={`font-semibold text-warn-text ${className}`}>Waiting to be sent</span>
-  );
+export function NotSentYet({ className = "", why }: { className?: string; why?: string }) {
+  return <NextStep why={why} className={className} />;
 }
 
 export function AccessSourceList({
@@ -170,7 +185,12 @@ export function AccessSourceList({
   }
 
   const [strongest, ...rest] = ordered;
-  const qualifier = showQualifier ? sourceQualifier(strongest) : undefined;
+  // A role that comes through an included bundle names both (B8).
+  const qualifier = !showQualifier
+    ? undefined
+    : strongest.kind === "bundle" && strongest.via_bundle_name
+      ? `Via ${strongest.bundle_name}, from ${strongest.via_bundle_name}`
+      : sourceQualifier(strongest);
 
   return (
     <span className="flex flex-wrap items-center gap-[9px]">
@@ -287,7 +307,7 @@ export function SourcePopover({
   const rows: Array<[string, React.ReactNode]> = [];
   if (by) rows.push(["By", by]);
   if (when) rows.push(["When", when]);
-  if (expires) rows.push(["Expires", expires]);
+  if (expires) rows.push(["Ends", expires]);
   if (note) rows.push(["Note", <span key="note" className="text-muted">{note}</span>]);
   const hasBody = rows.length > 0 || Boolean(footer);
 
@@ -307,7 +327,7 @@ export function SourcePopover({
         open={open}
         width={380}
         panelRef={panel}
-        className="settle-in rounded-panel border border-line-strong bg-surface-2 shadow-popover"
+        className="popover-in rounded-panel border border-line-strong bg-surface-2 shadow-popover"
       >
           <span className="flex items-center gap-2.5 border-b border-line px-[18px] py-4">
             <SourceChip kind={kind} />

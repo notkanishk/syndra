@@ -1,14 +1,18 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api-client";
-import { Button } from "@/components/ui/Button";
-import { CopyableValue } from "@/components/ui/CopyableValue";
+import { ArriveList } from "@/components/ui/ArriveList";
+import { Notice } from "@/components/ui/Notice";
 // The prose a failure wears lives in one place, shared with every surface that
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
 import { NOTHING_CHANGED, describeFailure, sentence } from "@/lib/outcome";
+import { TINT_MS, stillMotion } from "@/lib/motion";
+import { useUiView } from "@/lib/ui-view";
 
 /**
  * Four states, every list view. Not three — degraded is real and specific and
@@ -51,6 +55,36 @@ export function RowSkeleton({
   );
 }
 
+/** A read that lands inside this never shows a skeleton at all (A-05 S7). */
+export const SKELETON_DELAY_MS = 200;
+
+/**
+ * Shows its skeleton only if the read is still going after 200ms.
+ *
+ * A fast read used to flash a skeleton for a few frames and then replace it:
+ * movement that said "loading" about something that was never slow. `ListStates`
+ * is the one gate every list passes through, so the rule lives here and no
+ * screen can opt out of it.
+ */
+export function SkeletonAfterDelay({
+  children,
+  onShown,
+}: {
+  children: React.ReactNode;
+  /** Called once the skeleton is actually on screen, so a hand-over knows there is one to fade. */
+  onShown?: () => void;
+}) {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLate(true), SKELETON_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    if (late) onShown?.();
+  }, [late, onShown]);
+  return late ? <>{children}</> : null;
+}
+
 /**
  * Empty — a sentence naming what is absent, one line of guidance, one link to
  * the next move. No illustration, no "you're all caught up!".
@@ -88,7 +122,7 @@ export function EmptyState({
             href={action.href}
             className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline"
           >
-            {action.label} <span aria-hidden="true">→</span>
+            {action.label}
           </Link>
         ) : (
           <button
@@ -96,7 +130,7 @@ export function EmptyState({
             onClick={action.onClick}
             className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline"
           >
-            {action.label} <span aria-hidden="true">→</span>
+            {action.label}
           </button>
         ))}
     </div>
@@ -126,40 +160,60 @@ export function ErrorState({
   onRetry?: () => void;
   bare?: boolean;
 }) {
-  const detail = describeFailure(error);
+  // Zitadel never read: the degraded Notice above the page already says so,
+  // and a second, red one here would call it a failure of this list (N23).
+  if (isNeverRead(error)) return <NeverRead />;
+
   const requestId = error instanceof ApiError ? error.details?.request_id : undefined;
 
+  // The danger Notice (proposed/Notice.md), in the place of what failed to
+  // load. Inside a card it keeps the card's inset rather than drawing its own
+  // edge against the card's.
   return (
-    <div
-      role="alert"
-      className={
-        bare
-          ? "row-divider flex flex-col gap-2.5 px-6 py-7"
-          : "flex flex-col gap-2.5 rounded-card border border-danger-line bg-surface-1 px-6 py-7"
-      }
-    >
-      <div className={`type-empty-title ${bare ? "text-danger-text" : ""}`}>{title}</div>
-      <p className="text-[14px] text-muted">{`${sentence(detail)} ${NOTHING_CHANGED}`}</p>
-      {/* The shared control, not a hand-rolled pill: a browser pass found this
-          one rendering at 32px on a phone while every `Button` in the product
-          cleared 44, because the floor lives in `buttonClasses` and this had
-          walked around it. */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        {onRetry && (
-          <Button variant="ghost" size="sm" onClick={onRetry}>
-            Try again
-          </Button>
-        )}
-        {/* A labelled copy row rather than bare mono: an operator pasting this
-            into a message needs to be able to say what it is, and it is the
-            one thing here that gets the failure looked at. */}
-        {requestId && (
-          <div className="mt-1">
-            <CopyableValue value={requestId} label="Reference" />
-            <p className="mt-1 text-[12.5px] text-faint">Quote this if you ask for help.</p>
-          </div>
-        )}
-      </div>
+    <div className={bare ? "row-divider px-4 py-4 tablet:px-5" : ""}>
+      <Notice
+        tone="danger"
+        blocking
+        title={title}
+        action={onRetry ? { label: "Try again", onClick: onRetry } : undefined}
+        reference={typeof requestId === "string" ? requestId : undefined}
+      >
+        {`${sentence(describeFailure(error))} ${NOTHING_CHANGED}`}
+      </Notice>
+    </div>
+  );
+}
+
+/** A read Zitadel has never answered: there is nothing to show, not a failure. */
+export function isNeverRead(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "DIRECTORY_UNREACHABLE";
+}
+
+/**
+ * In the place of a read Zitadel has never answered (N23). An operator has
+ * the degraded Notice above the page and sees nothing more here; a member,
+ * who doesn't, gets the same amber Notice with the breathing dot: neutral
+ * means the network is gone, and Zitadel not answering is amber for operators
+ * too (A-06 §2). Either way the page asks again every minute on its own, so
+ * it fills in when Zitadel answers.
+ */
+function NeverRead() {
+  const { isOperator } = useUiView();
+  const client = useQueryClient();
+  useEffect(() => {
+    const again = setInterval(
+      () => client.invalidateQueries({ predicate: (q) => q.state.status === "error" }),
+      60_000,
+    );
+    return () => clearInterval(again);
+  }, [client]);
+
+  if (isOperator) return null;
+  return (
+    <div className="px-4 py-4 tablet:px-5">
+      <Notice tone="warn" live title="Syndra can't reach the sign-in system.">
+        Nothing about your access has changed. This page tries again on its own.
+      </Notice>
     </div>
   );
 }
@@ -188,7 +242,33 @@ export function ListStates({
   skeleton?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  if (isLoading) return <>{skeleton ?? <RowSkeleton />}</>;
+  // S7: when the read lands, a skeleton that was on screen fades first (tint),
+  // and only then do the rows arrive. They never crossfade. A read that landed
+  // inside the delay never showed one, so there is nothing to fade.
+  const [shown, setShown] = useState(false);
+  const [fading, setFading] = useState(false);
+  const markShown = useCallback(() => setShown(true), []);
+  const [wasLoading, setWasLoading] = useState(isLoading);
+  if (wasLoading !== isLoading) {
+    setWasLoading(isLoading);
+    if (isLoading) setShown(false);
+    else if (shown && !stillMotion()) setFading(true);
+  }
+  useEffect(() => {
+    if (!fading) return;
+    const timer = setTimeout(() => {
+      setFading(false);
+      setShown(false);
+    }, TINT_MS);
+    return () => clearTimeout(timer);
+  }, [fading]);
+
+  if (isLoading) {
+    return <SkeletonAfterDelay onShown={markShown}>{skeleton ?? <RowSkeleton />}</SkeletonAfterDelay>;
+  }
+  if (fading) return <div className="tint-out pointer-events-none">{skeleton ?? <RowSkeleton />}</div>;
+  // Never read (N23): no skeleton, no empty state, no rows.
+  if (isNeverRead(error)) return <NeverRead />;
   if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} bare />;
   if (isEmpty) return <>{empty}</>;
   // `arrive`, applied at the one place every list in the product already
@@ -198,5 +278,5 @@ export function ListStates({
   // `contents` keeps the wrapper out of the layout entirely: this sits inside
   // flex and grid parents everywhere, and a real box here would collapse the
   // gaps between rows.
-  return <div className="contents arrive-list">{children}</div>;
+  return <ArriveList>{children}</ArriveList>;
 }

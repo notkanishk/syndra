@@ -65,7 +65,7 @@ beforeEach(() => {
  * sequence the bar exists to prevent.
  */
 describe("the request queue states its ceiling before the tap", () => {
-  // 501 requests in the queue, 25 rows on screen. The ceiling is about the
+  // 501 requests in the queue, ten rows on screen. The ceiling is about the
   // SELECTION and not about what is rendered, which is the whole reason the
   // cap could be added without touching this assertion — and the reason the
   // test below exists to hold those two apart.
@@ -101,10 +101,10 @@ describe("the queue has a visible end", () => {
   it("renders a page rather than the whole queue", () => {
     renderQueue(60);
 
-    // A page, not sixty.
-    expect(screen.getAllByRole("checkbox", { name: /Select this request/ }).length).toBe(25);
-    expect(screen.getByRole("button", { name: /Load next 25/ })).toBeTruthy();
-    expect(screen.getByText("35 more")).toBeTruthy();
+    // A page, not sixty: the first ten, then the one pagination row.
+    expect(screen.getAllByRole("checkbox", { name: /Select this request/ }).length).toBe(10);
+    expect(screen.getByRole("button", { name: "Show 25 more" })).toBeTruthy();
+    expect(screen.getByText("Showing 10 of 60")).toBeTruthy();
   });
 
   it("still selects the whole queue, not the page", () => {
@@ -120,9 +120,9 @@ describe("the queue has a visible end", () => {
 
   it("shows the next page on request", () => {
     renderQueue(60);
-    fireEvent.click(screen.getByRole("button", { name: /Load next 25/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 25 more" }));
 
-    expect(screen.getAllByRole("checkbox", { name: /Select this request/ }).length).toBe(50);
-    expect(screen.getByText("10 more")).toBeTruthy();
+    expect(screen.getAllByRole("checkbox", { name: /Select this request/ }).length).toBe(35);
+    expect(screen.getByText("Showing 35 of 60")).toBeTruthy();
   });
 });

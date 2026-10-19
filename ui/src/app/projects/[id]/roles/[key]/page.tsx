@@ -277,10 +277,10 @@ function MemberRow({
       </div>
       <div className="w-[120px] shrink-0 text-[13.5px] text-faint">
         {member.expires
-          ? `Expires ${formatShortDate(member.expires)}`
+          ? `Ends ${formatShortDate(member.expires)}`
           : member.since
             ? `Since ${formatShortDate(member.since)}`
-            : "No expiry"}
+            : "No end date"}
       </div>
 
       {/* The action is named after the thing being removed. Where nothing can
@@ -291,7 +291,7 @@ function MemberRow({
           onClick={() => open("mapping")}
           className="shrink-0 text-[13px] font-semibold text-accent-text hover:underline"
         >
-          Open the rule →
+          Open the rule
         </button>
       ) : strongest?.kind === "bundle" ? (
         <Button variant="danger" size="sm" onClick={() => open("bundle")}>

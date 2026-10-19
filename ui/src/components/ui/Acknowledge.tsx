@@ -112,6 +112,7 @@ export function ConfirmByTyping({
 }) {
   const id = useId();
   const short = useIsShort();
+  const warmth = typingWarmth(expected, value);
 
   // A phone in landscape has about 190px above the keyboard, and this gate
   // needs a consequence sentence, a field and an armed red button all visible
@@ -148,10 +149,35 @@ export function ConfirmByTyping({
         autoCapitalize="none"
         autoCorrect="off"
         inputMode="text"
+        data-warmth={warmth}
+        data-armed={typedMatches(expected, value) || undefined}
+        // The border warms toward danger with each matching letter. Inline
+        // because the share is data; at 0 nothing is set and the field keeps
+        // its own neutral border.
+        style={
+          warmth
+            ? { borderColor: `color-mix(in srgb, var(--danger) ${warmth}%, var(--line-strong))` }
+            : undefined
+        }
         onChange={(e) => onChange(e.target.value)}
       />
     </div>
   );
+}
+
+/**
+ * How warm the field's border is, as a percentage toward danger (S16).
+ *
+ * One step per letter that still agrees with the name, so the full name lands
+ * on 70, never 100: danger at full strength is for the button, not for a field
+ * that has just been satisfied. A letter that disagrees (or runs past the
+ * name) is 0, which is neutral: nothing shakes.
+ */
+export function typingWarmth(expected: string, typed: string): number {
+  const want = expected.trim().toLowerCase();
+  const got = typed.trim().toLowerCase();
+  if (!want || !got || !want.startsWith(got)) return 0;
+  return Math.round((got.length / want.length) * 70);
 }
 
 /** Whether what was typed matches. One definition, so no two dialogs disagree. */

@@ -3,12 +3,17 @@
 import { useState } from "react";
 
 import { RoleRef } from "@/components/names";
+import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
+import { formatList } from "@/lib/format";
 import {
   useApplyPublish,
   useRehearsePublish,
   type BundleDraft,
+  type BundleIncluder,
+  type IncludeChange,
+  type IncluderAction,
 } from "@/lib/queries/useBundleVersions";
 
 /**
@@ -29,11 +34,18 @@ export function PublishVersionDialog({
   bundleId,
   name,
   draft: live,
+  includers = [],
   onClose,
 }: {
   bundleId: string;
   name: string;
   draft: BundleDraft;
+  /**
+   * The bundles that include this one (B8). Each must be answered, Update or
+   * Leave, with no default: Update puts the new version in its working copy,
+   * and its own publish moves its people.
+   */
+  includers?: BundleIncluder[];
   onClose: () => void;
 }) {
   const rehearse = useRehearsePublish(bundleId);
@@ -55,6 +67,12 @@ export function PublishVersionDialog({
 
   const [note, setNote] = useState("");
   const [migrate, setMigrate] = useState<boolean | null>(null);
+  const [answers, setAnswers] = useState<Record<string, IncluderAction>>({});
+  const answered = includers.every((i) => answers[i.bundle_id]);
+  const includerAnswers = includers.length
+    ? { includers: includers.map((i) => ({ bundle_id: i.bundle_id, action: answers[i.bundle_id] })) }
+    : {};
+  const through = includers.reduce((n, i) => n + i.people, 0);
 
   const holders = draft.holder_count;
   // With nobody holding it there is no question to ask, so there is no question
@@ -64,21 +82,34 @@ export function PublishVersionDialog({
   // One phrase, used by the field label, the radiogroup's accessible name and
   // the not-ready reason. Written out once because it was written out three
   // times and only one of them agreed with itself for a single holder.
-  const holdersPhrase = `The ${holders} who already ${holders === 1 ? "holds" : "hold"} it`;
+  const holdersPhrase = includers.length
+    ? `The ${holders} who ${holders === 1 ? "has" : "have"} it directly`
+    : `The ${holders} who already ${holders === 1 ? "holds" : "hold"} it`;
+  const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
 
   return (
     <RehearsalDialog
       title={`Publish ${name} v${draft.next_version}`}
       lede={
-        holders === 0
+        includers.length > 0
+          ? `${name} reaches ${people(holders + through)}: ${holders} directly, and ${through} through ${formatList(
+              includers.map((i) => i.name),
+            )}, which ${includers.length === 1 ? "includes" : "include"} it. Nobody moves unless you say so.`
+          : holders === 0
           ? "Nobody holds this bundle yet, so publishing changes nothing for anyone."
           : `${holders} ${holders === 1 ? "person holds" : "people hold"} this bundle today. Publishing does not move them unless you say so.`
       }
       noun={["person", "people"]}
-      ready={decided}
-      notReadyReason={`Choose what happens to the ${holders} ${
-        holders === 1 ? "person who already holds" : "people who already hold"
-      } it. Both answers are real, so there is no default.`}
+      ready={decided && answered}
+      notReadyReason={
+        includers.length === 0
+          ? `Choose what happens to the ${holders} ${
+              holders === 1 ? "person who already holds" : "people who already hold"
+            } it. Both answers are real, so there is no default.`
+          : holders > 0
+            ? `Choose what happens to the ${people(holders)} and to each bundle. Every answer is real, so there are no defaults.`
+            : "Choose what happens to each bundle that includes it. Every answer is real, so there are no defaults."
+      }
       // Publishing is an act on the BUNDLE. Two publishes move nobody and are
       // both legitimate — one where nothing holds it yet, and one where the
       // operator has chosen to leave the current holders where they are — and
@@ -91,6 +122,11 @@ export function PublishVersionDialog({
           <div>
             <FieldLabel>What changes in v{draft.next_version}</FieldLabel>
             <div className="mt-1.5 flex flex-col gap-1.5 rounded-inner border border-line-strong px-4 py-3 text-[14px]">
+              {(draft.include_changes ?? []).map((change) => (
+                <div key={`i${change.child_bundle_id}`} className="flex items-baseline gap-2">
+                  <IncludeChangeLine change={change} />
+                </div>
+              ))}
               {draft.added.map((role) => (
                 <div
                   key={`+${role.zitadel_project_id}:${role.zitadel_role_key}`}
@@ -108,7 +144,7 @@ export function PublishVersionDialog({
                   key={`-${role.zitadel_project_id}:${role.zitadel_role_key}`}
                   className="flex items-baseline gap-2"
                 >
-                  <span className="font-semibold text-danger-text">−</span>
+                  <span className="font-semibold text-warn-text">−</span>
                   <RoleRef
                     projectId={role.zitadel_project_id}
                     roleKey={role.zitadel_role_key}
@@ -145,6 +181,43 @@ export function PublishVersionDialog({
             </div>
           )}
 
+          {includers.length > 0 && (
+            <div>
+              <FieldLabel>
+                The {includers.length} {includers.length === 1 ? "bundle that includes" : "bundles that include"} it
+              </FieldLabel>
+              <div className="mt-1.5 rounded-inner border border-dashed border-line-strong px-4">
+                {includers.map((includer) => (
+                  <div key={includer.bundle_id} className="flex flex-wrap items-center gap-3 border-t border-line py-2.5 first:border-t-0">
+                    <span className="flex min-w-[min(200px,100%)] flex-1 flex-col gap-px">
+                      <span className="text-[14.5px] font-semibold">{includer.name}</span>
+                      <span className="text-[12.5px] text-muted">
+                        {people(includer.people)} · includes v{includer.included_version || includer.draft_version}
+                      </span>
+                    </span>
+                    <span role="radiogroup" aria-label={`${includer.name}: update or leave`} className="flex gap-1.5">
+                      {(["update", "leave"] as const).map((action) => (
+                        <ChoiceRow
+                          key={action}
+                          single
+                          name={`includer-${includer.bundle_id}`}
+                          selected={answers[includer.bundle_id] === action}
+                          onToggle={() => setAnswers((a) => ({ ...a, [includer.bundle_id]: action }))}
+                          title={action === "update" ? "Update" : "Leave"}
+                        />
+                      ))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <FieldHint>
+                Update puts {name} v{draft.next_version} into that bundle&rsquo;s next version; its people get it
+                when that bundle publishes. Leave keeps it where it is; its page offers v{draft.next_version} for
+                later.
+              </FieldHint>
+            </div>
+          )}
+
           <div>
             <FieldLabel htmlFor="version-note">Note for the history (optional)</FieldLabel>
             <Input
@@ -166,6 +239,7 @@ export function PublishVersionDialog({
             note,
             migrate: willMigrate,
             acknowledge_scope: acknowledgeScope,
+            ...includerAnswers,
           })
         ).plan
       }
@@ -173,7 +247,7 @@ export function PublishVersionDialog({
       // sends, and the backend accepts it there for the same reason it issued
       // none: there was no subject to approve.
       onApply={async (planId) =>
-        (await apply.mutateAsync({ note, migrate: willMigrate, plan_id: planId || undefined }))
+        (await apply.mutateAsync({ note, migrate: willMigrate, plan_id: planId || undefined, ...includerAnswers }))
           .plan
       }
       onClose={onClose}
@@ -210,5 +284,39 @@ function Choice({
       <span className="block text-[14.5px] font-semibold">{title}</span>
       <span className="mt-0.5 block text-[13px] leading-[1.5] text-muted">{detail}</span>
     </button>
+  );
+}
+
+/** "+ Safety basics v3", "Safety basics v3 → v4", "− Safety basics". */
+export function IncludeChangeLine({ change }: { change: IncludeChange }) {
+  if (change.from_version === 0) {
+    return (
+      <>
+        <span aria-label="Adds" className="w-3 font-semibold text-accent-text">
+          +
+        </span>
+        <span>
+          {change.child_name} v{change.to_version}
+        </span>
+      </>
+    );
+  }
+  if (change.to_version === 0) {
+    return (
+      <>
+        <span aria-label="Drops" className="w-3 font-semibold text-warn-text">
+          &minus;
+        </span>
+        <span>{change.child_name}</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span aria-hidden className="w-3" />
+      <span>
+        {change.child_name} v{change.from_version} → v{change.to_version}
+      </span>
+    </>
   );
 }

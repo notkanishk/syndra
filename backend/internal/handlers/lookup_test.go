@@ -58,10 +58,12 @@ func withLookupDeps(t *testing.T,
 
 	origSource := directorySource
 	origAllBundles := dbGetAllBundles
+	origRetired := dbGetRetiredBundles
 	origGetRole := dbGetRole
 
 	directorySource = func() directory.Source { return src }
 	dbGetAllBundles = func(context.Context) ([]models.Bundle, error) { return bundles, nil }
+	dbGetRetiredBundles = func(context.Context) ([]models.Bundle, error) { return nil, nil }
 	dbGetRole = func(_ context.Context, projectID, roleKey string) (models.Role, error) {
 		key := projectID + ":" + roleKey
 		if r, ok := roles[key]; ok {
@@ -73,6 +75,7 @@ func withLookupDeps(t *testing.T,
 	t.Cleanup(func() {
 		directorySource = origSource
 		dbGetAllBundles = origAllBundles
+		dbGetRetiredBundles = origRetired
 		dbGetRole = origGetRole
 	})
 }
