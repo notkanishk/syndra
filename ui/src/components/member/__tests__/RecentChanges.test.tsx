@@ -164,4 +164,16 @@ describe("Recent changes: approved, not there yet", () => {
     render(<RecentChanges items={[]} roleName={roleName} />);
     expect(screen.getByText("All your requests →").closest("a")!.getAttribute("href")).toBe("/requests");
   });
+
+  // A-04 §14.8: a removal cancelled before it was sent. RULES: never "waiting to be sent".
+  it("Kept: a cancelled removal says you keep the role and that nothing changes", () => {
+    const r = row({ kind: "cancelled_removal" });
+    expect(r.textContent).toContain("Kept");
+    expect(r.textContent).toContain(
+      "You keep Laser cutter · Operator. A removal was on its way to you. Makerspace staff cancelled it, so nothing changes.",
+    );
+    expect(r.querySelector("strong")!.textContent).toBe("Laser cutter · Operator");
+    expect(r.querySelector(".bg-healthy")).toBeTruthy();
+    expect(r.textContent).not.toMatch(/waiting to be sent/);
+  });
 });

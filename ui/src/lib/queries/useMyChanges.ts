@@ -6,7 +6,7 @@ import { request } from "@/lib/api-client";
 
 /** One change to the caller's own access (GET /me/changes, B10). */
 export interface MyChange {
-  kind: "request_approved" | "request_declined" | "request_withdrawn" | "given" | "taken_away";
+  kind: "request_approved" | "request_declined" | "request_withdrawn" | "given" | "taken_away" | "cancelled_removal";
   at: string;
   project_id: string;
   role_key: string;

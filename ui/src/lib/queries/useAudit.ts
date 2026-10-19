@@ -18,6 +18,22 @@ export interface AuditEntry {
    * decides what the Trace column may claim.
    */
   cascade_id?: string;
+  /** What the entry carries beyond its columns; omitted when null. Only `propagation.cancelled_unsent` has any today. */
+  details?: CancelledUnsentDetails | Record<string, unknown>;
+}
+
+/** `propagation.cancelled_unsent`: the change that was cancelled, and the act that cancelled it. */
+export interface CancelledUnsentDetails {
+  cancelled: {
+    kind: "give" | "remove";
+    project_id: string;
+    role_key: string;
+    user_id: string;
+    initiated_by?: string;
+    queued_at: string;
+    reason?: string;
+  };
+  cause: { action: "grant" | "remove" | "approve" | string; via?: string };
 }
 
 export interface AuditFilter {
