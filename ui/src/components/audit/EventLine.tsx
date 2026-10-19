@@ -1,8 +1,10 @@
 "use client";
 
-import { UserName, BundleName } from "@/components/names";
+import { UserName, BundleName, ProjectName } from "@/components/names";
 import { describeAction, targetKind, shortId } from "@/lib/audit-vocabulary";
-import type { AuditEntry } from "@/lib/queries/useAudit";
+import { formatRelative, humanizeKey } from "@/lib/format";
+import type { AuditEntry, CancelledUnsentDetails } from "@/lib/queries/useAudit";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 
 /**
  * One audit event, as a sentence — THE one renderer, for every screen that
@@ -54,6 +56,68 @@ export function hasTarget(entry: AuditEntry): boolean {
   return Boolean(entry.target_id) && entry.target_id !== "-" && entry.target_id !== "system";
 }
 
+const ACT: Record<string, string> = { grant: "gave it back", remove: "removed it", approve: "approved the request" };
+
+/** A first name, never a pronoun: "someone" until the name resolves. */
+function FirstName({ id }: { id: string }) {
+  const name = useNameResolver().resolveUser(id).value?.display_name?.trim().split(/\s+/)[0];
+  return <>{name || "someone"}</>;
+}
+
+/** "Network storage · Member": the place, then the role by its own name. */
+function PlaceRole({ projectId, roleKey }: { projectId: string; roleKey: string }) {
+  const role = useNameResolver().resolveRole(projectId, roleKey).value?.display_name ?? humanizeKey(roleKey);
+  return (
+    <>
+      <ProjectName id={projectId} /> · {role}
+    </>
+  );
+}
+
+/**
+ * A cancellation that carries what it cancelled (A-04 §14.8): who cancelled, the change,
+ * who queued it and when, the reason, and the act that caused it. Syndra's own names no
+ * act and says nobody was asked. A cause through a bundle or rule is not named: the entry
+ * carries the kind of path, not which bundle or rule.
+ */
+function CancelledChange({ entry, details }: { entry: AuditEntry; details: CancelledUnsentDetails }) {
+  const { cancelled: c, cause } = details;
+  const system = isSystemActor(entry.actor_id);
+  const queuer = c.initiated_by && !isSystemActor(c.initiated_by) ? c.initiated_by : null;
+  const give = c.kind === "give";
+  const act = ACT[cause?.action];
+  return (
+    <span className="flex flex-col gap-1">
+      <span>
+        {system ? "Syndra" : <UserName id={entry.actor_id} />} cancelled a change that was waiting for you to send
+      </span>
+      <span>
+        {give ? "Giving " : "Removing "}
+        <PlaceRole projectId={c.project_id} roleKey={c.role_key} />
+        {give ? " to " : " from "}
+        <UserName id={c.user_id || entry.target_id} />
+      </span>
+      <span className="text-faint">
+        Queued by {queuer ? <UserName id={queuer} /> : "Syndra"} · {formatRelative(c.queued_at)}
+      </span>
+      {c.reason ? (
+        <span>&ldquo;{c.reason}&rdquo;</span>
+      ) : queuer ? (
+        <span className="text-faint">
+          <FirstName id={queuer} /> gave no reason.
+        </span>
+      ) : null}
+      {system ? (
+        <span className="text-faint">Nobody was asked.</span>
+      ) : act ? (
+        <span className="text-faint">
+          cancelled when <FirstName id={entry.actor_id} /> {act}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 /**
  * The event in words, with the thing it happened to named INSIDE the sentence
  * rather than appended after a dash.
@@ -68,6 +132,11 @@ export function hasTarget(entry: AuditEntry): boolean {
 export function EventSentence({ entry }: { entry: AuditEntry }) {
   const { verb, template, destructive } = describeAction(entry.action);
   const tone = destructive ? "font-semibold text-danger-text" : undefined;
+
+  const d = entry.details as CancelledUnsentDetails | undefined;
+  if (entry.action === "propagation.cancelled_unsent" && d?.cancelled) {
+    return <CancelledChange entry={entry} details={d} />;
+  }
 
   // Syndra's own cancellation (expiry, onboarding, a rule) names Syndra, and says
   // nobody was asked: an operator's was always shown first, this one has no one to show.

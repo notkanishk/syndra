@@ -161,6 +161,15 @@ function describe(change: MyChange, trigger?: string, endsNow: string | null = n
         pre: keep ? "You withdrew your request to keep " : "You withdrew your request for ",
         post: ".",
       };
+    case "cancelled_removal":
+      // A removal queued for you was cancelled before it was sent (A-04 §14.8). It carries
+      // no decider or reason, so the sentence names neither.
+      return {
+        word: "Kept",
+        tone: "healthy",
+        pre: "You keep ",
+        post: ". A removal was on its way to you. Makerspace staff cancelled it, so nothing changes.",
+      };
     case "taken_away":
       // The board says "Taken away"; the copy guide's one word for ending
       // someone's access is "revoke" (plain-language-copy §6), and its guard
