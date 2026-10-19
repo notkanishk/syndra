@@ -128,7 +128,7 @@ function RequestRow({
           {describeAsk(entry, terms.data)}
         </span>
       </span>
-      <span className="w-full text-[14px] text-muted tablet:min-w-[200px] tablet:flex-1 tablet:truncate">
+      <span className="w-full text-[14px] text-muted [text-wrap:pretty] tablet:min-w-[200px] tablet:flex-1">
         {entry.justification ? `“${entry.justification}”` : "No reason given"}
       </span>
       <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0">
