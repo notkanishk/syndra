@@ -135,7 +135,7 @@ func seedBundles(ctx context.Context) error {
 		err := db.PG.QueryRow(ctx, `
 			INSERT INTO bundles (name, description)
 			VALUES ($1, $2)
-			ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
+			ON CONFLICT (name) WHERE retired_at IS NULL DO UPDATE SET description = EXCLUDED.description
 			RETURNING id
 		`, bundle.Name, bundle.Description).Scan(&bundleID)
 		if err != nil {
@@ -243,7 +243,7 @@ func seedAssignments(ctx context.Context) error {
 
 	for userID, bundleName := range assignments {
 		var bundleID string
-		if err := db.PG.QueryRow(ctx, `SELECT id FROM bundles WHERE name = $1`, bundleName).Scan(&bundleID); err != nil {
+		if err := db.PG.QueryRow(ctx, `SELECT id FROM bundles WHERE name = $1 AND retired_at IS NULL`, bundleName).Scan(&bundleID); err != nil {
 			return err
 		}
 		if _, err := db.PG.Exec(ctx, `

@@ -25,6 +25,7 @@ describe("targetKind", () => {
     expect(targetKind("mapping_rule.created")).toBe("rule");
     expect(targetKind("mapping_rule.updated")).toBe("rule");
     expect(targetKind("mapping_rule.deleted")).toBe("rule");
+    expect(targetKind("mapping_rule.retired")).toBe("rule");
   });
 
   it("defaults to a person for everything else", () => {

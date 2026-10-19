@@ -124,7 +124,7 @@ var ErrNoWelcomeBundleConfigured = errors.New("no welcome bundle configured")
 // (idx_bundles_welcome_unique).
 func GetWelcomeBundle(ctx context.Context) (string, error) {
 	var id string
-	err := querier(ctx).QueryRow(ctx, `SELECT id FROM bundles WHERE is_welcome = TRUE`).Scan(&id)
+	err := querier(ctx).QueryRow(ctx, `SELECT id FROM bundles WHERE is_welcome = TRUE AND retired_at IS NULL`).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrNoWelcomeBundleConfigured
 	}
@@ -150,7 +150,7 @@ func SetWelcomeBundle(ctx context.Context, bundleID string) error {
 	if _, err := tx.Exec(ctx, `UPDATE bundles SET is_welcome = FALSE WHERE is_welcome = TRUE`); err != nil {
 		return fmt.Errorf("clear previous welcome bundle: %w", err)
 	}
-	tag, err := tx.Exec(ctx, `UPDATE bundles SET is_welcome = TRUE WHERE id = $1`, bundleID)
+	tag, err := tx.Exec(ctx, `UPDATE bundles SET is_welcome = TRUE WHERE id = $1 AND retired_at IS NULL`, bundleID)
 	if err != nil {
 		return fmt.Errorf("mark welcome bundle: %w", err)
 	}

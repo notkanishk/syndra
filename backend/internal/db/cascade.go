@@ -435,7 +435,7 @@ func RemoveRoleFromBundleAndEnqueue(ctx context.Context, actor, bundleID, projec
 // statement (one implicit tx). mode is normalized so an invalid literal can never persist.
 func SetRuleConfirmationMode(ctx context.Context, ids []string, mode string) error {
 	_, err := querier(ctx).Exec(ctx,
-		`UPDATE mapping_rules SET confirmation_mode = $1 WHERE id = ANY($2)`,
+		`UPDATE mapping_rules SET confirmation_mode = $1 WHERE id = ANY($2) AND retired_at IS NULL`,
 		NormalizeConfirmationMode(mode), ids)
 	return err
 }
@@ -444,7 +444,7 @@ func SetRuleConfirmationMode(ctx context.Context, ids []string, mode string) err
 // statement (one implicit tx). Same shape as SetRuleConfirmationMode.
 func SetBundleConfirmationMode(ctx context.Context, ids []string, mode string) error {
 	_, err := querier(ctx).Exec(ctx,
-		`UPDATE bundles SET confirmation_mode = $1 WHERE id = ANY($2)`,
+		`UPDATE bundles SET confirmation_mode = $1 WHERE id = ANY($2) AND retired_at IS NULL`,
 		NormalizeConfirmationMode(mode), ids)
 	return err
 }
@@ -575,12 +575,16 @@ func UpdateMappingRuleAndEnqueue(ctx context.Context, actor, id, sp, sr, tp, tr 
 	if owned {
 		defer tx.Rollback(ctx)
 	}
-	if _, err := tx.Exec(ctx,
+	tag, err := tx.Exec(ctx,
 		`UPDATE mapping_rules
 		 SET source_zitadel_project_id=$2, source_zitadel_role_key=$3,
 		     target_zitadel_project_id=$4, target_zitadel_role_key=$5
-		 WHERE id=$1`, id, sp, sr, tp, tr); err != nil {
+		 WHERE id=$1 AND retired_at IS NULL`, id, sp, sr, tp, tr)
+	if err != nil {
 		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
 	}
 	ids, err := enqueueCascadeRows(ctx, tx,
 		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.updated", ResourceID: id}},
@@ -596,16 +600,16 @@ func UpdateMappingRuleAndEnqueue(ctx context.Context, actor, id, sp, sr, tp, tr 
 	return ids, nil
 }
 
-// DeleteMappingRuleAndEnqueue deletes the rule AND enqueues the caller-computed revoke rows in
-// ONE tx (mirrors UpdateMappingRuleAndEnqueue). The two halves must commit together: a rule row
-// removed without its revokes leaves everyone it ever granted holding access in Zitadel that no
+// RetireMappingRuleAndEnqueue retires the rule AND enqueues the caller-computed revoke rows in
+// ONE tx (mirrors UpdateMappingRuleAndEnqueue). The two halves must commit together: a rule
+// retired without its revokes leaves everyone it ever granted holding access in Zitadel that no
 // Syndra source explains — which is not a gap, it is drift, and the sweep would find it later
 // with no actor to attribute it to.
 //
-// The outbox rows keep source_ref = the deleted rule's id. That column is plain text with no
-// foreign key, deliberately: it records what caused the write, and the cause having since been
-// deleted is exactly what a reader of the change history needs to know.
-func DeleteMappingRuleAndEnqueue(ctx context.Context, actor, id string, params []EnqueueParams) ([]string, error) {
+// The row stays, with when and by whom, so the history that names it still resolves. The outbox
+// rows keep source_ref = the retired rule's id: that column is plain text with no foreign key,
+// recording what caused the write.
+func RetireMappingRuleAndEnqueue(ctx context.Context, actor, id string, params []EnqueueParams) ([]string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
@@ -613,18 +617,20 @@ func DeleteMappingRuleAndEnqueue(ctx context.Context, actor, id string, params [
 	if owned {
 		defer tx.Rollback(ctx)
 	}
-	tag, err := tx.Exec(ctx, `DELETE FROM mapping_rules WHERE id=$1`, id)
+	tag, err := tx.Exec(ctx,
+		`UPDATE mapping_rules SET retired_at = NOW(), retired_by = $2
+		  WHERE id=$1 AND retired_at IS NULL`, id, actor)
 	if err != nil {
 		return nil, err
 	}
-	// Nobody deleted it out from under us in the window between the handler's read and here —
-	// or somebody did, and enqueueing revokes for a rule a concurrent caller already removed
+	// Nobody retired it out from under us in the window between the handler's read and here —
+	// or somebody did, and enqueueing revokes for a rule a concurrent caller already retired
 	// (and already revoked for) would double-write.
 	if tag.RowsAffected() == 0 {
 		return nil, pgx.ErrNoRows
 	}
 	ids, err := enqueueCascadeRows(ctx, tx,
-		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.deleted", ResourceID: id}},
+		[]CascadeAudit{{Actor: actor, Action: "mapping_rule.retired", ResourceID: id}},
 		params)
 	if err != nil {
 		return nil, err

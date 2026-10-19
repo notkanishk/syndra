@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 type CreateMappingRuleRequest struct {
@@ -18,7 +19,33 @@ type CreateMappingRuleRequest struct {
 	ConfirmationMode string `json:"confirmation_mode,omitempty"`
 }
 
+// handleGetMappingRule reads one rule, retired or not, so a retired rule can say when and by whom
+// it was retired.
+// GET /api/v1/rules/mapping/{id}
+func handleGetMappingRule(w http.ResponseWriter, r *http.Request) {
+	rule, err := dbGetMappingRuleByID(r.Context(), r.PathValue("id"))
+	if err != nil {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "mapping rule not found")
+		return
+	}
+	jsonResponse(w, http.StatusOK, rule)
+}
+
+// handleGetMappingRules lists the rules in force; ?retired=true lists the retired ones instead,
+// read-only and without a holder count (a retired rule applies to nobody).
 func handleGetMappingRules(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("retired") == "true" {
+		retired, err := dbGetRetiredMappingRules(r.Context())
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		if retired == nil {
+			retired = []models.MappingRule{}
+		}
+		jsonResponse(w, http.StatusOK, retired)
+		return
+	}
 	rules, err := dbGetActiveMappingRules(r.Context())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -157,6 +184,10 @@ func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "mapping rule not found")
 		return
 	}
+	if old.RetiredAt != nil {
+		writeRetiredAt(w, "rule", *old.RetiredAt)
+		return
+	}
 
 	// Circular dependency guard — excludes this rule's own old edge from the graph first.
 	if err := dbDetectCycleOnUpdate(r.Context(), id, req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole); err != nil {
@@ -177,6 +208,10 @@ func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
 			jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A mapping rule with this source/target combination already exists")
 			return
 		}
+		if errors.Is(err, pgx.ErrNoRows) { // retired in the window since the read above
+			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "mapping rule not found")
+			return
+		}
 		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
 		return
 	}
@@ -187,7 +222,7 @@ func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleDeleteMappingRule retires a rule and takes back the access only it was granting.
+// handleRetireMappingRule retires a rule and takes back the access only it was granting.
 //
 // It reads the rule first for the same reason the update path does: the id alone does not say
 // what the rule reached, and the revoke set is computed from the closure the rule was part of.
@@ -195,7 +230,7 @@ func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
 // argument: a deletion inherits the mode the rule itself carried, so a rule that queued its
 // writes queues the writes that undo it.
 // DELETE /api/v1/rules/mapping/{id}
-func handleDeleteMappingRule(w http.ResponseWriter, r *http.Request) {
+func handleRetireMappingRule(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !trimmedNonEmpty(id) {
 		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
@@ -207,12 +242,16 @@ func handleDeleteMappingRule(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "mapping rule not found")
 		return
 	}
+	if old.RetiredAt != nil {
+		writeRetiredAt(w, "rule", *old.RetiredAt)
+		return
+	}
 
 	actor := getAdminUserID(r.Context())
 	if actor == "" {
 		actor = "system"
 	}
-	cascade, err := svcCascadeRuleDeleted(r.Context(), actor, old)
+	cascade, err := svcCascadeRuleRetired(r.Context(), actor, old)
 	if err != nil {
 		// A concurrent delete lands here: the row was gone by the time the tx ran, and its
 		// revokes were enqueued by whoever won. Reporting 500 would invite a retry of writes
@@ -226,7 +265,7 @@ func handleDeleteMappingRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]any{
-		"message": "Mapping rule deleted",
+		"message": "Mapping rule retired",
 		"cascade": cascade,
 	})
 }

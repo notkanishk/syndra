@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -48,7 +49,65 @@ type UpdateBundleRequest struct {
 	Description string `json:"description"`
 }
 
+// writeRetired answers a write to a retired bundle or rule: refused, and nothing was changed.
+// It reports whether err was that refusal.
+func writeRetired(w http.ResponseWriter, what string, err error) bool {
+	var retired *services.ErrRetired
+	if !errors.As(err, &retired) {
+		return false
+	}
+	writeRetiredAt(w, what, retired.At)
+	return true
+}
+
+func writeRetiredAt(w http.ResponseWriter, what string, at time.Time) {
+	jsonResponse(w, http.StatusConflict, map[string]any{
+		"error":   "RETIRED",
+		"message": "This " + what + " was retired on " + at.Format("2 January 2006") + ". Nothing about it can change.",
+		"details": map[string]any{"retired_at": at},
+	})
+}
+
+// withLiveBundle refuses every write to a bundle that was retired: its history stays readable and
+// nothing about it can change. It runs before the handler so no write route has to remember to
+// ask, and a bundle that doesn't exist passes through to the handler's own 404.
+func withLiveBundle(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if b, err := dbGetBundleByID(r.Context(), r.PathValue("id")); err == nil && b.RetiredAt != nil {
+			writeRetiredAt(w, "bundle", *b.RetiredAt)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// handleGetBundle reads one bundle, retired or not, so a retired bundle's page can say when and
+// by whom it was retired and show its history.
+// GET /api/v1/bundles/{id}
+func handleGetBundle(w http.ResponseWriter, r *http.Request) {
+	bundle, err := dbGetBundleByID(r.Context(), r.PathValue("id"))
+	if err != nil {
+		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Bundle not found")
+		return
+	}
+	jsonResponse(w, http.StatusOK, bundle)
+}
+
+// handleGetBundles lists the bundles in force; ?retired=true lists the retired ones instead,
+// read-only and without the counts that only mean something for a bundle somebody can hold.
 func handleGetBundles(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("retired") == "true" {
+		retired, err := dbGetRetiredBundles(r.Context())
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		if retired == nil {
+			retired = []models.Bundle{}
+		}
+		jsonResponse(w, http.StatusOK, retired)
+		return
+	}
 	bundles, err := dbGetAllBundles(r.Context())
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
@@ -225,25 +284,29 @@ func handleUpdateBundle(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Bundle updated"})
 }
 
-// handleDeleteBundle retires a bundle and revokes what only it was granting, in one transaction.
+// handleRetireBundle retires a bundle and revokes what only it was granting, in one transaction.
 //
 // The welcome flag is reported back rather than guarded against. Refusing to delete the welcome
 // bundle would be a rule an operator could not satisfy — the only way to clear the flag is to
 // promote a different bundle, which a makerspace with one bundle cannot do. So the deletion goes
 // through and the response says what else went with it, and the screen says it before the click.
 // DELETE /api/v1/bundles/{id}
-func handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
+func handleRetireBundle(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !trimmedNonEmpty(id) {
 		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
 		return
 	}
 
-	// Read before the delete: afterwards there is nothing left to ask whether it was the
-	// welcome bundle, and the caller needs to be told.
+	// Read before the retire: it clears the welcome flag, and the caller needs to be told
+	// whether this was the welcome bundle.
 	bundle, err := dbGetBundleByID(r.Context(), id)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Bundle not found")
+		return
+	}
+	if bundle.RetiredAt != nil {
+		writeRetiredAt(w, "bundle", *bundle.RetiredAt)
 		return
 	}
 
@@ -251,10 +314,13 @@ func handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "system"
 	}
-	cascade, err := svcCascadeBundleDeleted(r.Context(), actor, id)
+	cascade, err := svcCascadeBundleRetired(r.Context(), actor, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "Bundle not found")
+			return
+		}
+		if writeRetired(w, "bundle", err) {
 			return
 		}
 		var included *services.ErrBundleIncluded
@@ -271,7 +337,7 @@ func handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]any{
-		"message":     "Bundle deleted",
+		"message":     "Bundle retired",
 		"was_welcome": bundle.IsWelcome,
 		"cascade":     cascade,
 	})
@@ -396,6 +462,9 @@ func handleAssignBundleToUser(w http.ResponseWriter, r *http.Request) {
 	// failure rides in cascade.drain and is not fatal.
 	cascade, err := svcCascadeBundleAssigned(r.Context(), actor, userID, req.BundleID)
 	if err != nil {
+		if writeRetired(w, "bundle", err) {
+			return
+		}
 		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
 		return
 	}

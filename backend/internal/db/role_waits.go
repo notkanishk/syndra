@@ -168,10 +168,10 @@ func ListWaitSuggestions(ctx context.Context) ([]WaitSuggestion, error) {
 		    FROM bundles b
 		    JOIN bundle_versions v ON v.bundle_id = b.id
 		    JOIN bundle_version_roles bvr ON bvr.version_id = v.id
-		    WHERE b.confirmation_mode = 'manual'
+		    WHERE b.confirmation_mode = 'manual' AND b.retired_at IS NULL
 		    UNION
 		    SELECT r.target_zitadel_project_id, r.target_zitadel_role_key, 'rule', r.id::text, ''
-		    FROM mapping_rules r WHERE r.confirmation_mode = 'manual'
+		    FROM mapping_rules r WHERE r.confirmation_mode = 'manual' AND r.retired_at IS NULL
 		) s
 		WHERE NOT EXISTS (SELECT 1 FROM role_waits w
 		                  WHERE w.project_id = s.project_id AND w.role_key = s.role_key)

@@ -62,6 +62,7 @@ var (
 	dbUpdateBundle      = db.UpdateBundle
 	dbGetBundleByID     = db.GetBundleByID
 	dbGetAllBundles     = db.GetAllBundles
+	dbGetRetiredBundles = db.GetRetiredBundles
 	dbGetRolesForBundle = db.GetRolesForBundle
 	// What the bundle GRANTS, as opposed to what its working copy contains.
 	// Separate dep because they are separate questions — see handleGetBundleRoles.
@@ -96,16 +97,17 @@ var (
 	// injectable in the handler layer.
 	svcCascadeBundleRemoved = services.CascadeBundleRemovedFromUser // (ctx, actor, userID, bundleID)
 	// Retiring the bundle itself: the same revoke, computed once per holder.
-	svcCascadeBundleDeleted = services.CascadeBundleDeleted // (ctx, actor, bundleID)
+	svcCascadeBundleRetired = services.CascadeBundleRetired // (ctx, actor, bundleID)
 	svcCascadeRuleUpdated   = services.CascadeRuleUpdated   // (ctx, actor, old, sp, sr, tp, tr)
 	// Retiring a rule is the revoke half of a retarget with no new edge: same closure diff,
 	// same one transaction, so the rule and the access it was granting leave together.
-	svcCascadeRuleDeleted = services.CascadeRuleDeleted // (ctx, actor, old)
+	svcCascadeRuleRetired = services.CascadeRuleRetired // (ctx, actor, old)
 
 	// Rules handler injectables for the 6th trigger (Task 21f): read the pre-update rule, then
 	// validate the retarget against the graph WITHOUT the rule's own old edge.
-	dbGetMappingRuleByID  = db.GetMappingRuleByID
-	dbDetectCycleOnUpdate = db.DetectCycleOnUpdate
+	dbGetMappingRuleByID     = db.GetMappingRuleByID
+	dbGetRetiredMappingRules = db.GetRetiredMappingRules
+	dbDetectCycleOnUpdate    = db.DetectCycleOnUpdate
 
 	// Bundle versioning: the draft diff, the version list, and the two rehearsed
 	// applies (publish, move holders).

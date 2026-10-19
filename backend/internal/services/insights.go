@@ -486,7 +486,11 @@ func InsightsWhatIf(ctx context.Context, change models.InsightsWhatIfChange) (mo
 
 		switch change.Kind {
 		case "rule_gone":
-			if _, err := svcGetMappingRuleByID(ctx, change.RuleID); err != nil {
+			// A retired rule applies to nobody: there is nothing for it to go from.
+			if rule, err := svcGetMappingRuleByID(ctx, change.RuleID); err != nil || rule.RetiredAt != nil {
+				if err == nil {
+					err = pgx.ErrNoRows
+				}
 				return whatIfNotFound(err, "rule")
 			}
 			without := make([]models.MappingRule, 0, len(rules))
@@ -506,7 +510,10 @@ func InsightsWhatIf(ctx context.Context, change models.InsightsWhatIfChange) (mo
 				return effectiveClosure(base, rules), effectiveClosure(base, without), nil
 			}
 		default: // the three bundle kinds
-			if _, err := svcGetBundleByID(ctx, change.BundleID); err != nil {
+			if bundle, err := svcGetBundleByID(ctx, change.BundleID); err != nil || bundle.RetiredAt != nil {
+				if err == nil {
+					err = pgx.ErrNoRows
+				}
 				return whatIfNotFound(err, "bundle")
 			}
 			holders, err := svcGetBundleHoldersByVersion(ctx, change.BundleID)
