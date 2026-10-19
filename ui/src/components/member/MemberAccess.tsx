@@ -99,7 +99,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         .map((reason) => `${reason.trigger_project}\u0000${reason.trigger_role}`),
     );
     if (triggers.size !== 1) return undefined;
-    const [triggerProject, trigger] = [...triggers][0].split("\u0000");
+    const [triggerProject, trigger] = Array.from(triggers)[0].split("\u0000");
     return roleName(triggerProject, trigger);
   };
 
