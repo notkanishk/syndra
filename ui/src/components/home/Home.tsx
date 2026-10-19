@@ -427,7 +427,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
       <CardHeader title="Pending changes" count={count} />
       <CardRow>
         <div className="flex-1 text-[14.5px]">
-          {count} {count === 1 ? "change" : "changes"} waiting to be sent to Zitadel
+          {count} {count === 1 ? "change is" : "changes are"} waiting for you to send to Zitadel
           {/* Not "nothing has changed" — that flatly denies the count above it.
               The reassurance is about Zitadel, not the queue: it has not
               received any of this yet, so there is nothing to undo. */}
@@ -477,7 +477,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
  * (`one-truth-many-checks`: accepted is not confirmed).
  *
  * Neither of the two states this page already has a block for: not a failed
- * change — Zitadel said yes — and not one still waiting to be sent — Syndra
+ * change — Zitadel said yes — and not one still waiting for you to send — Syndra
  * already sent it. A 2xx is an acknowledgement of receipt, never evidence
  * Zitadel can show the change back, and the age is the entire content of the
  * finding: the backend only lists a row here once it is old enough that the
@@ -499,7 +499,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
           {count === 1 ? "it" : "them"}
           <span className="text-faint">
             {" "}
-            — not a failed change, and not one still waiting to be sent. A later look at Zitadel
+            — not a failed change, and not one still waiting for you to send. A later look at Zitadel
             just hasn&rsquo;t been able to see {count === 1 ? "it" : "them"} yet.
           </span>
         </div>

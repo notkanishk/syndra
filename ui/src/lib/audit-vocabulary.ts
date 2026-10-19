@@ -83,11 +83,11 @@ export const AUDIT_ACTIONS: Record<
     verb: "Closed a copy of a waiting request",
     passive: "A copy of their waiting request was closed",
   },
-  // An action cancelled a change still waiting to be sent, after the operator
+  // An action cancelled a change still waiting for you to send, after the operator
   // was shown it (owner, 15 Oct: never invisibly). resource_id is the outbox row.
   "propagation.cancelled_unsent": {
-    verb: "Cancelled a change that was waiting to be sent",
-    passive: "A change waiting to be sent for them was cancelled",
+    verb: "Cancelled a change that was waiting for makerspace staff to send it",
+    passive: "A change waiting for makerspace staff to send was cancelled",
   },
   "access_request.closed_as_given": {
     verb: "Closed a request for a role given another way",
@@ -99,8 +99,8 @@ export const AUDIT_ACTIONS: Record<
   },
   // Not destructive: the access was already going to lapse. What was recorded is that somebody
   // looked, which is the opposite of something being taken away unnoticed.
-  "grant_expiry.acknowledged": { verb: "Recorded that expiring access should be left to lapse" },
-  "grant_expiry.acknowledgement_cleared": { verb: "Put expiring access back in the undecided list" },
+  "grant_expiry.acknowledged": { verb: "Recorded that access that ends should be left to end" },
+  "grant_expiry.acknowledgement_cleared": { verb: "Put access that ends back in the undecided list" },
   "claim_profile.updated": { verb: "Changed a project's token format" },
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
@@ -109,7 +109,7 @@ export const AUDIT_ACTIONS: Record<
 /**
  * The two families the backend builds by concatenation, with the connected
  * system's name in the middle: a change to somebody's account on TrueNAS
- * recorded and waiting to be sent, and a hold that lifted itself on its date.
+ * recorded and waiting for you to send, and a hold that lifted itself on its date.
  * Neither can be a static key above, so they are matched by shape.
  */
 const ACCOUNT_CHANGE = /^entitlement\.([a-z0-9_-]+)\.enqueued$/;
@@ -130,7 +130,7 @@ export function describeAction(
   const account = action.match(ACCOUNT_CHANGE);
   if (account) {
     return {
-      verb: `Recorded a change to their ${targetLabel(account[1])} account, waiting to be sent`,
+      verb: `Recorded a change to their ${targetLabel(account[1])} account, waiting for makerspace staff to send it`,
       destructive: false,
     };
   }

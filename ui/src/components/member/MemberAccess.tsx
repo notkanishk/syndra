@@ -314,8 +314,7 @@ function RoleRow({
 /**
  * A role that was given and hasn't been sent (A-04 §7.3). A member reads "On
  * its way" with a neutral dot, never the operator's "Waiting for you to send",
- * which a member can't do, and never "waiting to be sent", which reads as
- * automatic. The reason it is held (a role that always waits, or Syndra not
+ * which a member can't do, and never a phrase that reads as automatic (A-04 §7.3). The reason it is held (a role that always waits, or Syndra not
  * reaching the sign-in system) is the operator's to read; the member's
  * question is only whether to expect it.
  */

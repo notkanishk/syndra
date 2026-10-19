@@ -435,7 +435,7 @@ function ReconcileControl({ target }: { target: string }) {
     <Card>
       <CardHeader
         title="Check for differences"
-        note={`Compares ${name} with what Syndra expects and records any fixes as changes waiting to be sent. Nothing is applied until somebody sends them from Pending changes.`}
+        note={`Compares ${name} with what Syndra expects and records any fixes as changes waiting for you to send. Nothing is applied until somebody sends them from Pending changes.`}
       />
       <CardRow>
         <div className="flex-1 text-[14.5px] text-muted">
@@ -448,7 +448,7 @@ function ReconcileControl({ target }: { target: string }) {
               again once it is reachable.
             </span>
           ) : (
-            `${result.bound} accounts managed · ${result.queued} fixes waiting to be sent · ${result.stale?.length ?? 0} accounts missing from ${name}`
+            `${result.bound} accounts managed · ${result.queued} fixes waiting for you to send · ${result.stale?.length ?? 0} accounts missing from ${name}`
           )}
         </div>
         <Button
@@ -1083,7 +1083,7 @@ function ResolveConflictDialog({
             The other person stops holding this account in Syndra, at once and without being
             told. Their data on {name} is untouched — this changes who Syndra says it belongs
             to, which is what every later action on it goes by. Account fixes for both people
-            are recorded as changes waiting to be sent, because the change that caused this
+            are recorded as changes waiting for you to send, because the change that caused this
             gave one person the other&rsquo;s settings.
           </p>
         </div>

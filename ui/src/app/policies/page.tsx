@@ -686,7 +686,7 @@ function DeleteRuleConfirm({
                         kind: auto ? "applied" : "queued",
                         message: `${shortRuleId(rule.id)} retired — ${n} ${
                           n === 1 ? "revocation" : "revocations"
-                        } ${auto ? "sent" : "waiting to be sent"}`,
+                        } ${auto ? "sent" : "waiting for you to send"}`,
                         detail: auto
                           ? "The rule applied without review, so the access it gave was revoked without review too."
                           : "The revocations wait under Pending changes until you send them. Until then, that access stays.",

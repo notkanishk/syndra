@@ -145,7 +145,7 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
         });
       }
     }
-    // The action would cancel changes still waiting to be sent. Ask, then send
+    // The action would cancel changes still waiting for you to send. Ask, then send
     // again naming exactly what was shown: if more was queued meanwhile, the
     // backend refuses again with the longer list and this asks again.
     const refusal = parsed as ApiErrorBody;
@@ -157,7 +157,7 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
       }
       throw new ApiError(409, {
         error: "KEPT_QUEUED",
-        message: "Nothing was changed. The changes waiting to be sent are still waiting",
+        message: "Nothing was changed. The queued changes are still there, waiting for you to send them",
       });
     }
     throw new ApiError(res.status, parsed as ApiErrorBody | string);

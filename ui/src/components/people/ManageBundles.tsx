@@ -130,7 +130,7 @@ function ManageBundlesOpen({
                     ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a few minutes, the rest until you send them.`
                     : " until you send them."
               }`
-            : "Nothing is waiting to be sent: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
+            : "Nothing is waiting for you to send: this left no change for Zitadel or a connected system to carry out. Pending changes is unaffected.",
       });
       setStaged(new Set());
     } catch (error) {

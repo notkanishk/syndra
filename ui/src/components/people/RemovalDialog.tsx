@@ -235,7 +235,7 @@ function DirectDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                This grant is still waiting to be sent, so {subject} never received it. Removing it withdraws the queued change; nothing reaches Zitadel.
+                This grant is still waiting for you to send, so {subject} never received it. Removing it withdraws the queued change; nothing reaches Zitadel.
               </span>
             </>
           ) : (
@@ -350,7 +350,7 @@ function BundleDialog({
         titleId="removal-title"
         lede={
           source.queued
-            ? `${bundleName} is still waiting to be sent, so nothing it carries has reached ${subject} yet.`
+            ? `${bundleName} is still waiting for you to send, so nothing it carries has reached ${subject} yet.`
             : `Everything ${bundleName} carries goes with it, except what another source also gives them.`
         }
       />
@@ -440,7 +440,7 @@ function BundleDialog({
                 const result = await removeBundle.mutateAsync(source.bundle_id!);
                 const waiting = result?.cascade?.enqueued ?? 0;
                 setOutcome({
-                  // `queued` paints an amber "Waiting to be sent" badge, and a
+                  // `queued` paints an amber "Waiting for you to send" badge, and a
                   // withdrawal leaves nothing waiting — the badge sat directly
                   // above "Nothing is waiting under Pending changes" and
                   // contradicted it. The record DID change, so this is not

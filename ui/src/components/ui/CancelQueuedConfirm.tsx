@@ -10,7 +10,7 @@ import { Relative } from "@/components/ui/Time";
 import { setCancelConfirmer, type QueuedChange } from "@/lib/cancel-confirm";
 
 /**
- * The one question before an action cancels changes still waiting to be sent
+ * The one question before an action cancels changes still waiting for you to send
  * (owner, 15 Oct: never invisibly). Whoever queued them may not be the person
  * acting now, and the reason they were set in motion isn't on this screen, so
  * it lists each one: what, for whom, who queued it, when, and why.

@@ -11,7 +11,7 @@ import { TargetOverview } from "@/components/targets/TargetOverview";
  * `halt()` in the add-on reconciler returns the result struct untouched —
  * `bound`, `queued` and `stale` are still at their zero values because nothing
  * was ever measured. The card rendered them anyway: "0 accounts managed · 0
- * fixes waiting to be sent · 0 accounts missing", which is what a healthy,
+ * fixes waiting for you to send · 0 accounts missing", which is what a healthy,
  * fully-converged system also looks like. The two states that most need
  * telling apart were displayed identically, and the flag that distinguishes
  * them was missing from the UI's own type.
@@ -105,6 +105,6 @@ describe("a reconcile pass that halted", () => {
     // The exact sentence a healthy run produces. A halted pass must never be
     // able to render it.
     expect(screen.queryByText(/0 accounts managed/)).toBeNull();
-    expect(screen.queryByText(/fixes waiting to be sent/)).toBeNull();
+    expect(screen.queryByText(/fixes waiting for you to send/)).toBeNull();
   });
 });
