@@ -111,6 +111,20 @@ describe("MemberAccess standing", () => {
     expect(screen.getByText("Checking what you can use.")).toBeTruthy();
   });
 
+  // A-06 §2, N23: Zitadel never read. The card headers stay, with no count, and
+  // there are no rows: a row would say what Syndra decided as though it were
+  // what the person can use, and nothing has been observed to say so.
+  it("shows card headers with no counts and no rows while Zitadel has never been read", () => {
+    reset();
+    access.value = view(undefined, undefined);
+    render(<MemberAccess session={session} />);
+    expect(screen.getByText("Fabrication")).toBeTruthy();
+    expect(screen.queryByText("Laser cutter · Member")).toBeNull();
+    expect(screen.queryByText("Given to you")).toBeNull();
+    expect(screen.getByText("Checking what you can use.")).toBeTruthy();
+    expect(screen.queryByText(/\b\d+ roles?\b/)).toBeNull();
+  });
+
   it("names roles by their catalogue label", () => {
     reset();
     access.value = view(COMPLETE, ["laser", "mill"]);

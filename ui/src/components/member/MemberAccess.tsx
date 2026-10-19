@@ -125,6 +125,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   // use right now". Same object PersonAccess shows an operator, member voice.
   const inForce = (access.data?.allowances ?? []).filter((allowance) => allowance.in_force);
   const summary = summarySentence(roleCount, rooms, ending);
+  // Zitadel never read (A-06 §2, N23): nothing has been observed, so the cards
+  // keep their headers and show no rows. A row would say what Syndra decided
+  // as though it were what the person can use.
+  const unread = !observation?.read_at;
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -197,7 +201,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                     id={project.project_id}
                   />
                 </div>
-                {roles.map((role) => (
+                {!unread && roles.map((role) => (
                   <RoleRow
                     key={role.role_key}
                     name={roleName(project.project_id, role.role_key)}
