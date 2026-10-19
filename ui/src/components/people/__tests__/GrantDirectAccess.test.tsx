@@ -142,6 +142,20 @@ describe("GrantDirectAccess · choosing the role", () => {
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
   });
 
+  it("a role given with an end but not yet sent is on its way, not held until a date", () => {
+    // Found on the dev box: an approved request's grant has an end and waits in the
+    // outbox; the row said "Has this until 31 Dec · Extend" for access not yet in Zitadel.
+    state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: "2026-12-18T12:00:00Z" }];
+    state.queued = ["operator"];
+    state.queuedAt = new Date(Date.now() - 60_000).toISOString();
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    expect(screen.getByText(/^Given/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Has this until/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Extend/ })).toBeNull();
+  });
+
   it("a role held with an end is listed, not pickable, and offers Extend", () => {
     state.grants = [{ id: "g1", project_id: "p1", role_key: "operator", expires_at: "2026-12-18T12:00:00Z" }];
     open();

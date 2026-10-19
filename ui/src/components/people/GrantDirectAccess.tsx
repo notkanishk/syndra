@@ -60,17 +60,18 @@ function GrantDirectAccessOpen({
   const resolved = resolveExpiry(preset, customDate, terms.data);
 
   // What the person holds already, so giving it again is said before the click,
-  // in the row's note seat. A direct grant's own end wins; otherwise what
-  // Zitadel shows is held with no end Syndra knows of; a role given and not
-  // yet sent is on its way.
+  // in the row's note seat. A role given and not yet sent is on its way first:
+  // it isn't theirs in Zitadel yet, so an end or an Extend would describe a
+  // grant that hasn't arrived (A-04 §12.4). Then a direct grant's own end; then
+  // what Zitadel shows is held with no end Syndra knows of.
   const heldGrants = useUserGrants(userId);
   const heldAccess = useUserAccess(userId);
   const noteOf = (project: string, key: string): RoleNote => {
     const g = (heldGrants.data ?? []).find((x) => x.project_id === project && x.role_key === key);
-    if (g?.expires_at) return { kind: "until", until: g.expires_at };
     const entry = (heldAccess.data?.projects ?? []).find((p) => p.project_id === project);
     const queued = [...(entry?.source_roles ?? []), ...(entry?.derived_roles ?? [])].find((r) => r.role_key === key);
     if (queued && nothingSentYet(queued.reasons)) return { kind: "onway", at: givenAt(queued.reasons) };
+    if (g?.expires_at) return { kind: "until", until: g.expires_at };
     if (g || entry?.observed_role_keys?.includes(key)) return { kind: "held" };
     return { kind: "none" };
   };
