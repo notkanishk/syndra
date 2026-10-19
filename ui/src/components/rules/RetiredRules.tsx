@@ -17,9 +17,13 @@ import { useRetiredMappingRules } from "@/lib/queries/useMappingRules";
  */
 export function RetiredRulesFold() {
   const [open, setOpen] = useState(false);
+  const retired = useRetiredMappingRules();
+  // Nothing retired, or not read yet: the list ends where it ends, with no empty fold to open.
+  const n = retired.data?.length ?? 0;
+  if (n === 0 && !retired.error) return null;
   return (
     <Card>
-      <FoldHeading open={open} onClick={() => setOpen(!open)} title="Retired rules" count="" picked={false} />
+      <FoldHeading open={open} onClick={() => setOpen(!open)} title="Retired rules" count={n ? String(n) : ""} picked={false} />
       {open && <RetiredRuleRows />}
     </Card>
   );

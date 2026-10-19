@@ -135,9 +135,9 @@ describe("the retired bundles fold", () => {
     expect(screen.getByRole("link", { name: /Spring Intake/ })).toBeInTheDocument();
   });
 
-  it("says plainly when nothing has been retired", () => {
-    render(<RetiredBundlesFold />);
-    fireEvent.click(screen.getByRole("button", { name: /Retired bundles/ }));
-    expect(screen.getByText("Nothing has been retired.")).toBeInTheDocument();
+  it("is not there at all when nothing has been retired", () => {
+    state.retired = [];
+    const { container } = render(<RetiredBundlesFold />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

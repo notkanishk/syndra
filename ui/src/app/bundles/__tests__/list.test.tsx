@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import BundlesPage from "@/app/bundles/page";
 import type { BundleRow } from "@/lib/queries/useBundles";
 
-const state = vi.hoisted(() => ({ bundles: [] as BundleRow[] }));
+const state = vi.hoisted(() => ({
+  bundles: [] as BundleRow[],
+  retired: [] as { id: string; name: string; retired_at: string }[],
+}));
 
 vi.mock("@/lib/queries/useBundles", () => ({
   useBundleRolesByBundle: () => ({ byId: {}, allLoaded: true }),
@@ -13,6 +16,7 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({ data: state.bundles, isLoading: false, error: null, refetch: () => {} }),
   useCreateBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRetiredBundles: () => ({ data: state.retired, isLoading: false, error: null, refetch: () => {} }),
 }));
 
 function bundle(overrides: Partial<BundleRow> = {}): BundleRow {
@@ -56,10 +60,19 @@ describe("the bundles list", () => {
     expect(screen.queryByText(/older version|Unpublished|Given to everyone/)).toBeNull();
   });
 
-  it("ends the list with a fold of retired bundles, closed", () => {
+  it("ends the list with a fold of retired bundles, closed, counting them", () => {
+    state.retired = [{ id: "r1", name: "Old Lab", retired_at: "2020-03-04T10:00:00Z" }];
     render(<BundlesPage />);
 
     expect(screen.getByRole("button", { name: /Retired bundles/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Retired bundles/ })).toHaveTextContent("1");
+  });
+
+  it("has no retired fold when nothing has been retired", () => {
+    state.retired = [];
+    render(<BundlesPage />);
+
+    expect(screen.queryByRole("button", { name: /Retired bundles/ })).toBeNull();
   });
 
   it("shows the Roles and People counts", () => {
