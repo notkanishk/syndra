@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
 
 import Link from "next/link";
@@ -116,6 +116,12 @@ export function Home({ session }: { session: SessionUser }) {
     : pending.length + expiring.length + onboardingGaps;
 
   const who = firstName(session);
+  // The greeting and the weekday depend on the reader's clock and zone, which
+  // the server doesn't share: rendered there, they were the server's hour in
+  // UTC and hydration failed (React #418). They appear on mount, in a seat held
+  // by an invisible stand-in so nothing below moves (same rule as Relative).
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => setNow(new Date()), []);
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
   const error = summary.error ?? requests.error ?? onboarding.error;
   // While the load is failing the count is unknown, and "nothing needs you" is
@@ -131,11 +137,11 @@ export function Home({ session }: { session: SessionUser }) {
             `text-balance` keeps the two lines close in length instead of
             leaving one word stranded. */}
         <h1 className="type-greeting max-w-[22ch] text-balance sm:max-w-[34ch]">
-          {greeting()}
+          {now ? greeting(now) : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}. <span className="text-ink/40">{headline}</span>
         </h1>
         <div className="mt-2 text-[14.5px] text-faint">
-          {formatWeekday()} · last checked <ClockTime at={summary.dataUpdatedAt} />
+          {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>} · last checked <ClockTime at={summary.dataUpdatedAt} />
         </div>
       </div>
 
@@ -679,8 +685,8 @@ function UnexplainedAccess({ count }: { count: number }) {
   );
 }
 
-function greeting(): string {
-  const hour = new Date().getHours();
+function greeting(now: Date): string {
+  const hour = now.getHours();
   if (hour < 12) return "Morning";
   if (hour < 17) return "Afternoon";
   return "Evening";
