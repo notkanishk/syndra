@@ -89,7 +89,8 @@ function CancelledChange({ entry, details }: { entry: AuditEntry; details: Cance
   return (
     <span className="flex flex-col gap-1">
       <span>
-        {system ? "Syndra" : <UserName id={entry.actor_id} />} cancelled a change that was waiting for you to send
+        {/* The actor has its own seat beside every entry, as for every other verb; Syndra is named. */}
+        {system ? "Syndra cancelled" : "Cancelled"} a change that was waiting for you to send
       </span>
       <span>
         {give ? "Giving " : "Removing "}
