@@ -119,7 +119,7 @@ export function pathAnswer(
       title: `${p.name} to ${role}`,
       meta: p.meta,
       lines: [
-        ...routes.map((r, i) => ({ tone: SHADES[Math.min(i, 2)], lead: r.lead, text: r.text })),
+        ...routes.map((r, i) => ({ tone: SHADES[Math.min(i, 2)], lead: r.lead, text: r.text, lights: { nodes: [roleId, ...r.nodes], threads: r.threads } })),
         ...(routes.length > 1
           ? [{ tone: "ink" as const, lead: `${routes.length} routes.`, text: `Removing one of them won't stop ${p.name} having it.` }]
           : []),
@@ -188,8 +188,14 @@ export function whoAnswer(m: Model, hasId: string, withoutId: string | null, fou
   if (withoutId) h.nodes.set(withoutId, "ink");
 
   const lines: Panel["lines"] = found.slice(0, MORE).map((p) => {
-    const hows = routesOf(m, hasId, has, p.how).map((r) => r.how);
-    return { tone: "accent" as const, lead: `${p.name}:`, text: hows.length ? `${formatList(hows)}.` : "holds it." };
+    const via = routesOf(m, hasId, has, p.how);
+    const hows = via.map((r) => r.how);
+    return {
+      tone: "accent" as const,
+      lead: `${p.name}:`,
+      text: hows.length ? `${formatList(hows)}.` : "holds it.",
+      lights: { nodes: [hasId, ...via.flatMap((r) => r.nodes)], threads: via.flatMap((r) => r.threads) },
+    };
   });
   if (found.length > MORE) lines.push({ tone: "ink", text: `And ${found.length - MORE} more.` });
   if (!found.length)
@@ -239,7 +245,11 @@ export function whatIfAnswer(
   const who = (list: InsightsWhatIf["gains"], verb: string, t: Tone) => {
     if (!list.length) return;
     lines.push({ tone: t, lead: people(list.length), text: `would ${verb} something.` });
-    for (const p of list.slice(0, MORE)) lines.push({ tone: t, lead: p.name, text: `would ${verb} ${roles(m, p.roles)}.` });
+    for (const p of list.slice(0, MORE)) {
+      const ids = p.roles.map((r) => m.roleId(r.project_id, r.role_key)).filter((x): x is string => Boolean(x));
+      const threads = (m.out.get(q.bundle) ?? []).filter((th) => ids.includes(th.to)).map((th) => th.id);
+      lines.push({ tone: t, lead: p.name, text: `would ${verb} ${roles(m, p.roles)}.`, lights: { nodes: [q.bundle, ...ids], threads } });
+    }
     if (list.length > MORE) lines.push({ tone: "ink", text: `And ${list.length - MORE} more.` });
   };
   who(data.losses, "lose", "warn");

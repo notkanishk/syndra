@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import type { Tone } from "@/components/insights/model";
+import type { Lit, Tone } from "@/components/insights/model";
 import { TONE_COLOUR } from "@/components/insights/tone";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +15,13 @@ export interface Panel {
   title: string;
   meta?: string;
   /** A line may open with a bold lead: "By hand:", a person's name. */
-  lines: Array<{ tone: Tone; lead?: string; text: string }>;
+  lines: Array<{
+    tone: Tone;
+    lead?: string;
+    text: string;
+    /** The person or role this line names, as map ids: hovering or focusing the line lights them. */
+    lights?: Lit;
+  }>;
   open?: { label: string; href: string };
 }
 
@@ -43,6 +49,7 @@ export function AnswerPanel({
   onPin,
   onlyPinned,
   phone = false,
+  onLight,
 }: {
   panel: Panel;
   onBack?: () => void;
@@ -53,6 +60,8 @@ export function AnswerPanel({
   onlyPinned?: () => void;
   /** Below tablet the panel is the page, and the pin says what it pins. */
   phone?: boolean;
+  /** Present only where there is a map to light (tablet and up): says what a hovered or focused line names, or null. */
+  onLight?: (lit: (Lit & { tone: Tone }) | null) => void;
 }) {
   const clipboard = useClipboardAvailable();
   const [copied, setCopied] = useState(false);
@@ -61,6 +70,9 @@ export function AnswerPanel({
     const t = setTimeout(() => setCopied(false), 1600);
     return () => clearTimeout(t);
   }, [copied]);
+
+  // The answer going away lets go of the map, or its last hover would stay lit.
+  useEffect(() => () => onLight?.(null), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function copy() {
     try {
@@ -84,7 +96,19 @@ export function AnswerPanel({
 
       <div className="flex min-w-0 flex-col gap-[7px] tablet:flex-[1_1_380px]">
         {panel.lines.map((line, i) => (
-          <p key={i} className="flex items-baseline gap-2.5 text-[14px] leading-[1.55] [text-wrap:pretty]">
+          <p
+            key={i}
+            className="flex items-baseline gap-2.5 text-[14px] leading-[1.55] [text-wrap:pretty]"
+            {...(onLight && line.lights
+              ? {
+                  tabIndex: 0,
+                  onMouseEnter: () => onLight({ ...line.lights!, tone: line.tone }),
+                  onMouseLeave: () => onLight(null),
+                  onFocus: () => onLight({ ...line.lights!, tone: line.tone }),
+                  onBlur: () => onLight(null),
+                }
+              : {})}
+          >
             <span
               aria-hidden
               className="size-[7px] flex-none rounded-pill"

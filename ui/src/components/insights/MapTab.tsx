@@ -14,12 +14,15 @@ import {
   crossing,
   describe,
   kindMeta,
+  lightOf,
   openOf,
   paint,
   pinLine,
   pinTones,
   reach,
   type Highlight,
+  type Lit,
+  type Tone,
 } from "@/components/insights/model";
 import { nodeIds, sentence, sentenceText, toParams, type Entity, type Question } from "@/components/insights/question";
 import { QuestionSeat } from "@/components/insights/QuestionSeat";
@@ -69,6 +72,8 @@ export function MapTab({ url }: { url: InsightsUrl }) {
   const findings = useFindings(model);
   const catalog = useCatalogUsers();
   const [keysOpen, setKeysOpen] = useState(false);
+  // The line of the answer being hovered or focused: while it is, the map shows only that line's thread.
+  const [lit, setLit] = useState<(Lit & { tone: Tone }) | null>(null);
   const [scrubOpen, setScrubOpen] = useState(false);
   const [today] = useState(todayDay);
   const asOn = Boolean(url.asof);
@@ -122,6 +127,8 @@ export function MapTab({ url }: { url: InsightsUrl }) {
 
   const highlight = useMemo<Highlight | null>(() => {
     if (!model) return null;
+    const mine = lit ? lightOf(model, lit, lit.tone) : null;
+    if (mine) return mine;
     const h: Highlight = { nodes: new Map(), threads: new Map() };
     if (finding) {
       const lit = findings.lit(finding);
@@ -144,7 +151,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     }
     return h.nodes.size ? h : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, finding, findings.lit, focus, asked, answer.answer, lensRead, pins.join()]);
+  }, [model, lit, finding, findings.lit, focus, asked, answer.answer, lensRead, pins.join()]);
 
   const held = (id: string) => findings.held.get(id) ?? null;
   let panel: Panel | null = null;
@@ -169,7 +176,10 @@ export function MapTab({ url }: { url: InsightsUrl }) {
       title: THREADS[pins.length],
       meta: "Each keeps its own shade",
       lines: [
-        ...pins.map((p) => ({ tone: tones.get(p)!, text: pinLine(model, p, held(p)) })),
+        ...pins.map((p) => {
+          const r = reach(model, p);
+          return { tone: tones.get(p)!, text: pinLine(model, p, held(p)), lights: { nodes: Array.from(r.nodes), threads: Array.from(r.threads) } };
+        }),
         ...(cross ? [{ tone: "ink" as const, text: cross }] : []),
       ],
     };
@@ -365,6 +375,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
             key={`${finding}|${JSON.stringify(question)}|${pins.join()}|${lens}|${url.days}|${url.group}`}
             panel={panel}
             phone={phone}
+            onLight={phone ? undefined : setLit}
             onBack={question || finding || pins.length || lens !== "people" ? back : undefined}
             pins={pins.map((id) => ({ id, name: model!.nameOf(id), tone: tones.get(id)! }))}
             onUnpin={unpin}

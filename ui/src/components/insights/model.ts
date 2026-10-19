@@ -124,6 +124,20 @@ export interface Highlight {
   threads: Map<string, Tone>;
 }
 
+/** What a line of the answer lights when its person or role is hovered or focused. */
+export interface Lit {
+  nodes: string[];
+  threads?: string[];
+}
+
+/** The map's highlight for one line of the answer: only what it names, in its tone. Null when none of it is on the map. */
+export function lightOf(m: Model, lit: Lit, tone: Tone): Highlight | null {
+  const h: Highlight = { nodes: new Map(), threads: new Map() };
+  for (const id of lit.nodes) if (m.byId.has(id)) h.nodes.set(id, tone);
+  for (const id of lit.threads ?? []) h.threads.set(id, tone);
+  return h.nodes.size ? h : null;
+}
+
 export const PIN_TONES: Tone[] = ["accent", "accent2", "accent3"];
 
 /** The first thing to paint a node or thread keeps it. */
