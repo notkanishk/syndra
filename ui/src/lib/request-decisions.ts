@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -107,11 +108,30 @@ export function useRequestDecisions() {
   const resolver = useNameResolver();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [outcomes, setOutcomes] = useState<Record<string, Decided>>({});
+  // Approving can cancel a removal still waiting for you to send. A row has no
+  // sheet of its own, so the step opens a small sheet holding only itself.
+  const [deciding, setDeciding] = useState<AccessRequest | null>(null);
+  const first = (resolver.resolveUser(deciding?.requester_id ?? "").value?.display_name ?? "").trim().split(/\s+/)[0];
+  const step = useCancelStep({
+    host: first ? `Approve ${first}'s request` : "Approve this request",
+    goAhead: "approve",
+    standalone: true,
+  });
 
   async function act(entry: AccessRequest, next: "approved" | "rejected") {
     setResolved((prev) => new Set(prev).add(entry.id));
+    setDeciding(entry);
     try {
-      const result = await decide.mutateAsync({ id: entry.id, status: next });
+      const result = await step.run(() => decide.mutateAsync({ id: entry.id, status: next }));
+      if (result === KEPT) {
+        // Kept: the request is still waiting, in its seat, and nothing was decided.
+        setResolved((prev) => {
+          const copy = new Set(prev);
+          copy.delete(entry.id);
+          return copy;
+        });
+        return;
+      }
       const keeping = entry.kind === "extend";
       let decided: Decided;
       if (next === "rejected") {
@@ -141,5 +161,6 @@ export function useRequestDecisions() {
     }
   }
 
-  return { act, resolved, outcomes, isPending: decide.isPending };
+  /** Render once beside the rows: the step for an approval that would cancel something. */
+  return { act, resolved, outcomes, isPending: decide.isPending, cancelStep: step.element };
 }

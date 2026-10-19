@@ -11,6 +11,7 @@ import {
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
 import { useRemoveBundle } from "@/lib/queries/useBundles";
@@ -203,9 +204,17 @@ function DirectDialog({
   // operator needs to be told which one they are looking at.
   const grantListPending = removal.grantsResolved === false;
   const blocked = !removal.grantId || !userId;
+  // Taking back a grant that is still waiting cancels it: the sheet turns to the
+  // step first (A-04 §14), and Keep it comes back to this dialog as it was.
+  const step = useCancelStep({
+    host: `Revoke direct access to ${roleLabel}`,
+    goAhead: "revoke",
+    tone: source?.queued ? "accent" : "danger",
+  });
 
   return (
     <Modal open onClose={onClose} busy={remove.isPending} size="sm" labelledBy="removal-title">
+      <PushedStep step={step}>
       <ModalHeader
         chip={<SourceChip kind="direct" />}
         title={`Revoke direct access to ${roleLabel}?`}
@@ -252,9 +261,11 @@ function DirectDialog({
         </div>
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
         note={
+          step.note ??
           // Two causes, and they were reported as one. "This role was not given
           // directly" is true when the grant id is missing; it is a fabrication
           // when the real problem is that the caller passed no person, which is
@@ -289,10 +300,13 @@ function DirectDialog({
             isPending={remove.isPending}
             onClick={async () => {
               try {
-                const result = await remove.mutateAsync({
-                  userId: userId!,
-                  grantId: removal.grantId!,
-                });
+                const result = await step.run(() =>
+                  remove.mutateAsync({
+                    userId: userId!,
+                    grantId: removal.grantId!,
+                  }),
+                );
+                if (result === KEPT) return;
                 // The residual outcome, from the backend that computed it. A
                 // role this person also holds through a bundle or a rule
                 // survives the removal, and which ones those are is a closure
@@ -315,6 +329,7 @@ function DirectDialog({
           </Button>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }
@@ -341,9 +356,15 @@ function BundleDialog({
   const bundleName = source.bundle_name ?? "this bundle";
   const removeBundle = useRemoveBundle(userId ?? "");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const step = useCancelStep({
+    host: `Remove the ${bundleName} bundle from ${subject}`,
+    goAhead: "remove",
+    tone: source.queued ? "accent" : "danger",
+  });
 
   return (
     <Modal open onClose={onClose} busy={removeBundle.isPending} size="sm" labelledBy="removal-title">
+      <PushedStep step={step}>
       <ModalHeader
         chip={<SourceChip kind="bundle" />}
         title={`Remove the ${bundleName} bundle from ${subject}?`}
@@ -393,12 +414,17 @@ function BundleDialog({
         )}
       </div>
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
+        // A bundle whose grants are still waiting says nothing about them here:
+        // the step is the one place that is said, because only it carries who
+        // queued each change and why (A-04 §13.4).
         note={
-          source.queued
-            ? "Every other role this bundle carries is withdrawn too, and none of them had been sent. Pending changes will be empty afterwards, not full of reversals."
-            : "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."
+          step.note ??
+          (source.queued
+            ? undefined
+            : "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit.")
         }
       >
         {/* First in the markup, same reason as the direct dialog: the focus
@@ -437,7 +463,8 @@ function BundleDialog({
             }
             onClick={async () => {
               try {
-                const result = await removeBundle.mutateAsync(source.bundle_id!);
+                const result = await step.run(() => removeBundle.mutateAsync(source.bundle_id!));
+                if (result === KEPT) return;
                 const waiting = result?.cascade?.enqueued ?? 0;
                 setOutcome({
                   // `queued` paints an amber "Waiting for you to send" badge, and a
@@ -466,6 +493,7 @@ function BundleDialog({
           </Button>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }

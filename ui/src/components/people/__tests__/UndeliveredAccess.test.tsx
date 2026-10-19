@@ -62,7 +62,7 @@ describe("removing a bundle whose grants were never sent", () => {
     expect(screen.queryByText(/no other source gives it/i)).toBeNull();
   });
 
-  it("says the queue empties rather than filling with reversals", () => {
+  it("says nothing of its own about the waiting grants: the step is the one place that is said", () => {
     render(
       <RemovalDialog
         removal={bundleSource(true)}
@@ -72,7 +72,8 @@ describe("removing a bundle whose grants were never sent", () => {
       />,
     );
 
-    expect(screen.getByText(/Pending changes will be empty afterwards/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Pending changes will be empty afterwards/i)).toBeNull();
+    expect(screen.queryByText(/none of them had been sent/i)).toBeNull();
   });
 
   it("still says what a delivered bundle takes away", () => {

@@ -4,6 +4,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
+import { WouldCancelQueued } from "@/lib/api-client";
+import type { QueuedChange } from "@/lib/cancel-confirm";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 
 const decide = vi.fn().mockResolvedValue({ message: "Request resolved" });
@@ -146,5 +148,50 @@ describe("a decided request names its person and its next step", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+  });
+});
+
+describe("approving a request that would cancel a change still waiting", () => {
+  const waiting: QueuedChange = {
+    id: "00000000-0000-0000-0000-000000000042",
+    op_type: "revoke",
+    user_id: "u1",
+    project_id: "pLaser",
+    role_keys: ["trained"],
+    source: "direct",
+    initiated_by: "op-2",
+    initiated_by_name: "Sam Iyer",
+    reason: "left the course",
+    queued_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+  };
+  const refusal = () => new WouldCancelQueued([waiting], "POST", "/requests/r1/decision");
+
+  it("opens a small sheet holding only the step; Keep it leaves the request waiting in its seat", async () => {
+    decide.mockClear();
+    decide.mockRejectedValueOnce(refusal());
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("This cancels a removal that's waiting");
+    expect(screen.getByRole("button", { name: "Cancel it and approve" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(decide).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("going ahead approves, and the seat says Approved", async () => {
+    decide.mockClear();
+    decide.mockRejectedValueOnce(refusal()).mockResolvedValueOnce({ message: "Request resolved" });
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel it and approve" }));
+
+    const seat = await decisionSeat();
+    expect(seat.textContent).toContain("Approved");
+    expect(decide).toHaveBeenCalledTimes(2);
   });
 });
