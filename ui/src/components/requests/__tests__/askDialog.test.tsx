@@ -228,6 +228,16 @@ describe("Ask for access · only what they lack, once", () => {
     expect(sendButton()).toBeDisabled();
   });
 
+  it("one given with an end and not yet sent is on its way, not yours until a date", () => {
+    // An approved request's grant has an end and waits in the outbox: it isn't theirs to keep yet.
+    held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: new Date(2026, 11, 18, 12).toISOString() }];
+    held.queued = ["trained"];
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    expect(within(dialog()).getByText("On its way")).toBeInTheDocument();
+    expect(within(dialog()).queryByText(/Yours until/)).toBeNull();
+  });
+
   it("arriving on one given and not yet sent dates it from when it was queued", () => {
     held.queued = ["trained"];
     held.queuedAt = "2026-01-15T09:00:00Z";

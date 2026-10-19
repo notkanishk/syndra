@@ -133,7 +133,6 @@ export function useAskState(userId: string) {
     );
     if (waiting) return { kind: "asked", at: waiting.created_at };
     const grant = (grants.data ?? []).find((g) => g.project_id === projectId && g.role_key === roleKey);
-    if (grant?.expires_at) return { kind: "until", until: grant.expires_at };
     const project = access.data?.projects?.find((p) => p.project_id === projectId);
     const role = [...(project?.source_roles ?? []), ...(project?.derived_roles ?? [])].find(
       (r) => r.role_key === roleKey,
@@ -148,6 +147,8 @@ export function useAskState(userId: string) {
         .pop();
       return { kind: "onway", at };
     }
+    // After "on its way": an end on a grant that hasn't reached Zitadel isn't theirs to keep yet.
+    if (grant?.expires_at) return { kind: "until", until: grant.expires_at };
     const observed = project?.observed_role_keys?.includes(roleKey);
     if (grant || observed) return { kind: "for_good" };
     return { kind: "none" };
