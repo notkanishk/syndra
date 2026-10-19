@@ -50,6 +50,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY, next);
     }
+    fadeThemeSwitch();
     applyTheme(next, false);
     setThemeState(next);
   }, []);
@@ -63,6 +64,25 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
+}
+
+/** S14 Daylight: how long html wears `theme-fading` after a switch (settle's 260ms, and a beat). */
+const FADE_MS = 300;
+let fadeTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Crossfade every colour for this one switch. The class turns a short
+ * transition on (globals.css) for the duration and is then taken off, so no
+ * other colour change in the product is slowed by it. A reader who has asked
+ * for less motion gets the switch itself and no fade.
+ */
+export function fadeThemeSwitch() {
+  if (typeof document === "undefined") return;
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  const root = document.documentElement;
+  root.classList.add("theme-fading");
+  clearTimeout(fadeTimer);
+  fadeTimer = setTimeout(() => root.classList.remove("theme-fading"), FADE_MS);
 }
 
 function applyTheme(theme: Theme, isSystem: boolean) {
