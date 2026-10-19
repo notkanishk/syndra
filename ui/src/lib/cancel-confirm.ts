@@ -1,6 +1,6 @@
 /**
  * Never invisibly (owner, 15 Oct): an action that would cancel a change still
- * waiting to be sent is refused by the backend (409 WOULD_CANCEL_QUEUED) with
+ * waiting for you to send is refused by the backend (409 WOULD_CANCEL_QUEUED) with
  * the list, until the operator has seen exactly those changes. `request()`
  * asks the one confirmation mounted at the root, then sends again naming the
  * ids it was shown. No screen has to be built to say so, and none can cancel

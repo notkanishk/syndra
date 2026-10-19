@@ -674,7 +674,7 @@ function RoleGroup({
 }: {
   // "Given" (source_roles), not "Granted": the per-row state below is what
   // carries the truth about whether it landed. A hardcoded "Granted" sitting
-  // above a row that says "Waiting to be sent" contradicted it directly.
+  // above a row that says "Waiting for you to send" contradicted it directly.
   label: "Given" | "Automatic";
   /** Whether Zitadel could be asked at all, and what it said. */
   confirmation: Confirmation;

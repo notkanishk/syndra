@@ -50,7 +50,7 @@ const EXTEND_DAYS = 90;
  * point at a destination rather than a tab.
  *
  * Two actions, and they are not symmetrical. **Extend** changes the access.
- * **Let it lapse** changes nothing about the access — it records that somebody
+ * **Let it end** changes nothing about the access — it records that somebody
  * looked and decided, which is the only thing this queue could not previously
  * say. The sweep removes the grant on its date either way.
  *
@@ -176,11 +176,11 @@ export default function ExpiringAccessPage() {
           error={grants.error}
           isEmpty={rows.length === 0}
           onRetry={() => grants.refetch()}
-          errorTitle="Couldn't load expiring access."
-          skeleton={<RowSkeleton rows={4} label="Loading expiring access" />}
+          errorTitle="Couldn't load access that ends."
+          skeleton={<RowSkeleton rows={4} label="Loading access that ends" />}
           empty={
             <EmptyState
-              title={`Nothing expires in the next ${within} days.`}
+              title={`Nothing ends in the next ${within} days.`}
               guidance="Direct grants appear here a month before they end."
               resolved
             />
@@ -213,7 +213,7 @@ export default function ExpiringAccessPage() {
             <>
               <div className="row-divider bg-tint-1 px-5 py-2.5">
                 <span className="type-label">
-                  Let lapse · {acknowledged.length}{" "}
+                  Left to end · {acknowledged.length}{" "}
                   {acknowledged.length === 1 ? "role" : "roles"}
                 </span>
               </div>
@@ -277,7 +277,7 @@ export default function ExpiringAccessPage() {
           op="extend"
           userIds={selectedUsers}
           grantIds={selectedGrantIds}
-          scope="with access expiring"
+          scope="with access that ends"
           onClose={() => {
             setExtending(false);
             selection.clear();
@@ -290,7 +290,7 @@ export default function ExpiringAccessPage() {
       <div className="flex flex-wrap gap-[18px]">
         <div className="card min-w-[min(320px,100%)] flex-1 px-5 py-4">
           <h2 className="type-card-title mb-2">
-            What &ldquo;Let it lapse&rdquo; does, and what it doesn&rsquo;t
+            What &ldquo;Let it end&rdquo; does, and what it doesn&rsquo;t
           </h2>
           <p className="max-w-[60ch] text-[14px] leading-[1.55] text-muted">
             It records that you read the row and decided. It changes nothing about the access — the
@@ -389,7 +389,7 @@ function ExpiringRow({
             <span className="font-semibold text-ink/80">
               <UserName id={ack.by} fallback="somebody no longer listed" />
             </span>{" "}
-            let this lapse on {formatShortDate(ack.at)}
+            let this end on {formatShortDate(ack.at)}
             {ack.note ? ` — ${ack.note}` : ""}
           </span>
         ) : (
@@ -464,11 +464,11 @@ function ExpiringRow({
               }
             }}
           >
-            Undo letting it lapse
+            Undo letting it end
           </Button>
         ) : (
           <Button variant="ghost" size="sm" onClick={onLetLapse}>
-            Let it lapse
+            Let it end
           </Button>
         )}
       </div>
@@ -510,12 +510,12 @@ function LetItLapseDialog({
   return (
     <Modal open onClose={onClose} busy={acknowledge.isPending} size="md" labelledBy="lapse-title">
       <ModalHeader
-        title="Let this lapse?"
+        title="Let this end?"
         titleId="lapse-title"
         lede={
           <>
             <RoleRef projectId={grant.project_id} roleKey={grant.role_key} /> for{" "}
-            <UserName id={grant.user_id} />, expiring {formatShortDate(expiresAt)}.
+            <UserName id={grant.user_id} />, ending {formatShortDate(expiresAt)}.
           </>
         }
       />
@@ -525,7 +525,7 @@ function LetItLapseDialog({
           <div className="type-label mb-1">What this does</div>
           <ul className="flex flex-col gap-1 text-muted">
             <li>
-              Nothing to the access. It already lapses on {formatShortDate(expiresAt)} and it still
+              Nothing to the access. It already ends on {formatShortDate(expiresAt)} and it still
               will — this records that you looked.
             </li>
             <li>The queue stops asking, and shows your name against the decision.</li>
@@ -574,9 +574,9 @@ function LetItLapseDialog({
                 });
                 setOutcome({
                   kind: "applied",
-                  message: "Recorded — it will lapse on its date",
+                  message: "Recorded — it will end on its date",
                   detail:
-                    "Nothing about the access changed — it still lapses on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
+                    "Nothing about the access changed — it still ends on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
                 });
               } catch (error) {
                 // A 409 here is the reopen rule arriving early: the grant was

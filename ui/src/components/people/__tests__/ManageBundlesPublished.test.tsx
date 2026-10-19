@@ -108,7 +108,7 @@ describe("ManageBundles", () => {
 
     expect(await screen.findByText("Applied")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/nothing is waiting to be sent/i)).toBeInTheDocument();
+    expect(screen.getByText(/nothing is waiting for you to send/i)).toBeInTheDocument();
   });
 
   it("reports the change waiting, and where to send it, when it enqueues a cascade", async () => {

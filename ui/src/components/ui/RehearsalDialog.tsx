@@ -65,7 +65,7 @@ export function resultMessage(
     return `Done. Nobody's access changed, because nobody holds it yet.`;
   }
   const parts = [`Applied to ${of(succeeded)}.`];
-  if (queued > 0) parts.push(`${of(queued)} ${queued === 1 ? "is" : "are"} waiting to be sent to ${system}.`);
+  if (queued > 0) parts.push(`${of(queued)} ${queued === 1 ? "is" : "are"} waiting for you to send to ${system}.`);
   if (failed > 0) parts.push(`${of(failed)} failed.`);
   return parts.join(" ");
 }
@@ -108,7 +108,7 @@ export function resultSentence(
 ): string {
   const { queued } = plan.summary;
   if (queued === 0) return "It has taken effect.";
-  return `${queued} ${queued === 1 ? noun[0] : noun[1]} ${queued === 1 ? "is" : "are"} waiting to be sent to ${system}.`;
+  return `${queued} ${queued === 1 ? noun[0] : noun[1]} ${queued === 1 ? "is" : "are"} waiting for you to send to ${system}.`;
 }
 
 /**
@@ -150,8 +150,8 @@ export function queuedNote(plan: BulkPlan, system: string = "Zitadel"): string |
   if (plan.summary.queued === 0) return undefined;
   const revocation = REVOKING_OPS.has(plan.op);
   return revocation
-    ? `Recorded in Syndra and waiting to be sent to ${system}. Syndra sends revocations on their own, every few minutes; until then the person still has the access.`
-    : `Recorded in Syndra and waiting to be sent to ${system}. Nothing has changed there yet; send it from Pending changes.`;
+    ? `Recorded in Syndra, not yet sent to ${system}. Syndra sends revocations on their own, every few minutes; until then the person still has the access.`
+    : `Recorded in Syndra and waiting for you to send to ${system}. Nothing has changed there yet; send it from Pending changes.`;
 }
 
 /** An error only when something actually failed; queued rows are a warning. */

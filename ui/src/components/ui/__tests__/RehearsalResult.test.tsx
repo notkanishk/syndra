@@ -38,7 +38,7 @@ describe("the apply toast", () => {
 
   it("names rows that never reached Zitadel instead of counting them as updated", () => {
     const p = plan({ succeeded: 0, queued: 12 });
-    expect(resultMessage(p, noun)).toBe("Applied to 0 people. 12 people are waiting to be sent to Zitadel.");
+    expect(resultMessage(p, noun)).toBe("Applied to 0 people. 12 people are waiting for you to send to Zitadel.");
     // A warning, not an error: nothing was lost and the outbox will re-drive it.
     expect(resultTone(p)).toBe("warning");
   });
@@ -46,7 +46,7 @@ describe("the apply toast", () => {
   it("keeps the three populations apart in one sentence", () => {
     const p = plan({ succeeded: 5, queued: 4, failed: 3 });
     expect(resultMessage(p, noun)).toBe(
-      "Applied to 5 people. 4 people are waiting to be sent to Zitadel. 3 people failed.",
+      "Applied to 5 people. 4 people are waiting for you to send to Zitadel. 3 people failed.",
     );
     // A real failure outranks a queued row.
     expect(resultTone(p)).toBe("error");
@@ -81,7 +81,7 @@ describe("an apply that reached nobody", () => {
     // queued population exists to keep visible.
     const p = plan({ total: 12, queued: 12 });
     expect(resultMessage(p, noun)).toBe(
-      "Applied to 0 people. 12 people are waiting to be sent to Zitadel.",
+      "Applied to 0 people. 12 people are waiting for you to send to Zitadel.",
     );
   });
 
@@ -106,7 +106,7 @@ describe("the result's word", () => {
     expect(resultWord(plan({ succeeded: 1 }, "extend"), noun)).toBe("Extended for 1 person");
   });
 
-  it("counts people waiting to be sent, because the word wears the amber dot then", () => {
+  it("counts people waiting for you to send, because the word wears the amber dot then", () => {
     expect(resultWord(plan({ succeeded: 2, queued: 10 }, "assign_role"), noun)).toBe(
       "Given to 12 people",
     );
@@ -122,10 +122,10 @@ describe("the result's word", () => {
   it("does not repeat the word in the sentence beside it", () => {
     expect(resultSentence(plan({ succeeded: 12 }, "assign_role"), noun)).toBe("It has taken effect.");
     expect(resultSentence(plan({ succeeded: 0, queued: 12 }, "assign_role"), noun)).toBe(
-      "12 people are waiting to be sent to Zitadel.",
+      "12 people are waiting for you to send to Zitadel.",
     );
     expect(resultSentence(plan({ succeeded: 5, queued: 4 }, "assign_role"), noun)).toBe(
-      "4 people are waiting to be sent to Zitadel.",
+      "4 people are waiting for you to send to Zitadel.",
     );
   });
 });

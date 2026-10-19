@@ -316,7 +316,7 @@ function HealthVerdict({
         ? "Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access. "
         : "Syndra's last attempt to reach Zitadel failed. "}
       {detail ||
-        "Syndra is showing what it last knew. Nothing is lost: changes waiting to be sent stay in order and go through when Zitadel is back."}
+        "Syndra is showing what it last knew. Nothing is lost: changes waiting for you to send stay in order and go through when Zitadel is back."}
     </Notice>
   );
 }

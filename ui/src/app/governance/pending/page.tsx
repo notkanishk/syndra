@@ -31,7 +31,7 @@ import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 /**
  * S3 · Automation › Pending changes.
  *
- * Changes waiting to be sent to Zitadel or a connected system. The queue is the
+ * Changes waiting for you to send to Zitadel or a connected system. The queue is the
  * safety property, not a defect: a change sitting here is a change that has not
  * happened yet and can still be examined.
  *
@@ -129,7 +129,7 @@ export default function PendingChangesPage() {
           skeleton={<RowSkeleton rows={4} label="Loading pending changes" />}
           empty={
             <EmptyState
-              title="Nothing is waiting to be sent."
+              title="Nothing is waiting for you to send."
               guidance="Every change Syndra has decided on has reached the system it was for."
               resolved
             />

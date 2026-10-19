@@ -35,7 +35,7 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   const parts: string[] = [];
   if (applied) parts.push(`${applied} sent`);
   if (failed) parts.push(`${failed} failed`);
-  if (requeued) parts.push(`${requeued} waiting to be sent`);
+  if (requeued) parts.push(`${requeued} waiting for you to send`);
   if (errored) parts.push(`${errored} not recorded`);
   const counts = parts.join(" · ");
 
@@ -76,14 +76,14 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
         return {
           tone: "error",
           message: "Zitadel is not answering. Nothing was sent.",
-          detail: "Every change is still waiting to be sent, in order.",
+          detail: "Every change is still waiting for you to send, in order.",
         };
       case "target_unreachable":
         return {
           tone: "error",
           message: `${stalled ?? "The connected system"} is not answering. Nothing was sent.`,
           detail:
-            "Syndra checked once before sending anything, so nothing counts against the retry limit. Everything is still waiting to be sent.",
+            "Syndra checked once before sending anything, so nothing counts against the retry limit. Everything is still waiting for you to send.",
         };
       case "max_retries_exceeded":
         return {
@@ -167,9 +167,9 @@ export function outcomeFromDrain(result: DrainResult | undefined): ActionOutcome
 function haltDetail(reason: string | undefined, system: string | undefined): string {
   switch (reason) {
     case "zitadel_offline":
-      return "Zitadel is not answering. Its changes are still waiting to be sent, in order; the rest went through.";
+      return "Zitadel is not answering. Its changes are still waiting for you to send, in order; the rest went through.";
     case "target_unreachable":
-      return `${system ?? "The connected system"} is not answering. Its changes are still waiting to be sent, and nothing counts against the retry limit.`;
+      return `${system ?? "The connected system"} is not answering. Its changes are still waiting for you to send, and nothing counts against the retry limit.`;
     case "max_retries_exceeded":
       return "Syndra has given up on a change there, so that queue stops at it. Nothing behind it was tried.";
     case "drain_in_progress":
