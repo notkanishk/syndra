@@ -61,7 +61,12 @@ FROM (
 	       COALESCE(ar.review_note, '')                                      AS note,
 	       ''                                                                AS source,
 	       ''                                                                AS source_ref,
-	       CASE WHEN ar.status = 'approved' THEN COALESCE(g.expires_at,
+	       -- An extension counts from the end they had, so its end is the one the
+	       -- decision recorded; the grant row may since have moved on. Before
+	       -- 000063 nothing was recorded, and the grant is the best left.
+	       CASE WHEN ar.status = 'approved' AND ar.kind = 'extend'
+	                 THEN COALESCE(ar.ends_after, g.expires_at)
+	            WHEN ar.status = 'approved' THEN COALESCE(g.expires_at,
 	            CASE WHEN ar.duration_days > 0
 	                 THEN ar.resolved_at + make_interval(days => ar.duration_days) END)
 	       END                                                               AS ends_at,

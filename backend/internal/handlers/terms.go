@@ -17,6 +17,11 @@ func handleGetTerms(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
+	// Members read the dates for "To the end of next term"; who set them is
+	// an operator's business.
+	if !isOperator(r) {
+		view.SetBy, view.SetAt = nil, nil
+	}
 	jsonResponse(w, http.StatusOK, view)
 }
 
