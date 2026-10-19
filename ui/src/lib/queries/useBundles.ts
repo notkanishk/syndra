@@ -27,6 +27,10 @@ export interface BundleRow {
   /** Set only when the bundle was read for one person: the version THEY hold. */
   pinned_version?: number;
   created_at?: string;
+  /** Retired: no longer given, history kept. Only the single read and the retired list carry it. */
+  retired_at?: string | null;
+  /** Who retired it (a person's id, or "system"). */
+  retired_by?: string;
 }
 
 export interface BundleRoleRow {
@@ -113,6 +117,32 @@ export function useBundles() {
       const data = await request<unknown>("/bundles");
       return Array.isArray(data) ? (data as BundleRow[]) : [];
     },
+  });
+}
+
+/**
+ * One bundle, retired or not. The list leaves retired bundles out, so this is how a retired
+ * bundle's page learns its name and when it was retired. A bundle that doesn't exist is a 404
+ * the page words itself, so it is not retried.
+ */
+export function useBundle(bundleId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["bundles", bundleId ?? "", "one"] as const,
+    queryFn: () => request<BundleRow>(`/bundles/${bundleId}`),
+    enabled: Boolean(bundleId),
+    retry: false,
+  });
+}
+
+/** The retired bundles, most recent first. Read-only history. */
+export function useRetiredBundles(enabled = true) {
+  return useQuery({
+    queryKey: ["bundles", "retired"] as const,
+    queryFn: async (): Promise<BundleRow[]> => {
+      const data = await request<unknown>("/bundles?retired=true");
+      return Array.isArray(data) ? (data as BundleRow[]) : [];
+    },
+    enabled,
   });
 }
 

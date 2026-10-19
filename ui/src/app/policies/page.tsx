@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { RetiredRulesFold } from "@/components/rules/RetiredRules";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -133,6 +134,8 @@ export default function AutomaticRulesPage() {
           ))}
         </ListStates>
       </Card>
+
+      <RetiredRulesFold />
 
       <p className="max-w-[900px] text-[14px] leading-[1.55] text-faint">
         One rule can set off another. Before you can save a rule, Check lists
@@ -632,7 +635,7 @@ function DeleteRuleConfirm({
         <div className="danger-note px-4 py-3.5 text-[14px] leading-[1.55]">
           <div className="type-label mb-1 text-danger-text">What happens</div>
           <ul className="flex flex-col gap-1 text-muted">
-            <li>The rule stops giving {label} to anybody.</li>
+            <li>The rule stops giving {label} to anybody, and can&rsquo;t be used again. It stays in the history.</li>
             <li>
               {holders === 0
                 ? "This rule is giving the second role to nobody today, so retiring it revokes nothing."

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { RetiredBundlesFold } from "@/components/bundles/RetiredBundle";
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -78,6 +79,8 @@ export default function BundlesPage() {
           ))}
         </ListStates>
       </Card>
+
+      <RetiredBundlesFold />
 
       <CreateBundleDialog open={creating} onClose={() => setCreating(false)} />
     </div>

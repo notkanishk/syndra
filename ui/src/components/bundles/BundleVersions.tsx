@@ -31,7 +31,16 @@ import {
  * changelog. "v4 · 3 people, v2 · 11 people" is a fact about the makerspace an
  * operator has to act on; a list of version numbers with dates is not.
  */
-export function BundleVersions({ bundleId, name }: { bundleId: string; name: string }) {
+export function BundleVersions({
+  bundleId,
+  name,
+  readOnly = false,
+}: {
+  bundleId: string;
+  name: string;
+  /** A retired bundle: its versions to read, with nobody on them and nothing to move. */
+  readOnly?: boolean;
+}) {
   const versions = useBundleVersions(bundleId);
   const holders = useBundleHolders(bundleId);
   const [moving, setMoving] = useState<BundleVersion | null>(null);
@@ -52,12 +61,14 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
         title="Versions"
         count={rows.length}
         note={
-          behind.length > 0
-            ? `${behind.length} ${behind.length === 1 ? "person is" : "people are"} on an older version`
-            : "Everybody is on the latest version"
+          readOnly
+            ? "Kept as they were when it was retired"
+            : behind.length > 0
+              ? `${behind.length} ${behind.length === 1 ? "person is" : "people are"} on an older version`
+              : "Everybody is on the latest version"
         }
         action={
-          behind.length > 0 && latest ? (
+          !readOnly && behind.length > 0 && latest ? (
             <Button size="sm" onClick={() => setMoving(latest)}>
               Move everyone to v{latest.version}
             </Button>
@@ -65,8 +76,9 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
         }
       />
       <p className="row-divider px-5 pb-3.5 text-[13.5px] leading-[1.5] text-muted">
-        Each person holds a specific version of {name}. Publishing a new version does not move them
-        unless you choose to.
+        {readOnly
+          ? `Everyone who had ${name} lost what it gave when it was retired. Its versions stay here to read.`
+          : `Each person holds a specific version of ${name}. Publishing a new version does not move them unless you choose to.`}
       </p>
 
       <ListStates
@@ -88,8 +100,8 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
             <div className="flex flex-wrap items-baseline gap-3">
               <span className="font-display text-[17px] leading-none">v{version.version}</span>
               {index === 0 ? (
-                <Badge tone="accent">Current</Badge>
-              ) : version.holder_count > 0 ? (
+                <Badge tone={readOnly ? "neutral" : "accent"}>{readOnly ? "Last" : "Current"}</Badge>
+              ) : !readOnly && version.holder_count > 0 ? (
                 // Only an older version with people ON it is worth marking.
                 // Marking every superseded version would make the marking
                 // meaningless, and the empty ones are just history.
@@ -126,7 +138,7 @@ export function BundleVersions({ bundleId, name }: { bundleId: string; name: str
               )}
             </div>
 
-            {version.holder_count > 0 && index > 0 && (
+            {!readOnly && version.holder_count > 0 && index > 0 && (
               <div className="mt-2.5">
                 <Button size="sm" onClick={() => setMoving(rows[0])}>
                   Move these {version.holder_count} {version.holder_count === 1 ? "person" : "people"} to v{rows[0].version}

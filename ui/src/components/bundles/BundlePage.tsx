@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
 import { BundlePeople, BundleVersions, ThroughOtherBundles } from "@/components/bundles/BundleVersions";
 import { IncludeChangeLine, PublishVersionDialog } from "@/components/bundles/PublishVersionDialog";
+import { RetiredBundlePage } from "@/components/bundles/RetiredBundle";
 import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -115,30 +116,29 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
   }
 
   if (!bundle) {
-    return (
-      <div className="flex flex-col gap-7">
-        <PageHeader eyebrow="Bundles" title="Bundle" lede="What it gives, who has it, and its history." />
-        <Card>
-          <ListStates
-            isLoading={bundles.isLoading}
-            error={bundles.error}
-            isEmpty
-            onRetry={() => bundles.refetch()}
-            errorTitle="Couldn't load this bundle."
-            skeleton={<RowSkeleton rows={3} avatar={false} label="Loading the bundle" />}
-            empty={
-              <EmptyState
-                title="There's no bundle here."
-                guidance="It may have been retired. Every bundle that exists is on the list."
-                action={{ label: "All bundles", href: "/bundles" }}
-              />
-            }
-          >
-            {null}
-          </ListStates>
-        </Card>
-      </div>
-    );
+    // Not on the list: still loading it, or retired (the list leaves retired bundles out, but
+    // its page still opens), or never there.
+    if (bundles.isLoading || bundles.error) {
+      return (
+        <div className="flex flex-col gap-7">
+          <PageHeader eyebrow="Bundles" title="Bundle" lede="What it gives, who has it, and its history." />
+          <Card>
+            <ListStates
+              isLoading={bundles.isLoading}
+              error={bundles.error}
+              isEmpty
+              onRetry={() => bundles.refetch()}
+              errorTitle="Couldn't load this bundle."
+              skeleton={<RowSkeleton rows={3} avatar={false} label="Loading the bundle" />}
+              empty={null}
+            >
+              {null}
+            </ListStates>
+          </Card>
+        </div>
+      );
+    }
+    return <RetiredBundlePage bundleId={bundleId} />;
   }
 
   const name = bundle.name;
@@ -763,7 +763,7 @@ function DeleteBundleDialog({
                 until another bundle is set.
               </li>
             )}
-            <li>Its version history goes with it, and cannot be brought back.</li>
+            <li>It can&rsquo;t be given again. Its history stays readable.</li>
           </ul>
         </div>
       </div>
