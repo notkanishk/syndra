@@ -16,6 +16,7 @@ const held = vi.hoisted(() => ({
   grants: [] as Array<{ id: string; project_id: string; role_key: string; expires_at?: string | null }>,
   observed: [] as string[],
   queued: [] as string[],
+  queuedAt: undefined as string | undefined,
 }));
 const create = vi.hoisted(() => ({
   calls: 0,
@@ -87,7 +88,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
         {
           project_id: "pLaser",
           observed_role_keys: held.observed,
-          source_roles: held.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true }] })),
+          source_roles: held.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true, queued_at: held.queuedAt }] })),
           derived_roles: [],
         },
       ],
@@ -115,6 +116,7 @@ beforeEach(() => {
   held.grants = [];
   held.observed = [];
   held.queued = [];
+  held.queuedAt = undefined;
   create.calls = 0;
   create.last = null;
   create.fail = null;
@@ -224,6 +226,16 @@ describe("Ask for access · only what they lack, once", () => {
     ).toBeInTheDocument();
     expect(within(dialog()).getByText("On its way")).toBeInTheDocument();
     expect(sendButton()).toBeDisabled();
+  });
+
+  it("arriving on one given and not yet sent dates it from when it was queued", () => {
+    held.queued = ["trained"];
+    held.queuedAt = "2026-01-15T09:00:00Z";
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    expect(
+      screen.getByText(/^Makerspace staff gave you Trained operator on 15 Jan( 2026)?\. It starts working once they send it/),
+    ).toBeInTheDocument();
   });
 
   it("becomes its result once sent: Asked, who decides, and only Close left", async () => {

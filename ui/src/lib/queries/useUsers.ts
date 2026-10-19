@@ -58,6 +58,8 @@ export interface AccessRoleReason {
   trigger_role?: string;
   /** Recorded, not yet sent to Zitadel. */
   queued?: boolean;
+  /** When it was queued (RFC3339; the earliest when several rows wait on this source). Only with `queued`. */
+  queued_at?: string;
 }
 
 export interface AccessRole {

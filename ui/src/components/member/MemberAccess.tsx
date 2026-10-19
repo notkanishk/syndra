@@ -8,6 +8,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { StatusDot } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import {
+  givenAt,
   nothingSentYet,
   orderedSources,
   sourceQualifier,
@@ -296,7 +297,8 @@ function RoleRow({
         <span className="text-[15px] font-semibold">{name}</span>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {waiting || nothingSentYet(reasons) ? (
-            <OnItsWay at={waiting?.at} />
+            // When it was queued, from the record; the feed's time only when the read has none.
+            <OnItsWay at={givenAt(reasons) ?? waiting?.at} />
           ) : (
             <>
               <Reason strongest={strongest} expiresAt={ends ? expiresAt : null} />

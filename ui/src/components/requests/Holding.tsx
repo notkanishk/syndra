@@ -4,7 +4,7 @@ import { StatusDot } from "@/components/ui/Badge";
 import { askLengthForMember, askLengthForOperator, formatShortDate } from "@/lib/format";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestsMine } from "@/lib/queries/useRequests";
-import { nothingSentYet } from "@/components/access/AccessSource";
+import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { useMyChanges } from "@/lib/queries/useMyChanges";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import type { Term } from "@/lib/queries/useTerms";
@@ -139,8 +139,9 @@ export function useAskState(userId: string) {
       (r) => r.role_key === roleKey,
     );
     if (role && nothingSentYet(role.reasons)) {
-      // The newest thing that gave it: when the member was told.
-      const at = (changes.data ?? [])
+      // When it was queued, from the access read; failing that, the newest
+      // thing that gave it: when the member was told.
+      const at = givenAt(role.reasons) ?? (changes.data ?? [])
         .filter((c) => c.project_id === projectId && c.role_key === roleKey && (c.kind === "given" || c.waiting))
         .map((c) => c.at)
         .sort()

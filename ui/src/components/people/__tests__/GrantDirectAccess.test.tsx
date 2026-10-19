@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
   grants: [] as unknown[],
   queued: [] as string[],
+  queuedAt: undefined as string | undefined,
   terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
 }));
 
@@ -63,7 +64,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
         {
           project_id: "p1",
           observed_role_keys: [],
-          source_roles: state.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true }] })),
+          source_roles: state.queued.map((key) => ({ role_key: key, reasons: [{ kind: "direct", description: "", queued: true, queued_at: state.queuedAt }] })),
           derived_roles: [],
         },
       ],
@@ -74,6 +75,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
 beforeEach(() => {
   state.grants = [];
   state.queued = [];
+  state.queuedAt = undefined;
   state.terms = undefined;
   state.mutateAsync.mockReset();
 });
@@ -129,6 +131,15 @@ describe("GrantDirectAccess · choosing the role", () => {
     expect(screen.getByText("Given")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
     expect(screen.getByRole("radio", { name: /Operator/ })).toBeDisabled();
+  });
+
+  it("says when it was given, from the time the read carries, beside the way to send it", () => {
+    state.queued = ["operator"];
+    state.queuedAt = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    expect(screen.getByText("Given 2h ago")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
   });
 
   it("a role held with an end is listed, not pickable, and offers Extend", () => {

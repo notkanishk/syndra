@@ -244,6 +244,18 @@ describe("MemberAccess recent changes", () => {
     ).toBeTruthy();
   });
 
+  it("dates it from when it was queued, the record's own time, over the feed's", () => {
+    reset();
+    changes.value = [
+      { kind: "request_approved", at: "2026-02-01T09:00:00Z", project_id: "p1", role_key: "mill", by: "op", via: null, waiting: true, wait_reason: "role_waits" },
+    ];
+    access.value = view(COMPLETE, ["laser"], {}, { queued: true, queued_at: "2026-01-15T09:00:00Z" });
+    render(<MemberAccess session={session} />);
+    expect(
+      screen.getAllByText(/^Given 15 Jan( 2026)?\. It starts working once makerspace staff send it\.$/).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("says the same when the send halted: a member can't act on why", () => {
     reset();
     changes.value = [

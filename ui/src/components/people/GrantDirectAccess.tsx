@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePickerOne";
-import { nothingSentYet } from "@/components/access/AccessSource";
+import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button, PILL } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
@@ -70,7 +70,7 @@ function GrantDirectAccessOpen({
     if (g?.expires_at) return { kind: "until", until: g.expires_at };
     const entry = (heldAccess.data?.projects ?? []).find((p) => p.project_id === project);
     const queued = [...(entry?.source_roles ?? []), ...(entry?.derived_roles ?? [])].find((r) => r.role_key === key);
-    if (queued && nothingSentYet(queued.reasons)) return { kind: "onway" };
+    if (queued && nothingSentYet(queued.reasons)) return { kind: "onway", at: givenAt(queued.reasons) };
     if (g || entry?.observed_role_keys?.includes(key)) return { kind: "held" };
     return { kind: "none" };
   };
