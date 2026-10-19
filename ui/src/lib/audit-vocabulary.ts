@@ -85,9 +85,13 @@ export const AUDIT_ACTIONS: Record<
   },
   // An action cancelled a change still waiting for you to send, after the operator
   // was shown it (owner, 15 Oct: never invisibly). resource_id is the outbox row.
+  // Worded the operator's way (A-04 §14.8). The row carries who caused it, the person
+  // and the outbox row, but not what the change was, who queued it or why: those are
+  // on the superseded outbox row, which no read returns yet.
   "propagation.cancelled_unsent": {
-    verb: "Cancelled a change that was waiting for makerspace staff to send it",
-    passive: "A change waiting for makerspace staff to send was cancelled",
+    verb: "Cancelled a change that was waiting for you to send",
+    template: "Cancelled a change that was waiting for you to send, for {}",
+    passive: "A change that was waiting for you to send was cancelled",
   },
   "access_request.closed_as_given": {
     verb: "Closed a request for a role given another way",

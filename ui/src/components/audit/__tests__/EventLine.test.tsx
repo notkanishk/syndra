@@ -73,4 +73,22 @@ describe("EventSentence", () => {
     );
     expect(made.querySelector(".text-danger-text")).toBeNull();
   });
+
+  // A-04 §14.8: a cancellation is in Change history, by whoever's action caused
+  // it, worded the operator's way. Syndra's own say so, and that nobody was asked.
+  it("an operator's cancellation says what was cancelled and for whom", () => {
+    render(<EventSentence entry={entry({ action: "propagation.cancelled_unsent", actor_id: "op1", target_id: "u1" })} />);
+    expect(document.body.textContent).toBe(
+      "Cancelled a change that was waiting for you to send, for Gurasheesh Paul Singh",
+    );
+    expect(document.body.textContent).not.toMatch(/waiting to be sent|makerspace staff to send/);
+  });
+
+  it("Syndra's own cancellation says Syndra, and that nobody was asked", () => {
+    render(<EventSentence entry={entry({ action: "propagation.cancelled_unsent", actor_id: "system:scheduler", target_id: "u1" })} />);
+    expect(document.body.textContent).toContain(
+      "Syndra cancelled a change that was waiting for you to send, for Gurasheesh Paul Singh",
+    );
+    expect(document.body.textContent).toContain("Nobody was asked.");
+  });
 });
