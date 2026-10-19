@@ -25,6 +25,8 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { useTerms } from "@/lib/queries/useTerms";
+import { useUserGrants } from "@/lib/queries/useUsers";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { useRequestDecisions } from "@/lib/request-decisions";
@@ -51,7 +53,7 @@ type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
  * itself rather than falling into either bucket — a status this file has not been taught about
  * must never read as a decision.
  */
-export function requestOutcome(status: string): {
+export function requestOutcome(status: string, kind?: string): {
   /** The member's dot. */
   tone: StatusTone;
   /** The operator's dot, where it differs: a decision is lime, being overtaken is not one. */
@@ -60,6 +62,10 @@ export function requestOutcome(status: string): {
   member: string;
 } {
   const o = requestOutcomeWords(status);
+  // A request to keep a role that was approved says what it did: kept, extended.
+  if (status === "approved" && kind === "extend") {
+    return { ...o, operator: "Extended", member: "Kept", operatorTone: o.tone };
+  }
   return { ...o, operatorTone: status === "fulfilled" ? "neutral" : o.tone };
 }
 
@@ -129,6 +135,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const catalog = useGlobalRoleCatalog();
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
   const ask = useAskOnArrival();
+  const terms = useTerms();
 
   // Decided rows stay in `rows` — the row reports its own outcome below and
   // only actually leaves once the refetch lands with its new status. Filtering
@@ -265,6 +272,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                 <UserName id={entry.requester_id} />
               </div>
               <div className="w-full text-[14.5px] text-ink/80 tablet:w-[250px] tablet:shrink-0 tablet:truncate">
+                {entry.kind === "extend" && "Keep "}
                 <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
                 {catalog.data?.some(
                   (r) =>
@@ -275,7 +283,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                 {/* Half of the ask. A decision made without it is a decision
                     about a different request. */}
                 <span className="block text-[12.5px] text-faint">
-                  {describeAsk(entry)}
+                  {describeAsk(entry, terms.data)}
                 </span>
               </div>
               <div className="w-full min-w-0 text-[14px] text-muted tablet:flex-1 tablet:truncate">
@@ -318,8 +326,8 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   />
                 ) : resolved.has(entry.id) ? null : (
                   <StatusSeat
-                    tone={requestOutcome(entry.status).operatorTone}
-                    word={requestOutcome(entry.status).operator}
+                    tone={requestOutcome(entry.status, entry.kind).operatorTone}
+                    word={requestOutcome(entry.status, entry.kind).operator}
                     note={
                       entry.status === "approved" &&
                       entry.reviewer_id &&
@@ -355,6 +363,10 @@ function OperatorQueue({ userId }: { userId?: string }) {
         </ListStates>
         </div>
       </Card>
+
+      {/* What this operator has asked for themselves, once they have: the
+          member's card, in the member's place (A-04 §2.1). */}
+      {userId && <YourRequests userId={userId} hideWhenEmpty onAsk={() => ask.setOpen(true)} />}
 
       <SelectionBar
         count={selecting ? selection.count : 0}
@@ -432,10 +444,54 @@ function useAskOnArrival() {
 
 /** A member's own requests, plus the form to make one. No jargon. */
 function MemberRequests({ userId }: { userId: string }) {
+  const { open, setOpen, close: closeDialog, linkedProject, linkedRole } = useAskOnArrival();
+
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Requests"
+        lede="Ask for access, and see what happened to what you asked for. Makerspace staff decide; the answer appears here."
+        actions={
+          <Button variant="accent" onClick={() => setOpen(true)}>
+            Ask for access
+          </Button>
+        }
+      />
+
+      <YourRequests userId={userId} onAsk={() => setOpen(true)} />
+
+      <AskForAccess
+        // Remounted per link so the prefill applies to whichever role was
+        // clicked, not only the first.
+        key={`${linkedProject}:${linkedRole}`}
+        open={open}
+        onClose={closeDialog}
+        initial={{ projectId: linkedProject, roleKey: linkedRole }}
+        userId={userId}
+      />
+    </div>
+  );
+}
+
+/**
+ * The card of what you asked for, and what became of it. A member's page, and
+ * an operator's under the queue once they have asked for anything: one row
+ * component, so a request reads the same to whoever made it.
+ */
+function YourRequests({
+  userId,
+  onAsk,
+  hideWhenEmpty = false,
+}: {
+  userId: string;
+  onAsk: () => void;
+  hideWhenEmpty?: boolean;
+}) {
   const requests = useRequestsMine();
   const withdraw = useWithdrawRequest();
   const resolver = useNameResolver();
-  const { open, setOpen, close: closeDialog, linkedProject, linkedRole } = useAskOnArrival();
+  const terms = useTerms();
+  const grants = useUserGrants(userId);
   // A member's own rows report their own withdrawals, in the row.
   const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   // Same idiom as OperatorQueue.act(): marked synchronously, before the await,
@@ -468,113 +524,122 @@ function MemberRequests({ userId }: { userId: string }) {
   }
 
   const mine = (requests.data ?? []).filter((entry) => entry.requester_id === userId);
+  if (hideWhenEmpty && mine.length === 0) return null;
+
+  // What a request to keep a role did, said from where the end is now: the
+  // read of a settled request doesn't carry the old or the new end.
+  const endNow = (entry: AccessRequest) =>
+    (grants.data ?? []).find((g) => g.project_id === entry.project_id && g.role_key === entry.role_key)?.expires_at ?? null;
 
   return (
-    <div className="flex flex-col gap-[18px]">
-      <PageHeader
-        title="Requests"
-        lede="Ask for access, and see what happened to what you asked for. Makerspace staff decide; the answer appears here."
-        actions={
-          <Button variant="accent" onClick={() => setOpen(true)}>
-            Ask for access
-          </Button>
+    <Card>
+      <CardHeader title="Your requests" count={mine.length} />
+      <ListStates
+        isLoading={requests.isLoading}
+        error={requests.error}
+        isEmpty={mine.length === 0}
+        onRetry={() => requests.refetch()}
+        errorTitle="Couldn't load your requests."
+        skeleton={<RowSkeleton rows={3} avatar={false} label="Loading your requests" />}
+        empty={
+          <EmptyState
+            title="You haven't asked for anything yet."
+            guidance="If there's a machine you need and can't use, ask here and makerspace staff will decide."
+            action={{ label: "Ask for access", onClick: onAsk }}
+          />
         }
-      />
-
-      <Card>
-        <CardHeader title="Your requests" count={mine.length} />
-        <ListStates
-          isLoading={requests.isLoading}
-          error={requests.error}
-          isEmpty={mine.length === 0}
-          onRetry={() => requests.refetch()}
-          errorTitle="Couldn't load your requests."
-          skeleton={<RowSkeleton rows={3} avatar={false} label="Loading your requests" />}
-          empty={
-            <EmptyState
-              title="You haven't asked for anything yet."
-              guidance="If there's a machine you need and can't use, ask here and makerspace staff will decide."
-              action={{ label: "Ask for access", onClick: () => setOpen(true) }}
-            />
-          }
-        >
-          {mine.map((entry) => (
-            <div
-              key={entry.id}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]"
-            >
-              <div className="w-full min-w-0 tablet:flex-1">
-                {/* The role, not only the place: two asks on one project were
-                    two identical rows. */}
-                <div className="text-[15px] font-semibold [text-wrap:pretty]">
-                  <ProjectName id={entry.project_id} /> ·{" "}
-                  {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
-                    humanizeKey(entry.role_key)}
-                </div>
-                <div className="text-[13.5px] text-faint [text-wrap:pretty]">
-                  {describeAskForMember(entry)}
-                </div>
-                <div className="text-[13.5px] text-faint [text-wrap:pretty]">
-                  {entry.justification || "No reason given"}
-                </div>
+      >
+        {mine.map((entry) => (
+          <div
+            key={entry.id}
+            className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]"
+          >
+            <div className="w-full min-w-0 tablet:flex-1">
+              {/* The role, not only the place: two asks on one project were
+                  two identical rows. */}
+              <div className="text-[15px] font-semibold [text-wrap:pretty]">
+                {entry.kind === "extend" && "Keep "}
+                <ProjectName id={entry.project_id} /> ·{" "}
+                {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
+                  humanizeKey(entry.role_key)}
               </div>
-              <div className="w-[110px] shrink-0 text-[13px] text-faint tablet:text-right">
-                <Relative iso={entry.created_at} />
+              <div className="text-[13.5px] text-faint [text-wrap:pretty]">
+                {describeAskForMember(entry, terms.data)}
               </div>
-              {/* One status seat: dot, word, note. A withdrawal reports here,
-                  in the member's own word, and keeps it until the next read. */}
-              <div className="w-full tablet:w-auto tablet:min-w-[220px] tablet:shrink-0">
-                {outcomes[entry.id] && resolved.has(entry.id) ? (
-                  <ActionOutcome
-                    placement="seat"
-                    word="You withdrew this"
-                    outcome={outcomes[entry.id]!}
-                  />
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <StatusSeat
-                      tone={requestOutcome(entry.status).tone}
-                      word={requestOutcome(entry.status).member}
-                      note={entry.status === "fulfilled" ? overtakenNote(entry) : undefined}
-                    />
-                    {outcomes[entry.id] && <ActionOutcome placement="seat" outcome={outcomes[entry.id]!} />}
-                  </div>
-                )}
-              </div>
-              {/*
-                Withdraw sits on the row rather than behind a dialog, outline and last (#109).
-                Nothing is destroyed by it and nobody else's access moves — it takes an ask out
-                of somebody's queue, which is the one thing here a member is entitled to do
-                without being asked twice.
-              */}
-              <div className="flex shrink-0 tablet:min-w-[96px] tablet:justify-end">
-                {entry.status === "pending" && !resolved.has(entry.id) && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={withdraw.isPending}
-                    onClick={() => withdrawOne(entry)}
-                  >
-                    Withdraw
-                  </Button>
-                )}
+              <div className="text-[13.5px] text-faint [text-wrap:pretty]">
+                {entry.justification || "No reason given"}
               </div>
             </div>
-          ))}
-        </ListStates>
-      </Card>
-
-      <AskForAccess
-        // Remounted per link so the prefill applies to whichever role was
-        // clicked, not only the first.
-        key={`${linkedProject}:${linkedRole}`}
-        open={open}
-        onClose={closeDialog}
-        initial={{ projectId: linkedProject, roleKey: linkedRole }}
-        userId={userId}
-      />
-    </div>
+            <div className="w-[110px] shrink-0 text-[13px] text-faint tablet:text-right">
+              <Relative iso={entry.created_at} />
+            </div>
+            {/* One status seat: dot, word, note. A withdrawal reports here,
+                in the member's own word, and keeps it until the next read. */}
+            <div className="w-full tablet:w-auto tablet:min-w-[220px] tablet:shrink-0">
+              {outcomes[entry.id] && resolved.has(entry.id) ? (
+                <ActionOutcome
+                  placement="seat"
+                  word="You withdrew this"
+                  outcome={outcomes[entry.id]!}
+                />
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <StatusSeat
+                    tone={requestOutcome(entry.status, entry.kind).tone}
+                    word={requestOutcome(entry.status, entry.kind).member}
+                    note={
+                      entry.status === "fulfilled" ? overtakenNote(entry) : keepNote(entry, endNow(entry))
+                    }
+                  />
+                  {outcomes[entry.id] && <ActionOutcome placement="seat" outcome={outcomes[entry.id]!} />}
+                </div>
+              )}
+            </div>
+            {/*
+              Withdraw sits on the row rather than behind a dialog, outline and last (#109).
+              Nothing is destroyed by it and nobody else's access moves — it takes an ask out
+              of somebody's queue, which is the one thing here a member is entitled to do
+              without being asked twice.
+            */}
+            <div className="flex shrink-0 tablet:min-w-[96px] tablet:justify-end">
+              {entry.status === "pending" && !resolved.has(entry.id) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={withdraw.isPending}
+                  onClick={() => withdrawOne(entry)}
+                >
+                  Withdraw
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </ListStates>
+    </Card>
   );
+}
+
+/**
+ * A request to keep a role, in its status seat (A-06 §3): what is true of the
+ * end until it's decided, and after. Only what is known is said: the read of a
+ * settled request carries neither the old end nor the new one, so a result
+ * names the end the role has now.
+ */
+export function keepNote(request: AccessRequest, endNow: string | null): string | undefined {
+  if (request.kind !== "extend") return undefined;
+  if (request.status === "pending") {
+    return request.current_until
+      ? `Until it's decided, it still ends ${formatShortDate(request.current_until)}.`
+      : undefined;
+  }
+  if (!endNow) return undefined;
+  if (request.status === "approved") return `It now ends ${formatShortDate(endNow)}.`;
+  // A role that has ended since doesn't "still end" anywhere.
+  if (request.status === "rejected" && new Date(endNow).getTime() > Date.now()) {
+    return `It still ends ${formatShortDate(endNow)}.`;
+  }
+  return undefined;
 }
 
 /**

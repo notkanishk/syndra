@@ -18,6 +18,7 @@ export function RecentChanges({
   items,
   roleName,
   triggerRole,
+  endOf,
 }: {
   items: MyChange[];
   roleName: (projectId: string, roleKey: string) => string;
@@ -28,6 +29,8 @@ export function RecentChanges({
    * makerspace rule" (A-06 §2).
    */
   triggerRole?: (projectId: string, roleKey: string) => string | undefined;
+  /** When the role the page shows ends now, for "It still ends" on a request to keep it that wasn't approved. */
+  endOf?: (projectId: string, roleKey: string) => string | null;
 }) {
   return (
     <Card>
@@ -42,6 +45,7 @@ export function RecentChanges({
           change={change}
           role={roleName(change.project_id, change.role_key)}
           trigger={triggerRole?.(change.project_id, change.role_key)}
+          endsNow={endOf?.(change.project_id, change.role_key) ?? null}
         />
       ))}
     </Card>
@@ -64,8 +68,18 @@ export function dayLabel(iso: string, now: Date = new Date()): string {
   return new Date(iso).toDateString() === now.toDateString() ? "Today" : formatShortDate(iso);
 }
 
-function ChangeRow({ change, role, trigger }: { change: MyChange; role: string; trigger?: string }) {
-  const { word, tone, pre, post } = describe(change, trigger);
+function ChangeRow({
+  change,
+  role,
+  trigger,
+  endsNow,
+}: {
+  change: MyChange;
+  role: string;
+  trigger?: string;
+  endsNow: string | null;
+}) {
+  const { word, tone, pre, post } = describe(change, trigger, endsNow);
   return (
     <div className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1.5 px-5 py-3.5">
       <span
@@ -104,31 +118,41 @@ function ChangeRow({ change, role, trigger }: { change: MyChange; role: string; 
   );
 }
 
-function describe(change: MyChange, trigger?: string): { word: string; tone: StatusTone; pre: string; post: ReactNode } {
+function describe(change: MyChange, trigger?: string, endsNow: string | null = null): { word: string; tone: StatusTone; pre: string; post: ReactNode } {
   const until = change.until ? `, until ${formatShortDate(change.until)}` : "";
-  // A request to keep a role longer reads "keep {role} longer", not "for {role}".
+  // A request to keep a role reads "keep {role}", not "for {role}" (A-06 §3).
   const keep = change.request_kind === "extend";
   const pre = keep ? "Your request to keep " : "Your request for ";
-  const longer = keep ? " longer" : "";
   switch (change.kind) {
     case "request_approved":
+      if (keep && !change.waiting) {
+        return {
+          word: "Kept",
+          tone: "healthy",
+          pre: "You keep ",
+          post: `${change.until ? ` until ${formatShortDate(change.until)}` : ""}. Your request to keep it was approved.`,
+        };
+      }
       return change.waiting
         ? {
             word: "Approved",
             tone: "warn",
             pre,
-            post: `${longer} was approved${until}. It isn't on your account yet: ${waitClause(change.wait_reason)}`,
+            post: ` was approved${until}. It isn't on your account yet: ${waitClause(change.wait_reason)}`,
           }
-        : { word: "Approved", tone: "healthy", pre, post: `${longer} was approved${until}.` };
-    case "request_declined":
-      return { word: "Not approved", tone: "neutral", pre, post: `${longer} was not approved.` };
+        : { word: "Approved", tone: "healthy", pre, post: ` was approved${until}.` };
+    case "request_declined": {
+      // Only a role that still ends in the future "still ends" anywhere.
+      const still = keep && endsNow && new Date(endsNow).getTime() > Date.now() ? ` It still ends ${formatShortDate(endsNow)}.` : "";
+      return { word: "Not approved", tone: "neutral", pre, post: ` was not approved.${still}` };
+    }
     case "request_withdrawn":
       // Said in the first person, like the request row's "You withdrew this".
       return {
         word: "Withdrawn",
         tone: "neutral",
         pre: keep ? "You withdrew your request to keep " : "You withdrew your request for ",
-        post: `${longer}.`,
+        post: ".",
       };
     case "taken_away":
       // The board says "Taken away"; the copy guide's one word for ending

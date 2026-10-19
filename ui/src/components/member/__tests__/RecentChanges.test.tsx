@@ -46,17 +46,34 @@ describe("Recent changes rows", () => {
     expect(screen.queryByText("Ask again")).toBeNull();
   });
 
-  it("a request to keep a role longer says so, and Ask again keeps it", () => {
+  it("a request to keep a role: Kept with its end, Not approved with what still holds, Ask again keeps it", () => {
+    const kept = row({ kind: "request_approved", request_kind: "extend", until: "2026-12-18T12:00:00Z" });
+    expect(kept.textContent).toContain("Kept");
+    expect(kept.textContent).toContain(
+      "You keep Laser cutter · Operator until 18 Dec. Your request to keep it was approved.",
+    );
     expect(row({ kind: "request_approved", request_kind: "extend" }).textContent).toContain(
-      "Your request to keep Laser cutter · Operator longer was approved.",
+      "You keep Laser cutter · Operator. Your request to keep it was approved.",
     );
     expect(row({ kind: "request_withdrawn", request_kind: "extend" }).textContent).toContain(
-      "You withdrew your request to keep Laser cutter · Operator longer.",
+      "You withdrew your request to keep Laser cutter · Operator.",
     );
     const r = row({ kind: "request_declined", request_kind: "extend" });
-    expect(r.textContent).toContain("Your request to keep Laser cutter · Operator longer was not approved.");
+    expect(r.textContent).toContain("Not approved");
+    expect(r.textContent).toContain("Your request to keep Laser cutter · Operator was not approved.");
+    expect(r.textContent).not.toContain("still ends");
     expect(screen.getAllByText("Ask again").at(-1)!.closest("a")!.getAttribute("href")).toBe(
       "/requests?project=p1&role=op&extend=1",
+    );
+  });
+
+  it("a declined request to keep says what still ends, when the page knows it", () => {
+    const items = [{ kind: "request_declined", at: AT, project_id: "p1", role_key: "op", via: null, request_kind: "extend" } as MyChange];
+    const { container } = render(
+      <RecentChanges items={items} roleName={roleName} endOf={() => "2099-12-18T12:00:00Z"} />,
+    );
+    expect(container.textContent).toContain(
+      "Your request to keep Laser cutter · Operator was not approved. It still ends 18 Dec 2099.",
     );
   });
 
