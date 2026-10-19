@@ -18,7 +18,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/queries/useRequests", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useRequests")>()),
   useRequestsAdmin: () => ({
-    data: [request()],
+    data: queue,
     isLoading: false,
     error: null,
     refetch: () => {},
@@ -67,6 +67,10 @@ function request(): AccessRequest {
     created_at: "2026-07-22T06:00:00Z",
   };
 }
+
+// One read, the same array every render, as the real query gives: the queue's
+// leaving-rows pass treats a new array as a new read.
+const queue = [request()];
 
 function renderQueue() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

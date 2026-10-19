@@ -8,8 +8,18 @@ import { motionInTests } from "@/test-utils/motion";
 
 /** Motion v2 S5: a row that leaves on a later read fades, then its gap closes. */
 
-function List({ ids, ready = true }: { ids: string[]; ready?: boolean }) {
-  const leaving = useLeavingRows(ids, (id) => id, ready);
+function List({
+  ids,
+  ready = true,
+  stay,
+  scope,
+}: {
+  ids: string[];
+  ready?: boolean;
+  stay?: ReadonlySet<string>;
+  scope?: string;
+}) {
+  const leaving = useLeavingRows(ids, (id) => id, ready, { stay, scope });
   return (
     <div data-testid="list" {...leaving.listProps}>
       <button type="button">inside</button>
@@ -99,5 +109,50 @@ describe("a row leaving after a read", () => {
     const { rerender } = render(<List ids={["a", "b"]} />);
     rerender(<List ids={[]} ready={false} />);
     expect(screen.queryByText("a")).not.toBeInTheDocument();
+  });
+});
+
+describe("a row held for what it is still saying", () => {
+  const HELD = new Set(["b"]);
+
+  it("stays as it was after the read drops it, and leaves like any other once released", () => {
+    const { rerender } = render(<List ids={["a", "b"]} stay={HELD} />);
+    rerender(<List ids={["a"]} stay={HELD} />);
+    expect(rowOf("b")).not.toHaveAttribute("aria-hidden");
+    expect(screen.getByText("b").parentElement).not.toHaveClass("tint-out");
+
+    rerender(<List ids={["a"]} stay={new Set()} />);
+    expect(screen.getByText("b").parentElement).toHaveClass("tint-out");
+    expect(rowOf("b")).toHaveClass("close-gap");
+  });
+
+  it("in reduced motion stays while held, then is simply gone", () => {
+    motionInTests(false);
+    const { rerender } = render(<List ids={["a", "b"]} stay={HELD} />);
+    rerender(<List ids={["a"]} stay={HELD} />);
+    expect(screen.getByText("b")).toBeInTheDocument();
+    rerender(<List ids={["a"]} stay={new Set()} />);
+    expect(screen.queryByText("b")).not.toBeInTheDocument();
+  });
+
+  it("a different scope is a different list: nothing fades out of it", () => {
+    const { rerender } = render(<List ids={["a", "b"]} scope="open" />);
+    rerender(<List ids={["c"]} scope="done" />);
+    expect(screen.queryByText("a")).not.toBeInTheDocument();
+    expect(screen.getByText("c")).toBeInTheDocument();
+  });
+});
+
+describe("focus that went with a removed button", () => {
+  it("does not keep the gap open once the pointer has left", () => {
+    const { rerender } = render(<List ids={["a", "b"]} />);
+    fireEvent.pointerEnter(screen.getByTestId("list"));
+    // Focus entered the list on a button that is then removed: no blur is ever sent.
+    fireEvent.focus(screen.getByRole("button", { name: "inside" }));
+    rerender(<List ids={["a"]} />);
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    fireEvent.pointerLeave(screen.getByTestId("list"));
+    expect(rowOf("b")).toHaveClass("close-gap");
   });
 });

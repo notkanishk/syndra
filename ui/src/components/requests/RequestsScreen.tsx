@@ -9,6 +9,7 @@ import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
@@ -25,12 +26,19 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
+import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTerms } from "@/lib/queries/useTerms";
 import { useUserGrants } from "@/lib/queries/useUsers";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { WaitsMark } from "@/components/ui/WaitsMark";
-import { useRequestDecisions } from "@/lib/request-decisions";
+import {
+  DECLINED,
+  declinedKeepOutcome,
+  extendedOutcome,
+  useRequestDecisions,
+  type Decided,
+} from "@/lib/request-decisions";
 import {
   useRequestsAdmin,
   useRequestsMine,
@@ -130,19 +138,33 @@ export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; us
 function OperatorQueue({ userId }: { userId?: string }) {
   const [status, setStatus] = useState<StatusFilter>("pending");
   const requests = useRequestsAdmin(status);
-  const { act, resolved, outcomes, cancelStep } = useRequestDecisions();
-  const catalog = useGlobalRoleCatalog();
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
+  // The beat of a bulk decision starts when its dialog closes: until then the
+  // operator is looking at the dialog's own result, not at the rows behind it.
+  const { act, settleAll, resolved, staying, outcomes, cancelStep } = useRequestDecisions({
+    pauseBeat: bulkStatus !== null,
+  });
+  const catalog = useGlobalRoleCatalog();
   const ask = useAskOnArrival();
   const terms = useTerms();
 
-  // Decided rows stay in `rows` — the row reports its own outcome below and
-  // only actually leaves once the refetch lands with its new status. Filtering
-  // them out here the instant `act()` fires used to remove the row before its
-  // own "Approved"/"Declined" line could ever be seen, which contradicted the
-  // promise a few lines down that the row "keeps its seat" and "leaves on the
-  // next read, not under the thumb that decided it".
+  // What the read holds. A decided row is in it until the refetch lands, and
+  // then it is not: the open list is a list of requests still waiting.
   const rows = useMemo(() => requests.data ?? [], [requests.data]);
+
+  // What is drawn: the read, plus the rows that just left it. A decided row
+  // keeps its place and its outcome for the beat (Motion 5b), then fades and its
+  // gap closes (S5) — it never goes the instant the refetch lands, taking its
+  // own "Approved" with it. A different filter is a different list, so nothing
+  // fades out of it.
+  const leaving = useLeavingRows(rows, (entry) => entry.id, !requests.isLoading && !requests.error, {
+    stay: staying,
+    scope: status,
+  });
+  const drawn = leaving.rows;
+  // The columns belong to the list as drawn: they stay while a decided row is
+  // still showing its outcome, or the outcome would move under the reader.
+  const anyPending = drawn.some((entry) => entry.status === "pending");
 
   // Only open, not-yet-decided-this-session requests can be decided, so only
   // they can be selected — offering a checkbox on a settled row would be
@@ -163,7 +185,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
   // queue rather than quietly meaning the page — which would change what the
   // bar's ceiling message is counting without saying so.
   const paging = usePaging();
-  const visible = useMemo(() => rows.slice(0, paging.limit), [rows, paging.limit]);
+  const visible = useMemo(() => drawn.slice(0, paging.limit), [drawn, paging.limit]);
   const selection = useRowSelection(useMemo(() => openRows.map((entry) => entry.id), [openRows]));
   // Deciding one request at a time is what this queue is for; the bulk verbs
   // are the exception, so they arrive behind a named control rather than a
@@ -204,7 +226,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
       />
 
       <Card>
-        {openRows.length > 0 && (
+        {anyPending && (
           <CardColumns>
             {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
             <span className="w-[170px]">Who</span>
@@ -227,11 +249,11 @@ function OperatorQueue({ userId }: { userId?: string }) {
           />
         )}
 
-        <div data-selection-scope {...selection.containerProps}>
+        <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
         <ListStates
           isLoading={requests.isLoading}
           error={requests.error}
-          isEmpty={rows.length === 0}
+          isEmpty={drawn.length === 0}
           onRetry={() => requests.refetch()}
           errorTitle="Couldn't load requests."
           skeleton={<RowSkeleton rows={4} label="Loading requests" />}
@@ -250,16 +272,16 @@ function OperatorQueue({ userId }: { userId?: string }) {
           }
         >
           {visible.map((entry) => (
+            <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              key={entry.id}
               className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] desktop:flex-nowrap ${
                 selection.isSelected(entry.id) ? "bg-accent-soft" : ""
               }`}
               {...selection.rowProps(entry.id)}
             >
-              {selecting && openRows.length > 0 && (
+              {selecting && anyPending && (
                 <span className="w-11 shrink-0 desktop:w-[26px]">
-                  {entry.status === "pending" ? (
+                  {entry.status === "pending" && !resolved.has(entry.id) ? (
                     <RowCheckbox
                       label="Select this request"
                       {...selection.checkboxProps(entry.id)}
@@ -350,13 +372,14 @@ function OperatorQueue({ userId }: { userId?: string }) {
                 </span>
               )}
             </div>
+            </LeavingRow>
           ))}
 
           <PaginationRow
             shown={visible.length}
-            total={rows.length}
+            total={drawn.length}
             onMore={paging.more}
-            onAll={() => paging.all(rows.length)}
+            onAll={() => paging.all(drawn.length)}
             onBack={paging.back}
           />
         </ListStates>
@@ -398,7 +421,10 @@ function OperatorQueue({ userId }: { userId?: string }) {
           status={bulkStatus}
           ids={Array.from(selection.selected)}
           onClose={() => setBulkStatus(null)}
-          onApplied={selection.clear}
+          onApplied={(ids, plan) => {
+            selection.clear();
+            settleAll(decidedByBulk(rows, ids, bulkStatus, plan));
+          }}
         />
       )}
 
@@ -660,6 +686,51 @@ export function keepResult(request: AccessRequest): string | undefined {
 }
 
 /**
+ * What each row of a bulk decision reports in its own seat, said as the plan's
+ * result says it for that requester. A row the plan did not carry out (blocked,
+ * failed, or not in the result) is not here: it is still waiting, and keeps its
+ * buttons.
+ */
+function decidedByBulk(
+  rows: AccessRequest[],
+  ids: string[],
+  status: "approved" | "rejected",
+  plan: BulkPlan,
+): Array<[AccessRequest, Decided]> {
+  const out: Array<[AccessRequest, Decided]> = [];
+  for (const entry of rows) {
+    if (!ids.includes(entry.id)) continue;
+    const keeping = entry.kind === "extend";
+    if (status === "rejected") {
+      out.push([entry, { word: "Declined", outcome: keeping ? declinedKeepOutcome(entry) : DECLINED }]);
+      continue;
+    }
+    const result = plan.outcomes.find((o) => o.user_id === entry.requester_id);
+    if (!result || result.effect === "blocked" || result.effect === "failed") continue;
+    if (result.effect === "queued") {
+      out.push([
+        entry,
+        {
+          word: "Approved",
+          outcome: { kind: "queued", message: "Approved. It goes when you send it.", detail: result.detail || undefined },
+        },
+      ]);
+    } else if (keeping) {
+      out.push([entry, { word: "Extended", outcome: extendedOutcome(entry) }]);
+    } else {
+      out.push([
+        entry,
+        {
+          word: "Approved",
+          outcome: { kind: "applied", message: "Approved.", detail: "Sent · not yet seen in Zitadel" },
+        },
+      ]);
+    }
+  }
+  return out;
+}
+
+/**
  * Deciding a batch of requests, rehearsed.
  *
  * The same dialog People opens for a bulk grant, because approving nine
@@ -675,7 +746,7 @@ function BulkDecisionDialog({
   status: "approved" | "rejected";
   ids: string[];
   onClose: () => void;
-  onApplied: () => void;
+  onApplied: (ids: string[], plan: BulkPlan) => void;
 }) {
   const rehearse = useRehearseBulkDecision();
   const apply = useApplyBulkDecision();
@@ -692,7 +763,7 @@ function BulkDecisionDialog({
       }
       onApply={async (planId) => {
         const plan = await apply.mutateAsync({ ...body, plan_id: planId });
-        onApplied();
+        onApplied(ids, plan);
         return plan;
       }}
       onClose={onClose}

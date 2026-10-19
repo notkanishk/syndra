@@ -120,4 +120,26 @@ describe("a member's request rows", () => {
     expect(screen.queryByText("Applied")).toBeNull();
     expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
   });
+
+  // The member's read holds every status, so a withdrawn request is still a row
+  // on the next read: the withdrawal must still be the thing the seat says.
+  it("keeps the withdrawal in its seat after the read comes back with it withdrawn", async () => {
+    state.withdraw.mockResolvedValueOnce(undefined);
+    state.data = [request()];
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const screenOf = () => (
+      <QueryClientProvider client={client}>
+        <RequestsScreen isOperator={false} userId="u1" />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(screenOf());
+    fireEvent.click(screen.getByRole("button", { name: "Withdraw" }));
+    await screen.findByRole("status");
+
+    state.data = [request({ status: "withdrawn" })];
+    rerender(screenOf());
+
+    expect(screen.getByRole("status").textContent).toBe("You withdrew thisNobody will be asked to decide it");
+    expect(screen.getByText("Capstone build.")).toBeInTheDocument();
+  });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FocusEvent, type ReactNode } from "react";
+import { useState, type FocusEvent, type PointerEvent, type ReactNode } from "react";
 
 import { stillMotion } from "@/lib/motion";
 
@@ -20,14 +20,25 @@ import { stillMotion } from "@/lib/motion";
 interface Kept<T> {
   row: T;
   key: string;
-  leaving: boolean;
+  /** No longer in the read. It leaves once nothing holds it (see `stay`). */
+  gone: boolean;
 }
 
-function merge<T>(before: Kept<T>[], rows: T[], keyOf: (row: T) => string): Kept<T>[] {
+const NOBODY: ReadonlySet<string> = new Set();
+
+function merge<T>(
+  before: Kept<T>[],
+  rows: T[],
+  keyOf: (row: T) => string,
+  stay: ReadonlySet<string>,
+  still: boolean,
+): Kept<T>[] {
   const next = new Set(rows.map(keyOf));
-  const out: Kept<T>[] = rows.map((row) => ({ row, key: keyOf(row), leaving: false }));
+  const out: Kept<T>[] = rows.map((row) => ({ row, key: keyOf(row), gone: false }));
   before.forEach((was, index) => {
     if (next.has(was.key)) return;
+    // Nothing to fade, so nothing to keep: only a row held for its outcome stays.
+    if (still && !stay.has(was.key)) return;
     // Where it was: straight after the nearest row before it that is still shown.
     let at = 0;
     for (let back = index - 1; back >= 0; back--) {
@@ -37,7 +48,7 @@ function merge<T>(before: Kept<T>[], rows: T[], keyOf: (row: T) => string): Kept
         break;
       }
     }
-    out.splice(at, 0, { ...was, leaving: true });
+    out.splice(at, 0, { ...was, gone: true });
   });
   return out;
 }
@@ -48,6 +59,21 @@ export interface LeaveProps {
   onGone: () => void;
 }
 
+export interface LeavingOptions {
+  /**
+   * Keys whose row has dropped out of the read but is still showing something
+   * the reader has to see first (a decision's outcome, Motion 5b's beat). A held
+   * row stays as it is, buttons and all, and leaves like any other once it is
+   * released. Under reduced motion it leaves at once, with no fade.
+   */
+  stay?: ReadonlySet<string>;
+  /**
+   * What the rows are a reading of (a filter's value). When it changes the list
+   * is a different list: nothing fades out of it, the old rows are just gone.
+   */
+  scope?: string;
+}
+
 /**
  * `rows` is what to draw: the read's rows, with the ones that just left still
  * in their place. `props(key)` is what each row's `LeavingRow` takes;
@@ -55,20 +81,32 @@ export interface LeaveProps {
  * and focus. `ready` is false until the first read has landed, so a list that
  * has not loaded is not mistaken for one that emptied.
  */
-export function useLeavingRows<T>(rows: T[], keyOf: (row: T) => string, ready = true) {
-  const [kept, setKept] = useState<Kept<T>[]>(() => rows.map((row) => ({ row, key: keyOf(row), leaving: false })));
+export function useLeavingRows<T>(
+  rows: T[],
+  keyOf: (row: T) => string,
+  ready = true,
+  { stay = NOBODY, scope }: LeavingOptions = {},
+) {
+  const [kept, setKept] = useState<Kept<T>[]>(() => rows.map((row) => ({ row, key: keyOf(row), gone: false })));
   const [seen, setSeen] = useState(rows);
+  const [was, setWas] = useState(scope);
   const [pointer, setPointer] = useState(false);
   const [focus, setFocus] = useState(false);
 
-  if (rows !== seen) {
+  const other = scope !== was;
+  if (rows !== seen || other) {
     setSeen(rows);
+    setWas(scope);
     setKept(
-      ready && !stillMotion()
-        ? merge(kept, rows, keyOf)
-        : rows.map((row) => ({ row, key: keyOf(row), leaving: false })),
+      ready && !other
+        ? merge(kept, rows, keyOf, stay, stillMotion())
+        : rows.map((row) => ({ row, key: keyOf(row), gone: false })),
     );
   }
+
+  const leaves = (entry: Kept<T>) => entry.gone && !stay.has(entry.key);
+  // Nothing animates under reduced motion, so a row that is going is already gone.
+  const shown = stillMotion() ? kept.filter((entry) => !leaves(entry)) : kept;
 
   const held = pointer || focus;
   const leftFocus = (event: FocusEvent<HTMLElement>) => {
@@ -76,15 +114,21 @@ export function useLeavingRows<T>(rows: T[], keyOf: (row: T) => string, ready = 
   };
 
   return {
-    rows: kept.map((entry) => entry.row),
+    rows: shown.map((entry) => entry.row),
     props: (key: string): LeaveProps => ({
-      leaving: kept.some((entry) => entry.key === key && entry.leaving),
+      leaving: kept.some((entry) => entry.key === key && leaves(entry)),
       held,
-      onGone: () => setKept((now) => now.filter((entry) => !(entry.key === key && entry.leaving))),
+      onGone: () => setKept((now) => now.filter((entry) => !(entry.key === key && entry.gone))),
     }),
     listProps: {
       onPointerEnter: () => setPointer(true),
-      onPointerLeave: () => setPointer(false),
+      // A focused button that is removed (Approve, once decided) never says it
+      // blurred, so focus is read again here rather than trusted: otherwise the
+      // gap would wait on a focus that is no longer anywhere.
+      onPointerLeave: (event: PointerEvent<HTMLElement>) => {
+        setPointer(false);
+        setFocus(event.currentTarget.contains(document.activeElement));
+      },
       onFocus: () => setFocus(true),
       onBlur: leftFocus,
     },
