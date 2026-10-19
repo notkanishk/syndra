@@ -7,6 +7,7 @@ import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePicker
 import { nothingSentYet } from "@/components/access/AccessSource";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button, PILL } from "@/components/ui/Button";
+import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { waitReasonLine } from "@/lib/wait-reason";
@@ -90,6 +91,9 @@ function GrantDirectAccessOpen({
   }));
   const first = userName.trim().split(/\s+/)[0] || "They";
   const roleName = selectedRole?.display_name || humanizeKey(roleKey);
+  // A grant that would cancel a removal still waiting for you to send turns the
+  // sheet to a step first (A-04 §14); Keep it comes back here as it was.
+  const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${roleName}` });
 
   const ready = Boolean(value) && (preset !== "date" || Boolean(customDate));
   // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
@@ -97,6 +101,7 @@ function GrantDirectAccessOpen({
 
   return (
     <Modal open onClose={onClose} busy={grant.isPending} size="md" labelledBy="grant-title">
+      <PushedStep step={step}>
       <ModalHeader title="Grant direct access" titleId="grant-title" />
       <div className="-mt-2 px-6 pb-3 text-[13px] text-faint">{userName}</div>
 
@@ -205,16 +210,17 @@ function GrantDirectAccessOpen({
           wants next is to read what happened to the person they just acted on,
           and a dialog that closes itself takes that with it. */}
       {result && <ActionOutcome outcome={result.outcome} word={result.word} className="mx-6 mb-1" />}
+      {result && step.after}
 
       <ModalFooter
         note={
-          result || !selectedRole ? undefined : selectedRole.waits_for_send ? (
+          step.note ?? (result || !selectedRole ? undefined : selectedRole.waits_for_send ? (
             <span className="rounded-inner bg-warn-soft px-2.5 py-1.5 text-warn-text">
               {roleName} always waits for you, so {first} gets it once you send it.
             </span>
           ) : (
             `${first} can use it as soon as you give it.`
-          )
+          ))
         }
       >
         {done ? (
@@ -240,12 +246,16 @@ function GrantDirectAccessOpen({
               onClick={async () => {
                 setResult(null);
                 try {
-                  const made = await grant.mutateAsync({
-                    project_id: projectId,
-                    role_key: roleKey,
-                    reason,
-                    duration_days: resolved.days,
-                  });
+                  const made = await step.run(() =>
+                    grant.mutateAsync({
+                      project_id: projectId,
+                      role_key: roleKey,
+                      reason,
+                      duration_days: resolved.days,
+                    }),
+                  );
+                  // Kept: the form is back as it was and nothing changed.
+                  if (made === KEPT) return;
                   // `wait_reason` is the backend's account of why this isn't
                   // in Zitadel yet; without one the grant went straight through.
                   const why = waitReasonLine(made.wait_reason, roleName, new Date().toISOString());
@@ -280,6 +290,7 @@ function GrantDirectAccessOpen({
           </>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }

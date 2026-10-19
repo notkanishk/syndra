@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { AccessSource } from "@/components/access/AccessSource";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
+import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -330,6 +331,9 @@ function ExpiringRow({
   // (user, project, role) and overwrites expires_at, so this renews in place
   // rather than creating a duplicate.
   const extend = useCreateGrant(grant.user_id);
+  // No sheet of its own: a small one holds the step if extending would cancel
+  // a change still waiting for you to send (A-04 §14).
+  const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const clearAck = useClearExpiryAcknowledgement();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Extending again would add another stretch to the same grant.
@@ -418,13 +422,16 @@ function ExpiringRow({
           disabled={extended}
           onClick={async () => {
             try {
-              const result = await extend.mutateAsync({
-                project_id: grant.project_id,
-                role_key: grant.role_key,
-                reason: "Extended from Expiring access",
-                duration_days: EXTEND_DAYS,
-                extend: true,
-              });
+              const result = await step.run(() =>
+                extend.mutateAsync({
+                  project_id: grant.project_id,
+                  role_key: grant.role_key,
+                  reason: "Extended from Expiring access",
+                  duration_days: EXTEND_DAYS,
+                  extend: true,
+                }),
+              );
+              if (result === KEPT) return;
               setExtended(true);
               // This endpoint enqueues to the outbox in manual mode ("pending")
               // rather than applying inline — see CreateGrantResult. Reporting
@@ -445,6 +452,7 @@ function ExpiringRow({
         >
           Extend {EXTEND_DAYS} days
         </Button>
+        {step.element}
 
         {ack ? (
           <Button

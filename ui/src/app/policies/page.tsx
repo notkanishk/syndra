@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FieldLabel } from "@/components/ui/Input";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -165,6 +166,12 @@ function RuleEditor({
   const create = useCreateMappingRule();
   const update = useUpdateMappingRule();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // Saving a rule gives the role to everyone it covers, which can cancel a
+  // removal still waiting for you to send: the sheet turns to the step first.
+  const step = useCancelStep({
+    host: rule ? `Edit ${shortRuleId(rule.id)}` : "New automatic rule",
+    goAhead: "save the rule",
+  });
   const validate = useValidateMappingRule();
   /**
    * Retiring the rule takes over this same dialog rather than opening a second one on top of it.
@@ -310,6 +317,7 @@ function RuleEditor({
 
   return (
     <Modal open onClose={onClose} busy={busy} size="md" labelledBy="rule-title">
+      <PushedStep step={step}>
       <ModalHeader
         title={rule ? `Editing ${shortRuleId(rule.id)}` : "New automatic rule"}
         titleId="rule-title"
@@ -447,17 +455,20 @@ function RuleEditor({
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
+      {saved && step.after}
+
       <ModalFooter
         note={
+          step.note ??
           // Two different unmet conditions used to share one sentence: an
           // incomplete form was told to "check the rule" while Check itself
           // sat disabled right below, recommending an action it had just
           // refused.
-          !complete
+          (!complete
             ? "Fill in every field above, then check the rule."
             : !validated
               ? "Check the rule before you can save it."
-              : undefined
+              : undefined)
         }
       >
         {saved && (
@@ -487,8 +498,11 @@ function RuleEditor({
                   target_project: targetProject,
                   target_role: targetRole,
                 };
+                const written = await step.run(() =>
+                  rule ? update.mutateAsync({ id: rule.id, ...input }) : create.mutateAsync(input),
+                );
+                if (written === KEPT) return;
                 if (rule) {
-                  await update.mutateAsync({ id: rule.id, ...input });
                   setOutcome({
                     // "Applied" over the rule itself is always true — it is a
                     // Syndra-side row, not a Zitadel mutation. What the pill
@@ -500,7 +514,6 @@ function RuleEditor({
                     detail: savedDetail(targetWaits),
                   });
                 } else {
-                  await create.mutateAsync(input);
                   setOutcome({
                     kind: targetWaits ? "queued" : "applied",
                     message: "Rule created",
@@ -547,6 +560,7 @@ function RuleEditor({
           </Button>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }
@@ -580,6 +594,7 @@ function DeleteRuleConfirm({
 }) {
   const remove = useDeleteMappingRule();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const step = useCancelStep({ host: `Retire ${shortRuleId(rule.id)}`, goAhead: "retire it", tone: "danger" });
   const holders = rule.holder_count ?? 0;
   // What the backend decides (services.Deliver): the role waits, or, until
   // the switch over to roles that wait, the rule's own mode did.
@@ -605,6 +620,7 @@ function DeleteRuleConfirm({
       size="md"
       labelledBy="rule-delete-title"
     >
+      <PushedStep step={step}>
       <ModalHeader
         title={`Retire ${shortRuleId(rule.id)}?`}
         titleId="rule-delete-title"
@@ -633,8 +649,9 @@ function DeleteRuleConfirm({
       </div>
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {gone && step.after}
 
-      <ModalFooter note="If you only want the rule to give a different role, edit it instead of retiring it.">
+      <ModalFooter note={step.note ?? "If you only want the rule to give a different role, edit it instead of retiring it."}>
         {/* First in the DOM, not first on screen: Modal focuses the panel's
             first focusable element on open, and a dialog must not open with
             the cursor already on the button that revokes access. `order-2`
@@ -659,7 +676,8 @@ function DeleteRuleConfirm({
             isPending={remove.isPending}
             onClick={async () => {
               try {
-                const result = await remove.mutateAsync(rule.id);
+                const result = await step.run(() => remove.mutateAsync(rule.id));
+                if (result === KEPT) return;
                 const n = result.cascade?.enqueued ?? 0;
                 const auto = result.cascade?.mode === "auto";
                 setOutcome(
@@ -693,6 +711,7 @@ function DeleteRuleConfirm({
           </Button>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }

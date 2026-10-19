@@ -40,7 +40,7 @@ export function PersonRequests({
   // audit tail, nothing is truncated on the way.
   const requests = useRequestsAdmin("all");
   // The queue's own decide: an approval here says what it says there.
-  const { act, resolved, outcomes, isPending } = useRequestDecisions();
+  const { act, resolved, outcomes, isPending, cancelStep } = useRequestDecisions();
 
   const mine = useMemo(
     () =>
@@ -54,6 +54,7 @@ export function PersonRequests({
 
   return (
     <Card>
+      {cancelStep}
       <CardColumns>
         <span className="w-[250px]">What they asked for</span>
         <span className="flex-1">Why</span>

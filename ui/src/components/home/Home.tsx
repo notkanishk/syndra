@@ -9,6 +9,7 @@ import { AccessSource } from "@/components/access/AccessSource";
 import { Makerspace } from "@/components/home/Makerspace";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Card, CardHeader, CardHeaderLink, CardRow } from "@/components/ui/Card";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
@@ -207,7 +208,7 @@ export function Home({ session }: { session: SessionUser }) {
 /** Approve / Deny resolve in place, on the row. They never navigate. */
 function OpenRequests({ requests }: { requests: AccessRequest[] }) {
   // The queue's own decide, so an approval here says what it says there.
-  const { act, resolved, outcomes } = useRequestDecisions();
+  const { act, resolved, outcomes, cancelStep } = useRequestDecisions();
 
   // Decided rows keep their seat until the next read; they used to vanish on
   // the tap, taking their own outcome with them.
@@ -216,6 +217,7 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
 
   return (
     <Card>
+      {cancelStep}
       <CardHeader
         title="Open requests"
         count={open}
@@ -313,6 +315,9 @@ function ExpiringRow({
   // Extending re-submits the grant with a later date: POST upserts on
   // (user, project, role), so this renews in place rather than duplicating.
   const extend = useCreateGrant(grant.user_id);
+  // A row has no sheet of its own: if extending would cancel a change still
+  // waiting for you to send, a small sheet holds the step (A-04 §14).
+  const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const remaining = daysUntil(grant.expires_at);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Extending again would add another 90 days to the same grant.
@@ -342,13 +347,16 @@ function ExpiringRow({
         disabled={extended}
         onClick={async () => {
           try {
-            await extend.mutateAsync({
-              project_id: grant.project_id,
-              role_key: grant.role_key,
-              reason: "Extended from Home",
-              duration_days: 90,
-              extend: true,
-            });
+            const made = await step.run(() =>
+              extend.mutateAsync({
+                project_id: grant.project_id,
+                role_key: grant.role_key,
+                reason: "Extended from Home",
+                duration_days: 90,
+                extend: true,
+              }),
+            );
+            if (made === KEPT) return;
             setExtended(true);
             setOutcome({
               kind: "applied",
@@ -364,6 +372,7 @@ function ExpiringRow({
       </Button>
 
       {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
+      {step.element}
     </CardRow>
   );
 }

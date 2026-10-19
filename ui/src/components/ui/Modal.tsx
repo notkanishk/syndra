@@ -83,7 +83,9 @@ const FOCUSABLE_SELECTOR =
 function focusableIn(panel: HTMLElement | null): HTMLElement[] {
   if (!panel) return [];
   return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) => element.tabIndex >= 0,
+    // `[hidden]` is a form kept mounted behind a pushed step (CancelQueuedStep):
+    // it is in the DOM but not on screen, so Tab must not land there.
+    (element) => element.tabIndex >= 0 && !element.closest("[hidden]"),
   );
 }
 

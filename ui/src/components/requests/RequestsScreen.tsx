@@ -129,7 +129,7 @@ export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; us
 function OperatorQueue({ userId }: { userId?: string }) {
   const [status, setStatus] = useState<StatusFilter>("pending");
   const requests = useRequestsAdmin(status);
-  const { act, resolved, outcomes } = useRequestDecisions();
+  const { act, resolved, outcomes, cancelStep } = useRequestDecisions();
   const catalog = useGlobalRoleCatalog();
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
   const ask = useAskOnArrival();
@@ -175,6 +175,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
         title="Requests"
         lede="What members have asked for. Approve gives them the access for the time they asked, starting now; decline closes it, and they may ask again."
       />
+      {cancelStep}
 
       {/* One control, so it stays on the row rather than behind a panel: a
           disclosure hiding a single five-way switch costs a click and hides

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
@@ -54,6 +55,13 @@ function ManageBundlesOpen({
   const assignedIds = useMemo(() => new Set(assigned.map((b) => b.id)), [assigned]);
   const [staged, setStaged] = useState<Set<string>>(new Set());
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // Which way the change being sent goes, so a step says "assign" or "remove".
+  const [acting, setActing] = useState<"assign" | "remove">("assign");
+  const step = useCancelStep({
+    host: `Manage bundles for ${userName}`,
+    goAhead: acting,
+    tone: acting === "remove" ? "danger" : "accent",
+  });
 
   const allIds = (bundles.data ?? []).map((bundle) => bundle.id);
   const { byId: bundleRoles } = useBundleRolesByBundle(allIds, { published: true });
@@ -94,7 +102,10 @@ function ManageBundlesOpen({
       let revoking = 0;
       for (const id of changes) {
         const removing = assignedIds.has(id);
-        const result = removing ? await remove.mutateAsync(id) : await assign.mutateAsync(id);
+        setActing(removing ? "remove" : "assign");
+        const result = await step.run(() => (removing ? remove.mutateAsync(id) : assign.mutateAsync(id)));
+        // Kept: what was waiting stays, the rest stays ticked, and the form is as it was.
+        if (result === KEPT) return;
         // Out of the staged set as soon as it is applied. Left in, a retry after
         // a later one fails would read it against the new state and send the
         // opposite (an assign becomes a remove).
@@ -145,6 +156,7 @@ function ManageBundlesOpen({
 
   return (
     <Modal open onClose={onClose} busy={busy} size="md" labelledBy="manage-bundles-title">
+      <PushedStep step={step}>
       <ModalHeader title="Manage bundles" titleId="manage-bundles-title" />
       <div className="-mt-2 px-6 pb-1 text-[13px] text-faint">{userName}</div>
 
@@ -263,6 +275,7 @@ function ManageBundlesOpen({
       )}
 
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && step.after}
 
       {/* The footer follows the state of the work, because the work has three
           states and this used to describe only the middle one.
@@ -275,9 +288,10 @@ function ManageBundlesOpen({
           while the only live control was the secondary one next to it. */}
       <ModalFooter
         note={
-          changes.length > 1
+          step.note ??
+          (changes.length > 1
             ? "Each change is applied in order. Any that fail stay unapplied and are reported."
-            : undefined
+            : undefined)
         }
       >
         {done ? (
@@ -326,6 +340,7 @@ function ManageBundlesOpen({
           <span className="text-[13px] text-faint">Recorded in Syndra first, not sent yet</span>
         )}
       </ModalFooter>
+      </PushedStep>
     </Modal>
   );
 }
