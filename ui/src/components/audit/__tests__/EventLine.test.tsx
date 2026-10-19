@@ -124,7 +124,8 @@ describe("EventSentence", () => {
   it("with details, says the change, who queued it and when, the reason, and the act that cancelled it", () => {
     render(<EventSentence entry={cancelled()} />);
     const t = document.body.textContent!;
-    expect(t).toContain("Kanishk Singh cancelled a change that was waiting for you to send");
+    expect(t).toContain("Cancelled a change that was waiting for you to send");
+    expect(t).not.toContain("Kanishk Singh cancelled");
     expect(t).toContain("Removing Network storage · Member from Gurasheesh Paul Singh");
     expect(t).toContain("Queued by Asha Rao · 2 hours ago");
     expect(t).toContain("“Left the lab”");
