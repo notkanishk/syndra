@@ -100,3 +100,21 @@ func TestPutTerms_RefusesBadInputAndSavesNothing(t *testing.T) {
 		t.Fatalf("%s", rr.Body)
 	}
 }
+
+// A member reads the dates, never which operator set them.
+func TestGetTerms_AMemberIsNotToldWhoSetThem(t *testing.T) {
+	stubTerms(t)
+	by, at := "op-1", time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	svcLoadTerms = func(context.Context, time.Time) (services.TermsView, error) {
+		return services.TermsView{Terms: services.DefaultTerms(2026), SetBy: &by, SetAt: &at}, nil
+	}
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	rr := httptest.NewRecorder()
+	handleGetTerms(rr, memberContext(httptest.NewRequest(http.MethodGet, "/api/v1/terms", nil), "member-1"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rr.Code, rr.Body.String())
+	}
+	if body := rr.Body.String(); strings.Contains(body, "op-1") || !strings.Contains(body, `"set_by":null`) || !strings.Contains(body, `"terms"`) {
+		t.Fatalf("a member saw who set the terms, or no terms: %s", body)
+	}
+}
