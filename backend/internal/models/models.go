@@ -225,6 +225,10 @@ type RoleReason struct {
 	// the page that shows it may not present a recorded intent and a delivered
 	// grant as the same thing. A source with this set gives them nothing yet.
 	Queued bool `json:"queued,omitempty"`
+	// QueuedAt is when the outbox row was created — "Given 2h ago" for an
+	// operator, "Given 15 Oct" for a member. Set only with Queued; the earliest
+	// when several rows wait on the same source.
+	QueuedAt *time.Time `json:"queued_at,omitempty"`
 }
 
 type EffectiveRole struct {

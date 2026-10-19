@@ -1512,10 +1512,17 @@ func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKe
 	}
 
 	type deliveryKey struct{ projectID, roleKey, source, sourceRef string }
-	queued := make(map[deliveryKey]bool, len(pending))
+	// The earliest queue time wins: "Given 2h ago" dates the oldest unsent change.
+	queued := make(map[deliveryKey]time.Time, len(pending))
 	for _, d := range pending {
-		queued[deliveryKey{d.ProjectID, d.RoleKey, d.Source, d.SourceRef}] = true
-		queued[deliveryKey{d.ProjectID, d.RoleKey, d.Source, ""}] = true
+		for _, k := range []deliveryKey{
+			{d.ProjectID, d.RoleKey, d.Source, d.SourceRef},
+			{d.ProjectID, d.RoleKey, d.Source, ""},
+		} {
+			if at, ok := queued[k]; !ok || d.QueuedAt.Before(at) {
+				queued[k] = d.QueuedAt
+			}
+		}
 	}
 
 	for key, role := range roleMap {
@@ -1534,8 +1541,12 @@ func markQueuedDeliveries(ctx context.Context, userID string, roleMap map[roleKe
 			default:
 				continue
 			}
-			if queued[deliveryKey{key.projectID, key.roleKey, source, ref}] {
+			if at, ok := queued[deliveryKey{key.projectID, key.roleKey, source, ref}]; ok {
 				role.Reasons[i].Queued = true
+				if !at.IsZero() {
+					at := at
+					role.Reasons[i].QueuedAt = &at
+				}
 			}
 		}
 	}
