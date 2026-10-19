@@ -107,9 +107,9 @@ func GetAllLocalRoles(ctx context.Context) ([]models.Role, error) {
 func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 	// Count bundle_roles per (project, role).
 	bundleQuery := `
-		SELECT zitadel_project_id, zitadel_role_key, COUNT(*)
-		FROM bundle_roles
-		GROUP BY zitadel_project_id, zitadel_role_key`
+		SELECT br.zitadel_project_id, br.zitadel_role_key, COUNT(*)
+		FROM bundle_roles br JOIN bundles b ON b.id = br.bundle_id AND b.retired_at IS NULL
+		GROUP BY br.zitadel_project_id, br.zitadel_role_key`
 
 	rows, err := querier(ctx).Query(ctx, bundleQuery)
 	if err != nil {
@@ -136,13 +136,13 @@ func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 			SELECT source_zitadel_project_id AS project_id,
 			       source_zitadel_role_key AS role_key,
 			       COUNT(*) AS cnt
-			FROM mapping_rules
+			FROM mapping_rules WHERE retired_at IS NULL
 			GROUP BY source_zitadel_project_id, source_zitadel_role_key
 			UNION ALL
 			SELECT target_zitadel_project_id,
 			       target_zitadel_role_key,
 			       COUNT(*)
-			FROM mapping_rules
+			FROM mapping_rules WHERE retired_at IS NULL
 			GROUP BY target_zitadel_project_id, target_zitadel_role_key
 		) sub
 		GROUP BY project_id, role_key`
@@ -171,11 +171,12 @@ func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 func GetAllReferencedRoleKeys(ctx context.Context) ([][2]string, error) {
 	query := `
 		SELECT DISTINCT project_id, role_key FROM (
-			SELECT zitadel_project_id AS project_id, zitadel_role_key AS role_key FROM bundle_roles
+			SELECT br.zitadel_project_id AS project_id, br.zitadel_role_key AS role_key
+			  FROM bundle_roles br JOIN bundles b ON b.id = br.bundle_id AND b.retired_at IS NULL
 			UNION
-			SELECT source_zitadel_project_id, source_zitadel_role_key FROM mapping_rules
+			SELECT source_zitadel_project_id, source_zitadel_role_key FROM mapping_rules WHERE retired_at IS NULL
 			UNION
-			SELECT target_zitadel_project_id, target_zitadel_role_key FROM mapping_rules
+			SELECT target_zitadel_project_id, target_zitadel_role_key FROM mapping_rules WHERE retired_at IS NULL
 			UNION
 			SELECT zitadel_project_id, zitadel_role_key FROM direct_role_grants
 		) all_refs

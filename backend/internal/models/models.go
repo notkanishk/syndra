@@ -22,6 +22,12 @@ type Bundle struct {
 	ConfirmationMode string    `json:"confirmation_mode"`
 	CreatedAt        time.Time `json:"created_at"`
 
+	// RetiredAt/RetiredBy: the bundle stopped being given and keeps its
+	// history. nil is live. Only the single read and the retired list carry
+	// them; every other read skips a retired bundle altogether.
+	RetiredAt *time.Time `json:"retired_at,omitempty"`
+	RetiredBy string     `json:"retired_by,omitempty"`
+
 	// HolderCount is how many people currently hold this bundle. Computed on
 	// read, never persisted. Publishing a version can change access for all of
 	// them at once, so the number belongs next to the name rather than a click
@@ -126,6 +132,10 @@ type MappingRule struct {
 	TargetRole       string    `json:"target_role"`
 	ConfirmationMode string    `json:"confirmation_mode"`
 	CreatedAt        time.Time `json:"created_at"`
+
+	// RetiredAt/RetiredBy: as on Bundle. nil is in force.
+	RetiredAt *time.Time `json:"retired_at,omitempty"`
+	RetiredBy string     `json:"retired_by,omitempty"`
 
 	// HolderCount is how many people currently hold the target role because of
 	// this rule. Computed on read, never persisted — "this affects 7 people" is

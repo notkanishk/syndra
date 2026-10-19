@@ -98,7 +98,9 @@ func RequestsInWindow(ctx context.Context, from, to time.Time) (RequestTrendRows
 func OutsideBundleRoles(ctx context.Context, from, to time.Time, limit int) ([]models.TrendOutsideRole, error) {
 	rows, err := querier(ctx).Query(ctx, `
 		WITH latest AS (
-			SELECT DISTINCT ON (bundle_id) id FROM bundle_versions ORDER BY bundle_id, version DESC
+			SELECT DISTINCT ON (v.bundle_id) v.id FROM bundle_versions v
+			  JOIN bundles b ON b.id = v.bundle_id AND b.retired_at IS NULL
+			 ORDER BY v.bundle_id, v.version DESC
 		), given AS (
 			SELECT DISTINCT e.zitadel_project_id AS p, e.zitadel_role_key AS k
 			  FROM bundle_version_effective_roles e JOIN latest l ON l.id = e.version_id

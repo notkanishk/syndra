@@ -118,14 +118,14 @@ func TestPublish_AsksEveryIncludingBundleAndUpdatesOnlyDrafts(t *testing.T) {
 }
 
 // Retiring a bundle that others include is refused, naming them.
-func TestCascadeBundleDeleted_RefusedWhileIncluded(t *testing.T) {
+func TestCascadeBundleRetired_RefusedWhileIncluded(t *testing.T) {
 	resetCascadeDeps(t)
 	publishStubs(t, nil, nil, nil)
 	orig := svcRetireBlockers
 	t.Cleanup(func() { svcRetireBlockers = orig })
 	svcRetireBlockers = func(context.Context, string) ([]string, error) { return []string{"New members", "Staff"}, nil }
 
-	_, err := CascadeBundleDeleted(context.Background(), "admin", "safety")
+	_, err := CascadeBundleRetired(context.Background(), "admin", "safety")
 	var included *ErrBundleIncluded
 	if !errors.As(err, &included) || len(included.Includers) != 2 || !errors.Is(err, db.ErrBundleIncluded) {
 		t.Fatalf("want refusal naming both, got %v", err)

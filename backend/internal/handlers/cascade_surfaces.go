@@ -165,6 +165,9 @@ func handleRemoveBundleFromUser(w http.ResponseWriter, r *http.Request) {
 	}
 	cascade, err := svcCascadeBundleRemoved(r.Context(), actor, userID, bundleID)
 	if err != nil {
+		if writeRetired(w, "bundle", err) {
+			return
+		}
 		jsonErrorResponse(w, http.StatusInternalServerError, "CASCADE_ERROR", err.Error())
 		return
 	}

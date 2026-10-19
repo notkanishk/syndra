@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -66,10 +67,10 @@ var (
 
 	// Revoke-side atomic mutation+enqueue (Task 21).
 	svcRemoveBundleFromUserAndEnqueue = db.RemoveBundleFromUserAndEnqueue
-	svcDeleteBundleAndEnqueue         = db.DeleteBundleAndEnqueue
+	svcRetireBundleAndEnqueue         = db.RetireBundleAndEnqueue
 	svcRemoveRoleFromBundleAndEnqueue = db.RemoveRoleFromBundleAndEnqueue
 	svcUpdateRuleAndEnqueue           = db.UpdateMappingRuleAndEnqueue
-	svcDeleteRuleAndEnqueue           = db.DeleteMappingRuleAndEnqueue
+	svcRetireRuleAndEnqueue           = db.RetireMappingRuleAndEnqueue
 
 	// The closure-diff helpers below (userBaseHoldings et al.) reuse the governance-layer
 	// injectables already declared in deps.go (svcGetDirectGrantsForUser, svcGetBundlesForUser,
@@ -84,6 +85,20 @@ func (e *ErrBundleIncluded) Error() string {
 }
 
 func (e *ErrBundleIncluded) Unwrap() error { return db.ErrBundleIncluded }
+
+// ErrRetired refuses a write to a bundle that was retired: it keeps its history and nothing
+// about it can change.
+type ErrRetired struct{ At time.Time }
+
+func (e *ErrRetired) Error() string { return "retired " + e.At.Format("2006-01-02") }
+
+// refuseRetired is the one test every bundle write here makes after reading the bundle.
+func refuseRetired(b models.Bundle) error {
+	if b.RetiredAt != nil {
+		return &ErrRetired{At: *b.RetiredAt}
+	}
+	return nil
+}
 
 // applyMode delivers the JUST-enqueued rows (Deliver): each goes to Zitadel
 // now unless its role waits, or, before the switch over, the bundle's or
@@ -326,6 +341,9 @@ func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID st
 		if err != nil {
 			return err
 		}
+		if err := refuseRetired(bundle); err != nil {
+			return err
+		}
 		// The LATEST PUBLISHED version, not the working copy. AssignBundleAndEnqueue
 		// pins the assignment to that version in the same transaction, so projecting
 		// from `bundle_roles` would push unpublished edits to somebody who is not
@@ -461,6 +479,9 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 		if err != nil {
 			return err
 		}
+		if err := refuseRetired(bundle); err != nil {
+			return err
+		}
 		rules, err := svcGetActiveMappingRules(ctx)
 		if err != nil {
 			return err
@@ -488,7 +509,7 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 	return applyMode(ctx, bundle.ConfirmationMode, ids)
 }
 
-// CascadeBundleDeleted retires a bundle and takes back what only it was granting.
+// CascadeBundleRetired retires a bundle and takes back what only it was granting.
 //
 // It is CascadeBundleRemovedFromUser run over every holder and committed with the deletion, and
 // it is written as a loop over holders rather than a single "revoke the bundle's roles" pass for
@@ -500,13 +521,16 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 // Holders are read via GetUsersForBundle — the assignment table — not the known-user list. A
 // bundle reaches exactly the people assigned to it, so widening the scan would be work with a
 // guaranteed empty delta.
-func CascadeBundleDeleted(ctx context.Context, actor, bundleID string) (CascadeResult, error) {
+func CascadeBundleRetired(ctx context.Context, actor, bundleID string) (CascadeResult, error) {
 	var bundle models.Bundle
 	var ids []string
 	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
 		bundle, err = svcGetBundleByID(ctx, bundleID)
 		if err != nil {
+			return err
+		}
+		if err := refuseRetired(bundle); err != nil {
 			return err
 		}
 		// Refused while another bundle includes it (B8): its people get these
@@ -548,7 +572,7 @@ func CascadeBundleDeleted(ctx context.Context, actor, bundleID string) (CascadeR
 			params = append(params, rows...)
 		}
 
-		ids, err = svcDeleteBundleAndEnqueue(ctx, actor, bundleID, params)
+		ids, err = svcRetireBundleAndEnqueue(ctx, actor, bundleID, params)
 		return err
 	})
 	if err != nil {
@@ -622,7 +646,7 @@ func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRul
 	return applyMode(ctx, old.ConfirmationMode, ids)
 }
 
-// CascadeRuleDeleted retires a rule and takes back what only it was granting. It is
+// CascadeRuleRetired retires a rule and takes back what only it was granting. It is
 // CascadeRuleUpdated with no replacement edge: rulesAfter is the active set minus `old`, so the
 // per-user closure diff yields revokes for the targets this rule alone reached, and nothing at
 // all for anyone whose access to those targets survives via a bundle, a direct grant or another
@@ -632,7 +656,7 @@ func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRul
 // Adds are possible in principle and are enqueued if they occur: a rule can suppress nothing
 // today, but the diff is computed, not assumed, and a one-directional "revokes only" shortcut
 // would be a claim about the rule graph rather than a reading of it.
-func CascadeRuleDeleted(ctx context.Context, actor string, old models.MappingRule) (CascadeResult, error) {
+func CascadeRuleRetired(ctx context.Context, actor string, old models.MappingRule) (CascadeResult, error) {
 	var ids []string
 	err := withLockedAccess(ctx, func(ctx context.Context) error {
 		var err error
@@ -668,7 +692,7 @@ func CascadeRuleDeleted(ctx context.Context, actor string, old models.MappingRul
 			params = append(params, rows...)
 		}
 
-		ids, err = svcDeleteRuleAndEnqueue(ctx, actor, old.ID, params)
+		ids, err = svcRetireRuleAndEnqueue(ctx, actor, old.ID, params)
 		if err != nil {
 			return err
 		}

@@ -110,7 +110,7 @@ func InitialVersionNote(roles int) string {
 // meaningless entry in a history that exists to answer "what changed for whom".
 func UpdateBundle(ctx context.Context, id, name, description string) error {
 	tag, err := querier(ctx).Exec(ctx,
-		`UPDATE bundles SET name = $2, description = $3 WHERE id = $1`, id, name, description)
+		`UPDATE bundles SET name = $2, description = $3 WHERE id = $1 AND retired_at IS NULL`, id, name, description)
 	if err != nil {
 		return fmt.Errorf("update bundle (id=%s): %w", id, err)
 	}
@@ -120,18 +120,22 @@ func UpdateBundle(ctx context.Context, id, name, description string) error {
 	return nil
 }
 
-// DeleteBundleAndEnqueue deletes a bundle AND enqueues the caller-computed revokes for everyone
+// RetireBundleAndEnqueue retires a bundle AND enqueues the caller-computed revokes for everyone
 // who held it, in ONE tx (mirrors RemoveBundleFromUserAndEnqueue, which is the same operation
 // for one person).
 //
-// The transaction is the point. Every table hanging off a bundle cascades on delete, so the
-// assignment rows vanish the moment the bundle does — and a holder whose assignment disappeared
-// without a revoke keeps the role in Zitadel with nothing in Syndra left to explain it. That is
-// the definition of drift, and it would arrive with no actor, found weeks later by the sweep.
+// Retiring keeps the row, its versions and what they gave: only the assignments go, because an
+// assignment is "this person is given this bundle" and a retired bundle is given to nobody. The
+// transaction is still the point. An assignment that vanished without a revoke would leave the
+// holder with the role in Zitadel and nothing in Syndra to explain it — drift with no actor,
+// found weeks later by the sweep.
 //
 // params may be empty: a bundle nobody holds, or one whose every role each holder also gets
-// somewhere else, deletes cleanly and enqueues nothing.
-func DeleteBundleAndEnqueue(ctx context.Context, actor, bundleID string, params []EnqueueParams) ([]string, error) {
+// somewhere else, retires cleanly and enqueues nothing.
+//
+// The welcome flag goes with it: a retired bundle is not what new members are given, and the
+// partial unique index would otherwise keep the flag from moving to the bundle that is.
+func RetireBundleAndEnqueue(ctx context.Context, actor, bundleID string, params []EnqueueParams) ([]string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return nil, err
@@ -140,21 +144,20 @@ func DeleteBundleAndEnqueue(ctx context.Context, actor, bundleID string, params 
 		defer tx.Rollback(ctx)
 	}
 
-	// What older, unheld versions of other bundles included is history, let
-	// go with the bundle; anything live was refused by the caller (B8), and
-	// the RESTRICT keys refuse the delete if one slipped through.
-	if _, err := tx.Exec(ctx, `DELETE FROM bundle_version_includes WHERE child_bundle_id = $1`, bundleID); err != nil {
-		return nil, fmt.Errorf("let go of past includes (id=%s): %w", bundleID, err)
-	}
-	tag, err := tx.Exec(ctx, `DELETE FROM bundles WHERE id = $1`, bundleID)
+	tag, err := tx.Exec(ctx,
+		`UPDATE bundles SET retired_at = NOW(), retired_by = $2, is_welcome = FALSE
+		  WHERE id = $1 AND retired_at IS NULL`, bundleID, actor)
 	if err != nil {
-		return nil, fmt.Errorf("delete bundle (id=%s): %w", bundleID, err)
+		return nil, fmt.Errorf("retire bundle (id=%s): %w", bundleID, err)
 	}
 	if tag.RowsAffected() == 0 {
 		return nil, pgx.ErrNoRows
 	}
+	if _, err := tx.Exec(ctx, `DELETE FROM user_bundle_assignments WHERE bundle_id = $1`, bundleID); err != nil {
+		return nil, fmt.Errorf("take back the retired bundle's assignments (id=%s): %w", bundleID, err)
+	}
 	ids, err := enqueueCascadeRows(ctx, tx,
-		[]CascadeAudit{{Actor: actor, Action: "bundle.deleted", ResourceID: bundleID}},
+		[]CascadeAudit{{Actor: actor, Action: "bundle.retired", ResourceID: bundleID}},
 		params)
 	if err != nil {
 		return nil, err
@@ -167,11 +170,25 @@ func DeleteBundleAndEnqueue(ctx context.Context, actor, bundleID string, params 
 	return ids, nil
 }
 
+const bundleListColumns = `b.id, b.name, b.description, b.is_welcome, b.confirmation_mode, b.created_at,
+		       COALESCE((SELECT MAX(version) FROM bundle_versions v WHERE v.bundle_id = b.id), 0)`
+
+// GetAllBundles lists the bundles in force. A retired one is not on it; see GetRetiredBundles.
 func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
-	query := `
-		SELECT b.id, b.name, b.description, b.is_welcome, b.confirmation_mode, b.created_at,
-		       COALESCE((SELECT MAX(version) FROM bundle_versions v WHERE v.bundle_id = b.id), 0)
-		FROM bundles b ORDER BY b.created_at DESC;`
+	return listBundles(ctx, `
+		SELECT `+bundleListColumns+`
+		FROM bundles b WHERE b.retired_at IS NULL ORDER BY b.created_at DESC;`, false)
+}
+
+// GetRetiredBundles lists the bundles that stopped being given, most recently retired first. They
+// keep their history, so the screen that shows it needs them; nothing that decides access does.
+func GetRetiredBundles(ctx context.Context) ([]models.Bundle, error) {
+	return listBundles(ctx, `
+		SELECT `+bundleListColumns+`, b.retired_at, COALESCE(b.retired_by, '')
+		FROM bundles b WHERE b.retired_at IS NOT NULL ORDER BY b.retired_at DESC;`, true)
+}
+
+func listBundles(ctx context.Context, query string, retired bool) ([]models.Bundle, error) {
 	rows, err := querier(ctx).Query(ctx, query)
 	if err != nil {
 		return nil, err
@@ -181,23 +198,30 @@ func GetAllBundles(ctx context.Context) ([]models.Bundle, error) {
 	var bundles []models.Bundle
 	for rows.Next() {
 		var b models.Bundle
-		if err := rows.Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode,
-			&b.CreatedAt, &b.LatestVersion); err != nil {
+		dest := []any{&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode,
+			&b.CreatedAt, &b.LatestVersion}
+		if retired {
+			dest = append(dest, &b.RetiredAt, &b.RetiredBy)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}
 		bundles = append(bundles, b)
 	}
-	return bundles, nil
+	return bundles, rows.Err()
 }
 
-// GetBundleByID fetches a single bundle by id, used by the cascade orchestrator to read its
-// confirmation_mode before fanning out.
+// GetBundleByID fetches a single bundle by id, retired or not: the cascade orchestrator reads
+// its confirmation_mode before fanning out, and a retired bundle's page reads when it was
+// retired. Callers that write must refuse a retired one (RetiredAt != nil).
 func GetBundleByID(ctx context.Context, id string) (models.Bundle, error) {
 	var b models.Bundle
 	err := querier(ctx).QueryRow(ctx,
-		`SELECT id, name, description, is_welcome, confirmation_mode, created_at
+		`SELECT id, name, description, is_welcome, confirmation_mode, created_at,
+		        retired_at, COALESCE(retired_by, '')
 		 FROM bundles WHERE id = $1`, id).
-		Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode, &b.CreatedAt)
+		Scan(&b.ID, &b.Name, &b.Description, &b.IsWelcome, &b.ConfirmationMode, &b.CreatedAt,
+			&b.RetiredAt, &b.RetiredBy)
 	return b, err
 }
 
@@ -228,7 +252,7 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 		FROM bundles b
 		JOIN user_bundle_assignments uba ON b.id = uba.bundle_id
 		JOIN bundle_versions bv ON bv.id = uba.version_id
-		WHERE uba.user_id = $1;`
+		WHERE uba.user_id = $1 AND b.retired_at IS NULL;`
 
 	rows, err := querier(ctx).Query(ctx, query, userID)
 	if err != nil {

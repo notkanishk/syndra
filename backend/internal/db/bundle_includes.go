@@ -103,7 +103,7 @@ const includesAnything = `
 // latest version, or a version somebody holds; "" when none does.
 const includerOf = `
 	SELECT b.name FROM bundles b
-	 WHERE b.id <> $1 AND (
+	 WHERE b.id <> $1 AND b.retired_at IS NULL AND (
 	       EXISTS (SELECT 1 FROM bundle_includes WHERE parent_bundle_id = b.id AND child_bundle_id = $1)
 	    OR EXISTS (SELECT 1 FROM bundle_version_includes i
 	                 JOIN bundle_versions v ON v.id = i.version_id
@@ -122,7 +122,7 @@ func BundleIncludesAnything(ctx context.Context, bundleID string) (bool, error) 
 
 func bundleName(ctx context.Context, tx pgx.Tx, id string) (string, error) {
 	var name string
-	err := tx.QueryRow(ctx, `SELECT name FROM bundles WHERE id = $1`, id).Scan(&name)
+	err := tx.QueryRow(ctx, `SELECT name FROM bundles WHERE id = $1 AND retired_at IS NULL`, id).Scan(&name)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", pgx.ErrNoRows
 	}
@@ -325,9 +325,9 @@ func ListIncluders(ctx context.Context, childID string) ([]Includer, error) {
 		          JOIN bundle_version_includes i ON i.version_id = a.version_id AND i.child_bundle_id = $1
 		         WHERE a.bundle_id = b.id)
 		  FROM bundles b
-		 WHERE EXISTS (SELECT 1 FROM bundle_includes w WHERE w.parent_bundle_id = b.id AND w.child_bundle_id = $1)
+		 WHERE b.retired_at IS NULL AND (EXISTS (SELECT 1 FROM bundle_includes w WHERE w.parent_bundle_id = b.id AND w.child_bundle_id = $1)
 		    OR EXISTS (SELECT 1 FROM bundle_version_includes i JOIN bundle_versions v ON v.id = i.version_id
-		                WHERE v.bundle_id = b.id AND i.child_bundle_id = $1)
+		                WHERE v.bundle_id = b.id AND i.child_bundle_id = $1))
 		 ORDER BY b.name`, childID)
 	if err != nil {
 		return nil, fmt.Errorf("includers: %w", err)

@@ -52,7 +52,10 @@ export const AUDIT_ACTIONS: Record<
   "bundle.updated": { verb: "Changed a bundle's name or description" },
   // Same word the console puts on the button. An operator looking for what they just did should
   // find it under the verb they read.
+  // `bundle.deleted` is the entry from before Retire kept its history (19 Oct 2026): those rows
+  // are still in the log, and now say what happened to the bundle in the same words.
   "bundle.deleted": { verb: "Retired a bundle", destructive: true },
+  "bundle.retired": { verb: "Retired a bundle", template: "Retired the {} bundle", destructive: true },
   "bundle.draft_discarded": { verb: "Discarded a bundle's unpublished changes", template: "Discarded the unpublished changes to the {} bundle" },
   "bundle.include_set": { verb: "Included a bundle in another", template: "Changed what the {} bundle includes" },
   "bundle.include_removed": { verb: "Took a bundle out of another", template: "Took a bundle out of the {} bundle" },
@@ -61,7 +64,9 @@ export const AUDIT_ACTIONS: Record<
   welcome_bundle_assigned: { verb: "Gave a new member the default bundle", template: "Gave {} the default bundle, as a new member", passive: "Given the default bundle, as a new member" },
   "mapping_rule.created": { verb: "Created an automatic rule" },
   "mapping_rule.updated": { verb: "Changed an automatic rule" },
+  // `mapping_rule.deleted` is the entry from before Retire kept its history: those rows stay.
   "mapping_rule.deleted": { verb: "Deleted an automatic rule", destructive: true },
+  "mapping_rule.retired": { verb: "Retired an automatic rule", destructive: true },
   "role.created": { verb: "Created a role" },
   "access_request.created": { verb: "Asked for access" },
   // Roles that wait for you (N14 B): settings, not access, so no passive.

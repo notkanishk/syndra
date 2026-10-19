@@ -264,6 +264,7 @@ func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, e
 			    ON r.source_zitadel_project_id = h.project_id
 			   AND r.source_zitadel_role_key = h.role_key
 			 WHERE r.target_zitadel_project_id = $1 AND r.target_zitadel_role_key = $2
+			   AND r.retired_at IS NULL
 		) holders
 		ORDER BY user_id`
 	rows, err := querier(ctx).Query(ctx, q, projectID, roleKey)

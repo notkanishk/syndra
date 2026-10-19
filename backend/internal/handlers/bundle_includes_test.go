@@ -55,16 +55,16 @@ func TestSetBundleInclude_AnswersWithTheDraft(t *testing.T) {
 
 // Retiring an included bundle is refused, naming who includes it.
 func TestDeleteBundle_RefusedWhileIncluded(t *testing.T) {
-	origGet, origCascade := dbGetBundleByID, svcCascadeBundleDeleted
-	t.Cleanup(func() { dbGetBundleByID, svcCascadeBundleDeleted = origGet, origCascade })
+	origGet, origCascade := dbGetBundleByID, svcCascadeBundleRetired
+	t.Cleanup(func() { dbGetBundleByID, svcCascadeBundleRetired = origGet, origCascade })
 	dbGetBundleByID = func(context.Context, string) (models.Bundle, error) { return models.Bundle{ID: "safety"}, nil }
-	svcCascadeBundleDeleted = func(context.Context, string, string) (services.CascadeResult, error) {
+	svcCascadeBundleRetired = func(context.Context, string, string) (services.CascadeResult, error) {
 		return services.CascadeResult{}, &services.ErrBundleIncluded{Includers: []string{"New members", "Staff"}}
 	}
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/safety", nil)
 	req.SetPathValue("id", "safety")
 	rr := httptest.NewRecorder()
-	handleDeleteBundle(rr, req)
+	handleRetireBundle(rr, req)
 	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "Refused while New members and Staff include it") {
 		t.Fatalf("got %d %s", rr.Code, rr.Body.String())
 	}
