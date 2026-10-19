@@ -70,4 +70,5 @@ beforeEach(() => {
 // across tests (would otherwise produce "multiple role=dialog" errors).
 afterEach(() => {
   cleanup();
+  if (typeof window !== "undefined") (window as { __motionInTests?: boolean }).__motionInTests = false;
 });
