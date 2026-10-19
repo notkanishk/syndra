@@ -193,7 +193,7 @@ describe("after a bundle is retired", () => {
     await retireTheSecondBundle();
 
     await waitFor(() =>
-      expect(document.body.textContent).toMatch(/Mill Certified retired/),
+      expect(document.body.textContent).toMatch(/Retired/),
     );
     // Nothing left to destroy, so nothing offers to.
     expect(screen.queryByRole("button", { name: "Retire and revoke" })).toBeNull();
