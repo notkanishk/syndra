@@ -152,3 +152,26 @@ describe("Everything sent (S13), in motion", () => {
     expect(sendButton()).toBeNull();
   });
 });
+
+describe("A change that goes on a later read (S5)", () => {
+  beforeEach(() => motionInTests());
+
+  it("one cancelled elsewhere fades where it was and the group stops counting it", () => {
+    pending.data = [
+      { ...row("o1"), cascade_id: "same" },
+      { ...row("o2"), cascade_id: "same", role_keys: ["door"] },
+      { ...row("o3"), cascade_id: "same", role_keys: ["laser"] },
+    ];
+    const view = render(tree());
+    expect(screen.getByText(/These 3 changes come from one edit/)).toBeInTheDocument();
+
+    pending.data = [pending.data[0], pending.data[2]];
+    view.rerender(tree());
+
+    const door = screen.getByText("door").closest("[aria-hidden=true]");
+    expect(door).not.toBeNull();
+    expect(screen.getByText(/These 2 changes come from one edit/)).toBeInTheDocument();
+    // Still the Send button's number: what is waiting is two.
+    expect(sendButton()).toHaveTextContent("Send 2 changes");
+  });
+});
