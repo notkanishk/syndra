@@ -28,6 +28,8 @@ type MyChangeRow struct {
 	// RequestKind is a request's kind (access | extend); empty for given and
 	// taken-away rows.
 	RequestKind string
+	// EndedBefore and EndsAfter are an extension's two ends, as settled.
+	EndedBefore, EndsAfter *time.Time
 	// Pending is an approval whose outbox row has not been sent yet, and
 	// WaitReason is that row's propagation_outbox.wait_reason.
 	Pending    bool
@@ -44,7 +46,7 @@ type MyChangeRow struct {
 // abandoned) never reached the person and is not a change to their access.
 // The row an approval queued is the approval itself, so it is not repeated.
 const myChangesSQL = `
-SELECT kind, changed_at, project_id, role_key, actor, note, source, source_ref, ends_at, pending, wait_reason, request_kind
+SELECT kind, changed_at, project_id, role_key, actor, note, source, source_ref, ends_at, pending, wait_reason, request_kind, ended_before, ends_after
 FROM (
 	SELECT CASE ar.status WHEN 'approved' THEN 'request_approved'
 	                      WHEN 'rejected' THEN 'request_declined'
@@ -62,7 +64,9 @@ FROM (
 	       END                                                               AS ends_at,
 	       w.id IS NOT NULL                                                  AS pending,
 	       COALESCE(w.wait_reason, '')                                       AS wait_reason,
-	       ar.kind                                                           AS request_kind
+	       ar.kind                                                           AS request_kind,
+	       ar.ended_before                                                   AS ended_before,
+	       ar.ends_after                                                     AS ends_after
 	  FROM access_requests ar
 	  LEFT JOIN direct_role_grants g
 	         ON ar.status = 'approved'
@@ -128,7 +132,7 @@ func ListMyChanges(ctx context.Context, userID string, days int) ([]MyChangeRow,
 	for rows.Next() {
 		var c MyChangeRow
 		if err := rows.Scan(&c.Kind, &c.At, &c.ProjectID, &c.RoleKey, &c.Actor, &c.Note,
-			&c.Source, &c.SourceRef, &c.Until, &c.Pending, &c.WaitReason, &c.RequestKind); err != nil {
+			&c.Source, &c.SourceRef, &c.Until, &c.Pending, &c.WaitReason, &c.RequestKind, &c.EndedBefore, &c.EndsAfter); err != nil {
 			return nil, fmt.Errorf("scan my change: %w", err)
 		}
 		out = append(out, c)

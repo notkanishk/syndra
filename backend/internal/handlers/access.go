@@ -582,6 +582,13 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 			"role_key":     request.RoleKey,
 			"from_request": requestID,
 		})
+		// An extension remembers both ends with its resolution: the end they
+		// had (read just above) and the end approving sets. Any other request
+		// records neither.
+		var endedBefore, endsAfter *time.Time
+		if request.Kind == requestKindExtend {
+			endedBefore, endsAfter = holdingEnd(holding), expiresAt
+		}
 		queued, err := dbApproveRequestAndEnqueue(ctx, requestID, reviewer, reviewNote, db.EnqueueParams{
 			UserID:      request.RequesterID,
 			ProjectID:   request.ProjectID,
@@ -594,7 +601,7 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 			SourceRef:   requestID,
 			OpType:      "add",
 			PayloadJSON: string(payload),
-		})
+		}, endedBefore, endsAfter)
 		if err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {
 				return decisionResult{}, errRequestAlreadyResolved
@@ -618,7 +625,17 @@ func resolveAccessRequestOutcome(ctx context.Context, requestID, status, reviewe
 			res.WaitReason = svcDeliver(ctx, []string{queued.OutboxID}, false).WaitReason()
 		}
 	} else { // rejected — no grant, just the conditional resolution
-		if err := dbResolveAccessRequest(ctx, requestID, status, reviewer, reviewNote); err != nil {
+		// A declined extension remembers the end it left alone. Best-effort: a
+		// failed read must not stop a decline, it only leaves the end unsaid.
+		var endedBefore *time.Time
+		if request.Kind == requestKindExtend {
+			if h, err := dbRequestHolding(ctx, request.RequesterID, request.ProjectID, request.RoleKey); err != nil {
+				log.Printf("[ACCESS] could not read the end %s has for declined request %s: %v", request.RequesterID, requestID, err)
+			} else {
+				endedBefore = holdingEnd(h)
+			}
+		}
+		if err := dbResolveAccessRequest(ctx, requestID, status, reviewer, reviewNote, endedBefore); err != nil {
 			if errors.Is(err, db.ErrRequestNotPending) {
 				return decisionResult{}, errRequestAlreadyResolved
 			}

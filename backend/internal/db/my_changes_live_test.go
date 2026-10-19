@@ -21,7 +21,7 @@ func TestListMyChanges_AgainstTheSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveAccessRequest(ctx, declined, "rejected", "op", "Book the induction first."); err != nil {
+	if err := ResolveAccessRequest(ctx, declined, "rejected", "op", "Book the induction first.", nil); err != nil {
 		t.Fatal(err)
 	}
 	withdrawn, err := CreateAccessRequest(ctx, user, "pLab", "door", "need it", nil)
@@ -41,7 +41,7 @@ func TestListMyChanges_AgainstTheSchema(t *testing.T) {
 		UserID: user, ProjectID: "pLab", RoleKeys: []string{"supervisor"}, GrantedBy: "op",
 		Reason: "Approved from access request", ExpiresAt: &expiry, Source: "direct",
 		SourceRef: approved, OpType: "add", PayloadJSON: `{}`,
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestListMyChanges_AgainstTheSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveAccessRequest(ctx, old, "rejected", "op", "no"); err != nil {
+	if err := ResolveAccessRequest(ctx, old, "rejected", "op", "no", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := PG.Exec(ctx, `UPDATE access_requests SET resolved_at = NOW() - interval '45 days' WHERE id = $1`, old); err != nil {

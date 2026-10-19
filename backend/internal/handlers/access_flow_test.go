@@ -42,7 +42,7 @@ func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *test
 		return "", nil
 	}
 	plainResolveCalled := false
-	dbResolveAccessRequest = func(context.Context, string, string, string, string) error {
+	dbResolveAccessRequest = func(context.Context, string, string, string, string, *time.Time) error {
 		plainResolveCalled = true
 		return nil
 	}
@@ -51,7 +51,7 @@ func TestHandleResolveAccessRequestApprovedEnqueuesGrantAndRebuildsCache(t *test
 	// the combined path, not resolve-then-enqueue across two transactions.
 	var gotID, gotReviewer, gotNote string
 	var gotParams db.EnqueueParams
-	dbApproveRequestAndEnqueue = func(_ context.Context, id, reviewer, note string, p db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(_ context.Context, id, reviewer, note string, p db.EnqueueParams, _, _ *time.Time) (db.EnqueueResult, error) {
 		gotID, gotReviewer, gotNote, gotParams = id, reviewer, note, p
 		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
 	}
@@ -148,7 +148,7 @@ func TestHandleResolveAccessRequest_ApproveRace_Returns409(t *testing.T) {
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		return db.EnqueueResult{}, db.ErrRequestNotPending
 	}
 	drainCalled := false
@@ -183,7 +183,7 @@ func TestHandleResolveAccessRequest_RebuildsCacheBeforeInlineDrain(t *testing.T)
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
 	}
 	var order []string
@@ -213,7 +213,7 @@ func TestHandleResolveAccessRequest_RebuildDetachedFromClientCancel(t *testing.T
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		return db.EnqueueResult{OutboxID: "ob-appr", Status: "pending"}, nil
 	}
 	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
@@ -249,7 +249,7 @@ func TestHandleResolveAccessRequest_RejectRace_Returns409(t *testing.T) {
 	dbGetAccessRequestByID = func(ctx context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbResolveAccessRequest = func(context.Context, string, string, string, string) error {
+	dbResolveAccessRequest = func(context.Context, string, string, string, string, *time.Time) error {
 		return db.ErrRequestNotPending
 	}
 	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
@@ -750,7 +750,7 @@ func TestHandleResolveAccessRequestRejectedDoesNotCreateGrant(t *testing.T) {
 			Status:      "pending",
 		}, nil
 	}
-	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string) error {
+	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string, _ *time.Time) error {
 		return nil
 	}
 
@@ -893,7 +893,7 @@ func TestHandleResolveAccessRequest_WithdrawnCannotBeDecided(t *testing.T) {
 		return models.AccessRequest{ID: id, RequesterID: "u1", ProjectID: "p1", RoleKey: "admin",
 			Status: "withdrawn"}, nil
 	}
-	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string) error {
+	dbResolveAccessRequest = func(ctx context.Context, id, status, reviewerID, reviewNote string, _ *time.Time) error {
 		t.Fatal("a withdrawn request must not be decidable")
 		return nil
 	}
@@ -919,7 +919,7 @@ func TestApprovingYourOwnRequestIsRecordedAsSelfApproved(t *testing.T) {
 	dbGetAccessRequestByID = func(_ context.Context, id string) (models.AccessRequest, error) {
 		return models.AccessRequest{ID: id, RequesterID: "op-1", ProjectID: "p1", RoleKey: "admin", Status: "pending"}, nil
 	}
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		return db.EnqueueResult{OutboxID: "ob", Status: "pending"}, nil
 	}
 	svcDrainPropagationRow = func(context.Context, string) (propagation.DrainResult, error) {
@@ -1026,7 +1026,7 @@ func TestApprovingARoleTheyHaveSinceComeToHoldIsRefused(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingForGood}, nil
 	}
 	granted := false
-	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams) (db.EnqueueResult, error) {
+	dbApproveRequestAndEnqueue = func(context.Context, string, string, string, db.EnqueueParams, *time.Time, *time.Time) (db.EnqueueResult, error) {
 		granted = true
 		return db.EnqueueResult{}, nil
 	}

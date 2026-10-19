@@ -31,6 +31,11 @@ type myChange struct {
 	WaitReason string `json:"wait_reason,omitempty"`
 	// RequestKind is "extend" for a request to keep a role longer.
 	RequestKind string `json:"request_kind,omitempty"`
+	// EndedBefore and EndsAfter are a settled extension's two ends: the end
+	// they had when it was decided and the end approval set (null on an
+	// approved one is no end date). A declined one has EndedBefore only.
+	EndedBefore *time.Time `json:"ended_before,omitempty"`
+	EndsAfter   *time.Time `json:"ends_after,omitempty"`
 }
 
 type myViaRef struct {
@@ -100,6 +105,7 @@ func shapeMyChanges(rows []db.MyChangeRow, triggers map[string]myTrigger) []myCh
 		c := myChange{
 			Kind: row.Kind, At: row.At, ProjectID: row.ProjectID, RoleKey: row.RoleKey, RequestKind: row.RequestKind,
 			Note: strings.TrimSpace(row.Note), Until: row.Until,
+			EndedBefore: row.EndedBefore, EndsAfter: row.EndsAfter,
 		}
 		switch row.Source {
 		case "bundle":
