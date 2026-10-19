@@ -48,6 +48,8 @@ export interface RoleReason {
    * nothing has carried it to Zitadel yet.
    */
   queued?: boolean;
+  /** When it was queued: "Given 2h ago". Present only with `queued`. */
+  queued_at?: string;
 }
 
 const ORDER: Record<SourceKind, number> = { direct: 0, bundle: 1, mapping: 2 };
@@ -146,6 +148,17 @@ export function SourceChip({ kind }: { kind: SourceKind }) {
 export function nothingSentYet(reasons: RoleReason[] | undefined | null): boolean {
   const ordered = orderedSources(reasons);
   return ordered.length > 0 && ordered.every((reason) => reason.queued === true);
+}
+
+/**
+ * When the role was given and queued: the earliest time among the sources still
+ * waiting, which is when someone decided it. Absent when none carries one.
+ */
+export function givenAt(reasons: RoleReason[] | undefined | null): string | undefined {
+  return orderedSources(reasons)
+    .map((reason) => reason.queued_at)
+    .filter((at): at is string => Boolean(at))
+    .sort()[0];
 }
 
 /**

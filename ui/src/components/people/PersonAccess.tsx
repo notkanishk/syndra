@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import {
   AccessSourceList,
   NotSentYet,
+  givenAt,
   nothingSentYet,
   orderedSources,
   sourceQualifier,
@@ -35,7 +36,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { daysUntil, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, formatAgoShort, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
 type Tab = "access" | "requests" | "activity";
@@ -743,7 +744,12 @@ function RoleGroup({
 
             <span className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]">
               {waiting ? (
-                <NotSentYet />
+                <>
+                  {givenAt(role.reasons) && (
+                    <span className="text-muted">Given {formatAgoShort(givenAt(role.reasons))}</span>
+                  )}
+                  <NotSentYet />
+                </>
               ) : standing === false ? (
                 // Recorded here, absent there, and nothing queued to carry it.
                 // This is the state the whole page exists to make visible: the

@@ -110,6 +110,23 @@ describe("a role whose grant has not been sent", () => {
     expect(screen.queryByText("No end date")).toBeNull();
   });
 
+  it("says when it was given, beside the way to send it", () => {
+    state.projects = project([
+      {
+        kind: "bundle",
+        bundle_id: "b1",
+        bundle_name: "Ops Admin",
+        description: "",
+        queued: true,
+        queued_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      },
+    ]);
+    renderPerson();
+
+    expect(screen.getByText("Given 2h ago")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
+  });
+
   it("says nothing once the grant has been delivered", () => {
     state.zitadel = [{ id: "zg1", projectId: "p-audio", roleKeys: ["community"] }];
     state.projects = project([
