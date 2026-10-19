@@ -893,13 +893,15 @@ html.theme-fading *::after {
     transition-timing-function: var(--ease-settle);
     transition-delay: 40ms;
   }
+  /* Only a checkbox is ever "some chosen": a radio group with nothing picked
+     matches :indeterminate too, and would paint every seat chosen. */
   & > input:checked + span,
-  & > input:indeterminate + span {
+  & > input[type="checkbox"]:indeterminate + span {
     background-color: var(--accent);
     border-color: var(--accent);
   }
-  & > input:checked:not(:indeterminate) + span > .seat-mark,
-  & > input:indeterminate + span > .seat-dash {
+  & > input:checked:not([type="checkbox"]:indeterminate) + span > .seat-mark,
+  & > input[type="checkbox"]:indeterminate + span > .seat-dash {
     opacity: 1;
     transform: none;
   }

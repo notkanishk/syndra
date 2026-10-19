@@ -222,6 +222,14 @@ describe("design system", () => {
     expect(found, "use ActionOutcome — see lib/outcome.ts").toEqual([]);
   });
 
+  it("marks only a checkbox as some chosen, never a radio group with nothing picked", () => {
+    // A radio group with no choice matches :indeterminate, so a bare
+    // input:indeterminate rule paints every unchosen radio seat as chosen.
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(css).not.toMatch(/input:indeterminate/);
+    expect(css).toMatch(/input\[type="checkbox"\]:indeterminate/);
+  });
+
   it("keeps the retired palette out of globals.css", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     for (const token of RETIRED_CSS_TOKENS) {
