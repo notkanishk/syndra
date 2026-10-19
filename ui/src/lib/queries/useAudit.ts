@@ -68,6 +68,10 @@ export function useAuditEntries(filter: AuditFilter = {}) {
   return useQuery({
     queryKey: userId ? KEYS.forUser(userId, limit) : KEYS.list(limit),
     queryFn: () => fetchPage(limit, userId, undefined),
+    // Asking for a longer window of the SAME scope keeps the rows already on
+    // screen while the longer one arrives; another person's rows never stand in.
+    placeholderData: (prev, prevQuery) =>
+      prevQuery && (userId ? prevQuery.queryKey[2] === userId : prevQuery.queryKey[1] === "list") ? prev : undefined,
   });
 }
 

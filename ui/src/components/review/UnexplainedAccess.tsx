@@ -12,6 +12,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterPills, Select } from "@/components/ui/Select";
 import { Tabs } from "@/components/ui/Tabs";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
@@ -64,8 +65,6 @@ import {
 type Tab = "triage" | "reconciliation";
 type Resolution = "attribute" | "revoke" | "external";
 
-/** Explicit pagination. The queue must have a visible end. */
-const PAGE = 12;
 
 /**
  * S6 · Review › Unexplained access — the highest-stakes screen in the product.
@@ -124,7 +123,7 @@ export function UnexplainedAccess() {
     null,
   );
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [limit, setLimit] = useState(PAGE);
+  const paging = usePaging();
   const [bulkOp, setBulkOp] = useState<"adopt" | "external" | null>(null);
 
   // What the request returned, before this page's own three filters — the
@@ -156,7 +155,7 @@ export function UnexplainedAccess() {
     [returned, filters],
   );
 
-  const visible = items.slice(0, limit);
+  const visible = items.slice(0, paging.limit);
   // Selection spans the whole queue, not the rendered page: a triage backlog is
   // exactly the case where paging four times before you can act is the tedium
   // worth removing.
@@ -446,21 +445,13 @@ export function UnexplainedAccess() {
                 />
               ))}
 
-              {items.length > visible.length && (
-                <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-                  <span className="text-[13.5px] text-faint">
-                    {items.length - visible.length} more
-                  </span>
-                  {/* `Button`, not a hand-rolled pill. This was a `<button>`
-                      carrying a copy of the outline variant's classes, and the
-                      copy had already drifted: it pressed with `motion-tint`
-                      instead of `motion-press press-scale`, and sat a pixel
-                      short of every other control on the page. */}
-                  <Button onClick={() => setLimit(items.length)}>
-                    Show all {items.length}
-                  </Button>
-                </div>
-              )}
+              <PaginationRow
+                shown={visible.length}
+                total={items.length}
+                onMore={paging.more}
+                onAll={() => paging.all(items.length)}
+                onBack={paging.back}
+              />
             </ListStates>
             </div>
           </Card>
