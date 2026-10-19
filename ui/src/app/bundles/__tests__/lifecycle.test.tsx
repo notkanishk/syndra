@@ -2,19 +2,26 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import BundlesPage from "@/app/bundles/page";
+import { BundlePage } from "@/components/bundles/BundlePage";
 import type { BundleRow } from "@/lib/queries/useBundles";
 
 const state = vi.hoisted(() => ({
   bundles: [] as BundleRow[],
   update: vi.fn(),
   remove: vi.fn(),
+  push: vi.fn(),
 }));
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }) }));
+
 vi.mock("@/lib/queries/useBundles", () => ({
+  useBundleRolesByBundle: () => ({ byId: {}, allLoaded: true }),
+  useSetBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useBundles: () => ({ data: state.bundles, isLoading: false, error: null, refetch: () => {} }),
   useBundleRoles: () => ({ data: [], isLoading: false, error: null, refetch: () => {} }),
   useBundleImpact: () => ({ data: { role_count: 0, users: [] }, isLoading: false }),
+  useAddBundleRole: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateBundle: () => ({ mutateAsync: state.update, isPending: false }),
   useDeleteBundle: () => ({ mutateAsync: state.remove, isPending: false }),
@@ -23,17 +30,23 @@ vi.mock("@/lib/queries/useBundles", () => ({
 }));
 
 vi.mock("@/lib/queries/useBundleVersions", () => ({
+  useVersionsByBundle: () => ({}),
+  useBundleIncluders: () => ({ data: [] }),
+  useBundleHolders: () => ({ data: [] }),
   useBundleDraft: () => ({ data: { latest_version: 2, next_version: 3, added: [], removed: [] } }),
+  useBundleVersions: () => ({ data: [], isLoading: false, refetch: vi.fn() }),
+  useDiscardBundleDraft: () => ({ mutateAsync: vi.fn(), isPending: false }),
   draftChangeCount: () => 0,
 }));
 
 vi.mock("@/lib/queries/useMappingRules", () => ({ useMappingRules: () => ({ data: [] }) }));
 
-vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => null }));
+vi.mock("@/components/bundles/BundleVersions", () => ({ BundleVersions: () => null, ThroughOtherBundles: () => null }));
 vi.mock("@/components/names", () => ({
   RoleRef: () => null,
   UserName: () => null,
 }));
+vi.mock("@/lib/queries/useRoles", () => ({ useGlobalRoleCatalog: () => ({ data: [] }) }));
 
 
 function bundle(overrides: Partial<BundleRow> = {}): BundleRow {
@@ -48,6 +61,7 @@ function bundle(overrides: Partial<BundleRow> = {}): BundleRow {
 }
 
 beforeEach(() => {
+  state.push = vi.fn();
   state.bundles = [bundle()];
   state.update = vi.fn().mockResolvedValue({ message: "ok" });
   state.remove = vi
@@ -57,23 +71,23 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("bundle deletion", () => {
-  // Deleting a bundle strips access from everybody holding it. The number is the whole reason
+describe("retiring a bundle", () => {
+  // Retiring a bundle strips access from everybody holding it. The number is the whole reason
   // to hesitate, so it has to be on screen before the click, not in a toast after it.
   it("names the holders before the confirming click", () => {
-    render(<BundlesPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
 
     expect(document.body.textContent).toMatch(/11 people hold it right now/);
     expect(state.remove).not.toHaveBeenCalled();
   });
 
-  // Deleting the welcome bundle silently stops onboarding granting anything. That consequence
+  // Retiring the welcome bundle silently stops onboarding granting anything. That consequence
   // has no other place to be said — the flag lives on the row that is about to go.
   it("warns that onboarding stops when the welcome bundle is the one going", () => {
     state.bundles = [bundle({ is_welcome: true })];
-    render(<BundlesPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
 
     expect(document.body.textContent).toMatch(/default for new members/i);
     expect(document.body.textContent).toMatch(/stop handing anything out/i);
@@ -81,25 +95,25 @@ describe("bundle deletion", () => {
 
   it("says nothing is taken away when nobody holds it", () => {
     state.bundles = [bundle({ holder_count: 0 })];
-    render(<BundlesPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
 
     expect(document.body.textContent).toMatch(/takes nothing away from anybody/i);
   });
 
   it("does not autofocus the destructive button on open", () => {
-    render(<BundlesPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
 
     expect(document.activeElement).not.toBe(
-      screen.getByRole("button", { name: "Delete and revoke" }),
+      screen.getByRole("button", { name: "Retire and revoke" }),
     );
   });
 
   it("deletes only on the confirming button", async () => {
-    render(<BundlesPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
 
     await waitFor(() => expect(state.remove).toHaveBeenCalledWith("b1"));
   });
@@ -107,7 +121,7 @@ describe("bundle deletion", () => {
 
 describe("bundle rename", () => {
   it("blocks a save that changes nothing", () => {
-    render(<BundlesPage />);
+    render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -116,7 +130,7 @@ describe("bundle rename", () => {
   });
 
   it("sends the trimmed name and the description together", async () => {
-    render(<BundlesPage />);
+    render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "  Lab Technician  " } });
@@ -134,10 +148,10 @@ describe("bundle rename", () => {
   /**
    * `setOutcome` used to fire alongside `onClose`, which unmounts the dialog
    * before "Now called Lab Technician" is ever painted. It now stays open on
-   * success until Done is pressed, same fix as the create dialog.
+   * success until Close is pressed, same fix as the create dialog.
    */
-  it("shows the rename landed and stays open until Done is pressed", async () => {
-    render(<BundlesPage />);
+  it("shows the rename landed and stays open until Close is pressed", async () => {
+    render(<BundlePage bundleId="b1" />);
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Lab Technician" } });
@@ -148,7 +162,7 @@ describe("bundle rename", () => {
     );
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(document.body.textContent).not.toMatch(/Now called Lab Technician/);
   });
 });
@@ -156,70 +170,61 @@ describe("bundle rename", () => {
 /**
  * What happens AFTER the delete lands.
  *
- * `DeleteBundleDialog` took an `onDeleted` callback and never called it, so the
- * page went on selecting a bundle that no longer existed. The fix could not
- * call it from the mutation either: clearing the selection unmounts this dialog
- * and would take the outcome the operator has not read yet with it. So the
- * sequence itself is the contract — the report stays, the destructive action
- * goes, and dismissing is what moves the page on.
+ * The page remembers the row it last saw, so the list refetch dropping it does
+ * not unmount the dialog that is still reporting. The sequence is the
+ * contract: the report stays, the destructive action goes, and dismissing is
+ * what moves the page on (to the list).
  */
-describe("after a bundle is deleted", () => {
+describe("after a bundle is retired", () => {
   beforeEach(() => {
     state.bundles = [bundle(), bundle({ id: "b2", name: "Mill Certified", holder_count: 3 })];
   });
 
-  async function deleteTheSecondBundle() {
-    render(<BundlesPage />);
-    fireEvent.click(screen.getByRole("button", { name: /Mill Certified/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+  async function retireTheSecondBundle() {
+    render(<BundlePage bundleId="b2" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
     await waitFor(() => expect(state.remove).toHaveBeenCalledWith("b2"));
     // The refetch the mutation triggers, which the mocked list cannot do itself.
     state.bundles = [bundle()];
   }
 
   it("keeps the report on screen and retires the destructive action", async () => {
-    await deleteTheSecondBundle();
+    await retireTheSecondBundle();
 
     await waitFor(() =>
-      expect(document.body.textContent).toMatch(/Mill Certified deleted/),
+      expect(document.body.textContent).toMatch(/Retired/),
     );
     // Nothing left to destroy, so nothing offers to.
-    expect(screen.queryByRole("button", { name: "Delete and revoke" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retire and revoke" })).toBeNull();
     // And the way out stops being a refusal, because there is nothing to refuse.
     expect(screen.queryByRole("button", { name: "Keep it" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
-  it("clears the parent's selection only when the operator dismisses", async () => {
-    await deleteTheSecondBundle();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeTruthy());
+  it("goes back to the list only when the operator dismisses", async () => {
+    await retireTheSecondBundle();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeTruthy());
 
-    // Still pinned to the deleted bundle until this click: the report is being
-    // read, and the page must not move under it.
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    // Still on the retired bundle until this click: the report is being read.
+    expect(state.push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    // The selection is released, which re-renders the PAGE — and the page is
-    // what holds the list. Closing the dialog alone re-renders the workspace
-    // inside it and leaves the deleted bundle on screen, which is exactly what
-    // the unwired callback did, so this assertion has to be about the page and
-    // not about the dialog.
-    await waitFor(() => expect(document.body.textContent).not.toMatch(/Mill Certified/));
-    expect(document.body.textContent).toMatch(/Lab Tech/);
-    expect(screen.getByRole("button", { name: "Delete bundle" })).toBeTruthy();
+    expect(state.push).toHaveBeenCalledWith("/bundles");
   });
 
   it("keeps the destructive action when the delete failed", async () => {
     state.remove = vi.fn().mockRejectedValue(new Error("the identity provider is unreachable"));
-    render(<BundlesPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete bundle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete and revoke" }));
+    render(<BundlePage bundleId="b1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Retire bundle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retire and revoke" }));
 
     await waitFor(() => expect(document.body.textContent).toMatch(/unreachable/i));
     // Nothing was deleted, so the offer stands and the way out is still a
     // refusal. Relabelling here would tell the operator it worked.
-    expect(screen.getByRole("button", { name: "Delete and revoke" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retire and revoke" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Keep it" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(state.push).not.toHaveBeenCalled();
   });
 });

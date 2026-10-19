@@ -33,7 +33,7 @@ export function FilterChip({
         type="button"
         onClick={onClear}
         aria-label={clearLabel}
-        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-pill font-semibold text-muted motion-tint hover:text-ink desktop:min-h-0 desktop:min-w-0 desktop:px-2 desktop:py-0.5"
+        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-pill font-semibold text-muted control hover:text-ink desktop:min-h-0 desktop:min-w-0 desktop:px-2 desktop:py-0.5"
       >
         ✕
       </button>

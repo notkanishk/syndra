@@ -18,6 +18,22 @@ export interface AuditEntry {
    * decides what the Trace column may claim.
    */
   cascade_id?: string;
+  /** What the entry carries beyond its columns; omitted when null. Only `propagation.cancelled_unsent` has any today. */
+  details?: CancelledUnsentDetails | Record<string, unknown>;
+}
+
+/** `propagation.cancelled_unsent`: the change that was cancelled, and the act that cancelled it. */
+export interface CancelledUnsentDetails {
+  cancelled: {
+    kind: "give" | "remove";
+    project_id: string;
+    role_key: string;
+    user_id: string;
+    initiated_by?: string;
+    queued_at: string;
+    reason?: string;
+  };
+  cause: { action: "grant" | "remove" | "approve" | string; via?: string };
 }
 
 export interface AuditFilter {
@@ -68,6 +84,10 @@ export function useAuditEntries(filter: AuditFilter = {}) {
   return useQuery({
     queryKey: userId ? KEYS.forUser(userId, limit) : KEYS.list(limit),
     queryFn: () => fetchPage(limit, userId, undefined),
+    // Asking for a longer window of the SAME scope keeps the rows already on
+    // screen while the longer one arrives; another person's rows never stand in.
+    placeholderData: (prev, prevQuery) =>
+      prevQuery && (userId ? prevQuery.queryKey[2] === userId : prevQuery.queryKey[1] === "list") ? prev : undefined,
   });
 }
 

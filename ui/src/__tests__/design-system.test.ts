@@ -222,6 +222,14 @@ describe("design system", () => {
     expect(found, "use ActionOutcome — see lib/outcome.ts").toEqual([]);
   });
 
+  it("marks only a checkbox as some chosen, never a radio group with nothing picked", () => {
+    // A radio group with no choice matches :indeterminate, so a bare
+    // input:indeterminate rule paints every unchosen radio seat as chosen.
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(css).not.toMatch(/input:indeterminate/);
+    expect(css).toMatch(/input\[type="checkbox"\]:indeterminate/);
+  });
+
   it("keeps the retired palette out of globals.css", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     for (const token of RETIRED_CSS_TOKENS) {
@@ -376,6 +384,71 @@ describe("design system", () => {
     expect(constant, "useFlashOnChange must export FLASH_MS").not.toBeNull();
 
     expect(constant![1], "FLASH_MS must equal --duration-flash").toBe(declared![1]);
+  });
+
+  // A-05: the motion vocabulary is tokens, so a change to a curve or a cap is a
+  // decision in one place. Each of these has a consumer in globals.css.
+  it("declares the motion tokens Motion v2 names", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    for (const token of [
+      "--ease-arrive: cubic-bezier(0.16, 1, 0.3, 1)",
+      "--ease-breathe: cubic-bezier(0.37, 0, 0.63, 1)",
+      "--ease-flash: cubic-bezier(0.33, 1, 0.68, 1)",
+      "--duration-glide: 520ms",
+      "--travel-cap: 10px",
+      "--arrive-step: 40ms",
+      "--arrive-cap: 5",
+    ]) {
+      expect(css, `globals.css must declare ${token}`).toContain(token);
+    }
+  });
+
+  // "Nothing in the page travels more than 10px." The phone sheet and a
+  // control's own indicator are outside it and are not keyframes here.
+  it("keeps every page keyframe inside the travel cap", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const cap = Number(/--travel-cap:\s*(\d+)px/.exec(css)?.[1]);
+    expect(cap).toBe(10);
+    for (const name of ["arrive", "settle-in", "popover-in", "lift", "flash-value"]) {
+      const frames = namedAtRuleBody(css, "@keyframes", name);
+      expect(frames, `@keyframes ${name} must exist`).not.toBe("");
+      for (const [, px] of frames.matchAll(/translateY\((\d+)px\)/g)) {
+        expect(Number(px), `@keyframes ${name} travels ${px}px`).toBeLessThanOrEqual(cap);
+      }
+    }
+    // The dialog's own rise, and a success's lift (S1, S6).
+    expect(namedAtRuleBody(css, "@keyframes", "settle-in")).toContain("translateY(8px) scale(0.98)");
+    expect(namedAtRuleBody(css, "@keyframes", "lift")).toContain("translateY(6px)");
+  });
+
+  // Delays the answer removed: unfold's content waits one tint, not 140ms, and
+  // nothing waits 280ms for a glide to end.
+  it("waits one tint, not an ad-hoc delay, for an unfold's contents", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(css).not.toMatch(/\b(140|280)ms/);
+    expect(atRuleBody(css, "@utility unfold")).toContain(
+      "animation: fade var(--duration-settle) var(--ease-tint) var(--duration-tint) both",
+    );
+  });
+
+  // Reduced motion keeps what answers the person or carries state, and drops
+  // what is only movement (A-05 §2.8).
+  it("lets press and flash survive reduced motion, drops the bloom, rests the breathing", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const reduce = atRuleBody(css, "@media (prefers-reduced-motion: reduce)");
+    expect(reduce).toMatch(/\.control,\s*\.press-scale\s*{[^}]*transition-duration: var\(--duration-press\)/);
+    expect(reduce).toMatch(/\.flash\s*{[^}]*animation-duration: var\(--duration-flash\)/);
+    expect(reduce).toMatch(/\.bloom::after\s*{[^}]*animation: none/);
+    expect(reduce).toMatch(/\.breathe,\s*\.skeleton-bar\s*{[^}]*animation: none[^}]*opacity: 1/);
+  });
+
+  // Hover is colour only; controls press, rows never scale.
+  it("lets only a control scale when pressed", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(atRuleBody(css, "@utility control")).toContain("scale(0.97)");
+    const hover = atRuleBody(css, "@utility hover-tint");
+    expect(hover).not.toContain("transform");
+    expect(hover).toContain("var(--surface-2)");
   });
 
   // ── Colour roles ────────────────────────────────────────────────────────
@@ -607,18 +680,18 @@ describe("design system", () => {
     expect(shell).toMatch(/<div className="flex min-h-0 min-w-0 flex-1 flex-col">/);
   });
 
-  // Two banners each sticking to `top-0` at the same z-index do not stack —
-  // the later one paints over the earlier, which put the degraded banner on
-  // top of the offline banner and inverted the ordering AppShell argues for.
-  // One sticky slot holding both is the fix, so neither may reclaim its own.
-  it("gives the two banners one sticky slot between them", () => {
+  // Every dysfunction is a Notice in the content column (6a), never a band
+  // under the top bar: the two system Notices open inside <main>, above the
+  // page, offline first because it qualifies degraded.
+  it("says the two system Notices inside the content column, offline first", () => {
     for (const name of ["states/OfflineBanner.tsx", "states/DegradedBanner.tsx"]) {
       const source = readFileSync(resolve(SRC_ROOT, "components", name), "utf8");
-      expect(source, `${name} must not stick on its own`).not.toContain("sticky top-0");
+      expect(source, `${name} must not stick on its own`).not.toContain("sticky");
+      expect(source, `${name} must use the Notice anatomy`).toContain("<Notice");
     }
     const shell = readFileSync(resolve(SRC_ROOT, "components/shell/AppShell.tsx"), "utf8");
-    const slot = /<div className="sticky top-0 z-40">\s*<OfflineBanner \/>\s*<DegradedBanner \/>/;
-    expect(slot.test(shell), "AppShell must hold both banners in one sticky slot").toBe(true);
+    const slot = /<main[^>]*>\s*<OfflineBanner \/>\s*<DegradedBanner \/>\s*\{children\}/;
+    expect(slot.test(shell), "AppShell must open both Notices inside <main>, above the page").toBe(true);
   });
 
   // iOS ignores manifest icons entirely and rasterises nothing, so without a

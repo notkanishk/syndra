@@ -1,4 +1,4 @@
-# Standing rules (the design project's CLAUDE.md, as of 15 Oct 2026)
+# Standing rules (the design project's CLAUDE.md, as of 17 Oct 2026)
 
 Every board follows these. Where a board is silent, build to them.
 
@@ -31,3 +31,17 @@ Every board follows these. Where a board is silent, build to them.
 - Operator's name: Kanishk Singh (top bar shows "Kanishk").
 - Freshness (86c): every reading has a dot. Colour says whether you can act (lime live and ageing, amber stale and provisional); a ring says it isn't a fresh read from the source, so Refresh won't help.
 - Phone (87c, N20): search keeps its seat on every list; below tablet Filters opens as a Modal sm sheet ending in one accent button that names the result ("Show 12 people"). Insights below tablet is the answer in sentences (List view, lens as a Select); the map is for wider screens, and the link keeps the question.
+
+## Added 17 Oct 2026 (A-04, A-05, A-06)
+
+- A plan row forecasts in the future tense, "Will wait for you to send" (amber dot, no link); it becomes the link once it is true.
+- A member reads "On its way" (neutral dot), with "Given 15 Oct. It starts working once makerspace staff send it." Never "waiting to be sent" (A-04 §7.3).
+- Asking and giving use the role picker in single choice (A-04 §1, §12): the row says what the person already has in its note seat before anyone picks. Checkbox and Radio are the round seat, 16 with a mouse and 24 on touch; held is ticked grey, can't-be-chosen is an empty faint ring; the card form is ChoiceRow (proposed/ChoiceRow.md). Never a native select or a second list for roles.
+- Every dialog ends on its own result, in the sheet, with Close (96b): a dot and one word in the act's own vocabulary (Given, Removed, Asked, Not sent, "Given to 12 people"), one sentence about the person, one faint line about where it goes next. Never "Applied" for something that has only been asked. Reopened, a dialog starts clean (A-04 §11).
+- Undoing a change that's still waiting is a pushed step inside the sheet that asked (proposed/CancelQueuedStep.md), never a second sheet: sheets don't stack. Keep it first; the confirm names what goes ahead.
+- A popover draws above the page, never inside its card (proposed/AnchoredPanel.md): 7px gap, 16px gutter, flips up only with more room above. Below tablet, a popover you read stays a popover; one you act in becomes a Modal sm sheet.
+- A box means something is wrong. Explanations are the lede or a caption, never a tinted box; Notice has no violet tone. Dialog cautions (I understand, ConfirmByTyping, Withheld) keep their own patterns.
+- Verbs: Revoke (a person loses access), Remove (a part out of a whole), Retire (a bundle or rule; history stays), Delete (gone everywhere). The verb is the label, the title and the confirm. A destructive action is outline danger at its seat's size: md in a header, sm in a row; solid only on a dialog's confirm. A button that opens a dialog never ends in →.
+- An end is "Ends 2 Aug" / "Ended 2 Aug" in a list, "until 2 Aug" in a sentence; the year only when it isn't this year. Never "expires". Expiring access opens on 14 days, with FilterPills 14 days | 30 days (4a); Home's tile, the rail and Insights' Ending soon land on the same 14. "Revoke" is the one word for losing access in copy (the copy guide); never "taken away".
+- A role someone holds until a date can be asked for again as "Ask to keep it": the request is an extension, and approving it runs Extend. Nothing else moves an end (A-04 §8).
+- Motion (A-05, Motion v2): six movements on one soft curve; life inside the rules. Light leads shape by 40ms; closing fades first and is quicker. Nothing in the page travels more than 10px (--travel-cap); a phone sheet from its edge and a control's own indicator are not page content. Hover is colour only; controls press 3%, rows and cards never scale. Success lifts 6px and its dot blooms once; failure appears still. Arrive only on a first paint you navigated to; refresh, filter and sort never replay it. Breathe is the only loop inside the product. Every movement has a still form.

@@ -83,7 +83,7 @@ describe("People index", () => {
       person({ expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),
     ];
     renderPeople();
-    expect(screen.getByText(/1 expires in 2 days/)).toBeInTheDocument();
+    expect(screen.getByText(/1 ends in 2 days/)).toBeInTheDocument();
   });
 
   it("shows the most serious signal when a person has more than one", () => {
@@ -163,13 +163,14 @@ describe("People index", () => {
       person({ user: { ...person().user, id: `u${index}`, name: `Person ${index}` } }),
     );
     renderPeople();
-    expect(screen.getByRole("button", { name: /Load next 10/ })).toBeInTheDocument();
+    expect(screen.getByText("Showing 10 of 60")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show 25 more" })).toBeInTheDocument();
   });
 
   it("counts how many people have access expiring, in the header", () => {
     users.data = [person({ expiring_count: 1 }), person({ user: { ...person().user, id: "u2" } })];
     renderPeople();
-    expect(screen.getByText(/1 with access expiring inside 30 days/)).toBeInTheDocument();
+    expect(screen.getByText(/1 with access ending inside 30 days/)).toBeInTheDocument();
   });
 });
 
@@ -270,9 +271,9 @@ describe("People index — bulk mode", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 60 people/ }));
 
     // ...and says so, with a way back to just the visible page: selecting 60
-    // when you meant 50 is dozens of people's access.
+    // when you meant 10 is dozens of people's access.
     expect(await screen.findByText(/All 60 people selected/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /select only the 50 people shown/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /select only the 10 people shown/ })).toBeInTheDocument();
   });
 
   // The name is the largest thing in a row and the obvious place a thumb

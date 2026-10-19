@@ -39,15 +39,20 @@ var (
 	dbGetPropagationStatus          = db.GetPropagationStatus
 	svcDrainPropagations            = propagation.Drain
 	svcDrainPropagationRow          = propagation.DrainOne
-	svcDrainAddon                   = propagation.DrainAddon
+	// svcDeliver is the one rule for whether a just-written change goes now
+	// or waits for the operator (roles that wait, N14 B).
+	svcDeliver    = services.Deliver
+	svcDrainAddon = propagation.DrainAddon
 
-	dbCreateAccessRequest  = db.CreateAccessRequest
-	dbGetAccessRequestByID = db.GetAccessRequestByID
-	dbRequestHolding       = db.RequestHolding
+	dbCreateAccessRequestOfKind = db.CreateAccessRequestOfKind
+	dbGetAccessRequestByID      = db.GetAccessRequestByID
+	dbRequestHolding            = db.RequestHolding
 	// Taking back your own ask. Scoped to the requester inside the statement, not just here.
 	dbWithdrawAccessRequest = db.WithdrawAccessRequest
 	dbResolveAccessRequest  = db.ResolveAccessRequest
 	dbInsertAuditLog        = db.InsertAuditLog
+	// A member's own recent changes (B10). Their own records only.
+	dbListMyChanges = db.ListMyChanges
 
 	// Bundle handler injectable vars. dbAddRoleToBundle/dbAssignBundleToUser were removed
 	// (sub-phase 3, Task 20): the cascade OWNS the source mutation now — see
@@ -57,6 +62,7 @@ var (
 	dbUpdateBundle      = db.UpdateBundle
 	dbGetBundleByID     = db.GetBundleByID
 	dbGetAllBundles     = db.GetAllBundles
+	dbGetRetiredBundles = db.GetRetiredBundles
 	dbGetRolesForBundle = db.GetRolesForBundle
 	// What the bundle GRANTS, as opposed to what its working copy contains.
 	// Separate dep because they are separate questions — see handleGetBundleRoles.
@@ -91,16 +97,17 @@ var (
 	// injectable in the handler layer.
 	svcCascadeBundleRemoved = services.CascadeBundleRemovedFromUser // (ctx, actor, userID, bundleID)
 	// Retiring the bundle itself: the same revoke, computed once per holder.
-	svcCascadeBundleDeleted = services.CascadeBundleDeleted // (ctx, actor, bundleID)
+	svcCascadeBundleRetired = services.CascadeBundleRetired // (ctx, actor, bundleID)
 	svcCascadeRuleUpdated   = services.CascadeRuleUpdated   // (ctx, actor, old, sp, sr, tp, tr)
 	// Retiring a rule is the revoke half of a retarget with no new edge: same closure diff,
 	// same one transaction, so the rule and the access it was granting leave together.
-	svcCascadeRuleDeleted = services.CascadeRuleDeleted // (ctx, actor, old)
+	svcCascadeRuleRetired = services.CascadeRuleRetired // (ctx, actor, old)
 
 	// Rules handler injectables for the 6th trigger (Task 21f): read the pre-update rule, then
 	// validate the retarget against the graph WITHOUT the rule's own old edge.
-	dbGetMappingRuleByID  = db.GetMappingRuleByID
-	dbDetectCycleOnUpdate = db.DetectCycleOnUpdate
+	dbGetMappingRuleByID     = db.GetMappingRuleByID
+	dbGetRetiredMappingRules = db.GetRetiredMappingRules
+	dbDetectCycleOnUpdate    = db.DetectCycleOnUpdate
 
 	// Bundle versioning: the draft diff, the version list, and the two rehearsed
 	// applies (publish, move holders).
@@ -108,6 +115,7 @@ var (
 	svcListBundleVersions = db.ListBundleVersions
 	svcGetRolesForVersion = db.GetRolesForVersion
 	svcBundleHolders      = db.GetBundleHoldersByVersion
+	svcDiscardBundleDraft = db.DiscardBundleDraft
 	// Decoration happens here rather than inside the rehearsal: the apply path
 	// runs the same rehearsal under the access lock, and looking a name up in
 	// the directory there would hold that lock across a call to Zitadel.
@@ -465,7 +473,25 @@ var (
 	addonsConnection = addons.ConnectionFor
 	// The backend's memory of an add-on's mutation log, read beside that add-on's
 	// own account of itself. Two authorities on purpose.
-	svcDormantAccounts    = services.DormantAccounts
+	svcDormantAccounts = services.DormantAccounts
+	// Insights (I2): read-only findings and the who-has-without question.
+	svcInsightsFindings   = services.InsightsFindings
+	svcInsightsWho        = services.InsightsWho
+	svcInsightsWhatIf     = services.InsightsWhatIf
+	svcInsightsTrends     = services.InsightsTrends
+	svcInsightsAsOf       = services.InsightsAsOf
+	svcInsightsTimeline   = services.InsightsTimeline
+	svcInsightsUsage      = services.InsightsUsage
+	svcInsightsLensEnding = services.InsightsLensEnding
+	svcInsightsLensGroup  = services.InsightsLensGroup
+	svcLoadTerms          = services.LoadTerms
+	dbGetUserUsage        = db.GetUserUsage
+	// Sign-in usage (I6): the webhook records, and resolves an application to
+	// its project through the directory.
+	dbRecordUsage         = db.RecordUsage
+	directoryApplications = func(ctx context.Context) ([]models.ApplicationCatalog, error) {
+		return directory.Default.Applications(ctx)
+	}
 	dbListMappingHistory  = db.ListMappingHistory
 	dbForgetTargetBinding = db.ForgetTargetBinding
 	// The merge base goes with the binding, always. One left behind is a claim
@@ -497,6 +523,7 @@ var (
 	svcConvergeProjectChange   = services.ConvergeProjectChange
 	svcConvergeSubjectOn       = services.ConvergeSubjectOn
 	dbWouldCancel              = db.WouldCancel
+	directoryUsers             = func(ctx context.Context) ([]models.UserProfile, error) { return directory.Default.Users(ctx) }
 	directoryProjects          = func(ctx context.Context) ([]models.ProjectCatalog, error) { return directory.Default.Projects(ctx) }
 	dbStandingBindingConflicts = db.StandingBindingConflicts
 	dbResolveBindingConflict   = db.ResolveBindingConflict

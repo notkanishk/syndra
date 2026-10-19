@@ -71,7 +71,7 @@ type RoleMembersView struct {
 	// ObservedOnly is who Zitadel shows holding this role with no Syndra record
 	// behind it — drift, listed here so the page cannot say "4 people hold
 	// this role" while Zitadel holds twelve. Nil when never observed.
-	ObservedOnly []models.UserProfile `json:"observed_only"`
+	ObservedOnly []models.UserProfile    `json:"observed_only"`
 	Observation  models.ObservationBasis `json:"observation"`
 	// WithheldCount is how many of them are holding the role with something
 	// taken away. Its own number rather than a length the client computes: the
@@ -418,6 +418,8 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 // revokes upstream is the failure this type is here to make visible.
 type DirectGrantRemoval struct {
 	OutboxIDs []string `json:"outbox_ids"`
+	// WaitReason: why the removal isn't in Zitadel yet, when it isn't.
+	WaitReason string `json:"wait_reason,omitempty"`
 	// Revoked lists "project/role" pairs that lost their last source and are
 	// queued for removal from the identity provider.
 	Revoked []string `json:"revoked_roles"`

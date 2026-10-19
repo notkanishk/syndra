@@ -25,6 +25,8 @@ interface UiViewContextValue {
   /** 'member' when the session is not an operator — no switch is rendered. */
   audience: Audience;
   isOperator: boolean;
+  /** The signed-in person's id, so a list can say "this is you". */
+  selfId?: string;
   setView: (next: UiView) => void;
   /**
    * Reveal an Advanced-only panel without leaving the page: sets the view and
@@ -37,9 +39,11 @@ const UiViewContext = createContext<UiViewContextValue | null>(null);
 
 export function UiViewProvider({
   isOperator,
+  selfId,
   children,
 }: {
   isOperator: boolean;
+  selfId?: string;
   children: React.ReactNode;
 }) {
   const [view, setViewState] = useState<UiView>("basic");
@@ -93,10 +97,11 @@ export function UiViewProvider({
       view: isOperator ? view : "basic",
       audience: isOperator ? view : "member",
       isOperator,
+      selfId,
       setView,
       revealInAdvanced,
     }),
-    [isOperator, view, setView, revealInAdvanced],
+    [isOperator, selfId, view, setView, revealInAdvanced],
   );
 
   return <UiViewContext.Provider value={value}>{children}</UiViewContext.Provider>;

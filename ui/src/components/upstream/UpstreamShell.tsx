@@ -2,6 +2,7 @@
 
 import { Term } from "@/components/ui/Term";
 import { Checkbox } from "@/components/ui/Choice";
+import { Notice } from "@/components/ui/Notice";
 import Link from "next/link";
 
 /**
@@ -99,41 +100,39 @@ export function DirectWriteWarning({
   acknowledged?: boolean;
   onAcknowledge?: (next: boolean) => void;
 }) {
+  // The sentence names what is *missing*, not a quantity. Everywhere else the
+  // tick counts what changes; here the count is beside the point and the
+  // absence is the entire risk.
+  const tick = onAcknowledge ? (
+    <label className="mt-2 flex min-h-[44px] cursor-pointer items-center gap-3 text-[13.5px] text-ink">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center desktop:h-auto desktop:w-auto">
+        <Checkbox checked={Boolean(acknowledged)} onChange={(event) => onAcknowledge(event.target.checked)} />
+      </span>
+      <span>I understand this changes Zitadel now, with no preview and no record in Syndra.</span>
+    </label>
+  ) : null;
+
+  if (traced) {
+    // Nothing is wrong on this path: an explanation, so a caption, not a box.
+    return (
+      <div>
+        <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
+          <strong className="font-semibold text-ink">This writes to Zitadel through Syndra’s record.</strong>{" "}
+          {what} The grant, an audit line and the queued change are written together, so it is explained
+          afterwards. It reaches Zitadel when Pending changes is sent — revocations go on their own,
+          every few minutes.
+        </p>
+        {tick}
+      </div>
+    );
+  }
+  // The other path skips Syndra's record, which is a fault in the making: a box.
   return (
-    <div className="danger-note px-4 py-3 text-[13.5px] leading-[1.55] text-muted">
-      {traced ? (
-        <>
-          <strong className="font-semibold text-warn-text">
-            This writes to Zitadel through Syndra’s record.
-          </strong>{" "}
-          {what} The grant, an audit line and the queued change are written together, so it is
-          explained afterwards. It reaches Zitadel when Pending changes is sent — revocations go
-          on their own, every few minutes.
-        </>
-      ) : (
-        <>
-          <strong className="font-semibold text-danger-text">
-            Changes here go straight to Zitadel, and Syndra keeps no record of them.
-          </strong>{" "}
-          {what} The next drift sweep — every six hours — lists what you changed under Drift with
-          nobody’s name on it, for somebody to resolve by hand. Do this inside Syndra instead
-          unless there is genuinely no way to.
-        </>
-      )}
-      {onAcknowledge ? (
-        // The sentence names what is *missing*, not a quantity. Everywhere
-        // else the tick counts what changes; here the count is beside the
-        // point and the absence is the entire risk.
-        <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-3 text-[13.5px] text-ink">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center desktop:h-auto desktop:w-auto">
-            <Checkbox
-              checked={Boolean(acknowledged)}
-              onChange={(event) => onAcknowledge(event.target.checked)}
-            />
-          </span>
-          <span>I understand this changes Zitadel now, with no preview and no record in Syndra.</span>
-        </label>
-      ) : null}
-    </div>
+    <Notice tone="warn" title="Changes here go straight to Zitadel, and Syndra keeps no record of them.">
+      {what} The next drift sweep — every six hours — lists what you changed under Drift with nobody’s
+      name on it, for somebody to resolve by hand. Do this inside Syndra instead unless there is
+      genuinely no way to.
+      {tick}
+    </Notice>
   );
 }

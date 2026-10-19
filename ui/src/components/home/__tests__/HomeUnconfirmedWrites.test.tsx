@@ -126,7 +126,7 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
     expect(screen.getByText(/Syndra sent this change and Zitadel accepted it/)).toBeTruthy();
     // What it is NOT.
     expect(screen.getByText(/not a failed change/)).toBeTruthy();
-    expect(screen.getByText(/not one still waiting to be sent/)).toBeTruthy();
+    expect(screen.getByText(/not one still waiting for you to send/)).toBeTruthy();
     // The age — the reason it is on screen at all.
     expect(screen.getByText(/45 min ago/)).toBeTruthy();
     // A next move, not a dead end.

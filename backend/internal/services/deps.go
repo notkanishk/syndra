@@ -189,7 +189,10 @@ var (
 	svcDeleteDirectGrantAndEnqueue        = db.DeleteDirectGrantAndEnqueue
 	svcDeleteExpiredDirectGrantAndEnqueue = db.DeleteExpiredDirectGrantAndEnqueue
 	svcInTxLockingAccess                  = db.InTxLockingAccess
-	svcGetActiveMappingRules              = db.GetActiveMappingRules
+	// One immutable read-only view for answers assembled from many queries
+	// (Insights what-if). Never takes the access-mutation lock.
+	svcInReadSnapshot        = db.InReadSnapshot
+	svcGetActiveMappingRules = db.GetActiveMappingRules
 	// What this person has been given and Syndra has not yet sent. Read on the
 	// access view so a recorded change is never rendered as a delivered one.
 	svcPendingDeliveries = db.PendingDeliveriesForUser
@@ -204,6 +207,7 @@ var (
 	svcDbDeleteRole         = db.DeleteRole
 	svcDbGetAllLocalRoles   = db.GetAllLocalRoles
 	svcDbGetRoleUsageCounts = db.GetRoleUsageCounts
+	svcListRoleWaits        = db.ListRoleWaits
 	// What the observation store confirms of a recorded count, and how
 	// current that confirmation is. Separate seams (not folded into
 	// svcRoleHolderCounts) so a test can exercise the recorded count without

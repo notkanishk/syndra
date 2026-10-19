@@ -47,10 +47,46 @@ export function describeDuration(days: number | null | undefined): string {
   return `for ${days} ${days === 1 ? "day" : "days"}`;
 }
 
+/**
+ * How long an ask is for, in the words people use for it: "a week", "a month",
+ * else "N days". The dialog offers a week, a month and the end of term, so the
+ * common lengths read as the choice that was made rather than as arithmetic.
+ */
+export function lengthWords(days: number): string {
+  if (days === 7) return "a week";
+  if (days === 14) return "two weeks";
+  if (days >= 28 && days <= 31) return "a month";
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/**
+ * A pending ask's length, as the person who asked reads it (A-06 §2): the
+ * length only, never a date. Approving starts it from the moment it is
+ * approved, so a date here would be wrong by however long the ask waits.
+ */
+export function askLengthForMember(days: number | null | undefined): string {
+  if (!days || days < 1) return "With no end date.";
+  return `For ${lengthWords(days)}, from when it's approved.`;
+}
+
+/**
+ * The same ask, as the person deciding reads it: the length and the date that
+ * approving it now would end it. "For a month · until 17 Nov". Approval starts
+ * it now, so that date is what Approve will do.
+ */
+export function askLengthForOperator(
+  days: number | null | undefined,
+  now: Date = new Date(),
+): string {
+  if (!days || days < 1) return "With no end date";
+  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  return `For ${lengthWords(days)} · until ${formatShortDate(end.toISOString(), now)}`;
+}
+
 export type UrgencyTone = "critical" | "warning" | "neutral" | "expired";
 
 /**
- * Compute a human countdown ("in 3 days", "in 2 hours", "expired") plus a
+ * Compute a human countdown ("ends in 3 days", "ends in 2 hours", "ended") plus a
  * semantic tone the UI can use to color-code urgency. Returns `null` for an
  * absent expiry (permanent grants).
  */
@@ -64,27 +100,27 @@ export function describeExpiry(expiresAt: string | null | undefined, now: Date =
   const daysLeft = Math.ceil(ms / (1000 * 60 * 60 * 24));
 
   if (ms <= 0) {
-    return { countdown: "expired", tone: "expired", daysLeft };
+    return { countdown: "ended", tone: "expired", daysLeft };
   }
   if (daysLeft <= 1) {
     const hours = Math.max(1, Math.round(ms / (1000 * 60 * 60)));
     return {
-      countdown: `expires in ${hours} hour${hours === 1 ? "" : "s"}`,
+      countdown: `ends in ${hours} hour${hours === 1 ? "" : "s"}`,
       tone: "critical",
       daysLeft,
     };
   }
   if (daysLeft <= 7) {
     return {
-      countdown: `expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
+      countdown: `ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
       tone: "critical",
       daysLeft,
     };
   }
   if (daysLeft <= 14) {
-    return { countdown: `expires in ${daysLeft} days`, tone: "warning", daysLeft };
+    return { countdown: `ends in ${daysLeft} days`, tone: "warning", daysLeft };
   }
-  return { countdown: `expires in ${daysLeft} days`, tone: "neutral", daysLeft };
+  return { countdown: `ends in ${daysLeft} days`, tone: "neutral", daysLeft };
 }
 
 /**
@@ -105,7 +141,25 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
   if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
   const days = Math.round(hours / 24);
   if (days < 30) return `${days} ${days === 1 ? "day" : "days"} ago`;
-  return formatShortDate(iso);
+  return formatShortDate(iso, now);
+}
+
+/**
+ * "2h ago": the short stamp a note seat has room for (A-04 §10). Past a month it
+ * is the date, the year only when it isn't this year.
+ */
+export function formatAgoShort(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const minutes = Math.max(0, Math.round((now.getTime() - then) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return formatShortDate(iso, now);
 }
 
 /**
@@ -118,12 +172,23 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
  */
 const DATE_LOCALE = "en-GB";
 
-/** "2 Aug" — the form a deadline is spoken in. */
-export function formatShortDate(iso: string | null | undefined): string {
+/**
+ * "2 Aug" — the form a deadline is spoken in. The year appears only when the
+ * date is not in this year ("2 Aug 2027"): a year on every date is noise, and
+ * a missing year on a date a year away is a false statement (A-04 §7.9).
+ */
+export function formatShortDate(
+  iso: string | null | undefined,
+  now: Date = new Date(),
+): string {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(DATE_LOCALE, { day: "numeric", month: "short" });
+  return date.toLocaleDateString(DATE_LOCALE, {
+    day: "numeric",
+    month: "short",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
 }
 
 /**
@@ -148,15 +213,7 @@ export function formatWhen(iso: string | null | undefined, now: Date = new Date(
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
   const clock = formatClock(iso);
-  return date.toDateString() === now.toDateString() ? clock : `${formatShortDate(iso)} ${clock}`;
-}
-
-/** "18 Dec 2026" — the form a resolved expiry date is confirmed in. */
-export function formatLongDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString(DATE_LOCALE, { day: "numeric", month: "short", year: "numeric" });
+  return date.toDateString() === now.toDateString() ? clock : `${formatShortDate(iso, now)} ${clock}`;
 }
 
 /** "Friday 31 July" — the line under a greeting. */
@@ -225,4 +282,17 @@ export function confirmedNote(recorded: number, confirmed: number | undefined): 
   if (confirmed === undefined) return "not confirmed";
   if (confirmed === recorded) return "confirmed";
   return `${confirmed} confirmed`;
+}
+
+/**
+ * Who someone is, in a picker (People everywhere 1): "title · team", read
+ * before the email under it. Team is free-text Zitadel metadata, so either
+ * half may be missing; an empty line is "", never "—" — the em dash belongs
+ * to People's own Team column, where a seat holds its place.
+ */
+export function personLine(user: { title?: string | null; team?: string | null }): string {
+  return [user.title, user.team]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(" · ");
 }

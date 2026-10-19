@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
 
 import Link from "next/link";
@@ -9,6 +9,7 @@ import { AccessSource } from "@/components/access/AccessSource";
 import { Makerspace } from "@/components/home/Makerspace";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Card, CardHeader, CardHeaderLink, CardRow } from "@/components/ui/Card";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
@@ -17,11 +18,8 @@ import {
   type UnreconciledTarget,
   type UnconfirmedWriteSummary,
 } from "@/lib/queries/useGovernance";
-import {
-  useDecideRequest,
-  useRequestsAdmin,
-  type AccessRequest,
-} from "@/lib/queries/useRequests";
+import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
+import { useRequestDecisions } from "@/lib/request-decisions";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -32,6 +30,7 @@ import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
+import { ArriveList } from "@/components/ui/ArriveList";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
 
@@ -117,6 +116,12 @@ export function Home({ session }: { session: SessionUser }) {
     : pending.length + expiring.length + onboardingGaps;
 
   const who = firstName(session);
+  // The greeting and the weekday depend on the reader's clock and zone, which
+  // the server doesn't share: rendered there, they were the server's hour in
+  // UTC and hydration failed (React #418). They appear on mount, in a seat held
+  // by an invisible stand-in so nothing below moves (same rule as Relative).
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => setNow(new Date()), []);
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
   const error = summary.error ?? requests.error ?? onboarding.error;
   // While the load is failing the count is unknown, and "nothing needs you" is
@@ -132,11 +137,11 @@ export function Home({ session }: { session: SessionUser }) {
             `text-balance` keeps the two lines close in length instead of
             leaving one word stranded. */}
         <h1 className="type-greeting max-w-[22ch] text-balance sm:max-w-[34ch]">
-          {greeting()}
+          {now ? greeting(now) : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}. <span className="text-ink/40">{headline}</span>
         </h1>
         <div className="mt-2 text-[14.5px] text-faint">
-          {formatWeekday()} · last checked <ClockTime at={summary.dataUpdatedAt} />
+          {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>} · last checked <ClockTime at={summary.dataUpdatedAt} />
         </div>
       </div>
 
@@ -164,7 +169,7 @@ export function Home({ session }: { session: SessionUser }) {
           <span className="text-[14.5px]">
             <strong className="font-semibold">Nothing here needs you.</strong>{" "}
             <span className="text-muted">
-              No open requests, and no access expiring in the next 14 days. Checked <ClockTime />.
+              No open requests, and no access ending in the next 14 days. Checked <ClockTime />.
             </span>
           </span>
         </div>
@@ -208,48 +213,27 @@ export function Home({ session }: { session: SessionUser }) {
 
 /** Approve / Deny resolve in place, on the row. They never navigate. */
 function OpenRequests({ requests }: { requests: AccessRequest[] }) {
-  const decide = useDecideRequest();
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
-  const [outcomes, setOutcomes] = useState<Record<string, Outcome | null>>({});
+  // The queue's own decide, so an approval here says what it says there.
+  const { act, resolved, outcomes, cancelStep } = useRequestDecisions();
 
-  const visible = requests.filter((entry) => !resolved.has(entry.id));
-  if (visible.length === 0) return null;
-
-  async function act(id: string, status: "approved" | "rejected", who: string) {
-    setResolved((prev) => new Set(prev).add(id));
-    try {
-      await decide.mutateAsync({ id, status });
-      setOutcomes((prev) => ({
-        ...prev,
-        [id]: {
-          kind: "applied",
-          message: status === "approved" ? `Approved for ${who}` : `Declined for ${who}`,
-        },
-      }));
-    } catch (error) {
-      // Put the row back: a row that vanished on a failed write would read as
-      // a decision that was recorded.
-      setResolved((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-      setOutcomes((prev) => ({ ...prev, [id]: outcomeFromError(error) }));
-    }
-  }
+  // Decided rows keep their seat until the next read; they used to vanish on
+  // the tap, taking their own outcome with them.
+  const open = requests.filter((entry) => !resolved.has(entry.id)).length;
+  if (requests.length === 0) return null;
 
   return (
     <Card>
+      {cancelStep}
       <CardHeader
         title="Open requests"
-        count={visible.length}
+        count={open}
         action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>}
       />
       {/* `arrive`, the same stagger every list in the product gets from
           `ListStates`. These two lists compose their own rows and so had none:
           the dashboard was the one screen whose rows appeared all at once. */}
-      <div className="contents arrive-list">
-        {visible.map((entry) => (
+      <ArriveList>
+        {requests.map((entry) => (
           <CardRow key={entry.id}>
             <UserAvatar id={entry.requester_id} size="list" />
             <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
@@ -264,28 +248,43 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
           <div className="w-[66px] shrink-0 text-[13px] text-faint">
             <Relative iso={entry.created_at} />
           </div>
-          <div className="flex shrink-0 gap-2">
-            <Button
-              variant="accent"
-              size="sm"
-              disabled={alreadyHeld(entry)}
-              reason={alreadyHeld(entry) ? "They already have this." : undefined}
-              onClick={() => act(entry.id, "approved", entry.requester_id)}
-            >
-              Approve
-            </Button>
-            <Button size="sm" onClick={() => act(entry.id, "rejected", entry.requester_id)}>
-              Decline
-            </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
+            {resolved.has(entry.id) ? (
+              outcomes[entry.id] && (
+                <ActionOutcome
+                  placement="seat"
+                  word={outcomes[entry.id].word}
+                  outcome={outcomes[entry.id].outcome}
+                />
+              )
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    disabled={alreadyHeld(entry)}
+                    reason={alreadyHeld(entry) ? "They already have this." : undefined}
+                    onClick={() => act(entry, "approved")}
+                  >
+                    Approve
+                  </Button>
+                  <Button size="sm" onClick={() => act(entry, "rejected")}>
+                    Decline
+                  </Button>
+                </div>
+                {/* A failed write puts the buttons back and says why under them. */}
+                {outcomes[entry.id] && (
+                  <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
+                )}
+              </>
+            )}
           </div>
 
-          {!outcomes[entry.id] && <HoldingNote request={entry} />}
-          {outcomes[entry.id] && (
-            <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
-          )}
+          {!resolved.has(entry.id) && <HoldingNote request={entry} />}
         </CardRow>
       ))}
-      </div>
+      </ArriveList>
     </Card>
   );
 }
@@ -302,7 +301,7 @@ function ExpiringSoon({
   return (
     <Card>
       <CardHeader
-        title="Direct access expiring soon"
+        title="Direct access ending soon"
         count={grants.length}
         tone="warn"
         note="Extending is the only action — doing nothing lets it lapse."
@@ -322,6 +321,9 @@ function ExpiringRow({
   // Extending re-submits the grant with a later date: POST upserts on
   // (user, project, role), so this renews in place rather than duplicating.
   const extend = useCreateGrant(grant.user_id);
+  // A row has no sheet of its own: if extending would cancel a change still
+  // waiting for you to send, a small sheet holds the step (A-04 §14).
+  const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const remaining = daysUntil(grant.expires_at);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Extending again would add another 90 days to the same grant.
@@ -351,13 +353,16 @@ function ExpiringRow({
         disabled={extended}
         onClick={async () => {
           try {
-            await extend.mutateAsync({
-              project_id: grant.project_id,
-              role_key: grant.role_key,
-              reason: "Extended from Home",
-              duration_days: 90,
-              extend: true,
-            });
+            const made = await step.run(() =>
+              extend.mutateAsync({
+                project_id: grant.project_id,
+                role_key: grant.role_key,
+                reason: "Extended from Home",
+                duration_days: 90,
+                extend: true,
+              }),
+            );
+            if (made === KEPT) return;
             setExtended(true);
             setOutcome({
               kind: "applied",
@@ -373,6 +378,7 @@ function ExpiringRow({
       </Button>
 
       {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
+      {step.element}
     </CardRow>
   );
 }
@@ -436,7 +442,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
       <CardHeader title="Pending changes" count={count} />
       <CardRow>
         <div className="flex-1 text-[14.5px]">
-          {count} {count === 1 ? "change" : "changes"} waiting to be sent to Zitadel
+          {count} {count === 1 ? "change is" : "changes are"} waiting for you to send to Zitadel
           {/* Not "nothing has changed" — that flatly denies the count above it.
               The reassurance is about Zitadel, not the queue: it has not
               received any of this yet, so there is nothing to undo. */}
@@ -486,7 +492,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
  * (`one-truth-many-checks`: accepted is not confirmed).
  *
  * Neither of the two states this page already has a block for: not a failed
- * change — Zitadel said yes — and not one still waiting to be sent — Syndra
+ * change — Zitadel said yes — and not one still waiting for you to send — Syndra
  * already sent it. A 2xx is an acknowledgement of receipt, never evidence
  * Zitadel can show the change back, and the age is the entire content of the
  * finding: the backend only lists a row here once it is old enough that the
@@ -508,12 +514,12 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
           {count === 1 ? "it" : "them"}
           <span className="text-faint">
             {" "}
-            — not a failed change, and not one still waiting to be sent. A later look at Zitadel
+            — not a failed change, and not one still waiting for you to send. A later look at Zitadel
             just hasn&rsquo;t been able to see {count === 1 ? "it" : "them"} yet.
           </span>
         </div>
       </CardRow>
-      <div className="contents arrive-list">
+      <ArriveList>
         {rows.map((row, i) => (
           <CardRow key={row.id} first={i === 0}>
             <UserAvatar id={row.user_id} size="list" />
@@ -540,7 +546,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
             </ButtonLink>
           </CardRow>
         ))}
-      </div>
+      </ArriveList>
     </Card>
   );
 }
@@ -600,7 +606,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>
       <CardHeader title="Systems Syndra could not check" count={targets.length} tone="danger" />
-      <div className="contents arrive-list">
+      <ArriveList>
         {targets.map((t, i) => (
           <CardRow key={t.target} first={i === 0} className="flex-wrap">
             <div className="flex-1 text-[14.5px]">
@@ -619,7 +625,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
           </ButtonLink>
         </CardRow>
       ))}
-      </div>
+      </ArriveList>
     </Card>
   );
 }
@@ -679,8 +685,8 @@ function UnexplainedAccess({ count }: { count: number }) {
   );
 }
 
-function greeting(): string {
-  const hour = new Date().getHours();
+function greeting(now: Date): string {
+  const hour = now.getHours();
   if (hour < 12) return "Morning";
   if (hour < 17) return "Afternoon";
   return "Evening";

@@ -62,7 +62,7 @@ describe("removing a bundle whose grants were never sent", () => {
     expect(screen.queryByText(/no other source gives it/i)).toBeNull();
   });
 
-  it("says the queue empties rather than filling with reversals", () => {
+  it("says nothing of its own about the waiting grants: the step is the one place that is said", () => {
     render(
       <RemovalDialog
         removal={bundleSource(true)}
@@ -72,7 +72,8 @@ describe("removing a bundle whose grants were never sent", () => {
       />,
     );
 
-    expect(screen.getByText(/Pending changes will be empty afterwards/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Pending changes will be empty afterwards/i)).toBeNull();
+    expect(screen.queryByText(/none of them had been sent/i)).toBeNull();
   });
 
   it("still says what a delivered bundle takes away", () => {
@@ -159,13 +160,13 @@ describe("the action, once it has run", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Withdraw the queued change/ }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
 
     // The dialog stays open to report what happened, and a destructive
     // confirm left armed inside it queues another cascade on the next click —
     // which is what a person does when the dialog does not close.
     expect(screen.queryByRole("button", { name: /Withdraw the queued change/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(removed.calls).toBe(1);
   });
 

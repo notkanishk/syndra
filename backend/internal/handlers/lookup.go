@@ -124,10 +124,13 @@ func handleLookup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.BundleIDs) > 0 {
+		// A retired bundle keeps its name: Change history still points at it, and an id is
+		// never what a reader should see.
 		bundles, err := dbGetAllBundles(ctx)
 		if err == nil {
-			byID := make(map[string]string, len(bundles))
-			for _, b := range bundles {
+			retired, _ := dbGetRetiredBundles(ctx)
+			byID := make(map[string]string, len(bundles)+len(retired))
+			for _, b := range append(bundles, retired...) {
 				byID[b.ID] = b.Name
 			}
 			for _, id := range dedupeNonEmpty(req.BundleIDs) {

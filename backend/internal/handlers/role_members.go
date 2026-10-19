@@ -77,18 +77,16 @@ func handleDeleteUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// the access is gone from the token path even if the caller disconnects.
 	rebuildUserCacheDetachedFn(r.Context(), userID)
 
-	// Same inline-apply opt-in as the grant path: ?apply=true drains these rows
-	// now instead of leaving them for the operator to resume. There may be none
-	// — every role the grant carried is still covered by another source — and
-	// that is the point: nothing is queued, so nothing is drained.
-	if r.URL.Query().Get("apply") == "true" {
-		for _, id := range res.OutboxIDs {
-			if _, derr := svcDrainPropagationRow(r.Context(), id); derr != nil {
-				continue
-			}
-			if st, serr := dbGetPropagationStatus(r.Context(), id); serr == nil && st != "" {
-				res.Status = st
-			}
+	// The same one rule as the grant path (services.Deliver): these rows go
+	// now unless the role waits; before the switch over, a removal sent
+	// without ?apply=true waits as it always did. There may be none — every
+	// role the grant carried is still covered by another source — and that is
+	// the point: nothing is queued, so nothing is sent.
+	d := svcDeliver(r.Context(), res.OutboxIDs, r.URL.Query().Get("apply") != "true")
+	res.WaitReason = d.WaitReason()
+	for _, id := range d.Sent {
+		if st, serr := dbGetPropagationStatus(r.Context(), id); serr == nil && st != "" {
+			res.Status = st
 		}
 	}
 

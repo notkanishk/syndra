@@ -179,7 +179,7 @@ function StatePill({ group }: { group: CascadeGroupRow }) {
     );
   }
   if (group.waiting > 0) {
-    return <Badge tone="warn">{group.waiting} waiting to be sent</Badge>;
+    return <Badge tone="warn">{group.waiting} waiting for you to send</Badge>;
   }
   if (group.applied > 0) {
     if (group.confirmed === group.applied) {
@@ -208,7 +208,7 @@ function consequenceFor(group: CascadeGroupRow): string {
     return `${needed}. ${group.applied} went through and ${group.failed} failed on the way to Zitadel. The failed ones are still waiting under Pending changes.`;
   }
   if (group.waiting > 0 && group.applied > 0) {
-    return `${needed}. ${group.applied} went through and ${group.waiting} are still waiting to be sent. Until they all go through, some people have access that does not match the edit — send them from Pending changes.`;
+    return `${needed}. ${group.applied} went through and ${group.waiting} are still waiting for you to send. Until they all go through, some people have access that does not match the edit — send them from Pending changes.`;
   }
   if (group.waiting > 0) {
     return `${needed}, and none have reached Zitadel yet. Nothing has changed for anybody so far. Send them from Pending changes.`;

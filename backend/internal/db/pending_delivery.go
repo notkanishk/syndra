@@ -1,6 +1,9 @@
 package db
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // PendingDelivery is one grant this person has been given that has not yet been
 // sent anywhere.
@@ -20,6 +23,8 @@ type PendingDelivery struct {
 	RoleKey   string
 	Source    string
 	SourceRef string
+	// QueuedAt is when the outbox row was created.
+	QueuedAt time.Time
 }
 
 // PendingDeliveriesForUser lists the still-unsent grants for one person.
@@ -33,7 +38,7 @@ type PendingDelivery struct {
 // deployment's scale. Add an index if a queue is ever allowed to grow.
 func PendingDeliveriesForUser(ctx context.Context, userID string) ([]PendingDelivery, error) {
 	const q = `
-		SELECT project_id, unnest(role_keys) AS role_key, source, COALESCE(source_ref, '')
+		SELECT project_id, unnest(role_keys) AS role_key, source, COALESCE(source_ref, ''), created_at
 		  FROM propagation_outbox
 		 WHERE user_id = $1
 		   AND op_type IN ('add','replace')
@@ -48,7 +53,7 @@ func PendingDeliveriesForUser(ctx context.Context, userID string) ([]PendingDeli
 	for rows.Next() {
 		var d PendingDelivery
 		var project *string
-		if err := rows.Scan(&project, &d.RoleKey, &d.Source, &d.SourceRef); err != nil {
+		if err := rows.Scan(&project, &d.RoleKey, &d.Source, &d.SourceRef, &d.QueuedAt); err != nil {
 			return nil, err
 		}
 		if project != nil {

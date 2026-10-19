@@ -1,6 +1,6 @@
 # Syndra — Next Steps
 
-> Single pickup point. Everything open, in one place, as of **2026-08-10**.
+> Single pickup point. Everything open, in one place, as of **2026-10-16**.
 > Sources consolidated here: `ROADMAP.md` phases 4–6, `docs/AUDIT.md` deferrals, open `changes/*/tasks.md`, and tooling debt.
 > [< Index](INDEX.md) · [Architecture](changes/syndra-core-architecture/design.md) · [Roadmap](changes/syndra-core-architecture/ROADMAP.md)
 
@@ -119,6 +119,16 @@ The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built 
 - **What happens to a home folder after someone leaves** (owner, 2026-10-14). Today it is kept, always: Syndra never moves or deletes a home (truenas-reconcile D10). The choice to build: keep it (today), archive it (owner becomes root, private, the shape the 14 Oct cleanup of old folders used), or delete it after N days. It should be settable per system, with the date the person left shown beside each kept folder.
 - **Role kind (core / extra)**: designed, not owed until a screen needs it. The only SQL touch points are `backend/internal/db/roles.go:31,62,81`.
 
+### Reconcile build — what design gave, in its order
+
+Steps 1 (foundations), 2 (never sample data) and 3 (roles that wait for you) are built in [`changes/reconcile-build`](changes/reconcile-build/tasks.md). Step 4 (screens) is under way: Bundles v2 with included bundles, My access with extend requests, and Insights (reads, trends, as-of dates, lenses, recent use). Migration 000056 ships with step 3. Migration 000058 switches every deployment to `confirmation.model = roles`; production's roles stay as they are, and the owner marks which ones wait later. The open tasks there carry their triage tags. Insights' open questions are in `design_handoff_syndra/reconcile-2026-10/to-design/Q-06-from-the-build.md` §7.
+
+Design answers A-04 to A-06 (17 Oct 2026) are built on `feat/design-answers-04-06`, stacked on #46: one role picker for asking and giving, Ask to keep it, the cancel step inside the sheet, dialog results with a word, AnchoredPanel and controls, motion v2, copy sweeps (Retire, ends, On its way), term dates as one setting edited on Makerspace settings (6.67), and Retire keeps a bundle's or rule's history (6.66, migration 000065). Live-DB run passed on the dev box and the owner answered 6.65 (19 Oct 2026). Open: Q-07 (design to draw Makerspace settings), Change history's retire entry names the bundle by id trace only, unwired cancel-step writes (holds, target revoke/sweep, mapping writes refuse safely), phone sheet rise from edge, Extend from a person's page for grants beyond 30 days.
+
+### Architecture deepening — the 16 Oct review
+
+Seven candidates where one question is answered by several copies, ranked, in [`changes/architecture-deepening`](changes/architecture-deepening/tasks.md) with the review page beside them. Top: one access-change planner, so a plan's preview and its apply are the same code.
+
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
@@ -234,6 +244,8 @@ None of these are code. All need a live instance and a human.
   **One drawn promise the backend refuses:** the decided-and-waiting row says deciding again replaces the queued work. `RecordMergeDecision` guards on `decision IS NULL` and fails closed, because the two resolutions it sits between are recreate-the-account and stop-managing-it. Invert the copy; do not relax the guard.
 
   Still open: what routes sit behind *apply it again* / *stop wanting it*; which index readings can co-occur; and that a member reads nothing when an operator sets read-only — `MyStorage` carries no lifecycle field, in neither backend nor UI.
+- **Insights and extend-request live-DB tests have never run.** The Insights reads (trends, snapshots, usage, lens, includes) and extend requests are unit-tested only. With migrations through `000062` on a test database, run `insights_trends_live_test.go`, `insights_snapshots_live_test.go`, `usage_live_test.go`, `insights_lens_live_test.go`, `bundle_includes_live_test.go` and `requests_live_test.go` with `SYNDRA_TEST_DATABASE_URL` set. [ready-for-human] (`reconcile-build` 4.2.11)
+- **Sign-in events are on (17 Oct 2026).** Zitadel sends `oidc_session.added` and `user.token.added` to the event webhook; Recent use fills in once #46 is deployed. (`reconcile-build` 4.2.12)
 - **Obsidian-clarity UI checklists** (`OCR-S2-19`, `OCR-S3-10`) — per-route manual pass over empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast. Browser-driven, can't be automated as specified.
 
 ---

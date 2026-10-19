@@ -25,7 +25,9 @@ export async function GET(request: Request): Promise<Response> {
   // Validated on the way in as well as on the way out. It is stored on this
   // origin rather than sent to the provider, so the only thing that reaches
   // Zitadel is still the state token.
-  const next = safeReturnPath(new URL(request.url).searchParams.get("next"));
+  const query = new URL(request.url).searchParams;
+  const next = safeReturnPath(query.get("next"));
+  const then = query.get("then") === "close" ? ("close" as const) : undefined;
 
   const state = generateState();
   const verifier = await generateCodeVerifier();
@@ -45,7 +47,7 @@ export async function GET(request: Request): Promise<Response> {
   const cookieStore = await cookies();
   cookieStore.set(
     PKCE_COOKIE_NAME,
-    encodePkce({ state, verifier, createdAt: Math.floor(Date.now() / 1000), next }),
+    encodePkce({ state, verifier, createdAt: Math.floor(Date.now() / 1000), next, then }),
     {
       httpOnly: true,
       sameSite: "lax",

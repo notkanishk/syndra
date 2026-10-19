@@ -66,9 +66,9 @@ describe("proxy route admin/member boundary", () => {
     expect(proxy.calls.length).toBe(0);
   });
 
-  it("allows member GET of catalog, applications, requests", async () => {
+  it("allows member GET of catalog, applications, requests, terms", async () => {
     (getSession as Mock).mockResolvedValue(MEMBER);
-    for (const p of ["catalog", "applications", "requests"]) {
+    for (const p of ["catalog", "applications", "requests", "terms"]) {
       const res = await call(GET, "GET", [p]);
       expect(res.status).toBe(200);
     }

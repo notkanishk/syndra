@@ -12,7 +12,7 @@ import { formatClock } from "@/lib/format";
  * The page builds access from the assignment tables, which say what somebody
  * has been GIVEN. In manual mode nothing reaches Zitadel until an operator
  * confirms Pending changes, and for that whole window a queued role rendered
- * with the same chip, the same section and the same "No expiry" as one that
+ * with the same chip, the same section and the same "No end date" as one that
  * landed a month ago. The operator who reported it took the page as
  * confirmation the work was done.
  */
@@ -104,10 +104,27 @@ describe("a role whose grant has not been sent", () => {
     ]);
     renderPerson();
 
-    expect(screen.getByText("Waiting to be sent")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
     // An expiry on access that does not exist yet answers a question nobody
     // can ask, so the marker takes the slot rather than sitting beside it.
-    expect(screen.queryByText("No expiry")).toBeNull();
+    expect(screen.queryByText("No end date")).toBeNull();
+  });
+
+  it("says when it was given, beside the way to send it", () => {
+    state.projects = project([
+      {
+        kind: "bundle",
+        bundle_id: "b1",
+        bundle_name: "Ops Admin",
+        description: "",
+        queued: true,
+        queued_at: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      },
+    ]);
+    renderPerson();
+
+    expect(screen.getByText("Given 2h ago")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
   });
 
   it("says nothing once the grant has been delivered", () => {
@@ -117,8 +134,8 @@ describe("a role whose grant has not been sent", () => {
     ]);
     renderPerson();
 
-    expect(screen.queryByText("Waiting to be sent")).toBeNull();
-    expect(screen.getByText("No expiry")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
+    expect(screen.getByText("No end date")).toBeInTheDocument();
   });
 
   // The half that would be wrong in the other direction.
@@ -132,7 +149,7 @@ describe("a role whose grant has not been sent", () => {
 
     // They hold it. One of the two reasons is still owed, and saying the row
     // is waiting would deny access the person actually has.
-    expect(screen.queryByText("Waiting to be sent")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
     expect(screen.getByText(/Held 2 ways/)).toBeInTheDocument();
   });
 });
@@ -175,7 +192,7 @@ describe("a role Syndra records that Zitadel does not have", () => {
     renderPerson();
 
     expect(screen.getByText("Not in Zitadel")).toBeInTheDocument();
-    expect(screen.queryByText("No expiry")).toBeNull();
+    expect(screen.queryByText("No end date")).toBeNull();
   });
 
   // An outage is not an absence. Reading it as one, on this screen, costs
@@ -221,7 +238,7 @@ describe("a role Zitadel confirms", () => {
 });
 
 describe("the group label above a role Syndra decided", () => {
-  // "Granted" sat above a row reading "Waiting to be sent" — contradictory.
+  // "Granted" sat above a row reading "Waiting for you to send" — contradictory.
   // The per-row state carries the truth now; the label just names the group.
   it("says Given, not Granted", () => {
     state.projects = project([{ kind: "direct", description: "" }]);

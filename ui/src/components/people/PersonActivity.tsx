@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 
 import { Card } from "@/components/ui/Card";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, machineName } from "@/lib/audit-vocabulary";
 import { EventSentence } from "@/components/audit/EventLine";
@@ -17,8 +17,6 @@ import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
 import { targetLabel } from "@/lib/nav";
 import { useTargetActivity, type TargetActivityEvent } from "@/lib/queries/useTargetActivity";
-
-const PAGE = 50;
 
 /**
  * One person's history — what they did, and what was done to them.
@@ -35,7 +33,8 @@ const PAGE = 50;
  * is a different claim entirely.
  */
 export function PersonActivity({ userId, name }: { userId: string; name: string }) {
-  const [limit, setLimit] = useState(PAGE);
+  const paging = usePaging();
+  const limit = paging.limit;
   const entries = useAuditEntries({ userId, limit });
 
   const rows = useMemo(() => entries.data ?? [], [entries.data]);
@@ -79,12 +78,15 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
           </div>
         ))}
 
-        {rows.length >= limit && !atCap && (
-          <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-            <Button onClick={() => setLimit((current) => Math.min(current + PAGE, 200))}>
-              Load more
-            </Button>
-          </div>
+        {!atCap && (
+          <PaginationRow
+            shown={rows.length}
+            hasMore={rows.length >= limit || entries.isPlaceholderData}
+            since={rows.length ? formatShortDate(rows[rows.length - 1].created_at) : null}
+            pending={entries.isPlaceholderData}
+            onMore={paging.more}
+            onBack={paging.back}
+          />
         )}
         {atCap && (
           <div className="border-t border-line px-5 py-3 text-[13px] text-faint">

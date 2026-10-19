@@ -49,6 +49,17 @@ export interface UserListEntry {
 export interface AccessRoleReason {
   kind: string;
   description: string;
+  bundle_id?: string;
+  bundle_name?: string;
+  /** The included bundle a bundle role comes through: "through {bundle}, from {via}". */
+  via_bundle_id?: string;
+  via_bundle_name?: string;
+  trigger_project?: string;
+  trigger_role?: string;
+  /** Recorded, not yet sent to Zitadel. */
+  queued?: boolean;
+  /** When it was queued (RFC3339; the earliest when several rows wait on this source). Only with `queued`. */
+  queued_at?: string;
 }
 
 export interface AccessRole {
@@ -223,6 +234,8 @@ export interface CreateGrantInput {
 export interface CreateGrantResult {
   outbox_id: string;
   status: string;
+  /** Why the grant isn't in Zitadel yet: role_waits, halted:<reason> or manual. */
+  wait_reason?: string;
 }
 
 /**

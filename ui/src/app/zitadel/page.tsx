@@ -9,12 +9,13 @@ import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CommandBlock } from "@/components/ui/CommandBlock";
+import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { request } from "@/lib/api-client";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useZitadelHealth } from "@/lib/queries/useZitadel";
-import { formatLongDate } from "@/lib/format";
+import { formatShortDate } from "@/lib/format";
 
 interface RotationStatus {
   key_installed?: boolean;
@@ -307,21 +308,16 @@ function HealthVerdict({
   }
 
   return (
-    <div className={`${notConfigured ? "warn-note" : "danger-note"} px-5 py-4`}>
-      <div
-        className={`text-[15px] font-semibold ${
-          notConfigured ? "text-warn-text" : "text-danger-text"
-        }`}
-      >
-        {notConfigured
-          ? "Not connected — Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access."
-          : "Unreachable — Syndra's last attempt to reach Zitadel failed."}
-      </div>
-      <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-        {detail ||
-          "Syndra is showing what it last knew. Nothing is lost: changes waiting to be sent stay in order and go through when Zitadel is back."}
-      </p>
-    </div>
+    <Notice
+      tone={notConfigured ? "warn" : "danger"}
+      title={notConfigured ? "Not connected" : "Unreachable"}
+    >
+      {notConfigured
+        ? "Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access. "
+        : "Syndra's last attempt to reach Zitadel failed. "}
+      {detail ||
+        "Syndra is showing what it last knew. Nothing is lost: changes waiting for you to send stay in order and go through when Zitadel is back."}
+    </Notice>
   );
 }
 
@@ -499,8 +495,8 @@ function rotationDetail(status: RotationStatus | undefined): string {
     const threshold = status.threshold_days ?? 90;
     const replaceBy = new Date(status.last_rotated_at);
     replaceBy.setDate(replaceBy.getDate() + threshold);
-    return `Replace by ${formatLongDate(replaceBy.toISOString())} · nothing to do`;
+    return `Replace by ${formatShortDate(replaceBy.toISOString())} · nothing to do`;
   }
-  if (status?.last_rotated_at) return `Last replaced ${formatLongDate(status.last_rotated_at)}`;
+  if (status?.last_rotated_at) return `Last replaced ${formatShortDate(status.last_rotated_at)}`;
   return "A secret Syndra and Zitadel share so each can trust the other during sign-in.";
 }

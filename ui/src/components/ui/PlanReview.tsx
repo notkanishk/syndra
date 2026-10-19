@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
-import { PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
+import { OUTCOME_LABEL, PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
+import { StatusDot } from "@/components/ui/Badge";
 import { UserName } from "@/components/names/UserName";
 
 /**
@@ -23,6 +25,27 @@ import { UserName } from "@/components/names/UserName";
 // how a plan and the row that ran it could have come to describe the same
 // result in two vocabularies. `queued` keeps the warning tone rather than the
 // accent one — recorded here, not yet at the target.
+
+/**
+ * The last sentence of a row's consequence is the backend's: "Cancels a change
+ * …: the removal of … queued 12 Oct (reason)." Its wording reads as automatic, so
+ * the plan says it the operator's way ("waiting for you to send") and splits it
+ * from whatever else the row said.
+ */
+const CANCELS = /(?:^|\s)Cancels (a change|(\d+) changes) waiting\s+to\s+be\s+sent: ([\s\S]*?)\.?$/;
+
+export function splitCancels(consequence: string | undefined): { rest: string; count: number; parts: string; line: string } | null {
+  const match = consequence ? CANCELS.exec(consequence) : null;
+  if (!consequence || !match) return null;
+  const count = match[2] ? Number(match[2]) : 1;
+  const parts = match[3].replace(/ \(([^()]*)\)/g, " “$1”");
+  return {
+    rest: consequence.slice(0, match.index).trim(),
+    count,
+    parts,
+    line: `Cancels ${count === 1 ? "a change that is" : `${count} changes that are`} waiting for you to send: ${parts}.`,
+  };
+}
 
 export function PlanReview({
   plan,
@@ -57,6 +80,11 @@ export function PlanReview({
   const missing = plan.outcomes === undefined || plan.outcomes === null;
   const outcomes = plan.outcomes ?? [];
 
+  // What the plan would cancel, once, under it: it goes stale if anyone queues
+  // another change first, because the rows named exactly these.
+  const cancels = outcomes.map((o) => splitCancels(o.consequence)).filter((c) => c !== null);
+  const cancelled = cancels.reduce((n, c) => n + c.count, 0);
+
   return (
     <div className="px-6">
       <div className="max-h-[46vh] overflow-y-auto rounded-inner border border-line-strong">
@@ -65,18 +93,55 @@ export function PlanReview({
             The list of {noun[1]} did not load. The totals under the buttons are all that came
             back.
           </p>
-        ) : outcomes.length === 0 ? (
+        ) : outcomes.length === 0 && !plan.excluded?.length ? (
           <p className="px-4 py-3 text-[13.5px] text-muted">{emptyNote(plan.op)}</p>
         ) : (
-          outcomes.map((outcome) => <PlanRow key={outcome.user_id} outcome={outcome} />)
+          <>
+            {outcomes.map((outcome) => (
+              <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} />
+            ))}
+            {/* #32: the requester, left out of anything that takes access away. */}
+            {plan.excluded?.map((left) => (
+              <div key={left.user_id} className="row-divider flex items-start gap-4 px-4 py-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14.5px] font-semibold">
+                    <UserName id={left.user_id} />
+                  </span>
+                  <span className="block text-[13px] text-muted">
+                    Left out · this is you. Change your own access from{" "}
+                    <Link
+                      href={`/users/${encodeURIComponent(left.user_id)}`}
+                      className="font-semibold text-accent-text hover:brightness-110"
+                    >
+                      your page
+                    </Link>
+                    .
+                  </span>
+                </span>
+              </div>
+            ))}
+          </>
         )}
       </div>
+      {cancelled > 0 && (
+        <p role="note" className="mt-3 text-[13px] leading-[1.5] text-warn-text">
+          Cancels {cancelled === 1 ? "a change that is" : `${cancelled} changes that are`} waiting for you to
+          send: {cancels.map((c) => c.parts).join("; ")}. If anyone queues another first, this plan goes stale
+          and nothing is cancelled unseen.
+        </p>
+      )}
     </div>
   );
 }
 
-function PlanRow({ outcome }: { outcome: BulkOutcome }) {
-  const label = PLAN_EFFECT_LABEL[outcome.effect] ?? PLAN_EFFECT_LABEL.no_change;
+function PlanRow({ outcome, applied }: { outcome: BulkOutcome; applied: boolean }) {
+  // Before the apply, a queued row forecasts ("Will wait for you to send");
+  // once the plan has run it is true, and says so in the operator's words.
+  const forecast = outcome.effect === "queued" && !applied;
+  const label =
+    outcome.effect === "queued" && applied
+      ? OUTCOME_LABEL.queued
+      : (PLAN_EFFECT_LABEL[outcome.effect] ?? PLAN_EFFECT_LABEL.no_change);
   const tone = PLAN_EFFECT_TONE[outcome.effect] ?? PLAN_EFFECT_TONE.no_change;
 
   return (
@@ -93,12 +158,22 @@ function PlanRow({ outcome }: { outcome: BulkOutcome }) {
           {outcome.consequence ? (
             <>
               {" "}
-              <span className="text-faint">{outcome.consequence}</span>
+              <span className="text-faint">
+                {(() => {
+                  const said = splitCancels(outcome.consequence);
+                  return said ? [said.rest, said.line].filter(Boolean).join(" ") : outcome.consequence;
+                })()}
+              </span>
             </>
           ) : null}
         </span>
       </span>
-      <span className={`shrink-0 rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${tone}`}>
+      <span
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${tone}`}
+      >
+        {/* A change that will wait wears the amber dot and says so in the future
+            tense. No link: nothing is queued yet, so there is nothing to send. */}
+        {forecast && <StatusDot tone="warn" />}
         {label}
       </span>
     </div>

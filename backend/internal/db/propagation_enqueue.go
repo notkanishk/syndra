@@ -64,6 +64,9 @@ type EnqueueResult struct {
 	OutboxID       string `json:"outbox_id"`
 	IdempotencyKey string `json:"idempotency_key"`
 	Status         string `json:"status"`
+	// WaitReason says why the change isn't in Zitadel yet, when it isn't:
+	// role_waits, manual, or halted:<reason> (services.Deliver).
+	WaitReason string `json:"wait_reason,omitempty"`
 }
 
 // EnqueueDirectGrantPropagation writes the intent ledger rows (one
@@ -180,7 +183,7 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 		return "", nil
 	}
 
-	// The same add already waiting to be sent delivers this one too. Extending
+	// The same add already waiting for you to send delivers this one too. Extending
 	// a grant before its first send queued a second, identical add: two rows
 	// in Pending changes for one role. The ledger carries the new end; the
 	// queued row is what sends it, so its id is the answer.

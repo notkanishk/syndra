@@ -70,7 +70,7 @@ func TestARoleNotOfferedIsRefusedWhenAskedGivenOrApproved(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingNone}, nil
 	}
 	wrote := false
-	dbCreateAccessRequest = func(context.Context, string, string, string, string, *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int) (string, error) {
 		wrote = true
 		return "req-1", nil
 	}

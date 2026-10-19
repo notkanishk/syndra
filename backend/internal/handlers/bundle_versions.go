@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Bundle version surfaces.
@@ -84,6 +87,31 @@ func handleGetBundleDraft(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, draft)
 }
 
+// DELETE /api/v1/bundles/{id}/draft — "Discard changes": the working copy goes
+// back to exactly the latest published version. Nobody's access is touched, so
+// there is no rehearsal and no cascade. Returns the fresh (empty) draft; with
+// nothing unpublished it is the same answer, still 200.
+func handleDiscardBundleDraft(w http.ResponseWriter, r *http.Request) {
+	bundleID := r.PathValue("id")
+	if !trimmedNonEmpty(bundleID) {
+		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
+		return
+	}
+	actor := getAdminUserID(r.Context())
+	if actor == "" {
+		actor = "system"
+	}
+	if err := svcDiscardBundleDraft(r.Context(), actor, bundleID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			jsonErrorResponse(w, http.StatusNotFound, "NOT_FOUND", "bundle not found")
+			return
+		}
+		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	handleGetBundleDraft(w, r)
+}
+
 // PublishBundleVersionRequest is the body of a publish.
 type PublishBundleVersionRequest struct {
 	Note string `json:"note"`
@@ -92,6 +120,9 @@ type PublishBundleVersionRequest struct {
 	// changes nothing, and it is the safe default for a request that forgot to
 	// say.
 	Migrate bool `json:"migrate"`
+	// Includers answers, for every bundle whose working copy includes this
+	// one, "update" or "leave" (B8). Required for each, no default.
+	Includers []services.IncluderChoice `json:"includers,omitempty"`
 	// PlanID cites the rehearsal being applied. Required with ?apply=true
 	// whenever the rehearsal reached anybody.
 	PlanID string `json:"plan_id,omitempty"`
@@ -129,9 +160,10 @@ func handlePublishBundleVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	call := services.PublishRequest{
-		BundleID: bundleID,
-		Note:     strings.TrimSpace(req.Note),
-		Migrate:  req.Migrate,
+		BundleID:  bundleID,
+		Note:      strings.TrimSpace(req.Note),
+		Migrate:   req.Migrate,
+		Includers: req.Includers,
 	}
 	actor := getAdminUserID(r.Context())
 	if actor == "" {
@@ -172,6 +204,12 @@ func handlePublishBundleVersion(w http.ResponseWriter, r *http.Request) {
 		// draft was discarded.
 		if strings.HasPrefix(err.Error(), "nothing to publish") {
 			jsonErrorResponse(w, http.StatusConflict, "NOTHING_TO_PUBLISH", err.Error())
+			return
+		}
+		var unanswered *services.ErrIncludersUnanswered
+		if errors.As(err, &unanswered) {
+			jsonErrorResponse(w, http.StatusConflict, "INCLUDERS_UNANSWERED",
+				"Say whether each bundle that includes this one takes the new version: "+strings.Join(unanswered.Names, ", ")+". Nothing was changed.")
 			return
 		}
 		jsonErrorResponse(w, http.StatusInternalServerError, "APPLY_ERROR", err.Error())

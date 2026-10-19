@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 )
 
 // UserGrant represents a Zitadel user grant (role assignment to a project).
@@ -21,6 +22,9 @@ type ZitadelUser struct {
 	DisplayName string `json:"displayName"`
 	Email       string `json:"email"`
 	State       string `json:"state"`
+	// Created is when Zitadel created the account (details.creationDate). Zero
+	// when the response carried none or an unreadable one.
+	Created time.Time `json:"-"`
 }
 
 // ProjectRoleResult represents a role definition within a Zitadel project.

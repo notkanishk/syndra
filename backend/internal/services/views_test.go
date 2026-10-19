@@ -1000,3 +1000,44 @@ func TestGovernance_CountsStandingMergeFindings(t *testing.T) {
 		t.Error("findings must not be folded into the drift count")
 	}
 }
+
+// "Given 2h ago" needs the queue time on the reason itself, and when two rows
+// wait on one source the oldest one dates the wait.
+func TestMarkQueuedDeliveriesCarriesTheEarliestQueueTime(t *testing.T) {
+	orig := svcPendingDeliveries
+	t.Cleanup(func() { svcPendingDeliveries = orig })
+	early := time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
+	svcPendingDeliveries = func(context.Context, string) ([]db.PendingDelivery, error) {
+		return []db.PendingDelivery{
+			{ProjectID: "p1", RoleKey: "r1", Source: "direct", QueuedAt: early.Add(time.Hour)},
+			{ProjectID: "p1", RoleKey: "r1", Source: "direct", QueuedAt: early},
+			{ProjectID: "p1", RoleKey: "r2", Source: "bundle", SourceRef: "b1", QueuedAt: early},
+		}, nil
+	}
+	roleMap := map[roleKey]*models.EffectiveRole{
+		{"p1", "r1"}: {Reasons: []models.RoleReason{{Kind: "direct"}}},
+		{"p1", "r2"}: {Reasons: []models.RoleReason{{Kind: "bundle", BundleID: "b1"}, {Kind: "bundle", BundleID: "b2"}}},
+		{"p1", "r3"}: {Reasons: []models.RoleReason{{Kind: "direct"}}},
+	}
+	if err := markQueuedDeliveries(context.Background(), "u1", roleMap); err != nil {
+		t.Fatal(err)
+	}
+	if r := roleMap[roleKey{"p1", "r1"}].Reasons[0]; !r.Queued || r.QueuedAt == nil || !r.QueuedAt.Equal(early) {
+		t.Errorf("direct reason = %+v, want queued at the earlier row's time", r)
+	}
+	b := roleMap[roleKey{"p1", "r2"}].Reasons
+	if !b[0].Queued || b[0].QueuedAt == nil || b[1].Queued || b[1].QueuedAt != nil {
+		t.Errorf("only the bundle whose row waits is queued: %+v", b)
+	}
+	if r := roleMap[roleKey{"p1", "r3"}].Reasons[0]; r.Queued || r.QueuedAt != nil {
+		t.Errorf("a delivered role carries no queue time: %+v", r)
+	}
+	raw, _ := json.Marshal(roleMap[roleKey{"p1", "r3"}].Reasons[0])
+	if strings.Contains(string(raw), "queued") {
+		t.Errorf("an unqueued reason omits both fields: %s", raw)
+	}
+	raw, _ = json.Marshal(roleMap[roleKey{"p1", "r1"}].Reasons[0])
+	if !strings.Contains(string(raw), `"queued_at":"2026-10-15T09:00:00Z"`) {
+		t.Errorf("queued_at is RFC3339: %s", raw)
+	}
+}

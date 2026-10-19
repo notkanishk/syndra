@@ -5,9 +5,20 @@ import { describe, expect, it, vi } from "vitest";
 import { EventSentence } from "@/components/audit/EventLine";
 import type { AuditEntry } from "@/lib/queries/useAudit";
 
+const NAMES: Record<string, string> = { u1: "Gurasheesh Paul Singh", op1: "Kanishk Singh", op2: "Asha Rao" };
 vi.mock("@/components/names", () => ({
-  UserName: ({ id }: { id: string }) => <span>{id === "u1" ? "Gurasheesh Paul Singh" : id}</span>,
+  UserName: ({ id }: { id: string }) => <span>{NAMES[id] ?? id}</span>,
   BundleName: ({ id }: { id: string }) => <span>{id === "b1" ? "Community · Basic" : id}</span>,
+  ProjectName: ({ id }: { id: string }) => <span>{id === "p1" ? "Network storage" : id}</span>,
+}));
+
+vi.mock("@/lib/queries/useNameResolver", () => ({
+  useNameResolver: () => ({
+    resolveUser: (id: string) => ({ value: NAMES[id] ? { display_name: NAMES[id] } : undefined, resolved: true }),
+    resolveRole: (_p: string, k: string) => ({ value: k === "member" ? { display_name: "Member" } : undefined, resolved: true }),
+    resolveProject: () => ({ value: undefined, resolved: true }),
+    resolveBundle: () => ({ value: undefined, resolved: true }),
+  }),
 }));
 
 function entry(over: Partial<AuditEntry>): AuditEntry {
@@ -72,5 +83,79 @@ describe("EventSentence", () => {
       <EventSentence entry={entry({ action: "bundle.assigned", target_id: "u1" })} />,
     );
     expect(made.querySelector(".text-danger-text")).toBeNull();
+  });
+
+  // A-04 §14.8: a cancellation is in Change history, by whoever's action caused
+  // it, worded the operator's way. Syndra's own say so, and that nobody was asked.
+  it("an operator's cancellation says what was cancelled and for whom", () => {
+    render(<EventSentence entry={entry({ action: "propagation.cancelled_unsent", actor_id: "op1", target_id: "u1" })} />);
+    expect(document.body.textContent).toBe(
+      "Cancelled a change that was waiting for you to send, for Gurasheesh Paul Singh",
+    );
+    expect(document.body.textContent).not.toMatch(/waiting to be sent|makerspace staff to send/);
+  });
+
+  it("Syndra's own cancellation says Syndra, and that nobody was asked", () => {
+    render(<EventSentence entry={entry({ action: "propagation.cancelled_unsent", actor_id: "system:scheduler", target_id: "u1" })} />);
+    expect(document.body.textContent).toContain(
+      "Syndra cancelled a change that was waiting for you to send, for Gurasheesh Paul Singh",
+    );
+    expect(document.body.textContent).toContain("Nobody was asked.");
+  });
+
+  // A-04 §14.8: with `details` the entry says what the change was, who queued it, when,
+  // why, and which act cancelled it.
+  const cancelled = (over: Record<string, unknown> = {}, cause: Record<string, unknown> = { action: "grant", via: "direct" }, actor = "op1") =>
+    entry({
+      action: "propagation.cancelled_unsent",
+      actor_id: actor,
+      target_id: "u1",
+      created_at: new Date().toISOString(),
+      details: {
+        cancelled: {
+          kind: "remove", project_id: "p1", role_key: "member", user_id: "u1",
+          initiated_by: "op2", queued_at: new Date(Date.now() - 2 * 3600_000).toISOString(),
+          reason: "Left the lab", ...over,
+        },
+        cause,
+      },
+    });
+
+  it("with details, says the change, who queued it and when, the reason, and the act that cancelled it", () => {
+    render(<EventSentence entry={cancelled()} />);
+    const t = document.body.textContent!;
+    expect(t).toContain("Cancelled a change that was waiting for you to send");
+    expect(t).not.toContain("Kanishk Singh cancelled");
+    expect(t).toContain("Removing Network storage · Member from Gurasheesh Paul Singh");
+    expect(t).toContain("Queued by Asha Rao · 2 hours ago");
+    expect(t).toContain("“Left the lab”");
+    expect(t).toContain("cancelled when Kanishk gave it back");
+    expect(t).not.toMatch(/waiting to be sent/);
+  });
+
+  it("words a give, and each act that can cancel", () => {
+    const { unmount } = render(<EventSentence entry={cancelled({ kind: "give" })} />);
+    expect(document.body.textContent).toContain("Giving Network storage · Member to Gurasheesh Paul Singh");
+    unmount();
+    const a = render(<EventSentence entry={cancelled({}, { action: "remove", via: "direct" })} />);
+    expect(document.body.textContent).toContain("cancelled when Kanishk removed it");
+    a.unmount();
+    render(<EventSentence entry={cancelled({}, { action: "approve", via: "direct" })} />);
+    expect(document.body.textContent).toContain("cancelled when Kanishk approved the request");
+  });
+
+  it("without a reason, says so by first name, never a pronoun", () => {
+    render(<EventSentence entry={cancelled({ reason: undefined })} />);
+    expect(document.body.textContent).toContain("Asha gave no reason.");
+    expect(document.body.textContent).not.toMatch(/\b(he|she|they|his|her|their)\b/i);
+  });
+
+  it("Syndra's own, with details, says Nobody was asked and names no act", () => {
+    render(<EventSentence entry={cancelled({ initiated_by: undefined, reason: undefined }, { action: "remove", via: "rule" }, "system")} />);
+    const t = document.body.textContent!;
+    expect(t).toContain("Syndra cancelled a change that was waiting for you to send");
+    expect(t).toContain("Removing Network storage · Member from Gurasheesh Paul Singh");
+    expect(t).toContain("Nobody was asked.");
+    expect(t).not.toContain("cancelled when");
   });
 });

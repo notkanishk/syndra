@@ -4,10 +4,21 @@
 
 ## ADDED Requirements
 
-### Requirement: A mapping rule MUST be removable, and removing it MUST take back what only it granted
+### Requirement: A mapping rule MUST be retirable, and retiring it MUST take back what only it granted
 
-`DELETE /api/v1/rules/mapping/{id}` deletes the rule and enqueues the resulting
-per-user revokes in ONE transaction.
+`DELETE /api/v1/rules/mapping/{id}` retires the rule and enqueues the resulting
+per-user revokes in ONE transaction. Retiring keeps the row (owner decision,
+19 Oct 2026, migration 000065): it sets `retired_at` and `retired_by`, and the
+rule is no longer evaluated — `GetActiveMappingRules`, which every cascade,
+closure, cache compile and drift read goes through, skips it. The audit action
+is `mapping_rule.retired` (`mapping_rule.deleted` stays in the log's vocabulary
+for rows written before). The rule's logic can be created again: the unique
+index on source and target is partial, `WHERE retired_at IS NULL`.
+
+A retired rule still reads — `GET /api/v1/rules/mapping/{id}` returns it with
+`retired_at` and `retired_by`, `GET /api/v1/rules/mapping?retired=true` lists
+them — and every write to one (`PUT`, `DELETE`) is refused `409 RETIRED`: "This
+rule was retired on {date}. Nothing about it can change."
 
 The revoke set is the closure diff with the rule's edge removed — the same
 computation `CascadeRuleUpdated` performs, with no replacement edge. This is not
@@ -20,33 +31,52 @@ The deletion inherits the rule's own `confirmation_mode`. A rule whose writes
 queued for confirmation queues the writes that undo it.
 
 #### Scenario: The rule was the only source
-- **WHEN** a rule granting `Laser Lab / trained` is deleted
+- **WHEN** a rule granting `Laser Lab / trained` is retired
 - **AND** a holder of its trigger role has no bundle or direct grant for that role
 - **THEN** a revoke for `Laser Lab / trained` is enqueued for that holder
-- **AND** the rule row and the revoke commit together
+- **AND** the retirement and the revoke commit together
 
 #### Scenario: Another source covers the target
-- **WHEN** the same rule is deleted
+- **WHEN** the same rule is retired
 - **AND** a holder also receives `Laser Lab / trained` from a bundle
 - **THEN** nothing is enqueued for that holder
 
-#### Scenario: The rule was removed concurrently
-- **WHEN** the `DELETE` finds no row to delete
+#### Scenario: The rule was retired concurrently
+- **WHEN** the `DELETE` finds no rule in force to retire
 - **THEN** the transaction rolls back and the caller receives `404`
 - **AND** no revokes are enqueued, because whoever won the race already enqueued them
 
-### Requirement: A bundle MUST be renamable and retirable
+#### Scenario: Writing to a retired rule
+- **WHEN** a retired rule is updated or retired again
+- **THEN** the caller receives `409 RETIRED` and nothing is changed
+
+### Requirement: A bundle MUST be renamable and retirable, and a retired bundle keeps its history
 
 `PUT /api/v1/bundles/{id}` rewrites `name` and `description` only. It publishes
 no version, runs no cascade, and changes nobody's access — a bundle's name is
 what operators call it, not what it grants. A name colliding with another
 bundle's is `409`, not `500`.
 
-`DELETE /api/v1/bundles/{id}` deletes the bundle and enqueues, per holder, the
+`DELETE /api/v1/bundles/{id}` retires the bundle and enqueues, per holder, the
 closure diff computed with that bundle excluded — in one transaction with the
-delete. Every table hanging off a bundle cascades on delete, so an assignment
-row that vanished without its revoke would leave the role in Zitadel with
-nothing in Syndra explaining it. That is drift, arriving with no actor.
+retire. Retiring keeps the row, its versions and what they gave (owner
+decision, 19 Oct 2026, migration 000065): `retired_at` and `retired_by` are set,
+the welcome flag is cleared, and the holders' assignments are removed. An
+assignment row that vanished without its revoke would leave the role in Zitadel
+with nothing in Syndra explaining it. That is drift, arriving with no actor.
+It is still refused `409 BUNDLE_INCLUDED` while another bundle includes it. The
+audit action is `bundle.retired` (`bundle.deleted` stays in the log's vocabulary
+for rows written before).
+
+A retired bundle is not in force. It is left out of the bundle list, pickers,
+cascades, the roles' usage counts, wait suggestions, includers, the welcome
+choice and Insights; a retired bundle's name is free for a new bundle (the name
+index is partial, `WHERE retired_at IS NULL`). It still reads:
+`GET /api/v1/bundles/{id}` returns it with `retired_at` and `retired_by`,
+`GET /api/v1/bundles?retired=true` lists them, and its versions, roles and
+history stay readable. Every write to one is refused `409 RETIRED` — "This
+bundle was retired on {date}. Nothing about it can change." — before the
+handler runs.
 
 The welcome flag is REPORTED, never guarded against. Refusing to delete the
 welcome bundle would be a rule an operator could not satisfy — the flag is
@@ -57,22 +87,30 @@ consequence before the click.
 `onboarding_triggers.bundle_id` MUST NOT hold a foreign key to `bundles`. The
 row records that somebody was onboarded and what they were given; that stays
 true after the bundle is retired, and both alternatives corrupt it — a foreign
-key makes every bundle that ever onboarded anybody undeletable, and
-`ON DELETE SET NULL` rewrites the row to say they were given nothing.
+key would make a bundle that ever onboarded anybody unremovable by a hard
+delete, and `ON DELETE SET NULL` rewrites the row to say they were given
+nothing.
 
 #### Scenario: Holders lose different things
-- **WHEN** a bundle carrying `Laser Lab / trained` is deleted
+- **WHEN** a bundle carrying `Laser Lab / trained` is retired
 - **AND** one holder also has a direct grant for that role and another does not
 - **THEN** exactly one revoke is enqueued, for the holder with no other source
 
-#### Scenario: The welcome bundle is deleted
-- **WHEN** the bundle carrying `is_welcome` is deleted
+#### Scenario: The welcome bundle is retired
+- **WHEN** the bundle carrying `is_welcome` is retired
 - **THEN** the response reports `was_welcome: true`
 - **AND** the console states that onboarding will grant nothing until another bundle is set
 
 #### Scenario: Nobody holds it
-- **WHEN** a bundle with no holders is deleted
-- **THEN** the bundle is deleted and no propagation rows are enqueued
+- **WHEN** a bundle with no holders is retired
+- **THEN** the bundle is retired and no propagation rows are enqueued
+
+#### Scenario: A retired bundle keeps its history
+- **WHEN** a bundle is retired
+- **THEN** its versions and what they gave remain readable by id, with when and by whom it was retired
+- **AND** it is absent from the bundle list and from every read that decides access
+- **AND** a new bundle may take its name
+- **AND** any write to it is refused `409 RETIRED`
 
 ### Requirement: A member MUST be able to withdraw their own pending request
 

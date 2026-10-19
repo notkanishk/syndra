@@ -102,7 +102,7 @@ export function WithdrawnAccess() {
           <Bucket
             title="Still on the way"
             tone="accent"
-            note="Waiting to be sent, and Syndra tries again by itself. The only thing to watch is how long one has waited."
+            note="Not sent yet, and Syndra tries again by itself. The only thing to watch is how long one has waited."
             empty="Nothing is waiting. Every revocation has either gone through or been given up on."
             rows={queued}
           />

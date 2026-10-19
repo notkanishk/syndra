@@ -1,4 +1,4 @@
-import { ButtonLink } from "@/components/ui/Button";
+import { EmptyState } from "@/components/states";
 
 /**
  * An address that matches no route.
@@ -18,18 +18,10 @@ import { ButtonLink } from "@/components/ui/Button";
  */
 export default function NotFound() {
   return (
-    <div className="flex min-h-[60dvh] items-center justify-center px-5">
-      <div className="w-full max-w-[52ch] rounded-[18px] border border-line-strong bg-surface-2 px-6 py-7">
-        <h1 className="type-card-title">There&rsquo;s nothing at this address.</h1>
-        <p className="mt-2 text-[14.5px] leading-[1.55] text-muted">
-          No page in Syndra has this address. If you followed a link, the link itself is wrong;
-          nothing has been deleted. A person or a bundle that was removed would say so on its own
-          page.
-        </p>
-        <ButtonLink href="/" variant="accent" className="mt-5">
-          Go to the home page
-        </ButtonLink>
-      </div>
-    </div>
+    <EmptyState
+      title="There’s nothing at this address."
+      guidance="No page in Syndra has this address. If you followed a link, the link itself is wrong; nothing has been deleted. A person or a bundle that was removed would say so on its own page."
+      action={{ label: "Go to the home page", href: "/" }}
+    />
   );
 }

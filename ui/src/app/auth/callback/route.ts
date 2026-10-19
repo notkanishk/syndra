@@ -150,7 +150,9 @@ export async function GET(request: Request): Promise<Response> {
   // here at the point of use: the value has been through a cookie and a
   // round trip since it was written, and this is the one place it becomes a
   // Location header.
-  return NextResponse.redirect(buildRedirectUrl(request, safeReturnPath(pkce.next)), {
+  // N21: a sign-in opened in a new tab ends on the door, saying to go back.
+  const landing = pkce.then === "close" ? "/login?then=close" : safeReturnPath(pkce.next);
+  return NextResponse.redirect(buildRedirectUrl(request, landing), {
     status: 307,
   });
 }

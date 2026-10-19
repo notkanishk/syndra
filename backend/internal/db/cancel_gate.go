@@ -9,7 +9,7 @@ import (
 )
 
 // Never invisibly (owner, 15 Oct): an action that would cancel a change still
-// waiting to be sent — a removal given back, a grant removed before it went —
+// waiting for you to send — a removal given back, a grant removed before it went —
 // is refused until the operator has seen exactly which changes it cancels.
 // The operator didn't queue them, or doesn't remember why; undoing them is a
 // decision, not a side effect.
@@ -21,7 +21,7 @@ import (
 // operator reviewed, whose rows name the cancellations.
 
 // ErrWouldCancel is the refusal; CancelGate.Refused has what it would cancel.
-var ErrWouldCancel = errors.New("this would cancel changes that are waiting to be sent")
+var ErrWouldCancel = errors.New("this would cancel changes that are waiting for you to send")
 
 // CancelGate is one request's acknowledgement, and what it refused.
 type CancelGate struct {

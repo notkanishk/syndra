@@ -5,10 +5,11 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
+import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Button, PILL } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
@@ -19,27 +20,37 @@ import {
 } from "@/components/ui/SelectionBar";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection } from "@/lib/useRowSelection";
-import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { FilterPills, Select } from "@/components/ui/Select";
-import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
+import { FilterPills } from "@/components/ui/Select";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
-import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
+import type { BulkPlan } from "@/lib/queries/useBulkGrants";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { useTerms } from "@/lib/queries/useTerms";
+import { useUserGrants } from "@/lib/queries/useUsers";
+import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
+import { WaitsMark } from "@/components/ui/WaitsMark";
 import {
-  useCreateRequest,
-  useDecideRequest,
+  DECLINED,
+  declinedKeepOutcome,
+  extendedOutcome,
+  useRequestDecisions,
+  type Decided,
+} from "@/lib/request-decisions";
+import {
   useRequestsAdmin,
   useRequestsMine,
   useWithdrawRequest,
   type AccessRequest,
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
-import { describeDuration, formatLongDate, formatShortDate } from "@/lib/format";
-import { HoldingNote, alreadyHeld, useAskState } from "@/components/requests/Holding";
+import { formatShortDate, humanizeKey } from "@/lib/format";
+import { keptEnds, stillEnds } from "@/lib/keep-ends";
+import { AskForAccess } from "@/components/requests/AskForAccess";
+import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
-import { daysUntilTermEnd } from "@/lib/term";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
 
@@ -52,14 +63,30 @@ type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
  * itself rather than falling into either bucket — a status this file has not been taught about
  * must never read as a decision.
  */
-export function requestOutcome(status: string): {
-  tone: "accent" | "neutral" | "warn";
+export function requestOutcome(status: string, kind?: string): {
+  /** The member's dot. */
+  tone: StatusTone;
+  /** The operator's dot, where it differs: a decision is lime, being overtaken is not one. */
+  operatorTone: StatusTone;
+  operator: string;
+  member: string;
+} {
+  const o = requestOutcomeWords(status);
+  // A request to keep a role that was approved says what it did: kept, extended.
+  if (status === "approved" && kind === "extend") {
+    return { ...o, operator: "Extended", member: "Kept", operatorTone: o.tone };
+  }
+  return { ...o, operatorTone: status === "fulfilled" ? "neutral" : o.tone };
+}
+
+function requestOutcomeWords(status: string): {
+  tone: StatusTone;
   operator: string;
   member: string;
 } {
   switch (status) {
     case "approved":
-      return { tone: "accent", operator: "Approved", member: "Approved" };
+      return { tone: "healthy", operator: "Approved", member: "Approved" };
     case "rejected":
       return { tone: "neutral", operator: "Declined", member: "Not approved" };
     case "withdrawn":
@@ -67,18 +94,41 @@ export function requestOutcome(status: string): {
     // Given another way while it waited (directly, or by a bundle), so closed
     // by Syndra: a resolution, not a decision. The note says how.
     case "fulfilled":
-      return { tone: "accent", operator: "Given another way", member: "You have this" };
+      return { tone: "healthy", operator: "Given another way", member: "You have this" };
     case "pending":
-      return { tone: "warn", operator: "Open", member: "Waiting" };
+      return { tone: "neutral", operator: "Open", member: "Waiting" };
     default:
       return { tone: "warn", operator: status, member: status };
   }
 }
-/** What a member asks for, in the units a member thinks in. */
-type HowLong = "7" | "30" | "term";
 
-/** Explicit pagination. The queue must have a visible end. */
-const PAGE = 25;
+/**
+ * A settled request's status seat (route-requests): dot, word, and at most one
+ * faint note under it. The same seat a decision just made reports in, so a row
+ * never changes shape between the tap and the next read.
+ */
+/**
+ * Why a request closed with nothing decided, in the member's words (A-04
+ * §13.1). Without it a closed request looks like a lost one.
+ */
+export function overtakenNote(request: AccessRequest): string {
+  const on = request.resolved_at ? ` on ${formatShortDate(request.resolved_at)}` : "";
+  return `Makerspace staff gave it to you directly${on}, so there was nothing left to decide.`;
+}
+
+export function StatusSeat({ tone, word, note }: { tone: StatusTone; word: string; note?: string }) {
+  return (
+    <span className="flex flex-col gap-1">
+      <span
+        className={`inline-flex items-center gap-2 whitespace-nowrap text-[13.5px] font-semibold ${STATUS_TONE[tone].label}`}
+      >
+        <StatusDot tone={tone} />
+        {word}
+      </span>
+      {note && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{note}</span>}
+    </span>
+  );
+}
 
 export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; userId: string }) {
   return isOperator ? <OperatorQueue userId={userId} /> : <MemberRequests userId={userId} />;
@@ -88,19 +138,33 @@ export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; us
 function OperatorQueue({ userId }: { userId?: string }) {
   const [status, setStatus] = useState<StatusFilter>("pending");
   const requests = useRequestsAdmin(status);
-  const decide = useDecideRequest();
-  const [resolved, setResolved] = useState<Set<string>>(new Set());
-  const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
+  // The beat of a bulk decision starts when its dialog closes: until then the
+  // operator is looking at the dialog's own result, not at the rows behind it.
+  const { act, settleAll, resolved, staying, outcomes, cancelStep } = useRequestDecisions({
+    pauseBeat: bulkStatus !== null,
+  });
+  const catalog = useGlobalRoleCatalog();
   const ask = useAskOnArrival();
+  const terms = useTerms();
 
-  // Decided rows stay in `rows` — the row reports its own outcome below and
-  // only actually leaves once the refetch lands with its new status. Filtering
-  // them out here the instant `act()` fires used to remove the row before its
-  // own "Approved"/"Declined" line could ever be seen, which contradicted the
-  // promise a few lines down that the row "keeps its seat" and "leaves on the
-  // next read, not under the thumb that decided it".
+  // What the read holds. A decided row is in it until the refetch lands, and
+  // then it is not: the open list is a list of requests still waiting.
   const rows = useMemo(() => requests.data ?? [], [requests.data]);
+
+  // What is drawn: the read, plus the rows that just left it. A decided row
+  // keeps its place and its outcome for the beat (Motion 5b), then fades and its
+  // gap closes (S5) — it never goes the instant the refetch lands, taking its
+  // own "Approved" with it. A different filter is a different list, so nothing
+  // fades out of it.
+  const leaving = useLeavingRows(rows, (entry) => entry.id, !requests.isLoading && !requests.error, {
+    stay: staying,
+    scope: status,
+  });
+  const drawn = leaving.rows;
+  // The columns belong to the list as drawn: they stay while a decided row is
+  // still showing its outcome, or the outcome would move under the reader.
+  const anyPending = drawn.some((entry) => entry.status === "pending");
 
   // Only open, not-yet-decided-this-session requests can be decided, so only
   // they can be selected — offering a checkbox on a settled row would be
@@ -120,43 +184,13 @@ function OperatorQueue({ userId }: { userId?: string }) {
   // every open row above, so "select all" keeps meaning the whole pending
   // queue rather than quietly meaning the page — which would change what the
   // bar's ceiling message is counting without saying so.
-  const [limit, setLimit] = useState(PAGE);
-  const visible = useMemo(() => rows.slice(0, limit), [rows, limit]);
+  const paging = usePaging();
+  const visible = useMemo(() => drawn.slice(0, paging.limit), [drawn, paging.limit]);
   const selection = useRowSelection(useMemo(() => openRows.map((entry) => entry.id), [openRows]));
   // Deciding one request at a time is what this queue is for; the bulk verbs
   // are the exception, so they arrive behind a named control rather than a
   // column of checkboxes that is always in front of every row.
   const [selecting, setSelecting] = useState(false);
-
-  async function act(entry: AccessRequest, next: "approved" | "rejected") {
-    setResolved((prev) => new Set(prev).add(entry.id));
-    try {
-      await decide.mutateAsync({ id: entry.id, status: next });
-      setOutcomes((prev) => ({
-        ...prev,
-        [entry.id]: {
-          kind: "applied",
-          // One sentence, not message+detail: this renders `placement="inline"`,
-          // which shows only `message`. Approving enqueues a grant and drains it
-          // inline best-effort, but the response (`{"message": "Request
-          // resolved"}`) never says whether that drain landed — so this cannot
-          // claim Zitadel has it. Declining never touches Zitadel at all, so it
-          // gets no such caveat.
-          message:
-            next === "approved"
-              ? "Approved. Sent; Zitadel has not been read back yet."
-              : "Declined",
-        },
-      }));
-    } catch (error) {
-      setResolved((prev) => {
-        const copy = new Set(prev);
-        copy.delete(entry.id);
-        return copy;
-      });
-      setOutcomes((prev) => ({ ...prev, [entry.id]: outcomeFromError(error) }));
-    }
-  }
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -164,6 +198,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
         title="Requests"
         lede="What members have asked for. Approve gives them the access for the time they asked, starting now; decline closes it, and they may ask again."
       />
+      {cancelStep}
 
       {/* One control, so it stays on the row rather than behind a panel: a
           disclosure hiding a single five-way switch costs a click and hides
@@ -191,14 +226,14 @@ function OperatorQueue({ userId }: { userId?: string }) {
       />
 
       <Card>
-        {openRows.length > 0 && (
+        {anyPending && (
           <CardColumns>
             {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
             <span className="w-[170px]">Who</span>
             <span className="w-[250px]">What they asked for</span>
             <span className="flex-1">Why</span>
             <span className="w-[66px]">When</span>
-            <span className="w-[150px] text-right">Decision</span>
+            <span className="w-[196px]">Decision</span>
           </CardColumns>
         )}
         {/* Only open requests can be selected; a decided one is not part of the
@@ -214,11 +249,11 @@ function OperatorQueue({ userId }: { userId?: string }) {
           />
         )}
 
-        <div data-selection-scope {...selection.containerProps}>
+        <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
         <ListStates
           isLoading={requests.isLoading}
           error={requests.error}
-          isEmpty={rows.length === 0}
+          isEmpty={drawn.length === 0}
           onRetry={() => requests.refetch()}
           errorTitle="Couldn't load requests."
           skeleton={<RowSkeleton rows={4} label="Loading requests" />}
@@ -237,16 +272,16 @@ function OperatorQueue({ userId }: { userId?: string }) {
           }
         >
           {visible.map((entry) => (
+            <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              key={entry.id}
-              className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px] ${
-                selection.isSelected(entry.id) ? "bg-accent-soft/30" : ""
+              className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] desktop:flex-nowrap ${
+                selection.isSelected(entry.id) ? "bg-accent-soft" : ""
               }`}
               {...selection.rowProps(entry.id)}
             >
-              {selecting && openRows.length > 0 && (
+              {selecting && anyPending && (
                 <span className="w-11 shrink-0 desktop:w-[26px]">
-                  {entry.status === "pending" ? (
+                  {entry.status === "pending" && !resolved.has(entry.id) ? (
                     <RowCheckbox
                       label="Select this request"
                       {...selection.checkboxProps(entry.id)}
@@ -258,52 +293,75 @@ function OperatorQueue({ userId }: { userId?: string }) {
               <div className="w-full truncate text-[15px] font-semibold tablet:w-[170px] tablet:shrink-0">
                 <UserName id={entry.requester_id} />
               </div>
-              <div className="w-full text-[14.5px] text-ink/80 tablet:w-[250px] tablet:shrink-0 tablet:truncate">
+              <div className="w-full text-[14.5px] text-ink/80 [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
+                {entry.kind === "extend" && "Keep "}
                 <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+                {catalog.data?.some(
+                  (r) =>
+                    r.project_id === entry.project_id &&
+                    r.role_key === entry.role_key &&
+                    r.waits_for_send,
+                ) && <WaitsMark className="ml-2" />}
                 {/* Half of the ask. A decision made without it is a decision
                     about a different request. */}
                 <span className="block text-[12.5px] text-faint">
-                  {describeDuration(entry.duration_days)}
+                  {describeAsk(entry, terms.data)}
                 </span>
               </div>
-              <div className="w-full min-w-0 text-[14px] text-muted tablet:flex-1 tablet:truncate">
+              {/* What someone decides on is never cut off (RULES 9b): the reason wraps, and below
+                  desktop the row wraps first, the decision seat taking the next line. */}
+              <div className="w-full min-w-0 text-[14px] text-muted [text-wrap:pretty] tablet:min-w-[180px] tablet:flex-1">
                 {entry.justification ? `“${entry.justification}”` : "No reason given"}
               </div>
               <div className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
                 <Relative iso={entry.created_at} />
               </div>
-              {entry.status === "pending" && !resolved.has(entry.id) ? (
-                <div className="flex w-full flex-row-reverse gap-3 tablet:w-auto tablet:shrink-0 tablet:flex-row tablet:gap-2">
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    className="flex-1 tablet:flex-none"
-                    disabled={alreadyHeld(entry)}
-                    reason={alreadyHeld(entry) ? "They already have this." : undefined}
-                    onClick={() => act(entry, "approved")}
-                  >
-                    Approve
-                  </Button>
-                  <Button size="sm" onClick={() => act(entry, "rejected")}>
-                    Decline
-                  </Button>
-                </div>
-              ) : resolved.has(entry.id) ? null : (
-                // A settled row from the data itself (viewing a non-"Open"
-                // filter) — not one just decided this session, which reports
-                // through its own ActionOutcome below instead. Showing this
-                // badge for a just-decided row would read its stale cached
-                // status ("Open") against the ActionOutcome's fresh one
-                // ("Approved") at the same time.
-                <span className="flex flex-col items-start gap-1">
-                  <Badge tone={requestOutcome(entry.status).tone}>
-                    {requestOutcome(entry.status).operator}
-                  </Badge>
-                  {entry.status === "approved" && entry.reviewer_id && entry.reviewer_id === entry.requester_id && (
-                    <span className="text-[12.5px] text-faint">by the person who asked</span>
-                  )}
-                </span>
-              )}
+              {/* The Decision seat (#96): the buttons, then the decision in
+                  their place — one seat, so no column moves on the tap. The
+                  row keeps it until the next read; no toast. */}
+              <div className="w-full tablet:ml-auto tablet:w-[196px] tablet:shrink-0">
+                {entry.status === "pending" && !resolved.has(entry.id) ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex w-full flex-row-reverse gap-3 tablet:flex-row tablet:gap-2">
+                      <Button
+                        variant="accent"
+                        size="sm"
+                        className="flex-1 tablet:flex-none"
+                        disabled={alreadyHeld(entry)}
+                        reason={alreadyHeld(entry) ? "They already have this." : undefined}
+                        onClick={() => act(entry, "approved")}
+                      >
+                        Approve
+                      </Button>
+                      <Button size="sm" onClick={() => act(entry, "rejected")}>
+                        Decline
+                      </Button>
+                    </div>
+                    {/* A failed write puts the buttons back and says why under them. */}
+                    {outcomes[entry.id] && (
+                      <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
+                    )}
+                  </div>
+                ) : outcomes[entry.id] ? (
+                  <ActionOutcome
+                    placement="seat"
+                    word={outcomes[entry.id].word}
+                    outcome={outcomes[entry.id].outcome}
+                  />
+                ) : resolved.has(entry.id) ? null : (
+                  <StatusSeat
+                    tone={requestOutcome(entry.status, entry.kind).operatorTone}
+                    word={requestOutcome(entry.status, entry.kind).operator}
+                    note={
+                      entry.status === "approved" &&
+                      entry.reviewer_id &&
+                      entry.reviewer_id === entry.requester_id
+                        ? "by the person who asked"
+                        : keepResult(entry)
+                    }
+                  />
+                )}
+              </div>
               {/* Allowed, and said before it happens (owner, 15 Oct): an
                   operator can approve their own request, and it is recorded
                   as exactly that. */}
@@ -313,30 +371,24 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   Your own request. Approving it is allowed, and Change history records that you approved your own.
                 </span>
               )}
-
-              {/* The row reports its own decision and keeps its seat. It
-                  leaves on the next read, not under the thumb that decided
-                  it — a row that vanishes on the tap takes the evidence of
-                  what just happened with it. */}
-              {outcomes[entry.id] && (
-                <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
-              )}
             </div>
+            </LeavingRow>
           ))}
 
-          {rows.length > visible.length && (
-            <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-              <span className="text-[13.5px] text-faint">
-                {rows.length - visible.length} more
-              </span>
-              <Button onClick={() => setLimit((current) => current + PAGE)}>
-                Load next {Math.min(PAGE, rows.length - visible.length)}
-              </Button>
-            </div>
-          )}
+          <PaginationRow
+            shown={visible.length}
+            total={drawn.length}
+            onMore={paging.more}
+            onAll={() => paging.all(drawn.length)}
+            onBack={paging.back}
+          />
         </ListStates>
         </div>
       </Card>
+
+      {/* What this operator has asked for themselves, once they have: the
+          member's card, in the member's place (A-04 §2.1). */}
+      {userId && <YourRequests userId={userId} hideWhenEmpty onAsk={() => ask.setOpen(true)} />}
 
       <SelectionBar
         count={selecting ? selection.count : 0}
@@ -360,7 +412,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
             nobody has the access yet. The per-row Decline above (default
             variant) already gets this right; the bulk twin did not. */}
         <SelectionAction onClick={() => setBulkStatus("rejected")}>
-          Review denying these
+          Review declining these
         </SelectionAction>
       </SelectionBar>
 
@@ -369,18 +421,22 @@ function OperatorQueue({ userId }: { userId?: string }) {
           status={bulkStatus}
           ids={Array.from(selection.selected)}
           onClose={() => setBulkStatus(null)}
-          onApplied={selection.clear}
+          onApplied={(ids, plan) => {
+            selection.clear();
+            settleAll(decidedByBulk(rows, ids, bulkStatus, plan));
+          }}
         />
       )}
 
       {/* An operator's own ask, arriving from My access. It used to land on
           this queue with the dialog shut and the choice lost. */}
-      <RequestDialog
+      <AskForAccess
         key={`${ask.linkedProject}:${ask.linkedRole}`}
         open={ask.open}
         onClose={ask.close}
         initial={{ projectId: ask.linkedProject, roleKey: ask.linkedRole }}
         userId={userId ?? ""}
+        selfDecides
       />
     </div>
   );
@@ -402,7 +458,7 @@ function useAskOnArrival() {
   const params = useSearchParams();
   const linkedProject = params.get("project") ?? "";
   const linkedRole = params.get("role") ?? "";
-  const linked = Boolean(linkedProject) || params.has("ask");
+  const linked = Boolean(linkedProject) || params.has("ask") || params.has("extend");
   const [open, setOpen] = useState(linked);
   function close() {
     setOpen(false);
@@ -413,9 +469,54 @@ function useAskOnArrival() {
 
 /** A member's own requests, plus the form to make one. No jargon. */
 function MemberRequests({ userId }: { userId: string }) {
+  const { open, setOpen, close: closeDialog, linkedProject, linkedRole } = useAskOnArrival();
+
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Requests"
+        lede="Ask for access, and see what happened to what you asked for. Makerspace staff decide; the answer appears here."
+        actions={
+          <Button variant="accent" onClick={() => setOpen(true)}>
+            Ask for access
+          </Button>
+        }
+      />
+
+      <YourRequests userId={userId} onAsk={() => setOpen(true)} />
+
+      <AskForAccess
+        // Remounted per link so the prefill applies to whichever role was
+        // clicked, not only the first.
+        key={`${linkedProject}:${linkedRole}`}
+        open={open}
+        onClose={closeDialog}
+        initial={{ projectId: linkedProject, roleKey: linkedRole }}
+        userId={userId}
+      />
+    </div>
+  );
+}
+
+/**
+ * The card of what you asked for, and what became of it. A member's page, and
+ * an operator's under the queue once they have asked for anything: one row
+ * component, so a request reads the same to whoever made it.
+ */
+function YourRequests({
+  userId,
+  onAsk,
+  hideWhenEmpty = false,
+}: {
+  userId: string;
+  onAsk: () => void;
+  hideWhenEmpty?: boolean;
+}) {
   const requests = useRequestsMine();
   const withdraw = useWithdrawRequest();
-  const { open, setOpen, close: closeDialog, linkedProject, linkedRole } = useAskOnArrival();
+  const resolver = useNameResolver();
+  const terms = useTerms();
+  const grants = useUserGrants(userId);
   // A member's own rows report their own withdrawals, in the row.
   const [outcomes, setOutcomes] = useState<Record<string, ActionResult | null>>({});
   // Same idiom as OperatorQueue.act(): marked synchronously, before the await,
@@ -430,11 +531,11 @@ function MemberRequests({ userId }: { userId: string }) {
       await withdraw.mutateAsync(entry.id);
       setOutcomes((prev) => ({
         ...prev,
+        // Neutral, not applied: nothing was given or taken (#51).
         [entry.id]: {
-          kind: "applied",
-          // One sentence: this renders `placement="inline"` below, which shows
-          // only `message` — a `detail` here would be written and never seen.
+          kind: "no_change",
           message: "You withdrew this. Nobody will be asked to decide it.",
+          detail: "Nobody will be asked to decide it",
         },
       }));
     } catch (error) {
@@ -448,58 +549,84 @@ function MemberRequests({ userId }: { userId: string }) {
   }
 
   const mine = (requests.data ?? []).filter((entry) => entry.requester_id === userId);
+  if (hideWhenEmpty && mine.length === 0) return null;
+
+  // What a request to keep a role did, said from where the end is now: the
+  // read of a settled request doesn't carry the old or the new end.
+  const endNow = (entry: AccessRequest) =>
+    (grants.data ?? []).find((g) => g.project_id === entry.project_id && g.role_key === entry.role_key)?.expires_at ?? null;
 
   return (
-    <div className="flex flex-col gap-[18px]">
-      <PageHeader
-        title="Requests"
-        lede="Ask for access, and see what happened to what you asked for. Makerspace staff decide; the answer appears here."
-        actions={
-          <Button variant="accent" onClick={() => setOpen(true)}>
-            Ask for access
-          </Button>
+    <Card>
+      <CardHeader title="Your requests" count={mine.length} />
+      <ListStates
+        isLoading={requests.isLoading}
+        error={requests.error}
+        isEmpty={mine.length === 0}
+        onRetry={() => requests.refetch()}
+        errorTitle="Couldn't load your requests."
+        skeleton={<RowSkeleton rows={3} avatar={false} label="Loading your requests" />}
+        empty={
+          <EmptyState
+            title="You haven't asked for anything yet."
+            guidance="If there's a machine you need and can't use, ask here and makerspace staff will decide."
+            action={{ label: "Ask for access", onClick: onAsk }}
+          />
         }
-      />
-
-      <Card>
-        <CardHeader title="Your requests" count={mine.length} />
-        <ListStates
-          isLoading={requests.isLoading}
-          error={requests.error}
-          isEmpty={mine.length === 0}
-          onRetry={() => requests.refetch()}
-          errorTitle="Couldn't load your requests."
-          skeleton={<RowSkeleton rows={3} avatar={false} label="Loading your requests" />}
-          empty={
-            <EmptyState
-              title="You haven't asked for anything yet."
-              guidance="If there's a machine you need and can't use, ask here and makerspace staff will decide."
-              action={{ label: "Ask for access", onClick: () => setOpen(true) }}
-            />
-          }
-        >
-          {mine.map((entry) => (
-            <div
-              key={entry.id}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[15px] font-semibold">
-                  <ProjectName id={entry.project_id} />
-                </div>
-                <div className="truncate text-[13.5px] text-faint">
-                  {describeDuration(entry.duration_days)} ·{" "}
-                  {entry.justification || "No reason given"}
-                </div>
+      >
+        {mine.map((entry) => (
+          <div
+            key={entry.id}
+            className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px]"
+          >
+            <div className="w-full min-w-0 tablet:flex-1">
+              {/* The role, not only the place: two asks on one project were
+                  two identical rows. */}
+              <div className="text-[15px] font-semibold [text-wrap:pretty]">
+                {entry.kind === "extend" && "Keep "}
+                <ProjectName id={entry.project_id} /> ·{" "}
+                {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
+                  humanizeKey(entry.role_key)}
               </div>
-              <div className="w-[110px] shrink-0 text-[13px] text-faint">
-                <Relative iso={entry.created_at} />
+              <div className="text-[13.5px] text-faint [text-wrap:pretty]">
+                {describeAskForMember(entry, terms.data)}
               </div>
-              {/*
-                Withdraw sits on the row rather than behind a dialog. Nothing is destroyed by it
-                and nobody else's access moves — it takes an ask out of somebody's queue, which
-                is the one thing here a member is entitled to do without being asked twice.
-              */}
+              <div className="text-[13.5px] text-faint [text-wrap:pretty]">
+                {entry.justification || "No reason given"}
+              </div>
+            </div>
+            <div className="w-[110px] shrink-0 text-[13px] text-faint tablet:text-right">
+              <Relative iso={entry.created_at} />
+            </div>
+            {/* One status seat: dot, word, note. A withdrawal reports here,
+                in the member's own word, and keeps it until the next read. */}
+            <div className="w-full tablet:w-auto tablet:min-w-[220px] tablet:shrink-0">
+              {outcomes[entry.id] && resolved.has(entry.id) ? (
+                <ActionOutcome
+                  placement="seat"
+                  word="You withdrew this"
+                  outcome={outcomes[entry.id]!}
+                />
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <StatusSeat
+                    tone={requestOutcome(entry.status, entry.kind).tone}
+                    word={requestOutcome(entry.status, entry.kind).member}
+                    note={
+                      entry.status === "fulfilled" ? overtakenNote(entry) : keepNote(entry, endNow(entry))
+                    }
+                  />
+                  {outcomes[entry.id] && <ActionOutcome placement="seat" outcome={outcomes[entry.id]!} />}
+                </div>
+              )}
+            </div>
+            {/*
+              Withdraw sits on the row rather than behind a dialog, outline and last (#109).
+              Nothing is destroyed by it and nobody else's access moves — it takes an ask out
+              of somebody's queue, which is the one thing here a member is entitled to do
+              without being asked twice.
+            */}
+            <div className="flex shrink-0 tablet:min-w-[96px] tablet:justify-end">
               {entry.status === "pending" && !resolved.has(entry.id) && (
                 <Button
                   size="sm"
@@ -510,260 +637,97 @@ function MemberRequests({ userId }: { userId: string }) {
                   Withdraw
                 </Button>
               )}
-              <Badge tone={requestOutcome(entry.status).tone}>
-                {requestOutcome(entry.status).member}
-              </Badge>
-
-              {outcomes[entry.id] && (
-                <ActionOutcome outcome={outcomes[entry.id]!} placement="inline" className="w-full" />
-              )}
             </div>
-          ))}
-        </ListStates>
-      </Card>
-
-      <RequestDialog
-        // Remounted per link so the prefill applies to whichever role was
-        // clicked, not only the first.
-        key={`${linkedProject}:${linkedRole}`}
-        open={open}
-        onClose={closeDialog}
-        initial={{ projectId: linkedProject, roleKey: linkedRole }}
-        userId={userId}
-      />
-    </div>
+          </div>
+        ))}
+      </ListStates>
+    </Card>
   );
 }
 
-function RequestDialogOpen({
-  onClose,
-  initial,
-  userId,
-}: {
-  open: boolean;
-  onClose: () => void;
-  /** Prefill from a "Ask for this" link in the catalogue. */
-  initial?: { projectId?: string; roleKey?: string };
-  /** Who is asking: what they have and have asked for is read for them. */
-  userId: string;
-}) {
-  // `/catalog`, the one list of what exists that a member may read. The
-  // operator lists (`/projects`, `/roles`) are refused to a member by the
-  // proxy, so the dialog offered them nothing but "Choose…".
-  const catalog = useCatalogProjects();
-  const create = useCreateRequest();
-  const [askOutcome, setAskOutcome] = useState<ActionResult | null>(null);
+/**
+ * A request to keep a role, in its status seat (A-06 §3): what is true of the
+ * end until it's decided, and after. A settled request says it from the ends it
+ * recorded; one settled before they were recorded names the end the role has now,
+ * and only while that is true.
+ */
+export function keepNote(request: AccessRequest, endNow: string | null): string | undefined {
+  if (request.kind !== "extend") return undefined;
+  if (request.status === "pending") {
+    return request.current_until
+      ? `Until it's decided, it still ends ${formatShortDate(request.current_until)}.`
+      : undefined;
+  }
+  if (request.status === "approved") {
+    return keptEnds(request) ?? (endNow ? `It now ends ${formatShortDate(endNow)}.` : undefined);
+  }
+  // A role that has ended since doesn't "still end" anywhere.
+  if (request.status === "rejected") return stillEnds(request.ended_before ?? endNow);
+  return undefined;
+}
 
-  const [projectId, setProjectId] = useState(initial?.projectId ?? "");
-  const [roleKey, setRoleKey] = useState(initial?.roleKey ?? "");
-  const [why, setWhy] = useState("");
-  const [howLong, setHowLong] = useState<HowLong>("term");
+/**
+ * The same settled keep, for the person who decided it: what approving did to
+ * the end, or that declining left it, in the words a decision seat uses
+ * ("Now ends 18 Jan, not 18 Dec."). Only what the request recorded.
+ */
+export function keepResult(request: AccessRequest): string | undefined {
+  if (request.kind !== "extend") return undefined;
+  const { ended_before: before, ends_after: after } = request;
+  if (request.status === "approved") {
+    if (after) return before ? `Now ends ${formatShortDate(after)}, not ${formatShortDate(before)}.` : `Now ends ${formatShortDate(after)}.`;
+    return before ? `Now has no end date, not ${formatShortDate(before)}.` : undefined;
+  }
+  if (request.status === "rejected") {
+    const still = stillEnds(before);
+    return still ? `Nothing was sent. ${still}` : undefined;
+  }
+  return undefined;
+}
 
-  const projectRoles = catalog.data.find((project) => project.id === projectId)?.roles ?? [];
-  const days = howLong === "term" ? daysUntilTermEnd() : Number(howLong);
-  const askState = useAskState(userId);
-  const chosen = askState(projectId, roleKey);
-  const until = new Date(Date.now() + days * 86_400_000).toISOString();
-  // Sent: the sheet becomes its result and nothing can be sent twice from it.
-  const sent = askOutcome?.kind === "applied";
-  // A request is for a role they lack, one per role (owner, 15 Oct).
-  const blocked = chosen.kind !== "none";
-
-
-  return (
-    <Modal open onClose={onClose} busy={create.isPending} size="sm" labelledBy="request-title">
-      <ModalHeader
-        title="Ask for access"
-        titleId="request-title"
-        lede="Say what you need and why. Makerspace staff decide — you'll see the answer here."
-      />
-      <div className="flex flex-col gap-3.5 px-6">
-        {!sent && (
-        <>
-        <div>
-          <FieldLabel htmlFor="req-project">What do you need to use?</FieldLabel>
-          <Select
-            id="req-project"
-            value={projectId}
-            onChange={(event) => {
-              setProjectId(event.target.value);
-              setRoleKey("");
-            }}
-          >
-            <option value="">Choose…</option>
-            {catalog.data.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <FieldLabel htmlFor="req-role">What do you need to do there?</FieldLabel>
-          <Select
-            id="req-role"
-            value={roleKey}
-            disabled={!projectId}
-            onChange={(event) => setRoleKey(event.target.value)}
-          >
-            <option value="">{projectId ? "Choose…" : "Pick a place first"}</option>
-            {projectRoles.map((role) => {
-              const state = askState(projectId, role.key);
-              return (
-                <option
-                  key={role.key}
-                  value={role.key}
-                  disabled={state.kind !== "none"}
-                >
-                  {role.label || role.key}
-                  {state.kind === "for_good"
-                    ? " · you have this"
-                    : state.kind === "asked"
-                      ? " · already asked"
-                      : state.kind === "until"
-                        ? ` · yours until ${formatShortDate(state.until)}`
-                        : ""}
-                </option>
-              );
-            })}
-          </Select>
-          {/* Design asked for a free-text escape here — "Can't find it?
-              Describe what you need and we'll route it." A request without a
-              project and a role is not something this API can carry, and a
-              form that accepts one would be dropping members' words on the
-              floor. What is true is that Why reaches the person deciding
-              verbatim, so the escape points at the field that already works.
-              A place with nothing defined in it is its own dead end and gets
-              its own sentence rather than an empty menu. */}
-          {chosen.kind === "for_good" ? (
-            <FieldHint>
-              You already have this, with no end date, so there&rsquo;s nothing to ask for.
-            </FieldHint>
-          ) : chosen.kind === "asked" ? (
-            <FieldHint>
-              You&rsquo;ve already asked for this. It&rsquo;s waiting, and the answer appears on this page.
-            </FieldHint>
-          ) : chosen.kind === "until" ? (
-            <FieldHint>
-              You have this until {formatShortDate(chosen.until)}. To keep it longer, ask makerspace
-              staff: they extend it from their side.
-            </FieldHint>
-          ) : projectId && projectRoles.length === 0 ? (
-            <FieldHint>
-              Nothing is defined here yet, so there is nothing to ask for. Pick another place, or
-              ask makerspace staff to set this one up.
-            </FieldHint>
-          ) : (
-            <FieldHint>
-              Can&rsquo;t find it? Pick the closest one and describe what you actually need in
-              Why — makerspace staff read that before deciding.
-            </FieldHint>
-          )}
-        </div>
-        <div>
-          {/*
-            Every request used to be filed as ninety days regardless of what
-            was asked for, so a student who needed the laser for one week was
-            recorded as wanting it for a quarter — and the operator deciding it
-            had no way to know the difference.
-
-            Three options, no free-form number: a member thinks in weeks and
-            terms, not in days, and the resolved date underneath turns the
-            choice back into something concrete.
-          */}
-          <FieldLabel>How long do you need it?</FieldLabel>
-          <div className="mb-2 flex flex-wrap gap-2">
-            {(
-              [
-                ["7", "A week"],
-                ["30", "A month"],
-                ["term", "Until the end of term"],
-              ] as Array<[HowLong, string]>
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={howLong === value}
-                onClick={() => setHowLong(value)}
-                className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
-                  howLong === value ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <FieldHint>
-            If it&rsquo;s approved, it runs to {formatLongDate(until)} and then stops. You can ask
-            again.
-          </FieldHint>
-        </div>
-        <div>
-          <FieldLabel htmlFor="req-why">Why?</FieldLabel>
-          <Input
-            id="req-why"
-            value={why}
-            onChange={(event) => setWhy(event.target.value)}
-            placeholder="Running the Trotec for my capstone build"
-          />
-        </div>
-        </>
-        )}
-        {/* The sheet becomes its own result. A member is being told who decides
-            and that nothing else is needed from them, and a dialog that closes
-            itself takes both sentences with it. Once sent, the form goes:
-            left in place, it sent the same request again on every click. */}
-        {askOutcome && <ActionOutcome outcome={askOutcome} />}
-      </div>
-
-      <ModalFooter>
-        {sent ? (
-          <Button variant="accent" onClick={onClose}>
-            Done
-          </Button>
-        ) : (
-        <>
-        <Button
-          variant="accent"
-          disabled={!projectId || !roleKey || blocked}
-          reason={
-            !projectId || !roleKey
-              ? "Choose a project and a role."
-              : chosen.kind === "asked"
-                ? "You've already asked for this."
-                : chosen.kind !== "none"
-                  ? "You already have this."
-                  : undefined
-          }
-          isPending={create.isPending}
-          onClick={async () => {
-            try {
-              await create.mutateAsync({
-                project_id: projectId,
-                role_key: roleKey,
-                justification: why,
-                duration_days: days,
-              });
-              const roleName = projectRoles.find((role) => role.key === roleKey)?.label || roleKey;
-              const placeName = catalog.data.find((project) => project.id === projectId)?.name ?? "";
-              setAskOutcome({
-                kind: "applied",
-                message: `Asked for ${roleName}${placeName ? ` on ${placeName}` : ""}`,
-                detail: "You'll see the answer on this page — nothing else is needed from you.",
-              });
-            } catch (error) {
-              setAskOutcome(outcomeFromError(error));
-            }
-          }}
-        >
-          Send request
-        </Button>
-        <Button onClick={onClose}>Cancel</Button>
-        </>
-        )}
-      </ModalFooter>
-    </Modal>
-  );
+/**
+ * What each row of a bulk decision reports in its own seat, said as the plan's
+ * result says it for that requester. A row the plan did not carry out (blocked,
+ * failed, or not in the result) is not here: it is still waiting, and keeps its
+ * buttons.
+ */
+function decidedByBulk(
+  rows: AccessRequest[],
+  ids: string[],
+  status: "approved" | "rejected",
+  plan: BulkPlan,
+): Array<[AccessRequest, Decided]> {
+  const out: Array<[AccessRequest, Decided]> = [];
+  for (const entry of rows) {
+    if (!ids.includes(entry.id)) continue;
+    const keeping = entry.kind === "extend";
+    if (status === "rejected") {
+      out.push([entry, { word: "Declined", outcome: keeping ? declinedKeepOutcome(entry) : DECLINED }]);
+      continue;
+    }
+    const result = plan.outcomes.find((o) => o.user_id === entry.requester_id);
+    if (!result || result.effect === "blocked" || result.effect === "failed") continue;
+    if (result.effect === "queued") {
+      out.push([
+        entry,
+        {
+          word: "Approved",
+          outcome: { kind: "queued", message: "Approved. It goes when you send it.", detail: result.detail || undefined },
+        },
+      ]);
+    } else if (keeping) {
+      out.push([entry, { word: "Extended", outcome: extendedOutcome(entry) }]);
+    } else {
+      out.push([
+        entry,
+        {
+          word: "Approved",
+          outcome: { kind: "applied", message: "Approved.", detail: "Sent · not yet seen in Zitadel" },
+        },
+      ]);
+    }
+  }
+  return out;
 }
 
 /**
@@ -782,7 +746,7 @@ function BulkDecisionDialog({
   status: "approved" | "rejected";
   ids: string[];
   onClose: () => void;
-  onApplied: () => void;
+  onApplied: (ids: string[], plan: BulkPlan) => void;
 }) {
   const rehearse = useRehearseBulkDecision();
   const apply = useApplyBulkDecision();
@@ -799,7 +763,7 @@ function BulkDecisionDialog({
       }
       onApply={async (planId) => {
         const plan = await apply.mutateAsync({ ...body, plan_id: planId });
-        onApplied();
+        onApplied(ids, plan);
         return plan;
       }}
       onClose={onClose}
@@ -807,4 +771,3 @@ function BulkDecisionDialog({
   );
 }
 
-const RequestDialog = mountedWhileOpen(RequestDialogOpen);

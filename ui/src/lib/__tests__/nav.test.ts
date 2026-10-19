@@ -140,7 +140,7 @@ describe("breadcrumbs", () => {
   // being unknown rather than the sidebar simply not showing it in this view.
   it("names an Advanced-only page for a Basic operator, from the full operator nav", () => {
     expect(crumbsFor("/governance/pending", "basic")).toEqual([
-      { label: "Automation" },
+      { label: "Changes" },
       { label: "Pending changes", href: "/governance/pending" },
     ]);
   });
@@ -303,5 +303,23 @@ describe("the retired sync surface", () => {
     for (const orphan of ["../../app/system/hardware-sync/page.tsx", "../../lib/queries/useIntents.ts"]) {
       expect(existsSync(resolve(__dirname, orphan)), `${orphan} still exists`).toBe(false);
     }
+  });
+});
+
+describe("Makerspace settings", () => {
+  // Owner decision, 19 Oct 2026: term dates are read by Trends, "new this
+  // term", the keep dialog and Ask for access, so one global page holds them.
+  // A single leaf at the very end: appending never moves anything above it.
+  it("is the last row of Advanced, a leaf and not a group, and absent from Basic", () => {
+    const last = ADVANCED_NAV[ADVANCED_NAV.length - 1];
+    expect(last).toMatchObject({ kind: "leaf", label: "Makerspace settings", href: "/settings" });
+    expect(navLeaves(BASIC_NAV).map((l) => l.label)).not.toContain("Makerspace settings");
+  });
+
+  it("is operator-only: a member is refused it, and an operator in Basic still gets its crumb", () => {
+    expect(memberMayVisit("/settings")).toBe(false);
+    expect(crumbsFor("/settings", "member")).toEqual([]);
+    expect(crumbsFor("/settings", "basic")).toEqual([{ label: "Makerspace settings" }]);
+    expect(crumbsFor("/settings", "advanced")).toEqual([{ label: "Makerspace settings" }]);
   });
 });

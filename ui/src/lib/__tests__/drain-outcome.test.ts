@@ -19,7 +19,7 @@ describe("describeDrain", () => {
   it("never reports a requeue as success", () => {
     const outcome = describeDrain(result({ requeued: 8 }));
     expect(outcome.tone).toBe("warning");
-    expect(outcome.message).toContain("8 waiting to be sent");
+    expect(outcome.message).toContain("8 waiting for you to send");
     expect(outcome.message).toContain("send again");
   });
 
@@ -32,7 +32,7 @@ describe("describeDrain", () => {
 
   it("reports every non-zero count, in a fixed order", () => {
     const outcome = describeDrain(result({ applied: 1, failed: 2, requeued: 3, errored: 4 }));
-    expect(outcome.message).toBe("1 sent · 2 failed · 3 waiting to be sent · 4 not recorded — send again.");
+    expect(outcome.message).toBe("1 sent · 2 failed · 3 waiting for you to send · 4 not recorded — send again.");
   });
 
   it("does not celebrate a terminal failure", () => {
@@ -96,7 +96,7 @@ describe("a send with more than one connected system", () => {
     // Not an error: most of the work went through, and the part that did not is
     // named and still waiting.
     expect(out.tone).toBe("warning");
-    expect(out.detail).toMatch(/waiting to be sent/i);
+    expect(out.detail).toMatch(/waiting for you to send/i);
   });
 
   it("says nothing was sent when the only pass that could run did not", () => {

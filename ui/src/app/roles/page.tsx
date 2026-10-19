@@ -93,6 +93,8 @@ export default function RolesPage() {
       <FilterBar
         filters={
           <FilterPanel
+            resultCount={rows.length}
+            noun={["role", "roles"]}
             activeCount={[project, group, unusedOnly ? "1" : ""].filter(Boolean).length}
             onClear={() => {
               setProject("");
@@ -145,29 +147,21 @@ export default function RolesPage() {
       />
 
       {/*
-        Required scope notice. GET /api/v1/roles returns roles Syndra created
+        Required scope note, a caption and not a box: an explanation is not a fault (A-04 §7.1a). GET /api/v1/roles returns roles Syndra created
         plus whatever the directory reports; a role made directly upstream in a
         project Syndra cannot currently read is still missing. Stating that is
         not pedantry — a silently partial list is how somebody concludes a role
         doesn't exist and creates a duplicate.
       */}
-      <div className="accent-note flex items-start gap-3 px-[18px] py-3.5">
-        <span
-          aria-hidden
-          className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill bg-accent-soft text-[12px] font-bold text-accent-text"
-        >
-          i
-        </span>
-        <div className="text-[14px] leading-[1.55] text-ink/80">
-          <strong className="font-semibold text-ink">This list may be partial.</strong> It covers
-          roles Syndra created and roles Zitadel reports. A role created straight in Zitadel, on a
-          project Syndra cannot read, is not here.{" "}
-          <ArrowLink href="/zitadel/projects">Check a project&rsquo;s roles in Zitadel</ArrowLink>
-        </div>
-      </div>
+      <p className="max-w-[92ch] text-[14px] leading-[1.55] text-muted">
+        <strong className="font-semibold text-ink">This list may be partial.</strong> It covers
+        roles Syndra created and roles Zitadel reports. A role created straight in Zitadel, on a
+        project Syndra cannot read, is not here.{" "}
+        <ArrowLink href="/zitadel/projects">Check a project&rsquo;s roles in Zitadel</ArrowLink>
+      </p>
 
       {/*
-        Holders is what Syndra decided, not what Zitadel has confirmed — the
+        People is what Syndra decided, not what Zitadel has confirmed — the
         "Confirmed" column says how much of that decision the observation
         store backs up, and this states once, for the whole page, when that
         confirmation last happened rather than repeating it on every row.
@@ -182,7 +176,7 @@ export default function RolesPage() {
           <span className="flex-1">Role</span>
           <span className="w-[130px]">Group</span>
           <span className="w-[150px]">Used by</span>
-          <span className="w-[110px] text-right">Holders</span>
+          <span className="w-[110px] text-right">People</span>
         </CardColumns>
 
         <ListStates

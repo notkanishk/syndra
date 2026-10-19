@@ -9,10 +9,11 @@ import (
 
 // The db package is tested only via migration-coherence guards (no live DB).
 //
-// DeleteBundleAndEnqueue issues a bare DELETE and relies entirely on the schema to take the
-// bundle's roles, versions and assignments with it. Postgres would refuse the DELETE outright if
-// anything still referenced the row without ON DELETE CASCADE — so this asserts the one reference
-// that deliberately does NOT cascade has had its foreign key removed instead.
+// Retiring keeps the bundle row, but a hard DELETE (migration 000065 down, reset-data) still
+// relies entirely on the schema to take the bundle's roles, versions and assignments with it.
+// Postgres would refuse the DELETE outright if anything still referenced the row without ON
+// DELETE CASCADE — so this asserts the one reference that deliberately does NOT cascade has had
+// its foreign key removed instead.
 func TestBundleDeleteHasNoBlockingReferences(t *testing.T) {
 	dir := findMigrationsDir(t)
 

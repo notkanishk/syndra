@@ -708,3 +708,186 @@ func newZitadelSourceForTest(c zitadel.ZitadelClient) *zitadelSource {
 func (fake *mockDirClient) GrantOriginByID(context.Context, string) (*zitadel.GrantOrigin, error) {
 	return nil, nil
 }
+
+// N23 / B11: a Zitadel that stops answering leaves Syndra showing what it last
+// held, marked not current, never sample data and never an empty list.
+func TestZitadelSource_ServesLastGoodReadWhileZitadelIsDown(t *testing.T) {
+	mc := newMockClient()
+	down := false
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		if down {
+			return nil, errors.New("connection refused")
+		}
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1", DisplayName: "Alice"}}}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+	readAt := time.Now()
+	now := readAt
+	src.now = func() time.Time { return now }
+
+	if _, err := src.Users(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if at, current := src.Freshness(); !current || !at.Equal(readAt) {
+		t.Fatalf("after a good read: want current at %v, got %v current=%v", readAt, at, current)
+	}
+
+	down = true
+	now = now.Add(CacheTTL + time.Second)
+	users, err := src.Users(context.Background())
+	if err != nil {
+		t.Fatalf("a down Zitadel with a last good read must serve it, got %v", err)
+	}
+	if len(users) != 1 || users[0].ID != "u1" {
+		t.Fatalf("want the last good read, got %+v", users)
+	}
+	if at, current := src.Freshness(); current || !at.Equal(readAt) {
+		t.Fatalf("while down: want not current, read at %v; got %v current=%v", readAt, at, current)
+	}
+
+	// Held for a TTL: the next page doesn't pay another slow failing call.
+	calls := mc.listUsersCalls
+	if _, err := src.Users(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if mc.listUsersCalls != calls {
+		t.Fatalf("a held last good read must not ask Zitadel again within the TTL")
+	}
+
+	down = false
+	now = now.Add(CacheTTL + time.Second)
+	if _, err := src.Users(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, current := src.Freshness(); !current {
+		t.Fatal("once Zitadel answers again the directory is current")
+	}
+}
+
+func TestZitadelSource_NeverReadIsUnreachable(t *testing.T) {
+	mc := newMockClient()
+	mc.listProjectsFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {
+		return nil, errors.New("connection refused")
+	}
+	src := newZitadelSourceForTest(mc)
+
+	projects, err := src.Projects(context.Background())
+	if !errors.Is(err, ErrUnreachable) {
+		t.Fatalf("with nothing ever read, want ErrUnreachable, got %v", err)
+	}
+	if projects != nil {
+		t.Fatalf("no rows when nothing was read, got %+v", projects)
+	}
+	if at, current := src.Freshness(); current || !at.IsZero() {
+		t.Fatalf("never read: want zero time, not current; got %v %v", at, current)
+	}
+}
+
+func TestZitadelSource_InvalidateKeepsTheLastGoodRead(t *testing.T) {
+	mc := newMockClient()
+	down := false
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		if down {
+			return nil, errors.New("timeout")
+		}
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1"}}}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+	if _, err := src.Users(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	src.InvalidateUsers()
+	down = true
+	users, err := src.Users(context.Background())
+	if err != nil || len(users) != 1 {
+		t.Fatalf("an invalidated entry still serves as the last good read; got %v %v", users, err)
+	}
+	if mc.listUsersCalls != 2 {
+		t.Fatalf("invalidation must make the next read ask Zitadel; got %d calls", mc.listUsersCalls)
+	}
+}
+
+func TestFreshnessOf_DemoIsAlwaysCurrent(t *testing.T) {
+	if at, current := FreshnessOf(NewDemoSource()); !current || !at.IsZero() {
+		t.Fatalf("demo can't go stale: got %v %v", at, current)
+	}
+}
+
+// Zitadel answering no is not Zitadel down: a refusal reaches the caller,
+// and a cancelled request says nothing about Zitadel at all.
+func TestZitadelSource_RefusalsAndCancellationsAreNotOutages(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"a 404 from Zitadel", &zitadel.StatusError{Code: 404, Message: "not found"}},
+		{"a cancelled request", context.Canceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mc := newMockClient()
+			fail := false
+			mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+				if fail {
+					return nil, tc.err
+				}
+				return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1"}}}, nil
+			}
+			src := newZitadelSourceForTest(mc)
+			if _, err := src.Users(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			src.InvalidateUsers()
+			fail = true
+			if _, err := src.Users(context.Background()); err == nil || errors.Is(err, ErrUnreachable) {
+				t.Fatalf("want the refusal itself, got %v", err)
+			}
+			if _, current := src.Freshness(); !current {
+				t.Fatal("a refusal or a cancellation must not mark Zitadel as not answering")
+			}
+		})
+	}
+}
+
+func TestZitadelSource_FindUserDoesNotProbeWhileDown(t *testing.T) {
+	mc := newMockClient()
+	down := false
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		if down {
+			return nil, errors.New("connection refused")
+		}
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1"}}}, nil
+	}
+	probed := false
+	mc.getUserFn = func(context.Context, string) (*zitadel.ZitadelUser, error) {
+		probed = true
+		return nil, errors.New("connection refused")
+	}
+	src := newZitadelSourceForTest(mc)
+	if _, err := src.Users(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	src.InvalidateUsers()
+	down = true
+
+	if _, found, err := src.FindUser(context.Background(), "u1"); err != nil || !found {
+		t.Fatalf("a user in the last good read is found: %v %v", found, err)
+	}
+	_, _, err := src.FindUser(context.Background(), "u2")
+	if !errors.Is(err, ErrUnreachable) {
+		t.Fatalf("a user outside the last good read is unreachable, not missing: %v", err)
+	}
+	if probed {
+		t.Fatal("no direct lookup while Zitadel isn't answering")
+	}
+}
+
+func TestToUserProfile_CarriesCreation(t *testing.T) {
+	at := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
+	if got := toUserProfile(zitadel.ZitadelUser{ID: "u1", Created: at}); got.Joined == nil || !got.Joined.Equal(at) {
+		t.Errorf("Joined = %v; want %v", got.Joined, at)
+	}
+	if got := toUserProfile(zitadel.ZitadelUser{ID: "u2"}); got.Joined != nil {
+		t.Errorf("no creation date must leave Joined nil, got %v", got.Joined)
+	}
+}

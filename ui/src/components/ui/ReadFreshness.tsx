@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { formatRelative } from "@/lib/format";
@@ -96,7 +96,7 @@ export function ReadFreshness({
 }: {
   state: ReadState;
   subject?: string;
-  onRefresh?: () => void;
+  onRefresh?: () => unknown;
   refreshing?: boolean;
   className?: string;
 }) {
@@ -115,8 +115,44 @@ export function ReadFreshness({
     return () => clearInterval(id);
   }, [state.readAt, state.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // S17. Only a read the reader asked for blooms. Pressing records the age on
+  // screen; the next read that differs from it is the answer to the press. A
+  // background read finds nothing recorded and lands quietly, and a press whose
+  // read never arrives is forgotten shortly after it settles, so it cannot
+  // claim the next background read.
+  const pressedAt = useRef<string | null | undefined>(undefined);
+  const [pressing, setPressing] = useState(false);
+  const [landed, setLanded] = useState<string | null>(null);
+  useEffect(() => {
+    if (pressedAt.current === undefined || (state.readAt ?? null) === pressedAt.current) return;
+    pressedAt.current = undefined;
+    setLanded(state.readAt ?? null);
+    const t = setTimeout(() => setLanded(null), 1000);
+    return () => clearTimeout(t);
+  }, [state.readAt]);
+  function press() {
+    pressedAt.current = state.readAt ?? null;
+    setPressing(true);
+    let result: unknown;
+    try {
+      result = onRefresh?.();
+    } catch {
+      // The read failed to start: the button comes back, nothing blooms.
+    }
+    Promise.resolve(result)
+      .catch(() => {})
+      .finally(() => {
+        setPressing(false);
+        setTimeout(() => {
+          pressedAt.current = undefined;
+        }, 250);
+      });
+  }
+
   const reading = freshness ?? classifyRead(state, new Date(state.readAt ?? 0).getTime());
   const age = state.readAt ? formatRelative(state.readAt) : null;
+
+  const blooming = landed !== null && landed === state.readAt && (reading === "live" || reading === "ageing");
 
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] ${className}`}>
@@ -128,15 +164,18 @@ export function ReadFreshness({
           the target could not confirm it. */}
       <span
         aria-hidden
-        className={`size-1.5 flex-none rounded-pill ${
+        data-freshness-dot
+        className={`size-1.5 flex-none rounded-pill ${blooming ? "bloom " : ""}${
           reading === "live" || reading === "ageing"
             ? "bg-healthy"
             : reading === "stale"
               ? "bg-warn"
-              : "border border-muted"
+              : "border border-warn"
         }`}
       />
-      <span className={TONE[reading]}>{sentence(reading, subject, age, Boolean(onRefresh))}</span>
+      <span key={blooming ? landed : "read"} className={`${TONE[reading]}${blooming ? " tint-in" : ""}`}>
+        {sentence(reading, subject, age, Boolean(onRefresh))}
+      </span>
       {state.truncated && (
         // Its own clause, never folded into the age. A capped read is complete
         // about what it saw and silent about the rest, and an operator who
@@ -145,8 +184,8 @@ export function ReadFreshness({
         <span className="text-faint">· not the whole list — only the first part was read</span>
       )}
       {onRefresh && reading === "stale" && (
-        <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
-          {refreshing ? "Reading…" : "Read again"}
+        <Button variant="outline" size="sm" onClick={press} isPending={refreshing || pressing}>
+          {refreshing || pressing ? "Reading" : "Read again"}
         </Button>
       )}
     </div>

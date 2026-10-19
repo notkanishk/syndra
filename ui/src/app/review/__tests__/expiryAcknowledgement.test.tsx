@@ -19,7 +19,10 @@ const state = vi.hoisted(() => ({
 // both. The value itself is held against the backend constant by
 // `lib/queries/__tests__/bulkCeiling.test.ts`, which was written because this
 // comment used to claim that check existed before it did.
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("") }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(""),
+  useRouter: () => ({ replace: vi.fn() }),
+}));
 
 vi.mock("@/lib/queries/useBulkGrants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useBulkGrants")>()),
@@ -143,7 +146,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // dialog has to deny it in words, on the screen where the button is.
   it("says acknowledging does not keep the access", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
     expect(document.body.textContent).toMatch(/still will/i);
     expect(document.body.textContent).toMatch(/records that you looked/i);
   });
@@ -152,7 +155,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // it is stated where the decision is made rather than only in a design doc.
   it("states the reopen rule in the dialog", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
     expect(document.body.textContent).toMatch(/extends it or gives it again/i);
     expect(document.body.textContent).toMatch(/comes back/i);
   });
@@ -161,7 +164,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // acknowledgement would be permanent — which is the rule we deliberately did not pick.
   it("sends the expiry the operator was shown", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
     fireEvent.change(screen.getByLabelText("Why (optional)"), {
       target: { value: "  Cohort ends  " },
     });
@@ -178,7 +181,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
 
   it("does not require a note", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
     fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
     expect(state.acknowledge.mock.calls[0][0].note).toBe("");
@@ -191,7 +194,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
       }),
     ];
     renderPage();
-    expect(document.body.textContent).toMatch(/let this lapse on/i);
+    expect(document.body.textContent).toMatch(/let this end on/i);
     expect(document.body.textContent).toMatch(/Cohort ends/);
   });
 
@@ -208,14 +211,14 @@ describe("Expiring access — acknowledgement (C4)", () => {
       }),
     ];
     renderPage();
-    expect(document.body.textContent).toMatch(/Let lapse · 1 role/);
-    expect(screen.getByRole("button", { name: "Undo letting it lapse" })).toBeTruthy();
+    expect(document.body.textContent).toMatch(/Left to end · 1 role/);
+    expect(screen.getByRole("button", { name: "Undo letting it end" })).toBeTruthy();
   });
 
   it("takes an acknowledgement back", async () => {
     state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Undo letting it lapse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo letting it end" }));
     await waitFor(() => expect(state.clear).toHaveBeenCalledWith("g1"));
   });
 
@@ -224,7 +227,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
     state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
     expect(screen.getByRole("button", { name: "Extend 90 days" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Let it lapse" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Let it end" })).toBeNull();
   });
 
   // A queue whose only rows are acknowledged ones looks identical to one nobody has touched.
@@ -257,7 +260,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
       .fn()
       .mockRejectedValue(new Error("This grant's expiry changed since you loaded the page."));
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
     fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
 
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
@@ -269,10 +272,10 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // acknowledgment again, against a grant that had not moved.
   it("cannot record the same decision twice", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
     fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Record the decision" })).toBeNull();
     expect(state.acknowledge).toHaveBeenCalledTimes(1);
   });
@@ -347,8 +350,8 @@ describe("extending a single row", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Extend 90 days" }));
 
-    await waitFor(() => expect(document.body.textContent).toMatch(/Waiting to be sent/i));
-    expect(document.body.textContent).toMatch(/Pending changes/);
+    const link = await screen.findByRole("link", { name: /Waiting for you to send/ });
+    expect(link.getAttribute("href")).toBe("/governance/pending");
     expect(document.body.textContent).not.toMatch(/Extended by 90 days/);
   });
 
