@@ -21,6 +21,9 @@ export interface MyChange {
   wait_reason?: string;
   /** "extend" for a request to keep a role longer. */
   request_kind?: "access" | "extend";
+  /** A settled keep: the end they had, and the end approving set. Omitted when null (see lib/keep-ends). */
+  ended_before?: string | null;
+  ends_after?: string | null;
 }
 
 /** The last 30 days of changes to your own access, newest first. */

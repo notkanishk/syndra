@@ -39,6 +39,7 @@ import {
 } from "@/lib/queries/useRequests";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate, humanizeKey } from "@/lib/format";
+import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import { AskForAccess } from "@/components/requests/AskForAccess";
 import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
@@ -332,7 +333,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                       entry.reviewer_id &&
                       entry.reviewer_id === entry.requester_id
                         ? "by the person who asked"
-                        : undefined
+                        : keepResult(entry)
                     }
                   />
                 )}
@@ -618,9 +619,9 @@ function YourRequests({
 
 /**
  * A request to keep a role, in its status seat (A-06 §3): what is true of the
- * end until it's decided, and after. Only what is known is said: the read of a
- * settled request carries neither the old end nor the new one, so a result
- * names the end the role has now.
+ * end until it's decided, and after. A settled request says it from the ends it
+ * recorded; one settled before they were recorded names the end the role has now,
+ * and only while that is true.
  */
 export function keepNote(request: AccessRequest, endNow: string | null): string | undefined {
   if (request.kind !== "extend") return undefined;
@@ -629,11 +630,29 @@ export function keepNote(request: AccessRequest, endNow: string | null): string 
       ? `Until it's decided, it still ends ${formatShortDate(request.current_until)}.`
       : undefined;
   }
-  if (!endNow) return undefined;
-  if (request.status === "approved") return `It now ends ${formatShortDate(endNow)}.`;
+  if (request.status === "approved") {
+    return keptEnds(request) ?? (endNow ? `It now ends ${formatShortDate(endNow)}.` : undefined);
+  }
   // A role that has ended since doesn't "still end" anywhere.
-  if (request.status === "rejected" && new Date(endNow).getTime() > Date.now()) {
-    return `It still ends ${formatShortDate(endNow)}.`;
+  if (request.status === "rejected") return stillEnds(request.ended_before ?? endNow);
+  return undefined;
+}
+
+/**
+ * The same settled keep, for the person who decided it: what approving did to
+ * the end, or that declining left it, in the words a decision seat uses
+ * ("Now ends 18 Jan, not 18 Dec."). Only what the request recorded.
+ */
+export function keepResult(request: AccessRequest): string | undefined {
+  if (request.kind !== "extend") return undefined;
+  const { ended_before: before, ends_after: after } = request;
+  if (request.status === "approved") {
+    if (after) return before ? `Now ends ${formatShortDate(after)}, not ${formatShortDate(before)}.` : `Now ends ${formatShortDate(after)}.`;
+    return before ? `Now has no end date, not ${formatShortDate(before)}.` : undefined;
+  }
+  if (request.status === "rejected") {
+    const still = stillEnds(before);
+    return still ? `Nothing was sent. ${still}` : undefined;
   }
   return undefined;
 }
