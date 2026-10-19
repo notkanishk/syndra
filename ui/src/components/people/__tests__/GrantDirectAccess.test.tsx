@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ApiError } from "@/lib/api-client";
@@ -16,6 +16,11 @@ const state = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
   grants: [] as unknown[],
   queued: [] as string[],
+  terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
+}));
+
+vi.mock("@/lib/queries/useTerms", () => ({
+  useTerms: () => ({ data: state.terms }),
 }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
@@ -69,6 +74,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
 beforeEach(() => {
   state.grants = [];
   state.queued = [];
+  state.terms = undefined;
   state.mutateAsync.mockReset();
 });
 
@@ -148,6 +154,24 @@ describe("GrantDirectAccess · choosing the role", () => {
     open();
     expect(screen.getByText("Printing Lab")).toBeInTheDocument();
     expect(screen.queryByText("p1")).not.toBeInTheDocument();
+  });
+});
+
+describe("GrantDirectAccess · End of term", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 8, 1, 12) }));
+  afterEach(() => vi.useRealTimers());
+
+  it("is the end of the term holding today, from the term setting", () => {
+    state.terms = [{ name: "Monsoon", start: "2026-08-03", end: "2026-11-27" }];
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "End of term" }));
+    expect(screen.getByText("27 Nov")).toBeInTheDocument();
+  });
+
+  it("falls back to 18 December when the setting can't be read", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "End of term" }));
+    expect(screen.getByText("18 Dec")).toBeInTheDocument();
   });
 });
 

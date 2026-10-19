@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
 import { ApiError } from "@/lib/api-client";
@@ -264,6 +264,28 @@ describe("Ask for access · only what they lack, once", () => {
     fireEvent.click(sendButton());
     expect(await screen.findByText("Not sent")).toBeInTheDocument();
     expect(sendButton()).toBeEnabled();
+  });
+});
+
+describe("Ask for access · Until the end of term", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 8, 1, 12) }));
+  afterEach(() => vi.useRealTimers());
+
+  it("ends where the term setting says", async () => {
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    fireEvent.click(sendButton());
+    await screen.findByText("Asked");
+    expect(dialog()).toHaveTextContent("until 31 Dec");
+  });
+
+  it("ends 18 December when the setting can't be read", async () => {
+    termsData.terms = undefined;
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    fireEvent.click(sendButton());
+    await screen.findByText("Asked");
+    expect(dialog()).toHaveTextContent("until 18 Dec");
   });
 });
 
