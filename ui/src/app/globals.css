@@ -779,6 +779,19 @@
   }
 }
 
+/* S14 · Daylight. For the 300ms after the reader switches theme, every colour
+   crossfades on settle's duration and tint's curve; nothing moves. The class
+   is added and removed by `fadeThemeSwitch` (lib/theme.tsx), never left on, and
+   not added at all under reduced motion. */
+html.theme-fading,
+html.theme-fading *,
+html.theme-fading *::before,
+html.theme-fading *::after {
+  transition-property: background-color, color, border-color, fill, stroke;
+  transition-duration: var(--duration-settle);
+  transition-timing-function: var(--ease-tint);
+}
+
 /* A control: colour answers the pointer on tint, and a press scales it to
    97% and nothing else (A-05 S8). Buttons, chips, nav items and segments are
    controls. Rows and cards are NOT: they never scale, and a pressed row
