@@ -967,6 +967,19 @@ html.theme-fading *::after {
   }
 }
 
+/* A row that left on a later read (S5): it has already faded, and now its gap
+   closes on settle. The grid row is what shrinks, so the height is the row's
+   own. Worn by `LeavingRow`. */
+@utility close-gap {
+  display: grid;
+  animation: fold var(--duration-settle) var(--ease-settle) var(--duration-tint) both;
+
+  > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
 /* arrive · 420ms — first paint of a screen or a list. Rows rise 8px in
    sequence, 40ms apart.
  *
