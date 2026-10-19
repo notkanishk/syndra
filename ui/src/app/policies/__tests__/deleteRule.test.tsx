@@ -7,11 +7,13 @@ import type { MappingRuleRow } from "@/lib/queries/useMappingRules";
 
 const state = vi.hoisted(() => ({
   rules: [] as MappingRuleRow[],
+  retired: [] as MappingRuleRow[],
   remove: vi.fn(),
 }));
 
 vi.mock("@/lib/queries/useMappingRules", () => ({
   useMappingRules: () => ({ data: state.rules, isLoading: false, error: null, refetch: () => {} }),
+  useRetiredMappingRules: () => ({ data: state.retired }),
   useCreateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteMappingRule: () => ({ mutateAsync: state.remove, isPending: false }),
@@ -105,9 +107,11 @@ describe("deleting an automatic rule", () => {
     expect(document.body.textContent).toMatch(/can.t be used again\. It stays in the history/);
   });
 
-  it("ends the list with a fold of retired rules, closed", () => {
+  it("ends the list with a fold of retired rules, closed, once one is retired", () => {
+    state.retired = [{ id: "old" } as MappingRuleRow];
     render(<AutomaticRulesPage />);
     expect(screen.getByRole("button", { name: /Retired rules/ })).toHaveAttribute("aria-expanded", "false");
+    state.retired = [];
   });
 
   // A queued rule's revokes queue too. Saying "applied" here would have an operator believe a
