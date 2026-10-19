@@ -139,6 +139,10 @@ export const ADVANCED_NAV: NavEntry[] = [
     // missing one — an operator clicks it before they read anything.
     leaf("Incoming events", "/operations"),
   ]),
+  // Last, and a leaf of its own: settings that belong to the whole makerspace
+  // rather than to one connected system (the term dates, today). Appended, so
+  // nothing above it moves.
+  leaf("Makerspace settings", "/settings"),
 ];
 
 /**
