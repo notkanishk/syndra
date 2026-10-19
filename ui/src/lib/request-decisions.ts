@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
+import { FLASH_MS } from "@/lib/useFlashOnChange";
 import { waitReasonLine } from "@/lib/wait-reason";
 
 /**
@@ -103,7 +104,7 @@ export interface Decided {
  * write settles and the list has not refetched yet, and a second tap in that
  * window decided the same request twice. A failure puts the row back.
  */
-export function useRequestDecisions() {
+export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean } = {}) {
   const decide = useDecideRequest();
   const resolver = useNameResolver();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
@@ -161,6 +162,38 @@ export function useRequestDecisions() {
     }
   }
 
+  /** Rows decided somewhere else (the bulk dialog) report in the same seat, and hold the same beat. */
+  function settleAll(decided: Array<[AccessRequest, Decided]>) {
+    setResolved((prev) => new Set(Array.from(prev).concat(decided.map(([entry]) => entry.id))));
+    setOutcomes((prev) => ({ ...prev, ...Object.fromEntries(decided.map(([entry, d]) => [entry.id, d])) }));
+  }
+
+  // Motion 5b's beat: a decided row keeps its place with its outcome for one
+  // flash, so the operator sees what the tap did before the list rearranges.
+  // `staying` is every row still in it, the write in flight included. It is
+  // held for the whole of that, so the read that drops the row (the refetch
+  // lands in tens of milliseconds) cannot take the outcome with it.
+  const [over, setOver] = useState<Set<string>>(new Set());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    if (pauseBeat) return;
+    for (const [id, decided] of Object.entries(outcomes)) {
+      if (!decided.word || !resolved.has(id) || timers.current.has(id)) continue;
+      timers.current.set(
+        id,
+        setTimeout(() => setOver((prev) => new Set(prev).add(id)), FLASH_MS),
+      );
+    }
+  }, [outcomes, resolved, pauseBeat]);
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      pending.forEach(clearTimeout);
+      pending.clear();
+    };
+  }, []);
+  const staying = useMemo(() => new Set(Array.from(resolved).filter((id) => !over.has(id))), [resolved, over]);
+
   /** Render once beside the rows: the step for an approval that would cancel something. */
-  return { act, resolved, outcomes, isPending: decide.isPending, cancelStep: step.element };
+  return { act, settleAll, resolved, staying, outcomes, isPending: decide.isPending, cancelStep: step.element };
 }
