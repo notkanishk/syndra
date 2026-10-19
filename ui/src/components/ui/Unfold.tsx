@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 type Phase = "opening" | "open" | "closing";
 
@@ -23,10 +23,13 @@ export function Unfold({
   open,
   children,
   className = "",
+  onClosed,
 }: {
   open: boolean;
   children: ReactNode;
   className?: string;
+  /** Called once the region is closed and gone (its gap shut), for what follows it. */
+  onClosed?: () => void;
 }) {
   const [phase, setPhase] = useState<Phase | null>(open ? "open" : null);
   // What leaves is what was there: the caller's children may already
@@ -42,6 +45,10 @@ export function Unfold({
     const still = !animates();
     setPhase(open ? (still ? "open" : "opening") : phase === null || still ? null : "closing");
   }
+
+  useEffect(() => {
+    if (phase === null && !open) onClosed?.();
+  }, [phase, open, onClosed]);
 
   if (phase === null) return null;
 
