@@ -96,6 +96,20 @@ describe("deleting an automatic rule", () => {
     expect(document.body.textContent).toMatch(/unless a bundle or a direct grant also gives it/);
   });
 
+  // Retire keeps its history (owner, 19 Oct 2026): the dialog says so, and the list ends in a
+  // fold for the rules already retired.
+  it("says the rule can't be used again and stays in the history", () => {
+    openTheRule();
+    fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
+
+    expect(document.body.textContent).toMatch(/can.t be used again\. It stays in the history/);
+  });
+
+  it("ends the list with a fold of retired rules, closed", () => {
+    render(<AutomaticRulesPage />);
+    expect(screen.getByRole("button", { name: /Retired rules/ })).toHaveAttribute("aria-expanded", "false");
+  });
+
   // A queued rule's revokes queue too. Saying "applied" here would have an operator believe a
   // door was locked while it was still open.
   it("says where the revokes go, per the rule's own mode", () => {

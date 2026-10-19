@@ -14,6 +14,10 @@ export interface MappingRuleRow {
   /** How many people hold the input role — i.e. how many this rule acts on. */
   holder_count: number;
   created_at: string;
+  /** Retired: no longer applied, kept in the history. Only the retired list carries it. */
+  retired_at?: string | null;
+  /** Who retired it (a person's id, or "system"). */
+  retired_by?: string;
 }
 
 export interface CreateMappingRuleInput {
@@ -43,6 +47,18 @@ export function useMappingRules() {
       const data = await request<unknown>("/rules/mapping");
       return Array.isArray(data) ? (data as MappingRuleRow[]) : [];
     },
+  });
+}
+
+/** The retired rules, most recent first. Read-only history. */
+export function useRetiredMappingRules(enabled = true) {
+  return useQuery({
+    queryKey: ["mapping-rules", "retired"] as const,
+    queryFn: async (): Promise<MappingRuleRow[]> => {
+      const data = await request<unknown>("/rules/mapping?retired=true");
+      return Array.isArray(data) ? (data as MappingRuleRow[]) : [];
+    },
+    enabled,
   });
 }
 

@@ -56,6 +56,12 @@ describe("the bundles list", () => {
     expect(screen.queryByText(/older version|Unpublished|Given to everyone/)).toBeNull();
   });
 
+  it("ends the list with a fold of retired bundles, closed", () => {
+    render(<BundlesPage />);
+
+    expect(screen.getByRole("button", { name: /Retired bundles/ })).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("shows the Roles and People counts", () => {
     render(<BundlesPage />);
 
