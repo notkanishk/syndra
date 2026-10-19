@@ -203,6 +203,28 @@
     }
   }
 
+  /* Closing is tint, quicker than opening (S1): a thing only fades... */
+  @keyframes fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  /* ...and a dialog's card also sinks 4px as it goes. */
+  @keyframes sink-out {
+    from {
+      opacity: 1;
+      transform: none;
+    }
+    to {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
   /* Things you opened scale from where you clicked (rising 8px from 98%), so the
      dialog grows into the place it is going to live rather than zooming out of screen centre. */
   @keyframes settle-in {
@@ -811,8 +833,23 @@ html.theme-fading *::after {
   }
 }
 
+/* The scrim tints first (S1); the card follows 40ms behind it. */
 @utility settle-scrim {
-  animation: fade var(--duration-settle) var(--ease-tint) both;
+  animation: fade var(--duration-tint) var(--ease-tint) both;
+}
+
+/* Closing (S1): the card fades and sinks 4px on tint, then the scrim follows
+   40ms behind. Worn by the copy Modal leaves behind while it goes. */
+@utility leave-panel {
+  animation: sink-out var(--duration-tint) var(--ease-tint) both;
+}
+@utility leave-scrim {
+  animation: fade-out var(--duration-tint) var(--ease-tint) var(--arrive-step) both;
+}
+
+/* Anything that fades out and nothing else: a popover, a skeleton, a row. */
+@utility tint-out {
+  animation: fade-out var(--duration-tint) var(--ease-tint) both;
 }
 
 /* The selection seat (proposed/SelectionSeat.md): how a choice is marked
