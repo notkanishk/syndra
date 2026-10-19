@@ -17,6 +17,9 @@ export function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label={`Switch to ${next} appearance`}
+      // The theme lives in this browser; the server renders its default, and the
+      // first client render corrects the label and glyph. Only these differ.
+      suppressHydrationWarning
       // A 32px ring inside a 44px box until desktop. The ring is the drawing;
       // the box is what a thumb on a tablet has to hit.
       className="flex h-11 w-11 items-center justify-center text-muted motion-tint hover:text-ink desktop:h-8 desktop:w-8"
@@ -28,10 +31,10 @@ export function ThemeToggle() {
       >
         {/* Both glyphs are always drawn; the one for now fades in on settle and
             turns a quarter as it arrives (S14). Nothing else in the page moves. */}
-        <span className={`absolute ${GLIDE} ${theme === "dark" ? "opacity-100 rotate-0" : "opacity-0 -rotate-45"}`}>
+        <span suppressHydrationWarning className={`absolute ${GLIDE} ${theme === "dark" ? "opacity-100 rotate-0" : "opacity-0 -rotate-45"}`}>
           <SunIcon />
         </span>
-        <span className={`absolute ${GLIDE} ${theme === "dark" ? "opacity-0 rotate-45" : "opacity-100 rotate-0"}`}>
+        <span suppressHydrationWarning className={`absolute ${GLIDE} ${theme === "dark" ? "opacity-0 rotate-45" : "opacity-100 rotate-0"}`}>
           <MoonIcon />
         </span>
       </span>
