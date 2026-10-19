@@ -130,6 +130,14 @@ func planApproval(r models.AccessRequest, h models.RequestHolding, now time.Time
 	return approvalPlan{Effect: effectExtend, ExpiresAt: end, EndRule: db.EndSet}, nil
 }
 
+// holdingEnd is the end a holding has, nil when it has none.
+func holdingEnd(h models.RequestHolding) *time.Time {
+	if h.Kind == models.HoldingUntil {
+		return h.Until
+	}
+	return nil
+}
+
 // endPhrase is "until 3 Nov 2026", or "with no end date".
 func endPhrase(t *time.Time) string {
 	if t == nil {

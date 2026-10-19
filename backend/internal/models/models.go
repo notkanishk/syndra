@@ -734,6 +734,11 @@ type AccessRequest struct {
 	// approving would set, so the queue shows what Approve will do.
 	CurrentUntil *time.Time `json:"current_until,omitempty"`
 	Until        *time.Time `json:"until,omitempty"`
+	// EndedBefore and EndsAfter are what a settled extension remembers: the
+	// end the person had when it was decided, and the end approval set (null
+	// for no end date on an approved one). A declined one has EndedBefore only.
+	EndedBefore *time.Time `json:"ended_before,omitempty"`
+	EndsAfter   *time.Time `json:"ends_after,omitempty"`
 }
 
 // The three things a person can already have of a role they ask for.
