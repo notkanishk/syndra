@@ -296,7 +296,7 @@ function AskForAccessOpen({
             <Button
               variant="accent"
               disabled={!value || Boolean(blockedArrival)}
-              reason={!value || blockedArrival ? "Choose a role to ask for." : undefined}
+              /* Why it's off is the footer note's sentence; said once. */
               isPending={create.isPending}
               onClick={send}
             >
