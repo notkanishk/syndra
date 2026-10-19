@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { RoleRef } from "@/components/names";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
@@ -16,6 +15,7 @@ import { FilterChip } from "@/components/ui/FilterChip";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { Select } from "@/components/ui/Select";
@@ -49,7 +49,6 @@ import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
 
 /** Explicit pagination, never infinite scroll: a queue you can reach the end of. */
-const PAGE = 50;
 
 /**
  * People — the index.
@@ -87,7 +86,8 @@ export default function PeoplePage() {
   // button useless.
   const [queryDraft, setQueryDraft] = useState(filters.q);
   const debounced = useDebounce(queryDraft, 250);
-  const [limit, setLimit] = useState(PAGE);
+  const paging = usePaging();
+  const limit = paging.limit;
   const [wholeFilter, setWholeFilter] = useState(false);
   const [bulkOp, setBulkOp] = useState<BulkOp | null>(null);
 
@@ -126,9 +126,9 @@ export default function PeoplePage() {
   // re-aim the pending action at a different set of people. Drop it, and reset
   // the page window with it.
   useEffect(() => {
-    setLimit(PAGE);
+    paging.back();
     setWholeFilter(false);
-  }, [filterKey]);
+  }, [filterKey, paging.back]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving the mode keeps the selection — an operator who taps Done to read
   // one person's row properly has not changed their mind about the other
@@ -370,14 +370,13 @@ export default function PeoplePage() {
             />
           ))}
 
-          {rows.length > visible.length && (
-            <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-              <span className="text-[13.5px] text-faint">{rows.length - visible.length} more</span>
-              <Button onClick={() => setLimit((current) => current + PAGE)}>
-                Load next {Math.min(PAGE, rows.length - visible.length)}
-              </Button>
-            </div>
-          )}
+          <PaginationRow
+            shown={visible.length}
+            total={rows.length}
+            onMore={paging.more}
+            onAll={() => paging.all(rows.length)}
+            onBack={paging.back}
+          />
         </ListStates>
         </div>
       </Card>

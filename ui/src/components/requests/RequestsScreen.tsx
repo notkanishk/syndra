@@ -21,6 +21,7 @@ import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection } from "@/lib/useRowSelection";
 import { FilterPills } from "@/components/ui/Select";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
@@ -120,9 +121,6 @@ export function StatusSeat({ tone, word, note }: { tone: StatusTone; word: strin
   );
 }
 
-/** Explicit pagination. The queue must have a visible end. */
-const PAGE = 25;
-
 export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; userId: string }) {
   return isOperator ? <OperatorQueue userId={userId} /> : <MemberRequests userId={userId} />;
 }
@@ -163,8 +161,8 @@ function OperatorQueue({ userId }: { userId?: string }) {
   // every open row above, so "select all" keeps meaning the whole pending
   // queue rather than quietly meaning the page — which would change what the
   // bar's ceiling message is counting without saying so.
-  const [limit, setLimit] = useState(PAGE);
-  const visible = useMemo(() => rows.slice(0, limit), [rows, limit]);
+  const paging = usePaging();
+  const visible = useMemo(() => rows.slice(0, paging.limit), [rows, paging.limit]);
   const selection = useRowSelection(useMemo(() => openRows.map((entry) => entry.id), [openRows]));
   // Deciding one request at a time is what this queue is for; the bulk verbs
   // are the exception, so they arrive behind a named control rather than a
@@ -350,16 +348,13 @@ function OperatorQueue({ userId }: { userId?: string }) {
             </div>
           ))}
 
-          {rows.length > visible.length && (
-            <div className="row-divider flex items-center gap-4 px-5 py-3.5">
-              <span className="text-[13.5px] text-faint">
-                {rows.length - visible.length} more
-              </span>
-              <Button onClick={() => setLimit((current) => current + PAGE)}>
-                Load next {Math.min(PAGE, rows.length - visible.length)}
-              </Button>
-            </div>
-          )}
+          <PaginationRow
+            shown={visible.length}
+            total={rows.length}
+            onMore={paging.more}
+            onAll={() => paging.all(rows.length)}
+            onBack={paging.back}
+          />
         </ListStates>
         </div>
       </Card>
