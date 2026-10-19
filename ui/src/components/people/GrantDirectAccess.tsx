@@ -15,6 +15,7 @@ import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 /**
@@ -45,6 +46,7 @@ function GrantDirectAccessOpen({
   const projects = useProjects();
   const roles = useGlobalRoleCatalog();
   const grant = useCreateGrant(userId);
+  const terms = useTerms();
 
   const [value, setValue] = useState<string | null>(null);
   const [projectId, roleKey] = value ? splitRoleId(value) : ["", ""];
@@ -54,7 +56,7 @@ function GrantDirectAccessOpen({
   const [result, setResult] = useState<{ word: string; outcome: Outcome } | null>(null);
 
   const selectedRole = (roles.data ?? []).find((role) => role.project_id === projectId && role.role_key === roleKey);
-  const resolved = resolveExpiry(preset, customDate);
+  const resolved = resolveExpiry(preset, customDate, terms.data);
 
   // What the person holds already, so giving it again is said before the click,
   // in the row's note seat. A direct grant's own end wins; otherwise what
@@ -90,7 +92,7 @@ function GrantDirectAccessOpen({
   const roleName = selectedRole?.display_name || humanizeKey(roleKey);
 
   const ready = Boolean(value) && (preset !== "date" || Boolean(customDate));
-  // Given, or waiting to be sent: the sheet is its result and nothing sends twice.
+  // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
   const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued";
 
   return (
@@ -283,10 +285,10 @@ function GrantDirectAccessOpen({
 
 /**
  * Presets resolve to a concrete date so the panel can show it with its
- * distance. "End of term" is 18 December or 18 May, whichever comes next —
- * the makerspace's own calendar, not a generic 90 days.
+ * distance. "End of term" is the end of the term holding today (or the next to
+ * start), from the term setting; 18 May / 18 December only when it can't be read.
  */
-function resolveExpiry(preset: Preset, custom: string): { date: string | null; days: number } {
+function resolveExpiry(preset: Preset, custom: string, terms?: Term[]): { date: string | null; days: number } {
   const now = new Date();
   if (preset === "never") return { date: null, days: 0 };
   if (preset === "30") {
@@ -298,8 +300,8 @@ function resolveExpiry(preset: Preset, custom: string): { date: string | null; d
     const days = daysUntil(custom) ?? 0;
     return { date: new Date(custom).toISOString(), days: Math.max(1, days) };
   }
-  const endOfTerm = nextTermEnd(now);
-  return { date: endOfTerm.toISOString(), days: daysUntilTermEnd(now) };
+  const endOfTerm = nextTermEnd(now, terms);
+  return { date: endOfTerm.toISOString(), days: daysUntilTermEnd(now, terms) };
 }
 
 export const GrantDirectAccess = mountedWhileOpen(GrantDirectAccessOpen);

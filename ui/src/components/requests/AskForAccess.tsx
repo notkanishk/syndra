@@ -97,7 +97,7 @@ function AskForAccessOpen({
   const extend = chosen.kind === "until";
   const current = chosen.kind === "until" ? chosen.until : null;
 
-  const ordinaryDays = howLong === "term" ? daysUntilTermEnd() : Number(howLong);
+  const ordinaryDays = howLong === "term" ? daysUntilTermEnd(new Date(), terms.data) : Number(howLong);
   const ordinaryUntil = new Date(Date.now() + ordinaryDays * 86_400_000).toISOString();
 
   const keep = useMemo(

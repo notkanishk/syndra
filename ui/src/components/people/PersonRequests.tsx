@@ -12,6 +12,7 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
 import { describeAsk } from "@/components/requests/Holding";
 import { useRequestDecisions, type Decided } from "@/lib/request-decisions";
+import { useTerms } from "@/lib/queries/useTerms";
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 
 /**
@@ -116,13 +117,14 @@ function RequestRow({
   outcome: Decided | null;
 }) {
   const open = entry.status === "pending" && !optimisticallyResolved;
+  const terms = useTerms();
 
   return (
     <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
       <span className="w-full text-[14.5px] tablet:w-[250px] tablet:shrink-0 tablet:truncate">
         <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
         <span className="block text-[12.5px] text-faint">
-          {describeAsk(entry)}
+          {describeAsk(entry, terms.data)}
         </span>
       </span>
       <span className="w-full text-[14px] text-muted tablet:min-w-[200px] tablet:flex-1 tablet:truncate">

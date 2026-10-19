@@ -15,6 +15,26 @@ describe("nextTermEnd", () => {
     expect(nextTermEnd(new Date(2026, 11, 20))).toEqual(new Date(2027, 4, 18));
   });
 
+  const setting = [
+    { name: "Spring", start: "2026-01-05", end: "2026-04-30" },
+    { name: "Monsoon", start: "2026-08-03", end: "2026-11-27" },
+  ];
+
+  it("reads the end of the term holding today from the setting", () => {
+    expect(nextTermEnd(new Date(2026, 8, 1), setting)).toEqual(new Date(2026, 10, 27));
+    expect(daysUntilTermEnd(new Date(2026, 10, 26, 12), setting)).toBe(1);
+  });
+
+  it("reads the next term's end when today falls between two", () => {
+    expect(nextTermEnd(new Date(2026, 6, 1), setting)).toEqual(new Date(2026, 10, 27));
+  });
+
+  it("falls back to the usual dates when the setting is unread, empty or all past", () => {
+    expect(nextTermEnd(new Date(2026, 7, 2))).toEqual(new Date(2026, 11, 18));
+    expect(nextTermEnd(new Date(2026, 7, 2), [])).toEqual(new Date(2026, 11, 18));
+    expect(nextTermEnd(new Date(2026, 11, 2), setting)).toEqual(new Date(2026, 11, 18));
+  });
+
   it("never resolves to zero days, even on the boundary itself", () => {
     expect(daysUntilTermEnd(new Date(2026, 4, 18, 12))).toBeGreaterThanOrEqual(1);
   });
