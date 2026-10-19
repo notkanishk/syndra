@@ -2,7 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api-client";
 import { ArriveList } from "@/components/ui/ArriveList";
@@ -11,6 +11,7 @@ import { Notice } from "@/components/ui/Notice";
 // reports a mutation. A read that fails and a write that fails were describing
 // the same 403 in two files until this import existed.
 import { NOTHING_CHANGED, describeFailure, sentence } from "@/lib/outcome";
+import { TINT_MS, stillMotion } from "@/lib/motion";
 import { useUiView } from "@/lib/ui-view";
 
 /**
@@ -65,12 +66,22 @@ export const SKELETON_DELAY_MS = 200;
  * is the one gate every list passes through, so the rule lives here and no
  * screen can opt out of it.
  */
-export function SkeletonAfterDelay({ children }: { children: React.ReactNode }) {
+export function SkeletonAfterDelay({
+  children,
+  onShown,
+}: {
+  children: React.ReactNode;
+  /** Called once the skeleton is actually on screen, so a hand-over knows there is one to fade. */
+  onShown?: () => void;
+}) {
   const [late, setLate] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setLate(true), SKELETON_DELAY_MS);
     return () => clearTimeout(timer);
   }, []);
+  useEffect(() => {
+    if (late) onShown?.();
+  }, [late, onShown]);
   return late ? <>{children}</> : null;
 }
 
@@ -231,7 +242,31 @@ export function ListStates({
   skeleton?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  if (isLoading) return <SkeletonAfterDelay>{skeleton ?? <RowSkeleton />}</SkeletonAfterDelay>;
+  // S7: when the read lands, a skeleton that was on screen fades first (tint),
+  // and only then do the rows arrive. They never crossfade. A read that landed
+  // inside the delay never showed one, so there is nothing to fade.
+  const [shown, setShown] = useState(false);
+  const [fading, setFading] = useState(false);
+  const markShown = useCallback(() => setShown(true), []);
+  const [wasLoading, setWasLoading] = useState(isLoading);
+  if (wasLoading !== isLoading) {
+    setWasLoading(isLoading);
+    if (isLoading) setShown(false);
+    else if (shown && !stillMotion()) setFading(true);
+  }
+  useEffect(() => {
+    if (!fading) return;
+    const timer = setTimeout(() => {
+      setFading(false);
+      setShown(false);
+    }, TINT_MS);
+    return () => clearTimeout(timer);
+  }, [fading]);
+
+  if (isLoading) {
+    return <SkeletonAfterDelay onShown={markShown}>{skeleton ?? <RowSkeleton />}</SkeletonAfterDelay>;
+  }
+  if (fading) return <div className="tint-out pointer-events-none">{skeleton ?? <RowSkeleton />}</div>;
   // Never read (N23): no skeleton, no empty state, no rows.
   if (isNeverRead(error)) return <NeverRead />;
   if (error) return <ErrorState title={errorTitle} error={error} onRetry={onRetry} bare />;
