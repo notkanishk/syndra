@@ -30,9 +30,9 @@ describe("the rail becomes destinations without gaining or losing one", () => {
     expect(access.children?.map((c) => c.label)).toEqual(["Projects", "Roles", "Apps"]);
   });
 
-  it("sends Advanced to the sheet, because ten destinations are not four", () => {
+  it("sends Advanced to the sheet, because eleven destinations are not four", () => {
     const destinations = touchDestinations(ADVANCED_NAV);
-    expect(destinations).toHaveLength(10);
+    expect(destinations).toHaveLength(11);
     expect(navShape(destinations)).toBe("sheet");
   });
 

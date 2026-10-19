@@ -5,6 +5,7 @@ import { useMemo, type ReactNode } from "react";
 import { buildModel } from "@/components/insights/model";
 import type { InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { ListStates, RowSkeleton } from "@/components/states";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Select";
 import { useInsightsTrends, useInsightsUsage, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
@@ -84,6 +85,8 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
           onChange={(p) => url.set({ period: p === "term" ? null : p })}
         />
         <span className="text-[13px] text-faint">{t?.window.label ?? ""}</span>
+        {/* The term's dates are one setting with one write place. */}
+        {url.period === "term" && t && <ArrowLink href="/settings">Set in Makerspace settings</ArrowLink>}
       </div>
 
       <ListStates
