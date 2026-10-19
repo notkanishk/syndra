@@ -205,7 +205,7 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 				RoleKeys: []string{request.RoleKey}, OpType: "add", Source: "direct"})
 			if err != nil {
 				out.Effect = services.EffectBlocked
-				out.Detail = "Syndra couldn't read what's waiting to be sent for them, so it won't approve this blind. Try again."
+				out.Detail = "Syndra couldn't read the changes waiting for you to send for them, so it won't approve this blind. Try again."
 				plan.Outcomes = append(plan.Outcomes, out)
 				continue
 			}

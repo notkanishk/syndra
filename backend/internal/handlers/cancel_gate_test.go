@@ -41,6 +41,9 @@ func TestACancellationNobodyWasShownIsRefusedWithTheList(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("one JSON body, the refusal's: %v (%s)", err, rr.Body.String())
 	}
+	if body.Message != "This would cancel 1 change that is waiting for you to send. Nothing was changed." {
+		t.Fatalf("the operator is the one who sends it: %q", body.Message)
+	}
 	if body.Error != "WOULD_CANCEL_QUEUED" || len(body.Cancels) != 1 || body.Cancels[0].ID != queuedID {
 		t.Fatalf("the refusal lists what it would cancel, got %+v", body)
 	}

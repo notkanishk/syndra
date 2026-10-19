@@ -10,7 +10,7 @@ import (
 // (B10, GET /me/changes). Raw facts only; the handler decides what a member
 // is shown (who decided, which bundle or rule, whether it waits).
 type MyChangeRow struct {
-	// Kind: request_approved | request_declined | request_withdrawn | given | taken_away.
+	// Kind: request_approved | request_declined | request_withdrawn | given | taken_away | cancelled_removal.
 	Kind      string
 	At        time.Time
 	ProjectID string
@@ -45,6 +45,9 @@ type MyChangeRow struct {
 // names the project and role. A row cancelled before it was sent (superseded,
 // abandoned) never reached the person and is not a change to their access.
 // The row an approval queued is the approval itself, so it is not repeated.
+//
+// A cancelled removal is the one cancelled send the member hears about: it
+// means they keep a role they were going to lose.
 const myChangesSQL = `
 SELECT kind, changed_at, project_id, role_key, actor, note, source, source_ref, ends_at, pending, wait_reason, request_kind, ended_before, ends_after
 FROM (
@@ -100,7 +103,9 @@ FROM (
 	       g.expires_at,
 	       false,
 	       '',
-	       ''
+	       '',
+	       NULL::timestamptz,
+	       NULL::timestamptz
 	  FROM propagation_outbox o
 	 CROSS JOIN LATERAL unnest(o.role_keys) AS rk(role_key)
 	  LEFT JOIN direct_role_grants g
@@ -116,6 +121,29 @@ FROM (
 	   AND o.status NOT IN ('superseded', 'abandoned')
 	   AND o.created_at >= NOW() - make_interval(days => $2::int)
 	   AND NOT EXISTS (SELECT 1 FROM access_requests ar WHERE ar.id::text = o.source_ref)
+
+	UNION ALL
+
+	-- A removal that was queued and never sent, cancelled because the role was
+	-- given back: they keep it. The audit entry (migration 000064) is the only
+	-- record left once the outbox row is pruned. Nothing of who queued it or
+	-- why is read: that is the operator's.
+	SELECT 'cancelled_removal',
+	       a.created_at,
+	       COALESCE(a.details->'cancelled'->>'project_id', ''),
+	       COALESCE(a.details->'cancelled'->>'role_key', ''),
+	       '', '', '', '',
+	       NULL::timestamptz,
+	       false,
+	       '',
+	       '',
+	       NULL::timestamptz,
+	       NULL::timestamptz
+	  FROM audit_logs a
+	 WHERE a.target_zitadel_user_id = $1
+	   AND a.action = 'propagation.cancelled_unsent'
+	   AND a.details->'cancelled'->>'kind' = 'remove'
+	   AND a.created_at >= NOW() - make_interval(days => $2::int)
 ) changes
 ORDER BY changed_at DESC
 LIMIT 200` // ponytail: a fixed cap on one person's month; page it if anyone outgrows it

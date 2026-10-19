@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -103,10 +105,14 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 	if actor == "" {
 		actor = "system"
 	}
-	for _, id := range cancelled {
+	for _, c := range answered {
+		details, err := CancelledUnsentDetails(c, p)
+		if err != nil {
+			return false, err
+		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id)
-			VALUES ($1, $2, $3, $4)`, actor, p.UserID, cancelledUnsentAudit, id); err != nil {
+			INSERT INTO audit_logs (actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, details)
+			VALUES ($1, $2, $3, $4, $5)`, actor, p.UserID, cancelledUnsentAudit, c.ID, details); err != nil {
 			return false, fmt.Errorf("audit a cancelled queued change: %w", err)
 		}
 	}
@@ -136,6 +142,65 @@ func withdrawUndelivered(ctx context.Context, tx pgx.Tx, target string, p Enqueu
 
 // cancelledUnsentAudit is the Change history action for each cancellation.
 const cancelledUnsentAudit = "propagation.cancelled_unsent"
+
+// CancelledUnsent is audit_logs.details for a cancelled_unsent entry: what was
+// cancelled and what cancelled it, kept whole because the outbox row is
+// pruned and the person's name, the project and the role are all the history
+// has left. Change history reads this to say it (design A-04 §14.8).
+type CancelledUnsent struct {
+	Cancelled CancelledChange `json:"cancelled"`
+	Cause     CancelCause     `json:"cause"`
+}
+
+// CancelledChange is the row that never went: Kind is "give" or "remove".
+type CancelledChange struct {
+	Kind        string    `json:"kind"`
+	ProjectID   string    `json:"project_id"`
+	RoleKey     string    `json:"role_key"`
+	UserID      string    `json:"user_id"`
+	InitiatedBy string    `json:"initiated_by,omitempty"`
+	QueuedAt    time.Time `json:"queued_at"`
+	Reason      string    `json:"reason,omitempty"`
+}
+
+// CancelCause is the act that cancelled it. Action is "grant", "remove" or
+// "approve" (a request approved); Via is where that act came from: direct,
+// bundle or rule. Who did it is the entry's actor, and "system" when nobody did.
+type CancelCause struct {
+	Action string `json:"action"`
+	Via    string `json:"via"`
+}
+
+// CancelledUnsentDetails is the details JSON for one cancellation by p.
+func CancelledUnsentDetails(c models.QueuedChange, p EnqueueParams) ([]byte, error) {
+	kind, role := "give", ""
+	if c.OpType == "revoke" {
+		kind = "remove"
+	}
+	if len(c.RoleKeys) > 0 {
+		role = c.RoleKeys[0]
+	}
+	via := p.Source
+	if via == "" {
+		via = "direct"
+	}
+	action := "grant"
+	switch {
+	case p.OpType == "revoke":
+		action = "remove"
+	case via == "direct" && p.SourceRef != "":
+		action = "approve"
+	}
+	b, err := json.Marshal(CancelledUnsent{
+		Cancelled: CancelledChange{Kind: kind, ProjectID: c.ProjectID, RoleKey: role, UserID: c.UserID,
+			InitiatedBy: c.InitiatedBy, QueuedAt: c.QueuedAt.UTC(), Reason: c.Reason},
+		Cause: CancelCause{Action: action, Via: via},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("audit a cancelled queued change: %w", err)
+	}
+	return b, nil
+}
 
 const givenBackReason = "cancelled before it was sent: the role was given back"
 

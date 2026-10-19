@@ -546,7 +546,7 @@ func TestABulkRowNamesWhatItWouldCancel(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := outcomeFor(t, plan, "u1").Consequence
-	if !strings.Contains(got, "Cancels a change waiting to be sent: the removal of trained queued 15 Oct 2026 (left the course).") {
+	if !strings.Contains(got, "Cancels a change waiting for you to send: the removal of trained queued 15 Oct 2026 (left the course).") {
 		t.Fatalf("the row names the queued removal it cancels, got %q", got)
 	}
 	if c := outcomeFor(t, plan, "u2").Consequence; strings.Contains(c, "Cancels") {

@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Project represents a downstream application in Zitadel
 type Project struct {
@@ -151,6 +154,9 @@ type AuditLog struct {
 	// events that cascaded to nobody and for every row written before migration 000023 — the
 	// console renders those without a lineage link rather than guessing one.
 	CascadeID string `json:"cascade_id,omitempty"`
+	// Details is structured detail an entry carries when it has any (migration
+	// 000064); today a propagation.cancelled_unsent's what-and-why. Operator-only.
+	Details json.RawMessage `json:"details,omitempty"`
 }
 
 type UserProfile struct {

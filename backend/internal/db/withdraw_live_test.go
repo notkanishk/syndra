@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -347,5 +348,69 @@ func TestAnUnshownCancellationIsRefusedAndNothingMoves(t *testing.T) {
 	}
 	if status, _ := statusOf(t, ctx, revoke); status != "superseded" {
 		t.Fatalf("cancelled once acknowledged, got %s", status)
+	}
+}
+
+// A cancellation's Change history entry keeps what was cancelled and what
+// cancelled it, and the person whose removal was cancelled hears of it (and
+// nobody hears of a cancelled grant) without who queued it or why.
+func TestACancellationKeepsWhatItCancelledAndTheMemberHearsOfIt(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	dropOutboxAfter(t, ctx, user)
+	seedOutbox(t, ctx, "add", "applied", user, "p1", "direct", "", []string{"community"})
+	revoke := seedOutbox(t, ctx, "revoke", "pending", user, "p1", "direct", "old-grant", []string{"community"})
+	if _, err := PG.Exec(ctx, `UPDATE propagation_outbox SET reason = 'left the course' WHERE id = $1`, revoke); err != nil {
+		t.Fatal(err)
+	}
+	give := EnqueueParams{UserID: user, ProjectID: "p1", RoleKeys: []string{"community"}, OpType: "add", Source: "direct", GrantedBy: "op2"}
+	if owed := runWithdraw(t, ctx, give); owed {
+		t.Fatal("the grant still stands, so giving it back owes no add")
+	}
+
+	var actor string
+	var raw []byte
+	if err := PG.QueryRow(ctx, `SELECT actor_zitadel_user_id, details FROM audit_logs WHERE resource_id = $1 AND action = 'propagation.cancelled_unsent'`, revoke).Scan(&actor, &raw); err != nil {
+		t.Fatalf("the cancellation is audited with details: %v", err)
+	}
+	var got CancelledUnsent
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if actor != "op2" || got.Cancelled.Kind != "remove" || got.Cancelled.ProjectID != "p1" || got.Cancelled.RoleKey != "community" ||
+		got.Cancelled.UserID != user || got.Cancelled.InitiatedBy != "tester" || got.Cancelled.Reason != "left the course" ||
+		got.Cancelled.QueuedAt.IsZero() || got.Cause.Action != "grant" || got.Cause.Via != "direct" {
+		t.Fatalf("actor %q, details %s", actor, raw)
+	}
+
+	feed, err := ListMyChanges(ctx, user, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kept []MyChangeRow
+	for _, c := range feed {
+		if c.Kind == "cancelled_removal" {
+			kept = append(kept, c)
+		}
+	}
+	if len(kept) != 1 || kept[0].ProjectID != "p1" || kept[0].RoleKey != "community" || kept[0].Actor != "" || kept[0].Note != "" {
+		t.Fatalf("they hear they keep the role, naming no one: %+v", kept)
+	}
+
+	// A grant that was removed before it went is not news to the person it never reached.
+	other := freshSubject(t, ctx)
+	dropOutboxAfter(t, ctx, other)
+	seedOutbox(t, ctx, "add", "pending", other, "p1", "direct", "", []string{"community"})
+	rm := revokeParams(other, "p1", "community", "direct", "grant-9")
+	rm.GrantedBy = "op"
+	runWithdraw(t, ctx, rm)
+	feed, err = ListMyChanges(ctx, other, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range feed {
+		if c.Kind == "cancelled_removal" {
+			t.Fatalf("a cancelled grant is not a kept role: %+v", c)
+		}
 	}
 }

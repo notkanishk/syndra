@@ -183,7 +183,7 @@ func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) 
 		return "", nil
 	}
 
-	// The same add already waiting to be sent delivers this one too. Extending
+	// The same add already waiting for you to send delivers this one too. Extending
 	// a grant before its first send queued a second, identical add: two rows
 	// in Pending changes for one role. The ledger carries the new end; the
 	// queued row is what sends it, so its id is the answer.

@@ -159,10 +159,12 @@ func GetAuditLogsForUser(
 	var logs []models.AuditLog
 	for rows.Next() {
 		var l models.AuditLog
+		var details []byte
 		if err := rows.Scan(&l.ID, &l.ActorID, &l.TargetID, &l.Action, &l.ResourceID, &l.CreatedAt,
-			&l.CascadeID); err != nil {
+			&l.CascadeID, &details); err != nil {
 			return nil, err
 		}
+		l.Details = details
 		logs = append(logs, l)
 	}
 	return logs, nil
@@ -175,7 +177,7 @@ func GetAuditLogsForUser(
 // returns the wrong page.
 func buildAuditQuery(userID string, limit int, after *AuditCursor) (string, []any) {
 	const columns = `SELECT id, actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, created_at,
-	                        COALESCE(cascade_id::text,'')
+	                        COALESCE(cascade_id::text,''), details
 	                 FROM audit_logs`
 
 	var where []string
