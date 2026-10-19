@@ -384,7 +384,7 @@ describe("The queue · a request to keep a role longer", () => {
   it("reads as an extension, and can be approved while they hold it until a date", () => {
     mine.data = extendRow({ kind: "until", until: "2026-11-03T12:00:00Z" });
     renderAs(true);
-    expect(screen.getByText("Asks to keep it longer · for 30 more days")).toBeInTheDocument();
+    expect(screen.getByText("Another month")).toBeInTheDocument();
     expect(screen.getByText("Has it until 3 Nov.")).toBeInTheDocument();
     expect(screen.queryByText(/Already has this/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Approve/ })).toBeEnabled();

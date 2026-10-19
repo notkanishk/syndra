@@ -4,7 +4,7 @@ import { ResolvedProjectName } from "@/components/names";
 import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { RecentChanges, askHref } from "@/components/member/RecentChanges";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
-import { ArrowLink } from "@/components/ui/ArrowLink";
+import { ButtonLink } from "@/components/ui/Button";
 import { StatusDot } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import {
@@ -139,7 +139,12 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       {/* Leads when there's news; gives up its seat on a quiet month. Not
           drawn until the read lands, so nothing unread is shown. */}
       {feed.length > 0 && (
-        <RecentChanges items={feed} roleName={roleName} triggerRole={triggerRole} />
+        <RecentChanges
+          items={feed}
+          roleName={roleName}
+          triggerRole={triggerRole}
+          endOf={(projectId, roleKey) => expiryFor(grants.data, projectId, roleKey)}
+        />
       )}
 
       {inForce.length > 0 && (
@@ -296,7 +301,12 @@ function RoleRow({
           )}
         </span>
       </span>
-      {ends && <ArrowLink href={askHref(projectId, roleKey, true)}>Ask to keep it longer</ArrowLink>}
+      {/* It opens a dialog, so it is a button with no arrow (A-04 §7.5). */}
+      {ends && (
+        <ButtonLink variant="outline" size="sm" href={askHref(projectId, roleKey, true)}>
+          Ask to keep it
+        </ButtonLink>
+      )}
     </div>
   );
 }

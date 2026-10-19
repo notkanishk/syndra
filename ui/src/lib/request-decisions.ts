@@ -57,6 +57,35 @@ export const DECLINED: ActionOutcome = {
   detail: "Nothing was sent",
 };
 
+/**
+ * Approving a request to keep a role, once the end has moved: the end it has now
+ * and the one it had. Nothing is sent to Zitadel for an end date, so there is no
+ * verdict line to give.
+ */
+export function extendedOutcome(
+  entry: Pick<AccessRequest, "current_until" | "until">,
+  result?: Pick<DecisionResult, "until">,
+): ActionOutcome {
+  const now = result?.until ?? entry.until;
+  const text = !now
+    ? "Extended"
+    : entry.current_until
+      ? `Now ends ${formatShortDate(now)}, not ${formatShortDate(entry.current_until)}`
+      : `Now ends ${formatShortDate(now)}`;
+  return { kind: "applied", message: text, detail: `${text}.` };
+}
+
+/** Declining a request to keep a role: nothing was sent, and the end hasn't moved. */
+export function declinedKeepOutcome(entry: Pick<AccessRequest, "current_until">): ActionOutcome {
+  return {
+    kind: "no_change",
+    message: "Declined",
+    detail: entry.current_until
+      ? `Nothing was sent · it still ends ${formatShortDate(entry.current_until)}.`
+      : "Nothing was sent",
+  };
+}
+
 /** What a decided row reports in its seat: the word, and what happened. */
 export interface Decided {
   /** Absent for a failure: the seat then says Failed or Refused. */
@@ -83,19 +112,24 @@ export function useRequestDecisions() {
     setResolved((prev) => new Set(prev).add(entry.id));
     try {
       const result = await decide.mutateAsync({ id: entry.id, status: next });
-      const decided: Decided =
-        next === "approved"
-          ? {
-              word: "Approved",
-              outcome: approvalOutcome(
-                result?.wait_reason,
-                resolver.resolveUser(entry.requester_id).value?.display_name || "They",
-                resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
-                  humanizeKey(entry.role_key),
-                result,
-              ),
-            }
-          : { word: "Declined", outcome: DECLINED };
+      const keeping = entry.kind === "extend";
+      let decided: Decided;
+      if (next === "rejected") {
+        decided = { word: "Declined", outcome: keeping ? declinedKeepOutcome(entry) : DECLINED };
+      } else if (keeping && !result?.wait_reason) {
+        decided = { word: "Extended", outcome: extendedOutcome(entry, result) };
+      } else {
+        decided = {
+          word: "Approved",
+          outcome: approvalOutcome(
+            result?.wait_reason,
+            resolver.resolveUser(entry.requester_id).value?.display_name || "They",
+            resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
+              humanizeKey(entry.role_key),
+            result,
+          ),
+        };
+      }
       setOutcomes((prev) => ({ ...prev, [entry.id]: decided }));
     } catch (error) {
       setResolved((prev) => {

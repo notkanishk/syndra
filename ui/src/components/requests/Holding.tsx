@@ -6,6 +6,8 @@ import type { AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { nothingSentYet } from "@/components/access/AccessSource";
 import { useMyChanges } from "@/lib/queries/useMyChanges";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
+import type { Term } from "@/lib/queries/useTerms";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 
 /**
@@ -27,24 +29,48 @@ export function alreadyHeld(request: AccessRequest): boolean {
   return Boolean(kind && kind !== "none");
 }
 
-/**
- * The ask's duration line, for the person deciding: how long, and the date
- * approving it now would end it; or, for a request to keep a role, that it is.
- * A member reads `describeAskForMember`: the length only.
- */
-export function describeAsk(request: AccessRequest): string {
-  const days = request.duration_days ?? 0;
-  if (request.kind !== "extend") return askLengthForOperator(days);
-  return `Asks to keep it longer · ${
-    days < 1 ? "with no end date" : `for ${days} more ${days === 1 ? "day" : "days"}`
-  }`;
+/** The same calendar day, in local time: a term's last day against an end counted in days. */
+function sameDay(ymd: string, iso: string): boolean {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const end = new Date(iso);
+  return end.getFullYear() === y && end.getMonth() === m - 1 && end.getDate() === d;
 }
 
-/** The same line for the person who asked: no date, because approving starts it then. */
-export function describeAskForMember(request: AccessRequest): string {
+/**
+ * How much longer a request to keep a role asks for, in the words it was chosen
+ * in: "Another month", "To the end of next term" (the new end is a term's last
+ * day), else "N days".
+ */
+export function keepLength(request: AccessRequest, terms?: Term[]): string {
+  const days = request.duration_days ?? 0;
+  if (days < 1) return "With no end date";
+  if (request.until && terms?.some((t) => sameDay(t.end, request.until!))) return "To the end of next term";
+  if (days >= 28 && days <= 31) return "Another month";
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/**
+ * The ask's duration line, for the person deciding: how long, and the date
+ * approving it now would end it; or, for a request to keep a role, how much
+ * longer and where that lands. A member reads `describeAskForMember`.
+ */
+export function describeAsk(request: AccessRequest, terms?: Term[]): string {
+  const days = request.duration_days ?? 0;
+  if (request.kind !== "extend") return askLengthForOperator(days);
+  const length = keepLength(request, terms);
+  if (!request.until || !request.current_until) return length;
+  return `${length} · to ${formatShortDate(request.until)} instead of ${formatShortDate(request.current_until)}`;
+}
+
+/**
+ * The same line for the person who asked: no date for a new ask, because
+ * approving starts it then. A request to keep counts from the current end, so
+ * its dates are known and read the same.
+ */
+export function describeAskForMember(request: AccessRequest, terms?: Term[]): string {
   const days = request.duration_days ?? 0;
   if (request.kind !== "extend") return askLengthForMember(days);
-  return describeAsk(request);
+  return describeAsk(request, terms);
 }
 
 /**
@@ -54,11 +80,16 @@ export function describeAskForMember(request: AccessRequest): string {
  */
 export function HoldingNote({ request }: { request: AccessRequest }) {
   const holding = request.holding;
+  const resolver = useNameResolver();
   if (request.kind === "extend" && holding && holding.kind !== "for_good") {
+    // Never a guessed pronoun: the first name, or nothing that needs one.
+    const first = resolver.resolveUser(request.requester_id).value?.display_name?.trim().split(/\s+/)[0];
     return (
       <span className="w-full text-[13px] text-muted">
         {holding.kind === "until"
-          ? `Has it until ${formatShortDate(holding.until)}.`
+          ? request.until
+            ? `Approving moves ${first ? `${first}'s` : "their"} end date to ${formatShortDate(request.until)}. Nothing else changes.`
+            : `Has it until ${formatShortDate(holding.until)}.`
           : "It ended while this waited. Approving gives it back for the time asked."}
       </span>
     );
