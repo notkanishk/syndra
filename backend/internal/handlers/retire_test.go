@@ -53,7 +53,7 @@ func TestWithLiveBundle_RefusesAWriteToARetiredBundle(t *testing.T) {
 	if body["error"] != "RETIRED" {
 		t.Fatalf("error = %v, want RETIRED", body["error"])
 	}
-	if want := "This bundle was retired on 19 October 2026. Nothing about it can change."; body["message"] != want {
+	if want := "This bundle was retired on 19 Oct 2026. Nothing about it can change."; body["message"] != want {
 		t.Fatalf("message = %q, want %q", body["message"], want)
 	}
 }
@@ -200,7 +200,7 @@ func TestRetiredRule_UpdateAndRetireAreRefused(t *testing.T) {
 		if rr.Code != http.StatusConflict || body["error"] != "RETIRED" {
 			t.Fatalf("%s: status = %d: %v", name, rr.Code, body)
 		}
-		if want := "This rule was retired on 19 October 2026. Nothing about it can change."; body["message"] != want {
+		if want := "This rule was retired on 19 Oct 2026. Nothing about it can change."; body["message"] != want {
 			t.Fatalf("%s: message = %q", name, body["message"])
 		}
 	}
