@@ -44,6 +44,11 @@ export function TargetRef({ entry }: { entry: AuditEntry }) {
   return <UserName id={entry.target_id} />;
 }
 
+/** "system" or "system:scheduler": work Syndra did on its own, with no operator to ask. */
+function isSystemActor(id: string): boolean {
+  return !id || id === "-" || id === "system" || id.startsWith("system:");
+}
+
 /** Whether this row names something the sentence can point at. */
 export function hasTarget(entry: AuditEntry): boolean {
   return Boolean(entry.target_id) && entry.target_id !== "-" && entry.target_id !== "system";
@@ -63,6 +68,23 @@ export function hasTarget(entry: AuditEntry): boolean {
 export function EventSentence({ entry }: { entry: AuditEntry }) {
   const { verb, template, destructive } = describeAction(entry.action);
   const tone = destructive ? "font-semibold text-danger-text" : undefined;
+
+  // Syndra's own cancellation (expiry, onboarding, a rule) names Syndra, and says
+  // nobody was asked: an operator's was always shown first, this one has no one to show.
+  if (entry.action === "propagation.cancelled_unsent" && isSystemActor(entry.actor_id)) {
+    return (
+      <span>
+        Syndra {verb.charAt(0).toLowerCase()}
+        {verb.slice(1)}
+        {hasTarget(entry) ? (
+          <>
+            , for <TargetRef entry={entry} />
+          </>
+        ) : null}
+        <span className="text-faint"> · Nobody was asked.</span>
+      </span>
+    );
+  }
 
   if (!hasTarget(entry)) return <span className={tone}>{verb}</span>;
 

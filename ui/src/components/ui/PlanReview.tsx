@@ -26,6 +26,27 @@ import { UserName } from "@/components/names/UserName";
 // result in two vocabularies. `queued` keeps the warning tone rather than the
 // accent one — recorded here, not yet at the target.
 
+/**
+ * The last sentence of a row's consequence is the backend's: "Cancels a change
+ * …: the removal of … queued 12 Oct (reason)." Its wording reads as automatic, so
+ * the plan says it the operator's way ("waiting for you to send") and splits it
+ * from whatever else the row said.
+ */
+const CANCELS = /(?:^|\s)Cancels (a change|(\d+) changes) waiting\s+to\s+be\s+sent: ([\s\S]*?)\.?$/;
+
+export function splitCancels(consequence: string | undefined): { rest: string; count: number; parts: string; line: string } | null {
+  const match = consequence ? CANCELS.exec(consequence) : null;
+  if (!consequence || !match) return null;
+  const count = match[2] ? Number(match[2]) : 1;
+  const parts = match[3].replace(/ \(([^()]*)\)/g, " “$1”");
+  return {
+    rest: consequence.slice(0, match.index).trim(),
+    count,
+    parts,
+    line: `Cancels ${count === 1 ? "a change that is" : `${count} changes that are`} waiting for you to send: ${parts}.`,
+  };
+}
+
 export function PlanReview({
   plan,
   noun = ["person", "people"],
@@ -58,6 +79,11 @@ export function PlanReview({
   // perfectly good plan was broken.
   const missing = plan.outcomes === undefined || plan.outcomes === null;
   const outcomes = plan.outcomes ?? [];
+
+  // What the plan would cancel, once, under it: it goes stale if anyone queues
+  // another change first, because the rows named exactly these.
+  const cancels = outcomes.map((o) => splitCancels(o.consequence)).filter((c) => c !== null);
+  const cancelled = cancels.reduce((n, c) => n + c.count, 0);
 
   return (
     <div className="px-6">
@@ -97,6 +123,13 @@ export function PlanReview({
           </>
         )}
       </div>
+      {cancelled > 0 && (
+        <p role="note" className="mt-3 text-[13px] leading-[1.5] text-warn-text">
+          Cancels {cancelled === 1 ? "a change that is" : `${cancelled} changes that are`} waiting for you to
+          send: {cancels.map((c) => c.parts).join("; ")}. If anyone queues another first, this plan goes stale
+          and nothing is cancelled unseen.
+        </p>
+      )}
     </div>
   );
 }
@@ -125,7 +158,12 @@ function PlanRow({ outcome, applied }: { outcome: BulkOutcome; applied: boolean 
           {outcome.consequence ? (
             <>
               {" "}
-              <span className="text-faint">{outcome.consequence}</span>
+              <span className="text-faint">
+                {(() => {
+                  const said = splitCancels(outcome.consequence);
+                  return said ? [said.rest, said.line].filter(Boolean).join(" ") : outcome.consequence;
+                })()}
+              </span>
             </>
           ) : null}
         </span>
