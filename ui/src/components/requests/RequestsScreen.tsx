@@ -252,7 +252,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
           {visible.map((entry) => (
             <div
               key={entry.id}
-              className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:items-center tablet:gap-[18px] ${
+              className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] desktop:flex-nowrap ${
                 selection.isSelected(entry.id) ? "bg-accent-soft" : ""
               }`}
               {...selection.rowProps(entry.id)}
@@ -271,7 +271,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               <div className="w-full truncate text-[15px] font-semibold tablet:w-[170px] tablet:shrink-0">
                 <UserName id={entry.requester_id} />
               </div>
-              <div className="w-full text-[14.5px] text-ink/80 tablet:w-[250px] tablet:shrink-0 tablet:truncate">
+              <div className="w-full text-[14.5px] text-ink/80 [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
                 {entry.kind === "extend" && "Keep "}
                 <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
                 {catalog.data?.some(
@@ -286,7 +286,9 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   {describeAsk(entry, terms.data)}
                 </span>
               </div>
-              <div className="w-full min-w-0 text-[14px] text-muted tablet:flex-1 tablet:truncate">
+              {/* What someone decides on is never cut off (RULES 9b): the reason wraps, and below
+                  desktop the row wraps first, the decision seat taking the next line. */}
+              <div className="w-full min-w-0 text-[14px] text-muted [text-wrap:pretty] tablet:min-w-[180px] tablet:flex-1">
                 {entry.justification ? `“${entry.justification}”` : "No reason given"}
               </div>
               <div className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
@@ -295,7 +297,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               {/* The Decision seat (#96): the buttons, then the decision in
                   their place — one seat, so no column moves on the tap. The
                   row keeps it until the next read; no toast. */}
-              <div className="w-full tablet:w-[196px] tablet:shrink-0">
+              <div className="w-full tablet:ml-auto tablet:w-[196px] tablet:shrink-0">
                 {entry.status === "pending" && !resolved.has(entry.id) ? (
                   <div className="flex flex-col gap-2">
                     <div className="flex w-full flex-row-reverse gap-3 tablet:flex-row tablet:gap-2">
