@@ -7,6 +7,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { formatShortDate } from "@/lib/format";
+import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import type { MyChange } from "@/lib/queries/useMyChanges";
 
 /**
@@ -126,11 +127,16 @@ function describe(change: MyChange, trigger?: string, endsNow: string | null = n
   switch (change.kind) {
     case "request_approved":
       if (keep && !change.waiting) {
+        // Said from the ends the request recorded; an older one that has none says its
+        // end as before.
+        const ends = keptEnds(change);
         return {
           word: "Kept",
           tone: "healthy",
           pre: "You keep ",
-          post: `${change.until ? ` until ${formatShortDate(change.until)}` : ""}. Your request to keep it was approved.`,
+          post: ends
+            ? `. Your request to keep it was approved. ${ends}`
+            : `${change.until ? ` until ${formatShortDate(change.until)}` : ""}. Your request to keep it was approved.`,
         };
       }
       return change.waiting
@@ -142,9 +148,10 @@ function describe(change: MyChange, trigger?: string, endsNow: string | null = n
           }
         : { word: "Approved", tone: "healthy", pre, post: ` was approved${until}.` };
     case "request_declined": {
-      // Only a role that still ends in the future "still ends" anywhere.
-      const still = keep && endsNow && new Date(endsNow).getTime() > Date.now() ? ` It still ends ${formatShortDate(endsNow)}.` : "";
-      return { word: "Not approved", tone: "neutral", pre, post: ` was not approved.${still}` };
+      // The end they had when it was declined; for an older request, the end the page
+      // knows now. Only an end still ahead "still ends" anywhere.
+      const said = keep ? stillEnds(change.ended_before ?? endsNow) : undefined;
+      return { word: "Not approved", tone: "neutral", pre, post: ` was not approved.${said ? ` ${said}` : ""}` };
     }
     case "request_withdrawn":
       // Said in the first person, like the request row's "You withdrew this".

@@ -67,6 +67,31 @@ describe("Recent changes rows", () => {
     );
   });
 
+  // The request remembers the end they had and the end approving set (6.37), so the
+  // row says it from there and not from a grant that may have moved since.
+  it("Kept says the end it now has instead of the one it had", () => {
+    const r = row({
+      kind: "request_approved",
+      request_kind: "extend",
+      ended_before: "2099-12-18T12:00:00Z",
+      ends_after: "2100-01-18T12:00:00Z",
+    });
+    expect(r.textContent).toContain(
+      "You keep Laser cutter · Operator. Your request to keep it was approved. It now ends 18 Jan 2100 instead of 18 Dec 2099.",
+    );
+  });
+
+  it("Not approved says the end it still has, from the request, even when the page knows another", () => {
+    const items = [
+      { kind: "request_declined", at: AT, project_id: "p1", role_key: "op", via: null, request_kind: "extend", ended_before: "2099-12-18T12:00:00Z" } as MyChange,
+    ];
+    const { container } = render(
+      <RecentChanges items={items} roleName={roleName} endOf={() => "2099-01-01T12:00:00Z"} />,
+    );
+    expect(container.textContent).toContain("was not approved. It still ends 18 Dec 2099.");
+    expect(container.textContent).not.toContain("1 Jan");
+  });
+
   it("a declined request to keep says what still ends, when the page knows it", () => {
     const items = [{ kind: "request_declined", at: AT, project_id: "p1", role_key: "op", via: null, request_kind: "extend" } as MyChange];
     const { container } = render(

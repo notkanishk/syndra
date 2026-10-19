@@ -5,7 +5,7 @@ import { useMemo } from "react";
 
 import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { StatusSeat, requestOutcome } from "@/components/requests/RequestsScreen";
+import { StatusSeat, keepResult, requestOutcome } from "@/components/requests/RequestsScreen";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -153,7 +153,7 @@ function RequestRow({
         ) : outcome && optimisticallyResolved ? (
           <ActionOutcome placement="seat" word={outcome.word} outcome={outcome.outcome} />
         ) : optimisticallyResolved ? null : (
-          <Outcome status={entry.status} note={entry.review_note} />
+          <Outcome status={entry.status} note={[keepResult(entry), entry.review_note].filter(Boolean).join(" · ")} />
         )}
         {/* A failed write puts the buttons back and says why under them. */}
         {outcome && !optimisticallyResolved && (
