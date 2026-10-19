@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@/lib/queries/useMappingRules", () => ({
   useMappingRules: () => ({ data: state.rules, isLoading: false, error: null, refetch: () => {} }),
+  useRetiredMappingRules: () => ({ data: [] }),
   useCreateMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateMappingRule: () => ({ mutateAsync: state.update, isPending: false }),
   useDeleteMappingRule: () => ({ mutateAsync: vi.fn(), isPending: false }),
