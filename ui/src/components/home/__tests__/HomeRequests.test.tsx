@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { Home } from "@/components/home/Home";
@@ -102,5 +103,28 @@ describe("deciding a request on Home", () => {
     renderHome();
     fireEvent.click(screen.getByRole("button", { name: "Decline" }));
     expect((await screen.findByRole("status")).textContent).toBe("DeclinedNothing was sent");
+  });
+});
+
+describe("the greeting", () => {
+  // The server has its own clock and zone: what it sends must not depend on them,
+  // or hydration fails (React #418) and the reader's hour arrives a render late.
+  it("sends no hour from the server, only the held seat", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const html = renderToString(
+      <QueryClientProvider client={client}>
+        <Home session={session} />
+      </QueryClientProvider>,
+    );
+    expect(html).not.toMatch(/>(Morning|Evening)</);
+    expect(html).toContain('class="invisible">Afternoon<');
+  });
+
+  it("greets by the reader's own hour once it's on their screen", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 20, 20, 0));
+    renderHome();
+    expect(await screen.findByRole("heading", { level: 1, name: /^Evening/ })).toBeInTheDocument();
+    vi.useRealTimers();
   });
 });
