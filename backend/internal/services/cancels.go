@@ -10,7 +10,7 @@ import (
 )
 
 // Never invisibly (owner, 15 Oct): a plan row that would cancel a change
-// still waiting to be sent says so before anyone applies it. The apply is
+// still waiting for you to send says so before anyone applies it. The apply is
 // marked reviewed (db.CancellationsReviewed) because these rows said it.
 
 // cancelsLine is the queued changes these writes would cancel, which
@@ -49,7 +49,7 @@ func DescribeCancels(changes []models.QueuedChange) string {
 	if len(changes) > 1 {
 		noun = fmt.Sprintf("%d changes", len(changes))
 	}
-	return fmt.Sprintf("Cancels %s waiting to be sent: %s.", noun, strings.Join(parts, "; "))
+	return fmt.Sprintf("Cancels %s waiting for you to send: %s.", noun, strings.Join(parts, "; "))
 }
 
 // WithCancels names the cancellations on a row, and folds them into its

@@ -350,7 +350,12 @@ func alreadyHeldMessage(h models.RequestHolding, who string) string {
 	}
 	// Given, not yet sent: still held, so not given twice, but it may not work yet.
 	if h.Waiting {
-		msg += " It's waiting to be sent, so it may not work yet."
+		// The operator is the one who sends it; the member waits on them.
+		if who == "They" {
+			msg += " It's waiting for you to send, so it may not work yet."
+		} else {
+			msg += " Makerspace staff haven't sent it yet, so it may not work just yet."
+		}
 	}
 	return msg
 }

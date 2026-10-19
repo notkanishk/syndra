@@ -1151,3 +1151,15 @@ func TestHandleGetAccessRequests_MineNarrowsAnOperatorToTheirOwn(t *testing.T) {
 		}
 	}
 }
+
+// A change queued for the operator waits for them to send; the member only
+// learns that staff haven't sent it.
+func TestAlreadyHeldMessage_WaitingIsWordedForWhoReadsIt(t *testing.T) {
+	h := models.RequestHolding{Kind: models.HoldingForGood, Waiting: true}
+	if got := alreadyHeldMessage(h, "They"); !strings.Contains(got, "waiting for you to send") || strings.Contains(got, "to be sent") {
+		t.Errorf("operator: %q", got)
+	}
+	if got := alreadyHeldMessage(h, "You"); strings.Contains(got, "waiting") || strings.Contains(got, "to be sent") {
+		t.Errorf("member: %q", got)
+	}
+}

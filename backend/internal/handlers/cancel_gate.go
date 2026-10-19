@@ -90,7 +90,7 @@ func (g *gateWriter) decide() {
 	}
 	jsonResponse(g.ResponseWriter, http.StatusConflict, WouldCancelResponse{
 		Error:   "WOULD_CANCEL_QUEUED",
-		Message: fmt.Sprintf("This would cancel %d %s waiting to be sent. Nothing was changed.", len(refused), noun),
+		Message: fmt.Sprintf("This would cancel %d %s waiting for you to send. Nothing was changed.", len(refused), noun),
 		Cancels: g.describe(refused),
 	})
 }

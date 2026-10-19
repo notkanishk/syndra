@@ -174,3 +174,15 @@ func TestMyChanges_RulesReadFailureKeepsTheFeed(t *testing.T) {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 }
+
+// A removal that was cancelled before it was sent reaches the member as the
+// role they keep: when, which role, and nothing of who queued it or why.
+func TestShapeMyChanges_ACancelledRemovalNamesNoOne(t *testing.T) {
+	at := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
+	got := shapeMyChanges([]db.MyChangeRow{{Kind: "cancelled_removal", At: at, ProjectID: "p", RoleKey: "laser"}}, nil)
+	body, _ := json.Marshal(got[0])
+	want := `{"kind":"cancelled_removal","at":"2026-10-02T09:00:00Z","project_id":"p","role_key":"laser","via":null}`
+	if string(body) != want {
+		t.Fatalf("got %s\nwant %s", body, want)
+	}
+}
