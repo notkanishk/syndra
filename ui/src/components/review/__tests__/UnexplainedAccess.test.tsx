@@ -88,6 +88,10 @@ vi.mock("@/lib/queries/useDrift", () => ({
   },
 }));
 
+vi.mock("@/lib/queries/useGrants", () => ({
+  useReconciliationDiff: () => ({ data: undefined, isLoading: false, error: null, refetch: () => {} }),
+}));
+
 function item(overrides: Partial<DriftTriageItem> = {}): DriftTriageItem {
   return {
     id: "d1",

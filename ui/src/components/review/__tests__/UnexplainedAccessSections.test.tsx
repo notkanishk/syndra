@@ -18,6 +18,21 @@ const drift = vi.hoisted(() => ({
   unread: [] as Array<{ target: string; since: string; reason?: string }>,
 }));
 
+// The reconciliation read: what the comparison shows beside the findings.
+const emptyDiff = () => ({
+  only_in_syndra: [] as Array<{ user_id: string; project_id: string; role_keys: string[] }>,
+  only_in_zitadel: [] as Array<{ user_id: string; project_id: string; role_keys: string[] }>,
+  drift: [] as Array<{
+    user_id: string;
+    project_id: string;
+    only_in_zitadel: string[];
+    only_in_syndra: string[];
+  }>,
+  generated_at: "2026-10-20T08:00:00Z",
+  truncated: false,
+});
+const diff = vi.hoisted(() => ({ data: undefined as ReturnType<typeof emptyDiff> | undefined }));
+
 const NAMES: Record<string, string> = { u1: "Meera Pillai", u2: "Arjun Das", u3: "Tomas Weber" };
 const PROJECTS: Record<string, string> = { p1: "Electronics bench", p2: "Wood shop" };
 
@@ -37,6 +52,10 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
       resolved: true,
     }),
   }),
+}));
+
+vi.mock("@/lib/queries/useGrants", () => ({
+  useReconciliationDiff: () => ({ data: diff.data, error: null, refetch: () => {} }),
 }));
 
 vi.mock("@/lib/queries/useGovernance", () => ({
@@ -111,6 +130,7 @@ beforeEach(() => {
   drift.isLoading = false;
   drift.error = null;
   drift.unread = [];
+  diff.data = emptyDiff();
 });
 
 describe("Drift — sections", () => {
@@ -313,5 +333,65 @@ describe("Drift — selection", () => {
     ];
     renderPage();
     expect(document.querySelectorAll("[data-danger-edge]")).toHaveLength(2);
+  });
+});
+
+describe("Drift — what the comparison adds to the findings", () => {
+  it("puts a both-sides row's roles in the card of the side that holds each", () => {
+    drift.data = [];
+    diff.data = {
+      ...emptyDiff(),
+      drift: [{ user_id: "u1", project_id: "p1", only_in_zitadel: ["laser"], only_in_syndra: ["kiln"] }],
+    };
+    renderPage();
+
+    const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
+    const gone = screen.getByRole("region", { name: GONE });
+    expect(within(zitadel).getByText("laser")).toBeInTheDocument();
+    expect(within(zitadel).queryByText("kiln")).toBeNull();
+    expect(within(gone).getByText("kiln")).toBeInTheDocument();
+    expect(within(gone).queryByText("laser")).toBeNull();
+    expect(within(zitadel).getByTestId("card-count")).toHaveTextContent("1");
+    // Nothing to decide on a row that is not a finding: no answers, and no Select.
+    expect(screen.queryByRole("button", { name: "Adopt" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
+    expect(screen.getByText("Everything else in Zitadel agrees with Syndra.")).toBeInTheDocument();
+  });
+
+  it("shows a role only one side has, and counts it with the findings", () => {
+    diff.data = {
+      ...emptyDiff(),
+      only_in_zitadel: [{ user_id: "u2", project_id: "p2", role_keys: ["member"] }],
+      only_in_syndra: [{ user_id: "u3", project_id: "p2", role_keys: ["booking"] }],
+    };
+    renderPage();
+
+    const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
+    expect(within(zitadel).getByText("member")).toBeInTheDocument();
+    expect(within(zitadel).getByTestId("card-count")).toHaveTextContent("3");
+    expect(within(screen.getByRole("region", { name: GONE })).getByText("booking")).toBeInTheDocument();
+    // The headline counts what can be decided, not what can only be read.
+    expect(screen.getByText(/3 to decide/)).toBeInTheDocument();
+  });
+
+  it("does not repeat a role a finding already says", () => {
+    drift.data = [item({ id: "a", user_id: "u1", project_id: "p1", role_keys: ["operator"] })];
+    diff.data = {
+      ...emptyDiff(),
+      only_in_zitadel: [{ user_id: "u1", project_id: "p1", role_keys: ["operator"] }],
+    };
+    renderPage();
+
+    const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
+    expect(within(zitadel).getAllByText("operator")).toHaveLength(1);
+    expect(within(zitadel).getByTestId("card-count")).toHaveTextContent("1");
+  });
+
+  it("does not say everything agrees when the comparison was cut short", () => {
+    diff.data = { ...emptyDiff(), truncated: true };
+    renderPage();
+
+    expect(screen.getByText("The comparison stopped early.")).toBeInTheDocument();
+    expect(screen.queryByText("Everything else in Zitadel agrees with Syndra.")).toBeNull();
   });
 });

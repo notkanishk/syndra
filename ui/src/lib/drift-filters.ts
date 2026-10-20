@@ -215,7 +215,7 @@ export function sortDrift(
 
 /** A person or a role: the name, the project, the role's name or its key. */
 export function matchesDriftSearch(
-  item: DriftTriageItem,
+  item: Pick<DriftTriageItem, "role_keys">,
   query: string,
   text: { who: string; what: string },
 ): boolean {
