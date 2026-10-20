@@ -327,3 +327,15 @@ export function whyNotChecked(reason: string): string {
       return reason;
   }
 }
+
+/**
+ * Some add-ons report `product_version` already carrying the product name
+ * ("TrueNAS-25.10.5"), which doubled the name wherever it was shown beside
+ * one ("TrueNAS TrueNAS-25.10.5"). Stripped once, here, so every caller gets
+ * a plain version number.
+ */
+export function versionLabel(name: string, productVersion?: string): string {
+  if (!productVersion) return "";
+  const stripped = productVersion.replace(new RegExp(`^${name}[-\\s]*`, "i"), "");
+  return stripped || productVersion;
+}
