@@ -39,4 +39,18 @@ describe("an app's header", () => {
     render(<AppTokenScreen applicationId="367263700000000001" />);
     expect(screen.getByText("367263700000000001")).toBeInTheDocument();
   });
+
+  // The board (route-applications-id): "Apps" over the title, and the project an
+  // app reads from is a link to it.
+  it("carries the Apps eyebrow over the title", () => {
+    render(<AppTokenScreen applicationId="367263700000000001" />);
+    const title = screen.getByRole("heading", { level: 1 });
+    expect(title.previousElementSibling).toHaveTextContent("Apps");
+  });
+
+  it("links the project it reads roles from", () => {
+    render(<AppTokenScreen applicationId="367263700000000001" />);
+    const link = screen.getByRole("link", { name: /Laser Lab/ });
+    expect(link).toHaveAttribute("href", "/projects/p1");
+  });
 });

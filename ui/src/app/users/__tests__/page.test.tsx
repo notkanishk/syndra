@@ -83,14 +83,14 @@ describe("People index", () => {
       person({ expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),
     ];
     renderPeople();
-    expect(screen.getByText(/1 ends in 2 days/)).toBeInTheDocument();
+    expect(screen.getByText("Expires in 2 days")).toBeInTheDocument();
   });
 
   it("shows the most serious signal when a person has more than one", () => {
     users.data = [person({ expiring_count: 1, open_request_count: 1, unexplained_count: 1 })];
     renderPeople();
     // Unexplained access outranks a deadline, which outranks a request.
-    expect(screen.getByText("1 unexplained")).toBeInTheDocument();
+    expect(screen.getByText("Unexplained role")).toBeInTheDocument();
     expect(screen.queryByText(/open request/)).not.toBeInTheDocument();
   });
 
@@ -330,5 +330,90 @@ describe("People · choosing who gets a role", () => {
     expect(screen.getByText("Holds it")).toBeInTheDocument();
     expect(screen.getByText("Needs it")).toBeInTheDocument();
     expect(screen.getByText(/Pick who should get/)).toBeInTheDocument();
+  });
+});
+
+// The board (route-users, undated, with RULES of 9 and 17 Oct over it): the team
+// rides in the subtitle, not a column; headings sort; the list says how fresh it
+// is; the attention cell says what and when; nothing a decision rests on is cut.
+describe("People · the board", () => {
+  const headings = () => {
+    const row = document.querySelector("[class*='tracking-[0.09em]']") as HTMLElement;
+    return Array.from(row.children).map((cell) => (cell.textContent ?? "").replace(/[↑↓]/g, "").trim());
+  };
+  const named = (name: string, over: Partial<UserListEntry> = {}) =>
+    person({ user: { ...person().user, id: name, name }, ...over });
+
+  it("reads Person, Bundles, Access, Attention, with no Team column", () => {
+    renderPeople();
+    expect(headings()).toEqual(["Person", "Bundles", "Access", "Attention"]);
+  });
+
+  it("puts title and team under the name, and the email only when there is no title", () => {
+    users.data = [
+      named("Aanya Rao", { user: { ...person().user, id: "a", name: "Aanya Rao", title: "Research assistant", team: "Mechanical Engineering" } }),
+      named("Lena Brandt", { user: { ...person().user, id: "l", name: "Lena Brandt", title: "", team: "", email: "lena@example.edu" } }),
+    ];
+    renderPeople();
+    expect(screen.getByText("Research assistant · Mechanical Engineering")).toBeInTheDocument();
+    expect(screen.getByText("lena@example.edu")).toBeInTheDocument();
+    expect(screen.queryByText("tomas@example.org")).not.toBeInTheDocument();
+  });
+
+  it("sorts on Person, Bundles and Attention, the Person arrow up by default", () => {
+    users.data = [
+      named("Zed", { bundle_names: ["Alpha"], unexplained_count: 0 }),
+      named("Amy", { bundle_names: ["Zulu"], expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),
+      named("Bo", { bundle_names: ["Mid"], unexplained_count: 2 }),
+    ];
+    renderPeople();
+    const order = () => screen.getAllByRole("link").map((a) => a.textContent ?? "").map((t) => ["Zed", "Amy", "Bo"].find((n) => t.includes(n)));
+    expect(screen.getByRole("button", { name: "Sort by person" })).toHaveAttribute("data-sort", "asc");
+    expect(order()).toEqual(["Amy", "Bo", "Zed"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by person" }));
+    expect(order()).toEqual(["Zed", "Bo", "Amy"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by bundles" }));
+    expect(order()).toEqual(["Zed", "Bo", "Amy"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by attention" }));
+    expect(screen.getByRole("button", { name: "Sort by attention" })).toHaveAttribute("data-sort", "asc");
+    // The first press puts the people who need you on top: unexplained, then
+    // the deadline, then the clear row.
+    expect(order()).toEqual(["Bo", "Amy", "Zed"]);
+  });
+
+  it("says how fresh the list is", () => {
+    users.data = [
+      person({ observation: { read_at: new Date().toISOString(), current: true, truncated: false } }),
+    ];
+    renderPeople();
+    expect(screen.getByText("The people list was read just now")).toBeInTheDocument();
+  });
+
+  it("names the attention in words with the day it falls", () => {
+    users.data = [
+      named("One", { expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),
+      named("Two", { unexplained_count: 3 }),
+      named("Three", { open_request_count: 1 }),
+      named("Four", { open_request_count: 2 }),
+    ];
+    renderPeople();
+    expect(screen.getByText("Expires in 2 days")).toBeInTheDocument();
+    expect(screen.getByText("3 unexplained roles")).toBeInTheDocument();
+    expect(screen.getByText("Open request")).toBeInTheDocument();
+    expect(screen.getByText("2 open requests")).toBeInTheDocument();
+  });
+
+  it("never cuts the Access sentence, and wraps attention", () => {
+    users.data = [
+      person({
+        observation: { read_at: "2026-09-10T00:00:00Z", current: true, truncated: false },
+        observed_role_count: 6,
+        observed_project_count: 4,
+        unexplained_count: 1,
+      }),
+    ];
+    renderPeople();
+    expect(screen.getByText("6 roles across 4 projects").className).not.toMatch(/truncate/);
+    expect(screen.getByText("Unexplained role").className).not.toMatch(/truncate|whitespace-nowrap/);
   });
 });

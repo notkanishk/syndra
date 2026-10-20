@@ -1,0 +1,120 @@
+// @vitest-environment jsdom
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import RolesPage from "@/app/roles/page";
+import type { CatalogRole } from "@/lib/queries/useRoles";
+
+const state = vi.hoisted(() => ({ roles: [] as unknown[] }));
+
+vi.mock("@/lib/queries/useRoles", () => ({
+  useGlobalRoleCatalog: () => ({ data: state.roles, isLoading: false, error: null, refetch: () => {} }),
+}));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(""),
+  useRouter: () => ({ replace: () => {} }),
+}));
+vi.mock("@/components/roles/CreateRoleDialog", () => ({ CreateRoleDialog: () => null }));
+
+function role(key: string, over: Partial<CatalogRole> = {}): CatalogRole {
+  return {
+    project_id: "p1",
+    project_name: "Laser Lab",
+    role_key: key,
+    display_name: key,
+    description: "",
+    group: "Machines",
+    bundle_count: 0,
+    rule_count: 0,
+    assigned_user_count: 1,
+    is_unused: false,
+    source: "syndra",
+    ...over,
+  };
+}
+
+const headings = () => {
+  const row = document.querySelector("[class*='tracking-[0.09em]']") as HTMLElement;
+  return Array.from(row.children).map((cell) => (cell.textContent ?? "").replace(/[↑↓]/g, "").trim());
+};
+const order = () =>
+  screen
+    .getAllByRole("link")
+    .filter((a) => a.getAttribute("href")?.includes("/roles/"))
+    .map((a) => ["Alpha", "Beta", "Gamma"].find((n) => a.textContent?.includes(n)));
+
+beforeEach(() => {
+  state.roles = [
+    role("gamma", { display_name: "Gamma", project_name: "Wood shop", project_id: "p2", assigned_user_count: 5, bundle_count: 2, rule_count: 1 }),
+    role("alpha", { display_name: "Alpha", assigned_user_count: 9, waits_for_send: true }),
+    role("beta", { display_name: "Beta", project_name: "Studio", project_id: "p3", assigned_user_count: 2, is_unused: true }),
+  ];
+});
+
+// The board (route-roles): a search, the one-sentence note beside the freshness
+// line instead of a bold box, sortable headings, the Waits mark, and Unused said.
+describe("the roles index, as drawn", () => {
+  it("reads Project, Role, Group, Used by, People", () => {
+    render(<RolesPage />);
+    expect(headings()).toEqual(["Project", "Role", "Group", "Used by", "People"]);
+  });
+
+  it("holds the partial-list note as one quiet sentence, not a boxed lead-in", () => {
+    render(<RolesPage />);
+    expect(screen.queryByText("This list may be partial.")).not.toBeInTheDocument();
+    const note = screen.getByText(/Roles made straight in Zitadel, on a project Syndra cannot read, are not listed/);
+    expect(note.tagName).toBe("P");
+    expect(note.querySelector("strong")).toBeNull();
+    expect(note.className).toMatch(/text-muted/);
+    expect(screen.getByRole("link", { name: /Check a project.s roles in Zitadel/ })).toHaveAttribute("href", "/zitadel/projects");
+  });
+
+  it("searches by role name, key or project", () => {
+    render(<RolesPage />);
+    const box = screen.getByRole("textbox", { name: "Search roles by name, key or project" });
+    expect(box).toHaveAttribute("placeholder", "Search role, key or project…");
+    fireEvent.change(box, { target: { value: "studio" } });
+    expect(order()).toEqual(["Beta"]);
+    fireEvent.change(box, { target: { value: "ALPHA" } });
+    expect(order()).toEqual(["Alpha"]);
+    fireEvent.change(box, { target: { value: "wood" } });
+    expect(order()).toEqual(["Gamma"]);
+    fireEvent.change(box, { target: { value: "zzz" } });
+    expect(screen.getByText("No roles match that.")).toBeInTheDocument();
+  });
+
+  it("sorts on Project at first, then Role, Group and People on request", () => {
+    render(<RolesPage />);
+    expect(screen.getByRole("button", { name: "Sort by project" })).toHaveAttribute("data-sort", "asc");
+    expect(order()).toEqual(["Alpha", "Beta", "Gamma"]); // Laser Lab, Studio, Wood shop
+    fireEvent.click(screen.getByRole("button", { name: "Sort by people" }));
+    expect(order()).toEqual(["Beta", "Gamma", "Alpha"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by role" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort by role" }));
+    expect(order()).toEqual(["Gamma", "Beta", "Alpha"]);
+  });
+
+  it("shows an Unused pill for a role nothing references, and what does for the rest", () => {
+    render(<RolesPage />);
+    expect(screen.getAllByText("Unused")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: /Beta/ }).textContent).toContain("Unused");
+    expect(screen.getByText("2 bundles · 1 rule")).toBeInTheDocument();
+  });
+
+  it("marks only the role that always waits for you", () => {
+    render(<RolesPage />);
+    const marked = screen.getAllByRole("img", { name: "Waits for you" });
+    expect(marked).toHaveLength(1);
+    expect(screen.getByRole("link", { name: /Alpha/ })).toContainElement(marked[0]);
+  });
+
+  it("wraps the role, the group and what uses it instead of cutting them", () => {
+    render(<RolesPage />);
+    const row = screen.getByRole("link", { name: /Gamma/ });
+    for (const cell of Array.from(row.children)) {
+      expect(cell.className, cell.textContent ?? "").not.toMatch(/truncate/);
+    }
+    // below desktop Group and Used by fold into a line under the role
+    expect(screen.getByText("Machines · 2 bundles · 1 rule")).toBeInTheDocument();
+  });
+});
