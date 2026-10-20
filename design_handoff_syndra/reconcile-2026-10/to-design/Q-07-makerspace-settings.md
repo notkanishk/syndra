@@ -133,8 +133,21 @@ What Syndra can tell today:
 30. **Counting.** When the Makerspace strip says "People", does that exclude service accounts? Should it say how many there are, for example "48 people · 6 service accounts"?
 31. **Ownerless or stale.** Should a service account with no owner, or one whose key or sign-in hasn't been used in 90 days, be something Syndra raises, the way drift is?
 
+## A very long list on Home (owner, 21 Oct 2026)
+
+Prod's first real read put 31 accounts in Home's "New people without a bundle", and the card drew every row, so it ran the height of several screens and pushed everything else down. This will happen again at the start of each term, when a whole intake arrives at once. Today the card has no cap, no "show more", no search and no bulk action.
+
+32. **How a long block behaves on Home.** Which should it be?
+    - A cap, for example the first 5 rows and then "and 26 more →" to the full list.
+    - A summary line instead of rows past a threshold: "31 new people, most from 18 Oct".
+    - Grouping by when they arrived, or by team.
+
+    What is the threshold? Does the same rule hold for every Home block (Open requests, Expiring, Drift), so no block can outgrow the page? Keep "structure never moves in response to data" in mind: the block's height should not depend on how many rows there are.
+33. **Where the full list lives.** Does "and 26 more" open People filtered to no bundle, or a page of its own? Would that page carry search, sort by arrival, and Select with "Give a bundle" to several at once? The Home board draws "Give a bundle" on each row, but not in bulk.
+34. **The phone.** On a phone the same 31 rows are an even longer scroll. Is it the same cap, or a single summary line that opens the list?
+
 ## Still undecided from earlier boards
 
-32. **Replacing the Zitadel key in fewer steps** (Zitadel board, open since 7 Oct). The guide dialog (2c) is not built; the four steps stay inline.
-33. **The Access map.** The boards' rail still draws Automation and Access map, the 12 Oct shape. N18 (13 Oct) moved Insights up and folded the map into it, and `/graph` now opens Insights. Could the boards' shared rail be redrawn to N18, so new boards stop carrying the older rail?
+35. **Replacing the Zitadel key in fewer steps** (Zitadel board, open since 7 Oct). The guide dialog (2c) is not built; the four steps stay inline.
+36. **The Access map.** The boards' rail still draws Automation and Access map, the 12 Oct shape. N18 (13 Oct) moved Insights up and folded the map into it, and `/graph` now opens Insights. Could the boards' shared rail be redrawn to N18, so new boards stop carrying the older rail?
 
