@@ -79,16 +79,39 @@ describe("the version band keeps one shape", () => {
   it("offers Publish inert rather than absent when there is nothing to publish", () => {
     render(<VersionBand target="truenas" history={history()} />);
 
-    expect(screen.getByText(/The live mappings match version 4/)).toBeTruthy();
+    expect(screen.getByText("Matches version 4")).toBeTruthy();
+    expect(screen.getByText(/What the rows say is what version 4 says/)).toBeTruthy();
+    expect(screen.getByText("Nothing to publish")).toBeTruthy();
     expect(publishButton().hasAttribute("disabled")).toBe(true);
   });
 
-  it("keeps the version count in its seat when nothing has been published", () => {
+  it("says in one line that nothing has been published, with no version count", () => {
     render(<VersionBand target="truenas" history={history({ versions: [], current_version: 0 })} />);
 
-    expect(screen.getByText("Nothing has been published")).toBeTruthy();
-    expect(screen.getByText("0")).toBeTruthy();
+    expect(screen.getByText("Nothing published yet")).toBeTruthy();
+    expect(screen.queryByText(/Versions/)).toBeNull();
     expect(publishButton().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("says the live rows are in no version yet, and that publishing makes version 1", () => {
+    render(
+      <VersionBand
+        target="truenas"
+        history={history({ versions: [], current_version: 0, unpublished: true, unpublished_changes: [change()] })}
+      />,
+    );
+
+    expect(screen.getByText("Nothing published yet")).toBeTruthy();
+    expect(screen.getByText(/records them as version 1/)).toBeTruthy();
+  });
+
+  it("titles unpublished edits against the version they follow", () => {
+    render(
+      <VersionBand target="truenas" history={history({ unpublished: true, unpublished_changes: [change()] })} />,
+    );
+
+    expect(screen.getByText("Version 4, plus 1 change not yet published")).toBeTruthy();
+    expect(screen.queryByText("Nothing to publish")).toBeNull();
   });
 
   it("names the version it would become once there is something to publish", () => {

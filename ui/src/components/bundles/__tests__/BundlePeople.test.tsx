@@ -21,6 +21,8 @@ vi.mock("@/lib/queries/useBundleVersions", () => ({
     ],
     isLoading: false,
     error: null,
+    isError: false,
+    dataUpdatedAt: Date.now(),
     refetch: () => {},
   }),
   useRehearseMoveHolders: () => ({}),
@@ -40,6 +42,12 @@ describe("who has a bundle", () => {
     expect(screen.getByRole("heading", { name: "On v2" })).toBeInTheDocument();
     expect(screen.getByText(/1 person · v3 is the latest/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Move them to v3" })).toBeInTheDocument();
+  });
+
+  // The board's People tab opens on a read line (route-bundles-v2, bundle-people).
+  it("says when who has the bundle was read", () => {
+    render(<BundlePeople bundleId="b" name="Lab Tech" />);
+    expect(screen.getByText("Who has Lab Tech was read just now")).toBeInTheDocument();
   });
 
   it("says how each person got it", () => {

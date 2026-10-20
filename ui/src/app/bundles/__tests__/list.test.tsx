@@ -14,7 +14,14 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useBundleRolesByBundle: () => ({ byId: {}, allLoaded: true }),
   useSetBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRemoveBundleInclude: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useBundles: () => ({ data: state.bundles, isLoading: false, error: null, refetch: () => {} }),
+  useBundles: () => ({
+    data: state.bundles,
+    isLoading: false,
+    error: null,
+    isError: false,
+    dataUpdatedAt: Date.now(),
+    refetch: () => {},
+  }),
   useCreateBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRetiredBundles: () => ({ data: state.retired, isLoading: false, error: null, refetch: () => {} }),
 }));
@@ -73,6 +80,21 @@ describe("the bundles list", () => {
     render(<BundlesPage />);
 
     expect(screen.queryByRole("button", { name: /Retired bundles/ })).toBeNull();
+  });
+
+  // The board's read line (route-bundles-v2): one sentence above the list says
+  // when what is below was read, rather than leaving the age to be guessed.
+  it("says when bundles and who has them were read, above the list", () => {
+    render(<BundlesPage />);
+
+    expect(screen.getByText("Bundles and who has them was read just now")).toBeInTheDocument();
+  });
+
+  it("has no read line when there is no list to date", () => {
+    state.bundles = [];
+    render(<BundlesPage />);
+
+    expect(screen.queryByText(/was read/)).toBeNull();
   });
 
   it("shows the Roles and People counts", () => {
