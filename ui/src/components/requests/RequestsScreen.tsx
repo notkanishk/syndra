@@ -24,6 +24,7 @@ import { FilterPills } from "@/components/ui/Select";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { Input } from "@/components/ui/Input";
 import { ProjectName, RoleRef, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -147,10 +148,25 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const catalog = useGlobalRoleCatalog();
   const ask = useAskOnArrival();
   const terms = useTerms();
+  const resolver = useNameResolver();
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
 
-  // What the read holds. A decided row is in it until the refetch lands, and
-  // then it is not: the open list is a list of requests still waiting.
-  const rows = useMemo(() => requests.data ?? [], [requests.data]);
+  // What the read holds, narrowed by the search. A decided row is in it until
+  // the refetch lands, and then it is not: the open list is a list of requests
+  // still waiting. The search narrows the rows themselves, so a selection and a
+  // bulk decision can never reach a request the operator cannot see.
+  const rows = useMemo(() => {
+    const read = requests.data ?? [];
+    if (!needle) return read;
+    return read.filter((entry) => {
+      const who = resolver.resolveUser(entry.requester_id).value;
+      const role = resolver.resolveRole(entry.project_id, entry.role_key).value;
+      const project = resolver.resolveProject(entry.project_id).value;
+      return [who?.display_name, who?.email, role?.display_name, humanizeKey(entry.role_key), project?.name]
+        .some((text) => text?.toLowerCase().includes(needle));
+    });
+  }, [requests.data, needle, resolver]);
 
   // What is drawn: the read, plus the rows that just left it. A decided row
   // keeps its place and its outcome for the beat (Motion 5b), then fades and its
@@ -204,6 +220,14 @@ function OperatorQueue({ userId }: { userId?: string }) {
           disclosure hiding a single five-way switch costs a click and hides
           nothing. Selection mode is an action on the list, so it trails. */}
       <FilterBar
+        search={
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search person or role…"
+            aria-label="Search requests by person or role"
+          />
+        }
         leading={
           <FilterPills<StatusFilter>
             label="Filter by status"
@@ -259,15 +283,23 @@ function OperatorQueue({ userId }: { userId?: string }) {
           skeleton={<RowSkeleton rows={4} label="Loading requests" />}
           empty={
             <EmptyState
-              title={status === "pending" ? "No open requests." : `No ${status} requests match those filters.`}
+              title={
+                needle
+                  ? "No requests match that search."
+                  : status === "pending"
+                    ? "No open requests."
+                    : `No ${status} requests match those filters.`
+              }
               guidance={
-                status === "pending"
-                  ? "New requests appear here the moment someone submits one."
-                  : "Try another filter."
+                needle
+                  ? "Try part of a name, or a role."
+                  : status === "pending"
+                    ? "New requests appear here the moment someone submits one."
+                    : "Try another filter."
               }
               // An empty pending queue is resolved work; an empty filter result
-              // is just a filter that matched nothing.
-              resolved={status === "pending"}
+              // or search is just one that matched nothing.
+              resolved={status === "pending" && !needle}
             />
           }
         >
