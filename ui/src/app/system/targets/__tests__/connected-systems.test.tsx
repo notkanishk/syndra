@@ -16,6 +16,11 @@ const state = {
   targets: [] as TargetSummary[],
   isLoading: false,
   error: null as unknown,
+  // What the system's own page reads say, one per hook. `undefined` data is a
+  // read that has not answered (or failed): the row must not invent a count.
+  health: undefined as Record<string, unknown> | undefined,
+  inventory: undefined as Record<string, unknown> | undefined,
+  findings: undefined as unknown[] | undefined,
 };
 
 vi.mock("@/lib/queries/useTargets", async () => {
@@ -30,6 +35,9 @@ vi.mock("@/lib/queries/useTargets", async () => {
       error: state.error,
       refetch: vi.fn(),
     }),
+    useTargetHealth: () => ({ data: state.health, isLoading: false, isError: false }),
+    useTargetInventory: () => ({ data: state.inventory, isLoading: false, isError: false }),
+    useMergeFindings: () => ({ data: state.findings, isLoading: false, isError: false }),
   };
 });
 
@@ -55,6 +63,9 @@ beforeEach(() => {
   state.targets = [];
   state.isLoading = false;
   state.error = null;
+  state.health = undefined;
+  state.inventory = undefined;
+  state.findings = undefined;
 });
 
 describe("connected systems", () => {
@@ -72,29 +83,139 @@ describe("connected systems", () => {
     expect(screen.queryByText(/connected$/)).toBeNull();
   });
 
-  it("lists a registered target and what it can do", () => {
+  it("lists a registered target under the board's columns, and not the old operation count", () => {
     state.targets = [target()];
     render(<ConnectedSystemsPage />);
 
-    // The lede now defines TrueNAS with a <Term>, so the bare name appears
-    // twice. The row is what this test is about — assert on the link, not on
-    // whichever copy the query happens to reach first.
-    expect(screen.getByRole("link", { name: /TrueNAS/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "TrueNAS" })).toBeTruthy();
     expect(screen.getByText("1 system connected")).toBeTruthy();
     expect(screen.getByText("Answering")).toBeTruthy();
-    expect(screen.getByText("2")).toBeTruthy();
+    for (const heading of ["Status", "Needs you", "People"]) expect(screen.getByText(heading)).toBeTruthy();
+    // A count of add-on operations is nothing an operator acts on.
+    expect(screen.queryByText("Things it can do")).toBeNull();
+  });
+
+  it("lists systems A to Z, whatever order they were registered in", () => {
+    state.targets = [target({ target: "truenas" }), target({ target: "door", callable: false, operations: [] })];
+    render(<ConnectedSystemsPage />);
+
+    const links = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    // "door" sorts before "truenas" by its label.
+    expect(links.indexOf("/system/targets/door")).toBeLessThan(links.indexOf("/system/targets/truenas"));
+  });
+
+  it("names the product and version the system reports, and the project it serves", () => {
+    state.targets = [target()];
+    state.health = { product: "TrueNAS SCALE", product_version: "TrueNAS-24.10.2" };
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("TrueNAS SCALE 24.10.2")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Makerspace" }).getAttribute("href")).toBe("/projects/p1");
+  });
+
+  it("says it has not read the product yet, rather than leaving the line empty", () => {
+    state.targets = [target()];
+    render(<ConnectedSystemsPage />);
+    expect(screen.getByText("Not read yet")).toBeTruthy();
+  });
+
+  // People is the same number the system's own page shows as "Accounts Syndra
+  // manages": one read, so the two pages cannot disagree.
+  it("counts the people with an account Syndra manages there, from the system's own inventory", () => {
+    state.targets = [target()];
+    state.inventory = { bound: 48, unmanaged: [], current: true };
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("48")).toBeTruthy();
+    expect(screen.queryByText("last known")).toBeNull();
+  });
+
+  it("keeps the last count and labels it once the system stops answering", () => {
+    state.targets = [
+      target({
+        status: "offline",
+        health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
+      }),
+    ];
+    state.inventory = { bound: 48, unmanaged: [], current: true };
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("48")).toBeTruthy();
+    expect(screen.getByText("last known")).toBeTruthy();
+    expect(screen.getByText("Unknown until it answers")).toBeTruthy();
+  });
+
+  it("shows a dash, never 0, when the count has not been read", () => {
+    state.targets = [target()];
+    render(<ConnectedSystemsPage />);
+    expect(screen.queryByText("0")).toBeNull();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  describe("Needs you", () => {
+    it("links each thing that is waiting to the part of the system's page that handles it", () => {
+      state.targets = [target()];
+      state.inventory = { bound: 48, unmanaged: [{ username: "a" }, { username: "b" }, { username: "c" }], current: true };
+      state.findings = [{ id: "f1" }];
+      render(<ConnectedSystemsPage />);
+
+      expect(screen.getByRole("link", { name: "3 accounts Syndra doesn't manage" }).getAttribute("href")).toBe(
+        "/system/targets/truenas#people",
+      );
+      expect(screen.getByRole("link", { name: "1 value somebody changed there" }).getAttribute("href")).toBe(
+        "/system/targets/truenas#waiting",
+      );
+      expect(screen.queryByText("Nothing waiting")).toBeNull();
+    });
+
+    it("counts a tampered change log and a disputed account as decisions", () => {
+      state.targets = [target()];
+      state.inventory = { bound: 3, unmanaged: [], current: true };
+      state.findings = [];
+      state.health = { log_anchor: { violation_reason: "edited" }, binding_conflicts: [{ id: "c1" }] };
+      render(<ConnectedSystemsPage />);
+
+      expect(screen.getByRole("link", { name: "2 things need a decision" })).toBeTruthy();
+    });
+
+    it("says nothing is waiting, so an empty cell never reads as unknown", () => {
+      state.targets = [target()];
+      state.inventory = { bound: 3, unmanaged: [], current: true };
+      state.findings = [];
+      render(<ConnectedSystemsPage />);
+
+      expect(screen.getByText("Nothing waiting")).toBeTruthy();
+    });
+
+    it("says unknown until it answers, never nothing waiting, for a system that is not answering", () => {
+      state.targets = [target({ circuit_open: true, status: "waiting_to_retry" })];
+      state.findings = [];
+      render(<ConnectedSystemsPage />);
+
+      expect(screen.getByText("Unknown until it answers")).toBeTruthy();
+      expect(screen.queryByText("Nothing waiting")).toBeNull();
+    });
+  });
+
+  it("says when the system last answered, under its status", () => {
+    state.targets = [target()];
+    render(<ConnectedSystemsPage />);
+    expect(screen.getByText(/^Answered /)).toBeTruthy();
   });
 
   // Registration is a deployment fact and a manifest is a runtime one. Showing
   // `0` for a target that has never answered would be a claim about the TARGET
   // — that it can do nothing — rather than about Syndra not having asked.
-  it("shows no operation count for a target that has never answered", () => {
+  it("shows dashes, not zero, for a target that has never answered", () => {
     state.targets = [target({ callable: false, operations: [] })];
     render(<ConnectedSystemsPage />);
 
     expect(screen.getByText("Not answered yet")).toBeTruthy();
     expect(screen.queryByText("0")).toBeNull();
-    expect(screen.getByText("—")).toBeTruthy();
+    // Needs you and People: Syndra has not read it.
+    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(screen.queryByText("Nothing waiting")).toBeNull();
+    expect(screen.getByText(/usually clears by itself/)).toBeTruthy();
   });
 
   // A secret that will not load is a fault on THIS side. Reporting it as the
@@ -163,12 +284,36 @@ describe("connected systems", () => {
   it("shows the project it serves, or the way to choose one", () => {
     state.targets = [target()];
     const { unmount } = render(<ConnectedSystemsPage />);
-    expect(screen.getByText("Serves Makerspace")).toBeTruthy();
+    expect(screen.getByText("Zitadel project")).toBeTruthy();
     unmount();
 
     state.targets = [target({ project: null })];
     render(<ConnectedSystemsPage />);
+    expect(screen.getByText("No Zitadel project yet")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Choose its Zitadel project" }).getAttribute("href")).toBe("/system/targets/truenas");
+  });
+
+  // Q-01 (14 Oct): a fault is one Notice above the page, said once; the row
+  // keeps its dot and word.
+  it("puts a system that stopped answering in one amber Notice above the page, and keeps the row's word", () => {
+    state.targets = [
+      target({
+        status: "offline",
+        health: { status: "offline", recent: ["missed", "missed", "missed"], reachable_since: "2026-10-14T08:33:00Z" },
+      }),
+    ];
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("TrueNAS isn't answering.")).toBeTruthy();
+    expect(screen.getByText(/Look at TrueNAS, not at Syndra/)).toBeTruthy();
+    expect(screen.getByText("Offline")).toBeTruthy();
+  });
+
+  it("gives an answering system no Notice", () => {
+    state.targets = [target()];
+    render(<ConnectedSystemsPage />);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 
