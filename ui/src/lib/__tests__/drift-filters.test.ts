@@ -6,8 +6,11 @@ import {
   driftHref,
   driftRequest,
   hasAnyDriftFilter,
+  driftReason,
+  matchesDriftSearch,
   originOf,
   parseDriftFilters,
+  sortDrift,
 } from "@/lib/drift-filters";
 import type { DriftTriageItem } from "@/lib/queries/useDrift";
 
@@ -176,5 +179,62 @@ describe("hasAnyDriftFilter", () => {
   it("is false only when nothing is set", () => {
     expect(hasAnyDriftFilter(EMPTY_DRIFT_FILTERS)).toBe(false);
     expect(hasAnyDriftFilter({ ...EMPTY_DRIFT_FILTERS, age: "today" })).toBe(true);
+  });
+});
+
+describe("driftReason", () => {
+  it("tells a removal from a write that never landed", () => {
+    const applied = row({ drift_type: "syndra_only", provenance: { applied_at: "2026-09-01T00:00:00Z" } });
+    expect(driftReason(applied)).toBe("removed");
+    expect(driftReason(row({ drift_type: "syndra_only", provenance: { granted_by: "x" } }))).toBe("never");
+  });
+
+  it("tells a person, the account itself, and nobody known", () => {
+    expect(driftReason(row({ upstream_actor: "u9" }))).toBe("person");
+    expect(driftReason(row({ upstream_actor: "u1", user_is_service_account: true }))).toBe("self");
+    expect(driftReason(row({}))).toBe("unknown");
+  });
+});
+
+describe("sortDrift", () => {
+  const who: Record<string, string> = { u1: "Meera", u2: "Arjun", u3: "Tomas" };
+  const names = { who: (item: DriftTriageItem) => who[item.user_id] ?? "", what: () => "" };
+  const rows = [
+    row({ id: "a", user_id: "u1", detected_at: "2026-09-10T00:00:00Z" }),
+    row({ id: "b", user_id: "u2", detected_at: "2026-09-12T00:00:00Z" }),
+    row({ id: "c", user_id: "u3", detected_at: "2026-09-11T00:00:00Z" }),
+  ];
+  const ids = (list: DriftTriageItem[]) => list.map((item) => item.id);
+
+  it("puts the most recently found first, and reverses", () => {
+    expect(ids(sortDrift(rows, "found", 1, names))).toEqual(["b", "c", "a"]);
+    expect(ids(sortDrift(rows, "found", -1, names))).toEqual(["a", "c", "b"]);
+  });
+
+  it("orders by name, newest first among equals", () => {
+    expect(ids(sortDrift(rows, "who", 1, names))).toEqual(["b", "a", "c"]);
+    const twins = [
+      row({ id: "x", user_id: "u1", detected_at: "2026-09-01T00:00:00Z" }),
+      row({ id: "y", user_id: "u1", detected_at: "2026-09-02T00:00:00Z" }),
+    ];
+    expect(ids(sortDrift(twins, "who", 1, names))).toEqual(["y", "x"]);
+  });
+
+  it("does not reorder what it was given", () => {
+    const before = ids(rows);
+    sortDrift(rows, "who", 1, names);
+    expect(ids(rows)).toEqual(before);
+  });
+});
+
+describe("matchesDriftSearch", () => {
+  it("matches a person or a role, in any case, and everything when empty", () => {
+    const item = row({ role_keys: ["wood.member"] });
+    const text = { who: "Meera Pillai", what: "Wood shop Member" };
+    expect(matchesDriftSearch(item, "", text)).toBe(true);
+    expect(matchesDriftSearch(item, "  MEERA ", text)).toBe(true);
+    expect(matchesDriftSearch(item, "wood.member", text)).toBe(true);
+    expect(matchesDriftSearch(item, "shop", text)).toBe(true);
+    expect(matchesDriftSearch(item, "laser", text)).toBe(false);
   });
 });
