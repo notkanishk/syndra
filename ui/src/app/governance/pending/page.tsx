@@ -31,8 +31,7 @@ import {
   usePendingPropagations,
   type PendingPropagationRow,
 } from "@/lib/queries/usePropagation";
-import { Notice } from "@/components/ui/Notice";
-import { ClockTime, Relative } from "@/components/ui/Time";
+import { Relative } from "@/components/ui/Time";
 import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
 /**
@@ -97,6 +96,10 @@ export default function PendingChangesPage() {
               <Button
                 variant="accent"
                 disabled={!reachable || !known || rows.length === 0}
+                // Zitadel not answering is the shell's one Notice, above the
+                // title. The reason a greyed button gives is visible text
+                // beside it, never a tooltip: hover does not exist on touch.
+                reason={!reachable ? "Sending waits until Zitadel answers. Nothing is lost." : undefined}
                 isPending={drain.isPending}
                 onClick={async () => {
                   setOutcome(null);
@@ -117,18 +120,6 @@ export default function PendingChangesPage() {
       />
 
       {outcome && <ActionOutcome outcome={outcome} />}
-
-      {/*
-        The reason is a visible strip, not a tooltip on a greyed button. Hover
-        does not exist on touch and does not survive a screenshot sent to a
-        colleague — and the point of this copy is that nothing is broken.
-      */}
-      {!reachable && (
-        <Notice tone="warn" live title="Zitadel is not answering.">
-          As of <ClockTime />. Sending waits until Zitadel answers. Nothing is lost: the changes wait in
-          order, and nothing has reached any system. Send them once Zitadel is back.
-        </Notice>
-      )}
 
       {known && rows.length > 0 && !cleared && (
         <div className="flex flex-col gap-3.5">
@@ -520,7 +511,8 @@ function CausedBy({
       {(isBundle || isRule) && row.source_ref && (
         <Mono className="text-faint">{shortId(row.source_ref, isBundle ? "b" : "R")}</Mono>
       )}
-      {row.cascade_id ? (
+      {/* A change made by hand has no edit behind it: no handle, not a dash. */}
+      {row.cascade_id && (
         <Link
           href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
           aria-label="See what this change set off, in Change history"
@@ -528,8 +520,6 @@ function CausedBy({
         >
           <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
         </Link>
-      ) : (
-        <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
       )}
     </span>
   );

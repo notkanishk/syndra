@@ -1,8 +1,10 @@
+import { cookies } from 'next/headers';
 import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from 'next/font/google';
 
 import { AppShell } from '@/components/shell/AppShell';
 import { Providers } from '@/components/providers';
 import { getSession } from '@/lib/session';
+import { VIEW_COOKIE, parseUiView } from '@/lib/ui-view-cookie';
 import './globals.css';
 
 // Display face — page titles, card titles, dialog titles. Optical sizing is
@@ -72,6 +74,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getSession();
+  // The view is rendered by the server, so the first paint is already the right one.
+  const initialView = parseUiView((await cookies()).get(VIEW_COOKIE)?.value);
   const fontVars = `${bricolage.variable} ${figtree.variable} ${jetbrains.variable}`;
 
   // Dark is the default; the stored preference is applied before paint so a
@@ -85,7 +89,7 @@ export default async function RootLayout({
       </head>
       <body className="bg-ground text-ink antialiased">
         <Providers hasSession={Boolean(session)} isOperator={session?.role === "admin"}>
-          {session ? <AppShell session={session}>{children}</AppShell> : children}
+          {session ? <AppShell session={session} initialView={initialView}>{children}</AppShell> : children}
         </Providers>
       </body>
     </html>

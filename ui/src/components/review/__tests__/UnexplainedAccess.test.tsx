@@ -30,6 +30,10 @@ const bulk = vi.hoisted(() => ({
   applies: 0,
 }));
 
+// Zitadel not answering, as the shell's one Notice decides it.
+const zitadel = vi.hoisted(() => ({ down: false }));
+vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => zitadel.down }));
+
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(""),
   useRouter: () => ({ replace: () => {} }),
@@ -644,5 +648,41 @@ describe("the revoke confirm, once it has run", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).queryByText(/removed from Zitadel as you confirm/i)).toBeNull();
     expect(within(dialog).getByText(/send on their own/i)).toBeInTheDocument();
+  });
+});
+
+// The board's degraded frame: last known rows stay readable, every answer waits.
+// UI only: the buttons are disabled, no request is changed.
+describe("Drift while Zitadel is not answering", () => {
+  beforeEach(() => {
+    drift.data = [item()];
+  });
+
+  it("disables the decisions and says they wait, in words", () => {
+    zitadel.down = true;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <UnexplainedAccess />
+      </QueryClientProvider>,
+    );
+    for (const name of ["Adopt", "Revoke", "Owned elsewhere", "Check Zitadel again"]) {
+      expect(screen.getByRole("button", { name })).toBeDisabled();
+    }
+    expect(screen.getByText(/wait until Zitadel answers/)).toBeInTheDocument();
+    // The reasons stay readable.
+    expect(screen.getByRole("button", { name: "Show evidence" })).not.toBeDisabled();
+    zitadel.down = false;
+  });
+
+  it("leaves them live when Zitadel answers", () => {
+    zitadel.down = false;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <UnexplainedAccess />
+      </QueryClientProvider>,
+    );
+    for (const name of ["Adopt", "Revoke", "Owned elsewhere"]) {
+      expect(screen.getByRole("button", { name })).not.toBeDisabled();
+    }
   });
 });

@@ -115,20 +115,27 @@ export function Home({ session }: { session: SessionUser }) {
     (onboarding.data && !onboarding.data.welcome_bundle_configured ? 1 : 0) +
     (onboarding.data?.missed.length ?? 0);
 
-  // Counted, and that is the whole point of it. An unreadable target produces
-  // no drift findings, so a week of silence lands here as blocks === 0 and the
-  // page says "Nothing here needs you" — the one sentence that must never be said
-  // about a system nobody has been able to look at.
-  const blocks = advanced
-    ? pending.length +
-      expiring.length +
-      onboardingGaps +
-      (propagation?.count ?? 0) +
-      unconfirmedWrites.count +
-      (drift?.count ?? 0) +
-      unvouched.length +
-      findings
-    : pending.length + expiring.length + onboardingGaps;
+  // BLOCKS, not rows (#31, "the headline counts blocks; each badge counts its own
+  // noun"): the headline said "98 things need you" for eighty-five rows in one
+  // block. A block with something in it is one thing; each card's own badge says
+  // how many rows it holds. Counted, and that is the whole point of it. An
+  // unreadable target produces no drift findings, so a week of silence lands here
+  // as blocks === 0 and the page says "Nothing here needs you" — the one sentence
+  // that must never be said about a system nobody has been able to look at.
+  const blocks = [
+    pending.length > 0,
+    expiring.length > 0,
+    onboardingGaps > 0,
+    ...(advanced
+      ? [
+          (propagation?.count ?? 0) > 0,
+          unconfirmedWrites.count > 0,
+          (drift?.count ?? 0) > 0,
+          unvouched.length > 0,
+          findings > 0,
+        ]
+      : []),
+  ].filter(Boolean).length;
 
   // What the line under the headline may call checked and clear. A block that
   // is on the page is not clear, and one that was never read is not claimed: the
@@ -346,10 +353,10 @@ function OpenRequests({
               <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
                 <UserName id={entry.requester_id} />
             </div>
-            <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+            <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
               <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
             </div>
-            <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+            <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
               {entry.justification ? `“${entry.justification}”` : "No reason given"}
             </div>
             <div className="w-[66px] shrink-0 text-[13px] text-faint">
@@ -443,12 +450,12 @@ function ExpiringRow({
       <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
         <UserName id={grant.user_id} />
       </div>
-      <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+      <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <AccessSource kind="direct" />
-        <span className="truncate text-[14px] text-muted">
+        <span className="text-[14px] text-muted [text-wrap:pretty]">
           No action — expires {formatShortDate(grant.expires_at)}
         </span>
       </div>
@@ -532,7 +539,7 @@ function OnboardingGaps({ report }: { report: MissedOnboardingReport }) {
           >
             <UserName id={person.user_id} />
           </Link>
-          <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+          <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
             Holds no bundle
           </div>
         </CardRow>
@@ -637,7 +644,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
             >
               <UserName id={row.user_id} />
             </Link>
-            <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+            <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
               {row.role_keys && row.role_keys.length > 0 ? (
                 row.role_keys.map((key) => (
                   <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-2" />
@@ -646,7 +653,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
                 <span className="text-faint">—</span>
               )}
             </div>
-            <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+            <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
               {writeNoun(row.op_type)}, accepted <Relative iso={row.applied_at} />
             </div>
             <ButtonLink href={`/users/${row.user_id}`} size="sm">

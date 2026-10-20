@@ -8,6 +8,7 @@ import { Notice } from "@/components/ui/Notice";
 import { Relative } from "@/components/ui/Time";
 import { Unfold } from "@/components/ui/Unfold";
 import { request } from "@/lib/api-client";
+import { useZitadelReachable } from "@/lib/queries/useIndicators";
 import { formatWhen } from "@/lib/format";
 import { useUiView } from "@/lib/ui-view";
 
@@ -51,15 +52,7 @@ interface SystemMode {
  * in words — colour is never the only signal.
  */
 export function DegradedBanner() {
-  // An operator's read: a member's proxy refuses /system/mode, every minute.
-  const { isOperator } = useUiView();
-  const { data } = useQuery({
-    queryKey: ["system", "mode"],
-    queryFn: () => request<SystemMode>("/system/mode"),
-    enabled: isOperator,
-    refetchInterval: 60_000,
-    retry: false,
-  });
+  const { data, degraded } = useSystemMode();
 
   // Two different lies, two different banners.
   //
@@ -77,7 +70,6 @@ export function DegradedBanner() {
   // signal that survives the restart.
   const [serverOpen, setServerOpen] = useState(false);
   const client = useQueryClient();
-  const degraded = Boolean(data?.degraded);
   const wasDegraded = useRef(degraded);
   // Zitadel answering again: every list read while it was down asks again,
   // rather than waiting out its stale time.
@@ -87,20 +79,20 @@ export function DegradedBanner() {
   }, [client, degraded]);
   const residue = data?.seed_residue ?? 0;
   const seededOverLive = residue > 0 && data?.directory === "zitadel";
-  const open = Boolean(data?.degraded || seededOverLive);
+  const open = degraded || seededOverLive;
 
   return (
     <Unfold open={open}>
       <div className="pb-4">
-        {data?.degraded ? (
-          data.last_read_at ? (
+        {degraded ? (
+          data?.last_read_at ? (
             <Notice
               tone="warn"
               live
               title={`Zitadel isn't answering. This is what it held at ${formatWhen(data.last_read_at)}.`}
             >
               Everything below is real, read <Relative iso={data.last_read_at} />, and may have
-              changed since. Giving and revoking access is paused until Zitadel answers, because a
+              changed since. Giving and revoking access wait until Zitadel answers, because a
               decision made on an old read can be wrong.
             </Notice>
           ) : (
@@ -159,12 +151,28 @@ export function DegradedBanner() {
   );
 }
 
-export function useDegraded(): boolean {
+/**
+ * THE answer to "is Zitadel answering", for the one Notice and for any control
+ * that pauses with it. Two signals said it before and disagreed: the backend's
+ * mode (configured and not answering) and the reachability the rail polls, which
+ * is also false when Syndra has no Zitadel client at all. Pending changes and
+ * Home read the second and showed their own notice; the shell read the first and
+ * showed nothing on Home and Drift. Either one means giving and revoking wait.
+ */
+function useSystemMode() {
+  // An operator's read: a member's proxy refuses /system/mode, every minute.
+  const { isOperator } = useUiView();
   const { data } = useQuery({
     queryKey: ["system", "mode"],
     queryFn: () => request<SystemMode>("/system/mode"),
+    enabled: isOperator,
     refetchInterval: 60_000,
     retry: false,
   });
-  return Boolean(data?.degraded);
+  const reachable = useZitadelReachable(isOperator);
+  return { data, degraded: Boolean(data?.degraded) || reachable === false };
+}
+
+export function useDegraded(): boolean {
+  return useSystemMode().degraded;
 }

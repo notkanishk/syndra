@@ -101,7 +101,10 @@ export function VersionBand({ target, history }: { target: string; history?: Map
           </p>
         </div>
 
-        <span className="flex shrink-0 flex-col items-end gap-1.5 whitespace-nowrap">
+        {/* Not `whitespace-nowrap` on the column: the disabled Publish button's
+            reason is a whole sentence under it, and a column that refused to
+            wrap it grew past the card's right edge. Only the button keeps one line. */}
+        <span className="flex max-w-full shrink-0 flex-col items-end gap-1.5 [&_button]:whitespace-nowrap">
           {/* Inert, never absent. The seat is what keeps the band one shape
               across all three readings. */}
           {/* The band says a note is required and then published without one.

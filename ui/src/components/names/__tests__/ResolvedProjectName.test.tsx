@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ResolvedProjectName } from "@/components/names/ProjectName";
+import { UiViewProvider } from "@/lib/ui-view";
 
 /**
  * A person's access view groups roles under a project name the backend
@@ -20,10 +21,20 @@ describe("ResolvedProjectName", () => {
   });
 
   it("labels an unresolved name instead of presenting the raw id as one", () => {
+    render(
+      <UiViewProvider isOperator initialView="advanced">
+        <ResolvedProjectName name="382075332397630470" resolved={false} id="382075332397630470" />
+      </UiViewProvider>,
+    );
+    expect(screen.getByText("Unknown project")).toBeInTheDocument();
+    // Advanced keeps the id on screen — an operator searches by it — just not
+    // alone in the slot a name occupies.
+    expect(screen.getByText("382075332397630470")).toBeInTheDocument();
+  });
+
+  it("keeps the id out of Basic altogether", () => {
     render(<ResolvedProjectName name="382075332397630470" resolved={false} id="382075332397630470" />);
     expect(screen.getByText("Unknown project")).toBeInTheDocument();
-    // The id stays on screen — an operator searches by it — just not alone
-    // in the slot a name occupies.
-    expect(screen.getByText("382075332397630470")).toBeInTheDocument();
+    expect(screen.queryByText("382075332397630470")).not.toBeInTheDocument();
   });
 });

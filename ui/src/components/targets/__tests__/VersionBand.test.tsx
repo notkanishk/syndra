@@ -123,6 +123,25 @@ describe("the version band keeps one shape", () => {
   });
 });
 
+// The disabled Publish button's reason is a whole sentence under it. The column
+// that holds them used to be `whitespace-nowrap`, so the sentence refused to wrap
+// and the card grew past its right edge ("...the next person to roll ba").
+describe("the Publish column stays inside the card", () => {
+  it("lets the reason sentence wrap; only the button keeps one line", () => {
+    render(
+      <VersionBand
+        target="truenas"
+        history={history({ unpublished: true, unpublished_changes: [change()] })}
+      />,
+    );
+    const reason = screen.getByText(/the next person to roll back reads/);
+    for (let el: HTMLElement | null = reason; el && !el.className.includes("rounded-card"); el = el.parentElement) {
+      expect(el.className, el.tagName).not.toMatch(/(^|\s)whitespace-nowrap/);
+    }
+    expect(reason.closest("span.max-w-full")?.className).toContain("[&_button]:whitespace-nowrap");
+  });
+});
+
 describe("the band enumerates what a rollback would undo", () => {
   it("names each edit, who made it, and how many people it moved", () => {
     render(

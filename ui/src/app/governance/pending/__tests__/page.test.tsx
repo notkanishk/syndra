@@ -128,13 +128,20 @@ describe("Pending changes", () => {
     pending.data = [row()];
     renderPending();
 
-    expect(screen.getByText(/Zitadel is not answering/)).toBeInTheDocument();
-    // A warn Notice with the breathing dot, not a hand-drawn box with a "!".
-    expect(screen.getByRole("status", { name: "" }).querySelector(".breathe")).not.toBeNull();
-    expect(
-      screen.getByText(/Sending waits until Zitadel answers/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Sending waits until Zitadel answers/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Send / })).toBeDisabled();
+  });
+
+  // Zitadel not answering is ONE Notice, the shell's, above the page title. The
+  // page used to add its own beneath the lede ("Zitadel is not answering."), so
+  // the same fact was said twice, in two places, on this page only.
+  it("leaves the Zitadel-not-answering Notice to the shell", () => {
+    summary.reachable = false;
+    pending.data = [row()];
+    renderPending();
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText(/Zitadel is not answering/)).toBeNull();
   });
 });
 
@@ -183,6 +190,25 @@ describe("Pending changes · caused by", () => {
 
     const link = screen.getByRole("link", { name: /Change history/i });
     expect(link).toHaveAttribute("href", "/operations/cascades?cascade=cas-8841-aaaa");
+  });
+
+  // A grant made by hand has no edit behind it. It used to carry a bare dash
+  // under "Given by hand", which read as a value that failed to load.
+  it("shows no handle, and no dash, for a change made by hand", () => {
+    pending.data = [row({ source: "direct", source_ref: undefined, cascade_id: undefined })];
+    renderPending();
+
+    const cell = screen.getByText("Given by hand").parentElement as HTMLElement;
+    expect(cell.textContent).toBe("Given by hand");
+  });
+
+  // A project nothing could name is words, not a dash before the role.
+  it("reads Unknown project, not a dash, before the role of a change", () => {
+    pending.data = [row()];
+    renderPending();
+
+    expect(screen.getByText(/Unknown project/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/give —/);
   });
 });
 

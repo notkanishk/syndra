@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 
 import { buildModel } from "@/components/insights/model";
+import { projectLabel } from "@/components/names/Unresolved";
 import type { InsightsUrl } from "@/components/insights/useInsightsUrl";
 import { ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -154,7 +155,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
               <CardHeader title="Ending soon" note="People whose direct access ends within 30, 60 and 90 days" />
               {t.ending_soon.length === 0 && <Quiet>No direct access ends in the next 90 days.</Quiet>}
               {t.ending_soon.map((p) => (
-                <Fact key={p.project_id} label={p.project_name} value={`${p.d30} · ${p.d60} · ${p.d90}`} />
+                <Fact key={p.project_id} label={projectLabel(p.project_name, p.project_id)} value={`${p.d30} · ${p.d60} · ${p.d90}`} />
               ))}
             </Card>
 

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { ProjectName } from "@/components/names";
+import { projectLabel } from "@/components/names/Unresolved";
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -25,7 +27,7 @@ import { humanizeKey } from "@/lib/format";
 type RoleSort = "project" | "role" | "group" | "people";
 
 const ROLE_SORT: Record<RoleSort, (role: CatalogRole) => string | number> = {
-  project: (role) => role.project_name || role.project_id,
+  project: (role) => projectLabel(role.project_name, role.project_id),
   role: (role) => role.display_name || humanizeKey(role.role_key),
   group: (role) => role.group || "",
   // The number the row shows: what Zitadel holds, else what Syndra recorded.
@@ -57,10 +59,12 @@ export default function RolesPage() {
 
   const all = useMemo(() => roles.data ?? [], [roles.data]);
 
-  const projects = useMemo(
-    () => Array.from(new Set(all.map((role) => role.project_name || role.project_id))).sort(),
-    [all],
-  );
+  // Keyed by id, labelled by name: two projects Syndra could not name are two
+  // projects, not one "Unknown project", and an id is never the label.
+  const projects = useMemo(() => {
+    const byId = new Map(all.map((role) => [role.project_id, projectLabel(role.project_name, role.project_id)]));
+    return Array.from(byId, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [all]);
   const groups = useMemo(
     () => Array.from(new Set(all.map((role) => role.group).filter(Boolean))).sort() as string[],
     [all],
@@ -70,7 +74,7 @@ export default function RolesPage() {
   const rows = orderBy(
     all.filter(
       (role) =>
-        (!project || (role.project_name || role.project_id) === project) &&
+        (!project || role.project_id === project) &&
         (!group || role.group === group) &&
         (!unusedOnly || role.is_unused) &&
         (!needle ||
@@ -142,9 +146,9 @@ export default function RolesPage() {
                 aria-label="Filter by project"
               >
                 <option value="">All projects</option>
-                {projects.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
+                {projects.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
                   </option>
                 ))}
               </Select>
@@ -260,7 +264,7 @@ export default function RolesPage() {
               className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
               <span className="w-full text-[12.5px] text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-[14.5px]">
-                {role.project_name || role.project_id}
+                <ProjectName id={role.project_id} name={role.project_name} />
               </span>
               <span className="w-full min-w-0 tablet:min-w-[200px] tablet:flex-1">
                 <span className="block text-[15px] font-semibold [text-wrap:pretty]">
@@ -270,7 +274,7 @@ export default function RolesPage() {
                 </span>
                 {role.cloned_from_role && (
                   <span className="block text-[12.5px] text-faint [text-wrap:pretty]">
-                    cloned from {role.cloned_from_project} / {role.cloned_from_role}
+                    cloned from <ProjectName id={role.cloned_from_project} /> / {role.cloned_from_role}
                   </span>
                 )}
                 {/* Between tablet and desktop the group and what uses the role
