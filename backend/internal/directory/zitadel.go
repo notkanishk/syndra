@@ -579,7 +579,12 @@ func toUserProfile(u zitadel.ZitadelUser) models.UserProfile {
 	if !u.Created.IsZero() {
 		joined = &u.Created
 	}
+	kind := models.UserKindHuman
+	if u.Machine {
+		kind = models.UserKindMachine
+	}
 	return models.UserProfile{
+		Kind:   kind,
 		Joined: joined,
 		ID:     u.ID,
 		Name:   name,

@@ -85,6 +85,11 @@ func FindMissedOnboarding(ctx context.Context) (MissedOnboardingReport, error) {
 		if p.Status != "active" {
 			continue
 		}
+		// A machine account is a service account, not a person missing a
+		// bundle; it stays in every access audit, just not in this list.
+		if p.IsMachine() {
+			continue
+		}
 		if _, ok := holderSet[p.ID]; ok {
 			continue
 		}

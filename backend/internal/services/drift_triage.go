@@ -305,7 +305,8 @@ func isServiceAccount(user models.UserProfile) bool {
 	if at := strings.Index(local, "@"); at >= 0 {
 		local = local[:at]
 	}
-	return strings.EqualFold(user.Status, "service") ||
+	return user.IsMachine() ||
+		strings.EqualFold(user.Status, "service") ||
 		strings.HasPrefix(strings.ToLower(user.Name), "svc-") ||
 		strings.HasPrefix(local, "svc-")
 }

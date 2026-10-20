@@ -529,6 +529,13 @@ function PersonRow({
           <span className="block truncate text-[12.5px] text-faint" title={subtitle}>
             {subtitle}
           </span>
+          {/* Zitadel's machine type. Listed with everyone for now; where they
+              finally live is design's call (Q-07 item 26). */}
+          {entry.user.kind === "machine" && (
+            <span className="mt-0.5 block">
+              <Badge>Service account</Badge>
+            </span>
+          )}
           {/* Below desktop the bundles fold into a line under the person, as the
               board draws them, so Access keeps its width. */}
           {bundleLine && (
