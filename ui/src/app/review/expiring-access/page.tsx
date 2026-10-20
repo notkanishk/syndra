@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
-
+import { useMemo, useRef, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
@@ -11,9 +10,14 @@ import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
 import { StatusDot } from "@/components/ui/Badge";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
-import { FilterPills } from "@/components/ui/Select";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
+import { FilterPills, Select } from "@/components/ui/Select";
+import { RunLabel, SortHead, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
+import { Unfold } from "@/components/ui/Unfold";
 import {
   RowCheckbox,
   SelectAllRow,
@@ -27,6 +31,7 @@ import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
   useAcknowledgeExpiry,
   useClearExpiryAcknowledgement,
@@ -34,7 +39,7 @@ import {
   type ExpiringGrantRow,
 } from "@/lib/queries/useExpiringAccess";
 import { useCreateGrant } from "@/lib/queries/useUsers";
-import { daysUntil, formatShortDate } from "@/lib/format";
+import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
 import {
   outcomeFromError,
   statesNothingChanged,
@@ -79,17 +84,102 @@ function windowDays(raw: string | null): Window {
   return WINDOWS.find((d) => String(d) === raw) ?? WINDOWS[0];
 }
 
+type SortKey = "who" | "what" | "given" | "ends";
+
+/** The two cards. `ends` is the clock: soonest first unless a heading says otherwise. */
+const SECTIONS = {
+  undecided: {
+    id: "sec-undecided",
+    label: "Undecided",
+    hint: "Each ends on its date unless you extend it",
+    tone: "warn",
+  },
+  lapse: {
+    id: "sec-lapse",
+    label: "Let lapse",
+    hint: "Somebody looked and decided. Extend still works",
+    tone: undefined,
+  },
+} as const;
+type SectionKey = keyof typeof SECTIONS;
+
 export default function ExpiringAccessPage() {
   const router = useRouter();
   const within = windowDays(useSearchParams().get("within"));
   const grants = useExpiringGrants(within);
   const rows = useMemo(() => [...(grants.data ?? [])].sort(sortBySoonest), [grants.data]);
 
+  // Search finds a row and the project narrows the window; neither is in the link, which
+  // carries only how far ahead (`?within=`). Names are the ones the rows show, so what is typed
+  // is what is seen.
+  const resolver = useNameResolver();
+  const [query, setQuery] = useState("");
+  const [project, setProject] = useState("");
+  const [sort, flipSort] = useSort<SortKey>("ends");
+  const [open, setOpen] = useState<Record<SectionKey, boolean>>({ undecided: true, lapse: true });
+  const text = useMemo(
+    () => ({
+      who: (grant: ExpiringGrantRow) => resolver.resolveUser(grant.user_id).value?.display_name ?? "",
+      what: (grant: ExpiringGrantRow) =>
+        `${resolver.resolveProject(grant.project_id).value?.name ?? ""} · ${humanizeKey(grant.role_key)}`,
+      given: (grant: ExpiringGrantRow) =>
+        resolver.resolveUser(grant.granted_by).value?.display_name ?? "",
+    }),
+    [resolver],
+  );
+  const needle = query.trim().toLowerCase();
+  const filtered = needle !== "" || project !== "";
+  // Still soonest first: the amber row and the "soonest ends" line are about the clock, not
+  // about the order a heading has put the rows in.
+  const matched = useMemo(
+    () =>
+      rows.filter(
+        (grant) =>
+          (!project || grant.project_id === project) &&
+          (!needle ||
+            [text.who(grant), text.what(grant), grant.role_key].some((part) =>
+              part.toLowerCase().includes(needle),
+            )),
+      ),
+    [rows, project, needle, text],
+  );
+  // Only projects with a row in the window, so nothing on offer returns nothing.
+  const projects = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const grant of rows) {
+      if (!byId.has(grant.project_id))
+        byId.set(grant.project_id, resolver.resolveProject(grant.project_id).value?.name ?? "");
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows, resolver]);
+  const ordered = useMemo(() => sortExpiring(matched, sort, text), [matched, sort, text]);
+  const soonestId = matched.find((grant) => !grant.acknowledged)?.id;
+
   // Two groups, not a filter. The cost this screen imposes is rescanning rows somebody has
   // already judged, and a heading is where the eye stops; a filter would hide the same rows
   // behind a control an operator has to remember to check.
-  const undecided = useMemo(() => rows.filter((grant) => !grant.acknowledged), [rows]);
-  const acknowledged = useMemo(() => rows.filter((grant) => grant.acknowledged), [rows]);
+  const undecided = useMemo(() => ordered.filter((grant) => !grant.acknowledged), [ordered]);
+  const acknowledged = useMemo(() => ordered.filter((grant) => grant.acknowledged), [ordered]);
+  // Across the whole window: "every one decided" is a fact about the queue, not about a search.
+  const anyUndecided = rows.some((grant) => !grant.acknowledged);
+
+  const sections = useMemo(
+    () =>
+      (["undecided", "lapse"] as const)
+        .map((key) => ({
+          key,
+          ...SECTIONS[key],
+          count: (key === "undecided" ? undecided : acknowledged).length,
+        }))
+        .filter((section) => section.count > 0),
+    [undecided, acknowledged],
+  );
+  const openSection = (section: { key: SectionKey }) =>
+    setOpen((cur) => ({ ...cur, [section.key]: true }));
+  const readAt = useMemo(
+    () => (grants.dataUpdatedAt ? new Date(grants.dataUpdatedAt).toISOString() : null),
+    [grants.dataUpdatedAt],
+  );
 
   // Selection spans the undecided rows only. Extending is the one thing worth doing to a dozen at
   // once, and a row already dealt with is not part of the working set.
@@ -118,16 +208,19 @@ export default function ExpiringAccessPage() {
     [selectedGrants],
   );
 
-  const people = new Set(rows.map((grant) => grant.user_id)).size;
-  const soonest = undecided[0]?.expires_at;
+  const people = new Set(matched.map((grant) => grant.user_id)).size;
+  const soonest = matched.find((grant) => !grant.acknowledged)?.expires_at;
   const showRows = !grants.isLoading && !grants.error && rows.length > 0;
-  const section = (title: string, hint: string, list: ExpiringGrantRow[], first: boolean) => (
+  const section = (key: SectionKey, list: ExpiringGrantRow[], first: boolean) => (
     <ExpiringSection
-      title={title}
-      hint={hint}
+      {...SECTIONS[key]}
       rows={list}
+      open={open[key]}
+      onToggle={() => setOpen((cur) => ({ ...cur, [key]: !cur[key] }))}
+      sort={sort}
+      onSort={flipSort}
       // Only the soonest undecided row is amber: a deadline signal, not a decoration.
-      soonestId={first ? list[0]?.id : undefined}
+      soonestId={first ? soonestId : undefined}
       selecting={selecting}
       selection={selection}
       onLetLapse={setLapsing}
@@ -135,7 +228,7 @@ export default function ExpiringAccessPage() {
         first && selecting ? (
           <SelectAllRow
             inScope={undecided.length}
-            total={rows.length}
+            total={matched.length}
             noun={["role", "roles"]}
             allSelected={selection.allSelected}
             {...selection.headerCheckboxProps}
@@ -153,7 +246,7 @@ export default function ExpiringAccessPage() {
           showRows ? (
             <MetaRow>
               {[
-                `${rows.length} ${rows.length === 1 ? "role" : "roles"} · ${people} ${people === 1 ? "person" : "people"}`,
+                `${matched.length} ${matched.length === 1 ? "role" : "roles"}${filtered ? " matching" : ""} · ${people} ${people === 1 ? "person" : "people"}`,
                 soonest ? `soonest ends ${formatShortDate(soonest)}` : "every one decided",
               ]}
             </MetaRow>
@@ -180,6 +273,41 @@ export default function ExpiringAccessPage() {
             }
           />
         }
+        search={
+          showRows ? (
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search person or role…"
+              aria-label="Search expiring access by person or role"
+            />
+          ) : undefined
+        }
+        filters={
+          showRows ? (
+            <FilterPanel
+              resultCount={matched.length}
+              noun={["role", "roles"]}
+              activeCount={project ? 1 : 0}
+              onClear={() => setProject("")}
+            >
+              <FilterField label="Project">
+                <Select
+                  value={project}
+                  onChange={(event) => setProject(event.target.value)}
+                  aria-label="Filter by project"
+                >
+                  <option value="">All projects</option>
+                  {projects.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </Select>
+              </FilterField>
+            </FilterPanel>
+          ) : undefined
+        }
         trailing={
           undecided.length > 0 ? (
             <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
@@ -187,21 +315,46 @@ export default function ExpiringAccessPage() {
         }
       />
 
-      {showRows ? (
+      {/* The read line: how current the list is on the left (Syndra's own, until the sweep
+          records its runs), a chip per card at the right end. Not while the read is out. */}
+      {!grants.isLoading && !grants.error && (
+        <ReadLine sections={sections} label="Sections of expiring access" onOpen={openSection} className="-mt-1">
+          <ReadFreshness
+            state={{ readAt, current: true }}
+            subject="Syndra’s own list"
+            onRefresh={() => grants.refetch()}
+          />
+        </ReadLine>
+      )}
+
+      {showRows && matched.length === 0 ? (
+        <Card>
+          <EmptyState
+            title="Nothing that ends matches those filters."
+            guidance={`${rows.length} ${rows.length === 1 ? "role ends" : "roles end"} in the next ${within} days.`}
+            action={{
+              label: "Clear filters",
+              onClick: () => {
+                setQuery("");
+                setProject("");
+              },
+            }}
+          />
+        </Card>
+      ) : showRows ? (
         <div data-selection-scope {...selection.containerProps} className="flex flex-col gap-4">
           {/* Everything in the window has been judged. Said outright, because a queue whose only
               rows are acknowledged ones looks identical to a queue nobody has touched. */}
-          {undecided.length === 0 && (
+          <SectionPill sections={sections} label="Sections of expiring access" onOpen={openSection} />
+          {!anyUndecided && (
             <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
               <StatusDot tone="healthy" />
               Nothing here is waiting on a decision. Every role that ends in the next {within} days has
               been looked at.
             </span>
           )}
-          {undecided.length > 0 &&
-            section("Undecided", "Each ends on its date unless you extend it", undecided, true)}
-          {acknowledged.length > 0 &&
-            section("Let lapse", "Somebody looked and decided. Extend still works", acknowledged, false)}
+          {undecided.length > 0 && section("undecided", undecided, true)}
+          {acknowledged.length > 0 && section("lapse", acknowledged, false)}
         </div>
       ) : (
         <Card>
@@ -288,18 +441,30 @@ export default function ExpiringAccessPage() {
  * rows out of reach.
  */
 function ExpiringSection({
-  title,
+  id,
+  label,
   hint,
+  tone,
   rows,
+  open,
+  onToggle,
+  sort,
+  onSort,
   soonestId,
   selecting,
   selection,
   onLetLapse,
   selectAll,
 }: {
-  title: string;
+  id: string;
+  label: string;
   hint: string;
+  tone?: "warn";
   rows: ExpiringGrantRow[];
+  open: boolean;
+  onToggle: () => void;
+  sort: Sort<SortKey>;
+  onSort: (key: SortKey) => void;
   soonestId?: string;
   selecting: boolean;
   selection: RowSelection;
@@ -307,37 +472,93 @@ function ExpiringSection({
   selectAll: React.ReactNode;
 }) {
   const paging = usePaging();
+  const resolver = useNameResolver();
+  const anchor = useRef<HTMLDivElement>(null);
   const shown = rows.slice(0, paging.limit);
+  // What and Given by gather equal values under a counted label; Who and Ends in do not.
+  const runAt = runStarts(
+    rows,
+    sort.key === "what"
+      ? (grant) => `${resolver.resolveProject(grant.project_id).value?.name ?? ""} · ${humanizeKey(grant.role_key)}`
+      : sort.key === "given"
+        ? (grant) => resolver.resolveUser(grant.granted_by).value?.display_name ?? "somebody no longer listed"
+        : null,
+  );
   return (
-    <Card>
-      <CardHeader title={title} count={rows.length} note={hint} />
-      <CardColumns>
-        {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
-        <span className="w-[190px]">Who</span>
-        <span className="flex-1">What they can get into</span>
-        <span className="hidden w-[160px] desktop:block">Given by</span>
-        <span className="w-[110px]">Ends in</span>
-        <span className="min-w-[300px]" />
-      </CardColumns>
-      {selectAll}
-      {shown.map((grant) => (
-        <ExpiringRow
-          key={grant.id}
-          grant={grant}
-          soonest={grant.id === soonestId}
-          selecting={selecting}
-          selection={selection}
-          onLetLapse={() => onLetLapse(grant)}
-        />
-      ))}
-      <PaginationRow
-        shown={shown.length}
-        total={rows.length}
-        onMore={paging.more}
-        onAll={() => paging.all(rows.length)}
-        onBack={paging.back}
-      />
-    </Card>
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-4">
+      <Card>
+        <div ref={anchor}>
+          <CardHeader
+            tone={tone}
+            count={rows.length}
+            note={hint}
+            title={
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={`${id}-body`}
+                onClick={onToggle}
+                className="inline-flex items-center gap-3 text-left"
+              >
+                <span
+                  aria-hidden
+                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-press ${
+                    open ? "rotate-90" : ""
+                  }`}
+                >
+                  ›
+                </span>
+                <span id={`${id}-title`}>{label}</span>
+              </button>
+            }
+          />
+        </div>
+        <Unfold open={open}>
+          <div id={`${id}-body`}>
+            <CardColumns>
+              {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+              <span className="w-[190px]">
+                <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
+              </span>
+              <span className="flex-1">
+                <SortHead label="What they can get into" name="what" sort={sort} onSort={onSort} />
+              </span>
+              <span className="hidden w-[160px] desktop:block">
+                <SortHead label="Given by" name="given" sort={sort} onSort={onSort} />
+              </span>
+              <span className="w-[110px]">
+                <SortHead label="Ends in" name="ends" sort={sort} onSort={onSort} />
+              </span>
+              <span className="min-w-[300px]" />
+            </CardColumns>
+            {selectAll}
+            {shown.map((grant, index) => {
+              const run = runAt(index);
+              return (
+                <div key={grant.id}>
+                  {run && <RunLabel {...run} />}
+                  <ExpiringRow
+                    grant={grant}
+                    soonest={grant.id === soonestId}
+                    selecting={selecting}
+                    selection={selection}
+                    onLetLapse={() => onLetLapse(grant)}
+                  />
+                </div>
+              );
+            })}
+            <PaginationRow
+              shown={shown.length}
+              total={rows.length}
+              onMore={paging.more}
+              onAll={() => paging.all(rows.length)}
+              onBack={paging.back}
+              anchor={anchor}
+            />
+          </div>
+        </Unfold>
+      </Card>
+    </section>
   );
 }
 
@@ -648,4 +869,20 @@ function sortBySoonest(a: ExpiringGrantRow, b: ExpiringGrantRow): number {
   if (!a.expires_at) return 1;
   if (!b.expires_at) return -1;
   return a.expires_at < b.expires_at ? -1 : 1;
+}
+
+/**
+ * The order a heading puts a card's rows in. Ends in is the clock itself, soonest first;
+ * the others compare their words, and equal words fall back to the clock.
+ */
+function sortExpiring(
+  rows: ExpiringGrantRow[],
+  sort: Sort<SortKey>,
+  text: Record<"who" | "what" | "given", (grant: ExpiringGrantRow) => string>,
+): ExpiringGrantRow[] {
+  return [...rows].sort((a, b) => {
+    if (sort.key === "ends") return sortBySoonest(a, b) * sort.dir;
+    const order = text[sort.key](a).localeCompare(text[sort.key](b)) * sort.dir;
+    return order || sortBySoonest(a, b);
+  });
 }

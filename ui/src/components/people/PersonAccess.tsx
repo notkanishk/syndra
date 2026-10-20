@@ -21,11 +21,12 @@ import { PersonRequests } from "@/components/people/PersonRequests";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
-import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
+import { Chip, Mono } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
 import { Unfold } from "@/components/ui/Unfold";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
@@ -190,6 +191,24 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   // Only the ones applying now. A lifted or lapsed hold belongs to the history
   // the Review queue keeps, not to what this person can reach.
   const inForce = (access.data.allowances ?? []).filter((a) => a.in_force);
+
+  // One section per project, in the order the cards are drawn. Never the two
+  // counts added together (ProjectRoleTally): what Syndra decided, or, with
+  // none, what it never gave.
+  const projectSections = access.data.projects.map((project) => ({
+    id: `proj-${project.project_id}`,
+    projectId: project.project_id,
+    label: project.project_name,
+    count: project.effective_role_keys.length || unexplainedIn(project).length,
+    tone: unexplainedIn(project).length > 0 ? ("warn" as const) : undefined,
+  }));
+  // A folded project opens on the way to it.
+  const openProject = ({ projectId }: { projectId: string }) =>
+    setFolded((prev) => {
+      const next = new Set(prev);
+      next.delete(projectId);
+      return next;
+    });
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -371,49 +390,25 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               per project at the right end (RULES, grouped lists). Not drawn
               while the read is still out, or with nothing to read it about. */}
           {access.data.projects.length > 0 && !upstreamGrants.isLoading && (
-            <div className="-mb-1 flex flex-wrap items-center gap-x-4 gap-y-2 px-5">
-              {(readAt || confirmation === "unreachable") && (
-                <ReadFreshness state={{ readAt }} subject="What Zitadel confirmed" />
-              )}
-              {access.data.projects.length > 1 && (
-                <nav aria-label="Projects on this page" className="ml-auto flex flex-wrap gap-2">
-                  {access.data.projects.map((project) => (
-                    <a
-                      key={project.project_id}
-                      href={`#proj-${project.project_id}`}
-                      className="inline-flex min-h-11 items-center desktop:min-h-0"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        setFolded((prev) => {
-                          const next = new Set(prev);
-                          next.delete(project.project_id);
-                          return next;
-                        });
-                        // Next frame: the fold has to be open before there is a place to land.
-                        requestAnimationFrame(() =>
-                          document
-                            .getElementById(`proj-${project.project_id}`)
-                            ?.scrollIntoView?.({ block: "start" }),
-                        );
-                      }}
-                    >
-                      <Chip className="gap-2">
-                        {unexplainedIn(project).length > 0 && <StatusDot tone="warn" />}
-                        {project.project_name}
-                        {/* Never the two added together (ProjectRoleTally): what Syndra
-                            decided, or, with none, what it never gave. */}
-                        <span className="text-faint">
-                          {project.effective_role_keys.length || unexplainedIn(project).length}
-                        </span>
-                        <span aria-hidden className="text-[12px] text-faint">
-                          ↓
-                        </span>
-                      </Chip>
-                    </a>
-                  ))}
-                </nav>
-              )}
-            </div>
+            <>
+              <ReadLine
+                sections={projectSections}
+                label="Projects on this page"
+                onOpen={openProject}
+                className="-mb-1 gap-x-4 px-5"
+              >
+                {(readAt || confirmation === "unreachable") && (
+                  <ReadFreshness state={{ readAt }} subject="What Zitadel confirmed" />
+                )}
+              </ReadLine>
+              {/* Once the read line has scrolled away, the same projects float at the top. */}
+              <SectionPill
+                sections={projectSections}
+                label="Projects on this page"
+                onOpen={openProject}
+                gap={18}
+              />
+            </>
           )}
 
           {access.data.projects.map((project) => {

@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { isDeparted } from "@/lib/people-filters";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Badge, Chip, Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -18,6 +18,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills, Select } from "@/components/ui/Select";
+import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
+import { RunLabel, SortHead, runStarts, useSort } from "@/components/ui/SortHead";
 import { Unfold } from "@/components/ui/Unfold";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
@@ -66,7 +68,6 @@ import {
 } from "@/lib/drift-filters";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
-import { stillMotion } from "@/lib/motion";
 import { targetLabel } from "@/lib/nav";
 import {
   outcomeFromError,
@@ -85,7 +86,7 @@ const SECTIONS = [
     kind: "target_only",
     id: "sec-z",
     title: "In Zitadel, not given by Syndra",
-    short: "Not given by Syndra",
+    label: "Not given by Syndra",
     hint: "They keep it until you decide",
     tone: "danger",
   },
@@ -93,7 +94,7 @@ const SECTIONS = [
     kind: "syndra_only",
     id: "sec-s",
     title: "Given by Syndra, gone from Zitadel",
-    short: "Gone from Zitadel",
+    label: "Gone from Zitadel",
     hint: "They no longer have it",
     tone: "warn",
   },
@@ -101,7 +102,7 @@ const SECTIONS = [
   kind: string;
   id: string;
   title: string;
-  short: string;
+  label: string;
   hint: string;
   tone: "danger" | "warn";
 }>;
@@ -159,11 +160,16 @@ export function UnexplainedAccess() {
   const projects = useProjects();
   // Search is not a filter in the URL: it finds a row, it does not make a view.
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<{ key: DriftSortKey; dir: 1 | -1 }>({ key: "found", dir: 1 });
+  const [sort, flipSort] = useSort<DriftSortKey>("found");
   const [open, setOpen] = useState<Record<SectionKind, boolean>>({
     target_only: true,
     syndra_only: true,
   });
+  // A folded section opens on the way to it (the chips and the pill call this).
+  const openSection = useCallback(
+    (section: { kind: SectionKind }) => setOpen((cur) => ({ ...cur, [section.kind]: true })),
+    [],
+  );
   const filtered = hasAnyDriftFilter(filters) || query.trim() !== "";
   // On the button, so "why am I seeing so few rows" never needs the panel
   // opened to answer it — that question is the one a hidden filter creates.
@@ -336,16 +342,16 @@ export function UnexplainedAccess() {
     <CardColumns>
       {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
       <span className="w-[180px] shrink-0">
-        <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
+        <SortHead label="Who" name="who" sort={sort} onSort={flipSort} />
       </span>
       <span className="w-[200px] shrink-0">
-        <SortHead label="What they can get into" name="what" sort={sort} onSort={setSort} />
+        <SortHead label="What they can get into" name="what" by="what" sort={sort} onSort={flipSort} />
       </span>
       <span className="flex-1">
-        <SortHead label="Why Syndra can’t explain it" name="why" sort={sort} onSort={setSort} />
+        <SortHead label="Why Syndra can’t explain it" name="why" by="why" sort={sort} onSort={flipSort} />
       </span>
       <span className="w-[110px] shrink-0 text-right">
-        <SortHead label="Found" name="found" sort={sort} onSort={setSort} />
+        <SortHead label="Found" name="found" sort={sort} onSort={flipSort} />
       </span>
     </CardColumns>
   );
@@ -390,7 +396,7 @@ export function UnexplainedAccess() {
       }
     >
       <div className="flex flex-col gap-4">
-        <SectionPill sections={sections} onGo={(kind) => goTo(kind, setOpen)} />
+        <SectionPill sections={sections} label="Sections of drift" onOpen={openSection} />
         {selecting && (
           <Card>
             <SelectAllRow
@@ -596,14 +602,13 @@ export function UnexplainedAccess() {
       {/* The read line: how current the list is on the left, a way to each
           section on the right. Only once there is a list to be current. */}
       {!drift.isLoading && !drift.error && (
-        <div className="-mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-2">
+        <ReadLine sections={sections} label="Sections of drift" onOpen={openSection} className="-mt-1">
           <ReadFreshness
             state={{ readAt, current: true }}
             subject="This list"
             onRefresh={() => drift.refetch()}
           />
-          <SectionChips sections={sections} onGo={(kind) => goTo(kind, setOpen)} />
-        </div>
+        </ReadLine>
       )}
 
       {/* A system nobody could read says what is missing from the list and why;
@@ -671,41 +676,6 @@ export function UnexplainedAccess() {
   );
 }
 
-/** A column heading that sorts. The one carrying the arrow is the one in force. */
-function SortHead({
-  label,
-  name,
-  sort,
-  onSort,
-}: {
-  label: string;
-  name: DriftSortKey;
-  sort: { key: DriftSortKey; dir: 1 | -1 };
-  onSort: (next: { key: DriftSortKey; dir: 1 | -1 }) => void;
-}) {
-  const on = sort.key === name;
-  return (
-    <button
-      type="button"
-      aria-label={`Sort by ${name}`}
-      onClick={() => onSort({ key: name, dir: on ? (-sort.dir as 1 | -1) : 1 })}
-      className={`inline-flex items-center gap-[5px] text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
-        on ? "text-ink" : ""
-      }`}
-    >
-      {label}
-      <span
-        aria-hidden
-        className={`inline-block text-[11px] motion-press ${on ? "opacity-100" : "opacity-0"} ${
-          on && sort.dir < 0 ? "rotate-180" : ""
-        }`}
-      >
-        ↓
-      </span>
-    </button>
-  );
-}
-
 /** A role the comparison shows on one side only, with no finding behind it. */
 type ReadRow = {
   key: string;
@@ -721,7 +691,7 @@ type SectionView = {
   kind: SectionKind;
   id: string;
   title: string;
-  short: string;
+  label: string;
   hint: string;
   tone: "danger" | "warn";
   /** Findings: what can be decided. */
@@ -730,138 +700,6 @@ type SectionView = {
   read: ReadRow[];
   count: number;
 };
-
-/** Opens a folded section on the way, then takes the reader to it. */
-function goTo(kind: SectionKind, setOpen: (next: (cur: Record<SectionKind, boolean>) => Record<SectionKind, boolean>) => void) {
-  setOpen((cur) => ({ ...cur, [kind]: true }));
-  const id = SECTIONS.find((section) => section.kind === kind)?.id;
-  setTimeout(() => {
-    const target = id ? document.getElementById(id) : null;
-    if (!target) return;
-    // The shell's own scroller where there is one, so a narrow page never
-    // moves sideways; the window otherwise (a page outside the shell).
-    const container = document.getElementById("app-scroll");
-    const behavior = stillMotion() ? "auto" : "smooth";
-    if (container) {
-      const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
-      container.scrollTo?.({ top: container.scrollTop + offset - 64, behavior });
-    } else {
-      window.scrollTo?.({ top: window.scrollY + target.getBoundingClientRect().top - 64, behavior });
-    }
-  }, 0);
-}
-
-/** One chip per section on the read line: its dot, a short name, the count, ↓. */
-function SectionChips({
-  sections,
-  onGo,
-}: {
-  sections: SectionView[];
-  onGo: (kind: SectionKind) => void;
-}) {
-  // One section has nowhere to take you.
-  if (sections.length < 2) return null;
-  return (
-    <nav id="drift-jump" aria-label="Sections of drift" className="ml-auto flex flex-wrap gap-2">
-      {sections.map((section) => (
-        <a
-          key={section.kind}
-          href={`#${section.id}`}
-          onClick={(event) => {
-            event.preventDefault();
-            onGo(section.kind);
-          }}
-          className="rounded-pill"
-        >
-          <Chip className="gap-2">
-            <StatusDot tone={section.tone as StatusTone} />
-            {section.short}
-            <span className="text-faint">{section.count}</span>
-            <span aria-hidden className="text-[12px] text-faint">
-              ↓
-            </span>
-          </Chip>
-        </a>
-      ))}
-    </nav>
-  );
-}
-
-/**
- * The same sections as a pill at the top centre, once the read line has
- * scrolled away. The one you are in is filled; the others point up or down to
- * where they are.
- */
-function SectionPill({
-  sections,
-  onGo,
-}: {
-  sections: SectionView[];
-  onGo: (kind: SectionKind) => void;
-}) {
-  const [spy, setSpy] = useState<{ active: string; away: boolean }>({ active: "", away: false });
-  const ids = sections.map((section) => section.id).join(" ");
-  useEffect(() => {
-    if (!ids.includes(" ")) return;
-    const read = () => {
-      const rest = document.getElementById("drift-jump");
-      const container = document.getElementById("app-scroll");
-      const top = container ? container.getBoundingClientRect().top : 0;
-      let active = ids.split(" ")[0];
-      for (const id of ids.split(" ")) {
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top - top < 120) active = id;
-      }
-      const away = rest ? rest.getBoundingClientRect().bottom - top < 0 : false;
-      setSpy((cur) => (cur.active === active && cur.away === away ? cur : { active, away }));
-    };
-    read();
-    document.addEventListener("scroll", read, true);
-    return () => document.removeEventListener("scroll", read, true);
-  }, [ids]);
-
-  if (sections.length < 2) return null;
-  const at = Math.max(0, sections.findIndex((section) => section.id === spy.active));
-  return (
-    <div className="sticky top-0 z-[5] -mb-4 h-0">
-      <nav
-        aria-label="Sections of drift (while scrolling)"
-        aria-hidden={!spy.away}
-        className={`absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 gap-0.5 overflow-x-auto whitespace-nowrap rounded-pill border border-line-strong bg-surface-1 p-1 shadow-dialog motion-tint ${
-          spy.away ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-      >
-        {sections.map((section, index) => {
-          const here = index === at;
-          return (
-            <a
-              key={section.kind}
-              href={`#${section.id}`}
-              tabIndex={spy.away ? 0 : -1}
-              aria-current={here ? "location" : undefined}
-              onClick={(event) => {
-                event.preventDefault();
-                onGo(section.kind);
-              }}
-              className={`inline-flex min-h-9 items-center gap-2 rounded-pill px-3.5 text-[13px] font-semibold motion-tint ${
-                here ? "bg-surface-2 text-ink" : "text-muted"
-              }`}
-            >
-              <StatusDot tone={section.tone as StatusTone} />
-              {section.short}
-              <span className="font-medium text-faint">{section.count}</span>
-              {!here && (
-                <span aria-hidden className="text-[12px] text-faint">
-                  {index < at ? "↑" : "↓"}
-                </span>
-              )}
-            </a>
-          );
-        })}
-      </nav>
-    </div>
-  );
-}
 
 /**
  * One direction of drift: a card whose heading folds it, ten rows to start,
@@ -889,10 +727,7 @@ function DriftSection({
   const visible = section.items.slice(0, paging.limit);
   // The comparison's rows follow the findings and share their ten.
   const visibleRead = section.read.slice(0, Math.max(0, paging.limit - visible.length));
-  const counts = new Map<string, number>();
-  if (runOf) for (const item of section.items) counts.set(runOf(item), (counts.get(runOf(item)) ?? 0) + 1);
-
-  let previous: string | null = null;
+  const runAt = runStarts(section.items, runOf);
   return (
     <section id={section.id} aria-labelledby={`${section.id}-title`} className="scroll-mt-4">
       <Card>
@@ -925,22 +760,11 @@ function DriftSection({
         <Unfold open={open}>
           <div id={`${section.id}-body`}>
             {head}
-            {visible.map((item) => {
-              const run = runOf ? runOf(item) : null;
-              const starts = run !== null && run !== previous;
-              previous = run;
+            {visible.map((item, index) => {
+              const run = runAt(index);
               return (
                 <div key={item.id}>
-                  {starts && (
-                    <div className="row-divider flex items-baseline gap-2.5 bg-surface-0 px-5 pb-2 pt-3">
-                      <span data-testid="drift-run" className="type-label text-ink">
-                        {run}
-                        <span className="ml-2.5 text-[12.5px] font-semibold normal-case tracking-normal text-muted">
-                          {counts.get(run)}
-                        </span>
-                      </span>
-                    </div>
-                  )}
+                  {run && <RunLabel {...run} />}
                   {renderRow(item)}
                 </div>
               );
