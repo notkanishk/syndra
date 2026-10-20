@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/Select";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { targetLabel } from "@/lib/nav";
 import { useMappingHistory, useMappings } from "@/lib/queries/useMappings";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useProjects } from "@/lib/queries/useProjects";
 import {
   HOME_ROOT,
@@ -153,6 +154,7 @@ export function SetupStrip({ target, project }: { target: string; project: { id:
   const mappings = useMappings(target);
   const history = useMappingHistory(target);
   const settings = useTargetSettings(target);
+  const resolver = useNameResolver();
   const [choosing, setChoosing] = useState(false);
   const roles = new Set((mappings.data ?? []).map((m) => m.role_key)).size;
   const version = history.data?.current_version;
@@ -162,7 +164,7 @@ export function SetupStrip({ target, project }: { target: string; project: { id:
     <Card>
       <SettingRow label="Zitadel project">
         <Link href={`/projects/${project.id}`} className="text-[15px] font-semibold text-ink hover:text-accent-text hover:underline">
-          {project.name || "Unnamed project"}
+          {project.name || resolver.resolveProject(project.id).value?.name || "a project Syndra couldn't name"}
         </Link>
       </SettingRow>
       <SettingRow

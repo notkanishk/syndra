@@ -234,6 +234,19 @@ describe("Incoming events — states", () => {
     expect(screen.queryByText("No events match those filters.")).toBeNull();
   });
 
+  it("draws no table headings over an empty card, and does over rows", () => {
+    state.events = [];
+    state.triggers = [];
+    const { unmount } = renderPage();
+    expect(screen.queryAllByRole("columnheader")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Sort by event" })).toBeNull();
+    unmount();
+
+    state.events = [webhook({ id: "w1" })];
+    renderPage();
+    expect(screen.getByRole("button", { name: "Sort by event" })).toBeTruthy();
+  });
+
   it("names the stream it could not read and keeps the rows of the one it could", () => {
     state.events = [webhook({ id: "w1" })];
     state.triggers = [];

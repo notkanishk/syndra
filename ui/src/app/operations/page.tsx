@@ -223,19 +223,6 @@ export default function EventActivityPage() {
       )}
 
       <Card>
-        <CardColumns>
-          <span className="w-[200px] shrink-0">
-            <SortHead label="Event" name="event" sort={sort} onSort={flipOrSet} />
-          </span>
-          <span className="min-w-0 flex-1">What happened</span>
-          <span className="hidden w-[150px] shrink-0 desktop:block">
-            <SortHead label="Outcome" name="outcome" sort={sort} onSort={flipOrSet} />
-          </span>
-          <span className="w-[110px] shrink-0 text-right">
-            <SortHead label="Time" name="time" sort={sort} onSort={flipOrSet} />
-          </span>
-        </CardColumns>
-
         <ListStates
           isLoading={isLoading}
           error={bothDown ? (events.error ?? triggers.error) : null}
@@ -260,6 +247,19 @@ export default function EventActivityPage() {
             )
           }
         >
+          {/* Headings only over rows: an empty list is a bare card (route-events, empty). */}
+          <CardColumns>
+            <span className="w-[200px] shrink-0">
+              <SortHead label="Event" name="event" sort={sort} onSort={flipOrSet} />
+            </span>
+            <span className="min-w-0 flex-1">What happened</span>
+            <span className="hidden w-[150px] shrink-0 desktop:block">
+              <SortHead label="Outcome" name="outcome" sort={sort} onSort={flipOrSet} />
+            </span>
+            <span className="w-[110px] shrink-0 text-right">
+              <SortHead label="Time" name="time" sort={sort} onSort={flipOrSet} />
+            </span>
+          </CardColumns>
           {visible.map((row, index) => {
             const run = runAt(index);
             return (

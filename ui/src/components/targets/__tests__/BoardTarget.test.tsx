@@ -302,3 +302,81 @@ describe("maintenance, as two action rows", () => {
     expect((within(maintenance()).getByLabelText("Reason") as HTMLTextAreaElement).value).toBe("disk work");
   });
 });
+
+// Compare 20 Oct, dev box: the page spoke in raw ids and device text, had no way back, and drew
+// "Unnamed project" where the board draws the project's link.
+describe("the page in plain words (route-system-targets-id)", () => {
+  it("has the way back to Connected systems above the title", () => {
+    renderTarget();
+    const back = screen.getByRole("link", { name: /Connected systems/ });
+    expect(back.getAttribute("href")).toBe("/system/targets");
+    expect(
+      back.compareDocumentPosition(screen.getByRole("heading", { name: "TrueNAS" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("names each thing it can do in a plain verb, with the id beneath and how it runs", () => {
+    state.roster[0].operations = [
+      { id: "account.provision", scope: "member", confirm: false, available: true },
+      { id: "account.purge", scope: "admin", confirm: true, secret_params: ["elevated_key"], available: true },
+      { id: "thing.unheard_of", scope: "member", confirm: false, available: true },
+    ] as TargetSummary["operations"];
+    renderTarget();
+
+    const row = (id: string) => screen.getByText(id).closest(".flex-wrap") as HTMLElement;
+    expect(within(row("account.provision")).getByText("Creates an account")).toBeInTheDocument();
+    expect(within(row("account.provision")).getByText("Runs by itself")).toBeInTheDocument();
+    expect(within(row("account.purge")).getByText("Deletes an account and its files")).toBeInTheDocument();
+    expect(within(row("account.purge")).getByText("Stops and asks")).toBeInTheDocument();
+    // No scope, no secret parameter name; an id Syndra has no word for is not made the label.
+    expect(screen.queryByText("elevated_key")).toBeNull();
+    expect(screen.queryByText(/never logged: /)).toBeNull();
+    expect(within(row("thing.unheard_of")).getByText(/Syndra has no name for/)).toBeInTheDocument();
+    // Beside the reconciliation card, not under it.
+    expect(screen.getByText("What it can do").closest(".grid")).toBe(
+      screen.getByText("Check for differences").closest(".grid"),
+    );
+  });
+
+  it("quotes the device's words as the device's, with when it raised them", () => {
+    state.system = {
+      target: "truenas",
+      readable: true,
+      alerts: [
+        {
+          level: "WARNING",
+          klass: "SMARTUncorrectedErrors",
+          text: "1 uncorrectable errors reported for sde (SERIAL0000).",
+          at: "2026-09-14T09:00:00Z",
+          dismissed: false,
+        },
+      ],
+      pools: [
+        { name: "tank", status: "ONLINE", healthy: true, warning: false, free_bytes: 1, allocated_bytes: 1, size_bytes: 2 },
+      ],
+    };
+    renderTarget();
+
+    expect(screen.getByText("A disk reports errors it could not correct")).toBeInTheDocument();
+    expect(screen.getByText(/TrueNAS raised this on 14 Sept and has not cleared it\./)).toBeInTheDocument();
+    expect(screen.getByText(/its words, not Syndra.s: .1 uncorrectable errors reported for sde/)).toBeInTheDocument();
+    expect(screen.getByText(/^Online/)).toBeInTheDocument();
+    expect(screen.queryByText(/^ONLINE/)).toBeNull();
+  });
+
+  it("links the project by its name, or says it could not be named, never 'Unnamed project'", () => {
+    state.roster[0].project = { id: "p1", name: "" };
+    renderTarget();
+    expect(screen.queryByText("Unnamed project")).toBeNull();
+    expect(screen.getByRole("link", { name: "a project Syndra couldn't name" }).getAttribute("href")).toBe(
+      "/projects/p1",
+    );
+  });
+
+  it("says in the header that no project is chosen yet", () => {
+    state.roster[0].project = null;
+    renderTarget();
+    expect(screen.getByText("no Zitadel project yet")).toBeInTheDocument();
+  });
+});
