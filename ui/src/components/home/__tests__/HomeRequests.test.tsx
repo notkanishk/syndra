@@ -11,7 +11,20 @@ import type { SessionUser } from "@/lib/session";
 // what it says on Requests for each wait_reason — and the row keeps its seat
 // to say it, rather than vanishing under the tap.
 
-const state = vi.hoisted(() => ({ decide: vi.fn() }));
+const state = vi.hoisted(() => ({
+  decide: vi.fn(),
+  requests: [
+    {
+      id: "r1",
+      requester_id: "u7",
+      project_id: "pLaser",
+      role_key: "supervisor",
+      justification: "Evening inductions.",
+      status: "pending",
+      created_at: "2026-10-16T06:00:00Z",
+    },
+  ],
+}));
 
 vi.mock("@/lib/queries/useGovernance", () => ({
   useGovernanceSummary: () => ({
@@ -30,22 +43,8 @@ vi.mock("@/lib/queries/useGovernance", () => ({
   }),
 }));
 vi.mock("@/lib/queries/useRequests", () => ({
-  useRequestsAdmin: () => ({
-    data: [
-      {
-        id: "r1",
-        requester_id: "u7",
-        project_id: "pLaser",
-        role_key: "supervisor",
-        justification: "Evening inductions.",
-        status: "pending",
-        created_at: "2026-10-16T06:00:00Z",
-      },
-    ],
-    isLoading: false,
-    error: null,
-    refetch: vi.fn(),
-  }),
+  // One array, as the query cache gives: a fresh one per render reads as a new list.
+  useRequestsAdmin: () => ({ data: state.requests, isLoading: false, error: null, refetch: vi.fn() }),
   useDecideRequest: () => ({ mutateAsync: state.decide, isPending: false }),
 }));
 vi.mock("@/lib/queries/usePropagation", () => ({
