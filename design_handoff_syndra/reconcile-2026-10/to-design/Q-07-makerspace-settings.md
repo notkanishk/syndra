@@ -100,8 +100,41 @@ On 20 Oct the live app was compared against every board, desktop and phone, Basi
 
 Say for each whether the board should change to what can be read, or the API should grow to fit the board.
 
+## Service accounts: a separate kind of account (owner, 21 Oct 2026)
+
+Once prod read real names, Home's "New people without a bundle" listed 31 accounts. Several of them aren't people at all. They are accounts made for one purpose in the lab: an integration (`netbird`, `syndra-service`, `mkauth`), an agent (`claude code`), and devices or kiosks (`Ingestion Station`, `Touch Pannel`). Some shared accounts look like people but belong to no one person (`Admin Makerspace`, `Makerspace Ashoka`, `test user`).
+
+The owner's decision: **they should not be there.** A service account is its own kind of entity, not a person missing a bundle. Design is asked how to draw it.
+
+What Syndra can tell today:
+- Zitadel marks each account **human** or **machine**. Machine accounts (keys, no sign-in) are certainly service accounts. Syndra doesn't read this yet; it will.
+- Some purpose accounts are **human-type** in Zitadel (they sign in with a password or a Google login), so the type alone misses them. Something has to mark them.
+
+26. **Where service accounts live.** Do they get their own list, for example under People as a "Service accounts" tab, or a leaf of their own in the rail? Or do they stay out of the directory, and appear only where they hold access?
+27. **What a service account's page shows.** A person's page is about one human: their projects, bundles and requests. A service account has a purpose and an owner, the person answerable for it, and holds roles like anyone. Does it need a purpose line, an owner, and when it last signed in or used its key? Is there anything it must never have?
+28. **Marking a human-type account as a service account.** Which one way should it be?
+    - The operator marks it in Syndra.
+    - A naming rule, such as a prefix.
+    - A Zitadel metadata key that Syndra reads.
+
+    The owner prefers one write place (an operator's mark, stored once). Where does that control sit, and what does it say?
+29. **What leaves the people flows.** Service accounts drop out of these:
+    - "New people without a bundle"
+    - onboarding gaps
+    - welcome bundles
+    - People counts on Home and Systems
+    - Asking for access, since a machine doesn't ask
+
+    Should they still show in these?
+    - Drift, where unexplained access on a service account matters as much as on a person, maybe more.
+    - Expiring access.
+    - Holds.
+    - The TrueNAS accounts table, where a device may well have a storage account.
+30. **Counting.** When the Makerspace strip says "People", does that exclude service accounts? Should it say how many there are, for example "48 people · 6 service accounts"?
+31. **Ownerless or stale.** Should a service account with no owner, or one whose key or sign-in hasn't been used in 90 days, be something Syndra raises, the way drift is?
+
 ## Still undecided from earlier boards
 
-26. **Replacing the Zitadel key in fewer steps** (Zitadel board, open since 7 Oct). The guide dialog (2c) is not built; the four steps stay inline.
-27. **The Access map.** The boards' rail still draws Automation and Access map, the 12 Oct shape. N18 (13 Oct) moved Insights up and folded the map into it, and `/graph` now opens Insights. Could the boards' shared rail be redrawn to N18, so new boards stop carrying the older rail?
+32. **Replacing the Zitadel key in fewer steps** (Zitadel board, open since 7 Oct). The guide dialog (2c) is not built; the four steps stay inline.
+33. **The Access map.** The boards' rail still draws Automation and Access map, the 12 Oct shape. N18 (13 Oct) moved Insights up and folded the map into it, and `/graph` now opens Insights. Could the boards' shared rail be redrawn to N18, so new boards stop carrying the older rail?
 
