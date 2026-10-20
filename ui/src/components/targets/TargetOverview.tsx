@@ -5,13 +5,13 @@ import { Radio } from "@/components/ui/Choice";
 import { roleCount } from "@/lib/role-mapping-plan";
 import { Fragment, useState } from "react";
 
-import { EmptyState, ListStates } from "@/components/states";
+import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
 import { MergeFindings } from "@/components/targets/MergeFindings";
 import { Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
-import { CountChip, Mono, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { Chip, Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
@@ -19,14 +19,13 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
-import { StatCard } from "@/components/ui/StatCard";
 import { Relative } from "@/components/ui/Time";
-import { CheckPips, ReadingWord, targetReading } from "@/components/targets/TargetReading";
+import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
-import { formatBytes, formatRelative, personLine } from "@/lib/format";
+import { formatBytes, personLine } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
@@ -73,9 +72,8 @@ export function TargetOverview({ target }: { target: string }) {
   // human, which is why they are one region and not three places.
   const waiting =
     (findings.data?.length ?? 0) + anchorFinding + conflicts.length;
-  const waitingKnown = !findings.isLoading && !health.isLoading;
+  const waitingKnown = !findings.isLoading && !health.isLoading && !health.error;
   const name = targetLabel(target);
-  const lifecycle = health.data?.lifecycle ?? "active";
   // One Zitadel project per system (3a). Unknown until the roster answers;
   // null is "not chosen", and everything that gives access waits for it.
   const project = registered?.project;
@@ -114,94 +112,83 @@ export function TargetOverview({ target }: { target: string }) {
         <SetupStrip target={target} project={project} />
       ) : null}
 
-      {/* The touch form of the four regions: a way to skip one rather than a
-          way to hide three. Everything below it is present and scrollable, so a
-          finding cannot end up behind a tab nobody selected. Gone while the
-          project is unchosen: there is nowhere to go yet. */}
-      {!(gated && !justSet) && <RegionIndex waiting={waitingKnown ? waiting : null} />}
+      {/* One chip per region at the right end of the read line (board, RULES):
+          a way to skip a region, never a way to hide one, so a finding cannot
+          end up behind a tab nobody selected. Gone while the project is
+          unchosen: there is nowhere to go yet. */}
+      {!(gated && !justSet) && (
+        <RegionChips
+          health={health.data}
+          name={name}
+          waiting={waitingKnown ? waiting : null}
+          accounts={inventory.data?.bound}
+          runs={registered?.callable ? registered.operations.length : undefined}
+        />
+      )}
 
       <div className="grid gap-8">
-        {/* Region 0 · the band.
+        {/* Region 0 · whether changes can land.
 
             Health and maintenance are one question, and they used to sit six
-            panels apart. A reachability reading has no meaning on its own: NOT
-            ANSWERING while somebody is draining it for a credential rotation is
-            a different fact from NOT ANSWERING at 04:00, and an operator who
-            reads the second when the first is true walks to the wrong machine.
+            panels apart. A reachability reading has no meaning on its own: Offline
+            while somebody is draining it for a credential rotation is a different
+            fact from Offline at 04:00, and an operator who reads the second when
+            the first is true walks to the wrong machine.
 
-            One status card, matching /zitadel: a dot, a bold sentence with a
-            cause and a timestamp, one line of consequence. The label/value
-            grid this replaced said "Last answered … just now" and then said
-            nothing else for the rest of its height — a card should never be
-            taller than what it has to say. */}
+            Two machines, kept apart (board, A-01): what Syndra can reach, and what
+            the system says about itself, each ending by saying which one to look
+            at. A fault in either is one Notice above them. */}
         <Region
-          id="answering"
-          title="Is it answering"
-          lede={`Whether Syndra can reach ${name}, what ${name} says about itself, and whether somebody has paused changes to it.`}
+          id="land"
+          title="Whether changes can land"
+          lede={`Two machines, kept apart: what Syndra can reach, and what ${name} says about itself. Each reading ends by saying which one to look at.`}
         >
-          <StatusVerdict
-            target={target}
-            health={health.data}
-            isLoading={health.isLoading}
-            // A deployment-side fault, carried into this card because that is
-            // where an operator looks when a target stops working — and it
-            // explains the reading below it rather than sitting beside it.
-            transportError={
-              registered?.transport_status === "error" ? registered.transport_error : undefined
-            }
-          />
+          {health.error && !health.data ? (
+            // Syndra's own server failed, not the target: said so, and that
+            // nothing was changed. No reading, count or age until it answers.
+            <Notice
+              tone="danger"
+              blocking
+              title={`This page for ${name} could not be read.`}
+              action={{ label: "Try again", onClick: () => health.refetch() }}
+            >
+              Syndra&rsquo;s server did not answer when this page asked for it. This says nothing about{" "}
+              {name} itself. Nothing was changed.
+            </Notice>
+          ) : (
+            <>
+              <ReachNotice
+                target={target}
+                health={health.data}
+                // A deployment-side fault, carried here because that is where an
+                // operator looks when a target stops working.
+                transportError={
+                  registered?.transport_status === "error" ? registered.transport_error : undefined
+                }
+              />
 
-          {waitingKnown && anchorFinding + conflicts.length > 0 && (
-            <p className="text-[13.5px] font-semibold text-danger-text">
-              {anchorFinding + conflicts.length === 1
-                ? "One item under Waiting on a person needs a decision before this can be trusted."
-                : `${anchorFinding + conflicts.length} items under Waiting on a person need a decision before this can be trusted.`}
-            </p>
+              {waitingKnown && anchorFinding + conflicts.length > 0 && (
+                <p className="text-[13.5px] font-semibold text-danger-text">
+                  {anchorFinding + conflicts.length === 1
+                    ? "One item under Waiting on you needs a decision before this can be trusted."
+                    : `${anchorFinding + conflicts.length} items under Waiting on you need a decision before this can be trusted.`}
+                </p>
+              )}
+
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-4">
+                <ReachCard
+                  target={target}
+                  health={health.data}
+                  isLoading={health.isLoading}
+                  transportError={
+                    registered?.transport_status === "error" ? registered.transport_error : undefined
+                  }
+                />
+                <SystemHealth target={target} stale={health.data?.reachable === false} />
+              </div>
+              <LifecycleControl target={target} health={health.data} />
+            </>
           )}
-
-          <div className="flex flex-wrap gap-[18px]">
-            <StatCard
-              label="Accounts Syndra manages"
-              value={inventory.data?.bound !== undefined ? `${inventory.data.bound}` : "—"}
-              detail={
-                inventory.isLoading
-                  ? "Reading…"
-                  : inventory.data?.read_at
-                    ? `Read ${formatRelative(inventory.data.read_at)}`
-                    : "Not read yet."
-              }
-            />
-            <StatCard
-              label="Waiting on a person"
-              value={waitingKnown ? `${waiting}` : "—"}
-              tone={waitingKnown && waiting > 0 ? "danger" : "neutral"}
-              detail={
-                !waitingKnown
-                  ? "Still checking."
-                  : waiting === 0
-                    ? "Nothing needs a decision."
-                    : "See Waiting on a person below."
-              }
-            />
-            <StatCard
-              label="Maintenance"
-              value={
-                lifecycle === "draining" ? "Finishing up" : lifecycle === "read_only" ? "Read-only" : "Active"
-              }
-              tone={lifecycle === "active" ? "neutral" : "accent"}
-              detail={
-                lifecycle === "draining"
-                  ? "Refusing new changes; finishing what's already sent."
-                  : lifecycle === "read_only"
-                    ? "Refusing every change. Reads keep working."
-                    : "Accepting changes normally."
-              }
-            />
-          </div>
-
-          <ConnectionNotices target={target} health={health.data} />
-          <SystemHealth target={target} />
-          <LifecycleControl target={target} health={health.data} />
         </Region>
 
         {/* What reports on the system and its pause stays live above; what
@@ -222,7 +209,7 @@ export function TargetOverview({ target }: { target: string }) {
             the only content here that is costing somebody access today. */}
         <Region
           id="waiting"
-          title="Waiting on a person"
+          title="Waiting on you"
           count={waitingKnown ? waiting : null}
           lede={`Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on ${name} that was altered, or two records disagreeing about whose account it is. Each needs a decision from you.`}
         >
@@ -244,8 +231,8 @@ export function TargetOverview({ target }: { target: string }) {
             that has not answered for forty minutes, and splitting them would
             take the roster away from the only sentence that explains it. */}
         <Region
-          id="people"
-          title="People and their access here"
+          id="accounts"
+          title={`Accounts on ${name}`}
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
           <MappingCensus target={target} project={project?.name} />
@@ -259,7 +246,7 @@ export function TargetOverview({ target }: { target: string }) {
             and reconciliation is the thing that calls them on a schedule. */}
         <Region
           id="runs"
-          title="What Syndra can do here"
+          title="What runs here"
           lede={`What Syndra is able to do on ${name}, and the scheduled check that keeps accounts in step.`}
         >
           {registered && <Capabilities registered={registered} />}
@@ -285,15 +272,32 @@ export function TargetOverview({ target }: { target: string }) {
  * kilobytes each and the add-on keeps three fields from `system.info`; what
  * reaches here is what changes a decision.
  */
-function SystemHealth({ target }: { target: string }) {
+function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
   const report = useTargetSystemHealth(target);
   const data = report.data;
   const name = targetLabel(target);
 
-  // Nothing at all while it is still being asked. Four calls to the target take
-  // a moment, and a card that flashes "no alerts" before the answer arrives has
-  // said something false.
-  if (report.isLoading || report.isError || !data) return null;
+  // The card keeps its seat while it is asked, with nothing in it. Four calls to
+  // the target take a moment, and a card that flashes "no alerts" before the
+  // answer arrives has said something false.
+  if (report.isLoading) {
+    return (
+      <Card>
+        <CardHeader title={`What ${name} reports`} />
+        <RowSkeleton rows={4} avatar={false} label={`Loading what ${name} reports`} />
+      </Card>
+    );
+  }
+  if (report.isError || !data) {
+    return (
+      <Card>
+        <CardHeader title={`What ${name} reports`} />
+        <Reading tone="neutral" label="Not read">
+          Syndra has not read {name}&rsquo;s own report yet, so this is not a report that nothing is wrong.
+        </Reading>
+      </Card>
+    );
+  }
 
   const alerts = (data.alerts ?? []).filter((a) => !a.dismissed);
   const pools = data.pools ?? [];
@@ -302,81 +306,81 @@ function SystemHealth({ target }: { target: string }) {
   // it is invisible from every other read the add-on makes.
   const services = (data.services ?? []).filter((s) => s.service === "cifs" || s.service === "nfs");
   const degraded = data.degraded ?? [];
+  const allRead = data.readable && degraded.length === 0;
 
   return (
-    <Card>
-      <CardHeader
-        title={`What ${name} reports about itself`}
-        note={
-          data.system?.hostname
-            ? `${data.system.hostname}${data.system.version ? ` · ${data.system.version}` : ""}`
-            : `Read from ${name} just now, not from Syndra's records`
-        }
-      />
-      <div className="flex flex-col gap-2.5 px-5 pb-5">
-        {!data.readable && (
-          <Reading tone="warn" label="Could not be asked">
-            {name} did not answer its own health reads, so this is not a report that nothing
-            is wrong.{data.detail ? ` ${data.detail}` : ""}
-          </Reading>
-        )}
+    // Last known, dimmed under its Notice, while Syndra cannot reach the system
+    // (RULES): still readable, never disabled.
+    <Card className={stale ? "opacity-[0.62]" : ""}>
+      <CardHeader title={`What ${name} reports`} note={allRead ? "All read" : "Partly read"} />
+      {!data.readable && (
+        <Reading tone="warn" label="Could not be asked">
+          {name} did not answer its own health reads, so this is not a report that nothing
+          is wrong.{data.detail ? ` ${data.detail}` : ""}
+        </Reading>
+      )}
 
-        {/* Named sources. "alerts could not be read" and "there are no alerts"
-            are the same empty list without this, and they are opposite facts. */}
-        {degraded.length > 0 && (
-          <Reading tone="warn" label="Partly read">
-            {degraded.join(", ")} could not be read. Whatever those would have said is
-            missing from this card, not absent from {name}.
-          </Reading>
-        )}
+      {/* Named sources. "alerts could not be read" and "there are no alerts"
+          are the same empty list without this, and they are opposite facts. */}
+      {degraded.length > 0 && (
+        <Reading tone="warn" label="Partly read">
+          {degraded.join(", ")} could not be read. Whatever those would have said is
+          missing from this card, not absent from {name}.
+        </Reading>
+      )}
 
-        {alerts.map((alert, i) => (
-          <Reading
-            key={`${alert.klass}-${i}`}
-            tone={alert.level === "CRITICAL" || alert.level === "ERROR" ? "danger" : alert.level === "WARNING" ? "warn" : "accent"}
-            label={alertLabel(alert.level)}
-          >
-            {alert.text}
-          </Reading>
-        ))}
+      {alerts.map((alert, i) => (
+        <Reading
+          key={`${alert.klass}-${i}`}
+          tone={alert.level === "CRITICAL" || alert.level === "ERROR" ? "danger" : alert.level === "WARNING" ? "warn" : "accent"}
+          label={alertLabel(alert.level)}
+        >
+          {alert.text}
+        </Reading>
+      ))}
 
-        {pools.map((pool) => (
-          <Reading
-            key={pool.name}
-            tone={!pool.healthy ? "danger" : pool.warning ? "warn" : "healthy"}
-            label={`Storage pool ${pool.name}`}
-          >
-            {pool.status}
-            {pool.size_bytes > 0 && (
-              <>
-                {" · "}
-                {formatBytes(pool.allocated_bytes)} of {formatBytes(pool.size_bytes)} used
-              </>
-            )}
-          </Reading>
-        ))}
-
-        {services
-          .filter((s) => s.state !== "RUNNING")
-          .map((s) => (
-            <Reading key={s.service} tone="danger" label={`${serviceName(s.service)} is not running`}>
-              Nobody can open their shares while it is stopped
-              {s.enable
-                ? `, and it is set to start on boot — so it stopped by itself. Check ${name}.`
-                : ", and it is not set to start on boot."}
-            </Reading>
-          ))}
-
-        {data.readable &&
-          degraded.length === 0 &&
-          alerts.length === 0 &&
-          pools.every((p) => p.healthy && !p.warning) &&
-          services.every((s) => s.state === "RUNNING") && (
-            <Reading tone="healthy" label="Nothing raised">
-              No alerts, every pool healthy, and the sharing services are running.
-            </Reading>
+      {pools.map((pool) => (
+        <Reading
+          key={pool.name}
+          tone={!pool.healthy ? "danger" : pool.warning ? "warn" : "healthy"}
+          label={`Storage pool ${pool.name}`}
+        >
+          {pool.status}
+          {pool.size_bytes > 0 && (
+            <>
+              {" · "}
+              {formatBytes(pool.allocated_bytes)} of {formatBytes(pool.size_bytes)} used
+            </>
           )}
-      </div>
+        </Reading>
+      ))}
+
+      {services
+        .filter((s) => s.state !== "RUNNING")
+        .map((s) => (
+          <Reading key={s.service} tone="danger" label={`${serviceName(s.service)} is not running`}>
+            Nobody can open their shares while it is stopped
+            {s.enable
+              ? `, and it is set to start on boot — so it stopped by itself. Check ${name}.`
+              : ", and it is not set to start on boot."}
+          </Reading>
+        ))}
+
+      {data.readable &&
+        degraded.length === 0 &&
+        alerts.length === 0 &&
+        pools.every((p) => p.healthy && !p.warning) &&
+        services.every((s) => s.state === "RUNNING") && (
+          <Reading tone="healthy" label="Nothing raised">
+            No alerts, every pool healthy, and the sharing services are running.
+          </Reading>
+        )}
+
+      {data.system?.hostname && (
+        <Reading tone="neutral" label={data.system.hostname}>
+          {data.system.version ?? ""}
+        </Reading>
+      )}
     </Card>
   );
 }
@@ -586,36 +590,22 @@ function versionLabel(name: string, productVersion?: string): string {
   const stripped = productVersion.replace(new RegExp(`^${name}[-\\s]*`, "i"), "");
   return stripped || productVersion;
 }
-
 /**
- * The one status card (matching /zitadel): a dot, a bold sentence with a
- * cause, one sentence of consequence. Everything this replaced — a dedicated
- * "Can Syndra reach it" card ending in a label/value grid with a huge gap
- * beneath its last row — said less in more space.
+ * Every dysfunction is one Notice (RULES), above the two cards: Syndra cannot
+ * make a request at all, the system has gone quiet, or Syndra stopped calling
+ * it. The reading itself, and the check pips, are the first row of Syndra's
+ * reach below.
  */
-function StatusVerdict({
+function ReachNotice({
   target,
   health,
-  isLoading,
   transportError,
 }: {
   target: string;
   health: TargetHealth | undefined;
-  isLoading: boolean;
   transportError?: string;
 }) {
   const name = targetLabel(target);
-
-  if (isLoading && !health) {
-    return (
-      <div className="panel px-5 py-4">
-        <p className="text-[14px] text-faint">Checking whether Syndra can reach {name}…</p>
-      </div>
-    );
-  }
-
-  const reading = targetReading({ status: health?.status, health: health?.health, name, transportError });
-  const recent = health?.health?.recent ?? [];
 
   if (transportError || health?.status === "cannot_connect") {
     return (
@@ -631,6 +621,7 @@ function StatusVerdict({
   // check, not an outage; three in a row are offline (A-01).
   if (health?.status === "offline" || health?.status === "waiting_to_retry") {
     const offline = health.status === "offline";
+    const reading = targetReading({ status: health.status, health: health.health, name });
     return (
       <Notice
         tone="warn"
@@ -638,43 +629,65 @@ function StatusVerdict({
         title={offline ? `${name} isn't answering.` : `Syndra is waiting before it calls ${name} again.`}
       >
         {reading.sentence} {offline && reading.look}
-        {offline && (
-          <span className="mt-2 flex flex-wrap items-center gap-2.5">
-            <CheckPips recent={recent} />
-          </span>
-        )}
         {!health.reachable && <LastKnown name={name} readAt={health.snapshot_taken_at} />}
       </Notice>
     );
   }
 
-  if (!health || health.status === "checking") {
+  return null;
+}
+
+/**
+ * What Syndra can reach: the reading first (dot, word, the check pips when they
+ * say something, and one faint line), then what is wrong on the Syndra side.
+ * Each ends by saying which machine to look at.
+ */
+function ReachCard({
+  target,
+  health,
+  isLoading,
+  transportError,
+}: {
+  target: string;
+  health: TargetHealth | undefined;
+  isLoading: boolean;
+  transportError?: string;
+}) {
+  const name = targetLabel(target);
+
+  // Nothing read yet: no word, no count, no age.
+  if (isLoading && !health) {
     return (
-      <div className="panel px-5 py-4">
-        <div className="flex flex-wrap items-center gap-2.5 text-[15px] font-semibold">
-          <ReadingWord reading={reading} recent={recent} />
-        </div>
-        <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">{reading.sentence}</p>
-      </div>
+      <Card>
+        <CardHeader title="Syndra's reach" />
+        <RowSkeleton rows={3} avatar={false} label={`Loading whether changes can land`} />
+      </Card>
     );
   }
 
-  const lifecycle = health.lifecycle ?? "active";
+  const cannot = Boolean(transportError) || health?.status === "cannot_connect";
+  const status = health?.status;
+  const reading = targetReading({
+    status: cannot ? "cannot_connect" : status,
+    health: health?.health,
+    name,
+    transportError,
+  });
+  const recent = health?.health?.recent ?? [];
+  const lifecycle = health?.lifecycle ?? "active";
   const paused = lifecycle !== "active";
   // The add-on's own breaker toward the system, while Syndra's checks still
   // answer: the connector on the Syndra server is holding off, and says so.
-  const holdingOff = health.circuit_open;
+  const holdingOff = health?.circuit_open;
+  const fault = cannot || status === "offline" || status === "waiting_to_retry";
 
-  return (
-    <div className="panel px-5 py-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] font-semibold">
-        <ReadingWord reading={reading} recent={recent} />
-        <span className="text-[13px] font-normal text-faint">
-          {reading.line ?? (health.health?.checked_at ? <>Answered <Relative iso={health.health.checked_at} /></> : null)}
-        </span>
-      </div>
-      <p className="mt-1 max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-        {holdingOff
+  // A fault's sentence, and where to look, are the Notice above; its row is
+  // the word, the pips and the one faint line.
+  let detail: React.ReactNode = null;
+  if (!fault) {
+    detail =
+      health && status !== "checking"
+        ? holdingOff
           ? `The add-on on the Syndra server is waiting before it calls ${name} again, after repeated failures, and tries again by itself. Changes for ${name} wait, and nothing is lost.`
           : paused
             ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)} — somebody set that on purpose${
@@ -685,12 +698,37 @@ function StatusVerdict({
                   : "Every change is refused at once. Reads keep working."
               }`
             : (reading.sentence ??
-              (health.in_flight ? `Accepting changes. ${health.in_flight} in flight.` : "Accepting changes. Nothing is in flight."))}
-      </p>
+              (health.in_flight ? `Accepting changes. ${health.in_flight} in flight.` : "Accepting changes. Nothing is in flight."))
+        : reading.sentence;
+  }
+  const faint =
+    reading.line ??
+    (!fault && health?.health?.checked_at ? <>Answered <Relative iso={health.health.checked_at} /></> : null);
+
+  return (
+    <Card>
+      <CardHeader title="Syndra's reach" />
+      <Reading
+        tone={reading.tone}
+        label={
+          <>
+            {reading.word}
+            {reading.pips && <CheckPips recent={recent} />}
+            {faint && <span className="text-[13px] font-normal text-faint">{faint}</span>}
+          </>
+        }
+      >
+        {detail}
+      </Reading>
+      <ConnectionNotices target={target} health={health} />
       {/* A missed check is not an outage, but this read did fail: what is on
           screen is the last copy, and says so. */}
-      {!health.reachable && <LastKnown name={name} readAt={health.snapshot_taken_at} />}
-    </div>
+      {health && !health.reachable && !fault && (
+        <div className="row-divider px-5 py-3">
+          <LastKnown name={name} readAt={health.snapshot_taken_at} />
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -777,46 +815,58 @@ function ConnectionNotices({
 
   if (notices.length === 0) return null;
 
-  return <div className="grid gap-2.5 px-1">{notices}</div>;
+  return <>{notices}</>;
 }
 
 /**
- * The touch form of the four regions (design T5).
+ * The way to each region (board, RULES): one chip per section at the right end
+ * of the read line, whose left says how current the reading is. A jump rather
+ * than a filter: everything stays present, so a finding cannot end up behind a
+ * chip nobody pressed. On a phone the chips wrap; there is no separate index.
  *
- * The mobile board made this page four horizontally scrolling tabs. What a
- * phone actually needs is a way to SKIP a region, not a way to hide three — a
- * finding behind an unselected tab is a finding nobody is looking at, and the
- * only fix for that is a badge on the tab, which is data driving structure by
- * another route.
- *
- * So: five rows, always the same five, hollow zeros included, each a jump
- * rather than a filter. Everything below stays present and scrollable.
+ * A count that has not been read is left off. Every region keeps its chip, at
+ * zero too: structure never moves in response to data.
  */
-function RegionIndex({ waiting }: { waiting: number | null }) {
-  const regions: Array<{ id: string; label: string; count?: number | null }> = [
-    { id: "answering", label: "Is it answering" },
-    { id: "waiting", label: "Waiting on a person", count: waiting },
-    { id: "people", label: "People and their access here" },
-    { id: "runs", label: "What Syndra can do here" },
+function RegionChips({
+  health,
+  name,
+  waiting,
+  accounts,
+  runs,
+}: {
+  health: TargetHealth | undefined;
+  name: string;
+  waiting: number | null;
+  accounts?: number;
+  runs?: number;
+}) {
+  const chips: Array<{ id: string; label: string; count?: number | null; dot?: boolean }> = [
+    { id: "waiting", label: "Waiting on you", count: waiting, dot: !!waiting },
+    { id: "accounts", label: "Accounts", count: accounts },
+    { id: "runs", label: "What runs here", count: runs },
   ];
+  const checkedAt = health?.health?.checked_at;
 
   return (
-    <nav aria-label="Sections of this page" className="desktop:hidden">
-      <Card>
-        {regions.map((region, i) => (
-          <a
-            key={region.id}
-            href={`#${region.id}`}
-            className={`flex min-h-[48px] items-center gap-3 px-5 py-2.5 text-[14.5px] motion-tint hover:bg-[var(--hover)] ${
-              i === 0 ? "" : "row-divider"
-            }`}
-          >
-            <span className="flex-1">{region.label}</span>
-            {region.count !== undefined && <CountChip n={region.count} />}
+    <div className="-mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-2 pl-5">
+      <div className="min-w-[260px] flex-1">
+        {checkedAt && <ReadFreshness subject={name} state={{ readAt: checkedAt, current: health?.reachable }} />}
+      </div>
+      <nav aria-label="Regions of this page" className="ml-auto flex flex-wrap gap-2">
+        {chips.map((chip) => (
+          <a key={chip.id} href={`#${chip.id}`} className="rounded-pill text-ink no-underline">
+            <Chip className="gap-2">
+              {chip.dot && <StatusDot tone="warn" />}
+              {chip.label}
+              {chip.count != null && <span className="text-faint">{chip.count}</span>}
+              <span aria-hidden className="text-[12px] text-faint">
+                ↓
+              </span>
+            </Chip>
           </a>
         ))}
-      </Card>
-    </nav>
+      </nav>
+    </div>
   );
 }
 
@@ -1245,22 +1295,27 @@ function ResolveFindingDialog({
   );
 }
 
-/** One health reading: a dot that carries the tone, a label, and the sentence. */
+/**
+ * One reading as a card row (board): a dot that carries the tone, a bold word,
+ * and what it means, ending in where to look.
+ */
 function Reading({
   tone,
   label,
   children,
 }: {
   tone: StatusTone;
-  label: string;
-  children: React.ReactNode;
+  label: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-baseline gap-2.5 text-[14px]">
-      <StatusDot tone={tone} className="mt-1.5" />
-      <span>
-        <span className={`font-semibold ${STATUS_TONE[tone].label}`}>{label}.</span>{" "}
-        <span className="text-muted">{children}</span>
+    <div className="row-divider flex gap-3 px-5 py-[13px]">
+      <StatusDot tone={tone} className="mt-[7px]" />
+      <span className="flex min-w-0 flex-col gap-[3px]">
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[14.5px] font-semibold">{label}</span>
+        {children && (
+          <span className="text-[13.5px] leading-[1.5] text-muted [text-wrap:pretty]">{children}</span>
+        )}
       </span>
     </div>
   );
@@ -1679,74 +1734,131 @@ function stateLabel(state: string): string {
 function LifecycleControl({ target, health }: { target: string; health: TargetHealth | undefined }) {
   const set = useSetLifecycle(target);
   const [reason, setReason] = useState("");
+  // Which action row is asking why. One at a time, so a reason typed for one
+  // state is never sent for another.
+  const [asking, setAsking] = useState<string | null>(null);
   const current = health?.lifecycle ?? "active";
   const name = targetLabel(target);
 
-  const STATES: Array<{ id: string; label: string; blurb: string }> = [
-    { id: "active", label: "Active", blurb: "Accept changes normally. Reads keep working." },
+  // The states you can put it in instead, in the order the board draws them:
+  // Make active first when it is not, since that is the way back.
+  const ACTIONS: Array<{ id: string; verb: string; head: string; more: string }> = [
+    {
+      id: "active",
+      verb: "Make active",
+      head: "Takes reads and changes again.",
+      more: "Use it once the work on the key or on the NAS itself is done.",
+    },
     {
       id: "draining",
-      label: "Finishing up",
-      blurb: `Refuse new changes, let the ones already sent finish. Reads keep working. This is the safe state for changing the ${name} API key.`,
+      verb: "Start draining",
+      head: "Lets calls already sent finish, and refuses new ones.",
+      more: `Use it before replacing ${name}'s key or restarting it: once nothing is in flight, nothing can be cut off halfway.`,
     },
-    { id: "read_only", label: "Read-only", blurb: "Refuse every change at once. Reads keep working." },
-  ];
-  const selected = STATES.find((state) => state.id === current) ?? STATES[0];
+    {
+      id: "read_only",
+      verb: "Set read-only",
+      head: "Keeps answering reads and refuses every change.",
+      more: `This page stays current. Use it while you work on the NAS itself; members setting a password are told to try later.`,
+    },
+  ].filter((a) => a.id !== current);
 
   return (
     <Card>
-      <CardHeader title="Maintenance" note={`Currently ${stateLabel(current)}`} />
-      <div className="grid gap-3 px-5 pb-5">
-        {/* One compact row, current marked by fill and by its own label —
-            not three description-list rows above three buttons that said the
-            same three names twice. */}
-        <div className="flex flex-wrap gap-2">
-          {STATES.map((state) => (
-            <Button
-              key={state.id}
-              variant={state.id === current ? "accentSoft" : "outline"}
-              size="sm"
-              aria-pressed={state.id === current}
-              disabled={!reason || set.isPending || state.id === current}
-              onClick={() =>
-                set.mutate({ state: state.id, reason }, { onSuccess: () => setReason("") })
-              }
-            >
-              {state.id === current ? `Already ${state.label.toLowerCase()}` : state.label}
-            </Button>
-          ))}
-        </div>
-        <p className="text-[13.5px] text-muted">{selected.blurb}</p>
+      <CardHeader title="Maintenance" />
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 pb-3.5">
+        <span className="inline-flex items-center gap-2 text-[15px] font-semibold">
+          <StatusDot tone={current === "active" ? "healthy" : "accent"} />
+          {current === "active" ? "Active" : stateLabel(current).replace(/^./, (c) => c.toUpperCase())}
+        </span>
+        <span className="text-[14px] text-muted">
+          {current === "active"
+            ? `${name} takes reads and changes. Two states you can put it in instead:`
+            : `${
+                current === "draining"
+                  ? "Refusing new changes; finishing what's already sent."
+                  : "Refusing every change. Reads keep working."
+              }${health?.lifecycle_note ? ` Set on purpose: ${health.lifecycle_note}.` : ""}`}
+        </span>
+      </div>
 
-        <FieldLabel htmlFor="lifecycle-reason">Reason</FieldLabel>
-        <Textarea
-          id="lifecycle-reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-        {/* One helper line, not one per button: the reason blocks every
-            non-current button for the same cause, and saying so three times
-            over three identical dark buttons taught nothing a single line
-            here does not. */}
-        <FieldHint>
-          {reason
-            ? "Recorded against the change, and shown to the next person who opens this page."
-            : "Say why first — a state change needs a reason before any button above will work."}
-        </FieldHint>
+      {ACTIONS.map((action) => {
+        const open = asking === action.id;
+        return (
+          <div key={action.id} className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-2 px-5 py-3.5">
+            <span className="w-[150px] flex-none">
+              <Button
+                variant="outline"
+                size="sm"
+                aria-expanded={open}
+                onClick={() => {
+                  setAsking(open ? null : action.id);
+                  setReason("");
+                }}
+              >
+                {open ? "Cancel" : action.verb}
+              </Button>
+            </span>
+            <span className="min-w-0 flex-[1_1_320px] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+              <span className="font-semibold text-ink">{action.head}</span> {action.more}
+            </span>
+            {open && (
+              <div className="grid w-full gap-2 pt-1">
+                <FieldLabel htmlFor="lifecycle-reason">Reason</FieldLabel>
+                <Textarea id="lifecycle-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+                {/* The reason blocks the button for one cause, said once: a
+                    state change needs a reason before it will go. */}
+                <FieldHint>
+                  {reason
+                    ? "Recorded against the change, and shown to the next person who opens this page."
+                    : "Say why first. A state change needs a reason before it will go."}
+                </FieldHint>
+                <div>
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    disabled={!reason || set.isPending}
+                    onClick={() =>
+                      set.mutate(
+                        { state: action.id, reason },
+                        {
+                          onSuccess: () => {
+                            setReason("");
+                            setAsking(null);
+                          },
+                        },
+                      )
+                    }
+                  >
+                    {action.verb}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
 
-        {/* A lifecycle change that did not land (design B2).
+      <div className="row-divider px-5 py-3 text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+        {current === "active"
+          ? "Neither takes anyone's access away. Each asks why, since the next person to read it is not you, and Make active undoes it."
+          : "Neither takes anyone's access away. Each asks why, since the next person to read it is not you."}
+      </div>
 
-            The refusal and the state are two blocks, in that order, and the
-            state still leads with its own dot and the word it always wore.
-            The single most expensive misreading here is that the page looks
-            like the change took, or like the state is now unknown. It is
-            known: it is what it was.
+      {/* A lifecycle change that did not land (design B2).
 
-            Amber and not red, because nothing is broken by this and nothing was
-            lost — including the typed reason, which stays in the field. A
-            mandatory-reason box that empties itself on a network failure
-            teaches people to type "asdf" the second time. */}
-        {set.error && (
+          The refusal and the state are two blocks, in that order, and the
+          state still leads with its own dot and the word it always wore.
+          The single most expensive misreading here is that the page looks
+          like the change took, or like the state is now unknown. It is
+          known: it is what it was.
+
+          Amber and not red, because nothing is broken by this and nothing was
+          lost — including the typed reason, which stays in the field. A
+          mandatory-reason box that empties itself on a network failure
+          teaches people to type "asdf" the second time. */}
+      {set.error && (
+        <div className="row-divider px-5 py-3.5">
           <div className="grid gap-2 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
             <p className="text-[13.5px] font-semibold text-warn-text">
               That did not go through. {name} did not answer the request.
@@ -1767,8 +1879,8 @@ function LifecycleControl({ target, health }: { target: string; health: TargetHe
               </p>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </Card>
   );
 }

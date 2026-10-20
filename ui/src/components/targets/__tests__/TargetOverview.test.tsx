@@ -537,7 +537,7 @@ describe("one target's page", () => {
  * 3-tile row, replacing the "Can Syndra reach it" card and its label/value
  * grid.
  */
-describe("the top band: one status card and three tiles", () => {
+describe("the top band: Syndra's reach, what the system reports, and Maintenance", () => {
   it("gives one calm sentence when reachable and active, with no leftover grid", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
@@ -562,21 +562,20 @@ describe("the top band: one status card and three tiles", () => {
     };
     renderTarget();
 
-    const tile = screen.getByText("Accounts Syndra manages").closest(".card");
-    expect(tile).not.toBeNull();
-    expect(within(tile as HTMLElement).getByText("4")).toBeInTheDocument();
+    const card = screen.getByText("Accounts Syndra manages").closest(".card");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByText("4")).toBeInTheDocument();
   });
 
-  it("names the maintenance state on its own tile, matching the control below", () => {
+  it("names the maintenance state in the Maintenance card, matching its action rows", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "draining" };
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    // The tile's own label, not the "Maintenance" card title further down —
-    // both are legitimately on screen at once.
-    expect(screen.getAllByText("Maintenance").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Maintenance")).toBeInTheDocument();
     expect(screen.getByText("Finishing up")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Make active" })).toBeInTheDocument();
   });
 
   it("does not double the product name beside its version", () => {
@@ -592,30 +591,6 @@ describe("the top band: one status card and three tiles", () => {
 
     expect(screen.queryByText(/TrueNAS TrueNAS-25\.10\.5/)).toBeNull();
     expect(screen.getByText("TrueNAS 25.10.5")).toBeInTheDocument();
-  });
-});
-
-/**
- * Maintenance: one compact row, one helper line — not the reason repeated
- * under every button.
- */
-describe("maintenance control is a single compact row", () => {
-  it("shows the 'say why first' helper once, not once per button", () => {
-    state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
-    renderTarget();
-
-    expect(screen.getAllByText(/Say why first/)).toHaveLength(1);
-  });
-
-  it("marks the current state and disables reselecting it", () => {
-    state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
-    renderTarget();
-
-    expect(screen.getByRole("button", { name: /Already active/ })).toBeDisabled();
   });
 });
 
@@ -977,7 +952,7 @@ describe("the system's Zitadel project", () => {
     const fence = () => document.getElementById("waiting")?.closest("[aria-disabled]");
     expect(fence()?.hasAttribute("inert")).toBe(true);
     // What reports on the system stays live.
-    expect(screen.getByText("Is it answering").closest("[aria-disabled]")).toBeNull();
+    expect(screen.getByText("Whether changes can land").closest("[aria-disabled]")).toBeNull();
 
     fireEvent.change(select, { target: { value: "p1" } });
     fireEvent.click(screen.getByRole("button", { name: "Use this project" }));
