@@ -1,6 +1,6 @@
 # compare-C: Systems, TrueNAS target, Mappings, Storage, Zitadel, Insights, Automation settings, Settings, Mobile
 
-Method: live https://syndra.makerspace.tools at 1280x800 (375x812 for mobile) vs boards on localhost:4400. Start view was BASIC; restored to Basic (localStorage `syndra_ui_view=basic`).
+Method: live the live app at 1280x800 (375x812 for mobile) vs boards on localhost:4400. Start view was BASIC; restored to Basic (localStorage `syndra_ui_view=basic`).
 
 Caveats
 - localStorage view is shared with the parallel helper, so the view flipped under me several times. I confirmed per page by aria-checked on the radio. Page BODY was identical in Basic and Advanced on Systems and TrueNAS (only the sidebar differs); the boards also draw one body for both views (their toggle changes the sidebar only). Mappings, Zitadel, Insights and Settings were not re-read in Basic.
