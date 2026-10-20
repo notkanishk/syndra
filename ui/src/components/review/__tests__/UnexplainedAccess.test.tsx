@@ -88,10 +88,6 @@ vi.mock("@/lib/queries/useDrift", () => ({
   },
 }));
 
-vi.mock("@/lib/queries/useGrants", () => ({
-  useReconciliationDiff: () => ({ data: undefined, isLoading: false, error: null, refetch: () => {} }),
-}));
-
 function item(overrides: Partial<DriftTriageItem> = {}): DriftTriageItem {
   return {
     id: "d1",
@@ -159,10 +155,17 @@ describe("Unexplained access — triage", () => {
     expect(labels.slice(0, 3)).toEqual(["Adopt", "Revoke", "Owned elsewhere"]);
   });
 
-  it("states that bulk revoke is deliberately absent rather than leaving a hole", () => {
+  // The board retires the red box under the list: it reports no failure, and
+  // the bar says it where somebody selecting rows would look for Revoke.
+  it("states that bulk revoke is deliberately absent, in the bar, rather than leaving a hole", () => {
     renderTriage();
+    expect(screen.queryByText(/You can adopt several rows at once/)).not.toBeInTheDocument();
+    enterSelect();
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
     expect(
-      screen.getByText(/You can adopt several rows at once/),
+      within(screen.getByRole("region", { name: "Selection" })).getByText(
+        "Revoking is one row at a time.",
+      ),
     ).toBeInTheDocument();
   });
 

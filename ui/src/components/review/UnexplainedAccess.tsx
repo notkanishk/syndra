@@ -1,21 +1,26 @@
 "use client";
 
-import { Term } from "@/components/ui/Term";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { isDeparted } from "@/lib/people-filters";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Badge, Mono } from "@/components/ui/Badge";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Badge, Chip, Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills, Select } from "@/components/ui/Select";
-import { Tabs } from "@/components/ui/Tabs";
+import { Unfold } from "@/components/ui/Unfold";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
+import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useProjects } from "@/lib/queries/useProjects";
 import { ProjectName, UserAvatar, UserName } from "@/components/names";
 import {
@@ -40,49 +45,89 @@ import {
   SelectionBar,
 } from "@/components/ui/SelectionBar";
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
-import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { Relative } from "@/components/ui/Time";
-import { formatShortDate, formatRelative, humanizeKey } from "@/lib/format";
+import { formatShortDate, formatRelative, formatWhen, humanizeKey, whyNotChecked } from "@/lib/format";
 import {
   AGE_LABELS,
   EMPTY_DRIFT_FILTERS,
   ORIGIN_LABELS,
+  REASON_LABELS,
   applyDriftFilters,
+  driftReason,
   driftRequest,
   hasAnyDriftFilter,
+  matchesDriftSearch,
   parseDriftFilters,
   serializeDriftFilters,
+  sortDrift,
   type DriftFilters,
+  type DriftSortKey,
 } from "@/lib/drift-filters";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
+import { stillMotion } from "@/lib/motion";
+import { targetLabel } from "@/lib/nav";
 import {
   outcomeFromError,
   statesNothingChanged,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 
-type Tab = "triage" | "reconciliation";
 type Resolution = "attribute" | "revoke" | "external";
 
+/**
+ * The two directions drift runs in. A grouped list folds (RULES): each is a
+ * card of its own, open by default, with its own count and paging.
+ */
+const SECTIONS = [
+  {
+    kind: "target_only",
+    id: "sec-z",
+    title: "In Zitadel, not given by Syndra",
+    short: "Not given by Syndra",
+    hint: "They keep it until you decide",
+    tone: "danger",
+  },
+  {
+    kind: "syndra_only",
+    id: "sec-s",
+    title: "Given by Syndra, gone from Zitadel",
+    short: "Gone from Zitadel",
+    hint: "They no longer have it",
+    tone: "warn",
+  },
+] as const satisfies ReadonlyArray<{
+  kind: string;
+  id: string;
+  title: string;
+  short: string;
+  hint: string;
+  tone: "danger" | "warn";
+}>;
+type SectionKind = (typeof SECTIONS)[number]["kind"];
+
+/** A quiet text control that sits among a row's buttons. */
+const QUIET_LINK =
+  "inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6";
+
+const isSafety = (item: DriftTriageItem) => (item.role_group ?? "").toLowerCase().includes("safety");
 
 /**
- * S6 · Review › Unexplained access — the highest-stakes screen in the product.
+ * S6 · Review › Drift — the highest-stakes screen in the product.
  *
  * Every row has to answer two questions in about two seconds: what is this, and
  * what happens if I revoke it. So the evidence sits ON the row rather than
  * behind a click, and the three resolutions are always in the same order —
  * Adopt, Revoke, Owned elsewhere — so a scanning eye learns one sequence.
  *
- * Ordering is by risk then age (computed server-side): a safety-gated role
- * found yesterday outranks a wiki role found last week. The row LAYOUT never
- * changes with risk; only the order and a left border do. A queue whose rows
+ * The list is gathered by direction and starts ordered by when it was found
+ * (most recent on top); every heading sorts. The row LAYOUT never changes with
+ * risk; only a left border does, on every safety-gated row. A queue whose rows
  * rearrange their own shape is a queue nobody can scan.
  */
 export function UnexplainedAccess() {
   const params = useSearchParams();
   const router = useRouter();
-  const tab: Tab = params.get("tab") === "reconciliation" ? "reconciliation" : "triage";
 
   /**
    * Six filters, in the URL, so a narrowed queue is a link somebody can send.
@@ -102,17 +147,23 @@ export function UnexplainedAccess() {
   );
   const setFilters = useCallback(
     (next: Partial<DriftFilters>) => {
-      const merged = { ...filters, ...next };
-      router.replace(
-        `/governance/drift${serializeDriftFilters(merged, tab === "reconciliation" ? { tab } : {})}`,
-        { scroll: false },
-      );
+      router.replace(`/governance/drift${serializeDriftFilters({ ...filters, ...next })}`, {
+        scroll: false,
+      });
     },
-    [filters, router, tab],
+    [filters, router],
   );
   const drift = useDriftItems(driftRequest(filters));
+  const summary = useGovernanceSummary();
   const projects = useProjects();
-  const filtered = hasAnyDriftFilter(filters);
+  // Search is not a filter in the URL: it finds a row, it does not make a view.
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<{ key: DriftSortKey; dir: 1 | -1 }>({ key: "found", dir: 1 });
+  const [open, setOpen] = useState<Record<SectionKind, boolean>>({
+    target_only: true,
+    syndra_only: true,
+  });
+  const filtered = hasAnyDriftFilter(filters) || query.trim() !== "";
   // On the button, so "why am I seeing so few rows" never needs the panel
   // opened to answer it — that question is the one a hidden filter creates.
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
@@ -123,15 +174,26 @@ export function UnexplainedAccess() {
     null,
   );
   const [expanded, setExpanded] = useState<string | null>(null);
-  const paging = usePaging();
   const [bulkOp, setBulkOp] = useState<"adopt" | "external" | null>(null);
 
-  // What the request returned, before this page's own three filters — the
-  // person and role choices are drawn from here, so every option offered
-  // matches at least one row.
+  // What the request returned, before this page's own filters — the person and
+  // role choices are drawn from here, so every option offered matches at least
+  // one row.
   const returned = useMemo(() => drift.data ?? [], [drift.data]);
-  const items = useMemo(() => applyDriftFilters(returned, filters), [returned, filters]);
   const resolver = useNameResolver();
+  const names = useMemo(() => {
+    const who = (item: DriftTriageItem) => resolver.resolveUser(item.user_id).value?.display_name ?? "";
+    const what = (item: DriftTriageItem) =>
+      `${resolver.resolveProject(item.project_id).value?.name ?? ""} · ${humanizeKey(item.role_keys[0] ?? "")}`;
+    return { who, what };
+  }, [resolver]);
+  const items = useMemo(
+    () =>
+      applyDriftFilters(returned, filters).filter((item) =>
+        matchesDriftSearch(item, query, { who: names.who(item), what: names.what(item) }),
+      ),
+    [returned, filters, query, names],
+  );
   // Options drawn from the queue itself, so nothing on offer returns nothing —
   // and each list is built with its OWN filter lifted, or choosing a name would
   // leave the name list holding only that name.
@@ -155,19 +217,32 @@ export function UnexplainedAccess() {
     [returned, filters],
   );
 
-  const visible = items.slice(0, paging.limit);
-  // Selection spans the whole queue, not the rendered page: a triage backlog is
-  // exactly the case where paging four times before you can act is the tedium
-  // worth removing.
-  const selection = useRowSelection(useMemo(() => items.map((item) => item.id), [items]));
-  // A triage row is read before it is resolved — the whole column headed "Why
-  // Syndra can't explain it" is there to be read — so the checkboxes arrive
-  // behind a named control rather than in front of every row by default.
+  const sections = useMemo(() => {
+    const sorted = sortDrift(items, sort.key, sort.dir, names);
+    return SECTIONS.map((section) => ({
+      ...section,
+      items: sorted.filter((item) => item.drift_type === section.kind),
+    })).filter((section) => section.items.length > 0);
+  }, [items, sort, names]);
+  // The order the rows are drawn in, so shift-click ranges mean what they look
+  // like. Selection spans the whole queue, not what a section has rendered: a
+  // triage backlog is exactly the case where paging four times before you can
+  // act is the tedium worth removing.
+  const selection = useRowSelection(
+    useMemo(() => sections.flatMap((section) => section.items.map((item) => item.id)), [sections]),
+  );
+  // A triage row is read before it is resolved, so the seats arrive behind a
+  // named control rather than in front of every row by default.
   const [selecting, setSelecting] = useState(false);
   const oldest = items.reduce<string | null>(
     (acc, item) => (!acc || item.detected_at < acc ? item.detected_at : acc),
     null,
   );
+  const readAt = useMemo(
+    () => (drift.dataUpdatedAt ? new Date(drift.dataUpdatedAt).toISOString() : null),
+    [drift.dataUpdatedAt],
+  );
+  const unread = summary.data?.unreconciled_targets ?? [];
 
   const selectedIds = useMemo(() => Array.from(selection.selected), [selection.selected]);
 
@@ -191,94 +266,182 @@ export function UnexplainedAccess() {
   /**
    * What the selection is made of, not just how much of it there is.
    *
-   * Safety-gated access is what the queue's ordering already keys on, so it is
-   * what an operator needs to know before resolving twelve rows at once — a
-   * batch of twelve wiki roles and a batch containing three laser-cutter roles
-   * are not the same decision.
+   * Safety-gated access is what an operator needs to know before resolving
+   * twelve rows at once — a batch of twelve wiki roles and a batch containing
+   * three laser-cutter roles are not the same decision.
    */
   const composition = useMemo(() => {
     if (selection.count === 0) return "";
     const chosen = items.filter((item) => selection.selected.has(item.id));
-    const safety = chosen.filter((item) =>
-      (item.role_group ?? "").toLowerCase().includes("safety"),
-    ).length;
+    const safety = chosen.filter(isSafety).length;
     const people = new Set(chosen.map((item) => item.user_id)).size;
     const parts = [`${people} ${people === 1 ? "person" : "people"}`];
     if (safety > 0) parts.unshift(`${safety} safety-gated`);
     return parts.join(" · ");
   }, [items, selection]);
 
+  const head = (
+    <CardColumns>
+      {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+      <span className="w-[180px] shrink-0">
+        <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
+      </span>
+      <span className="w-[200px] shrink-0">
+        <SortHead label="What they can get into" name="what" sort={sort} onSort={setSort} />
+      </span>
+      <span className="flex-1">
+        <SortHead label="Why Syndra can’t explain it" name="why" sort={sort} onSort={setSort} />
+      </span>
+      <span className="w-[110px] shrink-0 text-right">
+        <SortHead label="Found" name="found" sort={sort} onSort={setSort} />
+      </span>
+    </CardColumns>
+  );
+
+  const list = (
+    <ListStates
+      isLoading={drift.isLoading}
+      error={drift.error}
+      isEmpty={items.length === 0}
+      onRetry={() => drift.refetch()}
+      errorTitle="Couldn't load drift."
+      skeleton={
+        <Card>
+          <RowSkeleton rows={4} label="Loading drift" />
+        </Card>
+      }
+      empty={
+        <Card>
+          {/* "Nothing here" and "nothing here that matches" are different
+              answers, and on this queue the difference is whether there is
+              drift somewhere else that nobody is looking at. */}
+          {filtered ? (
+            <EmptyState
+              title="Nothing unexplained matches those filters."
+              guidance="There may still be drift under another project, or found the other way."
+              action={{
+                label: "Clear filters",
+                onClick: () => {
+                  setQuery("");
+                  setFilters(EMPTY_DRIFT_FILTERS);
+                },
+              }}
+            />
+          ) : (
+            <EmptyState
+              title="Everything is explained."
+              guidance="Every piece of access in Zitadel traces back to something Syndra did, and everything Syndra gave is there."
+              resolved
+            />
+          )}
+        </Card>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <SectionPill sections={sections} onGo={(kind) => goTo(kind, setOpen)} />
+        {selecting && (
+          <Card>
+            <SelectAllRow
+              inScope={items.length}
+              noun={["item", "items"]}
+              allSelected={selection.allSelected}
+              {...selection.headerCheckboxProps}
+            />
+          </Card>
+        )}
+        <div data-selection-scope {...selection.containerProps} className="flex flex-col gap-4">
+          {sections.map((section) => (
+            <DriftSection
+              key={section.kind}
+              section={section}
+              open={open[section.kind]}
+              onToggle={() => setOpen((cur) => ({ ...cur, [section.kind]: !cur[section.kind] }))}
+              head={head}
+              runOf={
+                sort.key === "what"
+                  ? names.what
+                  : sort.key === "why"
+                    ? (item) => REASON_LABELS[driftReason(item)]
+                    : null
+              }
+              renderRow={(item) => (
+                <TriageRow
+                  key={item.id}
+                  selecting={selecting}
+                  item={item}
+                  selection={selection}
+                  // Selecting is what this does, so it turns the mode on rather
+                  // than filling a selection nothing on screen is showing.
+                  onSelectSimilar={() => {
+                    setSelecting(true);
+                    selectSimilar(item);
+                  }}
+                  expanded={expanded === item.id}
+                  onExpand={() => setExpanded((cur) => (cur === item.id ? null : item.id))}
+                  onResolve={(resolution) => setPending({ item, resolution })}
+                />
+              )}
+            />
+          ))}
+        </div>
+        <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
+          <StatusDot tone="healthy" />
+          Everything else in Zitadel agrees with Syndra.
+        </span>
+      </div>
+    </ListStates>
+  );
+
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Drift"
-        lede={
-          <>
-            Access that exists in Zitadel that nothing in Syndra gave —{" "}
-            <Term name="drift">drift</Term>. Until you resolve a row, the person keeps that access.
-          </>
-        }
+        lede="Access in Zitadel that nothing in Syndra gave, and access Syndra gave that Zitadel no longer holds. Adopt keeps it and lets Syndra look after it; Revoke ends it; Owned elsewhere means another system manages it and Syndra stops asking."
         meta={
           items.length > 0
-            ? `${items.length} ${items.length === 1 ? "item" : "items"}${
-                filtered ? " matching these filters" : ""
-              }${oldest ? ` · oldest found ${formatRelative(oldest)}` : ""}`
+            ? `${items.length} ${filtered ? "matching these filters" : "to decide"}${
+                oldest ? ` · oldest found ${formatRelative(oldest)}` : ""
+              }`
             : undefined
         }
         actions={
-          <>
-            <Button
-              isPending={reconcile.isPending}
-              onClick={async () => {
-                setScanOutcome(null);
-                try {
-                  await reconcile.mutateAsync();
-                  // A scan is a read, so it applies nothing — saying "applied"
-                  // about a comparison would be the queue claiming it had
-                  // acted on what it found.
-                  setScanOutcome({
-                    kind: "no_change",
-                    message: "Checked again",
-                    detail: "The list below is what the check found just now.",
-                  });
-                } catch (error) {
-                  setScanOutcome(outcomeFromError(error));
-                }
-              }}
-            >
-              Check Zitadel again
-            </Button>
-          </>
+          <Button
+            isPending={reconcile.isPending}
+            onClick={async () => {
+              setScanOutcome(null);
+              try {
+                await reconcile.mutateAsync();
+                // A scan is a read, so it applies nothing — saying "applied"
+                // about a comparison would be the queue claiming it had
+                // acted on what it found.
+                setScanOutcome({
+                  kind: "no_change",
+                  message: "Checked again",
+                  detail: "The list below is what the check found just now.",
+                });
+              } catch (error) {
+                setScanOutcome(outcomeFromError(error));
+              }
+            }}
+          >
+            Check Zitadel again
+          </Button>
         }
       />
 
       {/* Under the control that ran it, above the queue it describes. */}
       {scanOutcome && <ActionOutcome outcome={scanOutcome} />}
 
-      {/* Tabs first — they decide what this page IS. Filters below them,
-          because they only narrow whichever view is showing. Six controls
-          strung along the page header wrapped into five stacked full-width
-          rows and pushed the queue itself below the fold. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Tabs
-          label="Views of unexplained access"
-          value={tab}
-          onSelect={(next) => router.replace(next === "triage" ? "?" : "?tab=reconciliation")}
-          options={[
-            {
-              value: "triage" as const,
-              label: (
-                <>
-                  Needs a decision{" "}
-                  <span className="font-semibold text-danger-text">{items.length}</span>
-                </>
-              ),
-            },
-            { value: "reconciliation" as const, label: "Side by side" },
-          ]}
-        />
-        <span className="flex-1" />
-        {tab === "triage" && (
+      <FilterBar
+        search={
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search person or role…"
+            aria-label="Search drift by person or role"
+          />
+        }
+        filters={
           <FilterPanel
             resultCount={items.length}
             noun={["finding", "findings"]}
@@ -362,143 +525,64 @@ export function UnexplainedAccess() {
               />
             </FilterField>
           </FilterPanel>
-        )}
-        {tab === "triage" && items.length > 0 && (
-          <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
-        )}
-      </div>
+        }
+        trailing={
+          items.length > 0 ? (
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          ) : undefined
+        }
+      />
 
-      {tab === "triage" ? (
-        <>
-          <p className="max-w-[92ch] text-[13.5px] leading-[1.5] text-muted">
-            Adopt — keep it and let Syndra track it. Revoke — end it. Owned elsewhere — another
-            system manages it; Syndra stops asking.
-          </p>
-          <Card>
-            <CardColumns>
-              {selecting && <span className="w-11 shrink-0 desktop:w-[18px]" />}
-              <span className="w-[186px]">Who</span>
-              <span className="w-[250px]">What they can get into</span>
-              <span className="flex-1">Why Syndra can&rsquo;t explain it</span>
-              <span className="w-[96px]">Found</span>
-              <span className="w-[300px] text-right">Resolve</span>
-            </CardColumns>
-
-            {selecting && items.length > 0 && (
-              <SelectAllRow
-                inScope={items.length}
-                noun={["item", "items"]}
-                allSelected={selection.allSelected}
-                {...selection.headerCheckboxProps}
-              />
-            )}
-
-            <div data-selection-scope {...selection.containerProps}>
-            <ListStates
-              isLoading={drift.isLoading}
-              error={drift.error}
-              isEmpty={items.length === 0}
-              onRetry={() => drift.refetch()}
-              errorTitle="Couldn't load unexplained access."
-              skeleton={<RowSkeleton rows={5} label="Loading unexplained access" />}
-              empty={
-                // "Nothing here" and "nothing here that matches" are different
-                // answers, and on this queue the difference is whether there is
-                // unexplained access somewhere else that nobody is looking at.
-                filtered ? (
-                  <EmptyState
-                    title="Nothing unexplained matches those filters."
-                    guidance="There may still be items under another project, or found the other way."
-                    action={{
-                      label: "Clear filters",
-                      onClick: () => setFilters(EMPTY_DRIFT_FILTERS),
-                    }}
-                  />
-                ) : (
-                  <EmptyState
-                    title="Everything is explained."
-                    guidance="Every piece of access in Zitadel traces back to something Syndra did."
-                    resolved
-                  />
-                )
-              }
-            >
-              {visible.map((item, index) => (
-                <TriageRow
-                  selecting={selecting}
-                  key={item.id}
-                  item={item}
-                  // Only the leading row carries the ranking border. If every
-                  // safety-gated row were marked, the marking would stop
-                  // meaning "start here".
-                  leading={index === 0 && (item.role_group ?? "").toLowerCase().includes("safety")}
-                  selection={selection}
-                  // Selecting is what this does, so it turns the mode on rather
-                  // than filling a selection nothing on screen is showing.
-                  onSelectSimilar={() => {
-                    setSelecting(true);
-                    selectSimilar(item);
-                  }}
-                  expanded={expanded === item.id}
-                  onExpand={() => setExpanded((cur) => (cur === item.id ? null : item.id))}
-                  onResolve={(resolution) => setPending({ item, resolution })}
-                />
-              ))}
-
-              <PaginationRow
-                shown={visible.length}
-                total={items.length}
-                onMore={paging.more}
-                onAll={() => paging.all(items.length)}
-                onBack={paging.back}
-              />
-            </ListStates>
-            </div>
-          </Card>
-
-          <SelectionBar
-            count={selecting ? selection.count : 0}
-            noun={["item", "items"]}
-            composition={composition}
-            // `boundBulkIDs` refuses past this on both drift bulk routes. Same
-            // server constant the grant and request endpoints use.
-            ceiling={BULK_MAX_USERS}
-            onTakeCeiling={() =>
-              selection.selectOnly(items.slice(0, BULK_MAX_USERS).map((item) => item.id))
-            }
-            onClear={selection.clear}
-          >
-            {/* Revoke is missing from this bar on purpose, and its absence is
-                stated where somebody would go looking for it. An operator who
-                selects nine rows to revoke and finds two buttons that are not
-                Revoke concludes the bar is broken, or hunts. Neither is a
-                thing to leave anybody doing on this queue. */}
-            <span className="text-[13px] text-faint">Revoking is one row at a time.</span>
-            {/* Both open a plan; neither resolves anything on tap. */}
-            <SelectionAction onClick={() => setBulkOp("adopt")}>
-              Preview adopting these
-            </SelectionAction>
-            <SelectionAction onClick={() => setBulkOp("external")}>
-              Preview marking these owned elsewhere
-            </SelectionAction>
-          </SelectionBar>
-
-          {/*
-            The absence is stated on the screen, not only in a spec. An operator
-            who cannot find bulk revoke should learn it was a decision rather
-            than assume the feature is broken.
-          */}
-          <p className="max-w-[92ch] text-[14px] leading-[1.55] text-muted">
-            <strong className="font-semibold text-ink">
-              You can adopt several rows at once, or mark several as owned elsewhere. Revoking is
-              always one row at a time.
-            </strong>{" "}
-            Revoking ends real access on real machines, and each revocation deserves its own look.
-          </p>
-        </>
-      ) : (
-        <Reconciliation />
+      {/* The read line: how current the list is on the left, a way to each
+          section on the right. Only once there is a list to be current. */}
+      {!drift.isLoading && !drift.error && (
+        <div className="-mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-2">
+          <ReadFreshness
+            state={{ readAt, current: true }}
+            subject="This list"
+            onRefresh={() => drift.refetch()}
+          />
+          <SectionChips sections={sections} onGo={(kind) => goTo(kind, setOpen)} />
+        </div>
       )}
+
+      {/* A system nobody could read says what is missing from the list and why;
+          the rows below are still current for the ones that were read. */}
+      {unread.map((target) => (
+        <Notice key={target.target} tone="warn" live title={`${targetLabel(target.target)} hasn’t been read since ${formatWhen(target.since)}.`}>
+          Anything that drifted on it is not in this list.{" "}
+          {target.reason ? `${whyNotChecked(target.reason)} ` : ""}The rows below are current for
+          the systems that were read.
+        </Notice>
+      ))}
+
+      {list}
+
+      <SelectionBar
+        count={selecting ? selection.count : 0}
+        noun={["item", "items"]}
+        composition={composition}
+        // `boundBulkIDs` refuses past this on both drift bulk routes. Same
+        // server constant the grant and request endpoints use.
+        ceiling={BULK_MAX_USERS}
+        onTakeCeiling={() =>
+          selection.selectOnly(
+            sections.flatMap((section) => section.items).slice(0, BULK_MAX_USERS).map((item) => item.id),
+          )
+        }
+        onClear={selection.clear}
+      >
+        {/* Revoke is missing from this bar on purpose, and its absence is
+            stated where somebody would go looking for it. An operator who
+            selects nine rows to revoke and finds two buttons that are not
+            Revoke concludes the bar is broken, or hunts. */}
+        <span className="text-[13px] text-faint">Revoking is one row at a time.</span>
+        {/* Both open a plan; neither resolves anything on tap. */}
+        <SelectionAction onClick={() => setBulkOp("adopt")}>Preview adopting these</SelectionAction>
+        <SelectionAction onClick={() => setBulkOp("external")}>
+          Preview marking these owned elsewhere
+        </SelectionAction>
+      </SelectionBar>
 
       <ResolutionDialog pending={pending} onClose={() => setPending(null)} />
 
@@ -515,10 +599,270 @@ export function UnexplainedAccess() {
   );
 }
 
+/** A column heading that sorts. The one carrying the arrow is the one in force. */
+function SortHead({
+  label,
+  name,
+  sort,
+  onSort,
+}: {
+  label: string;
+  name: DriftSortKey;
+  sort: { key: DriftSortKey; dir: 1 | -1 };
+  onSort: (next: { key: DriftSortKey; dir: 1 | -1 }) => void;
+}) {
+  const on = sort.key === name;
+  return (
+    <button
+      type="button"
+      aria-label={`Sort by ${name}`}
+      onClick={() => onSort({ key: name, dir: on ? (-sort.dir as 1 | -1) : 1 })}
+      className={`inline-flex items-center gap-[5px] text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
+        on ? "text-ink" : ""
+      }`}
+    >
+      {label}
+      <span
+        aria-hidden
+        className={`inline-block text-[11px] motion-press ${on ? "opacity-100" : "opacity-0"} ${
+          on && sort.dir < 0 ? "rotate-180" : ""
+        }`}
+      >
+        ↓
+      </span>
+    </button>
+  );
+}
+
+type SectionView = { kind: SectionKind; id: string; title: string; short: string; hint: string; tone: "danger" | "warn"; items: DriftTriageItem[] };
+
+/** Opens a folded section on the way, then takes the reader to it. */
+function goTo(kind: SectionKind, setOpen: (next: (cur: Record<SectionKind, boolean>) => Record<SectionKind, boolean>) => void) {
+  setOpen((cur) => ({ ...cur, [kind]: true }));
+  const id = SECTIONS.find((section) => section.kind === kind)?.id;
+  setTimeout(() => {
+    const target = id ? document.getElementById(id) : null;
+    if (!target) return;
+    // The shell's own scroller where there is one, so a narrow page never
+    // moves sideways; the window otherwise (a page outside the shell).
+    const container = document.getElementById("app-scroll");
+    const behavior = stillMotion() ? "auto" : "smooth";
+    if (container) {
+      const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+      container.scrollTo?.({ top: container.scrollTop + offset - 64, behavior });
+    } else {
+      window.scrollTo?.({ top: window.scrollY + target.getBoundingClientRect().top - 64, behavior });
+    }
+  }, 0);
+}
+
+/** One chip per section on the read line: its dot, a short name, the count, ↓. */
+function SectionChips({
+  sections,
+  onGo,
+}: {
+  sections: SectionView[];
+  onGo: (kind: SectionKind) => void;
+}) {
+  // One section has nowhere to take you.
+  if (sections.length < 2) return null;
+  return (
+    <nav id="drift-jump" aria-label="Sections of drift" className="ml-auto flex flex-wrap gap-2">
+      {sections.map((section) => (
+        <a
+          key={section.kind}
+          href={`#${section.id}`}
+          onClick={(event) => {
+            event.preventDefault();
+            onGo(section.kind);
+          }}
+          className="rounded-pill"
+        >
+          <Chip className="gap-2">
+            <StatusDot tone={section.tone as StatusTone} />
+            {section.short}
+            <span className="text-faint">{section.items.length}</span>
+            <span aria-hidden className="text-[12px] text-faint">
+              ↓
+            </span>
+          </Chip>
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+/**
+ * The same sections as a pill at the top centre, once the read line has
+ * scrolled away. The one you are in is filled; the others point up or down to
+ * where they are.
+ */
+function SectionPill({
+  sections,
+  onGo,
+}: {
+  sections: SectionView[];
+  onGo: (kind: SectionKind) => void;
+}) {
+  const [spy, setSpy] = useState<{ active: string; away: boolean }>({ active: "", away: false });
+  const ids = sections.map((section) => section.id).join(" ");
+  useEffect(() => {
+    if (!ids.includes(" ")) return;
+    const read = () => {
+      const rest = document.getElementById("drift-jump");
+      const container = document.getElementById("app-scroll");
+      const top = container ? container.getBoundingClientRect().top : 0;
+      let active = ids.split(" ")[0];
+      for (const id of ids.split(" ")) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top - top < 120) active = id;
+      }
+      const away = rest ? rest.getBoundingClientRect().bottom - top < 0 : false;
+      setSpy((cur) => (cur.active === active && cur.away === away ? cur : { active, away }));
+    };
+    read();
+    document.addEventListener("scroll", read, true);
+    return () => document.removeEventListener("scroll", read, true);
+  }, [ids]);
+
+  if (sections.length < 2) return null;
+  const at = Math.max(0, sections.findIndex((section) => section.id === spy.active));
+  return (
+    <div className="sticky top-0 z-[5] -mb-4 h-0">
+      <nav
+        aria-label="Sections of drift (while scrolling)"
+        aria-hidden={!spy.away}
+        className={`absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 gap-0.5 overflow-x-auto whitespace-nowrap rounded-pill border border-line-strong bg-surface-1 p-1 shadow-dialog motion-tint ${
+          spy.away ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        {sections.map((section, index) => {
+          const here = index === at;
+          return (
+            <a
+              key={section.kind}
+              href={`#${section.id}`}
+              tabIndex={spy.away ? 0 : -1}
+              aria-current={here ? "location" : undefined}
+              onClick={(event) => {
+                event.preventDefault();
+                onGo(section.kind);
+              }}
+              className={`inline-flex min-h-9 items-center gap-2 rounded-pill px-3.5 text-[13px] font-semibold motion-tint ${
+                here ? "bg-surface-2 text-ink" : "text-muted"
+              }`}
+            >
+              <StatusDot tone={section.tone as StatusTone} />
+              {section.short}
+              <span className="font-medium text-faint">{section.items.length}</span>
+              {!here && (
+                <span aria-hidden className="text-[12px] text-faint">
+                  {index < at ? "↑" : "↓"}
+                </span>
+              )}
+            </a>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+/**
+ * One direction of drift: a card whose heading folds it, ten rows to start,
+ * and under a sort that gathers equal values a quiet label for each run.
+ */
+function DriftSection({
+  section,
+  open,
+  onToggle,
+  head,
+  runOf,
+  renderRow,
+}: {
+  section: SectionView;
+  open: boolean;
+  onToggle: () => void;
+  head: ReactNode;
+  runOf: ((item: DriftTriageItem) => string) | null;
+  renderRow: (item: DriftTriageItem) => ReactNode;
+}) {
+  const paging = usePaging();
+  const anchor = useRef<HTMLDivElement>(null);
+  const visible = section.items.slice(0, paging.limit);
+  const counts = new Map<string, number>();
+  if (runOf) for (const item of section.items) counts.set(runOf(item), (counts.get(runOf(item)) ?? 0) + 1);
+
+  let previous: string | null = null;
+  return (
+    <section id={section.id} aria-labelledby={`${section.id}-title`} className="scroll-mt-4">
+      <Card>
+        <div ref={anchor}>
+          <CardHeader
+            tone={section.tone}
+            count={section.items.length}
+            note={section.hint}
+            title={
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={`${section.id}-body`}
+                onClick={onToggle}
+                className="inline-flex items-center gap-3 text-left"
+              >
+                <span
+                  aria-hidden
+                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-press ${
+                    open ? "rotate-90" : ""
+                  }`}
+                >
+                  ›
+                </span>
+                <span id={`${section.id}-title`}>{section.title}</span>
+              </button>
+            }
+          />
+        </div>
+        <Unfold open={open}>
+          <div id={`${section.id}-body`}>
+            {head}
+            {visible.map((item) => {
+              const run = runOf ? runOf(item) : null;
+              const starts = run !== null && run !== previous;
+              previous = run;
+              return (
+                <div key={item.id}>
+                  {starts && (
+                    <div className="row-divider flex items-baseline gap-2.5 bg-surface-0 px-5 pb-2 pt-3">
+                      <span data-testid="drift-run" className="type-label text-ink">
+                        {run}
+                        <span className="ml-2.5 text-[12.5px] font-semibold normal-case tracking-normal text-muted">
+                          {counts.get(run)}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                  {renderRow(item)}
+                </div>
+              );
+            })}
+            <PaginationRow
+              shown={visible.length}
+              total={section.items.length}
+              onMore={paging.more}
+              onAll={() => paging.all(section.items.length)}
+              onBack={paging.back}
+              anchor={anchor}
+            />
+          </div>
+        </Unfold>
+      </Card>
+    </section>
+  );
+}
 
 function TriageRow({
   item,
-  leading,
   selecting,
   selection,
   onSelectSimilar,
@@ -527,7 +871,6 @@ function TriageRow({
   onResolve,
 }: {
   item: DriftTriageItem;
-  leading: boolean;
   selecting: boolean;
   selection: RowSelection;
   onSelectSimilar: () => void;
@@ -544,87 +887,112 @@ function TriageRow({
   // permanent record of access nobody holds.
   const nothingToAdopt = item.drift_type === "syndra_only";
   const adoptPointless = item.user_is_service_account || nothingToAdopt;
+  const why = explainDrift(item);
 
   return (
-    <div className={leading ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}>
+    <div
+      {...(isSafety(item) ? { "data-danger-edge": "" } : {})}
+      className={isSafety(item) ? "border-l-[3px] border-danger" : "border-l-[3px] border-transparent"}
+    >
       <div
-        className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
+        className={`row-divider flex flex-wrap items-start gap-x-[18px] gap-y-3 px-5 py-4 ${
           selection.isSelected(item.id) ? "bg-accent-soft" : ""
         }`}
         {...selection.rowProps(item.id)}
       >
         {selecting && (
-          <RowCheckbox
-            label={`Select the ${role} row`}
-            {...selection.checkboxProps(item.id)}
-          />
+          <span className="order-1">
+            <RowCheckbox
+              label={`Select the ${role} row`}
+              {...selection.checkboxProps(item.id)}
+            />
+          </span>
         )}
 
-        <button
-          type="button"
-          onClick={onExpand}
-          aria-expanded={expanded}
-          data-testid="drift-row-toggle"
-          className="flex min-h-[44px] w-full min-w-0 items-center gap-2.5 text-left tablet:w-[186px] desktop:min-h-0"
-        >
+        {/* Who links to the person; the evidence has its own control. */}
+        <div className="order-1 flex w-full min-w-0 items-center gap-3 tablet:w-[180px] tablet:shrink-0">
           <UserAvatar id={item.user_id} size="row" />
           <span className="min-w-0">
-            <span className="block truncate text-[14.5px] font-semibold">
+            <Link
+              href={`/users/${item.user_id}`}
+              className="block text-[14.5px] font-semibold motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+            >
               <UserName id={item.user_id} />
-            </span>
-            <span className="block truncate text-[12.5px] text-faint">
-              {describeHolder(item)}
-            </span>
+            </Link>
+            <span className="block text-[12.5px] text-faint">{describeHolder(item)}</span>
           </span>
-        </button>
+        </div>
 
-        <div className="w-full min-w-0 tablet:w-[250px]">
-          <div className="truncate text-[14px]">
-            <ProjectName id={item.project_id} /> / <Mono>{role}</Mono>
-          </div>
+        <div className="order-2 flex w-full flex-col items-start gap-[3px] tablet:w-[200px] tablet:shrink-0">
+          <Link
+            href={`/projects/${item.project_id}`}
+            className="text-[14px] leading-[1.45] motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+          >
+            <ProjectName id={item.project_id} /> · {humanizeKey(role)}
+          </Link>
+          <Mono className="text-[12.5px] text-faint">{role}</Mono>
+          {item.target !== "zitadel" && (
+            <span className="text-[12.5px] text-muted">On {targetLabel(item.target)}</span>
+          )}
           <RiskPill item={item} />
         </div>
 
-        <div className="w-full tablet:min-w-[220px] tablet:flex-1">
-          <p className="text-[13.5px] leading-[1.5] text-muted">{explainDrift(item)}</p>
-          <WhoMadeIt item={item} />
-        </div>
-
-        <div className="text-[13px] text-faint tablet:w-[96px]">
+        <div className="order-3 text-[13px] text-faint tablet:ml-auto tablet:w-[110px] tablet:shrink-0 tablet:pt-0.5 tablet:text-right desktop:order-4">
           <span className="tablet:hidden">Found </span>
           <Relative iso={item.detected_at} />
         </div>
 
-        {/*
-          Fixed order, every row: Adopt · Revoke · Owned elsewhere. Revoke is a
-          red OUTLINE here — the solid fill exists only on the confirming
-          button inside its dialog.
-        */}
-        <div className="flex w-full flex-wrap gap-3 tablet:w-[300px] tablet:shrink-0 tablet:justify-end tablet:gap-2">
-          <Button
-            variant={adoptPointless ? "ghost" : "accent"}
-            size="sm"
-            disabled={adoptPointless}
-            reason={nothingToAdopt ? "Zitadel doesn't have this, so there's nothing to adopt." : undefined}
-            onClick={() => onResolve("attribute")}
-          >
-            Adopt
-          </Button>
-          <Button variant="danger" size="sm" onClick={() => onResolve("revoke")}>
-            Revoke
-          </Button>
-          <Button size="sm" onClick={() => onResolve("external")}>
-            Owned elsewhere
-          </Button>
-          {/* Drift arrives in clusters, so the fastest way to select the ones
-              that belong together is to say so, not to hunt for them. */}
-          <button
-            type="button"
-            onClick={onSelectSimilar}
-            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6"
-          >
-            Select similar rows
-          </button>
+        {/* The reason gets the width, and the answers sit beneath it in the
+            same order on every row: Adopt · Revoke · Owned elsewhere. Revoke is
+            a red OUTLINE here — the solid fill exists only on the confirming
+            button inside its dialog. Below the desktop breakpoint this block
+            drops under the line and takes the full width. */}
+        <div className="order-4 flex w-full min-w-0 flex-col gap-2.5 desktop:order-3 desktop:w-auto desktop:flex-1">
+          <div className="flex flex-col gap-1">
+            <p className="text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">{why.text}</p>
+            {/* Two separate facts, said separately (owner's requirement). */}
+            {why.note && (
+              <p className="text-[13.5px] leading-[1.55] text-warn-text [text-wrap:pretty]">{why.note}</p>
+            )}
+            <WhoMadeIt item={item} />
+          </div>
+          <div className="flex flex-wrap items-center gap-3 desktop:gap-2">
+            <Button
+              variant={adoptPointless ? "ghost" : "accent"}
+              size="sm"
+              disabled={adoptPointless}
+              reason={nothingToAdopt ? "Zitadel doesn't have this, so there's nothing to adopt." : undefined}
+              onClick={() => onResolve("attribute")}
+            >
+              Adopt
+            </Button>
+            <Button variant="danger" size="sm" onClick={() => onResolve("revoke")}>
+              Revoke
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => onResolve("external")}>
+              Owned elsewhere
+            </Button>
+            <button
+              type="button"
+              onClick={onExpand}
+              aria-expanded={expanded}
+              data-testid="drift-row-toggle"
+              className={QUIET_LINK}
+            >
+              {expanded ? "Hide evidence" : "Show evidence"}
+            </button>
+            {/* Drift arrives in clusters, so the fastest way to select the ones
+                that belong together is to say so, not to hunt for them. */}
+            <button type="button" onClick={onSelectSimilar} className={QUIET_LINK}>
+              Select similar rows
+            </button>
+          </div>
+          {item.user_is_service_account && (
+            <p className="text-[12.5px] leading-[1.5] text-faint">
+              Adopt is off: this account re-creates its own access on every deploy, whatever Syndra
+              records.
+            </p>
+          )}
         </div>
       </div>
 
@@ -887,7 +1255,7 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
       <button
         type="button"
         onClick={() => setAsked(true)}
-        className="mt-1 inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6"
+        className={QUIET_LINK}
       >
         Who made it?
       </button>
@@ -944,7 +1312,25 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
   );
 }
 
-function explainDrift(item: DriftTriageItem): string {
+function explainDrift(item: DriftTriageItem): { text: string; note?: string } {
+  const text = explainBody(item);
+  // Two separate facts, said separately (owner's requirement): the sentence is
+  // what the evidence does not show; this one is a guess about WHY, and only
+  // ventured when the event log reaches back far enough to support it
+  // (event_possibly_missed already carries that check). It is the sweep-found
+  // case alone — a row with a named maker has no missing event to wonder at.
+  const sweepFound =
+    item.drift_type !== "syndra_only" && !item.upstream_created_at && !item.upstream_actor;
+  return {
+    text,
+    note:
+      sweepFound && item.event_possibly_missed
+        ? "Zitadel usually tells Syndra about a change like this on its own. This time nothing arrived, which is worth a look."
+        : undefined,
+  };
+}
+
+function explainBody(item: DriftTriageItem): string {
   if (item.drift_type === "syndra_only") {
     // The row used to say "usually a queued write that never landed" for every
     // one of these, which is the wrong half of the story whenever the target was
@@ -987,16 +1373,7 @@ function explainDrift(item: DriftTriageItem): string {
   if (when || who) {
     return `Created in Zitadel${when}${who}. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.`;
   }
-  const base =
-    "Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.";
-  // Two separate facts, said separately (owner's requirement): the first
-  // sentence is what the evidence does not show; this one is a guess about
-  // WHY, and only ventured when the event log reaches back far enough to
-  // support it (event_possibly_missed already carries that check).
-  if (item.event_possibly_missed) {
-    return `${base} Zitadel usually tells Syndra about a change like this one on its own; this time nothing arrived, which is worth a look.`;
-  }
-  return base;
+  return "Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.";
 }
 
 // The third copy of "is this person gone", now the shared one. It was missing
@@ -1007,164 +1384,6 @@ function describeHolder(item: DriftTriageItem): string {
   if (item.user_is_service_account) return "Service account";
   if (isDeparted(item.user_status)) return "No longer active";
   return "Member";
-}
-
-/**
- * Reconciliation — the Syndra ↔ provider diff, relocated here from the retired
- * /grants route. Two directions of drift, named differently: extra upstream
- * grants go to triage, missing downstream writes get re-pushed.
- */
-function Reconciliation() {
-  const diff = useReconciliationDiff();
-  const data = diff.data;
-
-  const empty =
-    !data ||
-    (data.only_in_syndra.length === 0 &&
-      data.only_in_zitadel.length === 0 &&
-      data.drift.length === 0);
-
-  return (
-    <div className="flex flex-col gap-[18px]">
-      {data?.truncated && (
-        <div className="warn-note px-5 py-3.5 text-[14px] text-warn-text">
-          This comparison stopped early because the list was too long, so it is incomplete. Treat an empty
-          section as &ldquo;nothing found so far&rdquo;, not as &ldquo;nothing exists&rdquo;.
-        </div>
-      )}
-
-      <Card>
-        <CardHeader
-          title="Syndra compared with Zitadel"
-          note={
-            data?.generated_at ? (
-              <>
-                compared <Relative iso={data.generated_at} />
-              </>
-            ) : undefined
-          }
-        />
-        <ListStates
-          isLoading={diff.isLoading}
-          error={diff.error}
-          isEmpty={empty}
-          onRetry={() => diff.refetch()}
-          errorTitle="Couldn't compare with Zitadel."
-          skeleton={<RowSkeleton rows={4} avatar={false} label="Comparing" />}
-          empty={
-            <EmptyState
-              title="The two sides agree."
-              guidance="Everything Syndra gave exists in Zitadel, and nothing there is unaccounted for."
-              resolved
-            />
-          }
-        >
-          <DiffSection
-            label="In Zitadel but not in Syndra"
-            hint="These exist in Zitadel with nothing in Syndra explaining them."
-            tone="danger"
-            action={{ label: "Open Needs a decision", href: "?" }}
-            rows={(data?.only_in_zitadel ?? []).map((row) => ({
-              userId: row.user_id,
-              projectId: row.project_id,
-              roles: row.role_keys,
-            }))}
-          />
-          <DiffSection
-            label="In Syndra but not in Zitadel"
-            hint="Syndra gave these and Zitadel does not have them — the change never went through."
-            tone="warn"
-            action={{ label: "Open Pending changes", href: "/governance/pending" }}
-            rows={(data?.only_in_syndra ?? []).map((row) => ({
-              userId: row.user_id,
-              projectId: row.project_id,
-              roles: row.role_keys,
-            }))}
-          />
-          <DiffSection
-            label="Different on both sides"
-            hint="Same person and project, different roles. Each row says which side has them."
-            tone="warn"
-            rows={(data?.drift ?? []).map((row) => ({
-              userId: row.user_id,
-              projectId: row.project_id,
-              roles: row.only_in_zitadel.length > 0 ? row.only_in_zitadel : row.only_in_syndra,
-              side: row.only_in_zitadel.length > 0 ? "only in Zitadel" : "only in Syndra",
-            }))}
-          />
-
-          {/*
-            "Nothing wrong with the other four projects" is itself the answer
-            somebody came here for, so agreement is rendered rather than
-            filtered out — just at reduced contrast.
-          */}
-          {!empty && (
-            <div className="row-divider px-5 py-3 text-[13.5px] text-faint opacity-[.55]">
-              Everything not listed above is in agreement.
-            </div>
-          )}
-        </ListStates>
-      </Card>
-    </div>
-  );
-}
-
-function DiffSection({
-  label,
-  hint,
-  tone,
-  action,
-  rows,
-}: {
-  label: string;
-  hint: string;
-  tone: "danger" | "warn";
-  action?: { label: string; href: string };
-  rows: Array<{ userId: string; projectId: string; roles: string[]; side?: string }>;
-}) {
-  if (rows.length === 0) return null;
-  return (
-    <>
-      <div className="row-divider flex flex-wrap items-baseline gap-3 px-5 pb-1.5 pt-3">
-        <span className="type-label">{label}</span>
-        <span
-          className={`text-[13.5px] font-semibold ${
-            tone === "danger" ? "text-danger-text" : "text-warn-text"
-          }`}
-        >
-          {rows.length}
-        </span>
-        <span className="flex-1" />
-        {action && (
-          <ButtonLink href={action.href} size="sm" variant="ghost">
-            {action.label}
-          </ButtonLink>
-        )}
-        <p className="w-full max-w-[80ch] text-[13px] text-faint">{hint}</p>
-      </div>
-      {rows.map((row, index) => (
-        <div
-          key={`${row.userId}-${row.projectId}-${index}`}
-          className="flex items-center gap-4 px-5 py-2.5 text-[14px]"
-        >
-          <span className="w-[200px] shrink-0 truncate font-semibold">
-            <UserName id={row.userId} />
-          </span>
-          <span className="w-[180px] shrink-0 truncate text-muted">
-            <ProjectName id={row.projectId} />
-          </span>
-          <span className="min-w-0 flex-1 truncate">
-            {row.side && <span className="mr-2 text-[13px] text-faint">{row.side}:</span>}
-            {row.roles.map((key) => (
-              <Mono key={key} className="mr-2 text-muted">
-                {key}
-              </Mono>
-            ))}
-          </span>
-        </div>
-      ))}
-    </>
-  );
 }
 
 /**

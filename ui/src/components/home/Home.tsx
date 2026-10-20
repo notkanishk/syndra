@@ -33,7 +33,7 @@ import { targetLabel } from "@/lib/nav";
 import { ArriveList } from "@/components/ui/ArriveList";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
-import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
+import { formatShortDate, formatWeekday, daysUntil, whyNotChecked } from "@/lib/format";
 
 /**
  * Home — the operator landing. Two zones, in a fixed order.
@@ -586,37 +586,6 @@ function writeNoun(opType: string): string {
  * ticks"), and the reason travels with it because "unreachable" and "answered
  * and refused the read" send them to different machines.
  */
-/**
- * Why the last pass concluded nothing, in words.
- *
- * The reason is a closed vocabulary the backend writes to a row
- * (`db/target_reconciliation.go`), and this card printed the value itself —
- * `target_unreachable`, in the smallest grey type on the dashboard, under a
- * sentence written for somebody who has never read the schema. The whole point
- * of the entry is that the operator's next move differs by reason: there is
- * nothing to reach for, or there is something to fix.
- *
- * An unrecognised value falls through unchanged rather than being swallowed. A
- * reason nobody has worded yet is still more use than no reason at all, and it
- * shows up here rather than disappearing quietly.
- */
-function whyNotChecked(reason: string): string {
-  switch (reason) {
-    case "target_unreachable":
-      return "It did not answer when Syndra last tried.";
-    case "read_refused":
-      return "It answered and would not serve the read — something to fix rather than wait out.";
-    case "read_stale":
-      return "It served an older copy of itself, which cannot be compared against what Syndra expects.";
-    case "read_truncated":
-      return "The read hit its safety limit, so what is missing cannot be told from what is absent.";
-    case "findings_unrecorded":
-      return "The pass ran and its findings could not be written down.";
-    default:
-      return reason;
-  }
-}
-
 function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>
