@@ -1,4 +1,4 @@
-# Board vs live comparison, group A (live = syndra.makerspace.tools, operator "test")
+# Board vs live comparison, group A (live = the live app, operator "test")
 
 Method notes
 - Live compared in tab-3 (a background tab; tab-1 only paints a corner of the screenshot at 1280x800). Live at 1280x800 for Home/Requests/Pending/Holds/Expiring; the Drift/Events/Revocations screenshots had to be taken at 1024x640 because of a capture quirk. Layout verified by JS at 1280.
