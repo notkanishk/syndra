@@ -211,8 +211,8 @@ describe("Expiring access — acknowledgement (C4)", () => {
       }),
     ];
     renderPage();
-    expect(screen.getByText("Undecided")).toBeTruthy();
-    expect(screen.getByText("Let lapse")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undecided" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Let lapse" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Undo letting it lapse" })).toBeTruthy();
   });
 

@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills } from "@/components/ui/Select";
+import { RunLabel, SortHead, runStarts, useSort } from "@/components/ui/SortHead";
 import { Term } from "@/components/ui/Term";
 import { LogTime } from "@/components/ui/Time";
 import { outcomeLabel, outcomeOf, type EventOutcome } from "@/lib/event-outcome";
@@ -52,7 +53,7 @@ export default function EventActivityPage() {
   const [source, setSource] = useState<Source>("all");
   const [outcome, setOutcome] = useState<EventOutcome>("all");
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "time", dir: 1 });
+  const [sort, flipOrSet] = useSort<SortKey>("time");
   const events = useWebhookEvents();
   const triggers = useOnboardingTriggers();
   const resolver = useNameResolver();
@@ -98,14 +99,7 @@ export default function EventActivityPage() {
   // Runs: under Time, one per calendar day; under Event or Outcome, equal values
   // gathered under a quiet label (RULES: sort lives on the headings). The count is
   // the run's whole size, not how much of it is on screen yet.
-  const runSize = useMemo(() => {
-    const sizes = new Map<string, number>();
-    for (const row of stream) {
-      const run = runOf(row, sort.key);
-      sizes.set(run, (sizes.get(run) ?? 0) + 1);
-    }
-    return sizes;
-  }, [stream, sort.key]);
+  const runAt = useMemo(() => runStarts(stream, (row) => runOf(row, sort.key)), [stream, sort.key]);
   const visible = stream.slice(0, paging.limit);
 
   const isLoading = events.isLoading || triggers.isLoading;
@@ -127,8 +121,6 @@ export default function EventActivityPage() {
     setOutcome("all");
     setQuery("");
   };
-  const flipOrSet = (key: SortKey) =>
-    setSort((cur) => ({ key, dir: cur.key === key ? (-cur.dir as 1 | -1) : 1 }));
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -233,14 +225,14 @@ export default function EventActivityPage() {
       <Card>
         <CardColumns>
           <span className="w-[200px] shrink-0">
-            <SortHeading label="Event" sort={sort} sortKey="event" onSort={flipOrSet} />
+            <SortHead label="Event" name="event" sort={sort} onSort={flipOrSet} />
           </span>
           <span className="min-w-0 flex-1">What happened</span>
           <span className="hidden w-[150px] shrink-0 desktop:block">
-            <SortHeading label="Outcome" sort={sort} sortKey="outcome" onSort={flipOrSet} />
+            <SortHead label="Outcome" name="outcome" sort={sort} onSort={flipOrSet} />
           </span>
           <span className="w-[110px] shrink-0 text-right">
-            <SortHeading label="Time" sort={sort} sortKey="time" onSort={flipOrSet} />
+            <SortHead label="Time" name="time" sort={sort} onSort={flipOrSet} />
           </span>
         </CardColumns>
 
@@ -269,20 +261,10 @@ export default function EventActivityPage() {
           }
         >
           {visible.map((row, index) => {
-            const run = runOf(row, sort.key);
-            const newRun = index === 0 || runOf(visible[index - 1], sort.key) !== run;
+            const run = runAt(index);
             return (
               <div key={row.id} data-event-row>
-                {newRun && (
-                  <div className="row-divider flex items-baseline gap-2.5 bg-surface-0 px-5 pb-2 pt-3">
-                    <span data-testid="run-label" className="type-label text-ink">
-                      {run}
-                      <span className="ml-2.5 text-[12.5px] font-semibold text-muted">
-                        {runSize.get(run)}
-                      </span>
-                    </span>
-                  </div>
-                )}
+                {run && <RunLabel {...run} />}
                 <EventRow
                   row={row}
                   sortKey={sort.key}
@@ -302,41 +284,6 @@ export default function EventActivityPage() {
         </ListStates>
       </Card>
     </div>
-  );
-}
-
-/** A column heading that orders the list; the arrow shows on the one that does. */
-function SortHeading({
-  label,
-  sortKey,
-  sort,
-  onSort,
-}: {
-  label: string;
-  sortKey: SortKey;
-  sort: { key: SortKey; dir: 1 | -1 };
-  onSort: (key: SortKey) => void;
-}) {
-  const active = sort.key === sortKey;
-  return (
-    <button
-      type="button"
-      aria-label={`Sort by ${label.toLowerCase()}`}
-      onClick={() => onSort(sortKey)}
-      className={`inline-flex items-center gap-[5px] uppercase tracking-[inherit] motion-tint hover:text-ink ${
-        active ? "text-ink" : ""
-      }`}
-    >
-      {label}
-      <span
-        aria-hidden
-        className={`inline-block text-[11px] motion-tint ${active ? "opacity-100" : "opacity-0"} ${
-          active && sort.dir < 0 ? "rotate-180" : ""
-        }`}
-      >
-        ↑
-      </span>
-    </button>
   );
 }
 

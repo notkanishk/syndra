@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonAccess } from "@/components/people/PersonAccess";
@@ -185,6 +185,48 @@ describe("the project chips", () => {
     state.projects = twoProjects().slice(0, 1);
     renderPerson();
     expect(screen.queryByRole("navigation", { name: "Projects on this page" })).toBeNull();
+  });
+});
+
+describe("the floating project pill", () => {
+  const PILL = 'nav[aria-label="Projects on this page (while scrolling)"]';
+
+  it("floats the same projects once the read line has scrolled away, with the one you are in filled", () => {
+    renderPerson();
+    const pill = document.querySelector<HTMLElement>(PILL)!;
+    expect(pill).toHaveAttribute("aria-hidden", "true");
+
+    // The chips have gone off the top; the second project's heading is the last one passed.
+    const chips = screen.getByRole("navigation", { name: "Projects on this page" });
+    chips.getBoundingClientRect = () => ({ top: -60, bottom: -20 }) as DOMRect;
+    const headings = Array.from(document.querySelectorAll<HTMLElement>("[id^='proj-']"));
+    headings[0].getBoundingClientRect = () => ({ top: -400 }) as DOMRect;
+    headings[1].getBoundingClientRect = () => ({ top: 40 }) as DOMRect;
+    act(() => {
+      document.dispatchEvent(new Event("scroll"));
+    });
+
+    expect(pill).toHaveAttribute("aria-hidden", "false");
+    const links = within(pill).getAllByRole("link");
+    expect(links).toHaveLength(2);
+    expect(links[1]).toHaveAttribute("aria-current", "location");
+    expect(links[0]).toHaveTextContent("↑");
+  });
+
+  it("opens a folded project on the way, as the chips do", () => {
+    renderPerson();
+    fireEvent.click(screen.getByRole("button", { name: "Fold Wood shop" }));
+    expect(screen.queryByText("Member")).toBeNull();
+
+    const pill = document.querySelector<HTMLElement>(PILL)!;
+    fireEvent.click(within(pill).getByRole("link", { name: /Wood shop/, hidden: true }));
+    expect(screen.getByText("Member")).toBeInTheDocument();
+  });
+
+  it("is not drawn for a single project", () => {
+    state.projects = twoProjects().slice(0, 1);
+    renderPerson();
+    expect(document.querySelector(PILL)).toBeNull();
   });
 });
 

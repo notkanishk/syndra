@@ -267,7 +267,7 @@ describe("Drift — sort", () => {
     fireEvent.click(within(zitadel).getByRole("button", { name: "Sort by why" }));
 
     // A to Z by reason; inside a run, newest first.
-    const labels = within(zitadel).getAllByTestId("drift-run").map((el) => el.textContent);
+    const labels = within(zitadel).getAllByTestId("run-label").map((el) => el.textContent);
     expect(labels).toEqual(["Made in Zitadel by a person2", "Maker not known1"]);
     expect(peopleIn(zitadel)).toEqual(["Meera Pillai", "Tomas Weber", "Arjun Das"]);
   });
