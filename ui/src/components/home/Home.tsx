@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
 
 import Link from "next/link";
@@ -21,6 +21,7 @@ import {
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestDecisions } from "@/lib/request-decisions";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
+import { useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -31,8 +32,9 @@ import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
 import { ArriveList } from "@/components/ui/ArriveList";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
-import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
+import { formatShortDate, formatWeekday, daysUntil, whyNotChecked } from "@/lib/format";
 
 /**
  * Home — the operator landing. Two zones, in a fixed order.
@@ -52,6 +54,11 @@ import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
  * changes and unexplained access. Every block here is something you can finish.
  * Nothing is ever inserted above this zone, and nothing below it can push it
  * down: the queue is the first thing under the cursor or the page has failed.
+ *
+ * It is two columns (route-home layout 1c, chosen 2 Oct 2026): "Time-sensitive"
+ * holds what changes on its own if you wait, "When you're ready" what only
+ * waits. Each block type has one column for good, and a column with nothing in
+ * it leaves (#27) without the other moving across into its place.
  *
  * **The makerspace, below.** Always present, including on a day when the queue
  * is empty.
@@ -75,8 +82,16 @@ export function Home({ session }: { session: SessionUser }) {
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
   const onboarding = useMissedOnboarding();
+  const indicators = useIndicatorsRead();
 
-  const pending = requests.data ?? [];
+  const pending = useMemo(() => requests.data ?? [], [requests.data]);
+  // The queue's own decide and beat. They live here, not in the card, because
+  // the card goes when the read empties and would take a decided row's outcome
+  // with it: a decided row is held for the beat (Motion 5b), then fades (S5).
+  const decisions = useRequestDecisions();
+  const queue = useLeavingRows(pending, (entry) => entry.id, !requests.isLoading && !requests.error, {
+    stay: decisions.staying,
+  });
   const expiring = summary.data?.expiring_grants ?? [];
   const propagation = summary.data?.pending_propagation;
   const drift = summary.data?.drift;
@@ -100,20 +115,44 @@ export function Home({ session }: { session: SessionUser }) {
     (onboarding.data && !onboarding.data.welcome_bundle_configured ? 1 : 0) +
     (onboarding.data?.missed.length ?? 0);
 
-  // Counted, and that is the whole point of it. An unreadable target produces
-  // no drift findings, so a week of silence lands here as blocks === 0 and the
-  // page says "Nothing here needs you" — the one sentence that must never be said
-  // about a system nobody has been able to look at.
-  const blocks = advanced
-    ? pending.length +
-      expiring.length +
-      onboardingGaps +
-      (propagation?.count ?? 0) +
-      unconfirmedWrites.count +
-      (drift?.count ?? 0) +
-      unvouched.length +
-      findings
-    : pending.length + expiring.length + onboardingGaps;
+  // BLOCKS, not rows (#31, "the headline counts blocks; each badge counts its own
+  // noun"): the headline said "98 things need you" for eighty-five rows in one
+  // block. A block with something in it is one thing; each card's own badge says
+  // how many rows it holds. Counted, and that is the whole point of it. An
+  // unreadable target produces no drift findings, so a week of silence lands here
+  // as blocks === 0 and the page says "Nothing here needs you" — the one sentence
+  // that must never be said about a system nobody has been able to look at.
+  const blocks = [
+    pending.length > 0,
+    expiring.length > 0,
+    onboardingGaps > 0,
+    ...(advanced
+      ? [
+          (propagation?.count ?? 0) > 0,
+          unconfirmedWrites.count > 0,
+          (drift?.count ?? 0) > 0,
+          unvouched.length > 0,
+          findings > 0,
+        ]
+      : []),
+  ].filter(Boolean).length;
+
+  // What the line under the headline may call checked and clear. A block that
+  // is on the page is not clear, and one that was never read is not claimed: the
+  // placeholder zeros the rail holds before its first poll are not readings.
+  const readIndicators = indicators.isPlaceholderData ? undefined : indicators.data;
+  const clear: Array<[string, string]> = [
+    queue.rows.length === 0 && ["Requests", "/requests"],
+    expiring.length === 0 && ["Expiring access", "/review/expiring-access"],
+    advanced && (drift?.count ?? 0) === 0 && ["Drift", "/governance/drift"],
+    advanced && (propagation?.count ?? 0) === 0 && ["Pending changes", "/governance/pending"],
+    advanced &&
+      readIndicators?.unconfirmed_revocations === 0 && [
+        "Unfinished revocations",
+        "/governance/unconfirmed-revocations",
+      ],
+    advanced && readIndicators?.holds_due === 0 && ["Holds due", "/review/holds"],
+  ].filter((entry): entry is [string, string] => Array.isArray(entry));
 
   const who = firstName(session);
   // The greeting and the weekday depend on the reader's clock and zone, which
@@ -143,6 +182,22 @@ export function Home({ session }: { session: SessionUser }) {
         <div className="mt-2 text-[14.5px] text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>} · last checked <ClockTime at={summary.dataUpdatedAt} />
         </div>
+        {/* #27: a clear block gives up its seat, so this says it was checked. Only
+            where there is a queue to read: the one calm line below says the rest. */}
+        {!error && !loading && (blocks > 0 || queue.rows.length > 0) && clear.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-muted">
+            <span aria-hidden className="h-[7px] w-[7px] rounded-pill bg-healthy" />
+            <span>Checked, nothing waiting:</span>
+            {clear.map(([name, href], index) => (
+              <span key={href} className="inline-flex items-center gap-2">
+                {index > 0 && <span aria-hidden>·</span>}
+                <Link href={href} className="text-ink hover:text-accent-text hover:underline">
+                  {name}
+                </Link>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {error ? (
@@ -159,7 +214,8 @@ export function Home({ session }: { session: SessionUser }) {
         <Card>
           <RowSkeleton rows={4} label="Loading today's work" />
         </Card>
-      ) : blocks === 0 ? (
+      ) : blocks === 0 && queue.rows.length === 0 ? (
+        // The last decided row is still on its beat: the empty state waits for it.
         // One calm line, not a full-page card: the page continues below, and a
         // hero-sized empty state would read as the end of it.
         <div className="panel flex items-center gap-3 px-5 py-4">
@@ -175,25 +231,49 @@ export function Home({ session }: { session: SessionUser }) {
         </div>
       ) : (
         <>
-          {pending.length > 0 && <OpenRequests requests={pending} />}
-          {expiring.length > 0 && <ExpiringSoon grants={expiring} />}
-          {onboardingGaps > 0 && <OnboardingGaps report={onboarding.data!} />}
-
-          {advanced && (propagation?.count ?? 0) > 0 && (
-            <PendingChanges
-              count={propagation!.count}
-              reachable={propagation!.zitadel_reachable}
-            />
-          )}
-          {advanced && unconfirmedWrites.count > 0 && (
-            <UnconfirmedWrites summary={unconfirmedWrites} />
-          )}
-          {/* Above unexplained access, because it qualifies it: a target Syndra
-              cannot read contributes no findings, so the count below is a
-              statement about the targets it COULD read. */}
-          {advanced && unvouched.length > 0 && <UnvouchedTargets targets={unvouched} />}
-          {advanced && (drift?.count ?? 0) > 0 && <UnexplainedAccess count={drift!.count} />}
-          {advanced && findings > 0 && <MergeFindingsWaiting count={findings} />}
+          <div className="grid items-start gap-6 desktop:grid-cols-2">
+            {/* Time-sensitive: access ends, stays wrong, or goes unseen if you wait.
+                Drift leads, and a target Syndra cannot read stays beside the
+                findings it qualifies, in the same column. */}
+            {(expiring.length > 0 ||
+              (advanced &&
+                ((drift?.count ?? 0) > 0 || unvouched.length > 0 || unconfirmedWrites.count > 0))) && (
+              <QueueColumn
+                title="Time-sensitive"
+                note="Access ends, stays wrong, or goes unseen if you wait."
+                className="desktop:col-start-1"
+              >
+                {advanced && (drift?.count ?? 0) > 0 && <UnexplainedAccess count={drift!.count} />}
+                {expiring.length > 0 && <ExpiringSoon grants={expiring} />}
+                {advanced && unvouched.length > 0 && <UnvouchedTargets targets={unvouched} />}
+                {advanced && unconfirmedWrites.count > 0 && (
+                  <UnconfirmedWrites summary={unconfirmedWrites} />
+                )}
+              </QueueColumn>
+            )}
+            {/* When you're ready: nothing changes until you act. */}
+            {(queue.rows.length > 0 ||
+              onboardingGaps > 0 ||
+              (advanced && (findings > 0 || (propagation?.count ?? 0) > 0))) && (
+              <QueueColumn
+                title="When you're ready"
+                note="Nothing changes until you act."
+                className="desktop:col-start-2"
+              >
+                {queue.rows.length > 0 && (
+                  <OpenRequests rows={queue.rows} decisions={decisions} queue={queue} />
+                )}
+                {onboardingGaps > 0 && <OnboardingGaps report={onboarding.data!} />}
+                {advanced && findings > 0 && <MergeFindingsWaiting count={findings} />}
+                {advanced && (propagation?.count ?? 0) > 0 && (
+                  <PendingChanges
+                    count={propagation!.count}
+                    reachable={propagation!.zitadel_reachable}
+                  />
+                )}
+              </QueueColumn>
+            )}
+          </div>
 
           {!advanced && (
             <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
@@ -211,18 +291,51 @@ export function Home({ session }: { session: SessionUser }) {
   );
 }
 
-/** Approve / Deny resolve in place, on the row. They never navigate. */
-function OpenRequests({ requests }: { requests: AccessRequest[] }) {
-  // The queue's own decide, so an approval here says what it says there.
-  const { act, resolved, outcomes, cancelStep } = useRequestDecisions();
+/**
+ * One of the queue's two columns. `className` pins its side, so a column that
+ * leaves never pulls the other across into its place.
+ */
+function QueueColumn({
+  title,
+  note,
+  className,
+  children,
+}: {
+  title: string;
+  note: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const id = `home-col-${title.replace(/\W+/g, "-").toLowerCase()}`;
+  return (
+    <section aria-labelledby={id} className={`flex min-w-0 flex-col gap-3.5 ${className}`}>
+      <div className="flex flex-col gap-1">
+        <h2 id={id} className="type-card-title">
+          {title}
+        </h2>
+        <span className="text-[13.5px] text-muted">{note}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
 
-  // Decided rows keep their seat until the next read; they used to vanish on
-  // the tap, taking their own outcome with them.
-  const open = requests.filter((entry) => !resolved.has(entry.id)).length;
-  if (requests.length === 0) return null;
+/** Approve / Deny resolve in place, on the row. They never navigate. */
+function OpenRequests({
+  rows,
+  decisions: { act, resolved, outcomes, cancelStep },
+  queue,
+}: {
+  rows: AccessRequest[];
+  decisions: ReturnType<typeof useRequestDecisions>;
+  queue: ReturnType<typeof useLeavingRows<AccessRequest>>;
+}) {
+  // A decided row keeps its seat and its outcome through the beat, so the count
+  // is what is still open.
+  const open = rows.filter((entry) => !resolved.has(entry.id)).length;
 
   return (
-    <Card>
+    <Card {...queue.listProps}>
       {cancelStep}
       <CardHeader
         title="Open requests"
@@ -233,56 +346,58 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
           `ListStates`. These two lists compose their own rows and so had none:
           the dashboard was the one screen whose rows appeared all at once. */}
       <ArriveList>
-        {requests.map((entry) => (
-          <CardRow key={entry.id}>
-            <UserAvatar id={entry.requester_id} size="list" />
-            <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
-              <UserName id={entry.requester_id} />
-          </div>
-          <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
-            <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
-          </div>
-          <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
-            {entry.justification ? `“${entry.justification}”` : "No reason given"}
-          </div>
-          <div className="w-[66px] shrink-0 text-[13px] text-faint">
-            <Relative iso={entry.created_at} />
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
-            {resolved.has(entry.id) ? (
-              outcomes[entry.id] && (
-                <ActionOutcome
-                  placement="seat"
-                  word={outcomes[entry.id].word}
-                  outcome={outcomes[entry.id].outcome}
-                />
-              )
-            ) : (
-              <>
-                <div className="flex gap-2">
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    disabled={alreadyHeld(entry)}
-                    reason={alreadyHeld(entry) ? "They already have this." : undefined}
-                    onClick={() => act(entry, "approved")}
-                  >
-                    Approve
-                  </Button>
-                  <Button size="sm" onClick={() => act(entry, "rejected")}>
-                    Decline
-                  </Button>
-                </div>
-                {/* A failed write puts the buttons back and says why under them. */}
-                {outcomes[entry.id] && (
-                  <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
-                )}
-              </>
-            )}
-          </div>
+        {rows.map((entry) => (
+          <LeavingRow key={entry.id} {...queue.props(entry.id)}>
+            <CardRow>
+              <UserAvatar id={entry.requester_id} size="list" />
+              <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
+                <UserName id={entry.requester_id} />
+            </div>
+            <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
+              <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+            </div>
+            <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
+              {entry.justification ? `“${entry.justification}”` : "No reason given"}
+            </div>
+            <div className="w-[66px] shrink-0 text-[13px] text-faint">
+              <Relative iso={entry.created_at} />
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
+              {resolved.has(entry.id) ? (
+                outcomes[entry.id] && (
+                  <ActionOutcome
+                    placement="seat"
+                    word={outcomes[entry.id].word}
+                    outcome={outcomes[entry.id].outcome}
+                  />
+                )
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      disabled={alreadyHeld(entry)}
+                      reason={alreadyHeld(entry) ? "They already have this." : undefined}
+                      onClick={() => act(entry, "approved")}
+                    >
+                      Approve
+                    </Button>
+                    <Button size="sm" onClick={() => act(entry, "rejected")}>
+                      Decline
+                    </Button>
+                  </div>
+                  {/* A failed write puts the buttons back and says why under them. */}
+                  {outcomes[entry.id] && (
+                    <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
+                  )}
+                </>
+              )}
+            </div>
 
-          {!resolved.has(entry.id) && <HoldingNote request={entry} />}
-        </CardRow>
+            {!resolved.has(entry.id) && <HoldingNote request={entry} />}
+          </CardRow>
+          </LeavingRow>
       ))}
       </ArriveList>
     </Card>
@@ -335,12 +450,12 @@ function ExpiringRow({
       <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
         <UserName id={grant.user_id} />
       </div>
-      <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+      <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <AccessSource kind="direct" />
-        <span className="truncate text-[14px] text-muted">
+        <span className="text-[14px] text-muted [text-wrap:pretty]">
           No action — expires {formatShortDate(grant.expires_at)}
         </span>
       </div>
@@ -424,7 +539,7 @@ function OnboardingGaps({ report }: { report: MissedOnboardingReport }) {
           >
             <UserName id={person.user_id} />
           </Link>
-          <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+          <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
             Holds no bundle
           </div>
         </CardRow>
@@ -529,7 +644,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
             >
               <UserName id={row.user_id} />
             </Link>
-            <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+            <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
               {row.role_keys && row.role_keys.length > 0 ? (
                 row.role_keys.map((key) => (
                   <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-2" />
@@ -538,7 +653,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
                 <span className="text-faint">—</span>
               )}
             </div>
-            <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+            <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
               {writeNoun(row.op_type)}, accepted <Relative iso={row.applied_at} />
             </div>
             <ButtonLink href={`/users/${row.user_id}`} size="sm">
@@ -571,37 +686,6 @@ function writeNoun(opType: string): string {
  * ticks"), and the reason travels with it because "unreachable" and "answered
  * and refused the read" send them to different machines.
  */
-/**
- * Why the last pass concluded nothing, in words.
- *
- * The reason is a closed vocabulary the backend writes to a row
- * (`db/target_reconciliation.go`), and this card printed the value itself —
- * `target_unreachable`, in the smallest grey type on the dashboard, under a
- * sentence written for somebody who has never read the schema. The whole point
- * of the entry is that the operator's next move differs by reason: there is
- * nothing to reach for, or there is something to fix.
- *
- * An unrecognised value falls through unchanged rather than being swallowed. A
- * reason nobody has worded yet is still more use than no reason at all, and it
- * shows up here rather than disappearing quietly.
- */
-function whyNotChecked(reason: string): string {
-  switch (reason) {
-    case "target_unreachable":
-      return "It did not answer when Syndra last tried.";
-    case "read_refused":
-      return "It answered and would not serve the read — something to fix rather than wait out.";
-    case "read_stale":
-      return "It served an older copy of itself, which cannot be compared against what Syndra expects.";
-    case "read_truncated":
-      return "The read hit its safety limit, so what is missing cannot be told from what is absent.";
-    case "findings_unrecorded":
-      return "The pass ran and its findings could not be written down.";
-    default:
-      return reason;
-  }
-}
-
 function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>

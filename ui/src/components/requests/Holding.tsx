@@ -56,7 +56,7 @@ export function keepLength(request: AccessRequest, terms?: Term[]): string {
  */
 export function describeAsk(request: AccessRequest, terms?: Term[]): string {
   const days = request.duration_days ?? 0;
-  if (request.kind !== "extend") return askLengthForOperator(days);
+  if (request.kind !== "extend") return askLengthForOperator(days, new Date(), request.asked_until);
   const length = keepLength(request, terms);
   if (!request.until || !request.current_until) return length;
   return `${length} · to ${formatShortDate(request.until)} instead of ${formatShortDate(request.current_until)}`;

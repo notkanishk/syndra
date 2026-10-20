@@ -31,6 +31,9 @@ var (
 	// errExtensionShortens: the new end would not be later than the one they
 	// have. Counting from the current end, only a malformed ask can reach it.
 	errExtensionShortens = errors.New("it already runs past that date, so extending would shorten it")
+	// errAskEnded: the end date the ask names has already passed, so approving
+	// would give access that has already ended.
+	errAskEnded = errors.New("the end date this asks for has passed, so approving would give access that has already ended")
 )
 
 // approvalEffect is what approving a request will do.
@@ -57,16 +60,26 @@ func endAfter(now time.Time, days *int) *time.Time {
 	return &t
 }
 
-// extendEnd is the end an extension gives: the days asked, counted from the end
-// they have while it is still ahead ("another month" on a role that ends
-// 18 Dec means 18 Jan), and from now when it has passed or there is none.
-// Zero days or fewer means no end. (A-04 §2)
-func extendEnd(now time.Time, h models.RequestHolding, days *int) *time.Time {
+// extendEnd is the end an extension gives: the date asked for when the ask
+// names one (a term's end stays the term's end however late it is decided),
+// else the days asked, counted from the end they have while it is still ahead
+// ("another month" on a role that ends 18 Dec means 18 Jan), and from now when
+// it has passed or there is none. Zero days or fewer means no end. (A-04 §2)
+func extendEnd(now time.Time, h models.RequestHolding, days *int, until *time.Time) *time.Time {
+	if until != nil {
+		return askedEnd(until)
+	}
 	base := now
 	if h.Kind == models.HoldingUntil && h.Until != nil && h.Until.After(now) {
 		base = *h.Until
 	}
 	return endAfter(base, days)
+}
+
+// askedEnd is the fixed end date an ask carries, in UTC.
+func askedEnd(until *time.Time) *time.Time {
+	t := until.UTC()
+	return &t
 }
 
 // checkExtension says whether a new end extends what is held: there must be an
@@ -83,13 +96,16 @@ func checkExtension(h models.RequestHolding, newEnd *time.Time) error {
 
 // checkRequestKind refuses a request that doesn't fit what they hold, when it
 // is asked. The holding is read again when it is decided (planApproval).
-func checkRequestKind(kind string, h models.RequestHolding, days *int, now time.Time) error {
+func checkRequestKind(kind string, h models.RequestHolding, days *int, until *time.Time, now time.Time) error {
+	if until != nil && !until.After(now) {
+		return errAskEnded
+	}
 	switch kind {
 	case requestKindExtend:
 		if h.Kind == models.HoldingNone {
 			return errNothingHeldToExtend
 		}
-		return checkExtension(h, extendEnd(now, h, days))
+		return checkExtension(h, extendEnd(now, h, days, until))
 	default:
 		if h.Kind != models.HoldingNone {
 			return errRequestAlreadyHeld
@@ -107,10 +123,20 @@ var errNothingHeldToExtend = errors.New("you don't have this, so there's nothing
 // time asked: that is what they asked for, and refusing it would leave them
 // to ask again for the same thing. One that has come to have no end has
 // nothing left to extend.
+//
+// An ask that names an end date (until the end of term) gives the grant that
+// date, not now plus the days it was worth when asked; one whose date has
+// passed is refused rather than given already ended.
 func planApproval(r models.AccessRequest, h models.RequestHolding, now time.Time) (approvalPlan, error) {
+	if r.AskedUntil != nil && !r.AskedUntil.After(now) {
+		return approvalPlan{}, errAskEnded
+	}
 	end := endAfter(now, r.DurationDays)
+	if r.AskedUntil != nil {
+		end = askedEnd(r.AskedUntil)
+	}
 	if r.Kind == requestKindExtend {
-		end = extendEnd(now, h, r.DurationDays)
+		end = extendEnd(now, h, r.DurationDays, r.AskedUntil)
 	}
 	if r.Kind != requestKindExtend {
 		if h.Kind != models.HoldingNone {

@@ -1,17 +1,21 @@
 "use client";
 
+import Link from "next/link";
+
 import { roleCount } from "@/lib/role-mapping-plan";
 
+import { ProjectName } from "@/components/names";
 import { EmptyState } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card } from "@/components/ui/Card";
 import { ApiError } from "@/lib/api-client";
 import { MappingManagement } from "@/components/targets/MappingManagement";
 import { VersionBand } from "@/components/targets/VersionBand";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { targetLabel } from "@/lib/nav";
 import { useCrumb } from "@/lib/page-crumb";
 import { useMappingHistory, useMappings } from "@/lib/queries/useMappings";
+import { useTargets } from "@/lib/queries/useTargets";
 
 /**
  * What roles reach an add-on, and every published version of that answer
@@ -22,47 +26,62 @@ import { useMappingHistory, useMappings } from "@/lib/queries/useMappings";
  * access for everybody holding that role. A fact with that reach has no room to
  * breathe in a table row.
  *
- * The lede repeats, in the same words, the two sentences the census line on the
- * target page used to bring somebody here — how many mappings reach this target,
- * and that changing one moves everybody who holds the role. The repetition is
- * the handoff: an operator who clicked because of a sentence should find that
- * sentence at the top of what they clicked into, or the click feels like it went
- * somewhere else.
+ * The header is the board's (route-system-targets-id-mappings): a way back, a
+ * subline saying which system, which project, how many mappings and which
+ * version, and a two-sentence lede. The sentence that used to carry the count
+ * is the subline now, which is where the target page's census line sends
+ * somebody to look.
  */
 export function MappingScreen({ target }: { target: string }) {
   const mappings = useMappings(target);
   const history = useMappingHistory(target);
+  const roster = useTargets();
   useCrumb("Mappings");
 
   const reach = mappings.data ? roleCount(mappings.data) : undefined;
   const name = targetLabel(target);
+  const project = (roster.data ?? []).find((t) => t.target === target)?.project;
+  const version = history.data?.current_version;
+  // A project Syndra could not name has an empty name, and interpolating it
+  // read "holds one of 's roles".
+  const owner = project?.name ? `${project.name}'s` : project ? "the project's" : "the system's";
   const noProject = mappings.error instanceof ApiError && mappings.error.code === "PROJECT_REQUIRED";
 
   return (
     <div className="flex flex-col gap-[18px]">
-      <PageHeader
-        title="Mappings"
-        lede={
-          <>
-            A mapping ties a role to a group on {name} — a group is what decides which
-            folders an account can open — so everybody holding the role gets an account in
-            that group.{" "}
-            {reach !== undefined && (
-              <>
-                <strong className="font-semibold text-ink">
-                  {reach === 0
-                    ? "No role is mapped yet."
-                    : reach === 1
-                      ? "One role is mapped."
-                      : `${reach} roles are mapped.`}
-                </strong>{" "}
-              </>
-            )}
-            Changing one moves access for everybody holding that role, so every change here
-            is previewed before it is applied.
-          </>
-        }
-      />
+      <div className="flex flex-col gap-1">
+        <Link
+          href={`/system/targets/${target}`}
+          className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text hover:underline desktop:min-h-6"
+        >
+          <span aria-hidden>←&nbsp;</span>
+          {name}
+        </Link>
+        <PageHeader
+          title="Mappings"
+          meta={
+            <MetaRow>
+              {[
+                name,
+                project ? (
+                  <span key="project">
+                    Zitadel project{" "}
+                    <Link
+                      href={`/projects/${project.id}`}
+                      className="font-semibold text-ink hover:text-accent-text hover:underline"
+                    >
+                      <ProjectName id={project.id} name={project.name} />
+                    </Link>
+                  </span>
+                ) : null,
+                reach === undefined ? null : reach === 0 ? "no mappings" : `${reach} ${reach === 1 ? "mapping" : "mappings"}`,
+                version ? `version ${version}` : null,
+              ]}
+            </MetaRow>
+          }
+          lede={`A mapping gives everyone who holds one of ${owner} roles an account on ${name}, in a group. Changing one moves access for all of them, so every change is previewed before anything is sent.`}
+        />
+      </div>
 
       {noProject ? (
         // Reached by a link before the system has a project: why the project

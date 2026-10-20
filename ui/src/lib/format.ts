@@ -77,9 +77,11 @@ export function askLengthForMember(days: number | null | undefined): string {
 export function askLengthForOperator(
   days: number | null | undefined,
   now: Date = new Date(),
+  askedUntil?: string | null,
 ): string {
   if (!days || days < 1) return "With no end date";
-  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  // An ask that named its end ("until the end of term") is granted to that date, however late it is decided.
+  const end = askedUntil ? new Date(askedUntil) : new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   return `For ${lengthWords(days)} · until ${formatShortDate(end.toISOString(), now)}`;
 }
 
@@ -295,4 +297,47 @@ export function personLine(user: { title?: string | null; team?: string | null }
     .map((part) => part?.trim())
     .filter(Boolean)
     .join(" · ");
+}
+
+/**
+ * Why the last pass concluded nothing, in words.
+ *
+ * The reason is a closed vocabulary the backend writes to a row
+ * (`db/target_reconciliation.go`), and this card printed the value itself —
+ * `target_unreachable`, in the smallest grey type on the dashboard, under a
+ * sentence written for somebody who has never read the schema. The whole point
+ * of the entry is that the operator's next move differs by reason: there is
+ * nothing to reach for, or there is something to fix.
+ *
+ * An unrecognised value falls through unchanged rather than being swallowed. A
+ * reason nobody has worded yet is still more use than no reason at all, and it
+ * shows up here rather than disappearing quietly.
+ */
+export function whyNotChecked(reason: string): string {
+  switch (reason) {
+    case "target_unreachable":
+      return "It did not answer when Syndra last tried.";
+    case "read_refused":
+      return "It answered and would not serve the read — something to fix rather than wait out.";
+    case "read_stale":
+      return "It served an older copy of itself, which cannot be compared against what Syndra expects.";
+    case "read_truncated":
+      return "The read hit its safety limit, so what is missing cannot be told from what is absent.";
+    case "findings_unrecorded":
+      return "The pass ran and its findings could not be written down.";
+    default:
+      return reason;
+  }
+}
+
+/**
+ * Some add-ons report `product_version` already carrying the product name
+ * ("TrueNAS-25.10.5"), which doubled the name wherever it was shown beside
+ * one ("TrueNAS TrueNAS-25.10.5"). Stripped once, here, so every caller gets
+ * a plain version number.
+ */
+export function versionLabel(name: string, productVersion?: string): string {
+  if (!productVersion) return "";
+  const stripped = productVersion.replace(new RegExp(`^${name}[-\\s]*`, "i"), "");
+  return stripped || productVersion;
 }

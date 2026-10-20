@@ -41,6 +41,7 @@ import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
 import { useInsightsAsOf, useInsightsLens, useInsightsTimeline, useInsightsUsage } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
 import { useIsPhone, useIsTouch } from "@/lib/useViewport";
+import { UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
 
 const DOT: Record<Finding, string> = { drift: "bg-danger", send: "bg-warn", single: "bg-warn", unused: "bg-muted", overlap: "bg-muted" };
 const CHIP_WORDS: Record<Finding, [string, string]> = {
@@ -94,7 +95,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
     [model, catalog.data],
   );
   const nodeName = (id: string) => model?.nameOf(id) ?? id;
-  const personName = (id: string) => people.get(id)?.name ?? "Unknown account";
+  const personName = (id: string) => people.get(id)?.name ?? UNKNOWN_ACCOUNT;
 
   // A question naming something that is not on the map is not a question.
   // A question is about today: while an earlier date is shown there is none.

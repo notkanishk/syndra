@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"syndra/internal/db"
+	"syndra/internal/directory"
 	"syndra/internal/models"
 )
 
@@ -107,5 +108,44 @@ func TestFindMissedOnboarding_DirectoryFault_Propagates(t *testing.T) {
 	_, err := FindMissedOnboarding(context.Background())
 	if err == nil {
 		t.Fatal("expected the directory fault to propagate")
+	}
+}
+
+// usersOnly is a directory that knows exactly these people and nothing else.
+type usersOnly struct {
+	directory.Source
+	people []models.UserProfile
+}
+
+func (u usersOnly) Users(context.Context) ([]models.UserProfile, error) { return u.people, nil }
+
+// svcDirectoryUsers used to be `directory.Default.Users`, a method value bound
+// when the package initialised, while Default was still the demo source. Init()
+// swaps Default later, so production kept reading the five demo identities and
+// Home listed "dev_admin" and friends as new people without a bundle: none of
+// them exist in Zitadel, so no name could ever resolve for them. The seam must
+// follow Default at call time.
+func TestFindMissedOnboarding_ReadsTheDirectoryInUseNotTheOneAtInit(t *testing.T) {
+	origDir := directory.Default
+	origBundle := svcGetWelcomeBundle
+	origHolders := svcGetUsersForBundle
+	t.Cleanup(func() {
+		directory.Default = origDir
+		svcGetWelcomeBundle = origBundle
+		svcGetUsersForBundle = origHolders
+	})
+	svcGetWelcomeBundle = func(context.Context) (string, error) { return "bundle-welcome", nil }
+	svcGetUsersForBundle = func(context.Context, string) ([]string, error) { return nil, nil }
+	// What directory.Init() does at startup, after the package-level seams were bound.
+	directory.Default = usersOnly{people: []models.UserProfile{
+		{ID: "1234", Name: "Real Person", Status: "active"},
+	}}
+
+	got, err := FindMissedOnboarding(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Missed) != 1 || got.Missed[0].UserID != "1234" {
+		t.Fatalf("expected only the person in the live directory, got %+v", got.Missed)
 	}
 }

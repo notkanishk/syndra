@@ -157,6 +157,73 @@ export function serializeDriftFilters(
   return query ? `?${query}` : "";
 }
 
+/**
+ * Why Syndra cannot explain a row, in the board's five words. It is what the
+ * "Why" heading gathers equal values under, so it names a fact the row already
+ * carries rather than a ranking Syndra cannot compute.
+ */
+export const REASON_LABELS = {
+  unknown: "Maker not known",
+  person: "Made in Zitadel by a person",
+  self: "Made by the account itself",
+  removed: "Removed from Zitadel",
+  never: "Never reached Zitadel",
+} as const;
+
+export type DriftReason = keyof typeof REASON_LABELS;
+
+export function driftReason(item: DriftTriageItem): DriftReason {
+  if (item.drift_type === "syndra_only") {
+    // Applied, or seen held, then gone: somebody removed it. Neither: the write
+    // never landed (the same split `explainDrift` tells in prose).
+    const p = item.provenance;
+    return p?.applied_at || p?.last_observed_at ? "removed" : "never";
+  }
+  if (!item.upstream_actor) return "unknown";
+  return item.user_is_service_account && item.upstream_actor === item.user_id ? "self" : "person";
+}
+
+export type DriftSortKey = "who" | "what" | "why" | "found";
+
+/** The sort text of the two columns that need a resolved name. */
+export interface DriftNames {
+  who: (item: DriftTriageItem) => string;
+  what: (item: DriftTriageItem) => string;
+}
+
+/**
+ * Who and What order A to Z, Why gathers equal reasons (also A to Z), Found
+ * puts the most recent on top. Equal keys fall back to newest first, so a run
+ * keeps its own time order. Returns a copy: the server's order is not ours to
+ * change.
+ */
+export function sortDrift(
+  items: DriftTriageItem[],
+  key: DriftSortKey,
+  dir: 1 | -1,
+  names: DriftNames,
+): DriftTriageItem[] {
+  const newest = (a: DriftTriageItem, b: DriftTriageItem) =>
+    b.detected_at.localeCompare(a.detected_at);
+  const text = (item: DriftTriageItem) =>
+    key === "who" ? names.who(item) : key === "what" ? names.what(item) : REASON_LABELS[driftReason(item)];
+  return [...items].sort((a, b) => {
+    const order = key === "found" ? newest(a, b) : text(a).localeCompare(text(b)) * dir;
+    return (key === "found" ? order * dir : order) || newest(a, b);
+  });
+}
+
+/** A person or a role: the name, the project, the role's name or its key. */
+export function matchesDriftSearch(
+  item: Pick<DriftTriageItem, "role_keys">,
+  query: string,
+  text: { who: string; what: string },
+): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [text.who, text.what, ...item.role_keys].some((part) => part.toLowerCase().includes(needle));
+}
+
 /** A link into the Drift queue, already narrowed. */
 export function driftHref(filters: Partial<DriftFilters>): string {
   return `/governance/drift${serializeDriftFilters({ ...EMPTY_DRIFT_FILTERS, ...filters })}`;

@@ -1,3 +1,4 @@
+import { projectLabel } from "@/components/names/Unresolved";
 import { formatList } from "@/lib/format";
 import type { TopologyGraph, TopologyNode } from "@/lib/queries/useTopology";
 
@@ -42,10 +43,20 @@ export interface Model {
   roleId: (projectId: string, roleKey: string) => string | null;
 }
 
+/**
+ * The API labels a project it could not read with the project's own id. On a
+ * map that is a raw id standing where a name goes, and it prefixes every role in
+ * it, so it is renamed here, once, for every reader of the model.
+ */
+function named(n: TopologyNode): TopologyNode {
+  return n.kind === "project" ? { ...n, label: projectLabel(n.label, n.project_id ?? n.id.replace("project:", "")) } : n;
+}
+
 export function buildModel(graph: TopologyGraph): Model {
-  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const nodes = graph.nodes.map(named);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   const lanes: Record<Lane, TopologyNode[]> = { bundle: [], role: [], project: [], application: [] };
-  for (const n of [...graph.nodes].sort((a, b) => a.label.localeCompare(b.label))) lanes[n.kind]?.push(n);
+  for (const n of [...nodes].sort((a, b) => a.label.localeCompare(b.label))) lanes[n.kind]?.push(n);
 
   const projectByPid = new Map(lanes.project.map((p) => [p.project_id ?? p.id, p]));
   const roleIds = new Map<string, string>();

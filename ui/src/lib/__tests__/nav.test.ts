@@ -77,6 +77,47 @@ describe("navigation contract", () => {
   });
 });
 
+// N18 (owner picked 3a, 13 Oct 2026), the latest word on the Advanced rail. The
+// boards' shells (Sidebar, route-*) still draw the 12 Oct shape, an AUTOMATION
+// group with an Access map, which N12 retired into Insights and N18 split up.
+describe("the Advanced rail follows N18 (3a)", () => {
+  const advanced = ADVANCED_NAV.slice(BASIC_NAV.length);
+  const shape = advanced.map((e) =>
+    e.kind === "leaf" ? e.label : `${e.label}: ${e.children.map((c) => c.label).join(", ")}`,
+  );
+
+  it("puts Bundles, Automatic rules and Insights at top level, then Changes, Review, System", () => {
+    expect(shape.slice(0, 4)).toEqual([
+      "Bundles",
+      "Automatic rules",
+      "Insights",
+      "Changes: Pending changes, Change history, Roles that wait",
+    ]);
+    expect(advanced.filter((e) => e.kind === "group").map((e) => e.label)).toEqual([
+      "Changes",
+      "Review",
+      "System",
+    ]);
+  });
+
+  it("has no Automation group and no Access map row: the map is Insights now", () => {
+    const labels = navLeaves(ADVANCED_NAV).map((l) => l.label);
+    expect(labels).not.toContain("Access map");
+    expect(labels).not.toContain("Automation settings");
+    expect(ADVANCED_NAV.some((e) => e.kind === "group" && e.label === "Automation")).toBe(false);
+  });
+
+  it("keeps the retired routes under the rows that replaced them", () => {
+    const here = (path: string) => navLeaves(ADVANCED_NAV).find((l) => leafMatches(l, path))?.label;
+    expect(here("/graph")).toBe("Insights");
+    expect(here("/automation/settings")).toBe("Roles that wait");
+    expect(crumbsFor("/changes/roles-that-wait", "advanced")).toEqual([
+      { label: "Changes" },
+      { label: "Roles that wait", href: "/changes/roles-that-wait" },
+    ]);
+  });
+});
+
 describe("active-route matching", () => {
   const byLabel = new Map(navLeaves(ADVANCED_NAV).map((leaf) => [leaf.label, leaf]));
 

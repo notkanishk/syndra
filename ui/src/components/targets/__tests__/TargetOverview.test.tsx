@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import type {
@@ -33,6 +33,8 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 const state = {
   roster: [] as TargetSummary[],
   health: {} as TargetHealth,
+  healthLoading: false,
+  findingsError: null as unknown,
   inventory: {} as TargetInventory,
   resolved: [] as Array<{ head: string; note: string }>,
   reconcile: undefined as undefined | Record<string, unknown>,
@@ -80,7 +82,12 @@ vi.mock("@/lib/queries/useTargets", async () => {
   return {
     ...actual,
     useTargets: () => ({ data: state.roster, isLoading: false, error: null }),
-    useTargetHealth: () => ({ data: state.health, isLoading: false, error: null }),
+    useTargetHealth: () => ({
+      data: state.healthLoading ? undefined : state.health,
+      isLoading: state.healthLoading,
+      error: null,
+    }),
+    useMergeFindings: () => ({ data: undefined, isLoading: false, error: state.findingsError }),
     useTargetInventory: () => ({
       data: state.inventory,
       isLoading: false,
@@ -164,6 +171,11 @@ function renderTarget() {
     </QueryClientProvider>,
   );
 }
+
+beforeEach(() => {
+  state.healthLoading = false;
+  state.findingsError = null;
+});
 
 describe("one target's page", () => {
   it("never offers Syndra's own account for adoption, and says why", () => {
@@ -396,9 +408,9 @@ describe("one target's page", () => {
     ];
     renderTarget();
 
-    expect(screen.getByText("read what happened on the system for one person")).toBeInTheDocument();
-    expect(screen.getByText("replace a person's password on the system")).toBeInTheDocument();
-    expect(screen.getByText("read space used and quota")).toBeInTheDocument();
+    expect(screen.getByText("Reads a share's activity")).toBeInTheDocument();
+    expect(screen.getByText("Replaces a person's password, never logged")).toBeInTheDocument();
+    expect(screen.getByText("Reads space used and quota")).toBeInTheDocument();
   });
 
   // 9.2 — an operation removed from a manifest disappears without a frontend
@@ -537,7 +549,7 @@ describe("one target's page", () => {
  * 3-tile row, replacing the "Can Syndra reach it" card and its label/value
  * grid.
  */
-describe("the top band: one status card and three tiles", () => {
+describe("the top band: Syndra's reach, what the system reports, and Maintenance", () => {
   it("gives one calm sentence when reachable and active, with no leftover grid", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
@@ -562,21 +574,53 @@ describe("the top band: one status card and three tiles", () => {
     };
     renderTarget();
 
-    const tile = screen.getByText("Accounts Syndra manages").closest(".card");
-    expect(tile).not.toBeNull();
-    expect(within(tile as HTMLElement).getByText("4")).toBeInTheDocument();
+    const card = screen.getByText("Accounts Syndra manages").closest(".card");
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).getByText("4")).toBeInTheDocument();
   });
 
-  it("names the maintenance state on its own tile, matching the control below", () => {
+  it("does not call a target Active, or offer to drain it, before health has answered", () => {
+    state.roster = [summary([])];
+    state.health = {} as TargetHealth;
+    state.healthLoading = true;
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByText("Maintenance")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start draining" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set read-only" })).toBeNull();
+  });
+
+  it("says the maintenance state was not read when health answered without one", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: false } as TargetHealth;
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByText(/Not read just now\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start draining" })).toBeNull();
+  });
+
+  it("does not count Waiting on you as zero when the findings read failed", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.findingsError = new Error("boom");
+    renderTarget();
+
+    expect(screen.getAllByLabelText("count could not be read").length).toBeGreaterThan(0);
+  });
+
+  it("names the maintenance state in the Maintenance card, matching its action rows", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "draining" };
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    // The tile's own label, not the "Maintenance" card title further down —
-    // both are legitimately on screen at once.
-    expect(screen.getAllByText("Maintenance").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Maintenance")).toBeInTheDocument();
     expect(screen.getByText("Finishing up")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Make active" })).toBeInTheDocument();
   });
 
   it("does not double the product name beside its version", () => {
@@ -592,30 +636,6 @@ describe("the top band: one status card and three tiles", () => {
 
     expect(screen.queryByText(/TrueNAS TrueNAS-25\.10\.5/)).toBeNull();
     expect(screen.getByText("TrueNAS 25.10.5")).toBeInTheDocument();
-  });
-});
-
-/**
- * Maintenance: one compact row, one helper line — not the reason repeated
- * under every button.
- */
-describe("maintenance control is a single compact row", () => {
-  it("shows the 'say why first' helper once, not once per button", () => {
-    state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
-    renderTarget();
-
-    expect(screen.getAllByText(/Say why first/)).toHaveLength(1);
-  });
-
-  it("marks the current state and disables reselecting it", () => {
-    state.roster = [summary([])];
-    state.health = { reachable: true, lifecycle: "active" };
-    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
-    renderTarget();
-
-    expect(screen.getByRole("button", { name: /Already active/ })).toBeDisabled();
   });
 });
 
@@ -795,11 +815,13 @@ describe("what it can do · the confirmation the manifest declares", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    const purge = screen.getByText("account.purge").parentElement;
-    expect(purge?.textContent).toContain("confirmation required");
+    // The board's words: "Stops and asks" / "Runs by itself" (route-system-targets-id).
+    const purge = screen.getByText("account.purge").closest(".flex-wrap");
+    expect(purge?.textContent).toContain("Stops and asks");
 
-    const provision = screen.getByText("account.provision").parentElement;
-    expect(provision?.textContent).not.toContain("confirmation required");
+    const provision = screen.getByText("account.provision").closest(".flex-wrap");
+    expect(provision?.textContent).not.toContain("Stops and asks");
+    expect(provision?.textContent).toContain("Runs by itself");
   });
 });
 
@@ -977,7 +999,7 @@ describe("the system's Zitadel project", () => {
     const fence = () => document.getElementById("waiting")?.closest("[aria-disabled]");
     expect(fence()?.hasAttribute("inert")).toBe(true);
     // What reports on the system stays live.
-    expect(screen.getByText("Is it answering").closest("[aria-disabled]")).toBeNull();
+    expect(screen.getByText("Whether changes can land").closest("[aria-disabled]")).toBeNull();
 
     fireEvent.change(select, { target: { value: "p1" } });
     fireEvent.click(screen.getByRole("button", { name: "Use this project" }));

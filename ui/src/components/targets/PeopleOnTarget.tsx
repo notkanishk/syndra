@@ -1,14 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { HoldDialog } from "@/components/review/HoldDialog";
 import { TakeAwayDialog } from "@/components/targets/TakeAwayDialog";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { Relative } from "@/components/ui/Time";
-import { UserName } from "@/components/names";
+import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
+import { UserAvatar, UserName } from "@/components/names";
+import { formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetHomes, useTargetInventory, type AccountHome, type BoundAccount } from "@/lib/queries/useTargets";
@@ -34,14 +36,14 @@ export function PeopleOnTarget({ target }: { target: string }) {
   const accounts = inventory.data?.accounts ?? [];
   const homeOf = new Map((homes.data?.accounts ?? []).map((h) => [h.subject_id, h]));
   const name = targetLabel(target);
+  const paging = usePaging();
+  // A limit verb widens the actions seat (A-03 §3); the heads follow the rows.
+  const seat = accounts.some((a) => limitVerb(homeOf.get(a.subject_id))) ? "tablet:w-[380px]" : "tablet:w-[260px]";
 
   return (
     <Card>
       <CardHeader
-        // "Bound", not "People with an account here". The region heading above says
-        // whose accounts these are; repeating it in every card title spends the
-        // width on a sentence the reader has already read.
-        title="Have an account here"
+        title="Accounts Syndra manages"
         count={inventory.data?.bound}
         note="Put what a role gives them on hold, or revoke it (end their access)"
       />
@@ -59,15 +61,30 @@ export function PeopleOnTarget({ target }: { target: string }) {
         }
       >
         <>
-          {accounts.map((account, i) => (
+          {/* Name · description · numbers (8b): the person, the account they
+              have there, and since when in the last seat. */}
+          <CardColumns>
+            <span className="w-[220px] flex-none">Person</span>
+            <span className="min-w-0 flex-1">Account on {name}</span>
+            <span className="w-[110px] flex-none text-right">Since</span>
+            <span className={`flex-none ${seat}`} />
+          </CardColumns>
+          {accounts.slice(0, paging.limit).map((account) => (
             <PersonRow
               key={account.subject_id}
               target={target}
               account={account}
               home={homeOf.get(account.subject_id)}
-              first={i === 0}
+              seat={seat}
             />
           ))}
+          <PaginationRow
+            shown={Math.min(paging.limit, accounts.length)}
+            total={accounts.length}
+            onMore={paging.more}
+            onAll={() => paging.all(accounts.length)}
+            onBack={paging.back}
+          />
         </>
       </ListStates>
     </Card>
@@ -78,13 +95,14 @@ function PersonRow({
   target,
   account,
   home,
-  first,
+  seat,
 }: {
   target: string;
   account: BoundAccount;
+  /** The actions seat's width, shared with the column heads. */
+  seat: string;
   /** Their home folder limit and where it comes from; absent until read. */
   home?: AccountHome;
-  first: boolean;
 }) {
   const [dialog, setDialog] = useState<"hold" | "takeaway" | "limit" | null>(null);
   const verb = limitVerb(home);
@@ -97,31 +115,35 @@ function PersonRow({
 
   return (
     <>
-      <CardRow first={first} className="flex-wrap">
-        <span className="min-w-0 [overflow-wrap:anywhere] text-[14px]">
-          <UserName id={account.subject_id} />
+      <CardRow data-account={account.subject_id} className="flex-wrap gap-y-1.5">
+        <span className="flex w-[220px] flex-none items-center gap-2.5">
+          <UserAvatar id={account.subject_id} size="row" />
+          <Link
+            href={`/users/${account.subject_id}`}
+            className="min-w-0 [overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+          >
+            <UserName id={account.subject_id} />
+          </Link>
         </span>
-        <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px] text-muted">{account.username}</span>
-        {account.account_uid !== undefined && (
-          <span className="text-[13px] text-faint">id {account.account_uid}</span>
-        )}
-        <span className="text-[13px] text-faint">
-          account since <Relative iso={account.bound_at} />
+        <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-[13.5px] text-ink">
+          {account.username}
         </span>
-        <span className="flex-1" />
-        {/* Its home folder limit first, the one write place for it (A-03 §3);
-            then pause it, or end it, the reversible one first. */}
-        {verb && (
-          <Button variant="outline" size="sm" onClick={() => setDialog("limit")}>
-            {verb}
+        <span className="w-[110px] flex-none text-right text-[13.5px] text-muted">{formatShortDate(account.bound_at)}</span>
+        <span className={`flex flex-none flex-wrap items-center justify-end gap-2 ${seat}`}>
+          {/* Its home folder limit first, the one write place for it (A-03 §3);
+              then pause it, or end it, the reversible one first. */}
+          {verb && (
+            <Button variant="outline" size="sm" onClick={() => setDialog("limit")}>
+              {verb}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => setDialog("hold")}>
+            Put on hold
           </Button>
-        )}
-        <Button variant="outline" size="sm" onClick={() => setDialog("hold")}>
-          Put on hold
-        </Button>
-        <Button variant="danger" size="sm" onClick={() => setDialog("takeaway")}>
-          Revoke
-        </Button>
+          <Button variant="danger" size="sm" onClick={() => setDialog("takeaway")}>
+            Revoke
+          </Button>
+        </span>
         {home && <HomeLine home={home} />}
       </CardRow>
       {dialog === "limit" && home && (

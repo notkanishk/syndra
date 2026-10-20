@@ -8,11 +8,13 @@ import { TokenPreview } from "@/components/apps/TokenPreview";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { ProjectName } from "@/components/names";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useClaimShape } from "@/lib/queries/useClaimShape";
 import { useCrumb } from "@/lib/page-crumb";
+import { useIsAdvanced } from "@/lib/ui-view";
 
 /**
  * E6 · One screen, two equal halves: what the token is shaped like on the
@@ -25,6 +27,7 @@ import { useCrumb } from "@/lib/page-crumb";
  */
 export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   const apps = useApplications();
+  const advanced = useIsAdvanced();
   const app = (apps.data ?? []).find((entry) => entry.application.id === applicationId);
   const shape = useClaimShape(app?.application.project_id);
   // The editor holds edits the preview has not seen. Lifted here because they
@@ -72,6 +75,7 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   return (
     <div className="flex flex-col gap-[22px]">
       <PageHeader
+        eyebrow="Apps"
         title={app.application.name}
         lede={
           <>
@@ -83,8 +87,18 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
         }
         meta={
           <span className="flex flex-wrap items-center gap-2 text-[14px] text-faint">
-            uses roles from <ProjectName id={app.application.project_id} /> · id{" "}
-            <Mono>{app.application.id}</Mono>
+            uses roles from{" "}
+            {/* The project is a place of its own: a link, ending in the arrow
+                every way-on ends in. */}
+            <ArrowLink href={`/projects/${app.application.project_id}`}>
+              <ProjectName id={app.application.project_id} />
+            </ArrowLink>
+            {advanced && (
+              <>
+                {" "}
+                · id <Mono>{app.application.id}</Mono>
+              </>
+            )}
           </span>
         }
       />

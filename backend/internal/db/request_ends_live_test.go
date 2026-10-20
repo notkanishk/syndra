@@ -17,7 +17,7 @@ func TestRequestEnds_ResolveWritesThemAndReadsReturnThem(t *testing.T) {
 	set := had.Add(31 * 24 * time.Hour)
 	thirty := 31
 
-	approved, err := CreateAccessRequestOfKind(ctx, "extend", user, "pEnds", "keep", "keep it", &thirty)
+	approved, err := CreateAccessRequestOfKind(ctx, "extend", user, "pEnds", "keep", "keep it", &thirty, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestRequestEnds_ResolveWritesThemAndReadsReturnThem(t *testing.T) {
 	}, &had, &set); err != nil {
 		t.Fatal(err)
 	}
-	declined, err := CreateAccessRequestOfKind(ctx, "extend", user, "pEnds", "other", "keep it", &thirty)
+	declined, err := CreateAccessRequestOfKind(ctx, "extend", user, "pEnds", "other", "keep it", &thirty, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

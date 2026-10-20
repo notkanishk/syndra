@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { PlanReview } from "@/components/ui/PlanReview";
+import { UiViewProvider } from "@/lib/ui-view";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 
 /**
@@ -21,7 +22,11 @@ describe("PlanReview names", () => {
   } as BulkPlan;
 
   it("never says the name is not available", () => {
-    render(<PlanReview plan={plan} />);
+    render(
+      <UiViewProvider isOperator initialView="advanced">
+        <PlanReview plan={plan} />
+      </UiViewProvider>,
+    );
     expect(screen.queryByText(/name not available/i)).toBeNull();
     expect(screen.getByText("Unknown account")).toBeTruthy();
     expect(screen.getByText("366407994264519686")).toBeTruthy();

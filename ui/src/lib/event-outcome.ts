@@ -23,3 +23,22 @@ export function outcomeOf(status: string): string {
   if (status === "processed" || status === "completed" || status === "succeeded") return "done";
   return status;
 }
+
+/**
+ * What a bucket is called on screen, and the dot that carries it. One table,
+ * so the filter pills and the column on every row cannot name the same bucket
+ * two ways. An unrecognised status gets a word of its own rather than a borrowed
+ * one — the page must never say "Done" about something it does not understand.
+ */
+const OUTCOME_LABEL = {
+  done: { word: "Done", tone: "healthy" },
+  waiting: { word: "Waiting", tone: "neutral" },
+  failed: { word: "Failed", tone: "danger" },
+  dropped: { word: "Not acted on", tone: "neutral" },
+} as const;
+
+export function outcomeLabel(outcome: string): { word: string; tone: "healthy" | "neutral" | "danger" } {
+  return (
+    OUTCOME_LABEL[outcome as keyof typeof OUTCOME_LABEL] ?? { word: "Not recognised", tone: "neutral" }
+  );
+}

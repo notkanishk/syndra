@@ -7,6 +7,7 @@ import { DegradedBanner } from "@/components/states/DegradedBanner";
 import { OfflineBanner } from "@/components/states/OfflineBanner";
 import { PageCrumbProvider } from "@/lib/page-crumb";
 import type { SessionUser } from "@/lib/session";
+import type { UiView } from "@/lib/nav";
 import { UiViewProvider } from "@/lib/ui-view";
 
 /**
@@ -42,13 +43,16 @@ import { UiViewProvider } from "@/lib/ui-view";
  */
 export function AppShell({
   session,
+  initialView,
   children,
 }: {
   session: SessionUser;
+  /** The operator's stored Basic/Advanced choice, read from its cookie by the server. */
+  initialView?: UiView;
   children: React.ReactNode;
 }) {
   return (
-    <UiViewProvider isOperator={session.role === "admin"} selfId={session.id}>
+    <UiViewProvider isOperator={session.role === "admin"} selfId={session.id} initialView={initialView}>
       <PageCrumbProvider>
         <div className="flex h-dvh flex-col overflow-hidden bg-canvas tablet:flex-row">
           <Sidebar />

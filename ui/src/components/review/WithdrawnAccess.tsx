@@ -2,16 +2,29 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useMemo, useRef, useState } from "react";
 
-import { EmptyState, ListStates } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
-import { Card, CardHeader } from "@/components/ui/Card";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { Mono, StatusDot } from "@/components/ui/Badge";
+import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
+import { Input } from "@/components/ui/Input";
+import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
+import { Select } from "@/components/ui/Select";
+import { RunLabel, SortHead, orderBy, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Relative } from "@/components/ui/Time";
-import { UserName } from "@/components/names";
+import { Unfold } from "@/components/ui/Unfold";
+import { ProjectName, UserAvatar, UserName } from "@/components/names";
 import { request } from "@/lib/api-client";
 import { shortId } from "@/lib/audit-vocabulary";
+import { formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 
 /**
  * Review › Unfinished revocations (9.9, 9.10).
@@ -43,6 +56,8 @@ interface UnconfirmedRevocation {
   target: string;
   age_seconds: number;
   spent: boolean;
+  /** Why an add-on's revocation was queued, where its project and roles say nothing. */
+  reason?: string;
   /** The join key back to the change that caused this. */
   cascade_id?: string;
 }
@@ -53,139 +68,405 @@ interface Listing {
   escalated: boolean;
 }
 
+type SortKey = "who" | "what" | "where" | "when";
+type SectionKey = "spent" | "queued";
+
+/**
+ * Both sections always, in this order, whatever either holds. They used to render only when
+ * non-empty, so a revocation being given up on INSERTED a red card above the queue somebody was
+ * reading: the list moved under them because the data changed, which is the one thing the structure
+ * is not allowed to do. A section at zero is also the answer to a real question, "is anything
+ * stuck?", and reads better as a hollow zero than as a card that is not there.
+ */
+const SECTIONS: Record<SectionKey, { id: string; label: string; hint: string; tone?: "danger"; empty: string }> = {
+  spent: {
+    id: "given-up",
+    label: "Given up",
+    hint: "They still have it until somebody ends it",
+    tone: "danger",
+    empty: "Nothing has been given up on. Every revocation still has a way through.",
+  },
+  queued: {
+    id: "on-the-way",
+    label: "Still on the way",
+    hint: "Syndra keeps trying by itself",
+    empty: "Nothing is on the way. Every revocation has gone through or been given up on.",
+  },
+};
+
+/** Past this a revocation still waiting turns amber (route-revocations). */
+const AMBER_AFTER_SECONDS = 30 * 60;
+
 export function WithdrawnAccess() {
   const query = useQuery({
     queryKey: ["governance", "unconfirmed-revocations"],
     queryFn: () => request<Listing>("/governance/unconfirmed-revocations"),
     refetchInterval: 60_000,
   });
+  const resolver = useNameResolver();
 
-  const rows = query.data?.revocations ?? [];
-  const spent = rows.filter((r) => r.spent);
-  const queued = rows.filter((r) => !r.spent);
+  const rows = useMemo(() => query.data?.revocations ?? [], [query.data]);
+  const [search, setSearch] = useState("");
+  const [where, setWhere] = useState("");
+  // Most recent first, as the board draws it: `when` is how long ago, so ascending is newest.
+  const [sort, flipSort] = useSort<SortKey>("when");
+  const [open, setOpen] = useState<Record<SectionKey, boolean>>({ spent: true, queued: true });
+
+  const text = useMemo(
+    () => ({
+      who: (row: UnconfirmedRevocation) => resolver.resolveUser(row.user_id).value?.display_name ?? "",
+      what: (row: UnconfirmedRevocation) => whatText(row, resolver.resolveProject(row.project_id).value?.name ?? ""),
+      where: (row: UnconfirmedRevocation) => targetLabel(row.target),
+      when: (row: UnconfirmedRevocation) => row.age_seconds,
+    }),
+    [resolver],
+  );
+  const needle = search.trim().toLowerCase();
+  const filtered = needle !== "" || where !== "";
+  const matched = useMemo(
+    () =>
+      orderBy(rows, sort, text).filter(
+        (row) =>
+          (!where || row.target === where) &&
+          (!needle || [text.who(row), text.what(row), text.where(row)].some((part) => part.toLowerCase().includes(needle))),
+      ),
+    [rows, sort, text, where, needle],
+  );
+  // Only systems with a row, so nothing on offer returns nothing.
+  const systems = useMemo(() => Array.from(new Set(rows.map((row) => row.target))).sort(), [rows]);
+
+  const spent = matched.filter((row) => row.spent);
+  const queued = matched.filter((row) => !row.spent);
+  // The meta line counts the whole list: a search narrows what is shown, not what is outstanding.
+  const givenUp = rows.filter((row) => row.spent).length;
+  const people = new Set(rows.map((row) => row.user_id)).size;
+  const sections = (["spent", "queued"] as const).map((key) => ({
+    key,
+    ...SECTIONS[key],
+    count: (key === "spent" ? spent : queued).length,
+  }));
+  const openSection = (section: { key: SectionKey }) => setOpen((cur) => ({ ...cur, [section.key]: true }));
+  const showRows = !query.isLoading && !query.error && rows.length > 0;
+  const readAt = useMemo(
+    () => (query.dataUpdatedAt ? new Date(query.dataUpdatedAt).toISOString() : null),
+    [query.dataUpdatedAt],
+  );
 
   return (
-    <>
-      <PageHeader
-        title="Unfinished revocations"
-        lede="Access somebody revoked that has not gone away yet. Revocations still on the way clear themselves; the ones Syndra has given up on do not, and those people still have the access."
-      />
-      <ListStates
-        isLoading={query.isLoading}
-        error={query.error}
-        isEmpty={rows.length === 0}
-        onRetry={() => query.refetch()}
-        errorTitle="Couldn't load unfinished revocations."
-        empty={
-          <EmptyState
-            title="Nothing outstanding"
-            guidance="Every revocation has reached the system it was sent to."
+    <div className="flex flex-col gap-4">
+      {/* The intro keeps 12px of its own below it, so the first card never reads as attached to it. */}
+      <div className="pb-3">
+        <PageHeader
+          title="Unfinished revocations"
+          meta={
+            showRows ? (
+              <MetaRow>
+                {[
+                  `${givenUp} given up`,
+                  `${rows.length - givenUp} on the way`,
+                  `${people} ${people === 1 ? "person" : "people"}`,
+                ]}
+              </MetaRow>
+            ) : undefined
+          }
+          lede="Access somebody revoked that has not gone away yet. Revocations still on the way clear themselves. The ones Syndra has given up on do not, and those people still have the access until somebody ends it."
+        />
+      </div>
+
+      <div className="flex flex-col gap-3.5">
+        {showRows && (
+          <FilterBar
+            search={
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search person or role…"
+                aria-label="Search unfinished revocations by person or role"
+              />
+            }
+            filters={
+              <FilterPanel
+                resultCount={matched.length}
+                noun={["revocation", "revocations"]}
+                activeCount={where ? 1 : 0}
+                onClear={() => setWhere("")}
+              >
+                <FilterField label="Where">
+                  <Select value={where} onChange={(event) => setWhere(event.target.value)} aria-label="Filter by system">
+                    <option value="">Every system</option>
+                    {systems.map((target) => (
+                      <option key={target} value={target}>
+                        {targetLabel(target)}
+                      </option>
+                    ))}
+                  </Select>
+                </FilterField>
+              </FilterPanel>
+            }
           />
-        }
-      >
-        {/* Both buckets always, in this order, whatever either one holds.
-            They used to render only when non-empty, so a revocation being
-            given up on INSERTED a red card above the queue somebody was
-            reading — the list moved under them because the data changed,
-            which is the one thing the structure is not allowed to do. A
-            bucket at zero is also the answer to a real question: "is anything
-            stuck?" reads better as a hollow zero than as a card that is not
-            there. */}
-        <div className="grid gap-4">
-          <Bucket
-            title="Given up"
-            tone="danger"
-            note="Syndra tried its limit and stopped. This person still has the access: revoke it again from their page, or end it in the connected system by hand."
-            empty="Nothing has been given up on. Every revocation still has a way through."
-            rows={spent}
-          />
-          <Bucket
-            title="Still on the way"
-            tone="accent"
-            note="Not sent yet, and Syndra tries again by itself. The only thing to watch is how long one has waited."
-            empty="Nothing is waiting. Every revocation has either gone through or been given up on."
-            rows={queued}
-          />
-          <p className="text-[13px] text-faint">
-            A c_ handle links to the edit that set the revocation off, in Change history.
-          </p>
-        </div>
-      </ListStates>
-    </>
+        )}
+
+        {/* How current the list is on the left, a chip per section at the right end. Not while the
+            read is out. */}
+        {showRows && (
+          <ReadLine sections={sections} label="Sections of unfinished revocations" onOpen={openSection} className="-mt-1">
+            <ReadFreshness
+              state={{ readAt, current: true }}
+              subject="Syndra’s send queue"
+              onRefresh={() => query.refetch()}
+            />
+          </ReadLine>
+        )}
+
+        {showRows ? (
+          <div className="flex flex-col gap-4">
+            <SectionPill sections={sections} label="Sections of unfinished revocations" onOpen={openSection} />
+            {(["spent", "queued"] as const).map((key) => (
+              <RevocationSection
+                key={key}
+                {...SECTIONS[key]}
+                rows={key === "spent" ? spent : queued}
+                // A search that finds nothing here does not say nothing has been given up on.
+                empty={filtered ? "Nothing here matches." : SECTIONS[key].empty}
+                open={open[key]}
+                onToggle={() => setOpen((cur) => ({ ...cur, [key]: !cur[key] }))}
+                sort={sort}
+                onSort={flipSort}
+              />
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <ListStates
+              isLoading={query.isLoading}
+              error={query.error}
+              isEmpty
+              onRetry={() => query.refetch()}
+              errorTitle="Couldn't load unfinished revocations."
+              skeleton={<RowSkeleton rows={4} label="Loading unfinished revocations" />}
+              empty={
+                <EmptyState
+                  title="Nothing outstanding"
+                  guidance="Every revocation has reached the system it was sent to."
+                  resolved
+                />
+              }
+            >
+              {null}
+            </ListStates>
+          </Card>
+        )}
+      </div>
+    </div>
   );
 }
 
-/**
- * One of the two buckets, present at any count.
- *
- * The empty sentence is not decoration: on this page the interesting fact is
- * often which bucket is empty, and "nothing given up on" is a different
- * statement from "this section is not on the page today".
- */
-function Bucket({
-  title,
+/** What a row revokes as a person would search for it: project, role keys, or an add-on's reason. */
+function whatText(row: UnconfirmedRevocation, project: string) {
+  if (!row.project_id) return row.reason ?? `Access on ${targetLabel(row.target)}`;
+  return `${project} ${row.role_keys.map(humanizeKey).join(", ")} ${row.role_keys.join(" ")}`.trim();
+}
+
+function RevocationSection({
+  id,
+  label,
+  hint,
   tone,
-  note,
   empty,
   rows,
+  open,
+  onToggle,
+  sort,
+  onSort,
 }: {
-  title: string;
-  tone: "accent" | "danger";
-  note: string;
+  id: string;
+  label: string;
+  hint: string;
+  tone?: "danger";
   empty: string;
   rows: UnconfirmedRevocation[];
+  open: boolean;
+  onToggle: () => void;
+  sort: Sort<SortKey>;
+  onSort: (key: SortKey) => void;
 }) {
+  const paging = usePaging();
+  const resolver = useNameResolver();
+  const anchor = useRef<HTMLDivElement>(null);
+  const shown = rows.slice(0, paging.limit);
+  // What and Where gather equal values under a counted label; Who and Revoked do not.
+  const runAt = runStarts(
+    rows,
+    sort.key === "what"
+      ? (row) => whatText(row, resolver.resolveProject(row.project_id).value?.name ?? "")
+      : sort.key === "where"
+        ? (row) => targetLabel(row.target)
+        : null,
+  );
   return (
-    <Card>
-      <CardHeader title={title} count={rows.length} tone={tone} note={note} />
-      {rows.length === 0 ? (
-        <p className="px-5 pb-4 text-[13.5px] text-faint">{empty}</p>
-      ) : (
-        // Padded like every other card body. Without it the rows ran to the
-        // card's edges — a name against the left border, the c_ handle clipped
-        // by the right. The empty state one line above carried the padding, so
-        // the bug appeared only once the list had something in it.
-        <ul className="grid gap-3 px-5 pb-5 text-sm">
-          {rows.map((row) => (
-            <Row key={row.id} row={row} />
-          ))}
-        </ul>
-      )}
-    </Card>
+    <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-4">
+      <Card>
+        <div ref={anchor}>
+          <CardHeader
+            tone={tone}
+            count={rows.length}
+            note={hint}
+            title={
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={`${id}-body`}
+                onClick={onToggle}
+                className="inline-flex items-center gap-3 text-left"
+              >
+                <span
+                  aria-hidden
+                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-press ${
+                    open ? "rotate-90" : ""
+                  }`}
+                >
+                  ›
+                </span>
+                <span id={`${id}-title`}>{label}</span>
+              </button>
+            }
+          />
+        </div>
+        <Unfold open={open}>
+          <div id={`${id}-body`}>
+            {rows.length === 0 ? (
+              <div className="row-divider flex items-center gap-2.5 px-5 py-4 text-[14px] text-muted">
+                <StatusDot tone="healthy" />
+                {empty}
+              </div>
+            ) : (
+              <>
+                <CardColumns>
+                  <span className="w-[190px] flex-none">
+                    <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <SortHead label="What was revoked" name="what" sort={sort} onSort={onSort} />
+                  </span>
+                  <span className="hidden w-[130px] flex-none desktop:block">
+                    <SortHead label="Where" name="where" sort={sort} onSort={onSort} />
+                  </span>
+                  <span className="w-[110px] flex-none text-right">
+                    <SortHead label="Revoked" name="when" sort={sort} onSort={onSort} />
+                  </span>
+                  <span className="hidden w-[240px] flex-none desktop:block">
+                    <span className="sr-only">What happens next</span>
+                  </span>
+                </CardColumns>
+                {shown.map((row, index) => {
+                  const run = runAt(index);
+                  return (
+                    <div key={row.id}>
+                      {run && <RunLabel {...run} />}
+                      <Row row={row} />
+                    </div>
+                  );
+                })}
+                <PaginationRow
+                  shown={shown.length}
+                  total={rows.length}
+                  onMore={paging.more}
+                  onAll={() => paging.all(rows.length)}
+                  onBack={paging.back}
+                  anchor={anchor}
+                />
+              </>
+            )}
+          </div>
+        </Unfold>
+      </Card>
+    </section>
   );
 }
 
 function Row({ row }: { row: UnconfirmedRevocation }) {
+  const resolver = useNameResolver();
+  const first = resolver.resolveUser(row.user_id).value?.display_name?.split(" ")[0];
+  const where = targetLabel(row.target);
   return (
-    <li className="grid gap-1">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <UserName id={row.user_id} />
-        <span className="text-muted">
-          on {targetLabel(row.target)}
-          {row.role_keys.length > 0 && <> · {row.role_keys.join(", ")}</>}
+    <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
+      <span className="flex w-full items-center gap-3 tablet:w-[190px] tablet:shrink-0">
+        <UserAvatar id={row.user_id} />
+        <Link
+          href={`/users/${row.user_id}`}
+          className="min-w-0 text-[15px] font-semibold hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+        >
+          <UserName id={row.user_id} />
+        </Link>
+      </span>
+
+      <span className="flex w-full min-w-0 flex-col gap-[3px] pt-0.5 tablet:flex-1">
+        <span className="text-[14.5px] leading-[1.45]">
+          {row.project_id ? (
+            <>
+              <ProjectName id={row.project_id} />
+              {row.role_keys.length > 0 && " / "}
+              {row.role_keys.map(humanizeKey).join(", ")}
+            </>
+          ) : (
+            (row.reason ?? `Access on ${where}`)
+          )}
         </span>
-        <span className="text-faint">
-          revoked <Relative iso={row.created_at} />
+        <span className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-faint">
+          {row.role_keys.map((key) => (
+            <Mono key={key}>{key}</Mono>
+          ))}
+          {row.cascade_id && (
+            // The join key, as a link, exactly as it appears in the audit log and on a person's
+            // activity. A finding an operator cannot trace back to the change that caused it is a
+            // mystery.
+            <Link
+              href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
+              aria-label="See the edit that set off this revocation, in Change history"
+              className="hover:text-accent-text"
+            >
+              <Mono>{shortId(row.cascade_id, "c")}</Mono>
+            </Link>
+          )}
+          <span className="desktop:hidden">· {where}</span>
         </span>
-        <span className="flex-1" />
-        {row.cascade_id && (
-          // The join key, as a link, exactly as it appears in the audit log and
-          // on a person's activity. A finding an operator cannot trace back to
-          // the change that caused it is a mystery.
-          <Link
-            href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
-            aria-label="See the edit that set off this revocation, in Change history"
-            className="text-[13px] font-semibold text-accent-text"
-          >
-            <Mono>{shortId(row.cascade_id, "c")}</Mono>
-          </Link>
+        {row.last_error && (
+          // The reason, not a status. A given-up row an operator can see and not act on is the
+          // whole difference between a finding and a mystery.
+          <span className="mt-1 flex items-baseline gap-2 text-[13.5px] leading-[1.5] text-danger-text">
+            <StatusDot tone="danger" />
+            {row.last_error}
+          </span>
         )}
-      </div>
-      {row.last_error && (
-        // The reason, not a status. A given-up row an operator can see and not
-        // act on is the whole difference between a finding and a mystery.
-        <p className="text-muted">Last error: {row.last_error}</p>
-      )}
-    </li>
+      </span>
+
+      <span className="hidden w-[130px] flex-none pt-0.5 text-[14px] text-muted desktop:block">{where}</span>
+
+      <span className="flex flex-col gap-0.5 pt-0.5 tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+        <span
+          className={`text-[13.5px] font-semibold ${
+            row.spent ? "text-danger-text" : row.age_seconds >= AMBER_AFTER_SECONDS ? "text-warn-text" : "text-muted"
+          }`}
+        >
+          <Relative iso={row.created_at} />
+        </span>
+        <span className="text-[12.5px] text-faint">{formatShortDate(row.created_at)}</span>
+      </span>
+
+      <span className="flex w-full flex-none justify-end pt-0.5 desktop:w-[240px]">
+        {row.spent ? (
+          // The way forward is the person's own page, where Syndra revokes it again.
+          <ArrowLink href={`/users/${row.user_id}`}>
+            Revoke again on {first ? `${first}’s` : "their"} page
+          </ArrowLink>
+        ) : (
+          // The API carries how many tries so far, not the limit or the next time, so neither is claimed.
+          <span className="flex flex-col items-end gap-0.5 text-right text-[13px] text-muted">
+            <span>{row.attempts === 0 ? "Not tried yet" : `Tried ${row.attempts} ${row.attempts === 1 ? "time" : "times"}`}</span>
+            <span className="text-[12.5px] text-faint">Tries again by itself</span>
+          </span>
+        )}
+      </span>
+    </div>
   );
 }

@@ -41,6 +41,15 @@ export interface ReadState {
 }
 
 /**
+ * The read state of a list Syndra holds itself (bundles and who has them), where
+ * the server stamps nothing: the read is when this page last got an answer, and
+ * it is not current if the last attempt to get one failed.
+ */
+export function readStateOfQuery(q: { dataUpdatedAt: number; isError: boolean }): ReadState {
+  return { readAt: q.dataUpdatedAt ? new Date(q.dataUpdatedAt).toISOString() : null, current: !q.isError };
+}
+
+/**
  * Which of the four a read is, given when it happened.
  *
  * `provisional` outranks age deliberately. A four-second-old copy of state we

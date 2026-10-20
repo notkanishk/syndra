@@ -11,6 +11,8 @@ export interface BundleRow {
   description?: string;
   is_welcome?: boolean;
   roles?: string[];
+  /** How many distinct roles the latest version grants. The list never carries `roles` itself. */
+  role_count?: number;
   confirmation_mode?: "auto" | "manual";
   /** How many people currently hold this bundle. Editing it changes all of them. */
   holder_count?: number;

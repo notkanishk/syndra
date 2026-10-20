@@ -49,6 +49,7 @@ vi.mock("@/lib/queries/useBundleVersions", () => ({
 vi.mock("@/lib/queries/useMappingRules", () => ({ useMappingRules: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useRoles", () => ({ useGlobalRoleCatalog: () => ({ data: [] }) }));
 vi.mock("@/components/names", () => ({
+  ProjectName: ({ id, name }: { id: string; name?: string }) => <span>{name || id}</span>,
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
 }));

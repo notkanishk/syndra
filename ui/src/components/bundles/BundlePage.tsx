@@ -8,7 +8,8 @@ import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
 import { BundlePeople, BundleVersions, ThroughOtherBundles } from "@/components/bundles/BundleVersions";
 import { IncludeChangeLine, PublishVersionDialog } from "@/components/bundles/PublishVersionDialog";
 import { RetiredBundlePage } from "@/components/bundles/RetiredBundle";
-import { RoleRef } from "@/components/names";
+import { ProjectName, RoleRef } from "@/components/names";
+import { projectLabel } from "@/components/names/Unresolved";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -159,7 +160,11 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
   return (
     <div className="flex flex-col gap-7">
       <PageHeader
-        eyebrow="Bundles"
+        eyebrow={
+          <Link href="/bundles" className="hover:text-ink hover:underline hover:underline-offset-[3px]">
+            Bundles
+          </Link>
+        }
         title={name}
         meta={[
           latest ? `v${latest.version} · published ${formatShortDate(latest.published_at)}` : null,
@@ -401,12 +406,21 @@ function WhatItGives({
   const leaving = useMemo(() => draft?.removed ?? [], [draft?.removed]);
   const rows = useMemo(() => [...(roles.data ?? []), ...leaving], [roles.data, leaving]);
   const groups = useMemo(() => {
-    const out = new Map<string, BundleRoleRow[]>();
+    // By project id, so the heading can link to the project; the name is only
+    // what it is called. A project nobody could name has no name here and is
+    // headed by <ProjectName/>'s fallback, never by its id.
+    const out = new Map<string, { name: string | undefined; list: BundleRoleRow[] }>();
     for (const r of rows) {
-      const project = byId.get(idOf(r))?.project_name || r.zitadel_project_id;
-      out.set(project, [...(out.get(project) ?? []), r]);
+      const group = out.get(r.zitadel_project_id) ?? {
+        name: byId.get(idOf(r))?.project_name,
+        list: [],
+      };
+      group.list.push(r);
+      out.set(r.zitadel_project_id, group);
     }
-    return Array.from(out.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return Array.from(out.entries()).sort(([, a], [, b]) =>
+      projectLabel(a.name, null).localeCompare(projectLabel(b.name, null)),
+    );
   }, [rows, byId]);
   const next = draft?.next_version;
   const leavingIds = new Set(leaving.map(idOf));
@@ -456,9 +470,23 @@ function WhatItGives({
             catalog={byId}
           />
         ))}
-        {groups.map(([project, list]) => (
-          <Card key={project}>
-            <CardHeader title={project} note={`${list.length} ${list.length === 1 ? "role" : "roles"}`} />
+        {groups.map(([projectId, { name: project, list }]) => (
+          <Card key={projectId}>
+            <CardHeader
+              title={
+                <>
+                  <Link
+                    href={`/projects/${encodeURIComponent(projectId)}`}
+                    className="motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+                  >
+                    <ProjectName id={projectId} name={project} />
+                  </Link>
+                  <span className="ml-3 text-[13.5px] font-normal text-faint">
+                    {list.length} {list.length === 1 ? "role" : "roles"}
+                  </span>
+                </>
+              }
+            />
             {list.map((role) => {
               const id = idOf(role);
               const entry = byId.get(id);
@@ -1044,7 +1072,7 @@ function IncludedBundleCard({
     : [];
   const label = (r: BundleRoleRow) => {
     const entry = catalog.get(idOf(r));
-    return roleLabel(entry?.project_name || r.zitadel_project_id, r.zitadel_role_key, entry?.display_name);
+    return roleLabel(projectLabel(entry?.project_name, r.zitadel_project_id), r.zitadel_role_key, entry?.display_name);
   };
   async function run(act: () => Promise<unknown>) {
     setFailure(null);
@@ -1115,7 +1143,7 @@ function IncludedBundleCard({
                   href={`/projects/${encodeURIComponent(role.zitadel_project_id)}`}
                   className="motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
                 >
-                  {entry?.project_name || role.zitadel_project_id}
+                  <ProjectName id={role.zitadel_project_id} name={entry?.project_name} />
                 </Link>
               </span>
               {entry?.description && (

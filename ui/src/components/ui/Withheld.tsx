@@ -2,6 +2,8 @@
 
 import React from "react";
 
+import { targetLabel } from "@/lib/nav";
+
 /**
  * Access an operator has deliberately taken away, with the reason (design §20,
  * §25, §26).
@@ -34,6 +36,22 @@ export interface WithheldItem {
   actorId?: string;
   /** Past the date somebody promised to look at it again. */
   reviewDue?: boolean;
+}
+
+/**
+ * What the hold blocks, in the slot a role or value name takes. A hold on a
+ * whole account is the field `enabled` with the value `true`, sent verbatim:
+ * "true" is the switch's position, not the name of anything, and a line that
+ * opened with it read as a bare "true on truenas". Everything else is a value
+ * somebody recognises (a group, a share), shown as the code it is.
+ */
+function Held({ item, voice, className = "" }: { item: WithheldItem; voice: string; className?: string }) {
+  if (item.field !== "enabled") return <span className={`font-mono ${className}`}>{item.value}</span>;
+  return (
+    <span className="text-ink">
+      {voice} {item.target ? `${targetLabel(item.target)} account` : "account"}
+    </span>
+  );
 }
 
 /** The inline pill, for a row inside a longer list — a door, a share. */
@@ -81,8 +99,8 @@ export function Withheld({
       <ul className="mt-2 grid gap-1.5">
         {items.map((item) => (
           <li key={`${item.target ?? ""}:${item.field}:${item.value}`} className="text-[13.5px]">
-            <span className="font-mono text-[13px] text-ink">{item.value}</span>
-            {audience === "operator" && item.target && (
+            <Held item={item} voice={audience === "member" ? "Your" : "Their"} className="text-[13px] text-ink" />
+            {audience === "operator" && item.target && item.field !== "enabled" && (
               <span className="text-muted"> on {item.target}</span>
             )}
             {audience === "operator" && item.actorId && (
@@ -146,8 +164,8 @@ export function WithheldInline({ items }: { items: WithheldItem[] }) {
           className="flex flex-wrap items-baseline gap-x-1.5 text-[13px]"
         >
           <WithheldPill />
-          <span className="font-mono text-[12.5px] text-ink">{item.value}</span>
-          {item.target && <span className="text-faint">on {item.target}</span>}
+          <Held item={item} voice="Their" className="text-[12.5px] text-ink" />
+          {item.target && item.field !== "enabled" && <span className="text-faint">on {item.target}</span>}
           {item.reason && <span className="text-muted">— {item.reason}</span>}
           {item.reviewDue && (
             <span className="text-warn-text">· review date passed — needs a decision</span>
