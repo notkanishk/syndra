@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -70,7 +71,7 @@ func TestARoleNotOfferedIsRefusedWhenAskedGivenOrApproved(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingNone}, nil
 	}
 	wrote := false
-	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int, *time.Time) (string, error) {
 		wrote = true
 		return "req-1", nil
 	}

@@ -37,6 +37,11 @@ type CreateAccessRequestRequest struct {
 	RoleKey       string `json:"role_key"`
 	Justification string `json:"justification"`
 	DurationDays  int    `json:"duration_days"`
+	// Until is a fixed end date the ask names ("until the end of term", RFC
+	// 3339). When present, approving gives the grant this end however late it
+	// is decided, and it wins over DurationDays. Absent: days count from the
+	// decision, as before (older clients send only days).
+	Until *time.Time `json:"until,omitempty"`
 	// Kind is "access" (the default) or "extend": "Ask to keep it longer".
 	Kind string `json:"kind,omitempty"`
 }
@@ -272,6 +277,10 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "duration_days must be zero or greater", map[string]string{"duration_days": "min=0"})
 		return
 	}
+	if req.Until != nil && !req.Until.After(time.Now()) {
+		jsonValidationErrorResponse(w, "until must be a date that hasn't passed yet", map[string]string{"until": "future"})
+		return
+	}
 	if req.Kind == "" {
 		req.Kind = requestKindAccess
 	}
@@ -297,7 +306,7 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	switch err := checkRequestKind(req.Kind, holding, durationDays, time.Now()); {
+	switch err := checkRequestKind(req.Kind, holding, durationDays, req.Until, time.Now()); {
 	case errors.Is(err, errRequestAlreadyHeld):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "You"))
 		return
@@ -313,7 +322,7 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := dbCreateAccessRequestOfKind(r.Context(), req.Kind, req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays)
+	id, err := dbCreateAccessRequestOfKind(r.Context(), req.Kind, req.RequesterID, req.ProjectID, req.RoleKey, req.Justification, durationDays, req.Until)
 	if errors.Is(err, db.ErrAlreadyAsked) {
 		// The same ask is already waiting: one in the queue, however many
 		// times it was sent. Its id is returned so the page can point at it.
@@ -454,6 +463,8 @@ func handleResolveAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", "They already have this, so approving would change nothing. Decline it to close the request.")
 	case errors.Is(err, errExtensionShortens):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_RUNS_PAST", "They already have this past the end this asks for, so approving would shorten it. Decline it to close the request.")
+	case errors.Is(err, errAskEnded):
+		jsonErrorResponse(w, http.StatusConflict, "END_PASSED", "The end date this asked for has already passed, so approving would give access that has already ended. Decline it, and they can ask again.")
 	case errors.Is(err, errRoleNotOffered), errors.Is(err, errCatalogueUnread):
 		writeRoleOfferedError(w, err)
 	default:
