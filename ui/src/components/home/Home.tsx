@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
 
 import Link from "next/link";
@@ -31,6 +31,7 @@ import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
 import { ArriveList } from "@/components/ui/ArriveList";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { formatShortDate, formatWeekday, daysUntil } from "@/lib/format";
 
@@ -76,7 +77,14 @@ export function Home({ session }: { session: SessionUser }) {
   const requests = useRequestsAdmin("pending");
   const onboarding = useMissedOnboarding();
 
-  const pending = requests.data ?? [];
+  const pending = useMemo(() => requests.data ?? [], [requests.data]);
+  // The queue's own decide and beat. They live here, not in the card, because
+  // the card goes when the read empties and would take a decided row's outcome
+  // with it: a decided row is held for the beat (Motion 5b), then fades (S5).
+  const decisions = useRequestDecisions();
+  const queue = useLeavingRows(pending, (entry) => entry.id, !requests.isLoading && !requests.error, {
+    stay: decisions.staying,
+  });
   const expiring = summary.data?.expiring_grants ?? [];
   const propagation = summary.data?.pending_propagation;
   const drift = summary.data?.drift;
@@ -159,7 +167,8 @@ export function Home({ session }: { session: SessionUser }) {
         <Card>
           <RowSkeleton rows={4} label="Loading today's work" />
         </Card>
-      ) : blocks === 0 ? (
+      ) : blocks === 0 && queue.rows.length === 0 ? (
+        // The last decided row is still on its beat: the empty state waits for it.
         // One calm line, not a full-page card: the page continues below, and a
         // hero-sized empty state would read as the end of it.
         <div className="panel flex items-center gap-3 px-5 py-4">
@@ -175,7 +184,7 @@ export function Home({ session }: { session: SessionUser }) {
         </div>
       ) : (
         <>
-          {pending.length > 0 && <OpenRequests requests={pending} />}
+          {queue.rows.length > 0 && <OpenRequests rows={queue.rows} decisions={decisions} queue={queue} />}
           {expiring.length > 0 && <ExpiringSoon grants={expiring} />}
           {onboardingGaps > 0 && <OnboardingGaps report={onboarding.data!} />}
 
@@ -212,17 +221,21 @@ export function Home({ session }: { session: SessionUser }) {
 }
 
 /** Approve / Deny resolve in place, on the row. They never navigate. */
-function OpenRequests({ requests }: { requests: AccessRequest[] }) {
-  // The queue's own decide, so an approval here says what it says there.
-  const { act, resolved, outcomes, cancelStep } = useRequestDecisions();
-
-  // Decided rows keep their seat until the next read; they used to vanish on
-  // the tap, taking their own outcome with them.
-  const open = requests.filter((entry) => !resolved.has(entry.id)).length;
-  if (requests.length === 0) return null;
+function OpenRequests({
+  rows,
+  decisions: { act, resolved, outcomes, cancelStep },
+  queue,
+}: {
+  rows: AccessRequest[];
+  decisions: ReturnType<typeof useRequestDecisions>;
+  queue: ReturnType<typeof useLeavingRows<AccessRequest>>;
+}) {
+  // A decided row keeps its seat and its outcome through the beat, so the count
+  // is what is still open.
+  const open = rows.filter((entry) => !resolved.has(entry.id)).length;
 
   return (
-    <Card>
+    <Card {...queue.listProps}>
       {cancelStep}
       <CardHeader
         title="Open requests"
@@ -233,56 +246,58 @@ function OpenRequests({ requests }: { requests: AccessRequest[] }) {
           `ListStates`. These two lists compose their own rows and so had none:
           the dashboard was the one screen whose rows appeared all at once. */}
       <ArriveList>
-        {requests.map((entry) => (
-          <CardRow key={entry.id}>
-            <UserAvatar id={entry.requester_id} size="list" />
-            <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
-              <UserName id={entry.requester_id} />
-          </div>
-          <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
-            <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
-          </div>
-          <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
-            {entry.justification ? `“${entry.justification}”` : "No reason given"}
-          </div>
-          <div className="w-[66px] shrink-0 text-[13px] text-faint">
-            <Relative iso={entry.created_at} />
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
-            {resolved.has(entry.id) ? (
-              outcomes[entry.id] && (
-                <ActionOutcome
-                  placement="seat"
-                  word={outcomes[entry.id].word}
-                  outcome={outcomes[entry.id].outcome}
-                />
-              )
-            ) : (
-              <>
-                <div className="flex gap-2">
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    disabled={alreadyHeld(entry)}
-                    reason={alreadyHeld(entry) ? "They already have this." : undefined}
-                    onClick={() => act(entry, "approved")}
-                  >
-                    Approve
-                  </Button>
-                  <Button size="sm" onClick={() => act(entry, "rejected")}>
-                    Decline
-                  </Button>
-                </div>
-                {/* A failed write puts the buttons back and says why under them. */}
-                {outcomes[entry.id] && (
-                  <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
-                )}
-              </>
-            )}
-          </div>
+        {rows.map((entry) => (
+          <LeavingRow key={entry.id} {...queue.props(entry.id)}>
+            <CardRow>
+              <UserAvatar id={entry.requester_id} size="list" />
+              <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
+                <UserName id={entry.requester_id} />
+            </div>
+            <div className="w-full sm:w-[250px] shrink-0 truncate text-[14.5px] text-ink/80">
+              <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+            </div>
+            <div className="min-w-0 flex-1 truncate text-[14px] text-muted">
+              {entry.justification ? `“${entry.justification}”` : "No reason given"}
+            </div>
+            <div className="w-[66px] shrink-0 text-[13px] text-faint">
+              <Relative iso={entry.created_at} />
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
+              {resolved.has(entry.id) ? (
+                outcomes[entry.id] && (
+                  <ActionOutcome
+                    placement="seat"
+                    word={outcomes[entry.id].word}
+                    outcome={outcomes[entry.id].outcome}
+                  />
+                )
+              ) : (
+                <>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      disabled={alreadyHeld(entry)}
+                      reason={alreadyHeld(entry) ? "They already have this." : undefined}
+                      onClick={() => act(entry, "approved")}
+                    >
+                      Approve
+                    </Button>
+                    <Button size="sm" onClick={() => act(entry, "rejected")}>
+                      Decline
+                    </Button>
+                  </div>
+                  {/* A failed write puts the buttons back and says why under them. */}
+                  {outcomes[entry.id] && (
+                    <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
+                  )}
+                </>
+              )}
+            </div>
 
-          {!resolved.has(entry.id) && <HoldingNote request={entry} />}
-        </CardRow>
+            {!resolved.has(entry.id) && <HoldingNote request={entry} />}
+          </CardRow>
+          </LeavingRow>
       ))}
       </ArriveList>
     </Card>

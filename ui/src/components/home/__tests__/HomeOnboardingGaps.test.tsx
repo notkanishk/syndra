@@ -37,10 +37,14 @@ vi.mock("@/lib/queries/useGovernance", () => ({
     refetch: vi.fn(),
   }),
 }));
-vi.mock("@/lib/queries/useRequests", () => ({
-  useRequestsAdmin: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
-  useDecideRequest: () => ({ mutate: vi.fn(), isPending: false }),
-}));
+vi.mock("@/lib/queries/useRequests", () => {
+  // One array, as the query cache gives: a fresh one per render reads as a new list.
+  const none: never[] = [];
+  return {
+    useRequestsAdmin: () => ({ data: none, isLoading: false, error: null, refetch: vi.fn() }),
+    useDecideRequest: () => ({ mutate: vi.fn(), isPending: false }),
+  };
+});
 vi.mock("@/lib/queries/usePropagation", () => ({
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
