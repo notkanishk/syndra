@@ -272,6 +272,35 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 	return bundles, nil
 }
 
+// GetBundleRoleCounts returns, keyed by bundle id, how many distinct roles each
+// bundle grants today, in one query rather than one per bundle.
+func GetBundleRoleCounts(ctx context.Context) (map[string]int, error) {
+	// What each bundle grants today: distinct roles in its latest published
+	// version (own and included), the same set LatestVersionRoles returns.
+	const q = `
+		SELECT bv.bundle_id, COUNT(DISTINCT (r.zitadel_project_id, r.zitadel_role_key))
+		FROM bundle_version_effective_roles r
+		JOIN bundle_versions bv ON bv.id = r.version_id
+		WHERE bv.version = (SELECT MAX(version) FROM bundle_versions WHERE bundle_id = bv.bundle_id)
+		GROUP BY bv.bundle_id`
+	rows, err := querier(ctx).Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("query bundle role counts: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, fmt.Errorf("scan bundle role count: %w", err)
+		}
+		counts[id] = n
+	}
+	return counts, rows.Err()
+}
+
 // GetBundleHolderCounts returns holder counts keyed by bundle id, in one query
 // rather than one per bundle. Editing a bundle changes access for every holder
 // at once, so the number belongs on the list beside the name — and a list that

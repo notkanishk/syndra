@@ -199,12 +199,10 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 user.email,
                 user.title || null,
                 user.team || null,
-                // The id stays reachable — this is the one page where an
-                // operator genuinely needs it — but it sits last, after every
+                // Advanced only: the board's Basic header is name, email, role
+                // and team. When it is shown it sits last, after every
                 // human-readable fact, and never stands in for a name.
-                <Mono key="id">
-                  {user.id}
-                </Mono>,
+                advanced ? <Mono key="id">{user.id}</Mono> : null,
                 // Operator-only for the same reason the Activity tab is: /audit
                 // is operator-gated, so a member following this link would land
                 // on a page they cannot read.

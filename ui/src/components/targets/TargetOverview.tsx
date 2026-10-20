@@ -492,7 +492,6 @@ function ReconcileControl({ target }: { target: string }) {
           {result!.stale!.map((b) => (
             <CardRow key={b.subject_id} className="flex-wrap">
               <Mono className="min-w-0 [overflow-wrap:anywhere]">{b.username}</Mono>
-              {b.uid ? <span className="text-[13px] text-faint">id {b.uid}</span> : null}
               <span className="flex-1" />
               {released.includes(b.subject_id) ? (
                 <span className="text-[13px] text-faint">
@@ -1403,9 +1402,6 @@ function Inventory({ target }: { target: string }) {
               }
             >
               <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px]">{account.username}</span>
-              {account.uid !== undefined && (
-                <span className="text-[13px] text-faint">id {account.uid}</span>
-              )}
               <span className="flex-1" />
               {account.self ? (
                 // Syndra's own credential. Listed, because it IS on the target

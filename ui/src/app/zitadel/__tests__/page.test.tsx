@@ -201,3 +201,16 @@ describe("Identity provider · signing key", () => {
     expect(screen.queryByText("make zitadel-actions-rotate-key")).not.toBeInTheDocument();
   });
 });
+
+// The read-only doors used to be labelled by their routes ("/zitadel/projects"). A route is where
+// the link goes, not what the row is.
+describe("Identity provider · Look inside names each door", () => {
+  it("gives each row a plain name and a line, and prints no route", async () => {
+    renderPage();
+    expect(await screen.findByText("Each with how it compares with Syndra's record")).toBeInTheDocument();
+    expect(screen.getByText("Everyone Zitadel knows, and the roles it holds for each")).toBeInTheDocument();
+    expect(screen.getByText("Every role on every person, in one list")).toBeInTheDocument();
+    expect(screen.queryByText(/^\/zitadel\//)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open people" })).toHaveAttribute("href", "/zitadel/users");
+  });
+});

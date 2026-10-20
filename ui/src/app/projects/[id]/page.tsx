@@ -13,12 +13,14 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
+import { useIsAdvanced } from "@/lib/ui-view";
 
 /**
  * E1 detail · a project's roles. Each row's member count is the link into E2 —
@@ -37,6 +39,7 @@ export default function ProjectDetailPage({
   const projects = useProjects();
   const roles = useGlobalRoleCatalog();
   const apps = useApplications();
+  const advanced = useIsAdvanced();
 
   const project = (projects.data ?? []).find(
     (entry) => entry.project.id === id,
@@ -74,9 +77,22 @@ export default function ProjectDetailPage({
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         eyebrow="Projects"
-        title={project?.project.name ?? id}
+        // Never the id: while the list loads the title is a skeleton, and a project the
+        // list doesn't carry is said so in words.
+        title={
+          project ? (
+            project.project.name
+          ) : projects.isLoading ? (
+            <Skeleton className="h-7 w-56" aria-label="Loading project" />
+          ) : (
+            "That project isn't listed"
+          )
+        }
         lede="The roles this project offers, the apps that check them, and who holds each."
+        // Nothing until the project is in hand: "0 roles · no app reads this yet" is a
+        // count of nothing, said as though it were a fact about the project.
         meta={
+          !project ? undefined : (
           <span className="flex flex-wrap items-center gap-2">
             <span>
               {people
@@ -101,8 +117,9 @@ export default function ProjectDetailPage({
                 subject="What Zitadel confirmed"
               />
             )}
-            <Mono className="text-faint">{id}</Mono>
+            {advanced && <Mono className="text-faint">{id}</Mono>}
           </span>
+          )
         }
         actions={
           <>

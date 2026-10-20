@@ -114,7 +114,7 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
       <span className="hidden min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty] tablet:block">
         {bundle.description}
       </span>
-      <span className="w-[110px] text-right text-[15px] font-semibold tabular-nums">{bundle.roles?.length ?? "—"}</span>
+      <span className="w-[110px] text-right text-[15px] font-semibold tabular-nums">{bundle.role_count ?? "—"}</span>
       <span className="w-[110px] text-right text-[15px] font-semibold tabular-nums">{bundle.holder_count ?? 0}</span>
     </div>
   );

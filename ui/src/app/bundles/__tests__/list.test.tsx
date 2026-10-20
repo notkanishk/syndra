@@ -20,7 +20,7 @@ vi.mock("@/lib/queries/useBundles", () => ({
 }));
 
 function bundle(overrides: Partial<BundleRow> = {}): BundleRow {
-  return { id: "b1", name: "Lab Tech", description: "Trained on the mill", holder_count: 11, roles: ["a", "b", "c"], ...overrides };
+  return { id: "b1", name: "Lab Tech", description: "Trained on the mill", holder_count: 11, role_count: 3, ...overrides };
 }
 
 beforeEach(() => {
@@ -85,8 +85,19 @@ describe("the bundles list", () => {
     expect(screen.getByText("People")).toBeInTheDocument();
   });
 
-  it("shows a dash for roles when the list does not carry them, and 0 people", () => {
-    state.bundles = [bundle({ roles: undefined, holder_count: undefined })];
+  // The server's list never fills `roles`; the count is its own field. This once read `roles`,
+  // so every row showed a dash while the fixture (which set `roles`) said otherwise.
+  it("reads the Roles count from role_count, not from a roles array the list never carries", () => {
+    state.bundles = [bundle({ role_count: 7, roles: undefined })];
+    render(<BundlesPage />);
+
+    const row = screen.getByRole("link", { name: "Lab Tech" }).closest(".row-divider") as HTMLElement;
+    expect(row).toHaveTextContent("7");
+    expect(row).not.toHaveTextContent("—");
+  });
+
+  it("shows a dash for roles when the server sends no count, and 0 people", () => {
+    state.bundles = [bundle({ role_count: undefined, holder_count: undefined })];
     render(<BundlesPage />);
 
     const row = screen.getByRole("link", { name: "Lab Tech" }).closest(".row-divider") as HTMLElement;

@@ -650,6 +650,38 @@ func TestHandleGetBundles_NilSafe(t *testing.T) {
 	}
 }
 
+// The list never carries `roles` (that is one query per bundle), so its Roles column read "—"
+// for every bundle. The count is its own field, read for every bundle in one query.
+func TestHandleGetBundles_CarriesEachBundlesRoleCount(t *testing.T) {
+	resetBundleDeps(t)
+	origHolders, origRoles, origStale := dbGetBundleHolderCounts, dbGetBundleRoleCounts, dbGetStaleHolderCounts
+	origDraft, origIncl, origBlock := svcBundleDraft, dbBundleIncludesAnything, dbRetireBlockers
+	t.Cleanup(func() {
+		dbGetBundleHolderCounts, dbGetBundleRoleCounts, dbGetStaleHolderCounts = origHolders, origRoles, origStale
+		svcBundleDraft, dbBundleIncludesAnything, dbRetireBlockers = origDraft, origIncl, origBlock
+	})
+	dbGetAllBundles = func(context.Context) ([]models.Bundle, error) {
+		return []models.Bundle{{ID: "b1", Name: "Laser"}, {ID: "b2", Name: "Empty"}}, nil
+	}
+	dbGetBundleHolderCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
+	dbGetStaleHolderCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
+	dbGetBundleRoleCounts = func(context.Context) (map[string]int, error) { return map[string]int{"b1": 4}, nil }
+	svcBundleDraft = func(context.Context, string) (services.DraftDiff, error) { return services.DraftDiff{}, nil }
+	dbBundleIncludesAnything = func(context.Context, string) (bool, error) { return false, nil }
+	dbRetireBlockers = func(context.Context, string) ([]string, error) { return nil, nil }
+
+	rr := httptest.NewRecorder()
+	handleGetBundles(rr, httptest.NewRequest(http.MethodGet, "/api/v1/bundles", nil))
+
+	var got []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || len(got) != 2 {
+		t.Fatalf("bad body %q: %v", rr.Body.String(), err)
+	}
+	if got[0]["role_count"] != float64(4) || got[1]["role_count"] != float64(0) {
+		t.Fatalf("role_count = %v / %v, want 4 / 0", got[0]["role_count"], got[1]["role_count"])
+	}
+}
+
 // --- handleUpdateBundle ---
 
 func TestHandleUpdateBundle_BlankNameRejected(t *testing.T) {

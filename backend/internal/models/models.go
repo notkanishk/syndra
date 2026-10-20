@@ -43,6 +43,10 @@ type Bundle struct {
 	// are different objects, and only one of them means "the edit you made
 	// last term never reached anyone".
 	LatestVersion int `json:"latest_version"`
+	// RoleCount is how many distinct roles the latest version grants, its own
+	// and each included bundle's. Computed on read for the list, whose `roles`
+	// is never filled (that needs a query per bundle).
+	RoleCount int `json:"role_count"`
 	// HasIncludes: it includes other bundles (B8), so it can't go inside
 	// another. IncludedIn names the bundles that include it, so it can't take
 	// others in.
