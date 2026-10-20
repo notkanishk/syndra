@@ -54,3 +54,54 @@ The dialog, Modal md, in the same file:
 3. **A second place to see the dates, read-only.** Trends links here beside the term it shows. The keep dialog and Ask for access show a date derived from the terms ("until 18 May") but are reached by members, who can't open this page, so the build gives them no link. Should an operator's own view of them say where the dates are set?
 
 Nothing here is built behind a flag; if a board changes it, the page changes with it.
+
+---
+
+# Part 2 · From the board rebuild (21 Oct 2026)
+
+On 20 Oct the live app was compared against every board, desktop and phone, Basic and Advanced, and each screen was rebuilt to its board. Where a board and a later answer disagreed, the build followed the latest decision date. Below is what the build had to decide without a dated answer, and what it could not build. Each item names what was built, so "yes" keeps it.
+
+## Board files that don't render
+
+4. **`route-requests.dc.html` renders blank.** The degraded frame's note (near line 212) has unescaped double quotes inside a double-quoted string, so the board script stops. The build read a copy with the quotes escaped. Could the board be fixed at source?
+5. **`route-users-id.dc.html`, frame `person`, renders blank.** The build used `default` and the board notes. Is `person` meant to differ from `default`, and how?
+
+## Undated boards
+
+6. **Some boards carry no decision date**, so when they disagree with another source the build cannot tell which is later: a person's page, Revocations, People's sort order, Systems. Could each board's header say the date it was settled? The build follows the latest date, and an undated board loses to any dated answer.
+
+## Wording the build chose
+
+7. **A name Syndra can't read.** When Zitadel can't name a person or project, the build shows "Unknown account" or "Unknown project", with the id as faint mono text in Advanced only. Consensus #35 would show the id in both views. Which one?
+8. **When Zitadel isn't answering.** One Notice sits above the page title, from the shell. A-01 (14 Oct) words it "waits until Zitadel answers"; the Drift and person boards say "paused". The build uses A-01's words. Confirm, or give the one sentence.
+9. **Which controls pause while Zitadel isn't answering.** Drift's decision buttons, its bulk preview and "Check Zitadel again" are disabled, following N23 (13 Oct). A person's page, Requests and Expiring are not disabled, because the backend still queues those changes safely. Should they pause too, or say they will wait?
+10. **"Put on hold" or "Place a hold".** The TrueNAS page keeps the built "Put on hold". The board says "Place a hold". Which?
+11. **"Check for differences" or "Reconciliation".** The card title on the TrueNAS page keeps "Check for differences". The board says "Reconciliation". Which?
+12. **"Revoked" or "Taken away".** My access shows "Revoked", and its board says "Taken away". Which, for the member?
+
+## Layout the build chose
+
+13. **Home's headline counts blocks**, "Five things need you", following Consensus #31 over #26. Confirm.
+14. **Home's Makerspace strip has 3 tiles** (Connected systems, People, Where access lives), as the board draws. The old "Zitadel is reachable" tile is gone, because the shell's Notice now says when it isn't. Confirm.
+15. **Pending changes: why a change waits** sits under the change, as the board draws it, not as its own column as BUILD-LIST said. Confirm.
+16. **Section chips while selecting.** On Drift and Expiring the read line's chips stay visible in Select mode. The Expiring board hides them. Which?
+17. **The sort arrow** is ↑ for the column's natural order and turns over on reverse, as the boards draw it. Drift used ↓. Confirm ↑ everywhere.
+18. **Revocations is sorted newest first**, as the board draws it. Before, the backend's order was oldest first. Confirm.
+19. **A person's page has no Extend button on rows.** The board draws none, so Extend stays in Give access. Should a row ending soon offer Extend in place?
+20. **Systems: People** is the number of accounts Syndra manages on that system (the system's own inventory), not a count of role holders. Is that the number the column means?
+
+## Not built: the API doesn't carry it yet
+
+21. **Revocations retry:** the board's "Try 3 of 8 · next try in 4 min". The API exposes the tries so far but not the limit or the next time, so the row says "Tried 3 times · tries again by itself". Keep that until the API carries them, or should the column wait?
+22. **Systems:** "Configured 3 min ago" and "Last answered 1 min ago", and the product's kind ("network storage").
+23. **The TrueNAS accounts table:** sort by Person or Since, and each account's group.
+24. **Events:** the board's "dropped, its own change" and "dropped, duplicate". The backend records neither, so such a row says "Syndra chose not to act".
+25. **Zitadel:** the "all four checks pass" line. The backend checks reachability and the project count only.
+
+Say for each whether the board should change to what can be read, or the API should grow to fit the board.
+
+## Still undecided from earlier boards
+
+26. **Replacing the Zitadel key in fewer steps** (Zitadel board, open since 7 Oct). The guide dialog (2c) is not built; the four steps stay inline.
+27. **The Access map.** The boards' rail still draws Automation and Access map, the 12 Oct shape. N18 (13 Oct) moved Insights up and folded the map into it, and `/graph` now opens Insights. Could the boards' shared rail be redrawn to N18, so new boards stop carrying the older rail?
+
