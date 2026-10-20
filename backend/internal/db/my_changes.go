@@ -66,7 +66,7 @@ FROM (
 	       -- 000063 nothing was recorded, and the grant is the best left.
 	       CASE WHEN ar.status = 'approved' AND ar.kind = 'extend'
 	                 THEN COALESCE(ar.ends_after, g.expires_at)
-	            WHEN ar.status = 'approved' THEN COALESCE(g.expires_at,
+	            WHEN ar.status = 'approved' THEN COALESCE(g.expires_at, ar.asked_until,
 	            CASE WHEN ar.duration_days > 0
 	                 THEN ar.resolved_at + make_interval(days => ar.duration_days) END)
 	       END                                                               AS ends_at,

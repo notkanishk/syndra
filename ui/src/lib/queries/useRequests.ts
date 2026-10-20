@@ -46,6 +46,11 @@ export interface CreateRequestInput {
   role_key: string;
   justification: string;
   duration_days: number;
+  /**
+   * A fixed end date (ISO), sent for "until the end of term": approving then
+   * grants to it however late it is decided. Days alone count from the decision.
+   */
+  until?: string;
   /** Derived from what the member holds: "extend" for a role with an end date. */
   kind?: "access" | "extend";
 }

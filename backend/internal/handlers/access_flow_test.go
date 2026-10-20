@@ -349,7 +349,7 @@ func TestHandleCreateAccessRequest_BindsRequesterToPrincipal(t *testing.T) {
 	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
 
 	var gotRequester string
-	dbCreateAccessRequestOfKind = func(_ context.Context, _ string, requesterID, _, _, _ string, _ *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(_ context.Context, _ string, requesterID, _, _, _ string, _ *int, _ *time.Time) (string, error) {
 		gotRequester = requesterID
 		return "req-1", nil
 	}
@@ -622,7 +622,7 @@ func TestHandleUpsertUserDirectGrant_ApplyReportsThisRowNotBatch(t *testing.T) {
 func TestHandleCreateAccessRequest_PersistenceAndAudit(t *testing.T) {
 	resetAccessDeps(t)
 
-	dbCreateAccessRequestOfKind = func(ctx context.Context, _ string, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(ctx context.Context, _ string, requesterID, projectID, roleKey, justification string, durationDays *int, _ *time.Time) (string, error) {
 		return "req-1", nil
 	}
 	auditAction := ""
@@ -655,7 +655,7 @@ func TestHandleCreateAccessRequest_ZeroDuration_NilPointer(t *testing.T) {
 	resetAccessDeps(t)
 
 	var capturedDuration *int
-	dbCreateAccessRequestOfKind = func(ctx context.Context, _ string, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(ctx context.Context, _ string, requesterID, projectID, roleKey, justification string, durationDays *int, _ *time.Time) (string, error) {
 		capturedDuration = durationDays
 		return "req-2", nil
 	}
@@ -962,7 +962,7 @@ func TestACreateForARoleHeldForGoodIsRefused(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingForGood}, nil
 	}
 	created := false
-	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int, *time.Time) (string, error) {
 		created = true
 		return "req-1", nil
 	}
@@ -985,7 +985,7 @@ func TestACreateForARoleThatEndsIsRefusedToo(t *testing.T) {
 		return models.RequestHolding{Kind: models.HoldingUntil, Until: &until}, nil
 	}
 	created := false
-	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int, *time.Time) (string, error) {
 		created = true
 		return "req-1", nil
 	}
@@ -1001,7 +1001,7 @@ func TestASecondIdenticalAskPointsAtTheWaitingOne(t *testing.T) {
 	resetAccessDeps(t)
 	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
 	audited := false
-	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int) (string, error) {
+	dbCreateAccessRequestOfKind = func(context.Context, string, string, string, string, string, *int, *time.Time) (string, error) {
 		return "req-first", db.ErrAlreadyAsked
 	}
 	dbInsertAuditLog = func(context.Context, string, string, string, string) error { audited = true; return nil }

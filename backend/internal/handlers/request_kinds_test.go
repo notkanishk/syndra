@@ -90,7 +90,7 @@ func TestHandleCreateAccessRequest_AskToKeepItLonger(t *testing.T) {
 			dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) { return tc.held, nil }
 			dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
 			var filed string
-			dbCreateAccessRequestOfKind = func(_ context.Context, kind string, _, _, _, _ string, _ *int) (string, error) {
+			dbCreateAccessRequestOfKind = func(_ context.Context, kind string, _, _, _, _ string, _ *int, _ *time.Time) (string, error) {
 				filed = kind
 				return "req-1", nil
 			}
@@ -136,7 +136,7 @@ func TestExtendCountsFromTheCurrentEnd(t *testing.T) {
 		})
 	}
 	// Asking agrees with deciding.
-	if err := checkRequestKind(requestKindExtend, models.RequestHolding{Kind: models.HoldingUntil, Until: &dec18}, days(31), now); err != nil {
+	if err := checkRequestKind(requestKindExtend, models.RequestHolding{Kind: models.HoldingUntil, Until: &dec18}, days(31), nil, now); err != nil {
 		t.Fatalf("asking: %v", err)
 	}
 }

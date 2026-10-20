@@ -32,23 +32,24 @@ var ErrAlreadyAsked = errors.New("the same request is already waiting")
 // (idx_access_requests_one_waiting), so a second click, a second tab and a
 // retried POST all meet the same row rather than adding to the queue.
 func CreateAccessRequest(ctx context.Context, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
-	return CreateAccessRequestOfKind(ctx, "access", requesterID, projectID, roleKey, justification, durationDays)
+	return CreateAccessRequestOfKind(ctx, "access", requesterID, projectID, roleKey, justification, durationDays, nil)
 }
 
 // CreateAccessRequestOfKind files a request of a kind: "access" for a role
-// they don't have, "extend" to keep one that ends for longer.
-func CreateAccessRequestOfKind(ctx context.Context, kind, requesterID, projectID, roleKey, justification string, durationDays *int) (string, error) {
+// they don't have, "extend" to keep one that ends for longer. askedUntil is a
+// fixed end date the ask names (the end of term); nil for a days-based ask.
+func CreateAccessRequestOfKind(ctx context.Context, kind, requesterID, projectID, roleKey, justification string, durationDays *int, askedUntil *time.Time) (string, error) {
 	const insert = `
 		INSERT INTO access_requests (
-			requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, kind
+			requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, kind, asked_until
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (requester_user_id, zitadel_project_id, zitadel_role_key) WHERE status = 'pending'
 		DO NOTHING
 		RETURNING id`
 
 	var id string
-	err := querier(ctx).QueryRow(ctx, insert, requesterID, projectID, roleKey, justification, durationDays, kind).Scan(&id)
+	err := querier(ctx).QueryRow(ctx, insert, requesterID, projectID, roleKey, justification, durationDays, kind, askedUntil).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
@@ -158,7 +159,7 @@ func givenNote(source string) string {
 
 func GetAccessRequests(ctx context.Context, status string) ([]models.AccessRequest, error) {
 	query := `
-		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at, kind, ended_before, ends_after
+		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at, kind, ended_before, ends_after, asked_until
 		FROM access_requests`
 	args := []interface{}{}
 	if status != "" {
@@ -176,7 +177,7 @@ func GetAccessRequests(ctx context.Context, status string) ([]models.AccessReque
 	var requests []models.AccessRequest
 	for rows.Next() {
 		var req models.AccessRequest
-		if err := rows.Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt, &req.Kind, &req.EndedBefore, &req.EndsAfter); err != nil {
+		if err := rows.Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt, &req.Kind, &req.EndedBefore, &req.EndsAfter, &req.AskedUntil); err != nil {
 			return nil, err
 		}
 		requests = append(requests, req)
@@ -186,12 +187,12 @@ func GetAccessRequests(ctx context.Context, status string) ([]models.AccessReque
 
 func GetAccessRequestByID(ctx context.Context, id string) (models.AccessRequest, error) {
 	query := `
-		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at, kind, ended_before, ends_after
+		SELECT id, requester_user_id, zitadel_project_id, zitadel_role_key, justification, duration_days, status, COALESCE(reviewer_user_id, ''), COALESCE(review_note, ''), created_at, resolved_at, kind, ended_before, ends_after, asked_until
 		FROM access_requests
 		WHERE id = $1`
 
 	var req models.AccessRequest
-	if err := querier(ctx).QueryRow(ctx, query, id).Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt, &req.Kind, &req.EndedBefore, &req.EndsAfter); err != nil {
+	if err := querier(ctx).QueryRow(ctx, query, id).Scan(&req.ID, &req.RequesterID, &req.ProjectID, &req.RoleKey, &req.Justification, &req.DurationDays, &req.Status, &req.ReviewerID, &req.ReviewNote, &req.CreatedAt, &req.ResolvedAt, &req.Kind, &req.EndedBefore, &req.EndsAfter, &req.AskedUntil); err != nil {
 		return req, fmt.Errorf("failed to fetch access request: %w", err)
 	}
 	return req, nil

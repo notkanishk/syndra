@@ -17,7 +17,7 @@ import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outc
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useCreateRequest } from "@/lib/queries/useRequests";
 import { useTerms } from "@/lib/queries/useTerms";
-import { daysUntilTermEnd, keepOptions } from "@/lib/term";
+import { daysUntilTermEnd, endOfDay, keepOptions, nextTermEnd } from "@/lib/term";
 
 /** What a member asks for, in the units a member thinks in. */
 type HowLong = "7" | "30" | "term";
@@ -98,14 +98,20 @@ function AskForAccessOpen({
   const current = chosen.kind === "until" ? chosen.until : null;
 
   const ordinaryDays = howLong === "term" ? daysUntilTermEnd(new Date(), terms.data) : Number(howLong);
-  const ordinaryUntil = new Date(Date.now() + ordinaryDays * 86_400_000).toISOString();
+  // "Until the end of term" is a date, not a count of days: it is sent as the
+  // date so a late approval still ends with the term.
+  const ordinaryUntil =
+    howLong === "term"
+      ? endOfDay(nextTermEnd(new Date(), terms.data)).toISOString()
+      : new Date(Date.now() + ordinaryDays * 86_400_000).toISOString();
 
   const keep = useMemo(
     () => (current ? keepOptions(current, terms.data ?? []) : null),
     [current, terms.data],
   );
   const termOff = keep && "reason" in keep.term ? keep.term.reason : undefined;
-  const keepChoice = keep ? (keepHow === "term" && !termOff ? (keep.term as { days: number; until: string }) : keep.month) : null;
+  const keepsToTerm = keepHow === "term" && !termOff;
+  const keepChoice = keep ? (keepsToTerm ? (keep.term as { days: number; until: string }) : keep.month) : null;
 
   const final = result?.final ?? false;
 
@@ -118,6 +124,8 @@ function AskForAccessOpen({
         role_key: roleKey,
         justification: why,
         duration_days: extend && keepChoice ? keepChoice.days : ordinaryDays,
+        // Days alone for a week, a month or another month; the date for a term.
+        ...(extend ? (keepsToTerm && keepChoice ? { until: keepChoice.until } : {}) : howLong === "term" ? { until: ordinaryUntil } : {}),
         kind: extend ? "extend" : "access",
       });
       setResult({
