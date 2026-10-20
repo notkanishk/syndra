@@ -10,12 +10,14 @@ const mode = vi.hoisted(() => ({
   value: {} as Record<string, unknown>,
 }));
 
+const indicators = vi.hoisted(() => ({ value: { zitadel_reachable: true } as Record<string, unknown> }));
+
 const asked = vi.hoisted(() => ({ count: 0 }));
 
 vi.mock("@/lib/api-client", () => ({
-  request: async () => {
+  request: async (path: string) => {
     asked.count++;
-    return mode.value;
+    return path.includes("indicators") ? indicators.value : mode.value;
   },
 }));
 
@@ -40,6 +42,7 @@ function renderBanner(isOperator = true) {
 
 beforeEach(() => {
   asked.count = 0;
+  indicators.value = { zitadel_reachable: true };
   mode.value = {
     directory: "zitadel",
     seed_active: false,
@@ -160,5 +163,30 @@ describe("Degraded banner", () => {
       await screen.findByText("Zitadel isn't answering, and Syndra hasn't read it yet."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/are sample data\./)).not.toBeInTheDocument();
+  });
+
+  // Pending changes and Home read the reachability the rail polls, and said
+  // Zitadel was not answering while the shell, reading only the backend's mode,
+  // said nothing on Home and Drift. One Notice, whichever of the two knows.
+  it("shows the one Notice when only the rail's reachability says Zitadel is down", async () => {
+    mode.value = { directory: "demo", degraded: false, zitadel_configured: false, last_read_at: null };
+    indicators.value = { zitadel_reachable: false };
+    renderBanner();
+    expect(
+      await screen.findByText("Zitadel isn't answering, and Syndra hasn't read it yet."),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("says giving and revoking wait, not that they are paused (A-01, 14 Oct)", async () => {
+    mode.value = {
+      directory: "zitadel",
+      degraded: true,
+      zitadel_configured: true,
+      last_read_at: new Date(Date.now() - 14 * 60_000).toISOString(),
+    };
+    renderBanner();
+    expect(await screen.findByText(/Giving and revoking access wait until Zitadel answers/)).toBeInTheDocument();
+    expect(screen.queryByText(/paused/)).not.toBeInTheDocument();
   });
 });

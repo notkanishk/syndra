@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { useDegraded } from "@/components/states/DegradedBanner";
 import { isDeparted } from "@/lib/people-filters";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
@@ -157,6 +158,10 @@ export function UnexplainedAccess() {
   );
   const drift = useDriftItems(driftRequest(filters));
   const summary = useGovernanceSummary();
+  // Zitadel not answering: what is on screen is an old read, and a decision
+  // made on it can be wrong. UI only: the buttons wait, the requests are
+  // unchanged, and the one Notice above the page says why.
+  const paused = useDegraded();
   const projects = useProjects();
   // Search is not a filter in the URL: it finds a row, it does not make a view.
   const [query, setQuery] = useState("");
@@ -453,6 +458,7 @@ export function UnexplainedAccess() {
                   expanded={expanded === item.id}
                   onExpand={() => setExpanded((cur) => (cur === item.id ? null : item.id))}
                   onResolve={(resolution) => setPending({ item, resolution })}
+                  paused={paused}
                 />
               )}
             />
@@ -486,6 +492,7 @@ export function UnexplainedAccess() {
         actions={
           <Button
             isPending={reconcile.isPending}
+            disabled={paused}
             onClick={async () => {
               setScanOutcome(null);
               try {
@@ -512,6 +519,15 @@ export function UnexplainedAccess() {
 
       {/* Under the control that ran it, above the queue it describes. */}
       {scanOutcome && <ActionOutcome outcome={scanOutcome} />}
+
+      {/* The board's sentence for the paused controls, worded as A-01 (14 Oct)
+          has it: Syndra's own stops say they wait, never that they are paused.
+          The seat is Unfold's, so the list below does not jump when it comes. */}
+      <Unfold open={paused}>
+        <p className="text-[13.5px] text-muted" role="status">
+          Adopting, revoking and marking as owned elsewhere wait until Zitadel answers.
+        </p>
+      </Unfold>
 
       <FilterBar
         search={
@@ -670,8 +686,10 @@ export function UnexplainedAccess() {
             Revoke concludes the bar is broken, or hunts. */}
         <span className="text-[13px] text-faint">Revoking is one row at a time.</span>
         {/* Both open a plan; neither resolves anything on tap. */}
-        <SelectionAction onClick={() => setBulkOp("adopt")}>Preview adopting these</SelectionAction>
-        <SelectionAction onClick={() => setBulkOp("external")}>
+        <SelectionAction disabled={paused} onClick={() => setBulkOp("adopt")}>
+          Preview adopting these
+        </SelectionAction>
+        <SelectionAction disabled={paused} onClick={() => setBulkOp("external")}>
           Preview marking these owned elsewhere
         </SelectionAction>
       </SelectionBar>
@@ -867,6 +885,7 @@ function TriageRow({
   expanded,
   onExpand,
   onResolve,
+  paused,
 }: {
   item: DriftTriageItem;
   selecting: boolean;
@@ -875,6 +894,8 @@ function TriageRow({
   expanded: boolean;
   onExpand: () => void;
   onResolve: (resolution: Resolution) => void;
+  /** Zitadel is not answering: the decisions wait. */
+  paused: boolean;
 }) {
   const role = item.role_keys[0] ?? "";
   // A machine account is not a person: an integration that provisions itself
@@ -958,16 +979,16 @@ function TriageRow({
             <Button
               variant={adoptPointless ? "ghost" : "accent"}
               size="sm"
-              disabled={adoptPointless}
+              disabled={adoptPointless || paused}
               reason={nothingToAdopt ? "Zitadel doesn't have this, so there's nothing to adopt." : undefined}
               onClick={() => onResolve("attribute")}
             >
               Adopt
             </Button>
-            <Button variant="danger" size="sm" onClick={() => onResolve("revoke")}>
+            <Button variant="danger" size="sm" disabled={paused} onClick={() => onResolve("revoke")}>
               Revoke
             </Button>
-            <Button variant="outline" size="sm" onClick={() => onResolve("external")}>
+            <Button variant="outline" size="sm" disabled={paused} onClick={() => onResolve("external")}>
               Owned elsewhere
             </Button>
             <button

@@ -83,6 +83,17 @@ export function useIndicatorsRead() {
   return useQuery(indicatorsQuery(true));
 }
 
+/**
+ * Whether the rail's own poll could reach Zitadel; undefined until a real
+ * reading lands (the placeholder's `true` is not one). The same read the rail
+ * already makes, so asking costs nothing, and it is the answer Pending changes
+ * and Home's pending card were already acting on while the shell said nothing.
+ */
+export function useZitadelReachable(enabled: boolean): boolean | undefined {
+  const query = useQuery(indicatorsQuery(enabled));
+  return query.isPlaceholderData ? undefined : query.data?.zitadel_reachable;
+}
+
 export function useIndicators(enabled: boolean) {
   const query = useQuery(indicatorsQuery(enabled));
 

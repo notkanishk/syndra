@@ -180,4 +180,28 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
     expect((await screen.findAllByText(/Nothing here needs you/)).length).toBeGreaterThan(0);
     expect(screen.queryByText("Sent, and not seen back yet")).toBeNull();
   });
+
+  // RULES: a reason is what someone reads to decide, so it wraps in full on a
+  // phone too. It used to be cut off ("A grant, accepted 2 ...").
+  it("wraps the reason instead of cutting it off", async () => {
+    state.unconfirmed = {
+      count: 1,
+      top: [
+        {
+          id: "outbox-1",
+          op_type: "grant",
+          user_id: "u-a",
+          project_id: "p1",
+          role_keys: ["member"],
+          applied_at: new Date().toISOString(),
+        },
+      ],
+    };
+    renderHome();
+
+    await screen.findByText("Sent, and not seen back yet");
+    const reason = screen.getByText(/A grant, accepted/);
+    expect(reason.className).not.toContain("truncate");
+    expect(reason.className).toContain("[text-wrap:pretty]");
+  });
 });

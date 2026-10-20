@@ -9,6 +9,7 @@ import type { Question } from "@/components/insights/question";
 import { useInsightsWhatIf, useInsightsWho, type WhatIfChange } from "@/lib/queries/useInsights";
 import type { CatalogUser } from "@/lib/queries/useCatalogUsers";
 import { useUserAccess, type UserAccessView } from "@/lib/queries/useUsers";
+import { UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
 
 /** The reference the Insights reads take for a role or a bundle on the map. */
 function refOf(m: Model, id: string): string | null {
@@ -48,7 +49,7 @@ export function useAnswer(model: Model | null, q: Question | null, people: Map<s
 
   return useMemo(() => {
     if (!model || !q || q.kind === "follow") return { answer: null as Answer | null, status: null as Panel | null, pin: null as string | null };
-    const name = (id: string, fallback?: string) => people.get(id)?.name ?? fallback ?? "Unknown account";
+    const name = (id: string, fallback?: string) => people.get(id)?.name ?? fallback ?? UNKNOWN_ACCOUNT;
     const role = (id: string) => model.byId.get(id);
 
     const settled = (): Answer | "loading" | "failed" => {

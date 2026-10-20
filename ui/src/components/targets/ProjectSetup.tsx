@@ -24,6 +24,7 @@ import {
   useTargets,
   type TargetSetting,
 } from "@/lib/queries/useTargets";
+import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 
 /**
  * A system's one Zitadel project (3a, frames `noproject` and `projectset`).
@@ -164,7 +165,7 @@ export function SetupStrip({ target, project }: { target: string; project: { id:
     <Card>
       <SettingRow label="Zitadel project">
         <Link href={`/projects/${project.id}`} className="text-[15px] font-semibold text-ink hover:text-accent-text hover:underline">
-          {project.name || resolver.resolveProject(project.id).value?.name || "a project Syndra couldn't name"}
+          {project.name || resolver.resolveProject(project.id).value?.name || UNKNOWN_PROJECT}
         </Link>
       </SettingRow>
       <SettingRow

@@ -114,10 +114,10 @@ export default function UpstreamGrantsPage() {
           {visible.map((grant) => (
             <div key={grant.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-2.5">
               <span className="w-[230px] shrink-0 truncate text-[14px] font-semibold">
-                <UserName id={grant.userId} fallback={<Mono>{grant.userId}</Mono>} />
+                <UserName id={grant.userId} />
               </span>
               <span className="w-[200px] shrink-0 truncate text-[14px] text-muted">
-                <ProjectName id={grant.projectId} fallback={grant.projectId} />
+                <ProjectName id={grant.projectId} />
               </span>
               <span className="min-w-0 flex-1 truncate">
                 {grant.roleKeys.map((key) => (

@@ -85,4 +85,15 @@ describe("the mappings header", () => {
       screen.getByText(/Changing one moves access for all of them, so every change is previewed before anything is sent\./),
     ).toBeTruthy();
   });
+
+  // A project Syndra could not name has an empty name; interpolating it read
+  // "holds one of 's roles" and left "Zitadel project" with nothing after it.
+  it("never interpolates an empty project name", () => {
+    state.project = { id: "p_storage", name: "" };
+    render(<MappingScreen target="truenas" />);
+
+    expect(document.body.textContent).not.toMatch(/one of 's roles/);
+    expect(screen.getByText(/holds one of the project's roles/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Unknown project" }).getAttribute("href")).toBe("/projects/p_storage");
+  });
 });

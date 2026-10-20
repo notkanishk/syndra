@@ -19,6 +19,7 @@ import {
   useTargets,
   type TargetSummary,
 } from "@/lib/queries/useTargets";
+import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 
 /**
  * Connected systems — the index of the target plane.
@@ -209,7 +210,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           <span className="text-[13px] text-muted">
             Zitadel project{" "}
             <Link href={`/projects/${row.project.id}`} className="text-ink hover:underline">
-              {row.project.name || "a project Syndra couldn't name"}
+              {row.project.name || UNKNOWN_PROJECT}
             </Link>
           </span>
         ) : row.project === null ? (

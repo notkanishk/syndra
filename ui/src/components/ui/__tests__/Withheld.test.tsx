@@ -53,6 +53,32 @@ describe("the two densities say the same thing", () => {
   });
 });
 
+// A hold on a whole account carries the field "enabled" and the value "true".
+// "true" is a switch's position, and the person's page opened its line with it
+// ("true on truenas — put on hold by system").
+describe("a hold on a whole account", () => {
+  const ACCOUNT = { field: "enabled", value: "true", reason: "left the team", target: "truenas", actorId: "system" };
+
+  it("names the account, never the boolean, in every form", () => {
+    const { container } = render(
+      <>
+        <Withheld items={[ACCOUNT]} audience="operator" />
+        <Withheld items={[ACCOUNT]} audience="member" />
+        <WithheldInline items={[ACCOUNT]} />
+      </>,
+    );
+    expect(container.textContent).not.toMatch(/\btrue\b/);
+    expect(screen.getAllByText(/Their TrueNAS account/)).toHaveLength(2);
+    expect(screen.getByText(/Your TrueNAS account/)).toBeInTheDocument();
+    expect(container.textContent).toContain("Their TrueNAS account — put on hold by system — because left the team");
+  });
+
+  it("does not say the system twice", () => {
+    const { container } = render(<Withheld items={[ACCOUNT]} audience="operator" />);
+    expect(container.textContent).not.toMatch(/on truenas/);
+  });
+});
+
 /**
  * And the holder list actually passes it.
  *

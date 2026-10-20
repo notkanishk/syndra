@@ -121,8 +121,19 @@ describe("the headline's count is not the nav's count", () => {
   // or the two numbers read as one total that disagrees with itself.
   it("scopes the headline to this page, matching the nav's own disambiguation", () => {
     state.governance.merge_findings = 3;
+    state.governance.pending_propagation = { count: 2, zitadel_reachable: true };
     renderHome();
-    expect(screen.getByText(/Three things need you\./)).toBeTruthy();
+    expect(screen.getByText(/Two things need you\./)).toBeTruthy();
+  });
+
+  // #31: the headline counts blocks, each badge counts its own noun. The dev box
+  // said "98 things need you" over five blocks, eighty-five of those rows in one.
+  it("counts blocks, not the rows inside them", () => {
+    state.governance.merge_findings = 40;
+    state.governance.pending_propagation = { count: 58, zitadel_reachable: true };
+    renderHome();
+    expect(screen.getByText(/Two things need you\./)).toBeTruthy();
+    expect(screen.queryByText(/98/)).toBeNull();
   });
 });
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { roleCount } from "@/lib/role-mapping-plan";
 
+import { ProjectName } from "@/components/names";
 import { EmptyState } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card } from "@/components/ui/Card";
@@ -41,6 +42,9 @@ export function MappingScreen({ target }: { target: string }) {
   const name = targetLabel(target);
   const project = (roster.data ?? []).find((t) => t.target === target)?.project;
   const version = history.data?.current_version;
+  // A project Syndra could not name has an empty name, and interpolating it
+  // read "holds one of 's roles".
+  const owner = project?.name ? `${project.name}'s` : project ? "the project's" : "the system's";
   const noProject = mappings.error instanceof ApiError && mappings.error.code === "PROJECT_REQUIRED";
 
   return (
@@ -66,7 +70,7 @@ export function MappingScreen({ target }: { target: string }) {
                       href={`/projects/${project.id}`}
                       className="font-semibold text-ink hover:text-accent-text hover:underline"
                     >
-                      {project.name}
+                      <ProjectName id={project.id} name={project.name} />
                     </Link>
                   </span>
                 ) : null,
@@ -75,7 +79,7 @@ export function MappingScreen({ target }: { target: string }) {
               ]}
             </MetaRow>
           }
-          lede={`A mapping gives everyone who holds one of ${project ? `${project.name}'s` : "the system's"} roles an account on ${name}, in a group. Changing one moves access for all of them, so every change is previewed before anything is sent.`}
+          lede={`A mapping gives everyone who holds one of ${owner} roles an account on ${name}, in a group. Changing one moves access for all of them, so every change is previewed before anything is sent.`}
         />
       </div>
 
