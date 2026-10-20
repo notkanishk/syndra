@@ -29,6 +29,7 @@ import { useProjects } from "@/lib/queries/useProjects";
 import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
+import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 
 /**
  * S2 · Automation › Automatic rules.
@@ -219,7 +220,7 @@ function RuleEditor({
       entry?.project_name ||
       (projects.data ?? []).find((p) => p.project.id === projectId)?.project
         .name ||
-      projectId;
+      UNKNOWN_PROJECT;
     return `${project} / ${roleKey}`;
   };
 

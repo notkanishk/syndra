@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"syndra/internal/models"
 )
@@ -125,7 +126,13 @@ func FingerprintAccessRequest(r models.AccessRequest) string {
 	if r.DurationDays != nil {
 		duration = strconv.Itoa(*r.DurationDays)
 	}
-	return Fingerprint("request", r.ID, r.Status, r.RequesterID, r.ProjectID, r.RoleKey, duration)
+	parts := []string{"request", r.ID, r.Status, r.RequesterID, r.ProjectID, r.RoleKey, duration}
+	// The end date an ask names is what approving mints; absent for a days ask,
+	// so fingerprints of those are unchanged.
+	if r.AskedUntil != nil {
+		parts = append(parts, "until", r.AskedUntil.UTC().Format(time.RFC3339Nano))
+	}
+	return Fingerprint(parts...)
 }
 
 // FingerprintBulkRequest digests the submitted request a rehearsal was computed

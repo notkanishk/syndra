@@ -126,6 +126,16 @@ func handleGetBundles(w http.ResponseWriter, r *http.Request) {
 			bundles[i].HolderCount = counts[bundles[i].ID]
 		}
 	}
+	// And for the role count: the list never carries `roles` (one query per
+	// bundle), so without this every row's Roles cell had nothing to show. A
+	// failed read leaves it unset, which the list shows as "—": a zero would
+	// say the bundle grants nothing.
+	if roles, err := dbGetBundleRoleCounts(r.Context()); err == nil {
+		for i := range bundles {
+			n := roles[bundles[i].ID]
+			bundles[i].RoleCount = &n
+		}
+	}
 	// Same treatment for the version numbers: a failed count leaves zeros
 	// rather than failing the list. Stale holders is the one an operator scans
 	// for — "eleven people never got the edit you made last term".

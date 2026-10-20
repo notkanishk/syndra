@@ -42,6 +42,15 @@ export function nextTermEnd(now: Date = new Date(), terms?: TermDates[]): Date {
   return new Date(year + 1, 4, 18);
 }
 
+/**
+ * The last moment of a day, local. An ask "until the end of term" is stored as
+ * this, so a late approval still ends with the term and the term's last day is
+ * still the member's.
+ */
+export function endOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+}
+
 /** Whole days from now to the next term boundary, never less than one. */
 export function daysUntilTermEnd(now: Date = new Date(), terms?: TermDates[]): number {
   return Math.max(1, daysUntil(nextTermEnd(now, terms).toISOString(), now) ?? 1);
@@ -89,5 +98,5 @@ export function keepOptions(
   if (days < 1) {
     return { month: reach(30), term: { reason: "It already ends after the end of next term." } };
   }
-  return { month: reach(30), term: reach(days) };
+  return { month: reach(30), term: { days, until: endOfDay(termDay(next.end)).toISOString() } };
 }

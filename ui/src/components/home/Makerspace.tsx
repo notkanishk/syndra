@@ -6,16 +6,19 @@ import { useMemo } from "react";
 import { UserName } from "@/components/names";
 import { RowSkeleton } from "@/components/states";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
+import { StatCard } from "@/components/ui/StatCard";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { machineName } from "@/lib/audit-vocabulary";
 import { EventSentence } from "@/components/audit/EventLine";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
-import { formatWhen, humanizeKey } from "@/lib/format";
+import { formatShortDate, formatWhen, humanizeKey } from "@/lib/format";
+import { targetLabel } from "@/lib/nav";
 import { hasAccess, isDeparted, peopleHref } from "@/lib/people-filters";
 import { useAuditEntries } from "@/lib/queries/useAudit";
 import { useBundles } from "@/lib/queries/useBundles";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
+import { useTargets } from "@/lib/queries/useTargets";
 import { useUsers } from "@/lib/queries/useUsers";
 
 /**
@@ -42,7 +45,7 @@ export function Makerspace() {
         </span>
       </div>
 
-      <Health />
+      <Tiles />
       <div className="grid gap-6 desktop:grid-cols-2">
         <Gaps />
         <AccessShape />
@@ -53,104 +56,89 @@ export function Makerspace() {
 }
 
 /**
- * Is the machine healthy? Four facts, each a link to the surface that owns it.
- * A cell that is fine says so quietly; a cell that isn't takes its semantic
- * colour and stops being quiet.
+ * Three tiles, each the link to the list it counts (route-home; StatCard `href`).
+ * They used to be four machine-health cells, and three of those counted what the
+ * queue above already shows as a block — pending changes, drift, expiring access —
+ * so a number was given twice and neither copy said which was the one to act on.
+ * What the queue cannot say is how the place stands: whether every system was
+ * read, how many people there are, and what access is made of.
+ *
+ * No count is ever shown before it has been read: a tile whose list is still
+ * loading says so rather than reporting a zero.
  */
-function Health() {
+function Tiles() {
   const summary = useGovernanceSummary();
-  const propagation = summary.data?.pending_propagation;
-  const drift = summary.data?.drift;
+  const targets = useTargets();
+  const users = useUsers("");
+  const roles = useGlobalRoleCatalog();
+  const bundles = useBundles();
 
-  const reachable = propagation?.zitadel_reachable ?? true;
-  const queued = propagation?.count ?? 0;
-  const unexplained = drift?.count ?? 0;
+  // A count that was never read is not zero, and a read that failed is not "all clear":
+  // each tile says it hasn't read yet, or couldn't just now, instead of claiming either.
+  const systemsPending = targets.isLoading || summary.isLoading;
+  const systemsFailed = !!(targets.error || summary.error);
+  const systemsKnown = !systemsPending && !systemsFailed;
+  const endingKnown = !summary.isLoading && !summary.error;
+  const notRead = (loadingNow: boolean, failed: boolean) =>
+    loadingNow ? "Reading now." : failed ? "Not read just now." : "";
+
+  const registered = (targets.data ?? []).filter((entry) => entry.registered !== false);
+  const unread = summary.data?.unreconciled_targets ?? [];
+  const read = registered.length - unread.length;
+
+  const endingSoon = new Set((summary.data?.expiring_grants ?? []).map((grant) => grant.user_id)).size;
+
+  const roleRows = roles.data ?? [];
+  const projects = new Set(roleRows.map((role) => role.project_id)).size;
+  const bundleCount = (bundles.data ?? []).length;
+  const rolesLoading = roles.isLoading || bundles.isLoading;
+  const rolesFailed = !!(roles.error || bundles.error);
+  const rolesKnown = !rolesLoading && !rolesFailed;
 
   return (
-    <div className="grid gap-3 tablet:grid-cols-2 desktop:grid-cols-4">
-      <HealthCell
-        label="Zitadel"
-        value={reachable ? "Reachable" : "Unreachable"}
-        tone={reachable ? "calm" : "danger"}
-        // `/system` is not a route — there is no page at that path, only
-        // `/system/targets`. This tile is about Zitadel, and Zitadel has a page.
-        href="/zitadel"
-        note={reachable ? "Changes are getting through" : "Changes wait here — nothing is lost"}
+    <div className="flex flex-wrap gap-4">
+      <StatCard
+        label="Connected systems"
+        href="/system/targets"
+        value={!systemsKnown ? "—" : registered.length === 0 ? "None" : `${read} of ${registered.length} read`}
+        tone={systemsKnown && unread.length > 0 ? "warn" : "neutral"}
+        detail={
+          !systemsKnown
+            ? notRead(systemsPending, systemsFailed)
+            : registered.length === 0
+            ? "No system is connected."
+            : unread.length === 0
+              ? "Every system answered its last read."
+              : unread.length === 1
+                ? `${targetLabel(unread[0].target)} has not been read since ${formatShortDate(unread[0].since)}.`
+                : `${unread.length} systems have not been read.`
+        }
       />
-      <HealthCell
-        label="Waiting for you to send"
-        value={String(queued)}
-        tone={queued > 0 ? "accent" : "calm"}
-        // Pending changes, not Incoming events. `/operations` is the feed of
-        // what arrived FROM Zitadel; this tile counts what Syndra is waiting to
-        // send TO it. The two were one page before the rename, and this link
-        // was left pointing at the half that kept the old path — so the
-        // dashboard offered a count and then opened a screen that does not
-        // contain it.
-        href="/governance/pending"
-        note={queued > 0 ? "Waiting for you to send them" : "Nothing waiting"}
+      <StatCard
+        label="People"
+        href="/users"
+        value={users.isLoading || users.error || !users.data ? "—" : String(users.data.length)}
+        detail={
+          !endingKnown
+            ? notRead(!!summary.isLoading, !!summary.error)
+            : endingSoon === 0
+              ? "Nobody's access ends in the next 14 days."
+              : `${endingSoon} whose access ends in the next 14 days`
+        }
       />
-      <HealthCell
-        label="Drift"
-        value={String(unexplained)}
-        tone={unexplained > 0 ? "danger" : "calm"}
-        href="/governance/drift"
-        note={unexplained > 0 ? "Access Syndra did not give — review it" : "Everything is accounted for"}
-      />
-      <HealthCell
-        label="Ending in the next 14 days"
-        value={String(summary.data?.expiring_grants.length ?? 0)}
-        tone={(summary.data?.expiring_grants.length ?? 0) > 0 ? "warn" : "calm"}
-        // The backend's horizon (role_members.go, 14 days), carried so the
-        // list it opens holds the rows this number counts.
-        href="/review/expiring-access?within=14"
-        note="Direct access with an end date"
+      <StatCard
+        label="Where access lives"
+        href="/projects"
+        value={!rolesKnown ? "—" : `${roleRows.length} ${roleRows.length === 1 ? "role" : "roles"}`}
+        detail={
+          !rolesKnown
+            ? rolesLoading
+              ? "Reading the catalogue."
+              : "Not read just now."
+            : `Across ${projects} ${projects === 1 ? "project" : "projects"} and ${bundleCount} ${bundleCount === 1 ? "bundle" : "bundles"}`
+        }
       />
     </div>
-  );
-}
-
-const TONE_CLASS = {
-  // `calm` is this system's "nothing needed here" — the provider answered, the
-  // queue is empty, nothing expires inside the window. It gets the healthy
-  // lime as a WORD, never as a fill: a green field behind a count would make
-  // the absence of work the loudest thing on the page.
-  calm: "text-ink",
-  accent: "text-accent-text",
-  warn: "text-warn-text",
-  danger: "text-danger-text",
-} as const;
-
-function HealthCell({
-  label,
-  value,
-  note,
-  href,
-  tone,
-}: {
-  label: string;
-  value: string;
-  note: string;
-  href: string;
-  tone: keyof typeof TONE_CLASS;
-}) {
-  return (
-    <Link
-      href={href}
-      className="panel flex flex-col gap-1 px-4 py-3.5 motion-tint hover:bg-[var(--hover)]"
-    >
-      <span className="type-label">{label}</span>
-      <span className={`font-display text-[24px] leading-none ${TONE_CLASS[tone]}`}>{value}</span>
-      <span className="flex items-center gap-2 text-[12.5px] text-faint">
-        {/* Healthy is a DOT here, never the value. Four 24px lime numerals in
-            a row would make "nothing is wrong" the loudest thing on the page,
-            and this state earns its meaning by being the quietest. */}
-        {tone === "calm" && (
-          <span aria-hidden className="h-1.5 w-1.5 flex-none rounded-pill bg-healthy" />
-        )}
-        {note}
-      </span>
-    </Link>
   );
 }
 
@@ -164,11 +152,16 @@ function Gaps() {
   const users = useUsers("");
   const rows = useMemo(() => users.data ?? [], [users.data]);
 
-  if (users.isLoading) {
+  // Neither "still reading" nor "couldn't read" is an answer about anybody.
+  if (users.isLoading || users.error || !users.data) {
     return (
       <Card>
         <CardHeader title="Gaps" />
-        <RowSkeleton rows={3} label="Loading gaps" />
+        {users.isLoading ? (
+          <RowSkeleton rows={3} label="Loading gaps" />
+        ) : (
+          <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
+        )}
       </Card>
     );
   }
@@ -267,12 +260,15 @@ function AccessShape() {
   };
 
   const loading = roles.isLoading || bundles.isLoading;
+  const failed = !loading && !!(roles.error || bundles.error);
 
   return (
     <Card>
-      <CardHeader title="Where access lives" />
+      <CardHeader title="Roles most people hold" />
       {loading ? (
         <RowSkeleton rows={3} label="Loading where access lives" />
+      ) : failed ? (
+        <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
       ) : (
         <>
           {top.length > 0 && (
@@ -332,7 +328,7 @@ function AccessShape() {
           holds two destinations and a separator and no prose, so the exemption
           does not reach them. They measured 16px tall on the screen this
           product opens on. */}
-      {!loading && (
+      {!loading && !failed && (
         <div className="flex flex-wrap items-center gap-x-1.5 border-t border-line px-5 py-3 text-[13px] text-faint desktop:block desktop:py-3">
           {unused === 0 && emptyBundles === 0 ? (
             "Every role and bundle is in use."
@@ -370,6 +366,14 @@ function AccessShape() {
 function RecentActivity() {
   const entries = useAuditEntries({ limit: 8 });
   const rows = entries.data ?? [];
+  // Nothing is "recorded" until the log has been read.
+  const empty = entries.isLoading ? (
+    <RowSkeleton rows={3} label="Loading recent activity" />
+  ) : entries.error ? (
+    <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
+  ) : (
+    <div className="px-5 py-3.5 text-[14px] text-faint">Nothing recorded yet.</div>
+  );
 
   return (
     <Card>
@@ -380,7 +384,7 @@ function RecentActivity() {
         }
       />
       {rows.length === 0 ? (
-        <div className="px-5 py-3.5 text-[14px] text-faint">Nothing recorded yet.</div>
+        empty
       ) : (
         rows.map((entry) => (
           <div key={entry.id} className="row-divider flex flex-wrap items-baseline gap-3 px-5 py-2.5">

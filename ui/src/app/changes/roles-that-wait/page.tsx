@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { RolePicker } from "@/components/bundles/RolePicker";
+import { projectLabel } from "@/components/names/Unresolved";
 import { UserName } from "@/components/names/UserName";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -160,14 +161,16 @@ function WaitingRoles({
   ).length;
 
   const runs = useMemo(() => {
-    const out = new Map<string, typeof marked>();
+    // By project id, labelled by name: two projects nobody could name are two
+    // groups, and an id is never the label.
+    const out = new Map<string, { project: string; rows: typeof marked }>();
     for (const m of marked) {
-      const project =
-        byId.get(roleId(m.project_id, m.role_key))?.project_name ||
-        m.project_id;
-      out.set(project, [...(out.get(project) ?? []), m]);
+      const project = projectLabel(byId.get(roleId(m.project_id, m.role_key))?.project_name, m.project_id);
+      const run = out.get(m.project_id) ?? { project, rows: [] };
+      run.rows.push(m);
+      out.set(m.project_id, run);
     }
-    return Array.from(out.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return Array.from(out.entries()).sort(([, a], [, b]) => a.project.localeCompare(b.project));
   }, [marked, byId]);
 
   return (
@@ -200,8 +203,8 @@ function WaitingRoles({
           />
         }
       >
-        {runs.map(([project, rows]) => (
-          <div key={project}>
+        {runs.map(([projectId, { project, rows }]) => (
+          <div key={projectId}>
             <div className="row-divider px-5 pb-1.5 pt-3.5 text-[12.5px] font-semibold text-faint">
               {project} · {rows.length}
             </div>

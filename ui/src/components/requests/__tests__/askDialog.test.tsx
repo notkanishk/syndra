@@ -301,6 +301,39 @@ describe("Ask for access · Until the end of term", () => {
     expect(dialog()).toHaveTextContent("until 31 Dec");
   });
 
+  it("sends the end date itself, so a late approval still ends with the term", async () => {
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    fireEvent.click(sendButton());
+    await screen.findByText("Asked");
+    const until = new Date(String(create.last?.until));
+    expect([until.getFullYear(), until.getMonth(), until.getDate()]).toEqual([2026, 11, 31]);
+    expect(until.getHours()).toBe(23);
+    expect(create.last).toMatchObject({ kind: "access", duration_days: 121 });
+  });
+
+  it("a week or a month still sends days only", async () => {
+    search.value = "project=pLaser&role=trained";
+    renderAs(false);
+    fireEvent.click(screen.getByRole("button", { name: "A week" }));
+    fireEvent.click(sendButton());
+    await screen.findByText("Asked");
+    expect(create.last).toMatchObject({ duration_days: 7 });
+    expect(create.last).not.toHaveProperty("until");
+  });
+
+  it("keeping a role to the end of next term sends that term's end date", async () => {
+    held.grants = [{ id: "g1", project_id: "pLaser", role_key: "trained", expires_at: new Date(2026, 11, 18, 12).toISOString() }];
+    search.value = "project=pLaser&role=trained&extend=1";
+    renderAs(false);
+    fireEvent.click(screen.getByRole("radio", { name: "To the end of next term" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ask to keep it" }));
+    await screen.findByText("Asked");
+    const until = new Date(String(create.last?.until));
+    expect([until.getFullYear(), until.getMonth(), until.getDate()]).toEqual([2027, 4, 31]);
+    expect(create.last).toMatchObject({ kind: "extend" });
+  });
+
   it("ends 18 December when the setting can't be read", async () => {
     termsData.terms = undefined;
     search.value = "project=pLaser&role=trained";

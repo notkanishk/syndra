@@ -1,6 +1,7 @@
 "use client";
 
 
+import { projectLabel } from "@/components/names/Unresolved";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { useMemo, useState } from "react";
 
@@ -150,7 +151,7 @@ function Picker({
       if (!matches(role)) continue;
       const g = byProject.get(role.project_id) ?? {
         id: role.project_id,
-        project: role.project_name || role.project_id,
+        project: projectLabel(role.project_name, role.project_id),
         roles: [],
       };
       g.roles.push(role);

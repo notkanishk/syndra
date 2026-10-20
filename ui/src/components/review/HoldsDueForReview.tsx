@@ -6,11 +6,12 @@ import { EmptyState, ListStates } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardRow } from "@/components/ui/Card";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
 import { targetLabel } from "@/lib/nav";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { NOTHING_CHANGED, outcomeFromError, sentence, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useHoldsDueForReview, useLiftHold, type Hold } from "@/lib/queries/useHolds";
 
 /**
@@ -31,37 +32,44 @@ export function HoldsDueForReview() {
   const rows = due.data?.due_for_review ?? [];
 
   return (
-    <Card>
-      <CardHeader
-        title="Holds due"
-        count={rows.length}
-        tone="warn"
-        note="These holds are still blocking access. Being listed here does not end them — only lifting does. Lifting clears the block in Syndra at once; the access itself returns when the connected system is next brought in line."
-      />
-      <ListStates
-        isLoading={due.isLoading}
-        error={due.error}
-        isEmpty={rows.length === 0}
-        onRetry={() => due.refetch()}
-        errorTitle="Couldn't load holds due."
-        empty={
-          <EmptyState
-            title="Nothing due"
-            guidance="No hold has reached its review date. Holds appear here on the date the person who placed them chose."
+    <div className="flex flex-col gap-3.5">
+      {/* The page title already says "Holds due" and counts them, so the card has
+          no heading of its own. The read line is for a list, not for its absence. */}
+      {rows.length > 0 && !due.isLoading && !due.error && (
+        <div className="px-5">
+          <ReadFreshness
+            state={{ readAt: new Date(due.dataUpdatedAt).toISOString(), current: true }}
+            subject="This list"
           />
-        }
-      >
-        <>
-          {rows.map((hold, i) =>
-            hold.direction === "set" ? (
-              <OwnValueRow key={hold.id} hold={hold} first={i === 0} />
-            ) : (
-              <HoldRow key={hold.id} hold={hold} first={i === 0} />
-            ),
-          )}
-        </>
-      </ListStates>
-    </Card>
+        </div>
+      )}
+      <Card>
+        <ListStates
+          isLoading={due.isLoading}
+          error={due.error}
+          isEmpty={rows.length === 0}
+          onRetry={() => due.refetch()}
+          errorTitle="Couldn't load holds due."
+          empty={
+            <EmptyState
+              resolved
+              title="No hold is due for review."
+              guidance="A hold appears here on the review date the person who placed it chose. Until then it stays in force without asking."
+            />
+          }
+        >
+          <>
+            {rows.map((hold, i) =>
+              hold.direction === "set" ? (
+                <OwnValueRow key={hold.id} hold={hold} first={i === 0} />
+              ) : (
+                <HoldRow key={hold.id} hold={hold} first={i === 0} />
+              ),
+            )}
+          </>
+        </ListStates>
+      </Card>
+    </div>
   );
 }
 
@@ -133,41 +141,58 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
           visible. `ghost` is the quieter half of a pair, and this row
           has no pair — drawn borderless it read as text until hovered,
           which on a phone is never. */}
-      <Button
-        variant="outline"
-        size="sm"
-        isPending={lift.isPending}
-        onClick={async () => {
-          try {
-            await lift.mutateAsync(hold.id);
-            // Not "they have it again": lifting is one column in Syndra
-            // (`handleLiftAllowance` → `dbLiftAllowance`, HTTP 200 and
-            // return). Nothing queues a convergence, so the account on the
-            // connected system is still without the access until the next
-            // pass. Reporting the stronger thing sent an operator away
-            // believing somebody could work.
-            setOutcome({
-              kind: "applied",
-              message: `Hold lifted. ${label} returns when the connected system is next brought in line.`,
-            });
-          } catch (error) {
-            setOutcome(outcomeFromError(error));
-          }
-        }}
-      >
-        Lift the hold on {label}
-      </Button>
+      {/* Lifted and "couldn't lift it" take the seat the button held (route-holds:
+          lifted, lift-failed). The row stays until the next read, so nothing moves
+          under the hand; a failed lift keeps the button, as Try again. */}
+      {outcome?.kind === "applied" ? (
+        <ActionOutcome
+          placement="seat"
+          word="Lifted"
+          outcome={{
+            kind: "applied",
+            message: "",
+            detail: `${label[0].toUpperCase()}${label.slice(1)} returns when the connected system is next brought in line.`,
+          }}
+        />
+      ) : (
+        <span className="flex flex-col items-start gap-2">
+          {outcome && <ActionOutcome placement="seat" word="Couldn't lift it" outcome={outcome} />}
+          <Button
+            variant="outline"
+            size="sm"
+            isPending={lift.isPending}
+            onClick={async () => {
+              try {
+                await lift.mutateAsync(hold.id);
+                // Not "they have it again": lifting is one column in Syndra
+                // (`handleLiftAllowance` → `dbLiftAllowance`, HTTP 200 and
+                // return). Nothing queues a convergence, so the account on the
+                // connected system is still without the access until the next
+                // pass. Reporting the stronger thing sent an operator away
+                // believing somebody could work.
+                setOutcome({ kind: "applied", message: "" });
+              } catch (error) {
+                const failed = outcomeFromError(error);
+                setOutcome({
+                  ...failed,
+                  message:
+                    failed.kind === "failed"
+                      ? NOTHING_CHANGED
+                      : `${sentence(failed.message)} ${NOTHING_CHANGED}`,
+                });
+              }
+            }}
+          >
+            {outcome ? "Try again" : `Lift the hold on ${label}`}
+          </Button>
+        </span>
+      )}
       <p className="w-full text-[13.5px] text-muted">
         {hold.reason || <span className="text-faint">No reason recorded.</span>}
       </p>
       <p className="w-full text-[13px] text-faint">
-        {/* Extending demands a new date, which is why there is no
-            "remind me later" here: a review can be deferred but not
-            dropped, and deferring it is authoring the decision again. */}
-        Review date passed <Relative iso={hold.review_date} />. To push it back, lift this
-        hold and place a new one with a new date from their page.
+        Review date passed <Relative iso={hold.review_date} />.
       </p>
-      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </CardRow>
   );
 }

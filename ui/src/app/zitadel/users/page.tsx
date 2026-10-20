@@ -190,7 +190,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         {rows.map((grant) => (
           <div key={grant.id} className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
             <span className="min-w-[200px] flex-1 truncate text-[14.5px]">
-              <ProjectName id={grant.projectId} fallback={grant.projectId} />{" "}
+              <ProjectName id={grant.projectId} />{" "}
               {grant.roleKeys.map((key) => (
                 <Mono key={key} className="mr-1.5 text-muted">
                   {key}
@@ -247,7 +247,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
           />
           <div className="flex flex-col gap-3.5 px-6">
             <div className="text-[14.5px]">
-              <ProjectName id={revoking.projectId} fallback={revoking.projectId} />{" "}
+              <ProjectName id={revoking.projectId} />{" "}
               {revoking.roleKeys.map((key) => (
                 <Mono key={key} className="mr-1.5 text-muted">
                   {key}

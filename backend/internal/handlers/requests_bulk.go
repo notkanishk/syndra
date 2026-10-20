@@ -162,6 +162,9 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 				case errors.Is(perr, errExtensionShortens):
 					out.Effect = services.EffectBlocked
 					out.Detail = "Already has this past the end this asks for, so approving would shorten it. Decline it to close the request."
+				case errors.Is(perr, errAskEnded):
+					out.Effect = services.EffectBlocked
+					out.Detail = "The end date this asked for has already passed, so approving would give access that has already ended. Decline it, and they can ask again."
 				case perr == nil:
 					approval = plan
 				}
@@ -186,7 +189,11 @@ func rehearseDecisionBatch(ctx context.Context, ids []string, status string) ser
 			out.Detail = fmt.Sprintf("Gains %s.", request.RoleKey)
 			// The part an inbox action hides: this is an access change.
 			out.Consequence = "Approving mints a direct grant, the same as granting it by hand."
-			if request.DurationDays != nil && *request.DurationDays > 0 {
+			if request.AskedUntil != nil {
+				out.Consequence = fmt.Sprintf(
+					"Approving mints a direct grant until %s, the end date they asked for, the same as granting it by hand.",
+					request.AskedUntil.Format("2 Jan 2006"))
+			} else if request.DurationDays != nil && *request.DurationDays > 0 {
 				out.Consequence = fmt.Sprintf(
 					"Approving mints a direct grant for %d days, the same as granting it by hand.",
 					*request.DurationDays)

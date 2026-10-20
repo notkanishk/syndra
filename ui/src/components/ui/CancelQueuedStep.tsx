@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
+import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -85,7 +86,7 @@ function useWho() {
       if (!change.initiated_by || change.initiated_by === "system") return "Syndra";
       return resolver.resolveUser(change.initiated_by).value?.display_name ?? "an account Syndra can't name";
     },
-    place: (change: QueuedChange) => resolver.resolveProject(change.project_id).value?.name ?? "Unknown place",
+    place: (change: QueuedChange) => resolver.resolveProject(change.project_id).value?.name || UNKNOWN_PROJECT,
     role: (change: QueuedChange) =>
       change.role_keys
         .map((key) => resolver.resolveRole(change.project_id, key).value?.display_name ?? humanizeKey(key))

@@ -4,7 +4,7 @@ import { describeFailure, sentence } from "@/lib/outcome";
 import { useState } from "react";
 
 import { Relative } from "@/components/ui/Time";
-import { Badge, STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -19,11 +19,12 @@ import {
  * The version band (design M1, M2, M5). One seat under the page title, three
  * readings, and it never changes shape.
  *
- * Publish is inert rather than absent when there is nothing to publish, and the
- * version count keeps its seat at zero, because a band that appeared with its
- * first unpublished edit would be structure moving in response to data — on the
- * one screen where an operator most needs to know that the thing they are
- * reading is or is not what a rollback would restore.
+ * Publish is inert rather than absent when there is nothing to publish (and
+ * says so beneath it), because a band that appeared with its first unpublished
+ * edit would be structure moving in response to data — on the one screen where
+ * an operator most needs to know that the thing they are reading is or is not
+ * what a rollback would restore. The version count lives on the published
+ * versions card, as the board draws it.
  *
  * The three readings, and why each is the tone it is:
  *
@@ -47,14 +48,19 @@ export function VersionBand({ target, history }: { target: string; history?: Map
   const nothingPublished = versions.length === 0;
   const pending = changes.length > 0;
 
-  const reading: { tone: StatusTone; title: string } = nothingPublished
-    ? { tone: "neutral", title: "Nothing has been published" }
-    : pending
-      ? {
-          tone: "warn",
-          title: `Version ${current}, plus ${count(changes.length, "edit")} nobody has published`,
-        }
-      : { tone: "healthy", title: `The live mappings match version ${current}` };
+  // The board's three bands (route-system-targets-id-mappings): a title, one
+  // sentence, Publish at the right. Pending edits are already live, so the
+  // sentence is where "publishing applies nothing again" is said.
+  const reading: { tone: StatusTone; title: string } = pending
+    ? {
+        tone: "warn",
+        title: nothingPublished
+          ? "Nothing published yet"
+          : `Version ${current}, plus ${count(changes.length, "change")} not yet published`,
+      }
+    : nothingPublished
+      ? { tone: "neutral", title: "Nothing published yet" }
+      : { tone: "healthy", title: `Matches version ${current}` };
 
   const newest = versions[0];
 
@@ -69,34 +75,36 @@ export function VersionBand({ target, history }: { target: string; history?: Map
             </span>
           </span>
 
-          <p className="text-[13.5px] leading-[1.55] text-muted">
-            {nothingPublished ? (
+          <p className="pl-[18px] text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
+            {pending ? (
               <>
-                No version exists yet, so there is nothing to roll back to and nothing to
-                compare the live mappings against.
+                The rows below are live: each change went through its own preview.{" "}
+                <strong className="font-semibold text-ink">Publishing applies nothing again.</strong>{" "}
+                It records {nothingPublished ? "them" : "the set"} as version {current + 1}, so a
+                later rollback has something to return to.
+                {!nothingPublished &&
+                  ` Rolling back to version ${current} would undo ${changes.length === 1 ? "it" : `all ${word(changes.length)}`}.`}
               </>
-            ) : pending ? (
+            ) : nothingPublished ? (
               <>
-                The mappings below are what Syndra uses right now. Version {current} is what
-                a rollback would restore, and it does not include{" "}
-                {changes.length === 1 ? "this edit" : "these edits"}.
+                No version exists, so there is nothing to roll back to and nothing to compare the
+                rows against.
               </>
             ) : (
               <>
                 Published <Relative iso={newest?.published_at} /> by{" "}
                 <UserName id={newest?.published_by ?? ""} fallback="somebody" />
-                {newest?.note ? ` — “${newest.note}”` : ""}. Nothing is waiting to be
-                published, so what the rows below say is what version {current} says.
+                {newest?.note ? `: “${newest.note}”` : ""}. What the rows say is what version{" "}
+                {current} says.
               </>
             )}
           </p>
         </div>
 
-        <span className="flex shrink-0 items-center gap-3">
-          <span className="text-[13px] text-faint">
-            Versions ·{" "}
-            <Badge hollow={versions.length === 0}>{versions.length}</Badge>
-          </span>
+        {/* Not `whitespace-nowrap` on the column: the disabled Publish button's
+            reason is a whole sentence under it, and a column that refused to
+            wrap it grew past the card's right edge. Only the button keeps one line. */}
+        <span className="flex max-w-full shrink-0 flex-col items-end gap-1.5 [&_button]:whitespace-nowrap">
           {/* Inert, never absent. The seat is what keeps the band one shape
               across all three readings. */}
           {/* The band says a note is required and then published without one.
@@ -107,6 +115,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
               this is where somebody is told, not what enforces it. */}
           <Button
             size="sm"
+            variant={pending ? "accent" : "outline"}
             disabled={!pending || !note.trim() || publish.isPending}
             isPending={publish.isPending}
             reason={
@@ -120,6 +129,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
           >
             {pending ? `Publish as version ${current + 1}` : "Publish"}
           </Button>
+          {!pending && <span className="text-[12.5px] text-faint">Nothing to publish</span>}
         </span>
       </div>
 
@@ -135,19 +145,6 @@ export function VersionBand({ target, history }: { target: string; history?: Map
               <ChangeRow key={rowKey(change)} change={change} />
             ))}
           </div>
-
-          {/* The sentence an operator needs most. Every other tool in their life
-              has taught them that unpublished means not yet in effect, and here
-              it is exactly backwards. */}
-          <p className="mt-3 max-w-[78ch] text-[13.5px] leading-[1.55] text-muted">
-            Each of these edits was previewed and applied when it was made — it is already in
-            effect.{" "}
-            <strong className="font-semibold text-ink">
-              Publishing applies nothing again.
-            </strong>{" "}
-            It saves this set as version {current + 1} so that a later rollback has something
-            to return to.
-          </p>
 
           <div className="mt-3 max-w-[46rem]">
             <Input

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProjectsPage from "@/app/projects/page";
@@ -19,7 +19,10 @@ import type { ProjectSummaryRow } from "@/lib/queries/useProjects";
  * survives beside the name.
  */
 
-const state = { projects: [] as ProjectSummaryRow[] };
+const state = {
+  projects: [] as ProjectSummaryRow[],
+  apps: [] as Array<{ application: { id: string; name: string; project_id: string } }>,
+};
 
 vi.mock("@/lib/queries/useProjects", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useProjects")>(
@@ -37,7 +40,7 @@ vi.mock("@/lib/queries/useProjects", async () => {
 });
 
 vi.mock("@/lib/queries/useApplications", () => ({
-  useApplications: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
+  useApplications: () => ({ data: state.apps, isLoading: false, error: null, refetch: vi.fn() }),
 }));
 
 function project(
@@ -47,6 +50,7 @@ function project(
   memberCount = 19,
 ): ProjectSummaryRow {
   return {
+    observed_member_count: memberCount,
     project: { id, name, kind: "internal", description: "", roles: [] },
     member_count: memberCount,
     bundle_count: 0,
@@ -59,7 +63,13 @@ function project(
 
 beforeEach(() => {
   state.projects = [project("p1", "Studio Access", [])];
+  state.apps = [];
 });
+
+/** The Roles seat: the board's 110px right-aligned cell, desktop only. */
+function rolesSeat(row: HTMLElement) {
+  return Array.from(row.children).find((child) => child.className.includes("desktop:w-[110px]"));
+}
 
 describe("the projects table", () => {
   const SENTENCE = "No roles yet — nothing here can be granted";
@@ -79,7 +89,7 @@ describe("the projects table", () => {
       expect(
         node.className,
         "the roles column is 60px and right-aligned; a sentence in it wraps to six lines",
-      ).not.toMatch(/tablet:w-\[60px\]/);
+      ).not.toMatch(/desktop:w-\[110px\]/);
       if (node.tagName === "A") break;
     }
   });
@@ -88,12 +98,10 @@ describe("the projects table", () => {
     render(<ProjectsPage />);
 
     const row = screen.getByRole("link", { name: /Studio Access/ });
-    const roles = Array.from(row.children).find((child) =>
-      child.className.includes("tablet:w-[60px]"),
-    );
+    const roles = rolesSeat(row);
 
     expect(roles).toBeTruthy();
-    expect(roles?.textContent).toBe("0 roles");
+    expect(roles?.textContent).toBe("0");
   });
 
   it("puts the sentence beside the name, which is the column with room", () => {
@@ -109,10 +117,8 @@ describe("the projects table", () => {
 
     expect(screen.queryByText(SENTENCE)).toBeNull();
     const row = screen.getByRole("link", { name: /Badge Reader/ });
-    const roles = Array.from(row.children).find((child) =>
-      child.className.includes("tablet:w-[60px]"),
-    );
-    expect(roles?.textContent).toBe("2 roles");
+    expect(rolesSeat(row)?.textContent).toBe("2");
+    expect(screen.getByText("2 roles")).toBeTruthy();
   });
 
   // The contradiction this file exists to close: a project with roles nobody
@@ -125,9 +131,84 @@ describe("the projects table", () => {
 
     expect(screen.queryByText(SENTENCE)).toBeNull();
     const row = screen.getByRole("link", { name: /Laser Cutter/ });
-    const roles = Array.from(row.children).find((child) =>
-      child.className.includes("tablet:w-[60px]"),
-    );
-    expect(roles?.textContent).toBe("1 role");
+    expect(rolesSeat(row)?.textContent).toBe("1");
+    expect(screen.getByText("1 role")).toBeTruthy();
+  });
+});
+
+// The board (route-projects): Project, Apps served, Roles, People, the number
+// columns last in their 110px seats, search above, the two sortable headings.
+describe("the projects board", () => {
+  const headings = () => {
+    const row = document.querySelector("[class*='tracking-[0.09em]']") as HTMLElement;
+    return Array.from(row.children).map((cell) => (cell.textContent ?? "").replace(/[↑↓]/g, "").trim());
+  };
+  const names = () =>
+    screen
+      .getAllByRole("link")
+      .map((a) => ["Laser Lab", "Wood shop", "Studio"].find((n) => a.textContent?.includes(n)));
+
+  beforeEach(() => {
+    state.projects = [
+      project("p1", "Wood shop", ["a", "b"], 22),
+      project("p2", "Laser Lab", ["a", "b", "c"], 41),
+      project("p3", "Studio", ["a"], 9),
+    ];
+    state.apps = [
+      { application: { id: "a1", name: "Laser bookings", project_id: "p2" } },
+      { application: { id: "a2", name: "Kiosk", project_id: "p1" } },
+    ];
+  });
+
+  it("reads Project, Apps served, Roles, People", () => {
+    render(<ProjectsPage />);
+    expect(headings()).toEqual(["Project", "Apps served", "Roles", "People"]);
+  });
+
+  it("lists the apps in the second column, ahead of the counts", () => {
+    render(<ProjectsPage />);
+    const row = screen.getByRole("link", { name: /Laser Lab/ });
+    const cells = Array.from(row.children).map((c) => c.textContent ?? "");
+    expect(cells[1]).toBe("Laser bookings");
+    expect(cells[2]).toBe("3");
+    expect(cells[3]).toMatch(/^41/);
+  });
+
+  it("sorts by Project A to Z at first, and by People when asked", () => {
+    render(<ProjectsPage />);
+    expect(screen.getByRole("button", { name: "Sort by project" })).toHaveAttribute("data-sort", "asc");
+    expect(names()).toEqual(["Laser Lab", "Studio", "Wood shop"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by people" }));
+    expect(names()).toEqual(["Studio", "Wood shop", "Laser Lab"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by people" }));
+    expect(names()).toEqual(["Laser Lab", "Wood shop", "Studio"]);
+  });
+
+  it("searches by project name or by the app that reads it", () => {
+    render(<ProjectsPage />);
+    const box = screen.getByRole("textbox", { name: "Search projects by name or app" });
+    expect(box).toHaveAttribute("placeholder", "Search projects or apps…");
+    fireEvent.change(box, { target: { value: "kiosk" } });
+    expect(names()).toEqual(["Wood shop"]);
+    fireEvent.change(box, { target: { value: "stud" } });
+    expect(names()).toEqual(["Studio"]);
+    fireEvent.change(box, { target: { value: "nothing like it" } });
+    expect(screen.getByText("No project matches that.")).toBeTruthy();
+  });
+
+  it("says no app reads a project that no app reads", () => {
+    render(<ProjectsPage />);
+    // Studio has no app; Laser Lab and Wood shop have one each.
+    expect(screen.getAllByText("No app reads this yet")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: /Studio/ }).textContent).toContain("No app reads this yet");
+  });
+
+  it("notes what Zitadel does not show in amber, and wraps the apps", () => {
+    state.projects = [{ ...project("p2", "Laser Lab", ["a"], 41), member_count: 43, confirmed_member_count: 41 }];
+    render(<ProjectsPage />);
+    expect(screen.getByText("2 not in Zitadel yet").className).toMatch(/text-warn-text/);
+    const apps = screen.getByText("Laser bookings").parentElement as HTMLElement;
+    expect(apps.className).toMatch(/flex-wrap/);
+    expect(apps.className).not.toMatch(/truncate/);
   });
 });

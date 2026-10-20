@@ -43,6 +43,12 @@ type Bundle struct {
 	// are different objects, and only one of them means "the edit you made
 	// last term never reached anyone".
 	LatestVersion int `json:"latest_version"`
+	// RoleCount is how many distinct roles the latest version grants, its own
+	// and each included bundle's. Computed on read for the list, whose `roles`
+	// is never filled (that needs a query per bundle). Nil, and so absent, when
+	// the count could not be read: a bundle with no count is not a bundle with
+	// no roles.
+	RoleCount *int `json:"role_count,omitempty"`
 	// HasIncludes: it includes other bundles (B8), so it can't go inside
 	// another. IncludedIn names the bundles that include it, so it can't take
 	// others in.
@@ -730,18 +736,22 @@ type ExternalGrantExclusion struct {
 type AccessRequest struct {
 	// Kind is "access" (a role they don't have) or "extend" (keep one that
 	// ends for longer: the grant's end moves, the role is never given twice).
-	Kind          string     `json:"kind"`
-	ID            string     `json:"id"`
-	RequesterID   string     `json:"requester_id"`
-	ProjectID     string     `json:"project_id"`
-	RoleKey       string     `json:"role_key"`
-	Justification string     `json:"justification"`
-	DurationDays  *int       `json:"duration_days,omitempty"`
-	Status        string     `json:"status"`
-	ReviewerID    string     `json:"reviewer_id,omitempty"`
-	ReviewNote    string     `json:"review_note,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	ResolvedAt    *time.Time `json:"resolved_at,omitempty"`
+	Kind          string `json:"kind"`
+	ID            string `json:"id"`
+	RequesterID   string `json:"requester_id"`
+	ProjectID     string `json:"project_id"`
+	RoleKey       string `json:"role_key"`
+	Justification string `json:"justification"`
+	DurationDays  *int   `json:"duration_days,omitempty"`
+	// AskedUntil is the end date the ask named ("until the end of term"). When
+	// set, approving gives the grant that end, however late it is decided;
+	// DurationDays is then only what it was worth when asked.
+	AskedUntil *time.Time `json:"asked_until,omitempty"`
+	Status     string     `json:"status"`
+	ReviewerID string     `json:"reviewer_id,omitempty"`
+	ReviewNote string     `json:"review_note,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
 	// Holding is what the requester has of the role now, read for a waiting
 	// request so the person deciding sees what approving would change.
 	Holding *RequestHolding `json:"holding,omitempty"`

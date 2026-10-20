@@ -16,6 +16,8 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
+import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
+import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { Select } from "@/components/ui/Select";
@@ -144,12 +146,26 @@ export default function PeoplePage() {
     return new Set(roleMembers.data.members.map((member) => member.user.id));
   }, [filters.role, roleMembers.data]);
 
-  const rows = useMemo(() => applyFilters(all, filters, holders), [all, filters, holders]);
+  // The board's default: Person, A to Z. Sorting is local to the view; the
+  // filters in the URL decide who is listed, the headings only their order.
+  const [sort, setSort] = useSort<PeopleSort>("person");
+  const rows = useMemo(
+    () => orderBy(applyFilters(all, filters, holders), sort, PEOPLE_SORT),
+    [all, filters, holders, sort],
+  );
   const visible = rows.slice(0, limit);
   // Selection spans the whole filter, not the rendered page.
   const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
   const { selfId } = useUiView();
   const expiringSoon = all.filter((entry) => entry.expiring_count > 0).length;
+  // One basis for the whole list: every row carries an identical copy of when
+  // Zitadel was read, so the line says it once, under the search.
+  const basis = all.find((entry) => entry.observation)?.observation;
+  const readState: ReadState = {
+    readAt: basis?.read_at,
+    current: basis ? basis.current : undefined,
+    truncated: basis?.truncated,
+  };
 
   const projectName = useMemo(
     () => projects.data?.find((row) => row.project.id === filters.project)?.project.name ?? "",
@@ -265,6 +281,10 @@ export default function PeoplePage() {
         }
       />
 
+      {all.length > 0 && (
+        <ReadFreshness state={readState} subject="The people list" className="-mt-1.5 px-[2px]" />
+      )}
+
       {bulkMode && give.roleKey && (
         <p className="text-[14px] text-muted">
           Pick who should get <RoleRef projectId={give.projectId} roleKey={give.roleKey} />, then choose
@@ -313,11 +333,16 @@ export default function PeoplePage() {
       <Card>
         <CardColumns>
           {bulkMode && <span className="w-11 shrink-0 desktop:w-[26px]" />}
-          <span className="w-[250px]">Person</span>
-          <span className="w-[150px]">Team</span>
-          <span className="w-[220px]">Bundles</span>
-          <span className="flex-1">Access</span>
-          <span className="w-[150px] text-right">Needs attention</span>
+          <span className="w-[250px] min-w-[180px]">
+            <SortHead label="Person" name="person" sort={sort} onSort={setSort} />
+          </span>
+          <span className="hidden w-[180px] shrink-0 desktop:block">
+            <SortHead label="Bundles" name="bundles" sort={sort} onSort={setSort} />
+          </span>
+          <span className="min-w-[170px] flex-1">Access</span>
+          <span className="w-[110px] shrink-0 text-right">
+            <SortHead label="Attention" name="attention" sort={sort} onSort={setSort} />
+          </span>
         </CardColumns>
 
         {bulkMode && rows.length > 0 && (
@@ -467,6 +492,16 @@ function PersonRow({
   // came looking for — but it reads at reduced contrast so a live person is
   // never mistaken for one who left.
   const departed = isDeparted(entry.user.status);
+  // Who they are, in the words they hold: title, then team. The email is only
+  // the fallback for someone with no title, never a second line of its own.
+  const lead = entry.user.title || entry.user.email;
+  const subtitle = entry.user.team ? `${lead} · ${entry.user.team}` : lead;
+  const bundleLine = (entry.bundle_names ?? [])
+    .map((name) => {
+      const version = entry.bundle_versions?.[name];
+      return version ? `${name} v${version}` : name;
+    })
+    .join(" · ");
 
   const body = (
     <>
@@ -491,18 +526,18 @@ function PersonRow({
           ) : (
             <span className="block truncate text-[15px] font-semibold">{entry.user.name}</span>
           )}
-          <span
-            className="block truncate text-[12.5px] text-faint"
-            title={entry.user.title || entry.user.email}
-          >
-            {entry.user.title || entry.user.email}
+          <span className="block truncate text-[12.5px] text-faint" title={subtitle}>
+            {subtitle}
           </span>
+          {/* Below desktop the bundles fold into a line under the person, as the
+              board draws them, so Access keeps its width. */}
+          {bundleLine && (
+            <span className="block truncate text-[12.5px] text-faint desktop:hidden">{bundleLine}</span>
+          )}
         </span>
       </span>
 
-      <span className="hidden w-[150px] truncate text-[14px] text-muted tablet:block">{entry.user.team || "—"}</span>
-
-      <span className="hidden w-[220px] flex-wrap gap-1.5 tablet:flex">
+      <span className="hidden w-[180px] shrink-0 flex-wrap gap-1.5 desktop:flex">
         {entry.bundle_names?.length ? (
           entry.bundle_names.map((name) => {
             // The version rides on the chip. "Lab Tech" and "Lab Tech v2" are
@@ -521,9 +556,12 @@ function PersonRow({
         )}
       </span>
 
-      <span className="min-w-0 text-[13px] text-muted tablet:flex-1 tablet:truncate tablet:text-[14px]">{describeAccess(entry)}</span>
+      {/* Wraps. What somebody holds is what the row is read for. */}
+      <span className="min-w-0 text-[13px] text-muted [text-wrap:pretty] tablet:min-w-[170px] tablet:flex-1 tablet:text-[14px]">
+        {describeAccess(entry)}
+      </span>
 
-      <span className="tablet:w-[150px] tablet:text-right">
+      <span className="tablet:w-[110px] tablet:shrink-0 tablet:text-right">
         <NeedsAttention entry={entry} />
       </span>
     </>
@@ -570,34 +608,63 @@ function PersonRow({
  * three coloured phrases is a cell nobody reads.
  */
 function NeedsAttention({ entry }: { entry: UserListEntry }) {
+  const attention = attentionOf(entry);
+  if (!attention) {
+    // Nothing to report renders nothing — not a lone dash under the access
+    // text at phone width, where this is the only thing in the column. The
+    // header keeps the column's width on desktop regardless.
+    return null;
+  }
+  return (
+    <span className={`text-[13.5px] font-semibold [text-wrap:pretty] ${attention.tone}`}>
+      {attention.text}
+    </span>
+  );
+}
+
+/**
+ * The most urgent thing about a person, in a few words and the colour it
+ * belongs to. `rank` orders the Attention heading: urgent first when it sorts
+ * ascending, so the first press puts the people who need you on top.
+ */
+function attentionOf(entry: UserListEntry): { text: string; tone: string; rank: number } | null {
   if (entry.unexplained_count > 0) {
-    return (
-      <span className="text-[13.5px] font-semibold text-danger-text">
-        {entry.unexplained_count} unexplained
-      </span>
-    );
+    const n = entry.unexplained_count;
+    return {
+      text: n === 1 ? "Unexplained role" : `${n} unexplained roles`,
+      tone: "text-danger-text",
+      rank: -3_000 - n,
+    };
   }
   if (entry.expiring_count > 0) {
     const days = daysUntil(entry.soonest_expiry);
-    return (
-      <span className="text-[13.5px] font-semibold text-warn-text">
-        {entry.expiring_count} {entry.expiring_count === 1 ? "ends" : "end"}{" "}
-        {days === null ? "soon" : days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`}
-      </span>
-    );
+    const n = entry.expiring_count;
+    const when = days === null ? "soon" : days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
+    return {
+      text: n === 1 ? `Expires ${when}` : `${n} expire, the first ${when}`,
+      tone: "text-warn-text",
+      rank: -2_000 - n,
+    };
   }
   if (entry.open_request_count > 0) {
-    return (
-      <span className="text-[13.5px] font-semibold text-accent-text">
-        {entry.open_request_count} open request{entry.open_request_count === 1 ? "" : "s"}
-      </span>
-    );
+    const n = entry.open_request_count;
+    return {
+      text: n === 1 ? "Open request" : `${n} open requests`,
+      tone: "text-accent-text",
+      rank: -1_000 - n,
+    };
   }
-  // Nothing to report renders nothing — not a lone dash under the access
-  // text at phone width, where this is the only thing in the column. The
-  // header keeps the column's width on desktop regardless.
   return null;
 }
+
+type PeopleSort = "person" | "bundles" | "attention";
+
+const PEOPLE_SORT: Record<PeopleSort, (entry: UserListEntry) => string | number> = {
+  person: (entry) => entry.user.name,
+  // Nobody-in-a-bundle sorts after the last bundle name, not before the first.
+  bundles: (entry) => entry.bundle_names?.[0] ?? "\uffff",
+  attention: (entry) => attentionOf(entry)?.rank ?? 0,
+};
 
 /**
  * What Zitadel shows this person holding, not what Syndra decided to give

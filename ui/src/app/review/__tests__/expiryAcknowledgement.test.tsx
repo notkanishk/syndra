@@ -146,8 +146,8 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // dialog has to deny it in words, on the screen where the button is.
   it("says acknowledging does not keep the access", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
-    expect(document.body.textContent).toMatch(/still will/i);
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    expect(document.body.textContent).toMatch(/as it would have/i);
     expect(document.body.textContent).toMatch(/records that you looked/i);
   });
 
@@ -155,7 +155,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // it is stated where the decision is made rather than only in a design doc.
   it("states the reopen rule in the dialog", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
     expect(document.body.textContent).toMatch(/extends it or gives it again/i);
     expect(document.body.textContent).toMatch(/comes back/i);
   });
@@ -164,7 +164,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // acknowledgement would be permanent — which is the rule we deliberately did not pick.
   it("sends the expiry the operator was shown", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
     fireEvent.change(screen.getByLabelText("Why (optional)"), {
       target: { value: "  Cohort ends  " },
     });
@@ -181,7 +181,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
 
   it("does not require a note", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
     fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
     expect(state.acknowledge.mock.calls[0][0].note).toBe("");
@@ -194,7 +194,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
       }),
     ];
     renderPage();
-    expect(document.body.textContent).toMatch(/let this end on/i);
+    expect(document.body.textContent).toMatch(/let it lapse on/i);
     expect(document.body.textContent).toMatch(/Cohort ends/);
   });
 
@@ -211,14 +211,15 @@ describe("Expiring access — acknowledgement (C4)", () => {
       }),
     ];
     renderPage();
-    expect(document.body.textContent).toMatch(/Left to end · 1 role/);
-    expect(screen.getByRole("button", { name: "Undo letting it end" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undecided" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Let lapse" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undo letting it lapse" })).toBeTruthy();
   });
 
   it("takes an acknowledgement back", async () => {
     state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Undo letting it end" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo letting it lapse" }));
     await waitFor(() => expect(state.clear).toHaveBeenCalledWith("g1"));
   });
 
@@ -227,7 +228,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
     state.rows = [grant({ acknowledged: { by: "priya", at: "2026-08-04T09:00:00Z" } })];
     renderPage();
     expect(screen.getByRole("button", { name: "Extend 90 days" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Let it end" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Let it lapse" })).toBeNull();
   });
 
   // A queue whose only rows are acknowledged ones looks identical to one nobody has touched.
@@ -260,7 +261,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
       .fn()
       .mockRejectedValue(new Error("This grant's expiry changed since you loaded the page."));
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
     fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
 
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
@@ -272,7 +273,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // acknowledgment again, against a grant that had not moved.
   it("cannot record the same decision twice", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Let it end" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
     fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
@@ -372,9 +373,9 @@ it("names who acknowledged with a readable label, not the raw id twice over", ()
     grant({ acknowledged: { by: "op_2f81a9", at: "2026-08-04T09:00:00Z" } }),
   ];
   renderPage();
-  // Two, not one: the row's own "granted by" already uses this same fallback
-  // phrase for an unresolved id, and the acknowledger now does too. Before the
+  // Three, not one: the row's "Given by" (the laptop line and the desktop column, one shown by CSS)
+  // already use this same fallback phrase for an unresolved id, and the acknowledger does too. Before the
   // fix, the acknowledger fell back to its own raw id instead of this phrase,
   // so only one match existed here.
-  expect(screen.getAllByText(/somebody no longer listed/i)).toHaveLength(2);
+  expect(screen.getAllByText(/somebody no longer listed/i)).toHaveLength(3);
 });

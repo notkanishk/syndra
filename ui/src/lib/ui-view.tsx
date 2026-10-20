@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import type { Audience, UiView } from "@/lib/nav";
+import { parseUiView, writeViewCookie } from "@/lib/ui-view-cookie";
 
 /**
  * `ui_view` — which of the two surfaces the operator is looking at.
@@ -40,28 +41,36 @@ const UiViewContext = createContext<UiViewContextValue | null>(null);
 export function UiViewProvider({
   isOperator,
   selfId,
+  initialView,
   children,
 }: {
   isOperator: boolean;
   selfId?: string;
+  /** The stored view as the server read it from the cookie; absent if none. */
+  initialView?: UiView;
   children: React.ReactNode;
 }) {
-  const [view, setViewState] = useState<UiView>("basic");
+  const [view, setViewState] = useState<UiView>(initialView ?? "basic");
   const [pendingPanel, setPendingPanel] = useState<string | null>(null);
 
-  // Read the persisted preference after mount: rendering it on the server
-  // would mean a hydration mismatch on every operator whose stored view is
-  // not the default.
+  // No cookie yet: whoever chose a view before the cookie existed has it in
+  // localStorage. Read it after mount (the server cannot, and rendering it
+  // would be a hydration mismatch), and move it to the cookie so this is the
+  // only load that ever paints the default first.
   useEffect(() => {
-    if (!isOperator) return;
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored === "basic" || stored === "advanced") setViewState(stored);
-  }, [isOperator]);
+    if (!isOperator || initialView) return;
+    const stored = parseUiView(window.localStorage.getItem(STORAGE_KEY));
+    if (stored) {
+      setViewState(stored);
+      writeViewCookie(stored);
+    }
+  }, [isOperator, initialView]);
 
   const setView = useCallback(
     (next: UiView) => {
       if (!isOperator) return;
       setViewState(next);
+      writeViewCookie(next);
       window.localStorage.setItem(STORAGE_KEY, next);
     },
     [isOperator],
