@@ -17,6 +17,8 @@ export interface UserListEntry {
     team: string;
     status: string;
     avatar: string;
+    /** What Zitadel says the account is. Absent reads as a person. */
+    kind?: "human" | "machine";
   };
   bundle_count: number;
   bundle_names: string[];

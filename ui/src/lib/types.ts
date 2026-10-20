@@ -41,6 +41,7 @@ export interface UserProfile {
   team: string;
   status: string;
   avatar: string;
+  kind?: "human" | "machine";
 }
 
 export interface CatalogResponse {

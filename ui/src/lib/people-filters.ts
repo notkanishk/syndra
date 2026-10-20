@@ -154,6 +154,15 @@ export function isDeparted(status: string | undefined): boolean {
 }
 
 /**
+ * THE ONE COPY of "does this account count as a person". A service account
+ * (Zitadel's machine type) stays in the list and in every audit, but is never
+ * "arrived, never set up" and is not counted among the people.
+ */
+export function isPerson(entry: UserListEntry): boolean {
+  return entry.user.kind !== "machine";
+}
+
+/**
  * Whether Zitadel — or, absent an observation, Syndra's record — shows this
  * person holding anything at all. THE ONE COPY: "no access" and "departed,
  * still has access" are the same question asked in opposite directions, and
@@ -198,7 +207,7 @@ function matchesAttention(entry: UserListEntry, attention: Attention): boolean {
     case "requests":
       return entry.open_request_count > 0;
     case "no-access":
-      return !hasAccess(entry);
+      return isPerson(entry) && !hasAccess(entry);
     case "departed":
       // Only departed people who still hold something: a cleanly offboarded
       // account is not work, and listing it as such would bury the ones that are.

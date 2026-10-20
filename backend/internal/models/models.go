@@ -175,6 +175,12 @@ type AuditLog struct {
 	Details json.RawMessage `json:"details,omitempty"`
 }
 
+// UserProfile.Kind values, as Zitadel's user search types them.
+const (
+	UserKindHuman   = "human"
+	UserKindMachine = "machine"
+)
+
 type UserProfile struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
@@ -183,10 +189,17 @@ type UserProfile struct {
 	Team   string `json:"team"`
 	Status string `json:"status"`
 	Avatar string `json:"avatar"`
+	// Kind is what Zitadel says the account is: UserKindHuman or UserKindMachine
+	// (keys, no sign-in). Machine accounts leave the people flows (onboarding,
+	// People counts) and stay wherever access is audited. Empty reads as human.
+	Kind string `json:"kind"`
 	// Joined is when Zitadel created the account; nil when Zitadel gave none.
 	// Server-side only: the Insights "new this term" lens reads it.
 	Joined *time.Time `json:"-"`
 }
+
+// IsMachine is true for a Zitadel machine user: a service account, not a person.
+func (u UserProfile) IsMachine() bool { return u.Kind == UserKindMachine }
 
 type ProjectRole struct {
 	Key   string `json:"key"`

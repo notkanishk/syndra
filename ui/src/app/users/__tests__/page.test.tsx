@@ -78,6 +78,28 @@ beforeEach(() => {
 });
 
 describe("People index", () => {
+  it("marks a machine account as a service account and nobody else", () => {
+    users.data = [
+      person(),
+      person({ user: { ...person().user, id: "svc", name: "netbird", title: "", team: "", kind: "machine" } }),
+    ];
+    renderPeople();
+    expect(screen.getAllByText("Service account")).toHaveLength(1);
+    expect(screen.getByText("netbird")).toBeInTheDocument();
+    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+  });
+
+  it("keeps a machine account out of 'no access yet', which is for people who arrived", () => {
+    nav.url = "/users?attention=no-access";
+    users.data = [
+      person({ user: { ...person().user, id: "svc", name: "netbird", kind: "machine" }, effective_role_count: 0 }),
+      person({ user: { ...person().user, id: "u2", name: "Ines Ward" }, effective_role_count: 0 }),
+    ];
+    renderPeople();
+    expect(screen.getByText("Ines Ward")).toBeInTheDocument();
+    expect(screen.queryByText("netbird")).not.toBeInTheDocument();
+  });
+
   it("carries what a person needs, not just what they have", () => {
     users.data = [
       person({ expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),

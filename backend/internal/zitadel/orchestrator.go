@@ -22,6 +22,9 @@ type ZitadelUser struct {
 	DisplayName string `json:"displayName"`
 	Email       string `json:"email"`
 	State       string `json:"state"`
+	// Machine is true for a machine user (the search item carries `machine`
+	// where a person's carries `human`).
+	Machine bool `json:"-"`
 	// Created is when Zitadel created the account (details.creationDate). Zero
 	// when the response carried none or an unreadable one.
 	Created time.Time `json:"-"`
