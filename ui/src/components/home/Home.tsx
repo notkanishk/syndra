@@ -21,6 +21,7 @@ import {
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
 import { useRequestDecisions } from "@/lib/request-decisions";
 import { useDrainPropagations } from "@/lib/queries/usePropagation";
+import { useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -54,6 +55,11 @@ import { formatShortDate, formatWeekday, daysUntil, whyNotChecked } from "@/lib/
  * Nothing is ever inserted above this zone, and nothing below it can push it
  * down: the queue is the first thing under the cursor or the page has failed.
  *
+ * It is two columns (route-home layout 1c, chosen 2 Oct 2026): "Time-sensitive"
+ * holds what changes on its own if you wait, "When you're ready" what only
+ * waits. Each block type has one column for good, and a column with nothing in
+ * it leaves (#27) without the other moving across into its place.
+ *
  * **The makerspace, below.** Always present, including on a day when the queue
  * is empty.
  *
@@ -76,6 +82,7 @@ export function Home({ session }: { session: SessionUser }) {
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
   const onboarding = useMissedOnboarding();
+  const indicators = useIndicatorsRead();
 
   const pending = useMemo(() => requests.data ?? [], [requests.data]);
   // The queue's own decide and beat. They live here, not in the card, because
@@ -123,6 +130,23 @@ export function Home({ session }: { session: SessionUser }) {
       findings
     : pending.length + expiring.length + onboardingGaps;
 
+  // What the line under the headline may call checked and clear. A block that
+  // is on the page is not clear, and one that was never read is not claimed: the
+  // placeholder zeros the rail holds before its first poll are not readings.
+  const readIndicators = indicators.isPlaceholderData ? undefined : indicators.data;
+  const clear: Array<[string, string]> = [
+    queue.rows.length === 0 && ["Requests", "/requests"],
+    expiring.length === 0 && ["Expiring access", "/review/expiring-access"],
+    advanced && (drift?.count ?? 0) === 0 && ["Drift", "/governance/drift"],
+    advanced && (propagation?.count ?? 0) === 0 && ["Pending changes", "/governance/pending"],
+    advanced &&
+      readIndicators?.unconfirmed_revocations === 0 && [
+        "Unfinished revocations",
+        "/governance/unconfirmed-revocations",
+      ],
+    advanced && readIndicators?.holds_due === 0 && ["Holds due", "/review/holds"],
+  ].filter((entry): entry is [string, string] => Array.isArray(entry));
+
   const who = firstName(session);
   // The greeting and the weekday depend on the reader's clock and zone, which
   // the server doesn't share: rendered there, they were the server's hour in
@@ -151,6 +175,22 @@ export function Home({ session }: { session: SessionUser }) {
         <div className="mt-2 text-[14.5px] text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>} · last checked <ClockTime at={summary.dataUpdatedAt} />
         </div>
+        {/* #27: a clear block gives up its seat, so this says it was checked. Only
+            where there is a queue to read: the one calm line below says the rest. */}
+        {!error && !loading && (blocks > 0 || queue.rows.length > 0) && clear.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-muted">
+            <span aria-hidden className="h-[7px] w-[7px] rounded-pill bg-healthy" />
+            <span>Checked, nothing waiting:</span>
+            {clear.map(([name, href], index) => (
+              <span key={href} className="inline-flex items-center gap-2">
+                {index > 0 && <span aria-hidden>·</span>}
+                <Link href={href} className="text-ink hover:text-accent-text hover:underline">
+                  {name}
+                </Link>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {error ? (
@@ -184,25 +224,49 @@ export function Home({ session }: { session: SessionUser }) {
         </div>
       ) : (
         <>
-          {queue.rows.length > 0 && <OpenRequests rows={queue.rows} decisions={decisions} queue={queue} />}
-          {expiring.length > 0 && <ExpiringSoon grants={expiring} />}
-          {onboardingGaps > 0 && <OnboardingGaps report={onboarding.data!} />}
-
-          {advanced && (propagation?.count ?? 0) > 0 && (
-            <PendingChanges
-              count={propagation!.count}
-              reachable={propagation!.zitadel_reachable}
-            />
-          )}
-          {advanced && unconfirmedWrites.count > 0 && (
-            <UnconfirmedWrites summary={unconfirmedWrites} />
-          )}
-          {/* Above unexplained access, because it qualifies it: a target Syndra
-              cannot read contributes no findings, so the count below is a
-              statement about the targets it COULD read. */}
-          {advanced && unvouched.length > 0 && <UnvouchedTargets targets={unvouched} />}
-          {advanced && (drift?.count ?? 0) > 0 && <UnexplainedAccess count={drift!.count} />}
-          {advanced && findings > 0 && <MergeFindingsWaiting count={findings} />}
+          <div className="grid items-start gap-6 desktop:grid-cols-2">
+            {/* Time-sensitive: access ends, stays wrong, or goes unseen if you wait.
+                Drift leads, and a target Syndra cannot read stays beside the
+                findings it qualifies, in the same column. */}
+            {(expiring.length > 0 ||
+              (advanced &&
+                ((drift?.count ?? 0) > 0 || unvouched.length > 0 || unconfirmedWrites.count > 0))) && (
+              <QueueColumn
+                title="Time-sensitive"
+                note="Access ends, stays wrong, or goes unseen if you wait."
+                className="desktop:col-start-1"
+              >
+                {advanced && (drift?.count ?? 0) > 0 && <UnexplainedAccess count={drift!.count} />}
+                {expiring.length > 0 && <ExpiringSoon grants={expiring} />}
+                {advanced && unvouched.length > 0 && <UnvouchedTargets targets={unvouched} />}
+                {advanced && unconfirmedWrites.count > 0 && (
+                  <UnconfirmedWrites summary={unconfirmedWrites} />
+                )}
+              </QueueColumn>
+            )}
+            {/* When you're ready: nothing changes until you act. */}
+            {(queue.rows.length > 0 ||
+              onboardingGaps > 0 ||
+              (advanced && (findings > 0 || (propagation?.count ?? 0) > 0))) && (
+              <QueueColumn
+                title="When you're ready"
+                note="Nothing changes until you act."
+                className="desktop:col-start-2"
+              >
+                {queue.rows.length > 0 && (
+                  <OpenRequests rows={queue.rows} decisions={decisions} queue={queue} />
+                )}
+                {onboardingGaps > 0 && <OnboardingGaps report={onboarding.data!} />}
+                {advanced && findings > 0 && <MergeFindingsWaiting count={findings} />}
+                {advanced && (propagation?.count ?? 0) > 0 && (
+                  <PendingChanges
+                    count={propagation!.count}
+                    reachable={propagation!.zitadel_reachable}
+                  />
+                )}
+              </QueueColumn>
+            )}
+          </div>
 
           {!advanced && (
             <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
@@ -217,6 +281,35 @@ export function Home({ session }: { session: SessionUser }) {
       {/* The work zone above never moves. This is appended, never inserted. */}
       {!error && !loading && <Makerspace />}
     </div>
+  );
+}
+
+/**
+ * One of the queue's two columns. `className` pins its side, so a column that
+ * leaves never pulls the other across into its place.
+ */
+function QueueColumn({
+  title,
+  note,
+  className,
+  children,
+}: {
+  title: string;
+  note: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const id = `home-col-${title.replace(/\W+/g, "-").toLowerCase()}`;
+  return (
+    <section aria-labelledby={id} className={`flex min-w-0 flex-col gap-3.5 ${className}`}>
+      <div className="flex flex-col gap-1">
+        <h2 id={id} className="type-card-title">
+          {title}
+        </h2>
+        <span className="text-[13.5px] text-muted">{note}</span>
+      </div>
+      {children}
+    </section>
   );
 }
 
