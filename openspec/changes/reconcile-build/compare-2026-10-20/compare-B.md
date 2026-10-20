@@ -1,4 +1,4 @@
-# Compare B: live (syndra.makerspace.tools) vs boards
+# Compare B: live (the live app) vs boards
 
 Notes: the board draws ONE page body per route; the Basic/Advanced toggle on a board only changes the sidebar. So page-body diffs are marked "both". The Basic/Advanced switch is shared via localStorage with another helper, so the view flipped under me several times; the starting view was Basic and it is Basic again at the end. Console errors (pattern Error|#418|Minified): none on any page I visited. Boards: person frame (route-users-id ?frame=person) renders blank under its tabs; default frame was used instead.
 
