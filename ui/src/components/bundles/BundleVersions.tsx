@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate } from "@/lib/format";
@@ -179,33 +180,38 @@ export function BundlePeople({ bundleId, name }: { bundleId: string; name: strin
   const [moving, setMoving] = useState<BundleVersion | null>(null);
   const rows = useMemo(() => versions.data ?? [], [versions.data]);
   return (
-    <Card>
-      <ListStates
-        isLoading={holders.isLoading || versions.isLoading}
-        error={holders.error ?? versions.error}
-        isEmpty={(holders.data ?? []).length === 0}
-        onRetry={() => holders.refetch()}
-        errorTitle={`Couldn't load who has ${name}.`}
-        skeleton={<RowSkeleton rows={4} label="Loading people" />}
-        empty={
-          <EmptyState
-            title={`Nobody has ${name} yet.`}
-            guidance="Add people from here, or give it to someone from their page."
-          />
-        }
-      >
-        <Holders bundleId={bundleId} onMoveTo={(v) => setMoving(v)} versions={rows} />
-      </ListStates>
-      {moving && (
-        <MoveHoldersDialog
-          bundleId={bundleId}
-          name={name}
-          target={moving}
-          userIds={(holders.data ?? []).filter((h) => h.version_id !== moving.id).map((h) => h.user_id)}
-          onClose={() => setMoving(null)}
-        />
+    <div className="flex flex-col gap-3.5">
+      {(holders.data ?? []).length > 0 && (
+        <ReadFreshness state={readStateOfQuery(holders)} subject={`Who has ${name}`} className="px-5" />
       )}
-    </Card>
+      <Card>
+        <ListStates
+          isLoading={holders.isLoading || versions.isLoading}
+          error={holders.error ?? versions.error}
+          isEmpty={(holders.data ?? []).length === 0}
+          onRetry={() => holders.refetch()}
+          errorTitle={`Couldn't load who has ${name}.`}
+          skeleton={<RowSkeleton rows={4} label="Loading people" />}
+          empty={
+            <EmptyState
+              title={`Nobody has ${name} yet.`}
+              guidance="Add people from here, or give it to someone from their page."
+            />
+          }
+        >
+          <Holders bundleId={bundleId} onMoveTo={(v) => setMoving(v)} versions={rows} />
+        </ListStates>
+        {moving && (
+          <MoveHoldersDialog
+            bundleId={bundleId}
+            name={name}
+            target={moving}
+            userIds={(holders.data ?? []).filter((h) => h.version_id !== moving.id).map((h) => h.user_id)}
+            onClose={() => setMoving(null)}
+          />
+        )}
+      </Card>
+    </div>
   );
 }
 

@@ -14,6 +14,7 @@ import { Segmented, Select } from "@/components/ui/Select";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { formatList, personLine } from "@/lib/format";
 import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import {
@@ -51,6 +52,14 @@ export default function BundlesPage() {
           </Button>
         }
       />
+
+      {rows.length > 0 && (
+        <ReadFreshness
+          state={readStateOfQuery(bundles)}
+          subject="Bundles and who has them"
+          className="-mb-3.5 px-5"
+        />
+      )}
 
       <Card>
         <CardColumns>

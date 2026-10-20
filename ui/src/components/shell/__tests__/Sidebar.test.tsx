@@ -108,6 +108,27 @@ describe("the rail's stable structure", () => {
     expect(advanced).toContain("Drift");
   });
 
+  // N18 (3a, 13 Oct 2026): Insights, Bundles and Automatic rules are top level
+  // and Changes is its own group. The boards' older shells draw an AUTOMATION
+  // group with an Access map; that is the superseded shape.
+  it("draws Advanced's Changes group and no Automation group or Access map", () => {
+    view.audience = "advanced";
+    renderRail();
+    const order = railOrder();
+
+    expect(order.slice(order.indexOf("Bundles"), order.indexOf("Drift"))).toEqual([
+      "Bundles",
+      "Automatic rules",
+      "Insights",
+      "Pending changes",
+      "Change history",
+      "Roles that wait",
+    ]);
+    expect(screen.getByText("Changes")).toBeInTheDocument();
+    expect(screen.queryByText("Automation")).toBeNull();
+    expect(screen.queryByText("Access map")).toBeNull();
+  });
+
   it("shows a member three destinations and never the operator rows", () => {
     view.audience = "member";
     view.isOperator = false;

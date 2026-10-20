@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   draft: undefined as unknown,
   versions: [] as unknown[],
   discard: vi.fn(),
+  roles: [] as unknown[],
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -22,7 +23,7 @@ vi.mock("@/lib/queries/useBundles", () => ({
     error: null,
     refetch: () => {},
   }),
-  useBundleRoles: () => ({ data: [], isLoading: false, error: null, refetch: () => {} }),
+  useBundleRoles: () => ({ data: state.roles, isLoading: false, error: null, refetch: () => {} }),
   useBundleImpact: () => ({ data: null, isLoading: false }),
   useAddBundleRole: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateBundle: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -43,7 +44,14 @@ vi.mock("@/lib/queries/useBundleVersions", () => ({
 }));
 
 vi.mock("@/lib/queries/useMappingRules", () => ({ useMappingRules: () => ({ data: [] }) }));
-vi.mock("@/lib/queries/useRoles", () => ({ useGlobalRoleCatalog: () => ({ data: [] }) }));
+vi.mock("@/lib/queries/useRoles", () => ({
+  useGlobalRoleCatalog: () => ({
+    data: [
+      { project_id: "p1", project_name: "Laser Lab", role_key: "laser", display_name: "Laser operator", description: "" },
+      { project_id: "p1", project_name: "Laser Lab", role_key: "cnc", display_name: "CNC operator", description: "" },
+    ],
+  }),
+}));
 vi.mock("@/components/bundles/BundleVersions", () => ({
   BundlePeople: () => <div>who has it</div>,
   BundleVersions: () => <div>every version</div>,
@@ -56,6 +64,7 @@ vi.mock("@/components/names", () => ({
 const role = (key: string) => ({ bundle_id: "b1", zitadel_project_id: "p1", zitadel_role_key: key });
 
 beforeEach(() => {
+  state.roles = [role("laser"), role("cnc")];
   state.discard = vi.fn().mockResolvedValue({});
   state.draft = {
     bundle_id: "b1",
@@ -72,6 +81,27 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+// route-bundles-v2 (N9): the page leads back to the list, and each project's
+// card is headed by the project, a link, with how many of its roles this
+// bundle gives beside the name rather than off at the far edge.
+describe("a bundle's page follows its board", () => {
+  it("makes the Bundles eyebrow the way back to the list", () => {
+    render(<BundlePage bundleId="b1" />);
+
+    expect(screen.getByRole("link", { name: "Bundles" })).toHaveAttribute("href", "/bundles");
+  });
+
+  it("heads each project's card with a link to the project and its role count", () => {
+    state.draft = { ...(state.draft as object), added: [], removed: [] };
+    render(<BundlePage bundleId="b1" />);
+
+    const project = screen.getByRole("link", { name: "Laser Lab" });
+    expect(project).toHaveAttribute("href", "/projects/p1");
+    // Beside the name, in the same heading seat.
+    expect(project.closest("div")).toHaveTextContent("Laser Lab2 roles");
+  });
+});
 
 describe("a bundle's page", () => {
   it("titles the unpublished panel with the change count and names the next version", () => {

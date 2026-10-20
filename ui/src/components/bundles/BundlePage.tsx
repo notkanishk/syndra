@@ -159,7 +159,11 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
   return (
     <div className="flex flex-col gap-7">
       <PageHeader
-        eyebrow="Bundles"
+        eyebrow={
+          <Link href="/bundles" className="hover:text-ink hover:underline hover:underline-offset-[3px]">
+            Bundles
+          </Link>
+        }
         title={name}
         meta={[
           latest ? `v${latest.version} · published ${formatShortDate(latest.published_at)}` : null,
@@ -401,12 +405,18 @@ function WhatItGives({
   const leaving = useMemo(() => draft?.removed ?? [], [draft?.removed]);
   const rows = useMemo(() => [...(roles.data ?? []), ...leaving], [roles.data, leaving]);
   const groups = useMemo(() => {
-    const out = new Map<string, BundleRoleRow[]>();
+    // By project id, so the heading can link to the project; the name is only
+    // what it is called.
+    const out = new Map<string, { name: string; list: BundleRoleRow[] }>();
     for (const r of rows) {
-      const project = byId.get(idOf(r))?.project_name || r.zitadel_project_id;
-      out.set(project, [...(out.get(project) ?? []), r]);
+      const group = out.get(r.zitadel_project_id) ?? {
+        name: byId.get(idOf(r))?.project_name || r.zitadel_project_id,
+        list: [],
+      };
+      group.list.push(r);
+      out.set(r.zitadel_project_id, group);
     }
-    return Array.from(out.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return Array.from(out.entries()).sort(([, a], [, b]) => a.name.localeCompare(b.name));
   }, [rows, byId]);
   const next = draft?.next_version;
   const leavingIds = new Set(leaving.map(idOf));
@@ -456,9 +466,23 @@ function WhatItGives({
             catalog={byId}
           />
         ))}
-        {groups.map(([project, list]) => (
-          <Card key={project}>
-            <CardHeader title={project} note={`${list.length} ${list.length === 1 ? "role" : "roles"}`} />
+        {groups.map(([projectId, { name: project, list }]) => (
+          <Card key={projectId}>
+            <CardHeader
+              title={
+                <>
+                  <Link
+                    href={`/projects/${encodeURIComponent(projectId)}`}
+                    className="motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+                  >
+                    {project}
+                  </Link>
+                  <span className="ml-3 text-[13.5px] font-normal text-faint">
+                    {list.length} {list.length === 1 ? "role" : "roles"}
+                  </span>
+                </>
+              }
+            />
             {list.map((role) => {
               const id = idOf(role);
               const entry = byId.get(id);
