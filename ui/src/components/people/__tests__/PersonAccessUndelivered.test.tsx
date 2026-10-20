@@ -4,7 +4,6 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PersonAccess } from "@/components/people/PersonAccess";
-import { formatClock } from "@/lib/format";
 
 /**
  * A role nothing has delivered must not read as held.
@@ -219,13 +218,9 @@ describe("a role Zitadel confirms", () => {
     renderPerson();
 
     expect(screen.getByText(/In Zitadel/)).toBeInTheDocument();
-    // The read time is the project heading's job now — it is the evidence for
-    // every row beneath it, and it was being printed again on each of them.
-    // The test runner's local timezone need not be UTC, so the expectation is
-    // computed with the same `formatClock` the heading renders through.
-    expect(
-      screen.getByText(new RegExp(`Read from Zitadel ${formatClock(state.observedAt)}`)),
-    ).toBeInTheDocument();
+    // The read time is the page's read line now — it is the evidence for every
+    // row beneath it, and it was being printed again on each of them.
+    expect(screen.getByText(/What Zitadel confirmed was read/)).toBeInTheDocument();
   });
 
   it("still says so with no read time, rather than nothing", () => {

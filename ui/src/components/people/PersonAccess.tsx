@@ -19,12 +19,14 @@ import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
 import { PersonRequests } from "@/components/people/PersonRequests";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
-import { ErrorState, RowSkeleton } from "@/components/states";
+import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
-import { Chip, Mono } from "@/components/ui/Badge";
+import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { Unfold } from "@/components/ui/Unfold";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
@@ -36,7 +38,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { daysUntil, formatAgoShort, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
 type Tab = "access" | "requests" | "activity";
@@ -89,6 +91,15 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   const [bundlesOpen, setBundlesOpen] = useState(false);
   const [grantOpen, setGrantOpen] = useState(false);
   const [removal, setRemoval] = useState<Removal | null>(null);
+  // Projects folded shut. Open by default: a person's page is read to find
+  // something, and a fold that hid the answer would be the page's own fault.
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const toggleProject = (id: string) =>
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const user = access.data?.user;
   useCrumb(user?.name);
@@ -143,10 +154,10 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
         ? "unknown"
         : "read";
   // When the observation store's read happened — the basis every "In Zitadel"
-  // claim below rests on. Stated ONCE per project, on the heading, because
-  // every role in that card was read from this same observation; a clock
-  // repeated on each row is the same fact printed twice and crowds out the
-  // part that actually differs between rows.
+  // claim below rests on. Stated ONCE, on the read line above the cards,
+  // because every role on the page was read from this same observation; a
+  // clock repeated on each project or row is the same fact printed again and
+  // crowds out the part that actually differs.
   const readAt = upstreamGrants.data?.observedAt;
 
   if (access.isLoading) {
@@ -343,29 +354,112 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
             </Card>
           )}
 
-          {access.data.projects.map((project) => (
-            <Card key={project.project_id}>
-              <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-                <ResolvedProjectName
-                  className="type-card-title"
-                  name={project.project_name}
-                  resolved={project.project_name_resolved}
-                  id={project.project_id}
-                />
-                <ProjectRoleTally
-                  recorded={project.effective_role_keys.length}
-                  unexplained={unexplainedIn(project).length}
-                />
-                {/* Not gated on Advanced. The read time is the EVIDENCE for
-                    every "In Zitadel" below it, and a positive claim whose
-                    basis is only visible to operators in one view is a claim
-                    most readers are asked to take on faith. The grant id
-                    inside stays Advanced-only — that is a handle, not
-                    evidence. */}
-                {(
+          {access.data.projects.length === 0 && (
+            <Card>
+              <EmptyState
+                title={isOperator ? `${user.name} holds no access yet` : "You hold no access yet"}
+                guidance={`Access appears here once ${
+                  isOperator ? "they are" : "you are"
+                } given a bundle or direct access, or when a request ${
+                  isOperator ? "of theirs" : "of yours"
+                } is approved.`}
+              />
+            </Card>
+          )}
+
+          {/* The read line: how current the page is on the left, once, and a chip
+              per project at the right end (RULES, grouped lists). Not drawn
+              while the read is still out, or with nothing to read it about. */}
+          {access.data.projects.length > 0 && !upstreamGrants.isLoading && (
+            <div className="-mb-1 flex flex-wrap items-center gap-x-4 gap-y-2 px-5">
+              {(readAt || confirmation === "unreachable") && (
+                <ReadFreshness state={{ readAt }} subject="What Zitadel confirmed" />
+              )}
+              {access.data.projects.length > 1 && (
+                <nav aria-label="Projects on this page" className="ml-auto flex flex-wrap gap-2">
+                  {access.data.projects.map((project) => (
+                    <a
+                      key={project.project_id}
+                      href={`#proj-${project.project_id}`}
+                      className="inline-flex min-h-11 items-center desktop:min-h-0"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setFolded((prev) => {
+                          const next = new Set(prev);
+                          next.delete(project.project_id);
+                          return next;
+                        });
+                        // Next frame: the fold has to be open before there is a place to land.
+                        requestAnimationFrame(() =>
+                          document
+                            .getElementById(`proj-${project.project_id}`)
+                            ?.scrollIntoView?.({ block: "start" }),
+                        );
+                      }}
+                    >
+                      <Chip className="gap-2">
+                        {unexplainedIn(project).length > 0 && <StatusDot tone="warn" />}
+                        {project.project_name}
+                        {/* Never the two added together (ProjectRoleTally): what Syndra
+                            decided, or, with none, what it never gave. */}
+                        <span className="text-faint">
+                          {project.effective_role_keys.length || unexplainedIn(project).length}
+                        </span>
+                        <span aria-hidden className="text-[12px] text-faint">
+                          ↓
+                        </span>
+                      </Chip>
+                    </a>
+                  ))}
+                </nav>
+              )}
+            </div>
+          )}
+
+          {access.data.projects.map((project) => {
+            const open = !folded.has(project.project_id);
+            return (
+              <Card key={project.project_id}>
+                <div
+                  id={`proj-${project.project_id}`}
+                  className="flex scroll-mt-4 flex-wrap items-center gap-3 px-5 py-4"
+                >
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    aria-label={`${open ? "Fold" : "Open"} ${project.project_name}`}
+                    onClick={() => toggleProject(project.project_id)}
+                    className="group -my-2 -ml-2 flex size-11 flex-none items-center justify-center"
+                  >
+                    {/* The 28px round chevron is the look; the 44px button around it is the touch floor. */}
+                    <span
+                      aria-hidden
+                      className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press group-hover:bg-[var(--hover)] ${
+                        open ? "rotate-90" : ""
+                      }`}
+                    >
+                      ›
+                    </span>
+                  </button>
+                  <Link
+                    href={`/projects/${encodeURIComponent(project.project_id)}`}
+                    className="hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+                  >
+                    <ResolvedProjectName
+                      className="type-card-title"
+                      name={project.project_name}
+                      resolved={project.project_name_resolved}
+                      id={project.project_id}
+                    />
+                  </Link>
+                  <ProjectRoleTally
+                    recorded={project.effective_role_keys.length}
+                    unexplained={unexplainedIn(project).length}
+                  />
+                  {/* When Zitadel was read is the read line's job now; what stays
+                      here is what is specific to THIS project's grant. */}
                   <ZitadelGrantId
                     id={zitadelGrantByProject.get(project.project_id)}
-                    readAt={readAt}
                     showId={advanced && isOperator}
                     isOperator={isOperator}
                     loading={upstreamGrants.isLoading}
@@ -380,45 +474,47 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                       nothingSentYet(role.reasons),
                     )}
                   />
-                )}
-              </div>
+                </div>
 
-              <RoleGroup
-                confirmation={confirmation}
-                inZitadel={zitadelRolesByProject.get(project.project_id)}
-                label="Given"
-                roles={project.source_roles}
-                projectId={project.project_id}
-                projectName={project.project_name}
-                grantsByRole={grantsByRole}
-                grantsResolved={grantsResolved}
-                advanced={advanced}
-                isOperator={isOperator}
-                onRemove={setRemoval}
-                onReveal={revealInAdvanced}
-              />
-              <RoleGroup
-                confirmation={confirmation}
-                inZitadel={zitadelRolesByProject.get(project.project_id)}
-                label="Automatic"
-                roles={project.derived_roles}
-                projectId={project.project_id}
-                projectName={project.project_name}
-                grantsByRole={grantsByRole}
-                grantsResolved={grantsResolved}
-                advanced={advanced}
-                isOperator={isOperator}
-                onRemove={setRemoval}
-                onReveal={revealInAdvanced}
-              />
-              <UnexplainedRoles
-                roleKeys={unexplainedIn(project)}
-                projectId={project.project_id}
-                userId={userId}
-                isOperator={isOperator}
-              />
-            </Card>
-          ))}
+                <Unfold open={open}>
+                  <RoleGroup
+                    confirmation={confirmation}
+                    inZitadel={zitadelRolesByProject.get(project.project_id)}
+                    label="Given"
+                    roles={project.source_roles}
+                    projectId={project.project_id}
+                    projectName={project.project_name}
+                    grantsByRole={grantsByRole}
+                    grantsResolved={grantsResolved}
+                    advanced={advanced}
+                    isOperator={isOperator}
+                    onRemove={setRemoval}
+                    onReveal={revealInAdvanced}
+                  />
+                  <RoleGroup
+                    confirmation={confirmation}
+                    inZitadel={zitadelRolesByProject.get(project.project_id)}
+                    label="Automatic"
+                    roles={project.derived_roles}
+                    projectId={project.project_id}
+                    projectName={project.project_name}
+                    grantsByRole={grantsByRole}
+                    grantsResolved={grantsResolved}
+                    advanced={advanced}
+                    isOperator={isOperator}
+                    onRemove={setRemoval}
+                    onReveal={revealInAdvanced}
+                  />
+                  <UnexplainedRoles
+                    roleKeys={unexplainedIn(project)}
+                    projectId={project.project_id}
+                    userId={userId}
+                    isOperator={isOperator}
+                  />
+                </Unfold>
+              </Card>
+            );
+          })}
 
           {/* Advisory notes. Never an error — cleanup_hints are opinions. */}
           {access.data.cleanup_hints.map((hint) => (
@@ -580,11 +676,10 @@ function UnexplainedRoles({
  * three said anything the others did not.
  *
  * Split by what each can actually know. A grant in Zitadel is per (user,
- * project) and carries every role, so the heading is the right place for when
- * it was read and what its id is — facts about the READ, true for the whole
- * card. Whether one particular role is in it differs per row, so that stays on
- * the row. Now the heading says how we know, the row says what we found, and
- * neither repeats the other.
+ * project) and carries every role, so the heading is the right place for what
+ * its id is and whether it exists at all. When Zitadel was read is true for the
+ * whole page and is said once, on the read line. Whether one particular role is
+ * in the grant differs per row, so that stays on the row.
  *
  * Four states, and none of them guesses. An absent grant is stated as absent
  * rather than shown as a dash: Syndra listing roles for a project Zitadel has
@@ -593,7 +688,6 @@ function UnexplainedRoles({
  */
 function ZitadelGrantId({
   id,
-  readAt,
   showId,
   isOperator,
   loading,
@@ -601,8 +695,6 @@ function ZitadelGrantId({
   unsent,
 }: {
   id: string | undefined;
-  /** When this observation was taken — the basis the positive statement below cites. */
-  readAt: string | undefined;
   /** The raw grant id is an operator's handle for Zitadel's console or a ticket. */
   showId: boolean;
   isOperator: boolean;
@@ -634,15 +726,11 @@ function ZitadelGrantId({
       </span>
     );
   }
+  // The read time is on the page's read line; only the handle is left here.
+  if (!showId) return null;
   return (
     <span className="text-[13px] text-faint">
-      {readAt ? `Read from Zitadel ${formatClock(readAt)}` : "Read from Zitadel"}
-      {showId ? (
-        <>
-          {" "}
-          <Mono className="font-normal text-faint">{id}</Mono>
-        </>
-      ) : null}
+      Grant <Mono className="font-normal text-faint">{id}</Mono>
     </span>
   );
 }
@@ -715,6 +803,7 @@ function RoleGroup({
         // person can actually open the door. Syndra's tables say what was
         // DECIDED; they were being rendered as though they said what is true.
         const standing = confirmation === "read" ? Boolean(inZitadel?.has(role.role_key)) : null;
+        const verb = strongest?.queued ? "Withdraw" : strongest?.kind === "direct" ? "Revoke" : "Remove";
 
         return (
           <div
@@ -797,9 +886,15 @@ function RoleGroup({
             </span>
 
             {isOperator && strongest && (
-              <button
-                type="button"
-                aria-label={`Actions for ${role.role_key}`}
+              // The verb is the label (RULES): Revoke when a person loses access
+              // they hold, Withdraw while the change is still waiting to be
+              // sent, Remove when a part comes out of a whole. It opens the
+              // removal that belongs to this source; the dialog still decides
+              // what is left and names it.
+              <Button
+                size="sm"
+                variant={verb === "Revoke" ? "danger" : "outline"}
+                aria-label={`${verb} ${humanizeKey(role.role_key)} in ${projectName}`}
                 onClick={() =>
                   onRemove({
                     projectId,
@@ -815,19 +910,9 @@ function RoleGroup({
                     grantsResolved,
                   })
                 }
-                // 44px of target around a 30px ring: this is the only way into the
-                // removal flow for a role, so it is a destructive control and a
-                // mis-tap costs most here. The ring stays 30px; the box around it
-                // does not.
-                className="flex h-11 w-11 shrink-0 items-center justify-center text-[15px] leading-none text-muted motion-tint hover:text-ink desktop:h-[30px] desktop:w-[30px]"
               >
-                <span
-                  aria-hidden
-                  className="flex h-[30px] w-[30px] items-center justify-center rounded-pill border border-line-strong"
-                >
-                  ⋯
-                </span>
-              </button>
+                {verb}
+              </Button>
             )}
 
             {/* Advanced reveals lineage in place, on the same URL. */}
