@@ -369,7 +369,7 @@ describe("the page in plain words (route-system-targets-id)", () => {
     state.roster[0].project = { id: "p1", name: "" };
     renderTarget();
     expect(screen.queryByText("Unnamed project")).toBeNull();
-    expect(screen.getByRole("link", { name: "a project Syndra couldn't name" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Unknown project" }).getAttribute("href")).toBe(
       "/projects/p1",
     );
   });
