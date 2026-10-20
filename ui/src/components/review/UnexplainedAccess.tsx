@@ -21,6 +21,7 @@ import { FilterPills, Select } from "@/components/ui/Select";
 import { Unfold } from "@/components/ui/Unfold";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
+import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { useProjects } from "@/lib/queries/useProjects";
 import { ProjectName, UserAvatar, UserName } from "@/components/names";
 import {
@@ -217,13 +218,64 @@ export function UnexplainedAccess() {
     [returned, filters],
   );
 
+  /**
+   * What the comparison shows that no finding carries.
+   *
+   * The findings are what the scheduled check raised; the comparison is a read
+   * of both sides now. A role Zitadel holds that Syndra does not explain, or
+   * one Syndra gave that Zitadel lacks, can be in the comparison and not yet a
+   * finding — and a person and project with roles different on both sides puts
+   * each role on the side that holds it. Those rows have nothing to resolve (no
+   * finding to adopt or revoke), so they are read-only, and they are dropped
+   * where a finding already says the same thing. The origin, age and source
+   * filters ask about fields a comparison row does not have, so they hide
+   * these rather than claim a match.
+   */
+  const diff = useReconciliationDiff();
+  const readRows = useMemo(() => {
+    const read = diff.data;
+    if (!read || filters.origin || filters.age || filters.source) return [];
+    const said = new Set(
+      returned
+        .filter((item) => item.target === "zitadel")
+        .flatMap((item) =>
+          item.role_keys.map((r) => `${item.drift_type}|${item.user_id}|${item.project_id}|${r}`),
+        ),
+    );
+    const rows: ReadRow[] = [];
+    const add = (kind: SectionKind, userId: string, projectId: string, roles: string[], both: boolean) => {
+      for (const role of roles) {
+        const key = `${kind}|${userId}|${projectId}|${role}`;
+        if (said.has(key)) continue;
+        said.add(key);
+        if (filters.user && userId !== filters.user) continue;
+        if (filters.project && projectId !== filters.project) continue;
+        if (filters.role && role !== filters.role) continue;
+        const row = { key, kind, userId, projectId, role, both };
+        const text = {
+          who: resolver.resolveUser(userId).value?.display_name ?? "",
+          what: `${resolver.resolveProject(projectId).value?.name ?? ""} · ${humanizeKey(role)}`,
+        };
+        if (matchesDriftSearch({ role_keys: [role] }, query, text)) rows.push(row);
+      }
+    };
+    for (const g of read.only_in_zitadel) add("target_only", g.user_id, g.project_id, g.role_keys, false);
+    for (const g of read.only_in_syndra) add("syndra_only", g.user_id, g.project_id, g.role_keys, false);
+    for (const g of read.drift) {
+      add("target_only", g.user_id, g.project_id, g.only_in_zitadel, true);
+      add("syndra_only", g.user_id, g.project_id, g.only_in_syndra, true);
+    }
+    return rows;
+  }, [diff.data, returned, filters, query, resolver]);
+
   const sections = useMemo(() => {
     const sorted = sortDrift(items, sort.key, sort.dir, names);
-    return SECTIONS.map((section) => ({
-      ...section,
-      items: sorted.filter((item) => item.drift_type === section.kind),
-    })).filter((section) => section.items.length > 0);
-  }, [items, sort, names]);
+    return SECTIONS.map((section) => {
+      const rows = sorted.filter((item) => item.drift_type === section.kind);
+      const read = readRows.filter((row) => row.kind === section.kind);
+      return { ...section, items: rows, read, count: rows.length + read.length };
+    }).filter((section) => section.count > 0);
+  }, [items, sort, names, readRows]);
   // The order the rows are drawn in, so shift-click ranges mean what they look
   // like. Selection spans the whole queue, not what a section has rendered: a
   // triage backlog is exactly the case where paging four times before you can
@@ -302,7 +354,7 @@ export function UnexplainedAccess() {
     <ListStates
       isLoading={drift.isLoading}
       error={drift.error}
-      isEmpty={items.length === 0}
+      isEmpty={sections.length === 0}
       onRetry={() => drift.refetch()}
       errorTitle="Couldn't load drift."
       skeleton={
@@ -354,6 +406,7 @@ export function UnexplainedAccess() {
             <DriftSection
               key={section.kind}
               section={section}
+              comparedAt={diff.data?.generated_at ?? ""}
               open={open[section.kind]}
               onToggle={() => setOpen((cur) => ({ ...cur, [section.kind]: !cur[section.kind] }))}
               head={head}
@@ -384,10 +437,15 @@ export function UnexplainedAccess() {
             />
           ))}
         </div>
-        <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
-          <StatusDot tone="healthy" />
-          Everything else in Zitadel agrees with Syndra.
-        </span>
+        {/* Agreement is rendered, not filtered out ("nothing wrong with the
+            rest" is the answer somebody came for) — but only from a comparison
+            that finished. A cut-off or failed one cannot say it. */}
+        {diff.data && !diff.data.truncated && (
+          <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
+            <StatusDot tone="healthy" />
+            Everything else in Zitadel agrees with Syndra.
+          </span>
+        )}
       </div>
     </ListStates>
   );
@@ -411,6 +469,8 @@ export function UnexplainedAccess() {
               setScanOutcome(null);
               try {
                 await reconcile.mutateAsync();
+                // The comparison is a second read of the same two sides.
+                void diff.refetch();
                 // A scan is a read, so it applies nothing — saying "applied"
                 // about a comparison would be the queue claiming it had
                 // acted on what it found.
@@ -556,6 +616,18 @@ export function UnexplainedAccess() {
         </Notice>
       ))}
 
+      {diff.data?.truncated && (
+        <Notice tone="warn" title="The comparison stopped early.">
+          The list was too long, so what the comparison adds to the findings is incomplete. Treat a
+          missing row as “nothing found so far”, not as “nothing exists”.
+        </Notice>
+      )}
+      {diff.error && (
+        <Notice tone="warn" title="The comparison didn’t load.">
+          The findings below are still current. Differences only the comparison shows are missing.
+        </Notice>
+      )}
+
       {list}
 
       <SelectionBar
@@ -634,7 +706,30 @@ function SortHead({
   );
 }
 
-type SectionView = { kind: SectionKind; id: string; title: string; short: string; hint: string; tone: "danger" | "warn"; items: DriftTriageItem[] };
+/** A role the comparison shows on one side only, with no finding behind it. */
+type ReadRow = {
+  key: string;
+  kind: SectionKind;
+  userId: string;
+  projectId: string;
+  role: string;
+  /** The person holds other roles on this project on both sides. */
+  both: boolean;
+};
+
+type SectionView = {
+  kind: SectionKind;
+  id: string;
+  title: string;
+  short: string;
+  hint: string;
+  tone: "danger" | "warn";
+  /** Findings: what can be decided. */
+  items: DriftTriageItem[];
+  /** The comparison's own rows, read-only. */
+  read: ReadRow[];
+  count: number;
+};
 
 /** Opens a folded section on the way, then takes the reader to it. */
 function goTo(kind: SectionKind, setOpen: (next: (cur: Record<SectionKind, boolean>) => Record<SectionKind, boolean>) => void) {
@@ -681,7 +776,7 @@ function SectionChips({
           <Chip className="gap-2">
             <StatusDot tone={section.tone as StatusTone} />
             {section.short}
-            <span className="text-faint">{section.items.length}</span>
+            <span className="text-faint">{section.count}</span>
             <span aria-hidden className="text-[12px] text-faint">
               ↓
             </span>
@@ -754,7 +849,7 @@ function SectionPill({
             >
               <StatusDot tone={section.tone as StatusTone} />
               {section.short}
-              <span className="font-medium text-faint">{section.items.length}</span>
+              <span className="font-medium text-faint">{section.count}</span>
               {!here && (
                 <span aria-hidden className="text-[12px] text-faint">
                   {index < at ? "↑" : "↓"}
@@ -779,10 +874,12 @@ function DriftSection({
   head,
   runOf,
   renderRow,
+  comparedAt,
 }: {
   section: SectionView;
   open: boolean;
   onToggle: () => void;
+  comparedAt: string;
   head: ReactNode;
   runOf: ((item: DriftTriageItem) => string) | null;
   renderRow: (item: DriftTriageItem) => ReactNode;
@@ -790,6 +887,8 @@ function DriftSection({
   const paging = usePaging();
   const anchor = useRef<HTMLDivElement>(null);
   const visible = section.items.slice(0, paging.limit);
+  // The comparison's rows follow the findings and share their ten.
+  const visibleRead = section.read.slice(0, Math.max(0, paging.limit - visible.length));
   const counts = new Map<string, number>();
   if (runOf) for (const item of section.items) counts.set(runOf(item), (counts.get(runOf(item)) ?? 0) + 1);
 
@@ -800,7 +899,7 @@ function DriftSection({
         <div ref={anchor}>
           <CardHeader
             tone={section.tone}
-            count={section.items.length}
+            count={section.count}
             note={section.hint}
             title={
               <button
@@ -846,11 +945,14 @@ function DriftSection({
                 </div>
               );
             })}
+            {visibleRead.map((row) => (
+              <ComparedRow key={row.key} row={row} comparedAt={comparedAt} />
+            ))}
             <PaginationRow
-              shown={visible.length}
-              total={section.items.length}
+              shown={visible.length + visibleRead.length}
+              total={section.count}
               onMore={paging.more}
-              onAll={() => paging.all(section.items.length)}
+              onAll={() => paging.all(section.count)}
               onBack={paging.back}
               anchor={anchor}
             />
@@ -858,6 +960,63 @@ function DriftSection({
         </Unfold>
       </Card>
     </section>
+  );
+}
+
+/**
+ * A role the comparison shows on one side only, in the same seats as a finding
+ * but with no answers: nothing has been raised for it, so there is nothing to
+ * adopt, revoke or mark. Said in words so the missing buttons read as a fact
+ * about the row rather than a fault.
+ */
+function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) {
+  const inZitadel = row.kind === "target_only";
+  const text = inZitadel
+    ? row.both
+      ? "Zitadel gives this person this role on this project and Syndra does not, while they hold other roles on it on both sides."
+      : "Zitadel has this and nothing in Syndra explains it."
+    : row.both
+      ? "Syndra gave this role and Zitadel does not have it, while they hold other roles on this project on both sides."
+      : "Syndra gave this and Zitadel does not have it, so the change never went through.";
+  return (
+    <div data-compared-row className="border-l-[3px] border-transparent">
+      <div className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-3 px-5 py-4">
+        <div className="flex w-full min-w-0 items-center gap-3 tablet:w-[180px] tablet:shrink-0">
+          <UserAvatar id={row.userId} size="row" />
+          <Link
+            href={`/users/${row.userId}`}
+            className="text-[14.5px] font-semibold motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+          >
+            <UserName id={row.userId} />
+          </Link>
+        </div>
+        <div className="flex w-full flex-col items-start gap-[3px] tablet:w-[200px] tablet:shrink-0">
+          <Link
+            href={`/projects/${row.projectId}`}
+            className="text-[14px] leading-[1.45] motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+          >
+            <ProjectName id={row.projectId} /> · {humanizeKey(row.role)}
+          </Link>
+          <Mono className="text-[12.5px] text-faint">{row.role}</Mono>
+        </div>
+        <div className="order-last flex w-full min-w-0 flex-col gap-1 desktop:order-none desktop:w-auto desktop:flex-1">
+          <p className="text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">{text}</p>
+          <p className="text-[12.5px] leading-[1.5] text-faint">
+            It is in the comparison and has not been raised as a finding, so there is nothing to
+            resolve here yet.{" "}
+            {!inZitadel && (
+              <Link href="/governance/pending" className="font-semibold text-muted hover:text-accent-text hover:underline">
+                Check Pending changes
+              </Link>
+            )}
+          </p>
+        </div>
+        <div className="text-[13px] text-faint tablet:ml-auto tablet:w-[110px] tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
+          <span className="tablet:hidden">Compared </span>
+          <Relative iso={comparedAt} />
+        </div>
+      </div>
+    </div>
   );
 }
 
