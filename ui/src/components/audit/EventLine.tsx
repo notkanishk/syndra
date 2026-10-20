@@ -65,7 +65,7 @@ function FirstName({ id }: { id: string }) {
 }
 
 /** "Network storage · Member": the place, then the role by its own name. */
-function PlaceRole({ projectId, roleKey }: { projectId: string; roleKey: string }) {
+export function PlaceRole({ projectId, roleKey }: { projectId: string; roleKey: string }) {
   const role = useNameResolver().resolveRole(projectId, roleKey).value?.display_name ?? humanizeKey(roleKey);
   return (
     <>
