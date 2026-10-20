@@ -50,7 +50,13 @@ var (
 	// than re-declared. Neither is the onboarding_triggers log: that log is
 	// only what a webhook told Syndra, and the whole point of the reconciler
 	// is to answer from state instead.
-	svcDirectoryUsers = directory.Default.Users
+	//
+	// A closure, never the method value `directory.Default.Users`: that binds
+	// whichever source Default is at package init (the demo one), and Init()
+	// swaps it afterwards, so production would read five invented people.
+	svcDirectoryUsers = func(ctx context.Context) ([]models.UserProfile, error) {
+		return directory.Default.Users(ctx)
+	}
 
 	// Governance and lineage (Governance, ExplainUserAccess, BundleImpact,
 	// collectUserRoles)

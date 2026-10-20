@@ -102,9 +102,6 @@ function PersonRow({
           <UserName id={account.subject_id} />
         </span>
         <span className="min-w-0 [overflow-wrap:anywhere] font-mono text-[13.5px] text-muted">{account.username}</span>
-        {account.account_uid !== undefined && (
-          <span className="text-[13px] text-faint">id {account.account_uid}</span>
-        )}
         <span className="text-[13px] text-faint">
           account since <Relative iso={account.bound_at} />
         </span>

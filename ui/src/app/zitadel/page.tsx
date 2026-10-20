@@ -327,15 +327,26 @@ function HealthVerdict({
  * is nothing to read.
  */
 function UpstreamInspection({ reachable }: { reachable: boolean }) {
-  const rows: Array<{ label: string; open: string; path: string; href: string }> = [
+  // `sub` is the board's own line under each name (route-zitadel); the route is the link, never a label.
+  const rows: Array<{ label: string; sub: string; open: string; href: string }> = [
     {
       label: "Projects and their roles",
+      sub: "Each with how it compares with Syndra's record",
       open: "Open projects",
-      path: "/zitadel/projects",
       href: "/zitadel/projects",
     },
-    { label: "People", open: "Open people", path: "/zitadel/users", href: "/zitadel/users" },
-    { label: "Roles held", open: "Open roles held", path: "/zitadel/grants", href: "/zitadel/grants" },
+    {
+      label: "People",
+      sub: "Everyone Zitadel knows, and the roles it holds for each",
+      open: "Open people",
+      href: "/zitadel/users",
+    },
+    {
+      label: "Roles held",
+      sub: "Every role on every person, in one list",
+      open: "Open roles held",
+      href: "/zitadel/grants",
+    },
   ];
 
   return (
@@ -345,9 +356,11 @@ function UpstreamInspection({ reachable }: { reachable: boolean }) {
         note="What Zitadel holds, not what Syndra thinks it holds. Reading only; nothing here changes anything."
       />
       {rows.map((row) => (
-        <div key={row.path} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
-          <span className="min-w-[200px] flex-1 text-[14.5px]">{row.label}</span>
-          <Mono className="w-[190px] shrink-0 truncate text-faint">{row.path}</Mono>
+        <div key={row.href} className="row-divider flex flex-wrap items-center gap-4 px-5 py-3.5">
+          <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
+            <span className="text-[14.5px] font-semibold">{row.label}</span>
+            <span className="text-[13px] leading-[1.5] text-muted">{row.sub}</span>
+          </span>
           {reachable ? (
             <ButtonLink href={row.href} size="sm">
               {row.open}

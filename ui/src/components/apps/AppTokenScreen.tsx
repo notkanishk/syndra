@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useClaimShape } from "@/lib/queries/useClaimShape";
 import { useCrumb } from "@/lib/page-crumb";
+import { useIsAdvanced } from "@/lib/ui-view";
 
 /**
  * E6 · One screen, two equal halves: what the token is shaped like on the
@@ -25,6 +26,7 @@ import { useCrumb } from "@/lib/page-crumb";
  */
 export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   const apps = useApplications();
+  const advanced = useIsAdvanced();
   const app = (apps.data ?? []).find((entry) => entry.application.id === applicationId);
   const shape = useClaimShape(app?.application.project_id);
   // The editor holds edits the preview has not seen. Lifted here because they
@@ -83,8 +85,13 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
         }
         meta={
           <span className="flex flex-wrap items-center gap-2 text-[14px] text-faint">
-            uses roles from <ProjectName id={app.application.project_id} /> · id{" "}
-            <Mono>{app.application.id}</Mono>
+            uses roles from <ProjectName id={app.application.project_id} />
+            {advanced && (
+              <>
+                {" "}
+                · id <Mono>{app.application.id}</Mono>
+              </>
+            )}
           </span>
         }
       />
