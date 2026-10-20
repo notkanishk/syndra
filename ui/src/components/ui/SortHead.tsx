@@ -24,6 +24,29 @@ export function useSort<K extends string>(initial: K) {
 }
 
 /**
+ * The rows in the order a sort asks for, for a list that sorts as a whole.
+ * Text compares as a person reads it (case and accents aside, "Lab 2" before
+ * "Lab 10"); ties keep the order the list already had, so a re-sort never
+ * shuffles equals.
+ */
+export function orderBy<T, K extends string>(
+  rows: readonly T[],
+  sort: Sort<K>,
+  by: Record<K, (row: T) => string | number>,
+): T[] {
+  const get = by[sort.key];
+  return [...rows].sort((a, b) => {
+    const x = get(a);
+    const y = get(b);
+    const order =
+      typeof x === "number" && typeof y === "number"
+        ? x - y
+        : String(x).localeCompare(String(y), undefined, { sensitivity: "base", numeric: true });
+    return order * sort.dir;
+  });
+}
+
+/**
  * A column heading that sorts. `by` is what a screen reader hears after "Sort
  * by"; it is the label, lower-cased, unless a shorter name is wanted ("what"
  * for "What they can get into").
@@ -46,6 +69,7 @@ export function SortHead<K extends string>({
     <button
       type="button"
       aria-label={`Sort by ${by}`}
+      data-sort={on ? (sort.dir > 0 ? "asc" : "desc") : "none"}
       onClick={() => onSort(name)}
       className={`inline-flex items-center gap-[5px] text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
         on ? "text-ink" : ""
