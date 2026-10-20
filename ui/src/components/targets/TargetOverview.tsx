@@ -3,6 +3,7 @@
 import { describeFailure, sentence } from "@/lib/outcome";
 import { Radio } from "@/components/ui/Choice";
 import { roleCount } from "@/lib/role-mapping-plan";
+import Link from "next/link";
 import { Fragment, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -17,7 +18,7 @@ import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { blocksIrreversibleAction, ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { CheckPips, targetReading } from "@/components/targets/TargetReading";
@@ -25,7 +26,7 @@ import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/Projec
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { UserName } from "@/components/names";
-import { formatBytes, personLine, versionLabel } from "@/lib/format";
+import { formatBytes, formatShortDate, personLine, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
@@ -82,24 +83,37 @@ export function TargetOverview({ target }: { target: string }) {
 
   return (
     <div className="grid gap-5">
-      <PageHeader
-        title={name}
-        lede={
-          <>
-            Whether Syndra can reach {name} and what it says about itself, who has an account
-            there, and anything waiting on you. Syndra{" "}
-            <Term name="provision">provisions</Term> an account for every person whose roles
-            reach {name}, and keeps it in step.
-          </>
-        }
-        meta={
-          health.data?.product ? (
-            <Mono>
-              {name} {versionLabel(name, health.data.product_version)}
-            </Mono>
-          ) : undefined
-        }
-      />
+      <div className="flex flex-col gap-1">
+        <Link
+          href="/system/targets"
+          className="inline-flex min-h-11 items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline desktop:min-h-6"
+        >
+          <span aria-hidden>←&nbsp;</span>
+          Connected systems
+        </Link>
+        <PageHeader
+          title={name}
+          lede={
+            <>
+              Whether Syndra can reach {name} and what it says about itself, who has an account
+              there, and anything waiting on you. Syndra{" "}
+              <Term name="provision">provisions</Term> an account for every person whose roles
+              reach {name}, and keeps it in step.
+            </>
+          }
+          meta={
+            <MetaRow>
+              {[
+                health.data?.product
+                  ? `${name} ${versionLabel(name, health.data.product_version)}`.trim()
+                  : null,
+                gated && !justSet ? "no Zitadel project yet" : null,
+                <Mono key="id">{target}</Mono>,
+              ]}
+            </MetaRow>
+          }
+        />
+      </div>
 
       {/* The project comes first: its step while unchosen, its result for the
           visit it was chosen in, then a thin strip that is the only link to the
@@ -249,8 +263,11 @@ export function TargetOverview({ target }: { target: string }) {
           title="What runs here"
           lede={`What Syndra is able to do on ${name}, and the scheduled check that keeps accounts in step.`}
         >
-          {registered && <Capabilities registered={registered} />}
-          <ReconcileControl target={target} />
+          {/* Side by side where there is room, as the board draws them. */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-4">
+            {registered && <Capabilities registered={registered} />}
+            <ReconcileControl target={target} />
+          </div>
         </Region>
         </div>
         </NotOpenYet>
@@ -333,9 +350,13 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
         <Reading
           key={`${alert.klass}-${i}`}
           tone={alert.level === "CRITICAL" || alert.level === "ERROR" ? "danger" : alert.level === "WARNING" ? "warn" : "accent"}
-          label={alertLabel(alert.level)}
+          label={ALERT_TITLE[alert.klass ?? ""] ?? `${alertLabel(alert.level)} from ${name}`}
         >
-          {alert.text}
+          {/* The device's text is quoted, not rewritten: Syndra cannot know what a disk or a pool
+              is saying beyond its words (route-system-targets-id, "its words, not Syndra's"). */}
+          {alert.at && <>{name} raised this on {formatShortDate(alert.at)} and has not cleared it. </>}
+          These are its words, not Syndra&rsquo;s: &ldquo;{alert.text}&rdquo;{" "}
+          <span className="text-ink">Look at {name}.</span>
         </Reading>
       ))}
 
@@ -345,7 +366,8 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
           tone={!pool.healthy ? "danger" : pool.warning ? "warn" : "healthy"}
           label={`Storage pool ${pool.name}`}
         >
-          {pool.status}
+          {/* ONLINE is the device's shout; the reader gets the word. */}
+          {pool.status.charAt(0) + pool.status.slice(1).toLowerCase()}
           {pool.size_bytes > 0 && (
             <>
               {" · "}
@@ -391,6 +413,13 @@ function serviceName(service: string): string {
   if (service === "nfs") return "NFS sharing";
   return service;
 }
+
+/** The alert classes the connection is known to report, in plain words; any other is named by its level. */
+const ALERT_TITLE: Record<string, string> = {
+  SMARTUncorrectedErrors: "A disk reports errors it could not correct",
+  RESTAPIUsage: "Something used an interface TrueNAS is retiring",
+  HasUpdate: "An update is available",
+};
 
 function alertLabel(level: string): string {
   switch (level) {
@@ -862,18 +891,22 @@ function RegionChips({
 /**
  * What the add-on can perform, read from its manifest.
  */
-/** What each operation means, for the ids the connection is known to report. */
+/**
+ * What each operation does, in the board's plain verbs, for the ids the connection is known to
+ * report. The id stays beneath in mono: it is what an operator matches against the manifest.
+ */
 const OPERATION_LABEL: Record<string, string> = {
-  "account.provision": "create an account for a person",
-  "account.converge": "bring an account in line with the person's roles",
-  "account.release": "stop managing an account",
-  "account.adopt": "assign an existing account to a person",
-  "account.purge": "delete accounts",
-  "account.list": "read the list of accounts",
-  "health.get": "read the system's own health report",
-  "activity.get": "read what happened on the system for one person",
-  "password.rotate": "replace a person's password on the system",
-  "storage.status": "read space used and quota",
+  "account.provision": "Creates an account",
+  "account.converge": "Brings an account in line",
+  "account.release": "Lets go of an account, keeping it",
+  "account.adopt": "Assigns an existing account to a person",
+  "account.purge": "Deletes an account and its files",
+  "account.list": "Reads the list of accounts",
+  "health.get": "Reads the system's own health report",
+  "activity.get": "Reads a share's activity",
+  "credential.set": "Sets a member's password, never logged",
+  "password.rotate": "Replaces a person's password, never logged",
+  "storage.status": "Reads space used and quota",
 };
 
 function Capabilities({ registered }: { registered: TargetSummary }) {
@@ -893,33 +926,31 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
         </div>
       ) : (
         registered.operations.map((op, i) => (
-          <CardRow key={op.id} first={i === 0} className="flex-wrap">
-            <span className="font-mono text-[13.5px]">{op.id}</span>
-            {OPERATION_LABEL[op.id] && (
-              <span className="text-[13.5px] text-muted">{OPERATION_LABEL[op.id]}</span>
-            )}
-            <span className="text-[13px] text-faint">{op.scope}</span>
-            {/* Board §21 draws this beside `account.adopt` and `account.purge`,
-                and the page had been dropping it — the manifest says which
-                operations stop and ask, and this list is the only place an
-                operator can learn that before pressing one. */}
-            {op.confirm && <span className="text-[13px] text-faint">confirmation required</span>}
-            {op.secret_params && op.secret_params.length > 0 && (
-              // Named, never valued. There is nowhere in this payload for a
-              // secret and nowhere on this page to render one.
-              <span className="text-[12.5px] text-faint">
-                never logged: {op.secret_params.join(", ")}
+          <div
+            key={op.id}
+            className={`flex flex-wrap items-baseline gap-x-3.5 gap-y-1 px-5 py-[11px] ${i === 0 ? "" : "row-divider"}`}
+          >
+            <span className="flex min-w-0 flex-[1_1_200px] flex-col gap-0.5">
+              <span className="text-[14px]">
+                {OPERATION_LABEL[op.id] ?? `Something ${name} can do that Syndra has no name for`}
               </span>
-            )}
-            <span className="flex-1" />
+              <span className="type-mono text-[12.5px] text-faint">{op.id}</span>
+            </span>
+            {/* The manifest says which operations stop and ask, and this list is the only place an
+                operator can learn that before pressing one. The secret parameters are named in the
+                words of the operation ("never logged"), not listed, and the scope is the
+                manifest's business, not the reader's. */}
+            <span className={`text-[13px] font-semibold ${op.confirm ? "text-warn-text" : "text-muted"}`}>
+              {op.confirm ? "Stops and asks" : "Runs by itself"}
+            </span>
             {!op.available && (
               // Shown disabled with its reason rather than omitted: omitted, an
               // operator wonders whether the feature exists.
-              <span className="text-[13px] text-warn-text">
-                unavailable — {op.unavailable_reason}
+              <span className="basis-full text-[13px] text-warn-text">
+                Not available: {op.unavailable_reason}
               </span>
             )}
-          </CardRow>
+          </div>
         ))
       )}
     </Card>

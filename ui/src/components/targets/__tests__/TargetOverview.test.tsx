@@ -408,9 +408,9 @@ describe("one target's page", () => {
     ];
     renderTarget();
 
-    expect(screen.getByText("read what happened on the system for one person")).toBeInTheDocument();
-    expect(screen.getByText("replace a person's password on the system")).toBeInTheDocument();
-    expect(screen.getByText("read space used and quota")).toBeInTheDocument();
+    expect(screen.getByText("Reads a share's activity")).toBeInTheDocument();
+    expect(screen.getByText("Replaces a person's password, never logged")).toBeInTheDocument();
+    expect(screen.getByText("Reads space used and quota")).toBeInTheDocument();
   });
 
   // 9.2 — an operation removed from a manifest disappears without a frontend
@@ -815,11 +815,13 @@ describe("what it can do · the confirmation the manifest declares", () => {
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    const purge = screen.getByText("account.purge").parentElement;
-    expect(purge?.textContent).toContain("confirmation required");
+    // The board's words: "Stops and asks" / "Runs by itself" (route-system-targets-id).
+    const purge = screen.getByText("account.purge").closest(".flex-wrap");
+    expect(purge?.textContent).toContain("Stops and asks");
 
-    const provision = screen.getByText("account.provision").parentElement;
-    expect(provision?.textContent).not.toContain("confirmation required");
+    const provision = screen.getByText("account.provision").closest(".flex-wrap");
+    expect(provision?.textContent).not.toContain("Stops and asks");
+    expect(provision?.textContent).toContain("Runs by itself");
   });
 });
 
