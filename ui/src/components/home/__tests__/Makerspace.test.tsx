@@ -12,10 +12,10 @@ const state = vi.hoisted(() => ({
   bundles: [] as Array<Record<string, unknown>>,
   audit: [] as Array<Record<string, unknown>>,
   governance: {
-    expiring_grants: [] as unknown[],
-    pending_propagation: { count: 0, zitadel_reachable: true },
-    drift: { count: 0 },
+    expiring_grants: [] as Array<{ user_id: string }>,
+    unreconciled_targets: [] as Array<{ target: string; since: string }>,
   },
+  targets: [{ target: "truenas" }] as Array<{ target: string }>,
 }));
 
 const loading = vi.hoisted(() => ({ users: false, roles: false, bundles: false }));
@@ -34,6 +34,9 @@ vi.mock("@/lib/queries/useAudit", () => ({
 }));
 vi.mock("@/lib/queries/useGovernance", () => ({
   useGovernanceSummary: () => ({ data: state.governance }),
+}));
+vi.mock("@/lib/queries/useTargets", () => ({
+  useTargets: () => ({ data: state.targets, isLoading: false }),
 }));
 vi.mock("@/components/names", () => ({
   UserName: ({ id, fallback }: { id: string; fallback?: React.ReactNode }) => (
@@ -73,11 +76,8 @@ beforeEach(() => {
   state.roles = [];
   state.bundles = [];
   state.audit = [];
-  state.governance = {
-    expiring_grants: [],
-    pending_propagation: { count: 0, zitadel_reachable: true },
-    drift: { count: 0 },
-  };
+  state.governance = { expiring_grants: [], unreconciled_targets: [] };
+  state.targets = [{ target: "truenas" }];
   loading.users = false;
   loading.roles = false;
   loading.bundles = false;
@@ -89,7 +89,7 @@ describe("Home › The makerspace", () => {
     // so the operator went hunting through the nav instead.
     renderMakerspace();
     expect(screen.getByText("The makerspace")).toBeInTheDocument();
-    expect(screen.getByText("Zitadel")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connected systems" })).toBeInTheDocument();
   });
 
   it("surfaces both ends of a person's life here as links, not just counts", () => {
@@ -114,36 +114,78 @@ describe("Home › The makerspace", () => {
     expect(screen.getByText("Nobody who left still holds anything.")).toBeInTheDocument();
   });
 
-  it("takes its semantic colour only when the machine is actually unhappy", () => {
+  it("has the board's three tiles, each the link to the list it counts", () => {
+    renderMakerspace();
+    const hrefs = Object.fromEntries(
+      ["Connected systems", "People", "Where access lives"].map((name) => [
+        name,
+        screen.getByRole("link", { name }).getAttribute("href"),
+      ]),
+    );
+    expect(hrefs).toEqual({
+      "Connected systems": "/system/targets",
+      People: "/users",
+      "Where access lives": "/projects",
+    });
+    // The four machine-health cells repeated the queue above them: pending changes,
+    // drift and expiring access are blocks there, so they are not counted twice here.
+    for (const gone of ["Zitadel", "Waiting for you to send", "Ending in the next 14 days"]) {
+      expect(screen.queryByRole("link", { name: gone })).toBeNull();
+    }
+  });
+
+  it("says how many systems were read, and which one was not", () => {
+    state.targets = [{ target: "truenas" }, { target: "grafana" }, { target: "wiki" }];
     state.governance = {
       expiring_grants: [],
-      pending_propagation: { count: 0, zitadel_reachable: false },
-      drift: { count: 2 },
+      unreconciled_targets: [{ target: "truenas", since: "2026-10-01T12:00:00Z" }],
     };
     renderMakerspace();
-    expect(screen.getByText("Unreachable").className).toContain("text-danger-text");
-    expect(screen.getByText("2").className).toContain("text-danger-text");
+    const tile = screen.getByRole("link", { name: "Connected systems" });
+    expect(tile).toHaveTextContent("2 of 3 read");
+    expect(tile).toHaveTextContent(/TrueNAS has not been read since 1 Oct/);
+    expect(tile.querySelector(".text-warn-text")).not.toBeNull();
+  });
 
-    // A cell with nothing to report stays quiet. The healthy signal is a dot
-    // beside the note, never the value itself — four 26px lime numerals would
-    // make "nothing is wrong" the loudest thing on the page, and this is the
-    // one state that earns its meaning by being the calmest.
-    const calm = screen.getAllByText("0");
-    expect(calm.length).toBeGreaterThan(0);
-    for (const cell of calm) {
-      expect(cell.className).toContain("text-ink");
-      expect(cell.className).not.toContain("healthy");
-      // Healthy is never an action, so it must never borrow the accent either.
-      expect(cell.className).not.toContain("accent");
-    }
+  it("agrees with an empty queue when every system was read", () => {
+    state.targets = [{ target: "truenas" }, { target: "grafana" }, { target: "wiki" }];
+    renderMakerspace();
+    const tile = screen.getByRole("link", { name: "Connected systems" });
+    expect(tile).toHaveTextContent("3 of 3 read");
+    expect(tile.querySelector(".text-warn-text")).toBeNull();
+  });
 
-    // It is still said — quietly, and only where nothing is wrong.
-    const dots = document.querySelectorAll(".bg-healthy");
-    expect(dots.length, "a calm cell marks itself with a healthy dot").toBeGreaterThan(0);
-    expect(
-      screen.getByText("Changes wait here — nothing is lost").querySelector(".bg-healthy"),
-      "an unhealthy cell gets no healthy dot",
-    ).toBeNull();
+  it("counts people, and the people whose access ends soon once each", () => {
+    state.users = [person(), person({ user: { ...person().user, id: "u2" } })];
+    state.governance = {
+      expiring_grants: [{ user_id: "u1" }, { user_id: "u1" }, { user_id: "u2" }],
+      unreconciled_targets: [],
+    };
+    renderMakerspace();
+    const tile = screen.getByRole("link", { name: "People" });
+    expect(tile).toHaveTextContent("2");
+    expect(tile).toHaveTextContent("2 whose access ends in the next 14 days");
+  });
+
+  it("shows no people count while the list is still being read", () => {
+    loading.users = true;
+    state.users = [];
+    renderMakerspace();
+    expect(screen.getByRole("link", { name: "People" })).not.toHaveTextContent(/^People0/);
+    expect(screen.getByRole("link", { name: "People" })).toHaveTextContent("—");
+  });
+
+  it("counts roles across projects and bundles", () => {
+    state.roles = [
+      { project_id: "pLaser", project_name: "Laser Lab", role_key: "a", assigned_user_count: 1, is_unused: false },
+      { project_id: "pLaser", project_name: "Laser Lab", role_key: "b", assigned_user_count: 1, is_unused: false },
+      { project_id: "pWood", project_name: "Wood Shop", role_key: "c", assigned_user_count: 1, is_unused: false },
+    ];
+    state.bundles = [{ id: "b1", name: "Safety", holder_count: 4 }];
+    renderMakerspace();
+    const tile = screen.getByRole("link", { name: "Where access lives" });
+    expect(tile).toHaveTextContent("3 roles");
+    expect(tile).toHaveTextContent("Across 2 projects and 1 bundle");
   });
 
   it("makes every role in the shape list a link to its own page, which lists everyone the count counts", () => {

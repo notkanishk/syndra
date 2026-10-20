@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { request } from "@/lib/api-client";
@@ -53,8 +53,8 @@ const EMPTY: Indicators = {
   zitadel_reachable: true,
 };
 
-export function useIndicators(enabled: boolean) {
-  const query = useQuery({
+function indicatorsQuery(enabled: boolean) {
+  return queryOptions({
     queryKey: ["governance", "indicators"],
     queryFn: () => request<Indicators>("/governance/indicators"),
     enabled,
@@ -72,6 +72,19 @@ export function useIndicators(enabled: boolean) {
     // `useFlashOnChange`.
     placeholderData: (previous) => previous ?? EMPTY,
   });
+}
+
+/**
+ * The same read, for a screen that reports a count and must not chime: the rail
+ * owns the drift chime, and a second observer with its own memory would sound
+ * it twice. `isPlaceholderData` tells a real zero from the fabricated one.
+ */
+export function useIndicatorsRead() {
+  return useQuery(indicatorsQuery(true));
+}
+
+export function useIndicators(enabled: boolean) {
+  const query = useQuery(indicatorsQuery(enabled));
 
   // The chime belongs to whoever learns the drift count first, which is this
   // poll. It fires only on a RISE — a count that stays at 12 across polls is
