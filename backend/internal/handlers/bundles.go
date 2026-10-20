@@ -127,10 +127,13 @@ func handleGetBundles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// And for the role count: the list never carries `roles` (one query per
-	// bundle), so without this every row's Roles cell had nothing to show.
+	// bundle), so without this every row's Roles cell had nothing to show. A
+	// failed read leaves it unset, which the list shows as "—": a zero would
+	// say the bundle grants nothing.
 	if roles, err := dbGetBundleRoleCounts(r.Context()); err == nil {
 		for i := range bundles {
-			bundles[i].RoleCount = roles[bundles[i].ID]
+			n := roles[bundles[i].ID]
+			bundles[i].RoleCount = &n
 		}
 	}
 	// Same treatment for the version numbers: a failed count leaves zeros

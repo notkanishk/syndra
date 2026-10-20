@@ -72,7 +72,7 @@ export function TargetOverview({ target }: { target: string }) {
   // human, which is why they are one region and not three places.
   const waiting =
     (findings.data?.length ?? 0) + anchorFinding + conflicts.length;
-  const waitingKnown = !findings.isLoading && !health.isLoading && !health.error;
+  const waitingKnown = !findings.isLoading && !findings.error && !health.isLoading && !health.error;
   const name = targetLabel(target);
   // One Zitadel project per system (3a). Unknown until the roster answers;
   // null is "not chosen", and everything that gives access waits for it.
@@ -186,7 +186,7 @@ export function TargetOverview({ target }: { target: string }) {
                 />
                 <SystemHealth target={target} stale={health.data?.reachable === false} />
               </div>
-              <LifecycleControl target={target} health={health.data} />
+              <LifecycleControl target={target} health={health.data} isLoading={health.isLoading} />
             </>
           )}
         </Region>
@@ -1720,14 +1720,38 @@ function stateLabel(state: string): string {
   return state;
 }
 
-function LifecycleControl({ target, health }: { target: string; health: TargetHealth | undefined }) {
+function LifecycleControl({
+  target,
+  health,
+  isLoading,
+}: {
+  target: string;
+  health: TargetHealth | undefined;
+  isLoading: boolean;
+}) {
   const set = useSetLifecycle(target);
   const [reason, setReason] = useState("");
   // Which action row is asking why. One at a time, so a reason typed for one
   // state is never sent for another.
   const [asking, setAsking] = useState<string | null>(null);
-  const current = health?.lifecycle ?? "active";
   const name = targetLabel(target);
+  // The state is whatever health says it is. Before health has answered there is no state to
+  // call Active, and no Drain or Read-only to offer from it: the card keeps its seat and says so.
+  if (!health?.lifecycle) {
+    return (
+      <Card>
+        <CardHeader title="Maintenance" />
+        {isLoading ? (
+          <RowSkeleton rows={2} label="Reading the maintenance state" />
+        ) : (
+          <div className="px-5 pb-3.5 text-[14px] text-muted">
+            Not read just now. {name}&rsquo;s maintenance state is unknown, so nothing is offered to change it.
+          </div>
+        )}
+      </Card>
+    );
+  }
+  const current = health.lifecycle;
 
   // The states you can put it in instead, in the order the board draws them:
   // Make active first when it is not, since that is the way back.

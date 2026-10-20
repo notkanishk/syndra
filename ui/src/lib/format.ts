@@ -77,9 +77,11 @@ export function askLengthForMember(days: number | null | undefined): string {
 export function askLengthForOperator(
   days: number | null | undefined,
   now: Date = new Date(),
+  askedUntil?: string | null,
 ): string {
   if (!days || days < 1) return "With no end date";
-  const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  // An ask that named its end ("until the end of term") is granted to that date, however late it is decided.
+  const end = askedUntil ? new Date(askedUntil) : new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   return `For ${lengthWords(days)} · until ${formatShortDate(end.toISOString(), now)}`;
 }
 

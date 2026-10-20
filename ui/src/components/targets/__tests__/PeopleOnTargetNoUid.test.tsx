@@ -25,6 +25,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
 }));
 vi.mock("@/components/names", () => ({
   UserName: () => <span>Ada Lovelace</span>,
+  UserAvatar: () => null,
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: { display_name: "Ada Lovelace" }, resolved: true }) }),

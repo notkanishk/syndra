@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import type {
@@ -33,6 +33,8 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 const state = {
   roster: [] as TargetSummary[],
   health: {} as TargetHealth,
+  healthLoading: false,
+  findingsError: null as unknown,
   inventory: {} as TargetInventory,
   resolved: [] as Array<{ head: string; note: string }>,
   reconcile: undefined as undefined | Record<string, unknown>,
@@ -80,7 +82,12 @@ vi.mock("@/lib/queries/useTargets", async () => {
   return {
     ...actual,
     useTargets: () => ({ data: state.roster, isLoading: false, error: null }),
-    useTargetHealth: () => ({ data: state.health, isLoading: false, error: null }),
+    useTargetHealth: () => ({
+      data: state.healthLoading ? undefined : state.health,
+      isLoading: state.healthLoading,
+      error: null,
+    }),
+    useMergeFindings: () => ({ data: undefined, isLoading: false, error: state.findingsError }),
     useTargetInventory: () => ({
       data: state.inventory,
       isLoading: false,
@@ -164,6 +171,11 @@ function renderTarget() {
     </QueryClientProvider>,
   );
 }
+
+beforeEach(() => {
+  state.healthLoading = false;
+  state.findingsError = null;
+});
 
 describe("one target's page", () => {
   it("never offers Syndra's own account for adoption, and says why", () => {
@@ -565,6 +577,39 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
     const card = screen.getByText("Accounts Syndra manages").closest(".card");
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).getByText("4")).toBeInTheDocument();
+  });
+
+  it("does not call a target Active, or offer to drain it, before health has answered", () => {
+    state.roster = [summary([])];
+    state.health = {} as TargetHealth;
+    state.healthLoading = true;
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByText("Maintenance")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start draining" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set read-only" })).toBeNull();
+  });
+
+  it("says the maintenance state was not read when health answered without one", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: false } as TargetHealth;
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.getByText(/Not read just now\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start draining" })).toBeNull();
+  });
+
+  it("does not count Waiting on you as zero when the findings read failed", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    state.findingsError = new Error("boom");
+    renderTarget();
+
+    expect(screen.getAllByLabelText("count could not be read").length).toBeGreaterThan(0);
   });
 
   it("names the maintenance state in the Maintenance card, matching its action rows", () => {

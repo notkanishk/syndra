@@ -25,6 +25,8 @@ export interface AccessRequest {
   /** A waiting extension only: the end they have now, and the end approving would set. Absent when unknown. */
   current_until?: string;
   until?: string;
+  /** The end the ask named ("until the end of term"): approving grants to it, however late it is decided. */
+  asked_until?: string | null;
   /** A settled keep: the end they had, and the end approving set. Omitted when null (see lib/keep-ends). */
   ended_before?: string | null;
   ends_after?: string | null;

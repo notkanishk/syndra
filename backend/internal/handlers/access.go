@@ -277,7 +277,10 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "duration_days must be zero or greater", map[string]string{"duration_days": "min=0"})
 		return
 	}
-	if req.Until != nil && !req.Until.After(time.Now()) {
+	// One clock for both checks on the end date: a date that passes between them is no more
+	// "ended" than it was when the ask arrived.
+	now := time.Now()
+	if req.Until != nil && !req.Until.After(now) {
 		jsonValidationErrorResponse(w, "until must be a date that hasn't passed yet", map[string]string{"until": "future"})
 		return
 	}
@@ -306,7 +309,10 @@ func handleCreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
-	switch err := checkRequestKind(req.Kind, holding, durationDays, req.Until, time.Now()); {
+	switch err := checkRequestKind(req.Kind, holding, durationDays, req.Until, now); {
+	case errors.Is(err, errAskEnded):
+		jsonValidationErrorResponse(w, "until must be a date that hasn't passed yet", map[string]string{"until": "future"})
+		return
 	case errors.Is(err, errRequestAlreadyHeld):
 		jsonErrorResponse(w, http.StatusConflict, "ALREADY_HELD", alreadyHeldMessage(holding, "You"))
 		return

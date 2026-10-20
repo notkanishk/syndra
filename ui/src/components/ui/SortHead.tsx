@@ -66,25 +66,29 @@ export function SortHead<K extends string>({
 }) {
   const on = sort.key === name;
   return (
-    <button
-      type="button"
-      aria-label={`Sort by ${by}`}
-      data-sort={on ? (sort.dir > 0 ? "asc" : "desc") : "none"}
-      onClick={() => onSort(name)}
-      className={`inline-flex items-center gap-[5px] text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
-        on ? "text-ink" : ""
-      }`}
-    >
-      {label}
-      <span
-        aria-hidden
-        className={`inline-block text-[11px] motion-press ${on ? "opacity-100" : "opacity-0"} ${
-          on && sort.dir < 0 ? "rotate-180" : ""
+    // aria-sort belongs to the header cell, not to the button inside it: the cell is what a
+    // screen reader reads as "sorted ascending", the button is only how it is changed.
+    <span role="columnheader" aria-sort={on ? (sort.dir > 0 ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        aria-label={`Sort by ${by}`}
+        data-sort={on ? (sort.dir > 0 ? "asc" : "desc") : "none"}
+        onClick={() => onSort(name)}
+        className={`inline-flex items-center gap-[5px] text-left uppercase tracking-[inherit] motion-tint hover:text-ink ${
+          on ? "text-ink" : ""
         }`}
       >
-        ↑
-      </span>
-    </button>
+        {label}
+        <span
+          aria-hidden
+          className={`inline-block text-[11px] motion-press ${on ? "opacity-100" : "opacity-0"} ${
+            on && sort.dir < 0 ? "rotate-180" : ""
+          }`}
+        >
+          ↑
+        </span>
+      </button>
+    </span>
   );
 }
 

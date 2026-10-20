@@ -45,8 +45,10 @@ type Bundle struct {
 	LatestVersion int `json:"latest_version"`
 	// RoleCount is how many distinct roles the latest version grants, its own
 	// and each included bundle's. Computed on read for the list, whose `roles`
-	// is never filled (that needs a query per bundle).
-	RoleCount int `json:"role_count"`
+	// is never filled (that needs a query per bundle). Nil, and so absent, when
+	// the count could not be read: a bundle with no count is not a bundle with
+	// no roles.
+	RoleCount *int `json:"role_count,omitempty"`
 	// HasIncludes: it includes other bundles (B8), so it can't go inside
 	// another. IncludedIn names the bundles that include it, so it can't take
 	// others in.
