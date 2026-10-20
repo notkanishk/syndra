@@ -18,25 +18,66 @@ const state = vi.hoisted(() => ({
   targets: [{ target: "truenas" }] as Array<{ target: string }>,
 }));
 
-const loading = vi.hoisted(() => ({ users: false, roles: false, bundles: false }));
+const loading = vi.hoisted(() => ({
+  users: false,
+  roles: false,
+  bundles: false,
+  audit: false,
+  governance: false,
+  targets: false,
+}));
+const failed = vi.hoisted(() => ({
+  users: false,
+  roles: false,
+  bundles: false,
+  audit: false,
+  governance: false,
+  targets: false,
+}));
+const err = (on: boolean) => (on ? new Error("read failed") : null);
 
 vi.mock("@/lib/queries/useUsers", () => ({
-  useUsers: () => ({ data: state.users, isLoading: loading.users }),
+  useUsers: () => ({
+    data: loading.users || failed.users ? undefined : state.users,
+    isLoading: loading.users,
+    error: err(failed.users),
+  }),
 }));
 vi.mock("@/lib/queries/useRoles", () => ({
-  useGlobalRoleCatalog: () => ({ data: state.roles, isLoading: loading.roles }),
+  useGlobalRoleCatalog: () => ({
+    data: loading.roles || failed.roles ? undefined : state.roles,
+    isLoading: loading.roles,
+    error: err(failed.roles),
+  }),
 }));
 vi.mock("@/lib/queries/useBundles", () => ({
-  useBundles: () => ({ data: state.bundles, isLoading: loading.bundles }),
+  useBundles: () => ({
+    data: loading.bundles || failed.bundles ? undefined : state.bundles,
+    isLoading: loading.bundles,
+    error: err(failed.bundles),
+  }),
 }));
 vi.mock("@/lib/queries/useAudit", () => ({
-  useAuditEntries: () => ({ data: state.audit, isLoading: false, error: null, refetch: () => {} }),
+  useAuditEntries: () => ({
+    data: loading.audit || failed.audit ? undefined : state.audit,
+    isLoading: loading.audit,
+    error: err(failed.audit),
+    refetch: () => {},
+  }),
 }));
 vi.mock("@/lib/queries/useGovernance", () => ({
-  useGovernanceSummary: () => ({ data: state.governance }),
+  useGovernanceSummary: () => ({
+    data: loading.governance || failed.governance ? undefined : state.governance,
+    isLoading: loading.governance,
+    error: err(failed.governance),
+  }),
 }));
 vi.mock("@/lib/queries/useTargets", () => ({
-  useTargets: () => ({ data: state.targets, isLoading: false }),
+  useTargets: () => ({
+    data: loading.targets || failed.targets ? undefined : state.targets,
+    isLoading: loading.targets,
+    error: err(failed.targets),
+  }),
 }));
 vi.mock("@/components/names", () => ({
   UserName: ({ id, fallback }: { id: string; fallback?: React.ReactNode }) => (
@@ -81,6 +122,10 @@ beforeEach(() => {
   loading.users = false;
   loading.roles = false;
   loading.bundles = false;
+  for (const key of Object.keys(loading) as Array<keyof typeof loading>) {
+    loading[key] = false;
+    failed[key] = false;
+  }
 });
 
 describe("Home › The makerspace", () => {
@@ -268,6 +313,80 @@ describe("Home › The makerspace", () => {
     expect(screen.getAllByLabelText(/^Loading (gaps|where access lives)$/).length).toBeGreaterThan(0);
     expect(screen.queryByText("Nobody holds a role yet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Every role and bundle is in use.")).not.toBeInTheDocument();
+  });
+
+  describe("what was not read is never reported as nothing", () => {
+    it("holds the systems tile at a dash while the targets or the summary load", () => {
+      loading.targets = true;
+      renderMakerspace();
+      const tile = screen.getByRole("link", { name: "Connected systems" });
+      expect(tile).toHaveTextContent("—");
+      expect(tile).not.toHaveTextContent(/None|No system is connected|Every system answered/);
+    });
+
+    it("says the systems were not read when a read failed, not that none is connected", () => {
+      failed.targets = true;
+      renderMakerspace();
+      const tile = screen.getByRole("link", { name: "Connected systems" });
+      expect(tile).toHaveTextContent("Not read just now.");
+      expect(tile).not.toHaveTextContent(/None|No system is connected/);
+
+      failed.targets = false;
+      failed.governance = true;
+      renderMakerspace();
+      expect(screen.getAllByRole("link", { name: "Connected systems" })[1]).not.toHaveTextContent(
+        "Every system answered",
+      );
+    });
+
+    it("never shows 0 people or 'nobody's access ends' when those reads failed", () => {
+      failed.users = true;
+      failed.governance = true;
+      renderMakerspace();
+      const tile = screen.getByRole("link", { name: "People" });
+      expect(tile).toHaveTextContent("—");
+      expect(tile).not.toHaveTextContent(/^People0/);
+      expect(tile).toHaveTextContent("Not read just now.");
+      expect(tile).not.toHaveTextContent("Nobody's access ends");
+    });
+
+    it("holds the ending-soon line while the summary loads", () => {
+      loading.governance = true;
+      renderMakerspace();
+      expect(screen.getByRole("link", { name: "People" })).not.toHaveTextContent("Nobody's access ends");
+    });
+
+    it("does not count roles from a failed catalogue read", () => {
+      failed.roles = true;
+      renderMakerspace();
+      const tile = screen.getByRole("link", { name: "Where access lives" });
+      expect(tile).toHaveTextContent("—");
+      expect(tile).not.toHaveTextContent(/0 roles/);
+    });
+
+    it("says Gaps and the role shape were not read, never that everybody has something", () => {
+      failed.users = true;
+      failed.roles = true;
+      renderMakerspace();
+      expect(screen.queryByText("Everybody here has something.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Nobody who left still holds anything.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Nobody holds a role yet.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Every role and bundle is in use.")).not.toBeInTheDocument();
+      expect(screen.getAllByText("Not read just now.").length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("shows Lately a skeleton while loading and a plain line on failure, never 'Nothing recorded yet'", () => {
+      loading.audit = true;
+      const first = renderMakerspace();
+      expect(screen.getByLabelText("Loading recent activity")).toBeInTheDocument();
+      expect(screen.queryByText("Nothing recorded yet.")).not.toBeInTheDocument();
+      first.unmount();
+
+      loading.audit = false;
+      failed.audit = true;
+      renderMakerspace();
+      expect(screen.queryByText("Nothing recorded yet.")).not.toBeInTheDocument();
+    });
   });
 
   it("prints a bare clock for today and a dated one for anything older, in Lately", () => {

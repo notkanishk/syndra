@@ -11,13 +11,18 @@ import type { ExpiringGrantRow } from "@/lib/queries/useExpiringAccess";
  * Filters in the bar, headings that sort (and gather), two cards that fold,
  * chips on the read line and the floating pill.
  */
-const state = vi.hoisted(() => ({ rows: [] as ExpiringGrantRow[] }));
+const state = vi.hoisted(() => ({
+  rows: [] as ExpiringGrantRow[],
+  search: "",
+  // When set, a window reads its own rows: the 30-day list is not the 14-day list plus nothing.
+  byWindow: null as Record<number, ExpiringGrantRow[]> | null,
+}));
 
 const NAMES: Record<string, string> = { u1: "Meera Pillai", u2: "Arjun Das", u3: "Tomas Weber", priya: "Priya Nair" };
 const PROJECTS: Record<string, string> = { p1: "Electronics bench", p2: "Wood shop" };
 
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(""),
+  useSearchParams: () => new URLSearchParams(state.search),
   useRouter: () => ({ replace: vi.fn() }),
 }));
 
@@ -29,8 +34,8 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 }));
 
 vi.mock("@/lib/queries/useExpiringAccess", () => ({
-  useExpiringGrants: () => ({
-    data: state.rows,
+  useExpiringGrants: (days: number) => ({
+    data: state.byWindow?.[days] ?? state.rows,
     isLoading: false,
     error: null,
     refetch: vi.fn(),
@@ -89,6 +94,8 @@ const peopleIn = (card: HTMLElement) =>
 
 beforeEach(() => {
   state.rows = mixed();
+  state.search = "";
+  state.byWindow = null;
 });
 
 describe("Expiring access — the read line", () => {
@@ -165,6 +172,49 @@ describe("Expiring access — search", () => {
     fireEvent.change(box(), { target: { value: "operator" } });
     expect(screen.getByText("Meera Pillai")).toBeInTheDocument();
     expect(screen.queryByText("Tomas Weber")).toBeNull();
+  });
+
+  it("never says every one is decided about a search that matches nothing", () => {
+    renderPage();
+    fireEvent.change(box(), { target: { value: "zzz" } });
+    expect(screen.queryByText(/every one decided/)).toBeNull();
+    expect(screen.getByText("Nothing that ends matches those filters.")).toBeInTheDocument();
+  });
+
+  it("says it of the whole window, and only when the whole window is decided", () => {
+    state.rows = mixed().map((row) => ({ ...row, acknowledged: ACK }));
+    renderPage();
+    expect(screen.getByText(/every one decided/)).toBeInTheDocument();
+  });
+
+  it("does not say it of a search that happens to match only decided rows", () => {
+    // Arjun's Electronics bench row is let lapse; his Wood shop row is not, and neither are others.
+    state.rows = mixed().filter((row) => row.id !== "b");
+    renderPage();
+    fireEvent.change(box(), { target: { value: "arjun" } });
+    expect(screen.queryByText(/every one decided/)).toBeNull();
+  });
+
+  it("drops a project the other window has no row for, instead of filtering to nothing", () => {
+    state.byWindow = {
+      14: mixed(),
+      30: [grant({ id: "z", user_id: "u1", project_id: "p1", role_key: "operator", expires_at: days(20) })],
+    };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const page = () => (
+      <QueryClientProvider client={client}>
+        <ExpiringAccessPage />
+      </QueryClientProvider>
+    );
+    const view = render(page());
+    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by project" }), { target: { value: "p2" } });
+    expect(screen.queryByText("Meera Pillai")).toBeNull();
+
+    state.search = "within=30";
+    view.rerender(page());
+    expect(screen.queryByText("Nothing that ends matches those filters.")).toBeNull();
+    expect(screen.getByText("Meera Pillai")).toBeInTheDocument();
   });
 
   it("says nothing matches, and clearing is the way back", () => {

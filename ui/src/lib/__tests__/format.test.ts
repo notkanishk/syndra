@@ -180,6 +180,11 @@ describe("a pending ask's length", () => {
     expect(askLengthForOperator(null, now)).toBe("With no end date");
   });
 
+  it("names the date the ask itself named, not one counted from now", () => {
+    // Approved late, an "until the end of term" ask still ends on the term's last day.
+    expect(askLengthForOperator(60, now, "2026-12-31T00:00:00Z")).toBe("For 60 days · until 31 Dec");
+  });
+
   it("names the year when that date falls in the next one", () => {
     expect(askLengthForOperator(90, now)).toBe("For 90 days · until 15 Jan 2027");
   });

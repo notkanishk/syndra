@@ -316,6 +316,30 @@ describe("Pending changes · board layout", () => {
       expect(screen.getByRole("button", { name: "Send 2 changes" })).toBeEnabled();
     });
 
+    it("keeps a narrowed batch's band, counting the whole edit and saying how much is shown", () => {
+      pending.data = [
+        row({ id: "o1", user_id: "u1", role_keys: ["booking"] }),
+        row({ id: "o2", user_id: "u2", role_keys: ["welder"] }),
+        row({ id: "o3", user_id: "u2", role_keys: ["laser"] }),
+      ];
+      renderPending();
+      type("omar");
+      expect(screen.getByText(/These 3 changes come from one edit/)).toBeInTheDocument();
+      expect(screen.getByText(/They are sent together or not at all\. 2 of 3 shown\./)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Fold these 3 changes" })).toBeInTheDocument();
+    });
+
+    it("keeps the band even when one row of the batch is all that matches", () => {
+      pending.data = [
+        row({ id: "o1", user_id: "u1", role_keys: ["booking"] }),
+        row({ id: "o2", user_id: "u2", role_keys: ["welder"] }),
+      ];
+      renderPending();
+      type("omar");
+      expect(screen.getByText(/These 2 changes come from one edit/)).toBeInTheDocument();
+      expect(screen.getByText(/1 of 2 shown\./)).toBeInTheDocument();
+    });
+
     it("narrows by role", () => {
       renderPending();
       type("booking");

@@ -27,6 +27,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
 }));
 vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{id.startsWith("u1") ? "Ada Lovelace" : "Grace Hopper"}</span>,
+  UserAvatar: ({ id }: { id: string }) => <span aria-hidden>{id.startsWith("u1") ? "AL" : "GH"}</span>,
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({

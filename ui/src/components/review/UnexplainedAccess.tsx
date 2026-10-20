@@ -356,9 +356,19 @@ export function UnexplainedAccess() {
     </CardColumns>
   );
 
+  // "Everything is explained" is a claim about every read, not only the findings: it waits for
+  // the comparison and the system list to settle, and says what was not read instead of
+  // vouching for it.
+  const notRead = [
+    ...unread.map((target) => `${targetLabel(target.target)} wasn’t read`),
+    ...(summary.error ? ["Which systems were read isn’t known"] : []),
+    ...(diff.error ? ["The comparison didn’t load"] : []),
+    ...(diff.data?.truncated ? ["The comparison stopped early"] : []),
+  ];
+
   const list = (
     <ListStates
-      isLoading={drift.isLoading}
+      isLoading={drift.isLoading || (sections.length === 0 && !!(diff.isLoading || summary.isLoading))}
       error={drift.error}
       isEmpty={sections.length === 0}
       onRetry={() => drift.refetch()}
@@ -384,6 +394,11 @@ export function UnexplainedAccess() {
                   setFilters(EMPTY_DRIFT_FILTERS);
                 },
               }}
+            />
+          ) : notRead.length > 0 ? (
+            <EmptyState
+              title="Nothing is waiting in what was read."
+              guidance={`${notRead.join(". ")}. Anything that drifted there is not in this list.`}
             />
           ) : (
             <EmptyState

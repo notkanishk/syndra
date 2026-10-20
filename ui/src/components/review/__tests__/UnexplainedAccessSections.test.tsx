@@ -31,7 +31,12 @@ const emptyDiff = () => ({
   generated_at: "2026-10-20T08:00:00Z",
   truncated: false,
 });
-const diff = vi.hoisted(() => ({ data: undefined as ReturnType<typeof emptyDiff> | undefined }));
+const diff = vi.hoisted(() => ({
+  data: undefined as ReturnType<typeof emptyDiff> | undefined,
+  isLoading: false,
+  error: null as unknown,
+}));
+const summaryRead = vi.hoisted(() => ({ isLoading: false, error: null as unknown }));
 
 const NAMES: Record<string, string> = { u1: "Meera Pillai", u2: "Arjun Das", u3: "Tomas Weber" };
 const PROJECTS: Record<string, string> = { p1: "Electronics bench", p2: "Wood shop" };
@@ -55,11 +60,20 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
 }));
 
 vi.mock("@/lib/queries/useGrants", () => ({
-  useReconciliationDiff: () => ({ data: diff.data, error: null, refetch: () => {} }),
+  useReconciliationDiff: () => ({
+    data: diff.data,
+    isLoading: diff.isLoading,
+    error: diff.error,
+    refetch: () => {},
+  }),
 }));
 
 vi.mock("@/lib/queries/useGovernance", () => ({
-  useGovernanceSummary: () => ({ data: { unreconciled_targets: drift.unread } }),
+  useGovernanceSummary: () => ({
+    data: summaryRead.isLoading || summaryRead.error ? undefined : { unreconciled_targets: drift.unread },
+    isLoading: summaryRead.isLoading,
+    error: summaryRead.error,
+  }),
 }));
 
 vi.mock("@/lib/queries/useDrift", () => {
@@ -131,6 +145,10 @@ beforeEach(() => {
   drift.error = null;
   drift.unread = [];
   diff.data = emptyDiff();
+  diff.isLoading = false;
+  diff.error = null;
+  summaryRead.isLoading = false;
+  summaryRead.error = null;
 });
 
 describe("Drift — sections", () => {
@@ -280,6 +298,38 @@ describe("Drift — states", () => {
     expect(screen.getByText("Everything is explained.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: IN_ZITADEL })).toBeNull();
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
+  });
+
+  it("does not say everything is explained while the comparison is still loading", () => {
+    drift.data = [];
+    diff.isLoading = true;
+    renderPage();
+    expect(screen.queryByText("Everything is explained.")).toBeNull();
+  });
+
+  it("does not say everything is explained while the system list is still loading", () => {
+    drift.data = [];
+    summaryRead.isLoading = true;
+    renderPage();
+    expect(screen.queryByText("Everything is explained.")).toBeNull();
+  });
+
+  it("names what was not read, instead of saying everything is explained", () => {
+    drift.data = [];
+    drift.unread = [{ target: "truenas", since: "2026-10-01T22:10:00Z" }];
+    diff.error = new Error("boom");
+    renderPage();
+    expect(screen.queryByText("Everything is explained.")).toBeNull();
+    expect(screen.getByText("Nothing is waiting in what was read.")).toBeInTheDocument();
+    expect(screen.getByText(/TrueNAS wasn.t read\. The comparison didn.t load\. Anything/)).toBeInTheDocument();
+  });
+
+  it("does not vouch for a comparison that stopped early", () => {
+    drift.data = [];
+    diff.data = { ...emptyDiff(), truncated: true };
+    renderPage();
+    expect(screen.queryByText("Everything is explained.")).toBeNull();
+    expect(screen.getByText("Nothing is waiting in what was read.")).toBeInTheDocument();
   });
 
   it("shows no counts and no sections while the list is being read", () => {

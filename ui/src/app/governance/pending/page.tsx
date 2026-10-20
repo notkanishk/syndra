@@ -192,7 +192,13 @@ export default function PendingChangesPage() {
                 )
               }
             >
-              <PendingGroups groups={groups} bundles={bundles.data} rules={rules.data} leave={leaving.props} />
+              <PendingGroups
+                groups={groups}
+                whole={groupByCascade(leaving.rows)}
+                bundles={bundles.data}
+                rules={rules.data}
+                leave={leaving.props}
+              />
             </ListStates>
           </div>
         )}
@@ -204,11 +210,14 @@ export default function PendingChangesPage() {
 /** The queue's rows, grouped by the edit that produced them. */
 function PendingGroups({
   groups,
+  whole,
   bundles,
   rules,
   leave,
 }: {
   groups: CascadeGroup[];
+  /** The same batches before a search narrowed them: a band speaks for the whole edit, not for what is shown. */
+  whole?: CascadeGroup[];
   bundles?: BundleRow[];
   rules?: MappingRuleRow[];
   /** Each row's seat in a read that is taking it away (S5). */
@@ -227,10 +236,12 @@ function PendingGroups({
   return (
     <>
       {groups.map((group) => {
-        const count = waiting(group);
+        const all = whole?.find((entry) => entry.key === group.key) ?? group;
+        const count = waiting(all);
+        const shown = waiting(group);
         const open = count < 2 || !folded.has(group.key);
         // One reason for the whole batch is said once, in its band, not on every row.
-        const shared = count > 1 ? sharedWait(group.rows) : undefined;
+        const shared = count > 1 ? sharedWait(all.rows) : undefined;
         return (
           <div key={group.key}>
             {count > 1 && (
@@ -256,6 +267,7 @@ function PendingGroups({
                   These {count} changes come from one edit (
                   <Mono className="text-faint">{shortId(group.key, "c")}</Mono>).{" "}
                   {shared ? `${shared}. ` : ""}They are sent together or not at all.
+                  {shown < count && ` ${shown} of ${count} shown.`}
                 </p>
               </div>
             )}

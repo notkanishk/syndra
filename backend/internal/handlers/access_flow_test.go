@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -994,6 +995,31 @@ func TestACreateForARoleThatEndsIsRefusedToo(t *testing.T) {
 	handleCreateAccessRequest(rr, memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests", strings.NewReader(body)), "member-1"))
 	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "ALREADY_HELD") || created {
 		t.Fatalf("a request is only for a role they lack (owner, 15 Oct): %d %s (created %v)", rr.Code, rr.Body.String(), created)
+	}
+}
+
+// The end date is judged once, when the ask arrives. A date that passes while the holding is
+// being read is not an ask for an ended date, and must not be filed as one by a second clock.
+func TestAnAskIsJudgedOnOneClockWhenItsEndDatePassesMidRequest(t *testing.T) {
+	resetAccessDeps(t)
+	t.Setenv("ZITADEL_DOMAIN", "example.zitadel.cloud")
+	until := time.Now().Add(40 * time.Millisecond)
+	dbRequestHolding = func(context.Context, string, string, string) (models.RequestHolding, error) {
+		time.Sleep(80 * time.Millisecond)
+		return models.RequestHolding{Kind: models.HoldingNone}, nil
+	}
+	dbInsertAuditLog = func(context.Context, string, string, string, string) error { return nil }
+	var filedUntil *time.Time
+	dbCreateAccessRequestOfKind = func(_ context.Context, _, _, _, _, _ string, _ *int, u *time.Time) (string, error) {
+		filedUntil = u
+		return "req-1", nil
+	}
+	body := fmt.Sprintf(`{"project_id":"p1","role_key":"community","justification":"term","duration_days":30,"until":%q}`,
+		until.Format(time.RFC3339Nano))
+	rr := httptest.NewRecorder()
+	handleCreateAccessRequest(rr, memberContext(httptest.NewRequest(http.MethodPost, "/api/v1/requests", strings.NewReader(body)), "member-1"))
+	if rr.Code != http.StatusCreated || filedUntil == nil {
+		t.Fatalf("want it filed on the clock it arrived on: %d %s (filed %v)", rr.Code, rr.Body.String(), filedUntil)
 	}
 }
 

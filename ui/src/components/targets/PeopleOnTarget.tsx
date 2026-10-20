@@ -7,10 +7,9 @@ import { EmptyState, ListStates } from "@/components/states";
 import { HoldDialog } from "@/components/review/HoldDialog";
 import { TakeAwayDialog } from "@/components/targets/TakeAwayDialog";
 import { Button } from "@/components/ui/Button";
-import { Avatar } from "@/components/ui/Avatar";
 import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
-import { UserName } from "@/components/names";
+import { UserAvatar, UserName } from "@/components/names";
 import { formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -118,7 +117,7 @@ function PersonRow({
     <>
       <CardRow data-account={account.subject_id} className="flex-wrap gap-y-1.5">
         <span className="flex w-[220px] flex-none items-center gap-2.5">
-          <Avatar name={name} size="row" />
+          <UserAvatar id={account.subject_id} size="row" />
           <Link
             href={`/users/${account.subject_id}`}
             className="min-w-0 [overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink hover:text-accent-text hover:underline hover:underline-offset-[3px]"

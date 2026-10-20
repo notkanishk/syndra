@@ -152,6 +152,11 @@ export default function ExpiringAccessPage() {
     }
     return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [rows, resolver]);
+  // A project from the other window that this one has no row for would filter to nothing under
+  // a heading that says so. Reset it once the new window has been read.
+  if (project && !grants.isLoading && !grants.error && !projects.some((entry) => entry.id === project)) {
+    setProject("");
+  }
   const ordered = useMemo(() => sortExpiring(matched, sort, text), [matched, sort, text]);
   const soonestId = matched.find((grant) => !grant.acknowledged)?.id;
 
@@ -247,7 +252,13 @@ export default function ExpiringAccessPage() {
             <MetaRow>
               {[
                 `${matched.length} ${matched.length === 1 ? "role" : "roles"}${filtered ? " matching" : ""} · ${people} ${people === 1 ? "person" : "people"}`,
-                soonest ? `soonest ends ${formatShortDate(soonest)}` : "every one decided",
+                // "Every one decided" is true of the whole window or it is not said: a search or
+                // a project that matches nothing has decided nothing.
+                soonest
+                  ? `soonest ends ${formatShortDate(soonest)}`
+                  : !anyUndecided
+                    ? "every one decided"
+                    : "",
               ]}
             </MetaRow>
           ) : undefined

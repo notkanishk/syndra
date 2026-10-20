@@ -682,6 +682,41 @@ func TestHandleGetBundles_CarriesEachBundlesRoleCount(t *testing.T) {
 	}
 }
 
+// A count that could not be read is not a count of none: the field is left out, and the list
+// shows "—" for it rather than a Roles column of zeros.
+func TestHandleGetBundles_RoleCountUnsetWhenItsReadFails(t *testing.T) {
+	resetBundleDeps(t)
+	origHolders, origRoles, origStale := dbGetBundleHolderCounts, dbGetBundleRoleCounts, dbGetStaleHolderCounts
+	origDraft, origIncl, origBlock := svcBundleDraft, dbBundleIncludesAnything, dbRetireBlockers
+	t.Cleanup(func() {
+		dbGetBundleHolderCounts, dbGetBundleRoleCounts, dbGetStaleHolderCounts = origHolders, origRoles, origStale
+		svcBundleDraft, dbBundleIncludesAnything, dbRetireBlockers = origDraft, origIncl, origBlock
+	})
+	dbGetAllBundles = func(context.Context) ([]models.Bundle, error) {
+		return []models.Bundle{{ID: "b1", Name: "Laser"}}, nil
+	}
+	dbGetBundleHolderCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
+	dbGetStaleHolderCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
+	dbGetBundleRoleCounts = func(context.Context) (map[string]int, error) { return nil, errors.New("count query failed") }
+	svcBundleDraft = func(context.Context, string) (services.DraftDiff, error) { return services.DraftDiff{}, nil }
+	dbBundleIncludesAnything = func(context.Context, string) (bool, error) { return false, nil }
+	dbRetireBlockers = func(context.Context, string) ([]string, error) { return nil, nil }
+
+	rr := httptest.NewRecorder()
+	handleGetBundles(rr, httptest.NewRequest(http.MethodGet, "/api/v1/bundles", nil))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("a failed count must not fail the list, got %d", rr.Code)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil || len(got) != 1 {
+		t.Fatalf("bad body %q: %v", rr.Body.String(), err)
+	}
+	if _, present := got[0]["role_count"]; present {
+		t.Fatalf("role_count = %v, want it absent when the read failed", got[0]["role_count"])
+	}
+}
+
 // --- handleUpdateBundle ---
 
 func TestHandleUpdateBundle_BlankNameRejected(t *testing.T) {

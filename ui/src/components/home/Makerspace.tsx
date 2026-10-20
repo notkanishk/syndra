@@ -73,6 +73,15 @@ function Tiles() {
   const roles = useGlobalRoleCatalog();
   const bundles = useBundles();
 
+  // A count that was never read is not zero, and a read that failed is not "all clear":
+  // each tile says it hasn't read yet, or couldn't just now, instead of claiming either.
+  const systemsPending = targets.isLoading || summary.isLoading;
+  const systemsFailed = !!(targets.error || summary.error);
+  const systemsKnown = !systemsPending && !systemsFailed;
+  const endingKnown = !summary.isLoading && !summary.error;
+  const notRead = (loadingNow: boolean, failed: boolean) =>
+    loadingNow ? "Reading now." : failed ? "Not read just now." : "";
+
   const registered = (targets.data ?? []).filter((entry) => entry.registered !== false);
   const unread = summary.data?.unreconciled_targets ?? [];
   const read = registered.length - unread.length;
@@ -83,16 +92,20 @@ function Tiles() {
   const projects = new Set(roleRows.map((role) => role.project_id)).size;
   const bundleCount = (bundles.data ?? []).length;
   const rolesLoading = roles.isLoading || bundles.isLoading;
+  const rolesFailed = !!(roles.error || bundles.error);
+  const rolesKnown = !rolesLoading && !rolesFailed;
 
   return (
     <div className="flex flex-wrap gap-4">
       <StatCard
         label="Connected systems"
         href="/system/targets"
-        value={registered.length === 0 ? "None" : `${read} of ${registered.length} read`}
-        tone={unread.length > 0 ? "warn" : "neutral"}
+        value={!systemsKnown ? "—" : registered.length === 0 ? "None" : `${read} of ${registered.length} read`}
+        tone={systemsKnown && unread.length > 0 ? "warn" : "neutral"}
         detail={
-          registered.length === 0
+          !systemsKnown
+            ? notRead(systemsPending, systemsFailed)
+            : registered.length === 0
             ? "No system is connected."
             : unread.length === 0
               ? "Every system answered its last read."
@@ -104,20 +117,24 @@ function Tiles() {
       <StatCard
         label="People"
         href="/users"
-        value={users.isLoading ? "—" : String(users.data?.length ?? 0)}
+        value={users.isLoading || users.error || !users.data ? "—" : String(users.data.length)}
         detail={
-          endingSoon === 0
-            ? "Nobody's access ends in the next 14 days."
-            : `${endingSoon} whose access ends in the next 14 days`
+          !endingKnown
+            ? notRead(!!summary.isLoading, !!summary.error)
+            : endingSoon === 0
+              ? "Nobody's access ends in the next 14 days."
+              : `${endingSoon} whose access ends in the next 14 days`
         }
       />
       <StatCard
         label="Where access lives"
         href="/projects"
-        value={rolesLoading ? "—" : `${roleRows.length} ${roleRows.length === 1 ? "role" : "roles"}`}
+        value={!rolesKnown ? "—" : `${roleRows.length} ${roleRows.length === 1 ? "role" : "roles"}`}
         detail={
-          rolesLoading
-            ? "Reading the catalogue."
+          !rolesKnown
+            ? rolesLoading
+              ? "Reading the catalogue."
+              : "Not read just now."
             : `Across ${projects} ${projects === 1 ? "project" : "projects"} and ${bundleCount} ${bundleCount === 1 ? "bundle" : "bundles"}`
         }
       />
@@ -135,11 +152,16 @@ function Gaps() {
   const users = useUsers("");
   const rows = useMemo(() => users.data ?? [], [users.data]);
 
-  if (users.isLoading) {
+  // Neither "still reading" nor "couldn't read" is an answer about anybody.
+  if (users.isLoading || users.error || !users.data) {
     return (
       <Card>
         <CardHeader title="Gaps" />
-        <RowSkeleton rows={3} label="Loading gaps" />
+        {users.isLoading ? (
+          <RowSkeleton rows={3} label="Loading gaps" />
+        ) : (
+          <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
+        )}
       </Card>
     );
   }
@@ -238,12 +260,15 @@ function AccessShape() {
   };
 
   const loading = roles.isLoading || bundles.isLoading;
+  const failed = !loading && !!(roles.error || bundles.error);
 
   return (
     <Card>
       <CardHeader title="Roles most people hold" />
       {loading ? (
         <RowSkeleton rows={3} label="Loading where access lives" />
+      ) : failed ? (
+        <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
       ) : (
         <>
           {top.length > 0 && (
@@ -303,7 +328,7 @@ function AccessShape() {
           holds two destinations and a separator and no prose, so the exemption
           does not reach them. They measured 16px tall on the screen this
           product opens on. */}
-      {!loading && (
+      {!loading && !failed && (
         <div className="flex flex-wrap items-center gap-x-1.5 border-t border-line px-5 py-3 text-[13px] text-faint desktop:block desktop:py-3">
           {unused === 0 && emptyBundles === 0 ? (
             "Every role and bundle is in use."
@@ -341,6 +366,14 @@ function AccessShape() {
 function RecentActivity() {
   const entries = useAuditEntries({ limit: 8 });
   const rows = entries.data ?? [];
+  // Nothing is "recorded" until the log has been read.
+  const empty = entries.isLoading ? (
+    <RowSkeleton rows={3} label="Loading recent activity" />
+  ) : entries.error ? (
+    <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
+  ) : (
+    <div className="px-5 py-3.5 text-[14px] text-faint">Nothing recorded yet.</div>
+  );
 
   return (
     <Card>
@@ -351,7 +384,7 @@ function RecentActivity() {
         }
       />
       {rows.length === 0 ? (
-        <div className="px-5 py-3.5 text-[14px] text-faint">Nothing recorded yet.</div>
+        empty
       ) : (
         rows.map((entry) => (
           <div key={entry.id} className="row-divider flex flex-wrap items-baseline gap-3 px-5 py-2.5">

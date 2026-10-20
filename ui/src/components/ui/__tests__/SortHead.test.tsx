@@ -43,6 +43,18 @@ describe("sorting by a heading", () => {
     expect(arrow("Sort by the clock")).toHaveClass("opacity-0");
   });
 
+  it("says which way the heading in force is sorted on its header cell, and none on the rest", () => {
+    render(<Heads />);
+    const cell = (name: string) => screen.getByRole("button", { name }).closest("[role=columnheader]")!;
+    expect(cell("Sort by the clock")).toHaveAttribute("aria-sort", "ascending");
+    expect(cell("Sort by who")).toHaveAttribute("aria-sort", "none");
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort by the clock" }));
+    expect(cell("Sort by the clock")).toHaveAttribute("aria-sort", "descending");
+    // Never on the button itself, where it is not valid.
+    expect(screen.getByRole("button", { name: "Sort by the clock" })).not.toHaveAttribute("aria-sort");
+  });
+
   it("names itself for a screen reader by its label unless told otherwise", () => {
     render(<Heads />);
     expect(screen.getByRole("button", { name: "Sort by who" })).toBeInTheDocument();
