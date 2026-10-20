@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PendingChangesPage from "@/app/governance/pending/page";
@@ -12,9 +12,24 @@ const pending = vi.hoisted(() => ({ data: [] as PendingRow[] }));
 const summary = vi.hoisted(() => ({ reachable: true }));
 const bundles = vi.hoisted(() => ({ data: [] as BundleRow[] }));
 const rules = vi.hoisted(() => ({ data: [] as MappingRuleRow[] }));
+const load = vi.hoisted(() => ({ loading: false }));
+const names = vi.hoisted(() => ({ users: {} as Record<string, string> }));
+
+vi.mock("@/lib/queries/useNameResolver", () => ({
+  useNameResolver: () => {
+    const miss = { value: undefined, resolved: true } as const;
+    return {
+      resolveUser: (id: string) =>
+        names.users[id] ? { value: { display_name: names.users[id], email: "" }, resolved: true } : miss,
+      resolveProject: () => miss,
+      resolveRole: () => miss,
+      resolveBundle: () => miss,
+    };
+  },
+}));
 
 vi.mock("@/lib/queries/usePropagation", () => ({
-  usePendingPropagations: () => ({ ...pending, isLoading: false, error: null, refetch: () => {} }),
+  usePendingPropagations: () => ({ ...pending, isLoading: load.loading, error: null, refetch: () => {} }),
   useDrainPropagations: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -63,6 +78,8 @@ beforeEach(() => {
   summary.reachable = true;
   bundles.data = [];
   rules.data = [];
+  load.loading = false;
+  names.users = {};
 });
 
 describe("Pending changes", () => {
@@ -73,7 +90,8 @@ describe("Pending changes", () => {
       row({ id: "o3", cascade_id: "c3" }),
     ];
     renderPending();
-    expect(screen.getByText("Why it\u2019s waiting")).toBeInTheDocument();
+    // Said in the change's own cell, not in a column of its own that is blank for most rows.
+    expect(screen.queryByText("Why it\u2019s waiting")).not.toBeInTheDocument();
     const chosen = screen.getByText("Supervisor always waits for you");
     expect(chosen).toHaveClass("text-muted");
     const stopped = screen.getByText(/^Zitadel didn't answer at \d\d:\d\d$/);
@@ -201,5 +219,127 @@ describe("Pending changes · a connected system's change", () => {
     renderPending();
 
     expect(screen.getByText(/brought in line with their roles/)).toBeInTheDocument();
+  });
+});
+
+/** route-pending.dc.html: search, a status on every row, a folding band for one edit. */
+describe("Pending changes · board layout", () => {
+  it("keeps Send enabled while there are changes to send, counting all of them", () => {
+    pending.data = [row({ id: "o1" }), row({ id: "o2", cascade_id: "c2" })];
+    renderPending();
+    expect(screen.getByRole("button", { name: "Send 2 changes" })).toBeEnabled();
+  });
+
+  it("names no count until the list has been read", () => {
+    load.loading = true;
+    renderPending();
+    expect(screen.getByRole("button", { name: "Send changes" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /Search pending changes/ })).not.toBeInTheDocument();
+  });
+
+  it("has four columns, and the extra reason column is gone", () => {
+    pending.data = [row()];
+    renderPending();
+    for (const heading of ["Who", "Change", "Caused by", "Waiting"]) {
+      expect(screen.getByText(heading)).toBeInTheDocument();
+    }
+  });
+
+  it("marks a role that always waits, and says a revocation also sends on its own", () => {
+    pending.data = [
+      row({ id: "o1", role_keys: ["supervisor"], wait_reason: "role_waits", cascade_id: "c1" }),
+      row({ id: "o2", op_type: "revoke", cascade_id: "c2" }),
+    ];
+    renderPending();
+    expect(screen.getByRole("img", { name: "Waits for you" })).toBeInTheDocument();
+    expect(screen.getByText(/also sends on its own within a few minutes/)).toBeInTheDocument();
+  });
+
+  it("shows a failed change's status in its own row with what the system said", () => {
+    pending.data = [row({ status: "failed", last_error: "no such role" })];
+    renderPending();
+    expect(screen.getByText(/Failed, and Syndra will try again: no such role/)).toBeInTheDocument();
+  });
+
+  it("says a batch's shared reason once, in its band, not on every row", () => {
+    const waits = { role_keys: ["supervisor"], wait_reason: "role_waits" };
+    pending.data = [
+      row({ id: "o1", user_id: "u1", ...waits }),
+      row({ id: "o2", user_id: "u2", ...waits }),
+    ];
+    renderPending();
+    const said = screen.getAllByText(/Supervisor always waits for you/);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toHaveTextContent(/These 2 changes come from one edit/);
+  });
+
+  it("folds a batch to its band and opens it again", () => {
+    pending.data = [
+      row({ id: "o1", role_keys: ["alpha"] }),
+      row({ id: "o2", role_keys: ["beta"] }),
+    ];
+    renderPending();
+    const fold = screen.getByRole("button", { name: "Fold these 2 changes" });
+    expect(fold).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(fold);
+    expect(screen.queryByText("alpha")).not.toBeInTheDocument();
+    expect(screen.getByText(/These 2 changes come from one edit/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open these 2 changes" }));
+    expect(screen.getByText("alpha")).toBeInTheDocument();
+  });
+
+  it("gives a lone change no fold", () => {
+    pending.data = [row()];
+    renderPending();
+    expect(screen.queryByRole("button", { name: /these \d changes/ })).not.toBeInTheDocument();
+  });
+
+  describe("search", () => {
+    beforeEach(() => {
+      names.users = { u1: "Lena Brandt", u2: "Omar Haddad" };
+      pending.data = [
+        row({ id: "o1", user_id: "u1", role_keys: ["booking"], cascade_id: "c1" }),
+        row({ id: "o2", user_id: "u2", role_keys: ["welder"], cascade_id: "c2" }),
+      ];
+    });
+    const type = (value: string) =>
+      fireEvent.change(screen.getByRole("textbox", { name: /Search pending changes/ }), {
+        target: { value },
+      });
+
+    it("narrows by person, and says sending still sends all of them", () => {
+      renderPending();
+      type("omar");
+      expect(screen.queryByText("Lena Brandt")).not.toBeInTheDocument();
+      expect(screen.getByText("Omar Haddad")).toBeInTheDocument();
+      expect(screen.getByText(/1 of the 2 changes match\. Sending sends all 2, in order\./)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Send 2 changes" })).toBeEnabled();
+    });
+
+    it("narrows by role", () => {
+      renderPending();
+      type("booking");
+      expect(screen.getByText("Lena Brandt")).toBeInTheDocument();
+      expect(screen.queryByText("Omar Haddad")).not.toBeInTheDocument();
+    });
+
+    it("says so when nothing matches, rather than claiming nothing is waiting", () => {
+      renderPending();
+      type("zzz");
+      expect(screen.getByText(/No pending change matches/)).toBeInTheDocument();
+      expect(screen.queryByText("Nothing is waiting for you to send.")).not.toBeInTheDocument();
+    });
+
+    it("says they are sent in order when nothing is searched", () => {
+      renderPending();
+      expect(screen.getByText("They are sent in this order.")).toBeInTheDocument();
+    });
+  });
+
+  it("shows the resolved empty state with no search, and Send off", () => {
+    renderPending();
+    expect(screen.getByText("Nothing is waiting for you to send.")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /Search pending changes/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Send / })).toBeDisabled();
   });
 });

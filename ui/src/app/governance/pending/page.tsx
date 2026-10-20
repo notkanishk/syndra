@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Term } from "@/components/ui/Term";
 import { useEffect, useMemo, useState } from "react";
 import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
 import { Unfold } from "@/components/ui/Unfold";
@@ -11,9 +10,13 @@ import { useQueueCleared } from "@/lib/useQueueCleared";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { humanizeKey } from "@/lib/format";
-import { Mono } from "@/components/ui/Badge";
+import { Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { Input } from "@/components/ui/Input";
+import { WaitsMark } from "@/components/ui/WaitsMark";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName, UserName } from "@/components/names";
 import { machineName, shortId } from "@/lib/audit-vocabulary";
@@ -66,7 +69,12 @@ export default function PendingChangesPage() {
   // S5: a row that goes on a later read (cancelled by someone, sent by someone)
   // fades where it was and closes its gap after, and not under the pointer.
   const leaving = useLeavingRows(rows, (row) => row.id, !pending.isLoading && !pending.error);
-  const groups = groupByCascade(leaving.rows);
+  // Search narrows what is shown, never what Send sends: the note beside it says so.
+  const resolver = useNameResolver();
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const shown = needle ? leaving.rows.filter((row) => matches(row, needle, resolver)) : leaving.rows;
+  const groups = groupByCascade(shown);
   // S13: a queue that empties while you watch says so once.
   const { cleared, beginSend, failedSend } = useQueueCleared(
     rows,
@@ -75,25 +83,20 @@ export default function PendingChangesPage() {
   const [folded, setFolded] = useState(false);
   if (!cleared && folded) setFolded(false);
   const sentCount = cleared ? cleared.items.length : rows.length;
+  const known = !pending.isLoading && !pending.error;
 
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Pending changes"
-        lede={
-          <>
-            Changes Syndra has decided on that have not reached <Term name="zitadel">Zitadel</Term>{" "}
-            or a connected system yet. They wait in the <Term name="outbox">outbox</Term>; nothing
-            here takes effect until you send it.
-          </>
-        }
+        lede="Changes that have not reached Zitadel or a connected system yet. They wait for you: sending delivers all of them, in order, and each person's access changes as theirs arrives. Revocations also send on their own every few minutes."
         actions={
           // With nothing left to send it fades out, then goes.
           cleared && folded ? null : (
             <span className={cleared ? "tint-out inline-flex" : "inline-flex"} inert={cleared ? true : undefined}>
               <Button
                 variant="accent"
-                disabled={!reachable || rows.length === 0}
+                disabled={!reachable || !known || rows.length === 0}
                 isPending={drain.isPending}
                 onClick={async () => {
                   setOutcome(null);
@@ -106,18 +109,12 @@ export default function PendingChangesPage() {
                   }
                 }}
               >
-                Send {sentCount} {sentCount === 1 ? "change" : "changes"}
+                {known ? `Send ${sentCount} ${sentCount === 1 ? "change" : "changes"}` : "Send changes"}
               </Button>
             </span>
           )
         }
       />
-
-      <p className="max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-        Sending delivers every change below to the system it is for, in order, and each
-        person&rsquo;s access changes as theirs arrives. Revocations also send on their own,
-        every few minutes; everything else waits for you.
-      </p>
 
       {outcome && <ActionOutcome outcome={outcome} />}
 
@@ -133,13 +130,32 @@ export default function PendingChangesPage() {
         </Notice>
       )}
 
+      {known && rows.length > 0 && !cleared && (
+        <div className="flex flex-col gap-3.5">
+          <FilterBar
+            search={
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search person or role…"
+                aria-label="Search pending changes by person or role"
+              />
+            }
+          />
+          <span className="text-[13.5px] text-muted">
+            {needle
+              ? `${shown.length} of the ${rows.length} changes match. Sending sends all ${rows.length}, in order.`
+              : "They are sent in this order."}
+          </span>
+        </div>
+      )}
+
       <Card>
         <CardColumns>
-          <span className="w-[150px]">Who</span>
+          <span className="w-[130px]">Who</span>
           <span className="flex-1">Change</span>
-          <span className="w-[160px]">Caused by</span>
-          <span className="w-[200px]">Why it&rsquo;s waiting</span>
-          <span className="w-[78px] text-right">Waiting</span>
+          <span className="w-[130px]">Caused by</span>
+          <span className="w-[110px] text-right">Waiting</span>
         </CardColumns>
 
         {cleared ? (
@@ -157,25 +173,29 @@ export default function PendingChangesPage() {
             <ListStates
               isLoading={pending.isLoading}
               error={pending.error}
-              isEmpty={rows.length === 0}
+              isEmpty={shown.length === 0}
               onRetry={() => pending.refetch()}
               errorTitle="Couldn't load pending changes."
               skeleton={<RowSkeleton rows={4} label="Loading pending changes" />}
               empty={
-                <EmptyState
-                  title="Nothing is waiting for you to send."
-                  guidance="Every change Syndra has decided on has reached the system it was for."
-                  resolved
-                />
+                rows.length === 0 ? (
+                  <EmptyState
+                    title="Nothing is waiting for you to send."
+                    guidance="Every change Syndra has decided on has reached the system it was for."
+                    resolved
+                  />
+                ) : (
+                  <EmptyState
+                    title={`No pending change matches \u201c${query.trim()}\u201d.`}
+                    guidance="Search by a person's name or a role."
+                  />
+                )
               }
             >
               <PendingGroups groups={groups} bundles={bundles.data} rules={rules.data} leave={leaving.props} />
             </ListStates>
           </div>
         )}
-        <p className="px-5 py-3 text-[13px] text-faint">
-          Handles: R_ is an automatic rule, b_ a bundle, c_ one edit&rsquo;s set of changes.
-        </p>
       </Card>
     </div>
   );
@@ -194,66 +214,93 @@ function PendingGroups({
   /** Each row's seat in a read that is taking it away (S5). */
   leave: (id: string) => LeaveProps;
 }) {
+  // A batch folds to its band (the board's chevron); a lone change has nothing to fold.
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (key: string) =>
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   // A row on its way out is not one of "these N changes".
   const waiting = (group: CascadeGroup) => group.rows.filter((row) => !leave(row.id).leaving).length;
   return (
     <>
-      {groups.map((group) => (
-        <div key={group.key}>
-          {group.rows.map((row) => (
-            <LeavingRow key={row.id} {...leave(row.id)}>
-            <div
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
-            >
-              <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
-                <UserName id={row.user_id} />
-              </span>
+      {groups.map((group) => {
+        const count = waiting(group);
+        const open = count < 2 || !folded.has(group.key);
+        // One reason for the whole batch is said once, in its band, not on every row.
+        const shared = count > 1 ? sharedWait(group.rows) : undefined;
+        return (
+          <div key={group.key}>
+            {count > 1 && (
+              <div className="row-divider flex items-center gap-3 bg-surface-0 px-5 py-2.5">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-label={`${open ? "Fold" : "Open"} these ${count} changes`}
+                  onClick={() => toggle(group.key)}
+                  className="group -my-2 -ml-2 flex size-11 flex-none items-center justify-center"
+                >
+                  {/* The 28px round chevron is the look; the 44px button around it is the touch floor. */}
+                  <span
+                    aria-hidden
+                    className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press group-hover:bg-[var(--hover)] ${
+                      open ? "rotate-90" : ""
+                    }`}
+                  >
+                    ›
+                  </span>
+                </button>
+                <p className="min-w-0 flex-1 text-[13.5px] leading-[1.5] text-muted">
+                  These {count} changes come from one edit (
+                  <Mono className="text-faint">{shortId(group.key, "c")}</Mono>).{" "}
+                  {shared ? `${shared}. ` : ""}They are sent together or not at all.
+                </p>
+              </div>
+            )}
+            <Unfold open={open}>
+              {group.rows.map((row) => (
+                <LeavingRow key={row.id} {...leave(row.id)}>
+                  <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:items-center tablet:gap-[18px]">
+                    <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
+                      <UserName id={row.user_id} />
+                    </span>
 
-              <span className="w-full text-[14px] tablet:min-w-[220px] tablet:flex-1">
-                {row.op_type === "apply" ? (
-                  <SystemChange row={row} />
-                ) : (
-                  <>
-                    <span className="text-muted">{verb(row.op_type)}</span>{" "}
-                    <ProjectName id={row.project_id} /> /{" "}
-                    {(row.role_keys ?? []).map((key) => (
-                      <Mono key={key} className="mr-1.5">
-                        {key}
-                      </Mono>
-                    ))}
-                  </>
-                )}
-              </span>
+                    <span className="flex w-full min-w-0 flex-col gap-[3px] tablet:flex-1">
+                      <span className="text-[14px]">
+                        {row.op_type === "apply" ? (
+                          <SystemChange row={row} />
+                        ) : (
+                          <>
+                            <span className="text-muted">{verb(row.op_type)}</span>{" "}
+                            <ProjectName id={row.project_id} /> /{" "}
+                            {(row.role_keys ?? []).map((key) => (
+                              <Mono key={key} className="mr-1.5">
+                                {key}
+                              </Mono>
+                            ))}
+                            {row.wait_reason === "role_waits" && <WaitsMark className="ml-1.5" />}
+                          </>
+                        )}
+                      </span>
+                      <RowStatus row={row} skipWait={shared} />
+                    </span>
 
-              <span className="w-full text-[13px] tablet:w-[160px] tablet:shrink-0">
-                <CausedBy row={row} bundles={bundles} rules={rules} />
-              </span>
+                    <span className="w-full text-[13.5px] tablet:w-[130px] tablet:shrink-0">
+                      <CausedBy row={row} bundles={bundles} rules={rules} />
+                    </span>
 
-              <WhyWaiting row={row} />
-
-              <span className="text-[13px] text-faint tablet:w-[78px] tablet:shrink-0 tablet:text-right">
-                <Relative iso={row.created_at} />
-              </span>
-
-              {row.status === "failed" && (
-                <div className="w-full text-[13px] text-danger-text [overflow-wrap:anywhere]">
-                  Failed, and Syndra will try again
-                  {row.last_error ? `: ${row.last_error}` : "."}
-                </div>
-              )}
-            </div>
-            </LeavingRow>
-          ))}
-
-          {waiting(group) > 1 && (
-            <p className="row-divider bg-surface-0 px-5 py-2.5 text-[13.5px] leading-[1.5] text-muted">
-              These {waiting(group)} changes come from one edit (
-              <Mono className="text-faint">{shortId(group.key, "c")}</Mono>). They are
-              sent together or not at all.
-            </p>
-          )}
-        </div>
-      ))}
+                    <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0 tablet:text-right">
+                      <Relative iso={row.created_at} />
+                    </span>
+                  </div>
+                </LeavingRow>
+              ))}
+            </Unfold>
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -347,19 +394,69 @@ function SystemChange({ row }: { row: PendingPropagationRow }) {
   );
 }
 
-/** Empty when the row carries no reason; warn only for a send that stopped. */
-function WhyWaiting({ row }: { row: PendingPropagationRow }) {
+function waitLine(row: PendingPropagationRow): string | undefined {
   const role = (row.role_keys ?? []).map(humanizeKey).join(", ") || "It";
-  const line = waitReasonLine(row.wait_reason, role, row.created_at);
+  return waitReasonLine(row.wait_reason, role, row.created_at);
+}
+
+/** The one reason every row of a batch gives, if they all give the same. */
+function sharedWait(rows: PendingPropagationRow[]): string | undefined {
+  const first = waitLine(rows[0]);
+  return first && rows.every((row) => waitLine(row) === first) ? first : undefined;
+}
+
+/**
+ * What state the change is in, under it: why it waits (warn only for a send
+ * that stopped, not for a wait the operator chose), a failure and what the
+ * system said, and that a revocation also goes on its own. `skipWait` is the
+ * batch's shared reason, already said in its band.
+ */
+function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: string }) {
+  const line = waitLine(row);
   return (
-    <span
-      className={`w-full text-[13px] tablet:w-[200px] tablet:shrink-0 ${
-        waitIsChosen(row.wait_reason) ? "text-muted" : "text-warn-text"
-      }`}
-    >
-      {line}
-    </span>
+    <>
+      {line &&
+        line !== skipWait &&
+        (waitIsChosen(row.wait_reason) ? (
+          <span className="text-[12.5px] text-muted">{line}</span>
+        ) : (
+          <span className="inline-flex items-center gap-2 text-[13px]">
+            <StatusDot tone="warn" />
+            <span className="text-warn-text">{line}</span>
+          </span>
+        ))}
+      {row.status === "failed" && (
+        <span className="inline-flex items-center gap-2 text-[13px] text-danger-text">
+          <StatusDot tone="danger" />
+          <span className="[overflow-wrap:anywhere]">
+            Failed, and Syndra will try again
+            {row.last_error ? `: ${row.last_error}` : "."}
+          </span>
+        </span>
+      )}
+      {row.op_type === "revoke" && (
+        <span className="text-[12.5px] text-faint">
+          A revocation: it also sends on its own within a few minutes.
+        </span>
+      )}
+    </>
   );
+}
+
+/** Search by person or role: the name as the operator reads it, never the id. */
+function matches(
+  row: PendingPropagationRow,
+  needle: string,
+  resolver: ReturnType<typeof useNameResolver>,
+): boolean {
+  const person = resolver.resolveUser(row.user_id).value;
+  const project = resolver.resolveProject(row.project_id).value;
+  return [
+    person?.display_name,
+    person?.email,
+    project?.name,
+    ...(row.role_keys ?? []).flatMap((key) => [key, humanizeKey(key)]),
+  ].some((text) => text?.toLowerCase().includes(needle));
 }
 
 function CausedBy({
@@ -406,8 +503,8 @@ function CausedBy({
             : humanizeKey(row.source);
 
   return (
-    <span className="flex flex-wrap items-baseline gap-x-1.5">
-      <span className="truncate">{name}</span>
+    <span className="flex flex-col gap-0.5">
+      <span>{name}</span>
       {(isBundle || isRule) && row.source_ref && (
         <Mono className="text-faint">{shortId(row.source_ref, isBundle ? "b" : "R")}</Mono>
       )}
