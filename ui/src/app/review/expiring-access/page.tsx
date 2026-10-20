@@ -1,16 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 
-import { AccessSource } from "@/components/access/AccessSource";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { BulkDialog } from "@/components/people/BulkDialog";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { StatusDot } from "@/components/ui/Badge";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterPills } from "@/components/ui/Select";
 import {
   RowCheckbox,
@@ -23,7 +25,7 @@ import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import {
   useAcknowledgeExpiry,
@@ -51,7 +53,7 @@ const EXTEND_DAYS = 90;
  * point at a destination rather than a tab.
  *
  * Two actions, and they are not symmetrical. **Extend** changes the access.
- * **Let it end** changes nothing about the access — it records that somebody
+ * **Let it lapse** changes nothing about the access — it records that somebody
  * looked and decided, which is the only thing this queue could not previously
  * say. The sweep removes the grant on its date either way.
  *
@@ -116,20 +118,52 @@ export default function ExpiringAccessPage() {
     [selectedGrants],
   );
 
+  const people = new Set(rows.map((grant) => grant.user_id)).size;
+  const soonest = undecided[0]?.expires_at;
+  const showRows = !grants.isLoading && !grants.error && rows.length > 0;
+  const section = (title: string, hint: string, list: ExpiringGrantRow[], first: boolean) => (
+    <ExpiringSection
+      title={title}
+      hint={hint}
+      rows={list}
+      // Only the soonest undecided row is amber: a deadline signal, not a decoration.
+      soonestId={first ? list[0]?.id : undefined}
+      selecting={selecting}
+      selection={selection}
+      onLetLapse={setLapsing}
+      selectAll={
+        first && selecting ? (
+          <SelectAllRow
+            inScope={undecided.length}
+            total={rows.length}
+            noun={["role", "roles"]}
+            allSelected={selection.allSelected}
+            {...selection.headerCheckboxProps}
+          />
+        ) : null
+      }
+    />
+  );
+
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Expiring access"
-        lede={`Direct grants that end in the next ${within} days, soonest first. Syndra ends each one on its date whether or not you visit this page.`}
-        actions={
-          undecided.length > 0 ? (
-            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+        meta={
+          showRows ? (
+            <MetaRow>
+              {[
+                `${rows.length} ${rows.length === 1 ? "role" : "roles"} · ${people} ${people === 1 ? "person" : "people"}`,
+                soonest ? `soonest ends ${formatShortDate(soonest)}` : "every one decided",
+              ]}
+            </MetaRow>
           ) : undefined
         }
+        lede={`Direct access that ends in the next ${within} days. Syndra ends each on its date whether or not you visit this page. Extend gives ${EXTEND_DAYS} more days. Let it lapse changes nothing: it records that you looked, and the row asks again if the date changes.`}
       />
 
-      {/* A filter, not an action, so FilterPills and not a Segmented. The default
-          window keeps the link clean. */}
+      {/* A filter, not an action, so FilterPills and not a Segmented. Select is an action on the
+          list, so it trails. The default window keeps the link clean. */}
       <FilterBar
         leading={
           <FilterPills
@@ -146,93 +180,50 @@ export default function ExpiringAccessPage() {
             }
           />
         }
+        trailing={
+          undecided.length > 0 ? (
+            <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
+          ) : undefined
+        }
       />
 
-      <Card>
-        <CardColumns>
-          {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
-          <span className="w-[210px]">Who</span>
-          <span className="w-[260px]">What</span>
-          <span className="w-[180px]">Granted</span>
-          <span className="flex-1">State</span>
-          <span className="w-[110px] text-right">Remaining</span>
-          <span className="w-[200px] text-right">Action</span>
-        </CardColumns>
-
-        {/* Only the undecided rows can be selected, so the count here is the
-            undecided count and never the number of rows on screen. */}
-        {selecting && undecided.length > 0 && (
-          <SelectAllRow
-            inScope={undecided.length}
-            total={rows.length}
-            noun={["role", "roles"]}
-            allSelected={selection.allSelected}
-            {...selection.headerCheckboxProps}
-          />
-        )}
-
-        <div data-selection-scope {...selection.containerProps}>
-        <ListStates
-          isLoading={grants.isLoading}
-          error={grants.error}
-          isEmpty={rows.length === 0}
-          onRetry={() => grants.refetch()}
-          errorTitle="Couldn't load access that ends."
-          skeleton={<RowSkeleton rows={4} label="Loading access that ends" />}
-          empty={
-            <EmptyState
-              title={`Nothing ends in the next ${within} days.`}
-              guidance="Direct grants appear here a month before they end."
-              resolved
-            />
-          }
-        >
-          {undecided.map((grant, index) => (
-            // Only the soonest row is emphasised. Amber is a deadline signal,
-            // not a decoration for the whole table — paint every row and the
-            // one that actually needs attention stops standing out.
-            <ExpiringRow
-              key={grant.id}
-              grant={grant}
-              soonest={index === 0}
-              selecting={selecting}
-              selection={selection}
-              onLetLapse={() => setLapsing(grant)}
-            />
-          ))}
-
+      {showRows ? (
+        <div data-selection-scope {...selection.containerProps} className="flex flex-col gap-4">
           {/* Everything in the window has been judged. Said outright, because a queue whose only
               rows are acknowledged ones looks identical to a queue nobody has touched. */}
-          {undecided.length === 0 && acknowledged.length > 0 && (
-            <div className="row-divider px-5 py-3.5 text-[14px] text-muted">
+          {undecided.length === 0 && (
+            <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
+              <StatusDot tone="healthy" />
               Nothing here is waiting on a decision. Every role that ends in the next {within} days has
               been looked at.
-            </div>
+            </span>
           )}
-
-          {acknowledged.length > 0 && (
-            <>
-              <div className="row-divider bg-tint-1 px-5 py-2.5">
-                <span className="type-label">
-                  Left to end · {acknowledged.length}{" "}
-                  {acknowledged.length === 1 ? "role" : "roles"}
-                </span>
-              </div>
-              {acknowledged.map((grant) => (
-                <ExpiringRow
-                  key={grant.id}
-                  grant={grant}
-                  soonest={false}
-                  selecting={selecting}
-                  selection={selection}
-                  onLetLapse={() => setLapsing(grant)}
-                />
-              ))}
-            </>
-          )}
-        </ListStates>
+          {undecided.length > 0 &&
+            section("Undecided", "Each ends on its date unless you extend it", undecided, true)}
+          {acknowledged.length > 0 &&
+            section("Let lapse", "Somebody looked and decided. Extend still works", acknowledged, false)}
         </div>
-      </Card>
+      ) : (
+        <Card>
+          <ListStates
+            isLoading={grants.isLoading}
+            error={grants.error}
+            isEmpty
+            onRetry={() => grants.refetch()}
+            errorTitle="Couldn't load access that ends."
+            skeleton={<RowSkeleton rows={4} label="Loading access that ends" />}
+            empty={
+              <EmptyState
+                title={`Nothing ends in the next ${within} days.`}
+                guidance="Direct access appears here a month before it ends."
+                resolved
+              />
+            }
+          >
+            {null}
+          </ListStates>
+        </Card>
+      )}
 
       <SelectionBar
         count={selecting ? selection.count : 0}
@@ -287,29 +278,66 @@ export default function ExpiringAccessPage() {
       )}
 
       {lapsing && <LetItLapseDialog grant={lapsing} onClose={() => setLapsing(null)} />}
-
-      <div className="flex flex-wrap gap-[18px]">
-        <div className="card min-w-[min(320px,100%)] flex-1 px-5 py-4">
-          <h2 className="type-card-title mb-2">
-            What &ldquo;Let it end&rdquo; does, and what it doesn&rsquo;t
-          </h2>
-          <p className="max-w-[60ch] text-[14px] leading-[1.55] text-muted">
-            It records that you read the row and decided. It changes nothing about the access — the
-            access already ends on its date, and it still will. What changes is that the queue
-            stops asking your colleagues a question you have answered, with your name on the
-            answer.
-          </p>
-        </div>
-        <div className="card min-w-[min(320px,100%)] flex-1 px-5 py-4">
-          <h2 className="type-card-title mb-2">When a row comes back</h2>
-          <p className="max-w-[60ch] text-[14px] leading-[1.55] text-muted">
-            An acknowledgement is about one date. If somebody extends the access or gives it again, the
-            date you agreed to no longer exists, so the row returns as undecided and asks again —
-            you have not signed off on the new date. Nothing else clears it, and there is no timer.
-          </p>
-        </div>
-      </div>
     </div>
+  );
+}
+
+/**
+ * One card of the two: a counted heading, the column headings, then rows ten at a time
+ * (route-expiring.dc.html). Paging is per section, so a long Undecided never pushes the decided
+ * rows out of reach.
+ */
+function ExpiringSection({
+  title,
+  hint,
+  rows,
+  soonestId,
+  selecting,
+  selection,
+  onLetLapse,
+  selectAll,
+}: {
+  title: string;
+  hint: string;
+  rows: ExpiringGrantRow[];
+  soonestId?: string;
+  selecting: boolean;
+  selection: RowSelection;
+  onLetLapse: (grant: ExpiringGrantRow) => void;
+  selectAll: React.ReactNode;
+}) {
+  const paging = usePaging();
+  const shown = rows.slice(0, paging.limit);
+  return (
+    <Card>
+      <CardHeader title={title} count={rows.length} note={hint} />
+      <CardColumns>
+        {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+        <span className="w-[190px]">Who</span>
+        <span className="flex-1">What they can get into</span>
+        <span className="hidden w-[160px] desktop:block">Given by</span>
+        <span className="w-[110px]">Ends in</span>
+        <span className="min-w-[300px]" />
+      </CardColumns>
+      {selectAll}
+      {shown.map((grant) => (
+        <ExpiringRow
+          key={grant.id}
+          grant={grant}
+          soonest={grant.id === soonestId}
+          selecting={selecting}
+          selection={selection}
+          onLetLapse={() => onLetLapse(grant)}
+        />
+      ))}
+      <PaginationRow
+        shown={shown.length}
+        total={rows.length}
+        onMore={paging.more}
+        onAll={() => paging.all(rows.length)}
+        onBack={paging.back}
+      />
+    </Card>
   );
 }
 
@@ -336,9 +364,10 @@ function ExpiringRow({
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const clearAck = useClearExpiryAcknowledgement();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  // Extending again would add another stretch to the same grant.
-  const [extended, setExtended] = useState(false);
   const remaining = daysUntil(grant.expires_at);
+  // The result takes the seat the buttons held, until the next read. A refusal does not: the
+  // buttons stay beside it, so the attempt can be made again.
+  const reported = outcome !== null && !statesNothingChanged(outcome.kind);
 
   return (
     <div
@@ -352,7 +381,7 @@ function ExpiringRow({
               // is nothing to be ineligible for, and the edge would be noise.
               "border-l-[3px] border-dashed border-line-strong"
             : "border-l-[3px] border-transparent"
-      } ${ack ? "opacity-[.72]" : ""} ${selection.isSelected(grant.id) ? "bg-accent-soft" : ""}`}
+      } ${selection.isSelected(grant.id) ? "bg-accent-soft" : ""}`}
       {...(ack ? {} : selection.rowProps(grant.id))}
     >
       {selecting && (
@@ -368,122 +397,127 @@ function ExpiringRow({
           )}
         </span>
       )}
-      <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[210px]">
+      <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[190px] tablet:shrink-0">
         <UserAvatar id={grant.user_id} />
-        <span className="truncate text-[15px] font-semibold">
+        <Link
+          href={`/users/${grant.user_id}`}
+          className="min-w-0 text-[15px] font-semibold hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+        >
           <UserName id={grant.user_id} />
-        </span>
+        </Link>
       </span>
 
-      <div className="w-full text-[14.5px] text-ink/80 tablet:w-[260px] tablet:shrink-0 tablet:truncate">
-        <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
-      </div>
-
-      <div className="hidden w-[180px] shrink-0 truncate text-[13.5px] text-faint tablet:block">
-        by <UserName id={grant.granted_by} fallback="somebody no longer listed" />,{" "}
-        {formatShortDate(grant.created_at)}
-      </div>
-
-      <div className="flex w-full flex-wrap items-center gap-3 tablet:min-w-[220px] tablet:flex-1">
-        <AccessSource kind="direct" />
-        {ack ? (
+      <div className="flex w-full min-w-0 flex-col gap-[3px] tablet:flex-1">
+        <span className="text-[14.5px] leading-[1.45]">
+          <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
+        </span>
+        <span className="type-mono text-[12.5px] text-faint">{grant.role_key}</span>
+        {/* Laptop width only: the Given by column needs a desktop, and a phone has none (#54). */}
+        <span className="hidden text-[12.5px] text-faint tablet:block desktop:hidden">
+          Given by <UserName id={grant.granted_by} fallback="somebody no longer listed" />,{" "}
+          {formatShortDate(grant.created_at)}
+        </span>
+        {ack && (
           // Who and when, always. The point of a shared acknowledgement is that the next person
           // can see whose judgement they would be overriding.
-          <span className="min-w-0 text-[14px] text-muted tablet:truncate">
-            <span className="font-semibold text-ink/80">
+          <span className="mt-[3px] text-[13.5px] leading-[1.5] text-muted">
+            <span className="font-semibold text-ink">
               <UserName id={ack.by} fallback="somebody no longer listed" />
             </span>{" "}
-            let this end on {formatShortDate(ack.at)}
+            let it lapse on {formatShortDate(ack.at)}
             {ack.note ? ` — ${ack.note}` : ""}
           </span>
-        ) : (
-          <span className="text-[14px] text-muted tablet:truncate">
-            Undecided — ends {formatShortDate(grant.expires_at)}
-          </span>
         )}
       </div>
 
-      <div
-        className={`text-[13.5px] font-semibold tablet:w-[110px] tablet:shrink-0 tablet:text-right ${
-          soonest ? "text-warn-text" : "text-muted"
-        }`}
-      >
-        {remaining === null ? "—" : remaining <= 0 ? "ends today" : `${remaining} days left`}
-        <span className="tablet:hidden" />
+      <div className="hidden w-[160px] shrink-0 text-[13.5px] leading-[1.45] text-muted desktop:block">
+        <UserName id={grant.granted_by} fallback="somebody no longer listed" />
+        <span className="block text-[12.5px] text-faint">{formatShortDate(grant.created_at)}</span>
       </div>
 
-      <div className="flex w-full items-center gap-3 tablet:w-[200px] tablet:shrink-0 tablet:justify-end tablet:gap-2">
-        {/* Extend stays on an acknowledged row. Changing your mind toward KEEPING somebody's
-            access is the reversal that must never be harder than the one that lets it go. */}
-        <Button
-          variant={soonest ? "accent" : "outline"}
-          size="sm"
-          isPending={extend.isPending}
-          disabled={extended}
-          onClick={async () => {
-            try {
-              const result = await step.run(() =>
-                extend.mutateAsync({
-                  project_id: grant.project_id,
-                  role_key: grant.role_key,
-                  reason: "Extended from Expiring access",
-                  duration_days: EXTEND_DAYS,
-                  extend: true,
-                }),
-              );
-              if (result === KEPT) return;
-              setExtended(true);
-              // This endpoint enqueues to the outbox in manual mode ("pending")
-              // rather than applying inline — see CreateGrantResult. Reporting
-              // "applied" unconditionally would say Zitadel has it when only
-              // Syndra's own ledger does.
-              const waiting = result?.status === "pending";
-              setOutcome({
-                kind: waiting ? "queued" : "applied",
-                message: waiting
-                  ? `Will extend by ${EXTEND_DAYS} days once sent`
-                  : `Extended by ${EXTEND_DAYS} days`,
-                detail: waiting ? undefined : "It leaves this list when the page next refreshes.",
-              });
-            } catch (error) {
-              setOutcome(outcomeFromError(error));
-            }
-          }}
-        >
-          Extend {EXTEND_DAYS} days
-        </Button>
+      <div className="flex flex-col gap-0.5 tablet:w-[110px] tablet:shrink-0">
+        <span className={`text-[13.5px] font-semibold ${soonest ? "text-warn-text" : "text-muted"}`}>
+          {remaining === null
+            ? "—"
+            : remaining <= 0
+              ? "Ends today"
+              : `${remaining} ${remaining === 1 ? "day" : "days"} left`}
+        </span>
+        <span className="text-[12.5px] text-faint">{formatShortDate(grant.expires_at)}</span>
+      </div>
+
+      <div className="flex w-full min-w-0 flex-col items-start gap-2 desktop:w-auto desktop:min-w-[300px] desktop:items-end">
+        {reported ? (
+          <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />
+        ) : (
+          <div className="flex w-full flex-wrap items-center gap-2 tablet:w-auto tablet:justify-end">
+            {/* Extend stays on an acknowledged row. Changing your mind toward KEEPING somebody's
+                access is the reversal that must never be harder than the one that lets it go. */}
+            <Button
+              variant={soonest ? "accent" : "outline"}
+              size="sm"
+              isPending={extend.isPending}
+              onClick={async () => {
+                try {
+                  const result = await step.run(() =>
+                    extend.mutateAsync({
+                      project_id: grant.project_id,
+                      role_key: grant.role_key,
+                      reason: "Extended from Expiring access",
+                      duration_days: EXTEND_DAYS,
+                      extend: true,
+                    }),
+                  );
+                  if (result === KEPT) return;
+                  // This endpoint enqueues to the outbox in manual mode ("pending")
+                  // rather than applying inline — see CreateGrantResult. Reporting
+                  // "applied" unconditionally would say Zitadel has it when only
+                  // Syndra's own ledger does.
+                  const waiting = result?.status === "pending";
+                  setOutcome({
+                    kind: waiting ? "queued" : "applied",
+                    message: waiting
+                      ? `Will extend by ${EXTEND_DAYS} days once sent`
+                      : `Extended by ${EXTEND_DAYS} days`,
+                    detail: waiting ? undefined : "It leaves this list on the next read.",
+                  });
+                } catch (error) {
+                  setOutcome(outcomeFromError(error));
+                }
+              }}
+            >
+              Extend {EXTEND_DAYS} days
+            </Button>
+            {ack ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                isPending={clearAck.isPending}
+                onClick={async () => {
+                  try {
+                    await clearAck.mutateAsync(grant.id);
+                    setOutcome({
+                      kind: "applied",
+                      message: "Back in the undecided list",
+                      detail: "The list asks about it again.",
+                    });
+                  } catch (error) {
+                    setOutcome(outcomeFromError(error));
+                  }
+                }}
+              >
+                Undo letting it lapse
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={onLetLapse}>
+                Let it lapse
+              </Button>
+            )}
+          </div>
+        )}
         {step.element}
-
-        {ack ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            isPending={clearAck.isPending}
-            onClick={async () => {
-              try {
-                await clearAck.mutateAsync(grant.id);
-                setOutcome({
-                  kind: "applied",
-                  message: "Back in the undecided list",
-                  detail: "The list asks about it again.",
-                });
-              } catch (error) {
-                setOutcome(outcomeFromError(error));
-              }
-            }}
-          >
-            Undo letting it end
-          </Button>
-        ) : (
-          <Button variant="ghost" size="sm" onClick={onLetLapse}>
-            Let it end
-          </Button>
-        )}
+        {outcome && !reported && <ActionOutcome placement="seat" outcome={outcome} />}
       </div>
-
-      {/* The row reports its own extension and keeps its seat: it leaves this
-          queue on the next read, not under the thumb that extended it. */}
-      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
     </div>
   );
 }
@@ -518,7 +552,7 @@ function LetItLapseDialog({
   return (
     <Modal open onClose={onClose} busy={acknowledge.isPending} size="md" labelledBy="lapse-title">
       <ModalHeader
-        title="Let this end?"
+        title="Let this lapse?"
         titleId="lapse-title"
         lede={
           <>
@@ -533,13 +567,13 @@ function LetItLapseDialog({
           <div className="type-label mb-1">What this does</div>
           <ul className="flex flex-col gap-1 text-muted">
             <li>
-              Nothing to the access. It already ends on {formatShortDate(expiresAt)} and it still
-              will — this records that you looked.
+              Nothing to the access. It ends on {formatShortDate(expiresAt)}, as it would have; this
+              records that you looked.
             </li>
-            <li>The queue stops asking, and shows your name against the decision.</li>
+            <li>The list stops asking, and shows your name against the decision.</li>
             <li>
-              If somebody extends it or gives it again, this stops applying and the row comes back — you
-              have not signed off on a date that did not exist yet.
+              If somebody extends it or gives it again, the row comes back and asks again: you agreed to
+              this date, not a later one.
             </li>
           </ul>
         </div>

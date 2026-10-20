@@ -48,7 +48,7 @@ describe("the expiring window", () => {
     expect(pills().getAllByRole("radio").map((r) => r.textContent)).toEqual(["14 days", "30 days"]);
     expect(pills().getByRole("radio", { name: "14 days" })).toBeChecked();
     expect(nav.askedFor.at(-1)).toBe(14);
-    expect(screen.getByText(/end in the next 14 days/)).toBeInTheDocument();
+    expect(screen.getByText(/Direct access that ends in the next 14 days/)).toBeInTheDocument();
   });
 
   it("opens on 30 from ?within=30, and on 14 from Home's ?within=14", () => {
