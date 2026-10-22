@@ -31,6 +31,7 @@ import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
+import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
   useAcknowledgeExpiry,
@@ -587,6 +588,7 @@ function ExpiringRow({
   onLetLapse: () => void;
 }) {
   const ack = grant.acknowledged ?? null;
+  const accountHref = useAccountHref();
   // Extending re-submits the grant with a later date: POST upserts on
   // (user, project, role) and overwrites expires_at, so this renews in place
   // rather than creating a duplicate.
@@ -631,12 +633,15 @@ function ExpiringRow({
       )}
       <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[190px] tablet:shrink-0">
         <UserAvatar id={grant.user_id} />
-        <Link
-          href={`/users/${grant.user_id}`}
-          className="min-w-0 text-[15px] font-semibold hover:text-accent-text hover:underline hover:underline-offset-[3px]"
-        >
-          <UserName id={grant.user_id} />
-        </Link>
+        <span className="min-w-0">
+          <Link
+            href={accountHref(grant.user_id)}
+            className="text-[15px] font-semibold hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+          >
+            <UserName id={grant.user_id} />
+          </Link>
+          <ServiceAccountTag id={grant.user_id} />
+        </span>
       </span>
 
       <div className="flex w-full min-w-0 flex-col gap-[3px] tablet:flex-1">

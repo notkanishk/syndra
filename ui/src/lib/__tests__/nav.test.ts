@@ -265,7 +265,7 @@ describe("the target rows", () => {
     const system = targetNav([]).find((e) => e.kind === "group" && e.label === "System");
     const labels = system?.kind === "group" ? system.children.map((c) => c.label) : [];
 
-    expect(labels).toEqual(["Zitadel", "Connected systems", "Incoming events"]);
+    expect(labels).toEqual(["Zitadel", "Connected systems", "Service accounts", "Incoming events"]);
     // Static, so it is the same array — nothing is derived to produce it.
     expect(targetNav([])).toBe(ADVANCED_NAV);
   });
@@ -320,6 +320,24 @@ describe("the target rows", () => {
     expect(index && leafMatches(index, "/system/targets")).toBe(true);
     expect(index && leafMatches(index, "/system/targets/truenas")).toBe(false);
     expect(truenas && leafMatches(truenas, "/system/targets/truenas")).toBe(true);
+  });
+
+  // A-07 §26: Service accounts is how systems reach Zitadel, so it sits with
+  // them: after the targets, before Incoming events. Advanced only.
+  it("puts Service accounts after the targets and before Incoming events, Advanced only", () => {
+    const system = targetNav(["truenas"]).find((e) => e.kind === "group" && e.label === "System");
+    const labels = system?.kind === "group" ? system.children.map((c) => c.label) : [];
+    expect(labels).toEqual(["Zitadel", "Connected systems", "TrueNAS", "Service accounts", "Incoming events"]);
+    expect(navLeaves(BASIC_NAV).map((l) => l.href)).not.toContain("/system/service-accounts");
+  });
+
+  it("keeps the rail on Service accounts for an account's own page", () => {
+    const leaf = navLeaves(ADVANCED_NAV).find((l) => l.href === "/system/service-accounts");
+    expect(leaf && leafMatches(leaf, "/system/service-accounts/u1")).toBe(true);
+    expect(crumbsFor("/system/service-accounts", "advanced")).toEqual([
+      { label: "System" },
+      { label: "Service accounts", href: "/system/service-accounts" },
+    ]);
   });
 
   it("names a target once, from one place", () => {

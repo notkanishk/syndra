@@ -13,6 +13,12 @@ const holds: Hold[] = [
 
 const state = vi.hoisted(() => ({ due: [] as unknown[], lift: vi.fn() }));
 
+// Who is a service account comes from one cached list; these rows are all people.
+vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
+  ...(await original<typeof import("@/lib/queries/useServiceAccounts")>()),
+  useServiceAccountIds: () => new Set<string>(),
+}));
+
 vi.mock("@/lib/queries/useHolds", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/queries/useHolds")>()),
   useHoldsDueForReview: () => ({
