@@ -22,15 +22,24 @@ import (
 func TriggerOnboarding(ctx context.Context, userID, source, idempotencyKey string) error {
 	log.Printf("[ONBOARDING] Trigger received: user=%s source=%s key=%s", userID, source, idempotencyKey)
 
-	// A machine user gets no welcome bundle: nothing is recorded, nothing is
-	// assigned. A failed read is a failure (Zitadel redelivers) rather than a
-	// guess that the account is a person. An unknown user is treated as a
-	// person: the event may beat the directory's own listing.
-	if u, found, err := svcFindUser(ctx, userID); err != nil {
+	// A service account (a Zitadel machine user, or one an operator marked)
+	// gets no welcome bundle: nothing is recorded, nothing is assigned. A failed
+	// read of either is a failure (Zitadel redelivers) rather than a guess that
+	// the account is a person. An unknown user is treated as a person: the
+	// event may beat the directory's own listing.
+	u, found, err := svcFindUser(ctx, userID)
+	if err != nil {
 		return fmt.Errorf("onboarding: read user %s: %w", userID, err)
-	} else if found && u.IsMachine() {
-		log.Printf("[ONBOARDING] Skipped machine user=%s", userID)
-		return nil
+	}
+	if found {
+		isSA, err := IsServiceAccount(ctx, u)
+		if err != nil {
+			return fmt.Errorf("onboarding: read service accounts for %s: %w", userID, err)
+		}
+		if isSA {
+			log.Printf("[ONBOARDING] Skipped service account user=%s", userID)
+			return nil
+		}
 	}
 
 	// 1. Record the trigger — idempotent insert

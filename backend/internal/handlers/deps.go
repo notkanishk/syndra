@@ -486,7 +486,12 @@ var (
 	svcInsightsLensEnding = services.InsightsLensEnding
 	svcInsightsLensGroup  = services.InsightsLensGroup
 	svcLoadTerms          = services.LoadTerms
-	dbGetUserUsage        = db.GetUserUsage
+	// Service accounts (services/service_accounts.go).
+	svcListServiceAccounts  = services.ListServiceAccounts
+	svcGetServiceAccount    = services.GetServiceAccount
+	svcSaveServiceAccount   = services.SaveServiceAccount
+	svcUnmarkServiceAccount = services.UnmarkServiceAccount
+	dbGetUserUsage          = db.GetUserUsage
 	// Sign-in usage (I6): the webhook records, and resolves an application to
 	// its project through the directory.
 	dbRecordUsage         = db.RecordUsage

@@ -331,6 +331,11 @@ func Catalog(ctx context.Context) (models.CatalogResponse, error) {
 	if err != nil {
 		return models.CatalogResponse{}, err
 	}
+	marks, err := serviceAccountMarks(ctx)
+	if err != nil {
+		return models.CatalogResponse{}, fmt.Errorf("read service accounts: %w", err)
+	}
+	users = flagServiceAccounts(users, marks)
 	return models.CatalogResponse{
 		Users:        users,
 		Projects:     projects,
@@ -347,6 +352,11 @@ func ListUsers(ctx context.Context, query string) ([]models.UserListItem, error)
 	if err != nil {
 		return nil, err
 	}
+	marks, err := serviceAccountMarks(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read service accounts: %w", err)
+	}
+	snap.users = flagServiceAccounts(snap.users, marks)
 	return listUsersFromSnapshot(snap, query, attention)
 }
 
