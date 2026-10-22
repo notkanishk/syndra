@@ -181,20 +181,20 @@ func DriftInWindow(ctx context.Context, from, to time.Time) (DriftTrendRows, err
 }
 
 // EndingSoonRow is how many distinct people hold a direct grant in a project
-// that ends within 30, 60 and 90 days of now (cumulative).
+// that ends within 14 and 30 days of now (cumulative): the one window and its
+// wider pill (A-04 4a, A-07).
 type EndingSoonRow struct {
-	ProjectID     string
-	D30, D60, D90 int
+	ProjectID string
+	D14, D30  int
 }
 
 func GrantsEndingSoon(ctx context.Context, now time.Time) ([]EndingSoonRow, error) {
 	rows, err := querier(ctx).Query(ctx, `
 		SELECT zitadel_project_id,
-		       COUNT(DISTINCT user_id) FILTER (WHERE expires_at <= $1::timestamptz + interval '30 days'),
-		       COUNT(DISTINCT user_id) FILTER (WHERE expires_at <= $1::timestamptz + interval '60 days'),
+		       COUNT(DISTINCT user_id) FILTER (WHERE expires_at <= $1::timestamptz + interval '14 days'),
 		       COUNT(DISTINCT user_id)
 		  FROM direct_role_grants
-		 WHERE expires_at > $1 AND expires_at <= $1::timestamptz + interval '90 days'
+		 WHERE expires_at > $1 AND expires_at <= $1::timestamptz + interval '30 days'
 		 GROUP BY 1
 		 ORDER BY 1`, now)
 	if err != nil {
@@ -204,7 +204,7 @@ func GrantsEndingSoon(ctx context.Context, now time.Time) ([]EndingSoonRow, erro
 	var out []EndingSoonRow
 	for rows.Next() {
 		var e EndingSoonRow
-		if err := rows.Scan(&e.ProjectID, &e.D30, &e.D60, &e.D90); err != nil {
+		if err := rows.Scan(&e.ProjectID, &e.D14, &e.D30); err != nil {
 			return nil, fmt.Errorf("scan grants ending soon: %w", err)
 		}
 		out = append(out, e)

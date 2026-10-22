@@ -667,7 +667,7 @@ function attentionOf(entry: UserListEntry): { text: string; tone: string; rank: 
     const n = entry.expiring_count;
     const when = days === null ? "soon" : days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
     return {
-      text: n === 1 ? `Expires ${when}` : `${n} expire, the first ${when}`,
+      text: n === 1 ? `Ends ${when}` : `${n} end, the first ${when}`,
       tone: "text-warn-text",
       rank: -2_000 - n,
     };

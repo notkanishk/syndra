@@ -283,13 +283,13 @@ func TestGrantsEndingSoon_AgainstTheSchema(t *testing.T) {
 		}
 	}
 	grant("u1", pA, "r1", days(10)) // u1 holds two ending grants in A: one person, not two
-	grant("u1", pA, "r2", days(50))
-	grant("u2", pA, "r1", days(50))
-	grant("u3", pA, "r1", days(90)) // the 90th day is in
-	grant("u4", pA, "r1", days(91))
+	grant("u1", pA, "r2", days(20))
+	grant("u2", pA, "r1", days(20))
+	grant("u3", pA, "r1", days(14)) // the 14th day is in
+	grant("u4", pA, "r1", days(31))
 	grant("u5", pA, "r1", days(-1)) // already ended
 	grant("u6", pA, "r1", nil)      // never ends
-	grant("u7", pB, "r1", days(30)) // the 30th day is in every bucket
+	grant("u7", pB, "r1", days(30)) // the 30th day is in; not within 14
 
 	rows, err := GrantsEndingSoon(ctx, now)
 	if err != nil {
@@ -300,8 +300,8 @@ func TestGrantsEndingSoon_AgainstTheSchema(t *testing.T) {
 		got[r.ProjectID] = r
 	}
 	want := map[string]EndingSoonRow{
-		pA: {ProjectID: pA, D30: 1, D60: 2, D90: 3},
-		pB: {ProjectID: pB, D30: 1, D60: 1, D90: 1},
+		pA: {ProjectID: pA, D14: 2, D30: 3},
+		pB: {ProjectID: pB, D14: 0, D30: 1},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)

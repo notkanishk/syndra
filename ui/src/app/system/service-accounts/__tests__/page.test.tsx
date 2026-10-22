@@ -62,8 +62,9 @@ describe("Service accounts list", () => {
     render(<ServiceAccountsPage />);
 
     const owned = screen.getByRole("link", { name: "netbird" }).closest("[data-account-row]") as HTMLElement;
-    // The owner id is never the label: an unplaced person reads as the fallback, linked to their page.
-    expect(within(owned).queryByText("u9")).not.toBeInTheDocument();
+    // The owner id is never the label: an unplaced person reads as the fallback, with the id
+    // beside it to look up in Zitadel (A-07 §7), linked to their page.
+    expect(within(owned).getByText("Unknown account")).toBeInTheDocument();
     expect(owned.querySelector('a[href="/users/u9"]')).not.toBeNull();
 
     const orphan = screen.getByRole("link", { name: "zed" }).closest("[data-account-row]") as HTMLElement;

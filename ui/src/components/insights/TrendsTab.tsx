@@ -187,7 +187,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                         </span>
                         {/* A count the API has not sent is a dash, never a guess from another window. */}
                         <span role="cell" className="text-right font-semibold tabular-nums">
-                          {p.d14 ?? "—"}
+                          {p.d14}
                         </span>
                         <span role="cell" className="text-right font-semibold tabular-nums">
                           {p.d30}
