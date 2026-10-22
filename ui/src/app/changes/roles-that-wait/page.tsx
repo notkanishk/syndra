@@ -89,10 +89,6 @@ export default function RolesThatWaitPage() {
         />
       )}
 
-      <p className="text-[13px] text-faint">
-        The sound when drift is found is set for each browser, in your Account.
-      </p>
-
       {adding && (
         <AddRoles
           initial={asked}
