@@ -109,6 +109,22 @@ describe("a service account's page", () => {
     expect(screen.getByRole("heading", { name: "Mark netbird as a person" })).toBeInTheDocument();
   });
 
+  it("keeps the Unmarked result on screen after the page's own read stops finding the account", async () => {
+    read.account.data = account({ zitadel_type: "human", kind: "device", marked_by: "u1", marked_at: "2026-10-23T09:00:00Z" });
+    const { rerender } = renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Mark as a person" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Mark as a person" }));
+    // The mutation's invalidation refetches; the account is a person now, so the read 404s.
+    read.account = { data: undefined, isLoading: false, error: new ApiError(404, { error: "NOT_FOUND", message: "not found" }) };
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <ServiceAccountPage id="svc1" />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Unmarked")).toBeInTheDocument();
+    expect(screen.getByText("netbird is a person again.")).toBeInTheDocument();
+  });
+
   it("opens Change purpose as its own dialog", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Change purpose" }));

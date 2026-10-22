@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { AccessSourceList, orderedSources, type RoleReason } from "@/components/access/AccessSource";
 import { ResolvedProjectName } from "@/components/names";
@@ -28,8 +28,34 @@ export function ServiceAccountPage({ id }: { id: string }) {
   const one = useServiceAccount(id);
   const account = one.data;
   useCrumb(account?.name);
-  const [dialog, setDialog] = useState<"purpose" | "owner" | "person" | null>(null);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  // Unmarking succeeds by making this page's own read 404, so the dialog outlives the account
+  // it shows: it keeps the last account read, and renders beside whichever state follows.
+  const last = useRef(account);
+  if (account) last.current = account;
 
+  return (
+    <>
+      <ServiceAccountView id={id} one={one} dialog={dialog} setDialog={setDialog} />
+      {dialog === "person" && last.current && <UnmarkDialog account={last.current} onClose={() => setDialog(null)} />}
+    </>
+  );
+}
+
+type Dialog = "purpose" | "owner" | "person" | null;
+
+function ServiceAccountView({
+  id,
+  one,
+  dialog,
+  setDialog,
+}: {
+  id: string;
+  one: ReturnType<typeof useServiceAccount>;
+  dialog: Dialog;
+  setDialog: (dialog: Dialog) => void;
+}) {
+  const account = one.data;
   if (one.isLoading) {
     return (
       <Card>
@@ -123,7 +149,6 @@ export function ServiceAccountPage({ id }: { id: string }) {
 
       {dialog === "purpose" && <ServiceAccountDialog mode="purpose" account={account} onClose={() => setDialog(null)} />}
       {dialog === "owner" && <ServiceAccountDialog mode="owner" account={account} onClose={() => setDialog(null)} />}
-      {dialog === "person" && <UnmarkDialog account={account} onClose={() => setDialog(null)} />}
     </div>
   );
 }
