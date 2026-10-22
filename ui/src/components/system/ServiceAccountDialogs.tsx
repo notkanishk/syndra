@@ -274,7 +274,7 @@ export function UnmarkDialog({ account, onClose }: { account: { id: string; name
       <div className="flex flex-col gap-4 px-6">
         {done ? (
           <ActionOutcome
-            word="Done"
+            word="Unmarked"
             outcome={{
               kind: "applied",
               message: `${account.name} is a person again.`,

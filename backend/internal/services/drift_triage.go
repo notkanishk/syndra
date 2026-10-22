@@ -307,15 +307,8 @@ func isSafetyGated(group string) bool {
 
 // isServiceAccount marks service accounts, for which "adopt" is the wrong verb
 // — an integration that provisions itself on every deploy will re-create the
-// grant tomorrow no matter what Syndra records. The shared rule (machine or
-// marked) first; the naming hint is older than it and kept as an extra.
+// grant tomorrow no matter what Syndra records. The one shared rule, machine
+// or marked: no naming rule (A-07 §28).
 func isServiceAccount(marks map[string]db.ServiceAccountRow, user models.UserProfile) bool {
-	local := strings.ToLower(user.Email)
-	if at := strings.Index(local, "@"); at >= 0 {
-		local = local[:at]
-	}
-	return isServiceAccountIn(marks, user) ||
-		strings.EqualFold(user.Status, "service") ||
-		strings.HasPrefix(strings.ToLower(user.Name), "svc-") ||
-		strings.HasPrefix(local, "svc-")
+	return isServiceAccountIn(marks, user)
 }

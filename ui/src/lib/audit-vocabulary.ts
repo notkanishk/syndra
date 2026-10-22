@@ -59,6 +59,10 @@ export const AUDIT_ACTIONS: Record<
   "bundle.draft_discarded": { verb: "Discarded a bundle's unpublished changes", template: "Discarded the unpublished changes to the {} bundle" },
   "bundle.include_set": { verb: "Included a bundle in another", template: "Changed what the {} bundle includes" },
   "bundle.include_removed": { verb: "Took a bundle out of another", template: "Took a bundle out of the {} bundle" },
+  // One entry covers marking an account and changing its kind, purpose or owner: the details say
+  // which, and the verb is true of all of them.
+  "service_account.saved": { verb: "Set a service account's kind, purpose or owner" },
+  "service_account.unmarked": { verb: "Marked a service account as a person" },
   "bundle.version_published": { verb: "Published a bundle version", template: "Published a version of the {} bundle" },
   "bundle.holder_moved": { verb: "Moved somebody to a different bundle version", template: "Moved {} to a different bundle version", passive: "Moved to a different bundle version" },
   welcome_bundle_assigned: { verb: "Gave a new member the default bundle", template: "Gave {} the default bundle, as a new member", passive: "Given the default bundle, as a new member" },

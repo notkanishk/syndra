@@ -72,14 +72,13 @@ type TrendDrift struct {
 	MedianHoursToClear *float64 `json:"median_hours_to_clear"`
 }
 
-// TrendEndingSoon counts people whose direct grant in a project ends within 30,
-// 60 and 90 days (cumulative, distinct people).
+// TrendEndingSoon counts people whose direct grant in a project ends within 14
+// and 30 days (cumulative, distinct people).
 type TrendEndingSoon struct {
 	ProjectID   string `json:"project_id"`
 	ProjectName string `json:"project_name"`
+	D14         int    `json:"d14"`
 	D30         int    `json:"d30"`
-	D60         int    `json:"d60"`
-	D90         int    `json:"d90"`
 }
 
 type TrendUpkeep struct {

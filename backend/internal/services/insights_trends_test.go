@@ -265,8 +265,8 @@ func TestInsightsTrends_AssemblesEveryPart(t *testing.T) {
 		sends:   []float64{60, 180},
 		drift:   db.DriftTrendRows{Found: 4, Cleared: 3, ClearSeconds: []float64{7200, 14400, 21600}},
 		ending: []db.EndingSoonRow{
-			{ProjectID: "p1", D30: 1, D60: 2, D90: 3},
-			{ProjectID: "gone-project", D30: 0, D60: 0, D90: 1},
+			{ProjectID: "p1", D14: 1, D30: 2},
+			{ProjectID: "gone-project", D14: 0, D30: 1},
 		},
 		open: 7,
 	}
@@ -306,8 +306,8 @@ func TestInsightsTrends_AssemblesEveryPart(t *testing.T) {
 		t.Errorf("drift = %+v", got.Drift)
 	}
 	wantEnding := []models.TrendEndingSoon{
-		{ProjectID: "p1", ProjectName: "Laser room", D30: 1, D60: 2, D90: 3},
-		{ProjectID: "gone-project", ProjectName: "gone-project", D90: 1}, // unnamed -> its id
+		{ProjectID: "p1", ProjectName: "Laser room", D14: 1, D30: 2},
+		{ProjectID: "gone-project", ProjectName: "gone-project", D30: 1}, // unnamed -> its id
 	}
 	if !reflect.DeepEqual(got.EndingSoon, wantEnding) {
 		t.Errorf("ending soon = %+v", got.EndingSoon)

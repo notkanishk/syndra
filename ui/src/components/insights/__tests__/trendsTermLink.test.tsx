@@ -58,8 +58,8 @@ describe("Ending soon", () => {
     respond.mockResolvedValue({
       ...trends("Monsoon 2026"),
       ending_soon: [
-        { project_id: "p1", project_name: "Laser room", d14: 1, d30: 2, d60: 3, d90: 4 },
-        { project_id: "p2", project_name: "Wood shop", d14: 2, d30: 5, d60: 6, d90: 7 },
+        { project_id: "p1", project_name: "Laser room", d14: 1, d30: 2 },
+        { project_id: "p2", project_name: "Wood shop", d14: 2, d30: 5 },
       ],
     });
     render(
@@ -75,20 +75,6 @@ describe("Ending soon", () => {
     expect(rows).toEqual(["Wood shop25", "Laser room12"]);
   });
 
-  it("shows a dash, not an invented number, for a 14-day count the API has not sent", async () => {
-    query = "tab=trends";
-    respond.mockResolvedValue({
-      ...trends("Monsoon 2026"),
-      ending_soon: [{ project_id: "p1", project_name: "Laser room", d30: 2, d60: 3, d90: 4 }],
-    });
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <Mount />
-      </QueryClientProvider>,
-    );
-    await screen.findByText("Laser room");
-    expect(screen.getAllByRole("row")[1].textContent).toBe("Laser room—2");
-  });
 });
 
 describe("Trends and the term dates", () => {

@@ -241,7 +241,7 @@ func InsightsTrends(ctx context.Context, period TrendPeriod) (models.InsightsTre
 			name = e.ProjectID // a project the directory no longer lists is still a project
 		}
 		out.EndingSoon = append(out.EndingSoon, models.TrendEndingSoon{
-			ProjectID: e.ProjectID, ProjectName: name, D30: e.D30, D60: e.D60, D90: e.D90,
+			ProjectID: e.ProjectID, ProjectName: name, D14: e.D14, D30: e.D30,
 		})
 	}
 	return out, nil

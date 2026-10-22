@@ -159,7 +159,7 @@ describe("People index", () => {
       person({ expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),
     ];
     renderPeople();
-    expect(screen.getByText("Expires in 2 days")).toBeInTheDocument();
+    expect(screen.getByText("Ends in 2 days")).toBeInTheDocument();
   });
 
   it("shows the most serious signal when a person has more than one", () => {
@@ -473,7 +473,7 @@ describe("People · the board", () => {
       named("Four", { open_request_count: 2 }),
     ];
     renderPeople();
-    expect(screen.getByText("Expires in 2 days")).toBeInTheDocument();
+    expect(screen.getByText("Ends in 2 days")).toBeInTheDocument();
     expect(screen.getByText("3 unexplained roles")).toBeInTheDocument();
     expect(screen.getByText("Open request")).toBeInTheDocument();
     expect(screen.getByText("2 open requests")).toBeInTheDocument();
