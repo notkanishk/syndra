@@ -11,6 +11,7 @@ import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Select";
 import { useInsightsTrends, useInsightsUsage, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
+import { formatShortDate } from "@/lib/format";
 
 const PERIODS: Array<{ value: TrendPeriod; label: string }> = [
   { value: "30d", label: "30 days" },
@@ -43,6 +44,8 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
     </div>
   );
 }
+
+const ENDING_ROW = "row-divider grid grid-cols-[1fr_72px_72px] items-baseline gap-4 px-5 py-3";
 
 const Quiet = ({ children }: { children: ReactNode }) => (
   <p className="row-divider px-5 py-3.5 text-[13.5px] text-muted [text-wrap:pretty]">{children}</p>
@@ -86,8 +89,15 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
           onChange={(p) => url.set({ period: p === "term" ? null : p })}
         />
         <span className="text-[13px] text-faint">{t?.window.label ?? ""}</span>
-        {/* The term's dates are one setting with one write place. */}
-        {url.period === "term" && t && <ArrowLink href="/settings">Set in Makerspace settings</ArrowLink>}
+        {/* The term line: which term this is reading, then the one place its dates are set. */}
+        {url.period === "term" && t && (
+          <>
+            <span className="text-[13px] text-faint">
+              {formatShortDate(`${t.window.from}T12:00:00`)} – {formatShortDate(`${t.window.to}T12:00:00`)}
+            </span>
+            <ArrowLink href="/settings">Set in Makerspace settings</ArrowLink>
+          </>
+        )}
       </div>
 
       <ListStates
@@ -152,11 +162,40 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
             </Card>
 
             <Card>
-              <CardHeader title="Ending soon" note="People whose direct access ends within 30, 60 and 90 days" />
-              {t.ending_soon.length === 0 && <Quiet>No direct access ends in the next 90 days.</Quiet>}
-              {t.ending_soon.map((p) => (
-                <Fact key={p.project_id} label={projectLabel(p.project_name, p.project_id)} value={`${p.d30} · ${p.d60} · ${p.d90}`} />
-              ))}
+              <CardHeader title="Ending soon" note="People whose direct access ends within 14 and 30 days" />
+              {t.ending_soon.length === 0 ? (
+                <Quiet>No direct access ends in the next 30 days.</Quiet>
+              ) : (
+                // The product's one window (A-04 §4). In order by the 30-day count, most first,
+                // and the arrow says so (A-07 §17).
+                <div role="table" aria-label="Ending soon, by project">
+                  <div role="row" className={`${ENDING_ROW} type-label`}>
+                    <span role="columnheader">Project</span>
+                    <span role="columnheader" className="text-right">
+                      14 days
+                    </span>
+                    <span role="columnheader" className="text-right text-ink">
+                      30 days<span aria-hidden> ↑</span>
+                    </span>
+                  </div>
+                  {[...t.ending_soon]
+                    .sort((a, b) => b.d30 - a.d30)
+                    .map((p) => (
+                      <div key={p.project_id} role="row" className={`${ENDING_ROW} text-[13.5px]`}>
+                        <span role="cell" className="text-muted">
+                          {projectLabel(p.project_name, p.project_id)}
+                        </span>
+                        {/* A count the API has not sent is a dash, never a guess from another window. */}
+                        <span role="cell" className="text-right font-semibold tabular-nums">
+                          {p.d14 ?? "—"}
+                        </span>
+                        <span role="cell" className="text-right font-semibold tabular-nums">
+                          {p.d30}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
             </Card>
 
             <Card>

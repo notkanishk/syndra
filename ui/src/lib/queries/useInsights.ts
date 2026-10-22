@@ -142,7 +142,8 @@ export interface InsightsTrends {
   };
   sending: { median_minutes_approval_to_sent: number | null; sample: number };
   drift: { found: number; cleared: number; median_hours_to_clear: number | null };
-  ending_soon: Array<{ project_id: string; project_name: string; d30: number; d60: number; d90: number }>;
+  /** `d14` is optional until the API carries the 14-day count; the page shows a dash without it. */
+  ending_soon: Array<{ project_id: string; project_name: string; d14?: number; d30: number; d60: number; d90: number }>;
   upkeep: {
     people_who_left_holding: number;
     drift_open: number;

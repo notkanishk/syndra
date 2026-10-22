@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { CommandBlock } from "@/components/ui/CommandBlock";
@@ -39,6 +40,21 @@ interface SystemMode {
 }
 
 /**
+ * What waits, in the one sentence every route says (A-07 §8). Drift's decisions
+ * wait because they read Zitadel's state; the places that publish, move people
+ * and retire name those verbs; everywhere else a change queues safely.
+ */
+function waitsFor(pathname: string | null): string {
+  if (pathname?.startsWith("/governance/drift")) {
+    return "Deciding drift waits until Zitadel answers, because a decision made on an old read can be wrong.";
+  }
+  if (pathname && /^\/(bundles|roles|projects|applications)(\/|$)/.test(pathname)) {
+    return "Publishing, moving people and retiring wait until Zitadel answers.";
+  }
+  return "Anything you give or revoke now waits until Zitadel answers.";
+}
+
+/**
  * Degraded — the fourth state, and the one that matters.
  *
  * GET /api/v1/system/mode reports degraded: true when Zitadel is configured
@@ -53,6 +69,7 @@ interface SystemMode {
  */
 export function DegradedBanner() {
   const { data, degraded } = useSystemMode();
+  const pathname = usePathname();
 
   // Two different lies, two different banners.
   //
@@ -92,8 +109,7 @@ export function DegradedBanner() {
               title={`Zitadel isn't answering. This is what it held at ${formatWhen(data.last_read_at)}.`}
             >
               Everything below is real, read <Relative iso={data.last_read_at} />, and may have
-              changed since. Giving and revoking access wait until Zitadel answers, because a
-              decision made on an old read can be wrong.
+              changed since. {waitsFor(pathname)}
             </Notice>
           ) : (
             <Notice

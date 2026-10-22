@@ -247,6 +247,12 @@ interface RehearsalDialogProps {
    */
   system?: string;
   /**
+   * Said before the act while Zitadel isn't answering, in the footer's note on
+   * the steps that come before Apply. Only surfaces that stay on while it is
+   * down pass it (A-07 §9); Drift stays off and says nothing here.
+   */
+  waits?: string;
+  /**
    * Computes the plan. Takes the scope acknowledgement rather than reading it
    * from the caller, so a surface cannot acknowledge on the operator's behalf.
    */
@@ -334,6 +340,7 @@ export function RehearsalDialog({
   definitionLabel,
   consequence,
   system = "Zitadel",
+  waits,
   onRehearse,
   onApply,
   onClose,
@@ -598,9 +605,13 @@ export function RehearsalDialog({
       <ModalFooter
         note={
           step === "review" && plan
-            ? planNote(plan, noun)
+            ? waits
+              ? `${waits} ${planNote(plan, noun) ?? ""}`.trim()
+              : planNote(plan, noun)
             : step === "compose"
-              ? PREVIEW_LEDE
+              ? waits
+                ? `${waits} ${PREVIEW_LEDE}`
+                : PREVIEW_LEDE
               : undefined
         }
       >

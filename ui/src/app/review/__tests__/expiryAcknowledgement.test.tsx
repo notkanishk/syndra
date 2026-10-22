@@ -271,6 +271,23 @@ describe("Expiring access — acknowledgement (C4)", () => {
   // Nothing called `onClose()` on success, so the dialog stayed open with the
   // same "Record the decision" button live — a second click recorded the same
   // acknowledgment again, against a grant that had not moved.
+  // A-07 FINAL §2 item 8: Cancel is an outline button and comes before the primary; the
+  // result's Close is outline too.
+  it("puts an outline Cancel first, then the primary, and closes with an outline Close", async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
+    const dialog = screen.getByRole("dialog");
+    const buttons = within(dialog).getAllByRole("button");
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    const record = within(dialog).getByRole("button", { name: "Record the decision" });
+    expect(buttons.indexOf(cancel)).toBeLessThan(buttons.indexOf(record));
+    expect(cancel).toHaveClass("border-line-strong");
+
+    fireEvent.click(record);
+    const close = await within(dialog).findByRole("button", { name: "Close" });
+    expect(close).toHaveClass("border-line-strong");
+  });
+
   it("cannot record the same decision twice", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));

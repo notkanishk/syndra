@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
@@ -54,6 +55,7 @@ function ManageBundlesOpen({
 
   const assignedIds = useMemo(() => new Set(assigned.map((b) => b.id)), [assigned]);
   const [staged, setStaged] = useState<Set<string>>(new Set());
+  const waits = useWaitsBeforeLine();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Which way the change being sent goes, so a step says "assign" or "remove".
   const [acting, setActing] = useState<"assign" | "remove">("assign");
@@ -289,9 +291,10 @@ function ManageBundlesOpen({
       <ModalFooter
         note={
           step.note ??
-          (changes.length > 1
-            ? "Each change is applied in order. Any that fail stay unapplied and are reported."
-            : undefined)
+          ((!outcome && waits) ||
+            (changes.length > 1
+              ? "Each change is applied in order. Any that fail stay unapplied and are reported."
+              : undefined))
         }
       >
         {done ? (

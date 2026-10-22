@@ -203,6 +203,31 @@ describe("connected systems", () => {
     expect(screen.getByText(/^Answered /)).toBeTruthy();
   });
 
+  // A-07 §22: the API grows "Last answered", which freshness rests on. Without it the row says
+  // what it said before.
+  it("says when a system last answered, from the field the API carries", () => {
+    const at = new Date(Date.now() - 3 * 3_600_000).toISOString();
+    state.targets = [
+      target({
+        status: "offline",
+        health: {
+          status: "offline",
+          recent: ["missed", "missed", "missed"],
+          reachable_since: "2026-10-14T08:33:00Z",
+          last_answered_at: at,
+        },
+      }),
+    ];
+    render(<ConnectedSystemsPage />);
+    expect(screen.getByText(/^Last answered /)).toHaveTextContent(/^Last answered 3 .*ago$/);
+  });
+
+  it("says nothing of a last answer for a system that has never given one", () => {
+    state.targets = [target({ health: { status: "unknown", recent: [], last_answered_at: null } })];
+    render(<ConnectedSystemsPage />);
+    expect(screen.queryByText(/^Last answered /)).toBeNull();
+  });
+
   // Registration is a deployment fact and a manifest is a runtime one. Showing
   // `0` for a target that has never answered would be a claim about the TARGET
   // — that it can do nothing — rather than about Syndra not having asked.
@@ -210,7 +235,7 @@ describe("connected systems", () => {
     state.targets = [target({ callable: false, operations: [] })];
     render(<ConnectedSystemsPage />);
 
-    expect(screen.getByText("Not answered yet")).toBeTruthy();
+    expect(screen.getByText("No answer yet")).toBeTruthy();
     expect(screen.queryByText("0")).toBeNull();
     // Needs you and People: Syndra has not read it.
     expect(screen.getAllByText("—")).toHaveLength(2);
@@ -334,7 +359,7 @@ describe("the tone a reading wears", () => {
     state.targets = [target({ callable: false, operations: [] })];
     render(<ConnectedSystemsPage />);
 
-    expect(toneOf("Not answered yet")).toBe("muted");
+    expect(toneOf("No answer yet")).toBe("muted");
   });
 
   it("keeps amber for the reading that is a real fault on this host", () => {

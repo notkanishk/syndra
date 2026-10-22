@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Select } from "@/components/ui/Select";
@@ -51,6 +52,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
   const bundles = useBundles();
   const rehearse = useRehearseBulk();
   const apply = useApplyBulk();
+  const waits = useWaitsBeforeLine();
 
   const needsRole = op === "assign_role" || op === "remove_role";
   const needsBundle = op === "assign_bundle" || op === "remove_bundle";
@@ -107,6 +109,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
       noun={["person", "people"]}
       ready={ready}
       notReadyReason={notReadyReason}
+      waits={waits}
       destructive={op === "remove_role" || op === "remove_bundle"}
       onRehearse={(acknowledgeScope) =>
         rehearse.mutateAsync({ ...input, acknowledge_scope: acknowledgeScope })

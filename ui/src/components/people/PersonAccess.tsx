@@ -25,6 +25,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Chip, Mono } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
+import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
@@ -39,7 +41,8 @@ import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
-import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
@@ -475,6 +478,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
 
                 <Unfold open={open}>
                   <RoleGroup
+                    userId={userId}
                     confirmation={confirmation}
                     inZitadel={zitadelRolesByProject.get(project.project_id)}
                     label="Given"
@@ -489,6 +493,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                     onReveal={revealInAdvanced}
                   />
                   <RoleGroup
+                    userId={userId}
                     confirmation={confirmation}
                     inZitadel={zitadelRolesByProject.get(project.project_id)}
                     label="Automatic"
@@ -742,7 +747,76 @@ function ZitadelWord({ isOperator }: { isOperator: boolean }) {
   return isOperator ? <>Zitadel</> : <Term name="zitadel">Zitadel</Term>;
 }
 
+/** The one window for ending access (A-04 §4): a row inside it offers Extend. */
+const EXTEND_WITHIN_DAYS = 14;
+/** How long an extension buys. Stated in the row's own result, never implied. */
+const EXTEND_DAYS = 90;
+
+/**
+ * Extend, in the seat beside a row's end date (A-07 §19), the same write Expiring access
+ * and Home make: re-submitting the grant with a later date renews it in place. The result
+ * takes the button's seat until the next read; a refusal leaves the button beside it.
+ */
+function ExtendSeat({
+  userId,
+  projectId,
+  projectName,
+  roleKey,
+}: {
+  userId: string;
+  projectId: string;
+  projectName: string;
+  roleKey: string;
+}) {
+  const extend = useCreateGrant(userId);
+  // No sheet of its own: a small one holds the step if extending would cancel a change still
+  // waiting for you to send (A-04 §14).
+  const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+
+  if (outcome && !statesNothingChanged(outcome.kind)) {
+    return <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />;
+  }
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        isPending={extend.isPending}
+        aria-label={`Extend ${humanizeKey(roleKey)} in ${projectName}`}
+        onClick={async () => {
+          try {
+            const result = await step.run(() =>
+              extend.mutateAsync({
+                project_id: projectId,
+                role_key: roleKey,
+                reason: "Extended from the person's page",
+                duration_days: EXTEND_DAYS,
+                extend: true,
+              }),
+            );
+            if (result === KEPT) return;
+            // The outbox in manual mode answers "pending": reporting "applied" would say
+            // Zitadel has it when only Syndra's own ledger does.
+            const waiting = result?.status === "pending";
+            setOutcome({
+              kind: waiting ? "queued" : "applied",
+              message: waiting ? `Will extend by ${EXTEND_DAYS} days once sent` : `Extended by ${EXTEND_DAYS} days`,
+            });
+          } catch (error) {
+            setOutcome(outcomeFromError(error));
+          }
+        }}
+      >
+        Extend
+      </Button>
+      {step.element}
+    </>
+  );
+}
+
 function RoleGroup({
+  userId,
   label,
   confirmation,
   inZitadel,
@@ -756,6 +830,7 @@ function RoleGroup({
   onRemove,
   onReveal,
 }: {
+  userId: string;
   // "Given" (source_roles), not "Granted": the per-row state below is what
   // carries the truth about whether it landed. A hardcoded "Granted" sitting
   // above a row that says "Waiting for you to send" contradicted it directly.
@@ -881,6 +956,15 @@ function RoleGroup({
                 </>
               )}
             </span>
+
+            {isOperator && grant && remaining !== null && remaining >= 0 && remaining <= EXTEND_WITHIN_DAYS && (
+              <ExtendSeat
+                userId={userId}
+                projectId={projectId}
+                projectName={projectName}
+                roleKey={role.role_key}
+              />
+            )}
 
             {isOperator && strongest && (
               // The verb is the label (RULES): Revoke when a person loses access

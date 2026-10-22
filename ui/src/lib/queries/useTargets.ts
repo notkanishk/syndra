@@ -40,6 +40,11 @@ export interface HealthState {
   missed_since?: string;
   /** When this Syndra process started. */
   started_at?: string;
+  /**
+   * When the system last gave a good answer to a check; null when it never has. The API grows
+   * this (A-07 §22); absent until it does, and the row then says what it said before.
+   */
+  last_answered_at?: string | null;
 }
 
 /** The one reading a row and a header show, ranked on the backend (A-01). */

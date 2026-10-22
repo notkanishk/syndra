@@ -108,7 +108,7 @@ export default function ConnectedSystemsPage() {
 /**
  * The one Notice a faulted system earns: red for a key Syndra cannot read,
  * amber for a system that stopped answering or a breaker waiting to retry.
- * Not answered yet is no fault and gets none — it clears by itself.
+ * No answer yet is no fault and gets none — it clears by itself.
  */
 function FaultNotice({ row }: { row: TargetSummary }) {
   const name = targetLabel(row.target);
@@ -132,7 +132,7 @@ function FaultNotice({ row }: { row: TargetSummary }) {
   }
   if (row.status === "waiting_to_retry") {
     return (
-      <Notice tone="warn" live title={`Syndra is waiting before it calls ${name} again.`}>
+      <Notice tone="warn" live title={`Syndra is waiting to retry ${name}.`}>
         {reading.sentence}
       </Notice>
     );
@@ -224,9 +224,14 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           time it began faint under it. */}
       <span className="flex flex-col gap-[3px] text-[13.5px] tablet:w-[180px] tablet:shrink-0">
         <ReadingWord reading={reading} recent={row.health?.recent ?? []} />
-        {reading.line ? (
-          <span className="pl-4 text-[12.5px] text-faint">{reading.line}</span>
+        {reading.line && <span className="pl-4 text-[12.5px] text-faint">{reading.line}</span>}
+        {row.health?.last_answered_at ? (
+          <span className="pl-4 text-[12.5px] text-faint">
+            Last answered <Relative iso={row.health.last_answered_at} />
+          </span>
         ) : (
+          // Until the API carries it: the time of the last check, for a system that is answering.
+          !reading.line &&
           answering &&
           row.health?.checked_at && (
             <span className="pl-4 text-[12.5px] text-faint">
@@ -317,7 +322,7 @@ function readingFor(row: TargetSummary): Reading & { detail?: string } {
     // within a refresh interval, and colouring it would cost amber its meaning.
     return {
       tone: "neutral",
-      word: "Not answered yet",
+      word: "No answer yet",
       pips: false,
       detail: "The add-on is configured and has not answered yet. This usually clears by itself within a minute or two.",
     };

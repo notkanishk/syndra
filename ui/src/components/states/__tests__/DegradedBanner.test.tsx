@@ -14,6 +14,9 @@ const indicators = vi.hoisted(() => ({ value: { zitadel_reachable: true } as Rec
 
 const asked = vi.hoisted(() => ({ count: 0 }));
 
+const route = vi.hoisted(() => ({ path: "/" }));
+vi.mock("next/navigation", () => ({ usePathname: () => route.path }));
+
 vi.mock("@/lib/api-client", () => ({
   request: async (path: string) => {
     asked.count++;
@@ -42,6 +45,7 @@ function renderBanner(isOperator = true) {
 
 beforeEach(() => {
   asked.count = 0;
+  route.path = "/";
   indicators.value = { zitadel_reachable: true };
   mode.value = {
     directory: "zitadel",
@@ -79,6 +83,35 @@ describe("Degraded banner", () => {
     expect(screen.getByText(/Everything below is real, read/)).toBeInTheDocument();
     expect(screen.getByText(/14 min ago/)).toBeInTheDocument();
     expect(screen.queryByText(/not real|sample data/)).not.toBeInTheDocument();
+  });
+
+  // A-07 §8: one sentence everywhere; Drift and the places that publish name
+  // their own verbs, because those are the ones that wait for a different reason.
+  describe.each([
+    ["/people/u1", "Anything you give or revoke now waits until Zitadel answers."],
+    ["/requests", "Anything you give or revoke now waits until Zitadel answers."],
+    [
+      "/governance/drift",
+      "Deciding drift waits until Zitadel answers, because a decision made on an old read can be wrong.",
+    ],
+    ["/bundles", "Publishing, moving people and retiring wait until Zitadel answers."],
+    ["/roles", "Publishing, moving people and retiring wait until Zitadel answers."],
+    ["/projects/p1", "Publishing, moving people and retiring wait until Zitadel answers."],
+  ])("on %s", (path, ending) => {
+    it("ends with the sentence that route's verbs wait on", async () => {
+      route.path = path;
+      mode.value = {
+        directory: "zitadel",
+        degraded: true,
+        zitadel_configured: true,
+        last_read_at: new Date(Date.now() - 14 * 60_000).toISOString(),
+      };
+      const { container } = renderBanner();
+      await screen.findByText(/^Zitadel isn't answering\. This is what it held at /);
+      const said = container.textContent ?? "";
+      expect(said).toMatch(/Everything below is real, read 14 min ago, and may have changed since\. /);
+      expect(said.endsWith(ending)).toBe(true);
+    });
   });
 
   it("shows nothing at all when Zitadel has never been read", async () => {
@@ -186,7 +219,7 @@ describe("Degraded banner", () => {
       last_read_at: new Date(Date.now() - 14 * 60_000).toISOString(),
     };
     renderBanner();
-    expect(await screen.findByText(/Giving and revoking access wait until Zitadel answers/)).toBeInTheDocument();
+    expect(await screen.findByText(/Anything you give or revoke now waits until Zitadel answers/)).toBeInTheDocument();
     expect(screen.queryByText(/paused/)).not.toBeInTheDocument();
   });
 });

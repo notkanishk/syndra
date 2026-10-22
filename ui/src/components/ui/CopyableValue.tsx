@@ -27,11 +27,14 @@ export function CopyableValue({
   value,
   label,
   className = "",
+  inline = false,
 }: {
   value: string;
   /** What the value IS, for a screen reader. Never rendered as a placeholder. */
   label: string;
   className?: string;
+  /** The value alone, faint mono, in running text: the whole value is the copy control. */
+  inline?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [selected, setSelected] = useState(false);
@@ -87,6 +90,25 @@ export function CopyableValue({
     range.selectNodeContents(node);
     selection.addRange(range);
     confirmFor(setSelected);
+  }
+
+  if (inline) {
+    return (
+      <button
+        type="button"
+        data-skip-initial-focus
+        onClick={(event) => {
+          // Names sit inside links and rows; copying an id must not also open them.
+          event.preventDefault();
+          event.stopPropagation();
+          return canCopy ? copy() : select();
+        }}
+        aria-label={`${canCopy ? "Copy" : "Select"} ${object}`}
+        className={`type-mono text-faint motion-tint hover:text-ink ${copied || selected ? "text-healthy" : ""} ${className}`}
+      >
+        <span ref={valueRef}>{value}</span>
+      </button>
+    );
   }
 
   return (

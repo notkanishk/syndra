@@ -2,6 +2,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Zitadel answering: what the dialogs say before the act is not under test here.
+vi.mock("@/components/states/useWaitsBeforeLine", () => ({ useWaitsBeforeLine: () => undefined }));
+
 import { ManageBundles } from "@/components/people/ManageBundles";
 
 /**
