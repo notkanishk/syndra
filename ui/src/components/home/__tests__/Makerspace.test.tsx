@@ -209,7 +209,7 @@ describe("Home › The makerspace", () => {
     renderMakerspace();
     const tile = screen.getByRole("link", { name: "People" });
     expect(tile).toHaveTextContent("2");
-    expect(tile).toHaveTextContent("2 whose access ends in the next 14 days");
+    expect(tile).toHaveTextContent("2 whose access ends in 14 days");
   });
 
   it("leaves service accounts out of the people count and out of 'no access'", () => {

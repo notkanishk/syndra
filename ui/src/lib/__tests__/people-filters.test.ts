@@ -6,6 +6,7 @@ import {
   EMPTY_FILTERS,
   hasAccess,
   hasAnyFilter,
+  isPerson,
   parseFilters,
   peopleHref,
   serializeFilters,
@@ -248,5 +249,34 @@ describe("the version dimension", () => {
       "on v2 of the Safety bundle",
     );
     expect(describeFilters({ ...EMPTY_FILTERS, bundle: "Safety" })).toBe("in the Safety bundle");
+  });
+});
+
+describe("isPerson", () => {
+  // The backend's `service_account` is the effective answer: Zitadel's machine
+  // type OR an operator's mark. `kind` is only the fallback for a payload that
+  // doesn't carry it yet.
+  it("reads service_account, and an operator's mark wins over a human kind", () => {
+    expect(isPerson(person())).toBe(true);
+    expect(isPerson(person({ user: { ...person().user, service_account: true, kind: "human" } }))).toBe(false);
+  });
+
+  it("an explicit false beats a machine kind, and the kind is the fallback", () => {
+    expect(isPerson(person({ user: { ...person().user, service_account: false, kind: "machine" } }))).toBe(true);
+    expect(isPerson(person({ user: { ...person().user, kind: "machine" } }))).toBe(false);
+  });
+});
+
+describe("?bundle=none", () => {
+  const bundled = person({ bundle_names: ["Lab Tech"] });
+  const bare = person({ user: { ...person().user, id: "u2" }, bundle_names: [] });
+
+  it("lists only people who hold no bundle, rather than a bundle called none", () => {
+    const rows = applyFilters([bundled, bare], { ...EMPTY_FILTERS, bundle: "none" });
+    expect(rows.map((row) => row.user.id)).toEqual(["u2"]);
+  });
+
+  it("states itself in the scope sentence", () => {
+    expect(describeFilters({ ...EMPTY_FILTERS, bundle: "none" })).toBe("in no bundle");
   });
 });

@@ -181,7 +181,7 @@ export function describeBulkOp(op: BulkOp): string {
     case "remove_role":
       return "Remove a role";
     case "assign_bundle":
-      return "Add to a bundle";
+      return "Give a bundle";
     case "remove_bundle":
       return "Remove from a bundle";
     case "extend":

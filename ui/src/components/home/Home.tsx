@@ -32,6 +32,9 @@ import type { SessionUser } from "@/lib/session";
 import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
 import { ArriveList } from "@/components/ui/ArriveList";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
+import { useIsPhone } from "@/lib/useViewport";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { formatShortDate, formatWeekday, daysUntil, whyNotChecked } from "@/lib/format";
@@ -320,6 +323,44 @@ function QueueColumn({
   );
 }
 
+/**
+ * A block's rows, at most five (three on a phone), then one violet line to the
+ * rest (A-07 §32–34). The block's height has a ceiling, so an intake of 31 or
+ * 300 draws the same card; fewer rows draw a shorter one, which is the queue
+ * emptying, not structure moving. Every list block on this page goes through
+ * here, so the cap and the line are said once. `items` arrive in the order to
+ * show: newest or soonest first.
+ *
+ * Decided in JS rather than hidden in CSS because the count in the line has to
+ * agree with the rows above it, and it differs by viewport.
+ */
+const HOME_ROWS = 5;
+const HOME_ROWS_PHONE = 3;
+
+function Capped<T>({
+  items,
+  href,
+  children,
+}: {
+  items: readonly T[];
+  /** The full list, already narrowed to what these rows are. */
+  href: string;
+  children: (item: T) => React.ReactNode;
+}) {
+  const cap = useIsPhone() ? HOME_ROWS_PHONE : HOME_ROWS;
+  const more = items.length - cap;
+  return (
+    <>
+      <ArriveList>{items.slice(0, cap).map((item) => children(item))}</ArriveList>
+      {more > 0 && (
+        <CardRow>
+          <ArrowLink href={href}>{`and ${more} more`}</ArrowLink>
+        </CardRow>
+      )}
+    </>
+  );
+}
+
 /** Approve / Deny resolve in place, on the row. They never navigate. */
 function OpenRequests({
   rows,
@@ -333,6 +374,7 @@ function OpenRequests({
   // A decided row keeps its seat and its outcome through the beat, so the count
   // is what is still open.
   const open = rows.filter((entry) => !resolved.has(entry.id)).length;
+  const newestFirst = [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   return (
     <Card {...queue.listProps}>
@@ -345,8 +387,8 @@ function OpenRequests({
       {/* `arrive`, the same stagger every list in the product gets from
           `ListStates`. These two lists compose their own rows and so had none:
           the dashboard was the one screen whose rows appeared all at once. */}
-      <ArriveList>
-        {rows.map((entry) => (
+      <Capped items={newestFirst} href="/requests">
+        {(entry) => (
           <LeavingRow key={entry.id} {...queue.props(entry.id)}>
             <CardRow>
               <UserAvatar id={entry.requester_id} size="list" />
@@ -398,8 +440,8 @@ function OpenRequests({
             {!resolved.has(entry.id) && <HoldingNote request={entry} />}
           </CardRow>
           </LeavingRow>
-      ))}
-      </ArriveList>
+        )}
+      </Capped>
     </Card>
   );
 }
@@ -413,6 +455,10 @@ function ExpiringSoon({
 }: {
   grants: Array<{ id: string; user_id: string; project_id: string; role_key: string; expires_at?: string | null }>;
 }) {
+  // No end date is the furthest end there is, so it goes last.
+  const soonestFirst = [...grants].sort((a, b) =>
+    (a.expires_at ?? "￿").localeCompare(b.expires_at ?? "￿"),
+  );
   return (
     <Card>
       <CardHeader
@@ -421,9 +467,9 @@ function ExpiringSoon({
         tone="warn"
         note="Extending is the only action — doing nothing lets it lapse."
       />
-      {grants.map((grant) => (
-        <ExpiringRow key={grant.id} grant={grant} />
-      ))}
+      <Capped items={soonestFirst} href="/review/expiring-access">
+        {(grant) => <ExpiringRow key={grant.id} grant={grant} />}
+      </Capped>
     </Card>
   );
 }
@@ -530,20 +576,24 @@ function OnboardingGaps({ report }: { report: MissedOnboardingReport }) {
           </ButtonLink>
         </CardRow>
       )}
-      {report.missed.map((person) => (
-        <CardRow key={person.user_id}>
-          <UserAvatar id={person.user_id} size="list" />
-          <Link
-            href={`/users/${person.user_id}`}
-            className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
-          >
-            <UserName id={person.user_id} />
-          </Link>
-          <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
-            Holds no bundle
-          </div>
-        </CardRow>
-      ))}
+      {/* The report carries no join date, so its order is the read's. The line
+          opens People where the same people are sorted by Joined (A-07 §33). */}
+      <Capped items={report.missed} href={peopleHref({ bundle: NO_BUNDLE })}>
+        {(person) => (
+          <CardRow key={person.user_id}>
+            <UserAvatar id={person.user_id} size="list" />
+            <Link
+              href={`/users/${person.user_id}`}
+              className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+            >
+              <UserName id={person.user_id} />
+            </Link>
+            <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
+              Holds no bundle
+            </div>
+          </CardRow>
+        )}
+      </Capped>
     </Card>
   );
 }
@@ -690,9 +740,9 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>
       <CardHeader title="Systems Syndra could not check" count={targets.length} tone="danger" />
-      <ArriveList>
-        {targets.map((t, i) => (
-          <CardRow key={t.target} first={i === 0} className="flex-wrap">
+      <Capped items={targets} href="/system/targets">
+        {(t) => (
+          <CardRow key={t.target} className="flex-wrap">
             <div className="flex-1 text-[14.5px]">
               <strong className="font-semibold">{targetLabel(t.target)}</strong> hasn&rsquo;t been
               read since <Relative iso={t.since} />.
@@ -703,13 +753,13 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
               {t.reason && (
                 <div className="mt-1 text-[13px] text-faint">{whyNotChecked(t.reason)}</div>
               )}
-          </div>
-          <ButtonLink href={`/system/targets/${t.target}`} size="sm">
-            Open {targetLabel(t.target)}
-          </ButtonLink>
-        </CardRow>
-      ))}
-      </ArriveList>
+            </div>
+            <ButtonLink href={`/system/targets/${t.target}`} size="sm">
+              Open {targetLabel(t.target)}
+            </ButtonLink>
+          </CardRow>
+        )}
+      </Capped>
     </Card>
   );
 }
