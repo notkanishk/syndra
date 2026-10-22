@@ -276,6 +276,16 @@ describe("Unexplained access — triage", () => {
     expect(screen.getByRole("button", { name: "Owned elsewhere" })).toBeEnabled();
   });
 
+  // A-07 §29: Drift keeps service accounts, and the name opens the account's own page.
+  it("links a service account's name to its page and a person's to theirs", () => {
+    drift.data = [item({ id: "a", user_id: "svc", user_is_service_account: true }), item({ id: "b", user_id: "u2" })];
+    renderTriage();
+    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("/system/service-accounts/svc");
+    expect(hrefs).toContain("/users/u2");
+    expect(hrefs).not.toContain("/users/svc");
+  });
+
   it("says a role is missing from the catalogue, in words as well as colour", () => {
     drift.data = [item({ role_in_catalogue: false })];
     renderTriage();

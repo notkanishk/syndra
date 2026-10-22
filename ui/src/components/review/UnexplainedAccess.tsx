@@ -6,7 +6,9 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { useDegraded } from "@/components/states/DegradedBanner";
+import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { isDeparted } from "@/lib/people-filters";
+import { serviceAccountHref } from "@/lib/queries/useServiceAccounts";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -827,6 +829,7 @@ function DriftSection({
  * about the row rather than a fault.
  */
 function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) {
+  const accountHref = useAccountHref();
   const inZitadel = row.kind === "target_only";
   const text = inZitadel
     ? row.both
@@ -841,7 +844,7 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
         <div className="flex w-full min-w-0 items-center gap-3 tablet:w-[180px] tablet:shrink-0">
           <UserAvatar id={row.userId} size="row" />
           <Link
-            href={`/users/${row.userId}`}
+            href={accountHref(row.userId)}
             className="text-[14.5px] font-semibold motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
           >
             <UserName id={row.userId} />
@@ -933,7 +936,7 @@ function TriageRow({
           <UserAvatar id={item.user_id} size="row" />
           <span className="min-w-0">
             <Link
-              href={`/users/${item.user_id}`}
+              href={item.user_is_service_account ? serviceAccountHref(item.user_id) : `/users/${item.user_id}`}
               className="block text-[14.5px] font-semibold motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
             >
               <UserName id={item.user_id} />

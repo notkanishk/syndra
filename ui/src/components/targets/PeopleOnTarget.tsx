@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { HoldDialog } from "@/components/review/HoldDialog";
+import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { TakeAwayDialog } from "@/components/targets/TakeAwayDialog";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
@@ -111,6 +112,7 @@ function PersonRow({
   // uses, so the name in the dialog is the name in the row: asking somebody to
   // type "Ada Rivera" beside a row that says "Ada" is a puzzle, not a check.
   const resolver = useNameResolver();
+  const accountHref = useAccountHref();
   const name = resolver.resolveUser(account.subject_id).value?.display_name ?? account.subject_id;
 
   return (
@@ -118,12 +120,15 @@ function PersonRow({
       <CardRow data-account={account.subject_id} className="flex-wrap gap-y-1.5">
         <span className="flex w-[220px] flex-none items-center gap-2.5">
           <UserAvatar id={account.subject_id} size="row" />
-          <Link
-            href={`/users/${account.subject_id}`}
-            className="min-w-0 [overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink hover:text-accent-text hover:underline hover:underline-offset-[3px]"
-          >
-            <UserName id={account.subject_id} />
-          </Link>
+          <span className="min-w-0">
+            <Link
+              href={accountHref(account.subject_id)}
+              className="[overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+            >
+              <UserName id={account.subject_id} />
+            </Link>
+            <ServiceAccountTag id={account.subject_id} />
+          </span>
         </span>
         <span className="min-w-0 flex-1 basis-[200px] [overflow-wrap:anywhere] font-mono text-[13.5px] text-ink">
           {account.username}

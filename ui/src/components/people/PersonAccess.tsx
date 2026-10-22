@@ -14,6 +14,7 @@ import {
 } from "@/components/access/AccessSource";
 import { ResolvedProjectName } from "@/components/names";
 import { UserName } from "@/components/names/UserName";
+import { AccountKind } from "@/components/people/AccountKind";
 import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
@@ -281,6 +282,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
         <PersonActivity userId={userId} name={user.name} />
       ) : (
         <>
+          {advanced && isOperator && <AccountKind user={user} />}
           {/* Bundle chips state membership and nothing else — no inline ✕.
               Removal lives behind Manage bundles, which shows the impact. */}
           <div className="panel flex flex-wrap items-center gap-3 px-5 py-4">

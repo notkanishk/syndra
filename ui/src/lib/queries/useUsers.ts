@@ -19,6 +19,9 @@ export interface UserListEntry {
     avatar: string;
     /** What Zitadel says the account is. Absent reads as a person. */
     kind?: "human" | "machine";
+    /** Effective: machine or marked (A-07 §26). */
+    service_account?: boolean;
+    joined?: string;
   };
   bundle_count: number;
   bundle_names: string[];

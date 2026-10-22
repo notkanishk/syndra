@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
+import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
@@ -73,6 +75,19 @@ export function HoldsDueForReview() {
   );
 }
 
+/** Whose hold it is. A service account says so where a person's title would be, and its name opens its own page (A-07 §29). */
+function Subject({ id }: { id: string }) {
+  const accountHref = useAccountHref();
+  return (
+    <span className="text-[14px]">
+      <Link href={accountHref(id)} className="hover:text-accent-text hover:underline hover:underline-offset-[3px]">
+        <UserName id={id} />
+      </Link>
+      <ServiceAccountTag id={id} />
+    </span>
+  );
+}
+
 /**
  * What a person calls the thing a hold blocks. The value the resolver reads is
  * sent verbatim — "true" for a whole account — and is the wrong thing to put
@@ -96,9 +111,7 @@ function OwnValueRow({ hold, first }: { hold: Hold; first: boolean }) {
   const limit = !bytes ? "no limit" : `${(bytes / 1024 ** 3).toFixed(bytes % 1024 ** 3 ? 1 : 0)} GB`;
   return (
     <CardRow first={first} className="flex-wrap">
-      <span className="text-[14px]">
-        <UserName id={hold.subject_id} />
-      </span>
+      <Subject id={hold.subject_id} />
       <span className="text-[13.5px]">their own home folder limit, {limit}</span>
       <span className="text-[13px] text-faint">
         on {system} · set by <UserName id={hold.actor_id} /> <Relative iso={hold.created_at} />
@@ -124,9 +137,7 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
 
   return (
     <CardRow first={first} className="flex-wrap">
-      <span className="text-[14px]">
-        <UserName id={hold.subject_id} />
-      </span>
+      <Subject id={hold.subject_id} />
       <span className="text-[13.5px]">{label}</span>
       <span className="text-[13px] text-faint">
         on {targetLabel(hold.target)} · placed by <UserName id={hold.actor_id} />{" "}
