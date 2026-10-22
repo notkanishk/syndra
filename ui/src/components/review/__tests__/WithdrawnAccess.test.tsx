@@ -120,8 +120,8 @@ describe("the board's anatomy", () => {
     expect(link.getAttribute("href")).toBe("/users/u1");
     expect(screen.getByText("Zitadel says this person no longer exists there.")).toBeInTheDocument();
     // A queued row says how many tries, and claims neither a limit nor a next time.
-    expect(screen.getByText("Tried 2 times")).toBeInTheDocument();
-    expect(screen.getByText("Not tried yet")).toBeInTheDocument();
+    expect(screen.getByText("Tried 2 times · Tries again by itself")).toBeInTheDocument();
+    expect(screen.getByText("Not tried yet · Tries again by itself")).toBeInTheDocument();
     expect(screen.queryByText(/Next try/)).toBeNull();
     expect(screen.queryByText(/ of 8/)).toBeNull();
     // Names and roles, never the raw ids; an add-on row says its reason.

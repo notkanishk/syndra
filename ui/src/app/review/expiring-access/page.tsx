@@ -10,12 +10,11 @@ import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
-import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
 import { StatusDot } from "@/components/ui/Badge";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
-import { FilterPills, Select } from "@/components/ui/Select";
+import { FilterPills } from "@/components/ui/Select";
 import { RunLabel, SortHead, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Unfold } from "@/components/ui/Unfold";
 import {
@@ -110,12 +109,10 @@ export default function ExpiringAccessPage() {
   const grants = useExpiringGrants(within);
   const rows = useMemo(() => [...(grants.data ?? [])].sort(sortBySoonest), [grants.data]);
 
-  // Search finds a row and the project narrows the window; neither is in the link, which
-  // carries only how far ahead (`?within=`). Names are the ones the rows show, so what is typed
+  // Search finds a row; it is not in the link, which carries only how far ahead (`?within=`). Names are the ones the rows show, so what is typed
   // is what is seen.
   const resolver = useNameResolver();
   const [query, setQuery] = useState("");
-  const [project, setProject] = useState("");
   const [sort, flipSort] = useSort<SortKey>("ends");
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({ undecided: true, lapse: true });
   const text = useMemo(
@@ -129,35 +126,20 @@ export default function ExpiringAccessPage() {
     [resolver],
   );
   const needle = query.trim().toLowerCase();
-  const filtered = needle !== "" || project !== "";
+  const filtered = needle !== "";
   // Still soonest first: the amber row and the "soonest ends" line are about the clock, not
   // about the order a heading has put the rows in.
   const matched = useMemo(
     () =>
       rows.filter(
         (grant) =>
-          (!project || grant.project_id === project) &&
           (!needle ||
             [text.who(grant), text.what(grant), grant.role_key].some((part) =>
               part.toLowerCase().includes(needle),
             )),
       ),
-    [rows, project, needle, text],
+    [rows, needle, text],
   );
-  // Only projects with a row in the window, so nothing on offer returns nothing.
-  const projects = useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const grant of rows) {
-      if (!byId.has(grant.project_id))
-        byId.set(grant.project_id, resolver.resolveProject(grant.project_id).value?.name ?? "");
-    }
-    return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows, resolver]);
-  // A project from the other window that this one has no row for would filter to nothing under
-  // a heading that says so. Reset it once the new window has been read.
-  if (project && !grants.isLoading && !grants.error && !projects.some((entry) => entry.id === project)) {
-    setProject("");
-  }
   const ordered = useMemo(() => sortExpiring(matched, sort, text), [matched, sort, text]);
   const soonestId = matched.find((grant) => !grant.acknowledged)?.id;
 
@@ -253,8 +235,8 @@ export default function ExpiringAccessPage() {
             <MetaRow>
               {[
                 `${matched.length} ${matched.length === 1 ? "role" : "roles"}${filtered ? " matching" : ""} · ${people} ${people === 1 ? "person" : "people"}`,
-                // "Every one decided" is true of the whole window or it is not said: a search or
-                // a project that matches nothing has decided nothing.
+                // "Every one decided" is true of the whole window or it is not said: a search
+                // that matches nothing has decided nothing.
                 soonest
                   ? `soonest ends ${formatShortDate(soonest)}`
                   : !anyUndecided
@@ -295,31 +277,6 @@ export default function ExpiringAccessPage() {
             />
           ) : undefined
         }
-        filters={
-          showRows ? (
-            <FilterPanel
-              resultCount={matched.length}
-              noun={["role", "roles"]}
-              activeCount={project ? 1 : 0}
-              onClear={() => setProject("")}
-            >
-              <FilterField label="Project">
-                <Select
-                  value={project}
-                  onChange={(event) => setProject(event.target.value)}
-                  aria-label="Filter by project"
-                >
-                  <option value="">All projects</option>
-                  {projects.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      {entry.name}
-                    </option>
-                  ))}
-                </Select>
-              </FilterField>
-            </FilterPanel>
-          ) : undefined
-        }
         trailing={
           undecided.length > 0 ? (
             <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
@@ -348,7 +305,6 @@ export default function ExpiringAccessPage() {
               label: "Clear filters",
               onClick: () => {
                 setQuery("");
-                setProject("");
               },
             }}
           />
@@ -836,8 +792,11 @@ function LetItLapseDialog({
       {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
 
       <ModalFooter note={succeeded(outcome) ? undefined : "Extend instead if the access should continue."}>
-        {/* Nothing closed this on success, so the same "Record the decision"
-            button sat there re-submittable — a second click recorded the same
+        <Button variant="outline" onClick={onClose} disabled={acknowledge.isPending}>
+          {succeeded(outcome) ? "Close" : "Cancel"}
+        </Button>
+        {/* Cancel first, outline, then Close on the result (A-07). The primary goes once it has
+            run: nothing closed this on success, so a second click recorded the same
             acknowledgment again, against a grant that had not moved. */}
         {!succeeded(outcome) && (
           <Button
@@ -869,13 +828,6 @@ function LetItLapseDialog({
             Record the decision
           </Button>
         )}
-        <Button
-          variant={succeeded(outcome) ? "outline" : "ghost"}
-          onClick={onClose}
-          disabled={acknowledge.isPending}
-        >
-          {succeeded(outcome) ? "Close" : "Cancel"}
-        </Button>
       </ModalFooter>
     </Modal>
   );

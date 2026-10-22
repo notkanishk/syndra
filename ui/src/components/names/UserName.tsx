@@ -60,7 +60,7 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
     // mono text in Advanced only (touch cannot open a tooltip, and a screenshot
     // carries what is rendered). It is never the label: an opaque subject id
     // where a name belongs reads as a bug to everyone who sees it.
-    return <Unresolved label={fallback === "—" ? UNKNOWN_ACCOUNT : fallback} id={id} className={className} />;
+    return <Unresolved label={fallback === "—" ? UNKNOWN_ACCOUNT : fallback} id={id} idLabel="account id" className={className} />;
   }
 
   return (

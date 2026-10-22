@@ -10,6 +10,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
@@ -783,9 +784,11 @@ function BulkDecisionDialog({
   const rehearse = useRehearseBulkDecision();
   const apply = useApplyBulkDecision();
   const body = { ids, status };
+  const waits = useWaitsBeforeLine();
 
   return (
     <RehearsalDialog
+      waits={waits}
       title={status === "approved" ? "Approve requests" : "Decline requests"}
       lede=""
       noun={["request", "requests"]}

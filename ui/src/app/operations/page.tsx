@@ -465,7 +465,7 @@ function fromWebhook(event: WebhookEventRow): StreamRow {
       event.status === "dropped_enrichment_incomplete" ? (
         <> Zitadel did not say which project or role this was about, so Syndra could not act on it.</>
       ) : (
-        <> Syndra received it and chose not to act on it.</>
+        <> Syndra chose not to act.</>
       )
     ) : outcome === "waiting" ? (
       <> Syndra is still recording it.</>

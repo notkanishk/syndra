@@ -195,28 +195,6 @@ describe("Expiring access — search", () => {
     expect(screen.queryByText(/every one decided/)).toBeNull();
   });
 
-  it("drops a project the other window has no row for, instead of filtering to nothing", () => {
-    state.byWindow = {
-      14: mixed(),
-      30: [grant({ id: "z", user_id: "u1", project_id: "p1", role_key: "operator", expires_at: days(20) })],
-    };
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const page = () => (
-      <QueryClientProvider client={client}>
-        <ExpiringAccessPage />
-      </QueryClientProvider>
-    );
-    const view = render(page());
-    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Filter by project" }), { target: { value: "p2" } });
-    expect(screen.queryByText("Meera Pillai")).toBeNull();
-
-    state.search = "within=30";
-    view.rerender(page());
-    expect(screen.queryByText("Nothing that ends matches those filters.")).toBeNull();
-    expect(screen.getByText("Meera Pillai")).toBeInTheDocument();
-  });
-
   it("says nothing matches, and clearing is the way back", () => {
     renderPage();
     fireEvent.change(box(), { target: { value: "zzz" } });
@@ -244,20 +222,23 @@ describe("Expiring access — search", () => {
   });
 });
 
-describe("Expiring access — Filters", () => {
-  it("narrows to a project, offering only projects that have a row", () => {
+// A-07 FINAL §2 item 8: the pills are the filter; there is no Filters panel and no project select.
+describe("Expiring access — no Filters panel", () => {
+  it("narrows by how far ahead and by search, and by nothing else", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
-    const select = screen.getByRole("combobox", { name: "Filter by project" });
-    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
-      "All projects",
-      "Electronics bench",
-      "Wood shop",
-    ]);
+    expect(screen.queryByRole("button", { name: /Filters/ })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Filter by project" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "14 days" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "30 days" })).toBeInTheDocument();
+  });
+});
 
-    fireEvent.change(select, { target: { value: "p2" } });
-    expect(screen.queryByText("Meera Pillai")).toBeNull();
-    expect(screen.getByText("Tomas Weber")).toBeInTheDocument();
+// A-07 §16: moving between sections matters most while selecting across them.
+describe("Expiring access — chips in Select mode", () => {
+  it("keeps the section chips visible while selecting", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /^Select/ }));
+    expect(screen.getByRole("navigation", { name: "Sections of expiring access" })).toBeInTheDocument();
   });
 });
 

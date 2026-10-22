@@ -88,7 +88,7 @@ export const GLOSSARY = {
     kind: "standard",
   },
   reconcile: {
-    title: "Reconciliation",
+    title: "Check for differences",
     definition:
       "The pass that compares what Syndra believes a system holds against what it actually holds, and classifies each difference rather than resolving it by overwriting — one side moved, both did, or the account is gone. A change somebody made by hand survives it, and is reported instead of being silently reverted.",
     kind: "standard",

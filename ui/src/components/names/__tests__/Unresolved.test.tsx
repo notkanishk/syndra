@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProjectName, RoleRef, UserName } from "@/components/names";
@@ -33,36 +33,37 @@ const inView = (view: "basic" | "advanced", ui: React.ReactNode) =>
  * and "Unknown account 3664…" on Home, each page failing its own way.
  */
 describe("a name nothing could place", () => {
-  it("is plain words in Basic, for a person and for a project, with no id", () => {
-    const { container } = inView(
-      "basic",
-      <p>
-        <UserName id={USER_ID} /> · <ProjectName id={PROJECT_ID} />
-      </p>,
-    );
-    expect(container.textContent).toBe("Unknown account · Unknown project");
+  it("adds the id in both views, after the words and never instead of them", () => {
+    for (const view of ["basic", "advanced"] as const) {
+      const { container, unmount } = inView(
+        view,
+        <p>
+          <UserName id={USER_ID} /> · <ProjectName id={PROJECT_ID} />
+        </p>,
+      );
+      expect(container.textContent).toBe(`Unknown account ${USER_ID} · Unknown project ${PROJECT_ID}`);
+      expect(container.querySelectorAll(".type-mono.text-faint")).toHaveLength(2);
+      unmount();
+    }
   });
 
-  it("adds the id in Advanced, after the words and never instead of them", () => {
-    const { container } = inView(
-      "advanced",
-      <p>
-        <UserName id={USER_ID} /> · <ProjectName id={PROJECT_ID} />
-      </p>,
-    );
-    expect(container.textContent).toBe(`Unknown account ${USER_ID} · Unknown project ${PROJECT_ID}`);
-    expect(container.querySelectorAll(".type-mono.text-faint")).toHaveLength(2);
+  it("copies the id, which is the only thing anyone can look up in Zitadel", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    inView("basic", <UserName id={USER_ID} />);
+    fireEvent.click(screen.getByRole("button", { name: "Copy account id" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(USER_ID));
   });
 
   it("never turns a role pair into a dash and a slug", () => {
     const { container } = inView("basic", <RoleRef projectId={PROJECT_ID} roleKey="admin" />);
-    expect(container.textContent).toBe("Unknown project / admin");
+    expect(container.textContent).toBe(`Unknown project ${PROJECT_ID} / admin`);
     expect(container.textContent).not.toContain("—");
   });
 
-  it("does not take the id a server view sends for a project's name", () => {
+  it("never takes the id a server view sends for a project's name, though it shows it beside the words", () => {
     const { container } = inView("basic", <ProjectName id={PROJECT_ID} name={PROJECT_ID} />);
-    expect(container.textContent).toBe("Unknown project");
+    expect(container.textContent).toBe(`Unknown project ${PROJECT_ID}`);
   });
 
   it("uses the name a server view really carries", () => {

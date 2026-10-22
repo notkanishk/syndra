@@ -460,10 +460,12 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
             Revoke again on {first ? `${first}’s` : "their"} page
           </ArrowLink>
         ) : (
-          // The API carries how many tries so far, not the limit or the next time, so neither is claimed.
-          <span className="flex flex-col items-end gap-0.5 text-right text-[13px] text-muted">
-            <span>{row.attempts === 0 ? "Not tried yet" : `Tried ${row.attempts} ${row.attempts === 1 ? "time" : "times"}`}</span>
-            <span className="text-[12.5px] text-faint">Tries again by itself</span>
+          // The API carries how many tries so far, not the limit or the next time, so neither is claimed (A-07 §21).
+          <span className="text-right text-[13px] text-muted">
+            {row.attempts === 0
+              ? "Not tried yet"
+              : `Tried ${row.attempts} ${row.attempts === 1 ? "time" : "times"}`}
+            {" · Tries again by itself"}
           </span>
         )}
       </span>

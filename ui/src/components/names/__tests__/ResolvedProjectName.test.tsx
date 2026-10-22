@@ -32,9 +32,9 @@ describe("ResolvedProjectName", () => {
     expect(screen.getByText("382075332397630470")).toBeInTheDocument();
   });
 
-  it("keeps the id out of Basic altogether", () => {
+  it("shows the id in Basic too, beside the words", () => {
     render(<ResolvedProjectName name="382075332397630470" resolved={false} id="382075332397630470" />);
     expect(screen.getByText("Unknown project")).toBeInTheDocument();
-    expect(screen.queryByText("382075332397630470")).not.toBeInTheDocument();
+    expect(screen.getByText("382075332397630470")).toBeInTheDocument();
   });
 });
