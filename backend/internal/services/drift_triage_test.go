@@ -18,6 +18,7 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 	origFacts := svcRoleHolderFacts
 	origRefs := svcDbGetAllReferencedRoleKeys
 	origFind := directoryFindUser
+	stubServiceMarks(t)
 	origGrants, origBases, origLanded := svcGetAllDirectGrants, svcMergeBases, svcPropagations
 	t.Cleanup(func() {
 		svcGetAllDirectGrants, svcMergeBases, svcPropagations = origGrants, origBases, origLanded

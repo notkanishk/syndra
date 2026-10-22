@@ -27,6 +27,7 @@ func resetOnboardingDeps(t *testing.T) (
 	origFail = svcFailOnboardingTrigger
 	origUnconfigured := svcMarkOnboardingTriggerUnconfigured
 	origFind := svcFindUser
+	stubServiceMarks(t)
 	// Nobody is a machine unless a test says so; never the live directory.
 	svcFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
 		return models.UserProfile{}, false, nil

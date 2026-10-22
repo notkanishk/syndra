@@ -175,6 +175,26 @@ type AuditLog struct {
 	Details json.RawMessage `json:"details,omitempty"`
 }
 
+// ServiceAccount is one account made for a purpose rather than a person
+// (A-07 §26-31): a Zitadel machine user, or a human-type user an operator
+// marked. Kind, purpose and owner are Syndra's own record; a machine with no
+// record reads as an Integration with no purpose and no owner.
+type ServiceAccount struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	ZitadelType string `json:"zitadel_type"` // "machine" | "human"
+	Purpose     string `json:"purpose"`
+	OwnerID     string `json:"owner_id"`
+	// RoleCount is what Zitadel shows the account holding when that has been
+	// read, and Syndra's recorded count only before the first read — then
+	// RoleCountObserved is false and the number explains, it does not state.
+	RoleCount         int        `json:"role_count"`
+	RoleCountObserved bool       `json:"role_count_observed"`
+	MarkedBy          string     `json:"marked_by"`
+	MarkedAt          *time.Time `json:"marked_at"`
+}
+
 // UserProfile.Kind values, as Zitadel's user search types them.
 const (
 	UserKindHuman   = "human"
@@ -193,9 +213,12 @@ type UserProfile struct {
 	// (keys, no sign-in). Machine accounts leave the people flows (onboarding,
 	// People counts) and stay wherever access is audited. Empty reads as human.
 	Kind string `json:"kind"`
-	// Joined is when Zitadel created the account; nil when Zitadel gave none.
-	// Server-side only: the Insights "new this term" lens reads it.
-	Joined *time.Time `json:"-"`
+	// Joined is when Zitadel created the account; omitted when Zitadel gave none.
+	Joined *time.Time `json:"joined,omitempty"`
+	// ServiceAccount is the effective answer: a Zitadel machine user, or one an
+	// operator marked. Filled by the services that serve users; it is never
+	// read back as input.
+	ServiceAccount bool `json:"service_account"`
 }
 
 // IsMachine is true for a Zitadel machine user: a service account, not a person.

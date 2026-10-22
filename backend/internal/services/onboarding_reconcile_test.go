@@ -15,6 +15,7 @@ func resetReconcileDeps(t *testing.T) {
 	origBundle := svcGetWelcomeBundle
 	origHolders := svcGetUsersForBundle
 	origUsers := svcDirectoryUsers
+	stubServiceMarks(t)
 	t.Cleanup(func() {
 		svcGetWelcomeBundle = origBundle
 		svcGetUsersForBundle = origHolders
@@ -129,6 +130,7 @@ func TestFindMissedOnboarding_ReadsTheDirectoryInUseNotTheOneAtInit(t *testing.T
 	origDir := directory.Default
 	origBundle := svcGetWelcomeBundle
 	origHolders := svcGetUsersForBundle
+	stubServiceMarks(t)
 	t.Cleanup(func() {
 		directory.Default = origDir
 		svcGetWelcomeBundle = origBundle

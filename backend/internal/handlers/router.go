@@ -136,6 +136,13 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/terms", withCORS(withUserAuth(handleGetTerms)))
 	mux.HandleFunc("PUT /api/v1/terms", withCORS(withOperatorAuth(handlePutTerms)))
 
+	// Service accounts: who is one and what it is for. Operator-only; writes only
+	// Syndra's own record, never Zitadel.
+	mux.HandleFunc("GET /api/v1/service-accounts", withCORS(withOperatorAuth(handleListServiceAccounts)))
+	mux.HandleFunc("GET /api/v1/service-accounts/{id}", withCORS(withOperatorAuth(handleGetServiceAccount)))
+	mux.HandleFunc("PUT /api/v1/service-accounts/{id}", withCORS(withOperatorAuth(handlePutServiceAccount)))
+	mux.HandleFunc("DELETE /api/v1/service-accounts/{id}", withCORS(withOperatorAuth(handleDeleteServiceAccount)))
+
 	// Audit log exposes every actor/target pair org-wide — operator-only (SC3).
 	mux.HandleFunc("GET /api/v1/audit", withCORS(withOperatorAuth(handleGetAuditLogs)))
 	// Members may list (own only — handler filters) and create (own only —

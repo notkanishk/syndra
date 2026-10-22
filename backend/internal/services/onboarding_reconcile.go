@@ -78,6 +78,11 @@ func FindMissedOnboarding(ctx context.Context) (MissedOnboardingReport, error) {
 		return MissedOnboardingReport{}, fmt.Errorf("find missed onboarding: list people: %w", err)
 	}
 
+	marks, err := serviceAccountMarks(ctx)
+	if err != nil {
+		return MissedOnboardingReport{}, fmt.Errorf("find missed onboarding: read service accounts: %w", err)
+	}
+
 	missed := []MissedOnboarding{}
 	for _, p := range people {
 		// Only active members are expected to hold the welcome bundle — someone
@@ -85,9 +90,9 @@ func FindMissedOnboarding(ctx context.Context) (MissedOnboardingReport, error) {
 		if p.Status != "active" {
 			continue
 		}
-		// A machine account is a service account, not a person missing a
-		// bundle; it stays in every access audit, just not in this list.
-		if p.IsMachine() {
+		// A service account is not a person missing a bundle; it stays in every
+		// access audit, just not in this list.
+		if isServiceAccountIn(marks, p) {
 			continue
 		}
 		if _, ok := holderSet[p.ID]; ok {

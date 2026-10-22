@@ -29,6 +29,10 @@ type HealthState struct {
 	Status HealthStatus `json:"status"`
 	// CheckedAt is the latest health read, zero when none has happened.
 	CheckedAt time.Time `json:"checked_at"`
+	// LastAnsweredAt is when the target last gave a SUCCESSFUL answer; a later
+	// miss does not move it. Null when it has never answered since Syndra
+	// started. Freshness on the Connected systems list rests on it.
+	LastAnsweredAt *time.Time `json:"last_answered_at"`
 	// ReachableSince is when the current run of failures began: the time the
 	// target stopped answering. Set only while it is offline.
 	ReachableSince *time.Time `json:"reachable_since,omitempty"`
@@ -48,6 +52,7 @@ type HealthState struct {
 
 type healthRecord struct {
 	checkedAt     time.Time
+	answeredAt    time.Time
 	failures      int
 	firstFailedAt time.Time
 	everSucceeded bool
@@ -93,6 +98,7 @@ func (m *healthMonitor) observe(target string, reachable bool, lifecycle string,
 	}
 	if reachable {
 		r.failures, r.firstFailedAt, r.everSucceeded = 0, time.Time{}, true
+		r.answeredAt = at
 		r.lastLifecycle = lifecycle
 		return
 	}
@@ -111,6 +117,10 @@ func (m *healthMonitor) state(target string) HealthState {
 	}
 	st := HealthState{CheckedAt: r.checkedAt, Lifecycle: r.lastLifecycle, StartedAt: m.startedAt,
 		Recent: append([]string{}, r.recent...)}
+	if !r.answeredAt.IsZero() {
+		answered := r.answeredAt
+		st.LastAnsweredAt = &answered
+	}
 	if r.failures > 0 {
 		missed := r.firstFailedAt
 		st.MissedSince = &missed
