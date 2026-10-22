@@ -123,7 +123,7 @@ function Tiles() {
             ? notRead(!!summary.isLoading, !!summary.error)
             : endingSoon === 0
               ? "Nobody's access ends in the next 14 days."
-              : `${endingSoon} whose access ends in the next 14 days`
+              : `${endingSoon} whose access ends in 14 days`
         }
       />
       <StatCard
