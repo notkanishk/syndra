@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { stillMotion, TINT_MS } from "@/lib/motion";
 
 /**
  * Sorting by a column heading (RULES: sort lives on the headings).
@@ -20,7 +22,38 @@ export function useSort<K extends string>(initial: K) {
   const [sort, setSort] = useState<Sort<K>>({ key: initial, dir: 1 });
   const flip = (key: K) =>
     setSort((cur) => ({ key, dir: cur.key === key ? (-cur.dir as 1 | -1) : 1 }));
-  return [sort, flip] as const;
+
+  // A re-sort (A-05 §2.10): the heading turns at once, but the list fades out,
+  // re-orders while nobody can see it, and fades back in. Rows never travel.
+  // `view.sort` is what the rows are ordered by; `view.className` goes on the
+  // element that holds them (never on the headings), or `view.rowClassName` on
+  // each row when there is no such element.
+  const [shown, setShown] = useState(sort);
+  const [phase, setPhase] = useState<"out" | "in" | null>(null);
+  useEffect(() => {
+    if (sort === shown || stillMotion()) return;
+    setPhase("out");
+    const timer = setTimeout(() => {
+      setShown(sort);
+      setPhase("in");
+    }, TINT_MS);
+    return () => clearTimeout(timer);
+  }, [sort, shown]);
+  useEffect(() => {
+    if (phase !== "in") return;
+    const timer = setTimeout(() => setPhase(null), TINT_MS);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  const fade = phase === "out" ? "tint-out" : phase === "in" ? "tint-in" : "";
+  const view = {
+    sort: stillMotion() ? sort : shown,
+    className: fade,
+    // For rows that are direct children of an `ArriveList`, which stops their
+    // animation once settled: the fade has to outrank it.
+    rowClassName: phase === "out" ? "tint-out!" : phase === "in" ? "tint-in!" : "",
+  };
+  return [sort, flip, view] as const;
 }
 
 /**

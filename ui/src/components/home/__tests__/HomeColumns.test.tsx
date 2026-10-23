@@ -152,7 +152,33 @@ describe("Home's two columns", () => {
     expect(screen.queryByRole("region", { name: "Time-sensitive" })).toBeNull();
     const right = screen.getByRole("region", { name: "When you're ready" });
     // Not pulled across into the empty column's place: the same seat as when both are full.
-    expect(right.className).toContain("desktop:col-start-2");
+    expect(right.closest(".unfold")!.className).toContain("desktop:col-start-2");
+  });
+
+  // 5b: a block that empties while you are here is not unmounted; it fades, then its gap closes.
+  it("a block that empties while you are here folds instead of vanishing", () => {
+    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+    try {
+      everyBlock();
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const home = () => (
+        <QueryClientProvider client={client}>
+          <Home session={session} />
+        </QueryClientProvider>
+      );
+      const view = render(home());
+      expect(screen.getByText("Direct access ending soon")).toBeTruthy();
+
+      state.governance = { ...(state.governance as object), expiring_grants: [] };
+      view.rerender(home());
+
+      // Still on screen, still the block it was, closing; the rest of its column has not moved.
+      const folding = screen.getByText("Direct access ending soon").closest(".unfold")!;
+      expect(folding).toHaveAttribute("data-phase", "closing");
+      expect(screen.getByText("Drift")).toBeTruthy();
+    } finally {
+      delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
+    }
   });
 
   it("Basic: expiring access is time-sensitive, requests wait", () => {

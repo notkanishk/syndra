@@ -94,7 +94,9 @@ export function useLeavingRows<T>(
   const [focus, setFocus] = useState(false);
 
   const other = scope !== was;
-  if (rows !== seen || other) {
+  // A new array of the same rows (a memo that re-ran, a sort that changed nothing) is not a read.
+  const same = rows.length === seen.length && rows.every((row, index) => row === seen[index]);
+  if ((rows !== seen && !same) || other) {
     setSeen(rows);
     setWas(scope);
     setKept(

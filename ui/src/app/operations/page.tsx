@@ -53,7 +53,7 @@ export default function EventActivityPage() {
   const [source, setSource] = useState<Source>("all");
   const [outcome, setOutcome] = useState<EventOutcome>("all");
   const [query, setQuery] = useState("");
-  const [sort, flipOrSet] = useSort<SortKey>("time");
+  const [sort, flipOrSet, view] = useSort<SortKey>("time");
   const events = useWebhookEvents();
   const triggers = useOnboardingTriggers();
   const resolver = useNameResolver();
@@ -89,17 +89,17 @@ export default function EventActivityPage() {
           (!needle || names(row).some((name) => name && name.toLowerCase().includes(needle))),
       )
       .sort((a, b) => {
-        let order = sort.key === "time" ? b.ts - a.ts : runOf(a, sort.key).localeCompare(runOf(b, sort.key));
-        if (sort.dir < 0) order = -order;
+        let order = view.sort.key === "time" ? b.ts - a.ts : runOf(a, view.sort.key).localeCompare(runOf(b, view.sort.key));
+        if (view.sort.dir < 0) order = -order;
         return order || b.ts - a.ts;
       });
-  }, [all, source, outcome, needle, sort, resolver]);
+  }, [all, source, outcome, needle, view.sort, resolver]);
   const filtered = source !== "all" || outcome !== "all" || needle !== "";
 
   // Runs: under Time, one per calendar day; under Event or Outcome, equal values
   // gathered under a quiet label (RULES: sort lives on the headings). The count is
   // the run's whole size, not how much of it is on screen yet.
-  const runAt = useMemo(() => runStarts(stream, (row) => runOf(row, sort.key)), [stream, sort.key]);
+  const runAt = useMemo(() => runStarts(stream, (row) => runOf(row, view.sort.key)), [stream, view.sort.key]);
   const visible = stream.slice(0, paging.limit);
 
   const isLoading = events.isLoading || triggers.isLoading;
@@ -263,11 +263,11 @@ export default function EventActivityPage() {
           {visible.map((row, index) => {
             const run = runAt(index);
             return (
-              <div key={row.id} data-event-row>
+              <div key={row.id} data-event-row className={view.rowClassName}>
                 {run && <RunLabel {...run} />}
                 <EventRow
                   row={row}
-                  sortKey={sort.key}
+                  sortKey={view.sort.key}
                   open={openDetails === row.id}
                   onToggle={() => setOpenDetails((cur) => (cur === row.id ? null : row.id))}
                 />

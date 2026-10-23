@@ -5,10 +5,12 @@ import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
+import { Crossfade } from "@/components/ui/Crossfade";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { Card, CardRow } from "@/components/ui/Card";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { UserName } from "@/components/names";
@@ -32,6 +34,9 @@ import { useHoldsDueForReview, useLiftHold, type Hold } from "@/lib/queries/useH
 export function HoldsDueForReview() {
   const due = useHoldsDueForReview();
   const rows = due.data?.due_for_review ?? [];
+  // S5: a hold that leaves the list on a later read (lifted, kept or ended elsewhere) fades where
+  // it was and closes its gap after, and not under the pointer.
+  const leaving = useLeavingRows(rows, (hold) => hold.id, !due.isLoading && !due.error);
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -45,7 +50,7 @@ export function HoldsDueForReview() {
           />
         </div>
       )}
-      <Card>
+      <Card {...leaving.listProps}>
         <ListStates
           isLoading={due.isLoading}
           error={due.error}
@@ -61,13 +66,15 @@ export function HoldsDueForReview() {
           }
         >
           <>
-            {rows.map((hold, i) =>
-              hold.direction === "set" ? (
-                <OwnValueRow key={hold.id} hold={hold} first={i === 0} />
-              ) : (
-                <HoldRow key={hold.id} hold={hold} first={i === 0} />
-              ),
-            )}
+            {leaving.rows.map((hold, i) => (
+              <LeavingRow key={hold.id} {...leaving.props(hold.id)}>
+                {hold.direction === "set" ? (
+                  <OwnValueRow hold={hold} first={i === 0} />
+                ) : (
+                  <HoldRow hold={hold} first={i === 0} />
+                )}
+              </LeavingRow>
+            ))}
           </>
         </ListStates>
       </Card>
@@ -155,6 +162,7 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
       {/* Lifted and "couldn't lift it" take the seat the button held (route-holds:
           lifted, lift-failed). The row stays until the next read, so nothing moves
           under the hand; a failed lift keeps the button, as Try again. */}
+      <Crossfade id={outcome?.kind === "applied" ? "outcome" : "open"}>
       {outcome?.kind === "applied" ? (
         <ActionOutcome
           placement="seat"
@@ -167,7 +175,9 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
         />
       ) : (
         <span className="flex flex-col items-start gap-2">
-          {outcome && <ActionOutcome placement="seat" word="Couldn't lift it" outcome={outcome} />}
+          {outcome && (
+            <ActionOutcome placement="seat" className="tint-in" word="Couldn't lift it" outcome={outcome} />
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -198,6 +208,7 @@ function HoldRow({ hold, first }: { hold: Hold; first: boolean }) {
           </Button>
         </span>
       )}
+      </Crossfade>
       <p className="w-full text-[13.5px] text-muted">
         {hold.reason || <span className="text-faint">No reason recorded.</span>}
       </p>

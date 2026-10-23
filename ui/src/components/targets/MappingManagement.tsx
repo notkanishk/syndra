@@ -6,6 +6,8 @@ import { useState } from "react";
 import { EmptyState, ListStates } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
+import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { AddMappingButton, RefusedFields, RoleMappingDialog, placeName } from "@/components/targets/AddMappingDialog";
@@ -82,6 +84,11 @@ export function MappingManagement({ target }: { target: string }) {
   const [editing, setEditing] = useState<RoleMapping | null>(null);
   const [deleting, setDeleting] = useState<RoleMapping | null>(null);
   const name = targetLabel(target);
+  // Form parts: a mapping added while you are here opens to its height; one removed fades where
+  // it was, then its gap settles. What the page opens with is simply there.
+  const read = !mappings.isLoading && !mappings.error;
+  const drawn = useLeavingRows(shown, (m) => m.id, read);
+  const arrived = useAddedKeys(shown.map((m) => m.id), read);
 
   return (
     <>
@@ -108,9 +115,9 @@ export function MappingManagement({ target }: { target: string }) {
           <>
             {/* One row per role: its home folder and limit are rows of their
                 own in the store, shown here as the role's home line. */}
-            {shown.map((mapping, i) => (
+            {drawn.rows.map((mapping, i) => (
+              <FormPart key={mapping.id} appear={arrived.has(mapping.id)} {...drawn.props(mapping.id)}>
               <MappingRow
-                key={mapping.id}
                 mapping={mapping}
                 home={mapping.field === FIELD_GROUP ? rowsOf(all, mapping.project_id, mapping.role_key) : undefined}
                 homeRoot={homeRoot}
@@ -120,6 +127,7 @@ export function MappingManagement({ target }: { target: string }) {
                 onEdit={() => setEditing(mapping)}
                 onDelete={() => setDeleting(mapping)}
               />
+              </FormPart>
             ))}
           </>
         </ListStates>

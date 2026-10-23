@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import {
@@ -26,6 +27,9 @@ import {
 export default function ServiceAccountsPage() {
   const accounts = useServiceAccounts();
   const rows = accounts.data ?? [];
+  // S5: an account that leaves on a later read (turned back into a person, removed) fades where
+  // it was and closes its gap after, and not under the pointer.
+  const leaving = useLeavingRows(rows, (account) => account.id, !accounts.isLoading && !accounts.error);
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -38,7 +42,7 @@ export default function ServiceAccountsPage() {
         <ReadFreshness state={readStateOfQuery(accounts)} subject="Service accounts" className="-mb-3.5 px-5" />
       )}
 
-      <Card>
+      <Card {...leaving.listProps}>
         <CardHeader title="Service accounts" count={accounts.data ? rows.length : undefined} />
         <CardColumns>
           <span className="w-[220px] shrink-0">
@@ -63,8 +67,9 @@ export default function ServiceAccountsPage() {
             />
           }
         >
-          {rows.map((account, index) => (
-            <CardRow key={account.id} first={index === 0} data-account-row>
+          {leaving.rows.map((account, index) => (
+            <LeavingRow key={account.id} {...leaving.props(account.id)}>
+            <CardRow first={index === 0} data-account-row>
               {/* Phone: name and Roles on the first line, Purpose and Owner stacked beneath. */}
               <span className="order-1 min-w-0 flex-1 tablet:w-[220px] tablet:flex-none">
                 <Link
@@ -87,6 +92,7 @@ export default function ServiceAccountsPage() {
                 {account.role_count}
               </span>
             </CardRow>
+            </LeavingRow>
           ))}
         </ListStates>
       </Card>

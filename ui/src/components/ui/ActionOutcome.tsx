@@ -31,7 +31,9 @@ import {
  *  - `block` is a sheet or panel becoming its result, with room for the
  *    request id and the sentence that follows a refusal.
  *  - `seat` takes the slot a row's buttons held (proposed/ActionOutcome-seat.md):
- *    a dot and the decision in the row's own word, then where it went.
+ *    a dot and the decision in the row's own word, then where it went. The
+ *    caller sets it in a `Crossfade`, so the words change in place on tint; it
+ *    blooms only when something went well.
  *
  * Queued is never a pill. It is the step left, said where it was taken: the
  * one link "Waiting for you to send →", with the message saying what happened
@@ -67,10 +69,11 @@ export function ActionOutcome({
     return (
       <span
         role={grave ? "alert" : "status"}
-        className={`tint-in flex flex-col gap-1 ${className}`}
+        className={`flex flex-col gap-1 ${className}`}
       >
         <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink">
-          <StatusDot tone={SEAT_DOT[outcome.kind]} />
+          {/* It went well, because of you, and you are looking: the one dot that blooms (S4). */}
+          <StatusDot tone={SEAT_DOT[outcome.kind]} bloom={outcome.kind === "applied"} />
           {word ?? OUTCOME_LABEL[outcome.kind]}
         </span>
         {/* Queued: why it waits, then the step left — the word above already

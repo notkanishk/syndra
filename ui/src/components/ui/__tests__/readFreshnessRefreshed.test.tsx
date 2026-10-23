@@ -2,7 +2,8 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadFreshness, useRefreshPress } from "@/components/ui/ReadFreshness";
+import { motionInTests } from "@/test-utils/motion";
 
 // S17 Refreshed: a refresh the reader pressed is the only read that blooms.
 const NOW = Date.now();
@@ -65,6 +66,54 @@ describe("S17 Refreshed", () => {
     const { rerender } = render(<ReadFreshness state={{ readAt: ago(30) }} onRefresh={() => d.promise} />);
     fireEvent.click(screen.getByRole("button", { name: "Read again" }));
     rerender(<ReadFreshness state={{ readAt: ago(25) }} onRefresh={() => d.promise} />);
+    expect(dot().className).not.toContain("bloom");
+  });
+});
+
+// "Check Zitadel again" is a button elsewhere on the page, and it answers the same way: the press
+// is read by the freshness line it sits apart from.
+describe("S17 Refreshed, pressed from elsewhere", () => {
+  afterEach(() => {
+    cleanup();
+    motionInTests(false);
+  });
+
+  function Page({ readAt, run }: { readAt: string; run: () => Promise<void> }) {
+    const refreshed = useRefreshPress(readAt);
+    return (
+      <>
+        <button type="button" onClick={() => void refreshed.press(run)} disabled={refreshed.pressing}>
+          Check again
+        </button>
+        <ReadFreshness state={{ readAt }} refresh={refreshed} />
+      </>
+    );
+  }
+
+  it("keeps the old age while it reads, then crossfades just now in and blooms the dot once", async () => {
+    motionInTests();
+    const d = deferred();
+    const { rerender } = render(<Page readAt={ago(5)} run={() => d.promise} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(screen.getByRole("button", { name: "Check again" })).toBeDisabled();
+    expect(screen.getByText(/5 min ago/)).toBeInTheDocument();
+
+    await act(async () => {
+      d.resolve();
+      await d.promise;
+    });
+    rerender(<Page readAt={new Date().toISOString()} run={() => d.promise} />);
+
+    expect(dot().className).toContain("bloom");
+    expect(screen.getByText(/was read just now/).closest(".tint-in")).not.toBeNull();
+    // The old line is still there, fading out, until the new one has taken its place.
+    expect(screen.getByText(/5 min ago/).closest(".tint-out")).not.toBeNull();
+  });
+
+  it("a background read of the same page never blooms", () => {
+    const { rerender } = render(<Page readAt={ago(5)} run={async () => {}} />);
+    rerender(<Page readAt={new Date().toISOString()} run={async () => {}} />);
     expect(dot().className).not.toContain("bloom");
   });
 });

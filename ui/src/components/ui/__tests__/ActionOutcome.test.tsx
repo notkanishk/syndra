@@ -29,6 +29,17 @@ describe("ActionOutcome", () => {
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
+  it("seat: blooms only for what went well; queued and failed stay steady (S4)", () => {
+    const { container, rerender } = render(
+      <ActionOutcome placement="seat" word="Approved" outcome={{ kind: "applied", message: "Done" }} />,
+    );
+    expect(container.querySelector(".bloom")).not.toBeNull();
+    rerender(<ActionOutcome placement="seat" word="Approved" outcome={queued} />);
+    expect(container.querySelector(".bloom")).toBeNull();
+    rerender(<ActionOutcome placement="seat" outcome={{ kind: "failed", message: "Nope" }} />);
+    expect(container.querySelector(".bloom")).toBeNull();
+  });
+
   it("seat: a refusal shows its message, as an alert", () => {
     render(
       <ActionOutcome

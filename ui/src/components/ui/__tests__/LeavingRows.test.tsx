@@ -39,6 +39,12 @@ const animationEnd = (el: Element) => act(() => void fireEvent(el, new Event("we
 beforeEach(() => motionInTests());
 
 describe("a row leaving after a read", () => {
+  it("does not mistake a new array of the same rows for a read", () => {
+    const { rerender } = render(<List ids={["a", "b"]} />);
+    rerender(<List ids={["a", "b"]} />);
+    expect(screen.getByText("b").parentElement).not.toHaveClass("tint-out");
+  });
+
   it("fades where it was, then closes its gap, then is gone; the rows that stay never move", () => {
     const { rerender } = render(<List ids={["a", "b", "c"]} />);
     const a = screen.getByText("a");
