@@ -197,6 +197,11 @@ func GetUsersForBundle(ctx context.Context, bundleID string) ([]string, error) {
 	return scanUserIDs(ctx, `SELECT user_id FROM user_bundle_assignments WHERE bundle_id = $1`, bundleID)
 }
 
+// GetAllBundleHolderIDs lists every user id assigned to any bundle.
+func GetAllBundleHolderIDs(ctx context.Context) ([]string, error) {
+	return scanUserIDs(ctx, `SELECT DISTINCT user_id FROM user_bundle_assignments`)
+}
+
 // GetAllKnownUserIDs returns every user id Syndra has any record of — the union of direct-grant
 // holders, bundle-assignment holders, and Zitadel-grant-index holders. Rule create/update cascades
 // use this (not a single index) to discover which users' effective closures might change, since a

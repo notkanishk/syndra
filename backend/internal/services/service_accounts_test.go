@@ -68,7 +68,7 @@ func TestFindMissedOnboarding_ExcludesMarkedHuman(t *testing.T) {
 	resetReconcileDeps(t)
 	stubServiceMarks(t, db.ServiceAccountRow{UserID: "u-kiosk", Kind: "device"})
 	svcGetWelcomeBundle = func(context.Context) (string, error) { return "bundle-welcome", nil }
-	svcGetUsersForBundle = func(context.Context, string) ([]string, error) { return nil, nil }
+	svcGetBundleHolders = func(context.Context) ([]string, error) { return nil, nil }
 	svcDirectoryUsers = func(context.Context) ([]models.UserProfile, error) {
 		return []models.UserProfile{
 			{ID: "u-person", Name: "Person", Status: "active"},

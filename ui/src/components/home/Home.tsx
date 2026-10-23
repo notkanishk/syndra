@@ -7,6 +7,8 @@ import Link from "next/link";
 
 import { AccessSource } from "@/components/access/AccessSource";
 import { Makerspace } from "@/components/home/Makerspace";
+import { BulkDialog } from "@/components/people/BulkDialog";
+import { Owner } from "@/components/system/ServiceAccountOwner";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
@@ -24,11 +26,13 @@ import { useDrainPropagations } from "@/lib/queries/usePropagation";
 import { useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useMissedOnboarding, type MissedOnboardingReport } from "@/lib/queries/useOperations";
 import { useTargets } from "@/lib/queries/useTargets";
+import { serviceAccountHref, useServiceAccounts } from "@/lib/queries/useServiceAccounts";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
+import type { ServiceAccount } from "@/lib/types";
 import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
 import { ArriveList } from "@/components/ui/ArriveList";
@@ -117,6 +121,22 @@ export function Home({ session }: { session: SessionUser }) {
   const onboardingGaps =
     (onboarding.data && !onboarding.data.welcome_bundle_configured ? 1 : 0) +
     (onboarding.data?.missed.length ?? 0);
+  // Newest joined first, a person Zitadel gave no date for last (A-07 §33). The
+  // block's rows leave the way the queue's do (S5): after Give a bundle the next
+  // read drops the person and the row fades where it was.
+  const missed = useMemo(
+    () =>
+      [...(onboarding.data?.missed ?? [])].sort((a, b) => (b.joined ?? "").localeCompare(a.joined ?? "")),
+    [onboarding.data?.missed],
+  );
+  const gaps = useLeavingRows(missed, (person) => person.user_id, !onboarding.isLoading && !onboarding.error);
+  // Service accounts nobody answers for (A-07 §31). Not a read that can fail the
+  // page: until the list answers there is nothing to look at.
+  const accounts = useServiceAccounts();
+  const unowned = useMemo(() => (accounts.data ?? []).filter((a) => a.owner_id === ""), [accounts.data]);
+  // ponytail: "not used in 90 days", the other half of §31, is not built: Zitadel's
+  // last use of a machine key isn't read yet. Add it to this filter, and to the
+  // row's reason, when it is.
 
   // BLOCKS, not rows (#31, "the headline counts blocks; each badge counts its own
   // noun"): the headline said "98 things need you" for eighty-five rows in one
@@ -129,6 +149,7 @@ export function Home({ session }: { session: SessionUser }) {
     pending.length > 0,
     expiring.length > 0,
     onboardingGaps > 0,
+    unowned.length > 0,
     ...(advanced
       ? [
           (propagation?.count ?? 0) > 0,
@@ -187,7 +208,7 @@ export function Home({ session }: { session: SessionUser }) {
         </div>
         {/* #27: a clear block gives up its seat, so this says it was checked. Only
             where there is a queue to read: the one calm line below says the rest. */}
-        {!error && !loading && (blocks > 0 || queue.rows.length > 0) && clear.length > 0 && (
+        {!error && !loading && (blocks > 0 || queue.rows.length > 0 || gaps.rows.length > 0) && clear.length > 0 && (
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-muted">
             <span aria-hidden className="h-[7px] w-[7px] rounded-pill bg-healthy" />
             <span>Checked, nothing waiting:</span>
@@ -217,7 +238,7 @@ export function Home({ session }: { session: SessionUser }) {
         <Card>
           <RowSkeleton rows={4} label="Loading today's work" />
         </Card>
-      ) : blocks === 0 && queue.rows.length === 0 ? (
+      ) : blocks === 0 && queue.rows.length === 0 && gaps.rows.length === 0 ? (
         // The last decided row is still on its beat: the empty state waits for it.
         // One calm line, not a full-page card: the page continues below, and a
         // hero-sized empty state would read as the end of it.
@@ -257,6 +278,8 @@ export function Home({ session }: { session: SessionUser }) {
             {/* When you're ready: nothing changes until you act. */}
             {(queue.rows.length > 0 ||
               onboardingGaps > 0 ||
+              gaps.rows.length > 0 ||
+              unowned.length > 0 ||
               (advanced && (findings > 0 || (propagation?.count ?? 0) > 0))) && (
               <QueueColumn
                 title="When you're ready"
@@ -266,7 +289,10 @@ export function Home({ session }: { session: SessionUser }) {
                 {queue.rows.length > 0 && (
                   <OpenRequests rows={queue.rows} decisions={decisions} queue={queue} />
                 )}
-                {onboardingGaps > 0 && <OnboardingGaps report={onboarding.data!} />}
+                {(onboardingGaps > 0 || gaps.rows.length > 0) && (
+                  <OnboardingGaps report={onboarding.data!} gaps={gaps} />
+                )}
+                {unowned.length > 0 && <ServiceAccountsToLookAt accounts={unowned} />}
                 {advanced && findings > 0 && <MergeFindingsWaiting count={findings} />}
                 {advanced && (propagation?.count ?? 0) > 0 && (
                   <PendingChanges
@@ -525,11 +551,7 @@ function ExpiringRow({
             );
             if (made === KEPT) return;
             setExtended(true);
-            setOutcome({
-              kind: "applied",
-              message: "Extended by 90 days",
-              detail: "The row leaves this block on the next read.",
-            });
+            setOutcome(outcomeFromExtend(made, 90, "The row leaves this block on the next read."));
           } catch (error) {
             setOutcome(outcomeFromError(error));
           }
@@ -556,14 +578,23 @@ function ExpiringRow({
  * named people Zitadel confirms are active, checked against who the default
  * <Term name="bundle">bundle</Term> was actually given, this moment.
  */
-function OnboardingGaps({ report }: { report: MissedOnboardingReport }) {
+function OnboardingGaps({
+  report,
+  gaps,
+}: {
+  report: MissedOnboardingReport;
+  /** `report.missed`, newest joined first, with the rows that just left still in place. */
+  gaps: ReturnType<typeof useLeavingRows<MissedOnboardingReport["missed"][number]>>;
+}) {
+  // Give a bundle is People's own bulk flow, opened for the one person on the row.
+  const [giving, setGiving] = useState<string | null>(null);
   // The count counts PEOPLE. It used to add one for "no default bundle is
   // configured", so a card headed "New people without a bundle · 1" could be
   // about nobody at all — the 1 was a settings fact wearing a people badge.
   // The setting still gets said, as its own row, where it reads as the cause
   // it is rather than as a person.
   return (
-    <Card>
+    <Card {...gaps.listProps}>
       <CardHeader title="New people without a bundle" count={report.missed.length} />
       {!report.welcome_bundle_configured && (
         <CardRow>
@@ -576,20 +607,62 @@ function OnboardingGaps({ report }: { report: MissedOnboardingReport }) {
           </ButtonLink>
         </CardRow>
       )}
-      {/* The report carries no join date, so its order is the read's. The line
-          opens People where the same people are sorted by Joined (A-07 §33). */}
-      <Capped items={report.missed} href={peopleHref({ bundle: NO_BUNDLE })}>
+      {/* Newest joined first; the line opens People where the same people are
+          sorted by Joined (A-07 §33). */}
+      <Capped items={gaps.rows} href={peopleHref({ bundle: NO_BUNDLE })}>
         {(person) => (
-          <CardRow key={person.user_id}>
-            <UserAvatar id={person.user_id} size="list" />
+          <LeavingRow key={person.user_id} {...gaps.props(person.user_id)}>
+            <CardRow>
+              <UserAvatar id={person.user_id} size="list" />
+              <Link
+                href={`/users/${person.user_id}`}
+                className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+              >
+                <UserName id={person.user_id} />
+              </Link>
+              <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
+                Holds no bundle
+              </div>
+              {person.joined && (
+                <div className="w-[66px] shrink-0 text-[13px] text-faint">
+                  <Relative iso={person.joined} />
+                </div>
+              )}
+              <Button size="sm" onClick={() => setGiving(person.user_id)}>
+                Give a bundle
+              </Button>
+            </CardRow>
+          </LeavingRow>
+        )}
+      </Capped>
+      {giving && (
+        <BulkDialog op="assign_bundle" userIds={[giving]} scope="on Home" onClose={() => setGiving(null)} />
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Service accounts nobody answers for (A-07 §31). It isn't drift: nothing in
+ * Zitadel is wrong, but nobody is answering for the access. The row names why in
+ * its seat, a warn dot and a word, the same `Owner` the Service accounts list
+ * draws, so Home and that page cannot say it differently.
+ */
+function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
+  return (
+    <Card>
+      <CardHeader title="Service accounts to look at" count={accounts.length} tone="warn" />
+      <Capped items={accounts} href="/system/service-accounts">
+        {(account) => (
+          <CardRow key={account.id}>
             <Link
-              href={`/users/${person.user_id}`}
-              className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+              href={serviceAccountHref(account.id)}
+              className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere] hover:text-accent-text"
             >
-              <UserName id={person.user_id} />
+              {account.name}
             </Link>
-            <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
-              Holds no bundle
+            <div className="w-[170px] shrink-0 text-[14px]">
+              <Owner id={account.owner_id} />
             </div>
           </CardRow>
         )}

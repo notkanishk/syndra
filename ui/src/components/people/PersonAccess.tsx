@@ -42,7 +42,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
@@ -796,13 +796,7 @@ function ExtendSeat({
               }),
             );
             if (result === KEPT) return;
-            // The outbox in manual mode answers "pending": reporting "applied" would say
-            // Zitadel has it when only Syndra's own ledger does.
-            const waiting = result?.status === "pending";
-            setOutcome({
-              kind: waiting ? "queued" : "applied",
-              message: waiting ? `Will extend by ${EXTEND_DAYS} days once sent` : `Extended by ${EXTEND_DAYS} days`,
-            });
+            setOutcome(outcomeFromExtend(result, EXTEND_DAYS));
           } catch (error) {
             setOutcome(outcomeFromError(error));
           }

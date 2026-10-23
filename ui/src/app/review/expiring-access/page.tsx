@@ -42,6 +42,7 @@ import { useCreateGrant } from "@/lib/queries/useUsers";
 import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
 import {
   outcomeFromError,
+  outcomeFromExtend,
   statesNothingChanged,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
@@ -662,18 +663,7 @@ function ExpiringRow({
                     }),
                   );
                   if (result === KEPT) return;
-                  // This endpoint enqueues to the outbox in manual mode ("pending")
-                  // rather than applying inline — see CreateGrantResult. Reporting
-                  // "applied" unconditionally would say Zitadel has it when only
-                  // Syndra's own ledger does.
-                  const waiting = result?.status === "pending";
-                  setOutcome({
-                    kind: waiting ? "queued" : "applied",
-                    message: waiting
-                      ? `Will extend by ${EXTEND_DAYS} days once sent`
-                      : `Extended by ${EXTEND_DAYS} days`,
-                    detail: waiting ? undefined : "It leaves this list on the next read.",
-                  });
+                  setOutcome(outcomeFromExtend(result, EXTEND_DAYS, "It leaves this list on the next read."));
                 } catch (error) {
                   setOutcome(outcomeFromError(error));
                 }
