@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 
 import { buildModel } from "@/components/insights/model";
@@ -88,15 +89,17 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
           value={url.period}
           onChange={(p) => url.set({ period: p === "term" ? null : p })}
         />
-        <span className="text-[13px] text-faint">{t?.window.label ?? ""}</span>
         {/* The term line: which term this is reading, then the one place its dates are set. */}
-        {url.period === "term" && t && (
+        {url.period === "term" && t ? (
           <>
             <span className="text-[13px] text-faint">
-              {formatShortDate(`${t.window.from}T12:00:00`)} – {formatShortDate(`${t.window.to}T12:00:00`)}
+              This term is {t.window.label}, {formatShortDate(`${t.window.from}T12:00:00`)} to{" "}
+              {formatShortDate(`${t.window.to}T12:00:00`)}
             </span>
             <ArrowLink href="/settings">Set in Makerspace settings</ArrowLink>
           </>
+        ) : (
+          <span className="text-[13px] text-faint">{t?.window.label ?? ""}</span>
         )}
       </div>
 
@@ -162,7 +165,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
             </Card>
 
             <Card>
-              <CardHeader title="Ending soon" note="People whose direct access ends within 14 and 30 days" />
+              <CardHeader title="Ending soon" note="People whose direct access ends within 14 and 30 days. Each number opens Expiring access in the same window." />
               {t.ending_soon.length === 0 ? (
                 <Quiet>No direct access ends in the next 30 days.</Quiet>
               ) : (
@@ -185,12 +188,11 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
                         <span role="cell" className="text-muted">
                           {projectLabel(p.project_name, p.project_id)}
                         </span>
-                        {/* A count the API has not sent is a dash, never a guess from another window. */}
                         <span role="cell" className="text-right font-semibold tabular-nums">
-                          {p.d14}
+                          <EndingLink within={14} n={p.d14} />
                         </span>
                         <span role="cell" className="text-right font-semibold tabular-nums">
-                          {p.d30}
+                          <EndingLink within={30} n={p.d30} />
                         </span>
                       </div>
                     ))}
@@ -231,5 +233,18 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
         )}
       </ListStates>
     </>
+  );
+}
+
+/** Each Ending soon count opens Expiring access in the same window (route-insights, 23 Oct). */
+function EndingLink({ within, n }: { within: 14 | 30; n: number }) {
+  return (
+    <Link
+      href={`/review/expiring-access?within=${within}`}
+      aria-label={`${n} in ${within} days: open Expiring access`}
+      className="motion-tint hover:text-accent-text hover:underline"
+    >
+      {n}
+    </Link>
   );
 }
