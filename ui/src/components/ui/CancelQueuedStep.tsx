@@ -10,6 +10,7 @@ import { NextStep } from "@/components/ui/NextStep";
 import { WouldCancelQueued } from "@/lib/api-client";
 import { armAck, type QueuedChange } from "@/lib/cancel-confirm";
 import { formatAgoShort, humanizeKey } from "@/lib/format";
+import { SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 
 /**
@@ -67,12 +68,7 @@ export interface CancelStep {
   view: ReactNode;
 }
 
-const TINT_MS = 120;
 const CAP = 5;
-
-function reducedMotion(): boolean {
-  return typeof window === "undefined" || typeof window.matchMedia !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
 
 const firstOf = (name: string) => name.trim().split(/\s+/)[0] || name;
 const isRemoval = (change: QueuedChange) => change.op_type === "revoke";
@@ -388,7 +384,7 @@ export function PushedStep({ step, children }: { step: CancelStep; children: Rea
 
   useEffect(() => {
     if (wanted === shown) return;
-    if (reducedMotion()) {
+    if (stillMotion()) {
       setShown(wanted);
       return;
     }
@@ -418,9 +414,16 @@ export function PushedStep({ step, children }: { step: CancelStep; children: Rea
       el.style.height = "";
       el.style.transition = "";
     };
-    el.addEventListener("transitionend", done, { once: true });
-    const fallback = setTimeout(done, 600);
-    return () => clearTimeout(fallback);
+    // The height's own end: a fade inside the step bubbles transitionend too.
+    const onEnd = (event: TransitionEvent) => {
+      if (event.target === el) done();
+    };
+    el.addEventListener("transitionend", onEnd);
+    const fallback = setTimeout(done, SETTLE_MS + TINT_MS);
+    return () => {
+      clearTimeout(fallback);
+      el.removeEventListener("transitionend", onEnd);
+    };
   }, [shown]);
 
   return (

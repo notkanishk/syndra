@@ -81,9 +81,10 @@ let gliding = 0;
  * it jumps and the flash stays. Every jump to a section, from a chip, the
  * pill, a count or a revealed panel, goes through here. The shell's own
  * scroller where there is one, so a narrow page never moves sideways.
- * `clear` is the space left above the heading.
+ * `clear` is the space left above the heading. Resolves true once it has
+ * landed (at once when still), false if a later jump took over.
  */
-export function glideTo(target: HTMLElement, clear = 64) {
+export function glideTo(target: HTMLElement, clear = 64): Promise<boolean> {
   const container = document.getElementById("app-scroll");
   const from = container ? container.scrollTop : window.scrollY;
   const base = container ? container.getBoundingClientRect().top : 0;
@@ -99,15 +100,20 @@ export function glideTo(target: HTMLElement, clear = 64) {
   if (stillMotion() || !(ms > 0) || !ease) {
     go(to);
     flashLanding(target);
-    return;
+    return Promise.resolve(true);
   }
-  const start = performance.now();
-  const step = (now: number) => {
-    if (gliding !== token) return; // a later jump has taken over
-    const t = Math.min(1, (now - start) / ms);
-    go(t < 1 ? from + (to - from) * ease(t) : to);
-    if (t < 1) requestAnimationFrame(step);
-    else flashLanding(target);
-  };
-  requestAnimationFrame(step);
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const step = (now: number) => {
+      if (gliding !== token) return resolve(false); // a later jump has taken over
+      const t = Math.min(1, (now - start) / ms);
+      go(t < 1 ? from + (to - from) * ease(t) : to);
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        flashLanding(target);
+        resolve(true);
+      }
+    };
+    requestAnimationFrame(step);
+  });
 }

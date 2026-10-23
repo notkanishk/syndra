@@ -1074,7 +1074,7 @@ html.theme-fading *::after {
   /* Plays on the list's first paint only. `ArriveList` sets data-settled once
      the stagger has run, and from then on a child that mounts (a refresh, a
      filter, a search) simply appears: rows that stay hold still (A-05 §2.10). */
-  &[data-settled] > * {
+  &[data-settled] > *:not(.close-gap) {
     animation: none;
   }
 
@@ -1086,21 +1086,21 @@ html.theme-fading *::after {
     animation-delay: calc(min(var(--i), var(--arrive-cap) - 1) * var(--arrive-step));
   }
 
-  > * {
+  > *:not(.close-gap) {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
     animation-delay: calc((var(--arrive-cap) - 1) * var(--arrive-step));
   }
 
-  > *:nth-child(1) {
+  > *:nth-child(1):not(.close-gap) {
     animation-delay: 0ms;
   }
-  > *:nth-child(2) {
+  > *:nth-child(2):not(.close-gap) {
     animation-delay: calc(1 * var(--arrive-step));
   }
-  > *:nth-child(3) {
+  > *:nth-child(3):not(.close-gap) {
     animation-delay: calc(2 * var(--arrive-step));
   }
-  > *:nth-child(4) {
+  > *:nth-child(4):not(.close-gap) {
     animation-delay: calc(3 * var(--arrive-step));
   }
 }

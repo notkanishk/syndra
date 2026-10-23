@@ -139,6 +139,43 @@ describe("Modal as a phone sheet (S3)", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("does not rise again after a drag that settled back, or one that was refused", () => {
+    const { panel, grabber } = sheetOf(vi.fn());
+    drag(grabber, 150)();
+    act(() => void vi.advanceTimersByTime(600));
+    // An empty inline animation would hand the card back to `sheet-in`, which plays from the edge again.
+    expect(panel.style.animation).toBe("none");
+  });
+
+  it("does not rise again after a busy drag it refused", () => {
+    const { panel, grabber } = sheetOf(vi.fn(), true);
+    drag(grabber, 40)();
+    act(() => void vi.advanceTimersByTime(600));
+    expect(panel.style.animation).toBe("none");
+  });
+
+  it("leaves its dragged picture with the leave animation, not the drag's inline styles", () => {
+    const { rerender, grabber } = sheetOf(vi.fn());
+    drag(grabber, 150)();
+    act(() => void vi.advanceTimersByTime(600));
+    rerender(<Sheet open={false} />);
+    const card = ghost()!.firstElementChild as HTMLElement;
+    expect(card).toHaveClass("leave-panel");
+    expect(card.style.animation).toBe("");
+    expect(card.style.transform).toBe("");
+  });
+
+  it("leaves a copy on a later ordinary close even if a dragged-away close never unmounted it", () => {
+    const { rerender, grabber } = sheetOf(vi.fn());
+    drag(grabber, 250)();
+    act(() => void vi.advanceTimersByTime(260));
+    rerender(<Sheet open={false} />);
+    act(() => void vi.advanceTimersByTime(300));
+    rerender(<Sheet />);
+    rerender(<Sheet open={false} />);
+    expect(ghost()).not.toBeNull();
+  });
+
   it("leaves past a third, on settle's duration, then closes", () => {
     const onClose = vi.fn();
     const { panel, grabber } = sheetOf(onClose);
@@ -200,7 +237,7 @@ describe("Modal as a phone sheet (S3)", () => {
     drag(grabber, 200);
     expect(panel.style.transform).toBe("");
     expect(sentence).toHaveClass("text-ink");
-    act(() => void vi.advanceTimersByTime(700));
+    act(() => void vi.advanceTimersByTime(1000));
     expect(sentence).toHaveClass("text-faint");
     expect(onClose).not.toHaveBeenCalled();
   });

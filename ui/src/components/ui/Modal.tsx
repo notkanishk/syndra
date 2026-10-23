@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { FLASH_MS } from "@/lib/useFlashOnChange";
 import { LIGHT_LEAD_MS, SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 
 /**
@@ -214,6 +215,10 @@ function leaveAsCopy(scrim: HTMLElement) {
   const card = copy.firstElementChild;
   card?.classList.remove("sheet-in");
   card?.classList.add("leave-panel");
+  // A drag leaves inline styles on the picture; they would out-rank the leave class.
+  if (card instanceof HTMLElement) card.style.cssText = "";
+  copy.style.backgroundColor = "";
+  copy.style.transition = "";
   document.body.appendChild(copy);
   setTimeout(() => copy.remove(), TINT_MS + LIGHT_LEAD_MS + 20);
 }
@@ -358,7 +363,7 @@ function useSheetDrag({
 
   useEffect(() => {
     if (!answered) return;
-    const timer = setTimeout(() => setAnswered(false), 600);
+    const timer = setTimeout(() => setAnswered(false), FLASH_MS);
     return () => clearTimeout(timer);
   }, [answered]);
 
@@ -380,10 +385,9 @@ function useSheetDrag({
     if (scrim) scrim.style.transition = `background-color ${SETTLE_MS}ms var(--ease-settle)`;
     place(0, 1);
     setTimeout(() => {
-      if (panelRef.current) {
-        panelRef.current.style.transition = "";
-        panelRef.current.style.animation = "";
-      }
+      // The entry animation stays off once a drag has begun: clearing it would
+      // hand the card back to `sheet-in`, and the sheet would rise again.
+      if (panelRef.current) panelRef.current.style.transition = "";
       if (scrimRef.current) scrimRef.current.style.transition = "";
     }, SETTLE_MS);
   };
@@ -454,10 +458,9 @@ function useSheetDrag({
           // If the parent kept it open, it comes back rather than sitting
           // invisible over the page.
           setTimeout(() => {
-            if (!panelRef.current) return;
             draggedAway.current = false;
-            settleBack();
-          }, 100);
+            if (panelRef.current) settleBack();
+          }, TINT_MS);
         }, SETTLE_MS);
       },
       onPointerCancel() {

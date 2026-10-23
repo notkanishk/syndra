@@ -444,6 +444,20 @@ describe("design system", () => {
     expect(list).not.toContain("nth-child(6)");
   });
 
+  // A row that leaves inside a settled list must still run its own exit: the
+  // list's `animation: none` out-ranks `.close-gap` (the cascade, which jsdom
+  // cannot see), and `LeavingRow` waits on that animation's end to remove it.
+  it("never lets the list's own animation rules reach a leaving row", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const list = atRuleBody(css, "@utility arrive-list");
+    const selectors = Array.from(list.matchAll(/([^{}]+)\{[^{}]*\banimation(?:-delay)?:/g)).map((m) => m[1].trim());
+    const aimedAtEveryChild = selectors.filter((s) => !s.includes("[data-arriving]"));
+    expect(aimedAtEveryChild.length).toBeGreaterThan(0);
+    for (const selector of aimedAtEveryChild) {
+      expect(selector, `${selector} must exclude .close-gap`).toContain(":not(.close-gap)");
+    }
+  });
+
   // S3: a phone sheet rises from its edge on settle; wider, it is the dialog's
   // own rise. Rows the reader asked for arrive on the list's own cap.
   it("rises a phone sheet from the bottom edge, and only below the tablet breakpoint", () => {

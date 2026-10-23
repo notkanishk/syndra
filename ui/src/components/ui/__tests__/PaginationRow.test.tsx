@@ -93,24 +93,52 @@ describe("PaginationRow motion", () => {
     document.querySelectorAll("h2").forEach((h) => h.remove());
   });
 
-  it("Back to 10 glides to the heading before the rows leave, and trims out of sight", () => {
+  /** The one glide (lib/motion): the heading sits 900px down, the page is at 0. */
+  function glidePage() {
     vi.useFakeTimers();
     motionInTests();
+    document.documentElement.style.setProperty("--duration-glide", "520ms");
+    document.documentElement.style.setProperty("--ease-settle", "cubic-bezier(0.16, 1, 0.3, 1)");
+    const scroller = document.createElement("div");
+    scroller.id = "app-scroll";
+    scroller.scrollTo = vi.fn(({ top }: ScrollToOptions) => void (scroller.scrollTop = top ?? 0)) as never;
+    scroller.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
     const heading = document.createElement("h2");
-    document.body.appendChild(heading);
-    const scrollIntoView = vi.fn();
-    heading.scrollIntoView = scrollIntoView;
+    heading.getBoundingClientRect = () => ({ top: 900 - scroller.scrollTop }) as DOMRect;
+    scroller.append(heading);
+    document.body.append(scroller);
+    return { scroller, heading };
+  }
+
+  afterEach(() => {
+    document.getElementById("app-scroll")?.remove();
+    document.documentElement.style.cssText = "";
+  });
+
+  it("Back to 10 glides to the heading before the rows leave, and trims once it has landed", async () => {
+    const { scroller, heading } = glidePage();
     const onBack = vi.fn();
     row({ shown: 35, total: 61, onBack, anchor: { current: heading } });
 
     fireEvent.click(screen.getByRole("button", { name: "Back to 10" }));
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    await act(async () => void vi.advanceTimersByTime(260));
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    expect(scroller.scrollTop).toBeLessThan(836);
     expect(onBack).not.toHaveBeenCalled();
 
-    act(() => void vi.advanceTimersByTime(519));
-    expect(onBack).not.toHaveBeenCalled();
-    act(() => void vi.advanceTimersByTime(2));
+    await act(async () => void vi.advanceTimersByTime(300));
+    expect(scroller.scrollTop).toBe(836);
     expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it("trims nothing if the row went away during the glide", async () => {
+    const { heading } = glidePage();
+    const onBack = vi.fn();
+    const { unmount } = row({ shown: 35, total: 61, onBack, anchor: { current: heading } });
+    fireEvent.click(screen.getByRole("button", { name: "Back to 10" }));
+    unmount();
+    await act(async () => void vi.advanceTimersByTime(700));
+    expect(onBack).not.toHaveBeenCalled();
   });
 
   it("Show 25 more makes only the rows it adds arrive", async () => {
