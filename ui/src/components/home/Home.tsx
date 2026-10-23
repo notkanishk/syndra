@@ -753,7 +753,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
         // A disabled action states its reason in the row, not on hover: hover
         // doesn't exist on touch and doesn't survive a screenshot.
         <div className="border-t border-dashed border-warn-line bg-warn-soft px-[18px] py-3 text-[13.5px] text-warn-text">
-          Disabled — Zitadel is not answering. Changes wait here, in order, and nothing is lost.
+          Sending waits until Zitadel answers. Changes wait here, in order, and nothing is lost.
         </div>
       )}
     </Card>
