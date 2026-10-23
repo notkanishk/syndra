@@ -63,7 +63,7 @@ export function Segmented<T extends string>({
     size === "sm"
       ? "min-h-[44px] px-3 text-[12.5px] desktop:min-h-0 desktop:py-1"
       : "min-h-[44px] px-4 text-[13px] desktop:min-h-0 desktop:py-1.5";
-  const { ref, box } = useGlideIndicator();
+  const { ref, box } = useGlideIndicator(value);
   return (
     <div
       ref={ref}
@@ -109,7 +109,7 @@ export function FilterPills<T extends string>({
   onChange: (next: T) => void;
   label: string;
 }) {
-  const { ref, box } = useGlideIndicator();
+  const { ref, box } = useGlideIndicator(value);
   return (
     <div ref={ref} role="radiogroup" aria-label={label} className="relative flex flex-wrap items-center gap-1">
       <GlideIndicator box={box} kind="fill" className="bg-tint-3" />

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type FocusEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type PointerEvent, type ReactNode } from "react";
 
-import { stillMotion } from "@/lib/motion";
+import { SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 
 /**
  * A row that leaves on a later read (Motion v2 S5): it fades where it was, then
@@ -142,6 +142,21 @@ export function LeavingRow({ leaving, held, onGone, children }: LeaveProps & { c
   const [closing, setClosing] = useState(false);
   if (leaving && !held && !closing) setClosing(true);
   if (!leaving && closing) setClosing(false);
+
+  // The gap is gone when its fold ends. If no animation runs to say so (none
+  // matched, or the styles never loaded), it is removed after the fold's own
+  // delay and duration anyway rather than left as an inert row.
+  // `onGone` is new on every render, so it is read through a ref: a parent
+  // that re-renders often must not keep restarting the wait.
+  const gone = useRef(onGone);
+  useEffect(() => {
+    gone.current = onGone;
+  });
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(() => gone.current(), TINT_MS + SETTLE_MS + 100);
+    return () => clearTimeout(timer);
+  }, [closing]);
 
   return (
     <div

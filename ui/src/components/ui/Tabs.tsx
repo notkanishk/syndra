@@ -45,7 +45,7 @@ export function Tabs<T extends string>({
   label: string;
   className?: string;
 }) {
-  const { ref, box } = useGlideIndicator();
+  const { ref, box } = useGlideIndicator(value);
   return (
     <div
       ref={ref}

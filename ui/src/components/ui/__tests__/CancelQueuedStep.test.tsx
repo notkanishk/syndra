@@ -7,6 +7,7 @@ import { KEPT, PushedStep, useCancelStep, type CancelStepOptions } from "@/compo
 import { Modal } from "@/components/ui/Modal";
 import { WouldCancelQueued } from "@/lib/api-client";
 import { takeAck, type QueuedChange } from "@/lib/cancel-confirm";
+import { motionInTests } from "@/test-utils/motion";
 
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
@@ -240,6 +241,7 @@ describe("the step pushed inside the host sheet", () => {
 
   it("the form fades first, then the step takes the sheet (the form stays mounted behind)", async () => {
     vi.useFakeTimers();
+    motionInTests();
     vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => undefined, removeEventListener: () => undefined }));
     try {
       render(<Host write={refusedOnce([change()])} />);
@@ -254,6 +256,41 @@ describe("the step pushed inside the host sheet", () => {
       expect(screen.getByRole("heading", { name: /This cancels/ })).toBeInTheDocument();
       expect(screen.getByLabelText("Reason", { selector: "input" }).closest("[data-step-form]")).toHaveAttribute("hidden");
     } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("the pushed step's height", () => {
+  const rect = (open: boolean) => ({ open, view: open ? <p>the step</p> : null }) as never;
+
+  it("ends on its own transition, not a child's, and lets go of the listener", async () => {
+    vi.useFakeTimers();
+    motionInTests();
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    // jsdom has no layout: the form is 50 tall, the step 200.
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, get: () => 50 });
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", { configurable: true, get: () => 200 });
+    try {
+      const view = render(<PushedStep step={rect(false)}>form</PushedStep>);
+      view.rerender(<PushedStep step={rect(true)}>form</PushedStep>);
+      await act(async () => void vi.advanceTimersByTime(130));
+      const box = view.container.firstElementChild as HTMLElement;
+      expect(box.style.height).toBe("200px");
+
+      // A fade inside the step finishing is not the height finishing.
+      fireEvent.transitionEnd(screen.getByText("the step"));
+      expect(box.style.height).toBe("200px");
+
+      fireEvent.transitionEnd(box);
+      expect(box.style.height).toBe("");
+      expect(box.style.overflow).toBe("");
+    } finally {
+      // @ts-expect-error restoring jsdom's own (absent) layout
+      delete HTMLElement.prototype.offsetHeight;
+      // @ts-expect-error restoring jsdom's own (absent) layout
+      delete HTMLElement.prototype.scrollHeight;
       vi.unstubAllGlobals();
       vi.useRealTimers();
     }

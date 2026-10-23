@@ -22,7 +22,7 @@ type Box = { left: number; top: number; width: number; height: number };
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-export function useGlideIndicator() {
+export function useGlideIndicator(choice: unknown) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<Box | null>(null);
 
@@ -33,8 +33,8 @@ export function useGlideIndicator() {
     setBox((cur) => (cur && cur.left === next.left && cur.top === next.top && cur.width === next.width && cur.height === next.height ? cur : next));
   }, []);
 
-  // Every render: the choice may have changed, and the set above bails when it has not moved.
-  useIsoLayoutEffect(measure);
+  // When the choice changes; size changes are the observer's.
+  useIsoLayoutEffect(measure, [measure, choice]);
 
   useEffect(() => {
     const group = ref.current;

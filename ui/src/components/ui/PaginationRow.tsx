@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 import { armArrive } from "@/components/ui/ArriveList";
 import { Button } from "@/components/ui/Button";
-import { stillMotion } from "@/lib/motion";
+import { glideTo, stillMotion } from "@/lib/motion";
 
 /** The first page of every long list, and what Show more adds (A-04 section 7.4). */
 export const PAGE_FIRST = 10;
@@ -64,6 +64,14 @@ export function PaginationRow({
   anchor?: RefObject<HTMLElement | null>;
 }) {
   const known = total !== undefined;
+  // The trim waits on the glide; a row that unmounted meanwhile has nothing to trim.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const remaining = known ? total - shown : 0;
   const ended = known ? remaining <= 0 : !hasMore;
 
@@ -83,21 +91,16 @@ export function PaginationRow({
   // Glide to the heading first, then trim the list out of sight (8c): trimmed
   // first, the page would shrink under the reader's eyes and the scroll would
   // be a jump from wherever the browser clamped it.
-  // ponytail: switch to glideTo once it lands.
   const back = () => {
     const target = anchor?.current ?? document.querySelector<HTMLElement>("h1");
     if (!target) return onBack();
     if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
     target.focus({ preventScroll: true });
-    if (stillMotion()) {
-      target.scrollIntoView?.({ behavior: "auto", block: "start" });
-      return onBack();
-    }
-    target.scrollIntoView?.({ behavior: "smooth", block: "start" });
-    const glide = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--duration-glide"),
-    );
-    setTimeout(onBack, glide || 520);
+    const gliding = glideTo(target);
+    if (stillMotion()) return onBack(); // it jumped; nothing to wait for
+    void gliding.then((landed) => {
+      if (landed && mounted.current) onBack();
+    });
   };
 
   const dot = (

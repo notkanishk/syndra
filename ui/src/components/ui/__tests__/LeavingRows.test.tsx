@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { setMediaQuery } from "@/test-utils/media";
@@ -61,6 +61,19 @@ describe("a row leaving after a read", () => {
 
     animationEnd(gone);
     expect(screen.queryByText("b")).not.toBeInTheDocument();
+  });
+
+  it("is gone after its own duration even if no animation ever ends", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(<List ids={["a", "b"]} />);
+      rerender(<List ids={["a"]} />);
+      expect(screen.getByText("b")).toBeInTheDocument();
+      act(() => void vi.advanceTimersByTime(120 + 260 + 100));
+      expect(screen.queryByText("b")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("waits for the pointer to leave the list before the gap closes", () => {
