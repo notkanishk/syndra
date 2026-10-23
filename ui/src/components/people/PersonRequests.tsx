@@ -5,7 +5,9 @@ import { useMemo } from "react";
 
 import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { StatusSeat, keepResult, requestOutcome } from "@/components/requests/RequestsScreen";
+import { keepResult, requestOutcome } from "@/components/requests/RequestsScreen";
+import { Crossfade } from "@/components/ui/Crossfade";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -136,6 +138,7 @@ function RequestRow({
       </span>
       {/* One seat: the buttons, then the decision in their place (#96). */}
       <span className="flex w-full flex-col gap-2 tablet:w-[196px] tablet:shrink-0">
+        <Crossfade id={open && isOperator ? "open" : outcome && optimisticallyResolved ? "outcome" : "status"}>
         {open && isOperator ? (
           <span className="flex items-center gap-3 tablet:gap-2">
             <Button
@@ -155,9 +158,10 @@ function RequestRow({
         ) : optimisticallyResolved ? null : (
           <Outcome status={entry.status} note={[keepResult(entry), entry.review_note].filter(Boolean).join(" · ")} />
         )}
+        </Crossfade>
         {/* A failed write puts the buttons back and says why under them. */}
         {outcome && !optimisticallyResolved && (
-          <ActionOutcome placement="seat" outcome={outcome.outcome} />
+          <ActionOutcome placement="seat" className="tint-in" outcome={outcome.outcome} />
         )}
       </span>
     </div>

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RunLabel, SortHead, runStarts, useSort } from "@/components/ui/SortHead";
+import { motionInTests } from "@/test-utils/motion";
 
 type Key = "who" | "ends";
 
@@ -85,5 +86,51 @@ describe("runs", () => {
   it("labels a run with its value and its count", () => {
     render(<RunLabel label="Wood shop · Operator" size={7} />);
     expect(screen.getByTestId("run-label")).toHaveTextContent("Wood shop · Operator7");
+  });
+});
+
+/** A re-sort (A-05 §2.10): the list fades out, re-orders while unseen, fades back in. Rows never travel. */
+describe("a re-sort", () => {
+  function Sorted() {
+    const [sort, flip, view] = useSort<Key>("ends");
+    return (
+      <>
+        <SortHead label="Who" name="who" sort={sort} onSort={flip} />
+        <ul data-testid="list" className={view.className}>
+          <li>{view.sort.key}</li>
+        </ul>
+      </>
+    );
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    motionInTests();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("turns the arrow at once, fades the list out, re-orders it unseen, then fades it back in", () => {
+    render(<Sorted />);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by who" }));
+
+    expect(arrow("Sort by who")).toHaveClass("opacity-100");
+    expect(screen.getByTestId("list")).toHaveClass("tint-out");
+    expect(screen.getByText("ends")).toBeInTheDocument();
+
+    act(() => void vi.advanceTimersByTime(120));
+    expect(screen.getByText("who")).toBeInTheDocument();
+    expect(screen.getByTestId("list")).toHaveClass("tint-in");
+
+    act(() => void vi.advanceTimersByTime(120));
+    expect(screen.getByTestId("list")).not.toHaveClass("tint-in");
+    expect(screen.getByTestId("list")).not.toHaveClass("tint-out");
+  });
+
+  it("re-orders at once under reduced motion", () => {
+    motionInTests(false);
+    render(<Sorted />);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by who" }));
+    expect(screen.getByText("who")).toBeInTheDocument();
+    expect(screen.getByTestId("list")).not.toHaveClass("tint-out");
   });
 });

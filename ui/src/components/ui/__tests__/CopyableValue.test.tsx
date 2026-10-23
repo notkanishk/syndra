@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ClipboardUnavailableNote, CopyableValue } from "@/components/ui/CopyableValue";
@@ -50,6 +50,35 @@ describe("a value somebody has to transport", () => {
     const done = screen.getByRole("button", { name: "Copied share path" });
     expect(done.querySelector(".bloom.bg-healthy")).not.toBeNull();
     expect(done).toHaveTextContent("Copied");
+  });
+
+  // S18: Copy and Copied share one seat, sized to the wider label, so the button never changes
+  // width; the words crossfade on tint and it is back to Copy after 900ms.
+  it("keeps both labels in one seat and crossfades them, then goes back after 900ms", async () => {
+    withClipboard(vi.fn().mockResolvedValue(undefined));
+    render(<CopyableValue value="smb://fileserver-01/studio" label="Share path" />);
+
+    const button = await screen.findByRole("button", { name: "Copy share path" });
+    const copy = screen.getByText("Copy");
+    const copied = screen.getByText("Copied");
+    expect(copy).toHaveClass("opacity-100");
+    expect(copied).toHaveClass("opacity-0");
+    expect(copy.parentElement).toBe(copied.parentElement);
+
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        fireEvent.click(button);
+      });
+      expect(copy).toHaveClass("opacity-0");
+      expect(copied).toHaveClass("opacity-100");
+      act(() => void vi.advanceTimersByTime(900));
+      expect(copy).toHaveClass("opacity-100");
+      expect(copied).toHaveClass("opacity-0");
+      expect(button.querySelector(".bloom")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // The row knows before it is tapped, because the answer is knowable before

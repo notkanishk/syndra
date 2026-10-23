@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UnexplainedAccess } from "@/components/review/UnexplainedAccess";
 import type { DriftTriageItem } from "@/lib/queries/useDrift";
+import { motionInTests } from "@/test-utils/motion";
 
 /**
  * The Drift list as the board draws it (route-drift): rows gathered by
@@ -211,6 +212,41 @@ describe("Drift — sections", () => {
     renderPage();
     expect(screen.getByText(/3 to decide/)).toBeInTheDocument();
     expect(screen.getByText(/oldest found/)).toBeInTheDocument();
+  });
+});
+
+describe("Drift — a finding that goes on a later read (S5)", () => {
+  it("fades where it was, inert, and is no longer counted; the others hold still", () => {
+    motionInTests();
+    try {
+      const view = renderPage();
+      const [a, , c] = drift.data!;
+      drift.data = [a, c];
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <UnexplainedAccess />
+        </QueryClientProvider>,
+      );
+      const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
+      expect(within(zitadel).getByTestId("card-count")).toHaveTextContent("1");
+      const gone = within(zitadel).getByRole("link", { name: "Arjun Das", hidden: true });
+      expect(gone.closest(".tint-out")).not.toBeNull();
+      expect(gone.closest("[inert]")).not.toBeNull();
+      expect(within(zitadel).getByRole("link", { name: "Meera Pillai" }).closest(".tint-out")).toBeNull();
+    } finally {
+      motionInTests(false);
+    }
+  });
+});
+
+describe("Drift — Check Zitadel again (S17)", () => {
+  it("is busy while it reads, then says it checked, as the freshness line's own press", async () => {
+    renderPage();
+    const check = screen.getByRole("button", { name: "Check Zitadel again" });
+    fireEvent.click(check);
+    expect(screen.getByRole("button", { name: /Check Zitadel again/ })).toHaveAttribute("aria-busy", "true");
+    expect(await screen.findByText(/Checked again/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check Zitadel again" })).not.toHaveAttribute("aria-busy", "true");
   });
 });
 

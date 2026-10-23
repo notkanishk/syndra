@@ -17,7 +17,9 @@ import { Chip, Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -407,12 +409,18 @@ function WhatItGives({
   const added = new Set((draft?.added ?? []).map(idOf));
   const leaving = useMemo(() => draft?.removed ?? [], [draft?.removed]);
   const rows = useMemo(() => [...(roles.data ?? []), ...leaving], [roles.data, leaving]);
+  // Form parts: a role added while you are here opens to its height; one that goes fades where it
+  // was, then its gap settles. What the editor opens with is simply there.
+  const read = !roles.isLoading && !roles.error;
+  const drawn = useLeavingRows(rows, idOf, read);
+  const arrived = useAddedKeys(rows.map(idOf), read);
+  const live = new Set(rows.map(idOf));
   const groups = useMemo(() => {
     // By project id, so the heading can link to the project; the name is only
     // what it is called. A project nobody could name has no name here and is
     // headed by <ProjectName/>'s fallback, never by its id.
     const out = new Map<string, { name: string | undefined; list: BundleRoleRow[] }>();
-    for (const r of rows) {
+    for (const r of drawn.rows) {
       const group = out.get(r.zitadel_project_id) ?? {
         name: byId.get(idOf(r))?.project_name,
         list: [],
@@ -423,7 +431,7 @@ function WhatItGives({
     return Array.from(out.entries()).sort(([, a], [, b]) =>
       projectLabel(a.name, null).localeCompare(projectLabel(b.name, null)),
     );
-  }, [rows, byId]);
+  }, [drawn.rows, byId]);
   const next = draft?.next_version;
   const leavingIds = new Set(leaving.map(idOf));
   const includes = draft?.includes ?? [];
@@ -484,7 +492,8 @@ function WhatItGives({
                     <ProjectName id={projectId} name={project} />
                   </Link>
                   <span className="ml-3 text-[13.5px] font-normal text-faint">
-                    {list.length} {list.length === 1 ? "role" : "roles"}
+                    {list.filter((role) => live.has(idOf(role))).length}{" "}
+                    {list.filter((role) => live.has(idOf(role))).length === 1 ? "role" : "roles"}
                   </span>
                 </>
               }
@@ -496,7 +505,8 @@ function WhatItGives({
               const isNew = added.has(id);
               const open = removing !== null && idOf(removing) === id;
               return (
-                <div key={id} className={`row-divider motion-tint ${isLeaving ? "bg-warn-soft" : ""}`}>
+                <FormPart key={id} appear={arrived.has(id)} {...drawn.props(id)}>
+                <div className={`row-divider motion-tint ${isLeaving ? "bg-warn-soft" : ""}`}>
                   <div className="flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3.5">
                     <div className="min-w-[min(240px,100%)] flex-1">
                       <span className="text-[15px] font-semibold">
@@ -548,6 +558,7 @@ function WhatItGives({
                     </div>
                   </Unfold>
                 </div>
+                </FormPart>
               );
             })}
           </Card>

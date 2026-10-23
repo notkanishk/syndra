@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RetiredBundlesFold } from "@/components/bundles/RetiredBundle";
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -40,6 +41,9 @@ export default function BundlesPage() {
   const bundles = useBundles();
   const [creating, setCreating] = useState(false);
   const rows = [...(bundles.data ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  // S5: a bundle that leaves on a later read (retired) fades where it was and closes its gap
+  // after, and not under the pointer.
+  const leaving = useLeavingRows(rows, (bundle) => bundle.id, !bundles.isLoading && !bundles.error);
 
   return (
     <div className="flex flex-col gap-7">
@@ -61,7 +65,7 @@ export default function BundlesPage() {
         />
       )}
 
-      <Card>
+      <Card {...leaving.listProps}>
         <CardColumns>
           <span className="w-[min(260px,40%)]">Bundle ↑</span>
           <span className="hidden flex-1 tablet:block">What it&rsquo;s for</span>
@@ -83,8 +87,10 @@ export default function BundlesPage() {
             />
           }
         >
-          {rows.map((bundle) => (
-            <BundleListRow key={bundle.id} bundle={bundle} />
+          {leaving.rows.map((bundle) => (
+            <LeavingRow key={bundle.id} {...leaving.props(bundle.id)}>
+              <BundleListRow bundle={bundle} />
+            </LeavingRow>
           ))}
         </ListStates>
       </Card>

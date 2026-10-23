@@ -37,7 +37,7 @@ export default function ProjectsPage() {
   const projects = useProjects();
   const apps = useApplications();
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useSort<ProjectSort>("project");
+  const [sort, setSort, view] = useSort<ProjectSort>("project");
 
   const appsByProject = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -62,10 +62,10 @@ export default function ProjectsPage() {
               name.toLowerCase().includes(needle),
             ),
         ),
-        sort,
+        view.sort,
         PROJECT_SORT,
       ),
-    [all, needle, appsByProject, sort],
+    [all, needle, appsByProject, view.sort],
   );
   const servedCount = new Set((apps.data ?? []).map((a) => a.application.id)).size;
 
@@ -121,6 +121,7 @@ export default function ProjectsPage() {
           </span>
         </CardColumns>
 
+        <div className={view.className}>
         <ListStates
           isLoading={projects.isLoading}
           error={projects.error}
@@ -209,6 +210,7 @@ export default function ProjectsPage() {
             );
           })}
         </ListStates>
+        </div>
       </Card>
     </div>
   );

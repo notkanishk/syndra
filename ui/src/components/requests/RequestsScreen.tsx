@@ -5,7 +5,9 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
-import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { type StatusTone } from "@/components/ui/Badge";
+import { Crossfade } from "@/components/ui/Crossfade";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -116,20 +118,6 @@ function requestOutcomeWords(status: string): {
 export function overtakenNote(request: AccessRequest): string {
   const on = request.resolved_at ? ` on ${formatShortDate(request.resolved_at)}` : "";
   return `Makerspace staff gave it to you directly${on}, so there was nothing left to decide.`;
-}
-
-export function StatusSeat({ tone, word, note }: { tone: StatusTone; word: string; note?: string }) {
-  return (
-    <span className="flex flex-col gap-1">
-      <span
-        className={`inline-flex items-center gap-2 whitespace-nowrap text-[13.5px] font-semibold ${STATUS_TONE[tone].label}`}
-      >
-        <StatusDot tone={tone} />
-        {word}
-      </span>
-      {note && <span className="pl-[14px] text-[12.5px] leading-[1.45] text-faint">{note}</span>}
-    </span>
-  );
 }
 
 export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; userId: string }) {
@@ -353,6 +341,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   their place — one seat, so no column moves on the tap. The
                   row keeps it until the next read; no toast. */}
               <div className="w-full tablet:ml-auto tablet:w-[196px] tablet:shrink-0">
+                <Crossfade id={entry.status === "pending" && !resolved.has(entry.id) ? "open" : outcomes[entry.id] ? "outcome" : "status"}>
                 {entry.status === "pending" && !resolved.has(entry.id) ? (
                   <div className="flex flex-col gap-2">
                     <div className="flex w-full flex-row-reverse gap-3 tablet:flex-row tablet:gap-2">
@@ -372,7 +361,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                     </div>
                     {/* A failed write puts the buttons back and says why under them. */}
                     {outcomes[entry.id] && (
-                      <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
+                      <ActionOutcome placement="seat" className="tint-in" outcome={outcomes[entry.id].outcome} />
                     )}
                   </div>
                 ) : outcomes[entry.id] ? (
@@ -394,6 +383,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
                     }
                   />
                 )}
+                </Crossfade>
               </div>
               {/* Allowed, and said before it happens (owner, 15 Oct): an
                   operator can approve their own request, and it is recorded
@@ -634,6 +624,7 @@ function YourRequests({
             {/* One status seat: dot, word, note. A withdrawal reports here,
                 in the member's own word, and keeps it until the next read. */}
             <div className="w-full tablet:w-auto tablet:min-w-[220px] tablet:shrink-0">
+              <Crossfade id={outcomes[entry.id] && resolved.has(entry.id) ? "outcome" : "status"}>
               {outcomes[entry.id] && resolved.has(entry.id) ? (
                 <ActionOutcome
                   placement="seat"
@@ -649,9 +640,12 @@ function YourRequests({
                       entry.status === "fulfilled" ? overtakenNote(entry) : keepNote(entry, endNow(entry))
                     }
                   />
-                  {outcomes[entry.id] && <ActionOutcome placement="seat" outcome={outcomes[entry.id]!} />}
+                  {outcomes[entry.id] && (
+                    <ActionOutcome placement="seat" className="tint-in" outcome={outcomes[entry.id]!} />
+                  )}
                 </div>
               )}
+              </Crossfade>
             </div>
             {/*
               Withdraw sits on the row rather than behind a dialog, outline and last (#109).

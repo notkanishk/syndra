@@ -50,7 +50,7 @@ export default function RolesPage() {
   const [group, setGroup] = useState("");
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useSort<RoleSort>("project");
+  const [sort, setSort, view] = useSort<RoleSort>("project");
 
   // Unused lives in the URL, unlike the other two, because Home links straight
   // here with "N roles nobody holds" — a link that until now landed on an
@@ -82,7 +82,7 @@ export default function RolesPage() {
             .filter(Boolean)
             .some((text) => text.toLowerCase().includes(needle))),
     ),
-    sort,
+    view.sort,
     ROLE_SORT,
   );
   const unusedCount = all.filter((role) => role.is_unused).length;
@@ -222,6 +222,7 @@ export default function RolesPage() {
           </span>
         </CardColumns>
 
+        <div className={view.className}>
         <ListStates
           isLoading={roles.isLoading}
           error={roles.error}
@@ -317,6 +318,7 @@ export default function RolesPage() {
             );
           })}
         </ListStates>
+        </div>
       </Card>
 
       <p className="max-w-[900px] text-[14px] leading-[1.55] text-faint">
