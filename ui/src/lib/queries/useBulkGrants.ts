@@ -152,6 +152,9 @@ export function useApplyBulk() {
         "propagations",
         "audit",
         "review",
+        // Home's "New people without a bundle" is read from here: a bundle given
+        // to one of them takes the row off on this read, not the next poll.
+        "operations",
       ]) {
         qc.invalidateQueries({ queryKey: [key] });
       }

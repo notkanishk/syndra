@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,7 +65,7 @@ func TestTriggerOnboarding_HumanOnboardedAndUnreadableUserFails(t *testing.T) {
 func TestFindMissedOnboarding_ExcludesMachineAccounts(t *testing.T) {
 	resetReconcileDeps(t)
 	svcGetWelcomeBundle = func(context.Context) (string, error) { return "bundle-welcome", nil }
-	svcGetUsersForBundle = func(context.Context, string) ([]string, error) { return nil, nil }
+	svcGetBundleHolders = func(context.Context) ([]string, error) { return nil, nil }
 	svcDirectoryUsers = func(context.Context) ([]models.UserProfile, error) {
 		return []models.UserProfile{
 			{ID: "u-person", Name: "Person", Status: "active", Kind: models.UserKindHuman},
@@ -78,6 +80,33 @@ func TestFindMissedOnboarding_ExcludesMachineAccounts(t *testing.T) {
 	}
 	if len(got.Missed) != 2 || got.Missed[0].UserID != "u-person" || got.Missed[1].UserID != "u-legacy" {
 		t.Fatalf("want the two people and no machine, got %+v", got.Missed)
+	}
+}
+
+// The report carries when each person joined, so Home can put the newest first
+// (A-07 §33); a person Zitadel gave no date for carries none.
+func TestFindMissedOnboarding_CarriesJoined(t *testing.T) {
+	resetReconcileDeps(t)
+	joined := time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
+	svcGetWelcomeBundle = func(context.Context) (string, error) { return "bundle-welcome", nil }
+	svcGetBundleHolders = func(context.Context) ([]string, error) { return nil, nil }
+	svcDirectoryUsers = func(context.Context) ([]models.UserProfile, error) {
+		return []models.UserProfile{
+			{ID: "u-dated", Name: "Dated", Status: "active", Joined: &joined},
+			{ID: "u-undated", Name: "Undated", Status: "active"},
+		}, nil
+	}
+
+	got, err := FindMissedOnboarding(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Missed) != 2 || got.Missed[0].Joined == nil || !got.Missed[0].Joined.Equal(joined) || got.Missed[1].Joined != nil {
+		t.Fatalf("want the join time carried and nil where unknown, got %+v", got.Missed)
+	}
+	raw, _ := json.Marshal(got.Missed[1])
+	if strings.Contains(string(raw), "joined") {
+		t.Fatalf("an unknown join time is omitted, got %s", raw)
 	}
 }
 

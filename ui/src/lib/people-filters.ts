@@ -165,7 +165,7 @@ export function isPerson(entry: UserListEntry): boolean {
   return !(entry.user.service_account ?? entry.user.kind === "machine");
 }
 
-/** `?bundle=none`: Home's "and N more" into People, for who holds no bundle. */
+/** `?bundle=none`: Home's "and N more" into People, for the active people who hold no bundle. */
 export const NO_BUNDLE = "none";
 
 /**
@@ -240,7 +240,9 @@ export function applyFilters(
     if (filters.project && !(entry.key_project_ids ?? []).includes(filters.project)) return false;
     if (filters.role && roleHolders && !roleHolders.has(entry.user.id)) return false;
     if (filters.bundle === NO_BUNDLE) {
-      if ((entry.bundle_names ?? []).length > 0) return false;
+      // The same people as Home's "New people without a bundle", which is what
+      // opens this: active people (the backend's FindMissedOnboarding), holding none.
+      if (!isPerson(entry) || entry.user.status !== "active" || (entry.bundle_names ?? []).length > 0) return false;
     } else if (filters.bundle && !(entry.bundle_names ?? []).includes(filters.bundle)) return false;
     if (filters.version && String(entry.bundle_versions?.[filters.bundle] ?? "") !== filters.version) {
       return false;

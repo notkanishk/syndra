@@ -13,12 +13,12 @@ import (
 func resetReconcileDeps(t *testing.T) {
 	t.Helper()
 	origBundle := svcGetWelcomeBundle
-	origHolders := svcGetUsersForBundle
+	origHolders := svcGetBundleHolders
 	origUsers := svcDirectoryUsers
 	stubServiceMarks(t)
 	t.Cleanup(func() {
 		svcGetWelcomeBundle = origBundle
-		svcGetUsersForBundle = origHolders
+		svcGetBundleHolders = origHolders
 		svcDirectoryUsers = origUsers
 	})
 }
@@ -29,7 +29,7 @@ func resetReconcileDeps(t *testing.T) {
 func TestFindMissedOnboarding_FindsPersonWithNoTriggerRowAtAll(t *testing.T) {
 	resetReconcileDeps(t)
 	svcGetWelcomeBundle = func(context.Context) (string, error) { return "bundle-welcome", nil }
-	svcGetUsersForBundle = func(context.Context, string) ([]string, error) { return []string{"u-has-it"}, nil }
+	svcGetBundleHolders = func(context.Context) ([]string, error) { return []string{"u-has-it"}, nil }
 	svcDirectoryUsers = func(context.Context) ([]models.UserProfile, error) {
 		return []models.UserProfile{
 			{ID: "u-has-it", Name: "Has It", Status: "active"},
@@ -54,7 +54,7 @@ func TestFindMissedOnboarding_FindsPersonWithNoTriggerRowAtAll(t *testing.T) {
 func TestFindMissedOnboarding_IgnoresInactivePeople(t *testing.T) {
 	resetReconcileDeps(t)
 	svcGetWelcomeBundle = func(context.Context) (string, error) { return "bundle-welcome", nil }
-	svcGetUsersForBundle = func(context.Context, string) ([]string, error) { return nil, nil }
+	svcGetBundleHolders = func(context.Context) ([]string, error) { return nil, nil }
 	svcDirectoryUsers = func(context.Context) ([]models.UserProfile, error) {
 		return []models.UserProfile{
 			{ID: "u-locked", Status: "locked"},
@@ -101,7 +101,7 @@ func TestFindMissedOnboarding_NoWelcomeBundleConfigured_ReturnsGapNotError(t *te
 func TestFindMissedOnboarding_DirectoryFault_Propagates(t *testing.T) {
 	resetReconcileDeps(t)
 	svcGetWelcomeBundle = func(context.Context) (string, error) { return "bundle-welcome", nil }
-	svcGetUsersForBundle = func(context.Context, string) ([]string, error) { return nil, nil }
+	svcGetBundleHolders = func(context.Context) ([]string, error) { return nil, nil }
 	svcDirectoryUsers = func(context.Context) ([]models.UserProfile, error) {
 		return nil, errors.New("zitadel unreachable")
 	}
@@ -129,15 +129,15 @@ func (u usersOnly) Users(context.Context) ([]models.UserProfile, error) { return
 func TestFindMissedOnboarding_ReadsTheDirectoryInUseNotTheOneAtInit(t *testing.T) {
 	origDir := directory.Default
 	origBundle := svcGetWelcomeBundle
-	origHolders := svcGetUsersForBundle
+	origHolders := svcGetBundleHolders
 	stubServiceMarks(t)
 	t.Cleanup(func() {
 		directory.Default = origDir
 		svcGetWelcomeBundle = origBundle
-		svcGetUsersForBundle = origHolders
+		svcGetBundleHolders = origHolders
 	})
 	svcGetWelcomeBundle = func(context.Context) (string, error) { return "bundle-welcome", nil }
-	svcGetUsersForBundle = func(context.Context, string) ([]string, error) { return nil, nil }
+	svcGetBundleHolders = func(context.Context) ([]string, error) { return nil, nil }
 	// What directory.Init() does at startup, after the package-level seams were bound.
 	directory.Default = usersOnly{people: []models.UserProfile{
 		{ID: "1234", Name: "Real Person", Status: "active"},
