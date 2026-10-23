@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script>(function load() { if (!window.React) { setTimeout(load, 10); return; } if (!window.React.cache) { window.React.cache = function (fn) { return fn; }; } if (window.__syDsLoading) return; window.__syDsLoading = true; var s = document.createElement("script"); s.src = "_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"; document.head.appendChild(s); })();</script>
+<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a{color:var(--accent-text);text-decoration:none} a:hover{color:var(--focus-ring)}</style>
+</helmet>
+<x-import component-from-global-scope="Syndra.SyndraRoot" data="{{ rootData }}" hint-size="100%,100vh">
+<div style="--duration-tint: {{ dTint }}; --duration-press: {{ dPress }}; --duration-settle: {{ dSettle }}; --duration-arrive: {{ dArrive }}; --duration-flash: {{ dFlash }}; --duration-breathe: {{ dBreathe }}; --arrive-step: {{ dStep }}; --ease-arrive: cubic-bezier(0.16, 1, 0.3, 1); --ease-flash: cubic-bezier(0.33, 1, 0.68, 1); --ease-breathe: cubic-bezier(0.37, 0, 0.63, 1); --duration-glide: 520ms; --travel-cap: 10px; width:1560px; box-sizing:border-box; padding:72px 72px 120px; display:flex; flex-direction:column; gap:64px; background:var(--ground); min-height:100vh">
+
+<header data-screen-label="Motion v2" style="display:flex;flex-direction:column;gap:14px;max-width:960px">
+  <span class="type-label" style="color:var(--label)">Q-05 · A-05 · extends the Motion board, which stays · Final, 23 Oct 2026</span>
+  <h1 class="type-page-title" style="margin:0">Motion, alive</h1>
+  <p style="margin:0;font-size:15.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The owner asked for motion that is posh, rich, uplifting and subtle, and that makes the product a joy to touch. Code's reading is right: <strong style="color:var(--ink);font-weight:600">more life inside the rules, not fewer rules.</strong> Nothing new travels further. Instead, more of the product answers you, every answer lands on one soft curve, and light does the work that distance would. Each demo below loops; the line under it names the step on screen. Use Tweaks to slow them or see the still forms.</p>
+</header>
+
+<section data-screen-label="Character" style="display:flex;flex-direction:column;gap:20px">
+  <h2 class="type-section-title" style="margin:0">What the four words mean here</h2>
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px">
+    <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:8px"><span style="font-family:var(--font-display);font-size:21px;font-weight:600">Organic</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">One curve for everything that moves: fast away, long soft landing (<span class="type-mono" style="font-size:12px">--ease-settle</span>). Light leads and shape follows by 40ms, so nothing switches all at once. Groups stagger; nothing marches.</p></div>
+    <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:8px"><span style="font-family:var(--font-display);font-size:21px;font-weight:600">Rich</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Depth from layers, not distance. A scrim tints before its sheet rises. A control's indicator glides to your choice. A dot that just went well blooms once. Every surface you touch answers, not only buttons.</p></div>
+    <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:8px"><span style="font-family:var(--font-display);font-size:21px;font-weight:600">Uplifting</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Good news gets a gesture: things that went well lift 6px and bloom. Bad news stays still and steady, so it reads as calm, not alarm. Closing is quicker than opening, so the product never makes you wait to leave.</p></div>
+    <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:8px"><span style="font-family:var(--font-display);font-size:21px;font-weight:600">Subtle</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">10px is the furthest anything in the page travels. 3% is the deepest press. A healthy screen is the stillest thing on it. Counts never roll. Nothing moves under the reader while they read.</p></div>
+  </div>
+</section>
+
+<section data-screen-label="Tokens" style="display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px"><span class="type-label" style="color:var(--label)">§1, §2.1–2.4, §2.7</span><h2 class="type-section-title" style="margin:0">Six movements, every one with a curve</h2><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Code's reading of the board is confirmed. Six is current; the design system's card said three and is now redrawn as six (<span class="type-mono" style="font-size:12.5px">guidelines/motion.html</span>). Three easing tokens are named, and two constants. Glide isn't a seventh movement: it's settle's curve over a scroll's distance.</p></div>
+  <div class="card" style="padding:4px 0">
+    <div style="display:grid;grid-template-columns:120px 230px minmax(0,1fr) minmax(0,1fr);gap:0 24px;padding:12px 22px"><span class="type-label" style="color:var(--label)">Movement</span><span class="type-label" style="color:var(--label)">Token</span><span class="type-label" style="color:var(--label)">For</span><span class="type-label" style="color:var(--label)">Still form (reduced motion)</span></div>
+    <sc-for list="{{ tokens }}" as="t" hint-placeholder-count="8">
+      <div class="row-divider" style="display:grid;grid-template-columns:120px 230px minmax(0,1fr) minmax(0,1fr);gap:0 24px;padding:14px 22px;align-items:baseline">
+        <span style="font-family:var(--font-display);font-size:17px;font-weight:600">{{ t.name }}</span>
+        <span style="display:flex;flex-direction:column;gap:2px"><span class="type-mono" style="font-size:12.5px;color:var(--ink)">{{ t.value }}</span><span class="type-mono" style="font-size:11.5px;color:{{ t.curveColor }}">{{ t.curve }}</span></span>
+        <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ t.use }}</span>
+        <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ t.still }}</span>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section data-screen-label="Surfaces" style="display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px"><span class="type-label" style="color:var(--label)">§3 · drawn here for the first time</span><h2 class="type-section-title" style="margin:0">Where the life goes</h2><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">Twelve surfaces, each built from the six. Ids are for the reply.</p></div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start">
+
+    <div id="S1" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S1</span><span style="font-size:15.5px;font-weight:600">A dialog opens and closes</span></div>
+      <div style="position:relative;height:260px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);overflow:hidden">
+        <div style="position:absolute;inset:22px;display:flex;flex-direction:column;gap:12px"><span style="width:45%;height:16px;border-radius:var(--radius-pill);background:var(--surface-2)"></span><span style="width:70%;height:10px;border-radius:var(--radius-pill);background:var(--surface-1)"></span><span style="flex:1;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)"></span></div>
+        <div style="position:absolute;inset:0;background:color-mix(in oklch, var(--ground) 72%, transparent);opacity:{{ s1.scrimOp }};transition:{{ s1.scrimTr }}"></div>
+        <div style="position:absolute;left:50%;top:50%;width:300px;margin:-78px 0 0 -150px;box-sizing:border-box;padding:18px 20px;display:flex;flex-direction:column;gap:12px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:var(--radius-card);box-shadow:var(--shadow-dialog);opacity:{{ s1.dOp }};transform:{{ s1.dTf }};transition:{{ s1.dTr }}">
+          <span style="font-family:var(--font-display);font-size:17px;font-weight:600">Give Rohan Mehta a role</span>
+          <span style="width:80%;height:9px;border-radius:var(--radius-pill);background:var(--surface-1)"></span><span style="width:60%;height:9px;border-radius:var(--radius-pill);background:var(--surface-1)"></span>
+          <span style="display:flex;gap:8px;margin-top:4px"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" hint-size="120px,34px">Give Supervisor</x-import></span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s1.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The scrim comes first.</li>
+        <li><span class="type-mono" style="color:var(--faint)">settle · 260 +40</span> The sheet rises 8px from 98% and lands, its light 40ms ahead of its shape.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> Closing: the sheet fades and sinks 4px, then the scrim follows 40ms behind.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: scrim and sheet appear and leave together.</p>
+    </div>
+
+    <div id="S2" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S2 · S12</span><span style="font-size:15.5px;font-weight:600">A step pushed inside a sheet</span></div>
+      <div style="position:relative;height:300px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);overflow:hidden;display:flex;align-items:center;justify-content:center">
+        <div style="width:340px;box-sizing:border-box;padding:18px 20px;display:flex;flex-direction:column;gap:10px;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:var(--radius-card);box-shadow:var(--shadow-dialog)">
+          <span style="font-family:var(--font-display);font-size:16px;font-weight:600">{{ s2.title }}</span>
+          <div style="display:grid;grid-template-rows:{{ s2.aRows }};opacity:{{ s2.aOp }};transition:{{ s2.aTr }}"><div style="overflow:hidden;display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:12px;font-weight:600;color:var(--label)">Role</span>
+            <span style="align-self:flex-start;padding:4px 12px;border-radius:var(--radius-pill);border:1px solid var(--accent-line);background:var(--accent-soft);font-size:12.5px;font-weight:600">Member · Network storage</span>
+            <span style="width:90%;height:9px;border-radius:var(--radius-pill);background:var(--surface-1)"></span><span style="width:70%;height:9px;margin-bottom:4px;border-radius:var(--radius-pill);background:var(--surface-1)"></span>
+          </div></div>
+          <div style="display:grid;grid-template-rows:{{ s2.bRows }};opacity:{{ s2.bOp }};transition:{{ s2.bTr }}"><div style="overflow:hidden">
+            <div style="border-radius:var(--radius-inner);border:1px solid var(--line-strong);overflow:hidden;margin-bottom:4px">
+              <div style="display:grid;grid-template-rows:{{ s2.cRows }};opacity:{{ s2.cOp }};background:{{ s2.cBg }};transition:{{ s2.cTr }}"><div style="overflow:hidden"><div style="padding:10px 12px;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid var(--line)"><span style="font-size:13px"><strong style="font-weight:600">Giving</strong> 3D printers to Rohan</span><span style="font-size:11.5px;font-weight:600;color:var(--accent-text)">New since you looked</span></div></div></div>
+              <div style="padding:10px 12px;display:flex;flex-direction:column;gap:3px"><span style="font-size:13px"><strong style="font-weight:600">Removing</strong> Member from Rohan</span><span style="font-size:11.5px;color:var(--muted)">Queued by Sam Iyer · 2h ago</span><span style="font-size:12.5px">“left the course”</span></div>
+            </div>
+          </div></div>
+          <div style="display:grid">
+            <span style="grid-area:1/1;display:flex;gap:8px;opacity:{{ s2.aOp }};transition:{{ s2.fTr }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Cancel</x-import><span style="display:inline-flex;transform:{{ s2.press }};transition:transform var(--duration-press) var(--ease-press)"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" hint-size="110px,34px">Give Member</x-import></span></span>
+            <span style="grid-area:1/1;display:flex;gap:8px;opacity:{{ s2.bOp }};transition:{{ s2.fTr }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Keep it</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" hint-size="150px,34px">{{ s2.go }}</x-import></span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s2.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">tint, then settle</span> The form fades first; the sheet's height settles to the step. The sheet itself never moves.</li>
+        <li><span class="type-mono" style="color:var(--faint)">settle + flash</span> A longer list: the new group settles in at the top and washes once into its accent tint.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint, then settle</span> Keep it: the reverse, and the form returns exactly as it was.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: each page of the sheet appears in place. Focus lands on Keep it.</p>
+    </div>
+
+    <div id="S3" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S3</span><span style="font-size:15.5px;font-weight:600">A phone sheet, held and let go</span></div>
+      <div style="height:300px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);display:flex;align-items:center;justify-content:center">
+        <div style="position:relative;width:170px;height:276px;border-radius:26px;border:1px solid var(--line-strong);background:var(--canvas);overflow:hidden">
+          <div style="position:absolute;inset:18px 14px;display:flex;flex-direction:column;gap:10px"><span style="width:60%;height:12px;border-radius:var(--radius-pill);background:var(--surface-2)"></span><span style="height:40px;border-radius:12px;background:var(--surface-0);border:1px solid var(--line)"></span><span style="height:40px;border-radius:12px;background:var(--surface-0);border:1px solid var(--line)"></span></div>
+          <div style="position:absolute;inset:0;background:color-mix(in oklch, var(--ground) 72%, transparent);opacity:{{ s3.scrimOp }};transition:{{ s3.scrimTr }}"></div>
+          <div style="position:absolute;left:0;right:0;bottom:0;height:180px;box-sizing:border-box;padding:10px 14px;display:flex;flex-direction:column;gap:10px;background:var(--surface-2);border-top:1px solid var(--line-strong);border-radius:20px 20px 0 0;transform:translateY({{ s3.y }});transition:{{ s3.tr }}">
+            <span style="align-self:center;width:36px;height:4px;border-radius:var(--radius-pill);background:var(--line-strong)"></span>
+            <span style="font-family:var(--font-display);font-size:14px;font-weight:600">Filters</span>
+            <span style="height:30px;border-radius:var(--radius-pill);border:1px solid var(--line)"></span><span style="height:30px;border-radius:var(--radius-pill);background:var(--accent)"></span>
+            <span style="position:absolute;left:50%;top:2px;width:26px;height:26px;margin-left:-13px;border-radius:var(--radius-pill);background:color-mix(in oklch, var(--ink) 30%, transparent);opacity:{{ s3.finger }};transition:opacity var(--duration-tint) var(--ease-tint)"></span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s3.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">settle · 260</span> A sheet enters from the edge it belongs to. The 10px cap is for the page; a sheet comes from outside it.</li>
+        <li><span class="type-mono" style="color:var(--faint)">1:1</span> Held, it follows the finger exactly, and the scrim thins with it.</li>
+        <li><span class="type-mono" style="color:var(--faint)">settle</span> Let go short of a third: back. Past a third, or a quick flick: it leaves, easing out.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: no travel; a drag past a third closes it in place. Busy: 7a, below.</p>
+    </div>
+
+    <div id="S4" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S4</span><span style="font-size:15.5px;font-weight:600">A status changes in place</span></div>
+      <div style="height:200px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);display:flex;align-items:center;padding:0 18px">
+        <div style="flex:1;display:flex;align-items:center;gap:16px;padding:14px 16px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)">
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:14.5px;font-weight:600">Laser cutter · Supervisor</span><span style="font-size:12.5px;color:var(--muted)">Laser Lab · given by you</span></span>
+          <span style="width:190px;flex:none;display:grid">
+            <span style="grid-area:1/1;display:flex;flex-direction:column;gap:2px;opacity:{{ s4.waitOp }};transition:{{ s4.wordTr }}"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><span style="width:7px;height:7px;flex:none"></span>Given</span><span style="padding-left:15px;font-size:12px;font-weight:600;color:var(--accent-text)">Waiting for you to send →</span><span style="padding-left:15px;font-size:11.5px;color:var(--faint)">He can't supervise yet</span></span>
+            <span style="grid-area:1/1;display:flex;flex-direction:column;gap:2px;opacity:{{ s4.sentOp }};transition:{{ s4.wordTr }}"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><span style="width:7px;height:7px;flex:none"></span>Sent</span><span style="padding-left:15px;font-size:12px;color:var(--faint)">Rohan can supervise now</span></span>
+            <span style="grid-area:1/1;align-self:start;margin-top:6px;width:7px;height:7px;border-radius:var(--radius-pill);background:{{ s4.dot }};box-shadow:{{ s4.ring }};transition:{{ s4.dotTr }}"></span>
+          </span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s4.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The words crossfade in their seat; the row's height is the taller of the two, so nothing shifts.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The dot changes colour where it sits.</li>
+        <li><span class="type-mono" style="color:var(--faint)">flash · bloom</span> Only when it went well: one ring of the new colour opens 9px from the dot and fades.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the new words and colour appear; no bloom. A status that changes off screen doesn't bloom when you scroll to it.</p>
+    </div>
+
+    <div id="S5" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S5</span><span style="font-size:15.5px;font-weight:600">A row leaves after something elsewhere</span></div>
+      <div style="height:240px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);padding:14px 16px;box-sizing:border-box">
+        <div style="border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0);overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 14px"><span style="flex:1;font-size:13.5px"><strong style="font-weight:600">Giving</strong> Bandsaw to Omar Haddad</span><span style="font-size:12px;color:var(--faint)">10:02</span></div>
+          <div style="display:grid;grid-template-rows:{{ s5.rows }};opacity:{{ s5.op }};transition:{{ s5.tr }}"><div style="overflow:hidden"><div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid var(--line)"><span style="flex:1;font-size:13.5px"><strong style="font-weight:600">Removing</strong> Member from Rohan Mehta</span><span style="width:150px;display:grid;text-align:right"><span style="grid-area:1/1;font-size:12px;color:var(--faint);opacity:{{ s5.aOp }};transition:opacity var(--duration-tint) var(--ease-tint)">09:14</span><span style="grid-area:1/1;font-size:12px;line-height:1.35;color:var(--muted);opacity:{{ s5.bOp }};transition:opacity var(--duration-tint) var(--ease-tint)">Cancelled by Sam · nothing will be sent</span></span></div></div></div>
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid var(--line)"><span style="flex:1;font-size:13.5px"><strong style="font-weight:600">Giving</strong> 3D printers to Wei Chen</span><span style="font-size:12px;color:var(--faint)">08:40</span></div>
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid var(--line)"><span style="flex:1;font-size:13.5px"><strong style="font-weight:600">Removing</strong> Studio from Lena Brandt</span><span style="font-size:12px;color:var(--faint)">08:12</span></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s5.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">tint</span> Changed by someone else: the row keeps its seat and its seat says what happened (Moment 2).</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint, then settle</span> On the next read it fades first, then its gap closes and the rows below settle up.</li>
+        <li><span class="type-mono" style="color:var(--faint)">the reader</span> If the pointer or focus is in the list, the gap waits until it leaves, so nothing moves under the reader.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the row is gone on the next read.</p>
+    </div>
+
+    <div id="S6" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S6</span><span style="font-size:15.5px;font-weight:600">Success lifts; failure stays still</span></div>
+      <div style="height:200px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:16px;box-sizing:border-box">
+        <div style="padding:14px;border-radius:var(--radius-inner);background:var(--surface-2);border:1px solid var(--line-strong);display:flex;flex-direction:column;justify-content:center">
+          <div style="display:flex;flex-direction:column;gap:5px;opacity:{{ s6.op }};transform:{{ s6.tf }};transition:{{ s6.tr }}">
+            <span style="display:inline-flex;align-items:center;gap:9px;font-family:var(--font-display);font-size:18px;font-weight:600"><span style="width:8px;height:8px;border-radius:var(--radius-pill);background:var(--healthy);box-shadow:{{ s6.ring }};transition:{{ s6.ringTr }}"></span>Given</span>
+            <span style="font-size:13px;line-height:1.45">Rohan can use the laser cutter on his own now.</span>
+          </div>
+        </div>
+        <div style="padding:14px;border-radius:var(--radius-inner);background:var(--surface-2);border:1px solid var(--line-strong);display:flex;flex-direction:column;justify-content:center">
+          <div style="display:flex;flex-direction:column;gap:5px;opacity:{{ s6.op }};transition:{{ s6.errTr }}">
+            <span style="display:inline-flex;align-items:center;gap:9px;font-family:var(--font-display);font-size:18px;font-weight:600"><span style="width:8px;height:8px;border-radius:var(--radius-pill);background:var(--danger)"></span>Not given</span>
+            <span style="font-size:13px;line-height:1.45">Zitadel refused it. Nothing was changed.</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s6.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">settle + bloom</span> Success rises 6px into its seat and its dot blooms once. The gentle lift.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint only</span> Failure appears where it is, at once, with a steady dot. No shake, no bloom, no breathing: steadiness reads as "this is under control".</li>
+        <li><span class="type-mono" style="color:var(--faint)">focus</span> Both take focus (role=status, alert for failure), so the words are heard as they land.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: both appear in place; colour and words still differ.</p>
+    </div>
+
+    <div id="S7" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S7</span><span style="font-size:15.5px;font-weight:600">Loading becomes content</span></div>
+      <div style="position:relative;height:240px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);padding:14px 16px;box-sizing:border-box">
+        <div style="position:absolute;inset:14px 16px;display:flex;flex-direction:column;gap:10px;opacity:{{ s7.skOp }};transition:{{ s7.skTr }}">
+          <sc-for list="{{ s7.bars }}" as="b" hint-placeholder-count="4"><span class="breathe" style="height:40px;border-radius:12px;background:var(--surface-1)"></span></sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ s7.rows }}" as="r" hint-placeholder-count="4"><div style="height:40px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface-0);opacity:{{ r.op }};transform:{{ r.tf }};transition:{{ r.tr }}"><span style="flex:1;font-size:13.5px;font-weight:600">{{ r.name }}</span><span style="font-size:12px;color:var(--faint)">{{ r.sub }}</span></div></sc-for>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s7.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">wait 200</span> The skeleton shows only if the read takes longer than 200ms, so fast reads never flicker.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint</span> The skeleton fades first. No crossfade: two layers at once reads as a stutter.</li>
+        <li><span class="type-mono" style="color:var(--faint)">arrive</span> Then the rows arrive, 8px, 40ms apart, five steps at most.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the skeleton holds at full strength; the rows replace it.</p>
+    </div>
+
+    <div id="S8" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S8 · S9</span><span style="font-size:15.5px;font-weight:600">Everything you touch answers</span></div>
+      <div style="height:240px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;box-sizing:border-box">
+        <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label" style="color:var(--label)">Row</span><div style="padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:{{ s8.rowBg }};transition:background-color var(--duration-tint) var(--ease-tint);font-size:13.5px">Aanya Rao</div></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label" style="color:var(--label)">Name link</span><span style="padding:10px 0;font-size:13.5px;font-weight:600;color:{{ s8.linkInk }};text-decoration:underline;text-underline-offset:3px;text-decoration-color:{{ s8.linkLine }};transition:color var(--duration-tint) var(--ease-tint), text-decoration-color var(--duration-tint) var(--ease-tint)">Rohan Mehta</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label" style="color:var(--label)">Nav item</span><span style="align-self:flex-start;display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--radius-pill);background:{{ s8.navBg }};transform:{{ s8.navTf }};transition:background-color var(--duration-tint) var(--ease-tint), transform var(--duration-press) var(--ease-press);font-size:13.5px"><span style="width:5px;height:5px;border-radius:var(--radius-pill);background:var(--muted)"></span>People</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><span class="type-label" style="color:var(--label)">Focus ring</span><span style="align-self:flex-start;display:inline-flex;border-radius:var(--radius-pill);box-shadow:{{ s9.ring }};transition:{{ s9.tr }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Approve</x-import></span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s8.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">tint</span> Hover is colour only, everywhere: rows, cards (their line), links (ink to accent, the underline tints in), nav.</li>
+        <li><span class="type-mono" style="color:var(--faint)">press</span> Controls press 3%: buttons, chips, nav items, segments. Rows and cards never scale; they darken one step.</li>
+        <li><span class="type-mono" style="color:var(--faint)">instant · tint out</span> S9: focus appears at once, because a keyboard user is waiting on it, and fades on blur.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: hover and focus as drawn; press keeps its scale (3%, under the finger, no travel).</p>
+    </div>
+
+    <div id="S10" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S10</span><span style="font-size:15.5px;font-weight:600">A choice glides to where you put it</span></div>
+      <div style="height:200px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);display:flex;flex-direction:column;justify-content:center;gap:34px;padding:0 26px">
+        <div style="position:relative;display:grid;grid-template-columns:repeat(3,1fr);height:40px;box-sizing:border-box;padding:3px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:var(--surface-0)">
+          <span style="position:absolute;top:3px;bottom:3px;left:{{ s10.thumb }};width:calc((100% - 6px) / 3);border-radius:var(--radius-pill);background:var(--accent);transition:left var(--duration-settle) var(--ease-settle)"></span>
+          <sc-for list="{{ s10.seg }}" as="l" hint-placeholder-count="3"><span style="position:relative;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:{{ l.color }};transition:color var(--duration-tint) var(--ease-tint)">{{ l.t }}</span></sc-for>
+        </div>
+        <div style="position:relative;display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line)">
+          <sc-for list="{{ s10.tabs }}" as="l" hint-placeholder-count="3"><span style="padding:10px 0;text-align:center;font-size:14px;font-weight:600;color:{{ l.color }};transition:color var(--duration-tint) var(--ease-tint)">{{ l.t }}</span></sc-for>
+          <span style="position:absolute;bottom:-1px;height:2px;left:{{ s10.bar }};width:calc(100% / 3);border-radius:2px;background:var(--accent);transition:left var(--duration-settle) var(--ease-settle)"></span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s10.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">settle</span> Segmented's fill and Tabs' underline glide to the choice. The cap is for content; a control's own indicator goes where you sent it.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint</span> The labels change colour as it passes. The tab's content swaps in place, with no slide.</li>
+        <li><span class="type-mono" style="color:var(--faint)">native</span> Select stays the browser's own and doesn't animate.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the fill and underline jump.</p>
+    </div>
+
+    <div id="S11" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S11</span><span style="font-size:15.5px;font-weight:600">A screen's first paint</span></div>
+      <div style="height:240px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);display:flex;overflow:hidden">
+        <div style="width:74px;flex:none;background:var(--rail);border-right:1px solid var(--line);padding:14px 10px;box-sizing:border-box;display:flex;flex-direction:column;gap:9px"><span style="width:28px;height:8px;border-radius:var(--radius-pill);background:var(--accent)"></span><span style="height:7px;border-radius:var(--radius-pill);background:var(--surface-2)"></span><span style="height:7px;border-radius:var(--radius-pill);background:var(--surface-2)"></span><span style="height:7px;border-radius:var(--radius-pill);background:var(--surface-2)"></span></div>
+        <div style="flex:1;display:flex;flex-direction:column">
+          <div style="height:30px;border-bottom:1px solid var(--line)"></div>
+          <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;flex-direction:column;gap:6px;opacity:{{ s11.hOp }};transition:{{ s11.hTr }}"><span style="font-family:var(--font-display);font-size:19px;font-weight:600">People</span><span style="width:75%;height:7px;border-radius:var(--radius-pill);background:var(--surface-1)"></span></div>
+            <sc-for list="{{ s11.cards }}" as="c" hint-placeholder-count="3"><div style="height:36px;border-radius:12px;border:1px solid var(--line);background:var(--surface-0);opacity:{{ c.op }};transform:{{ c.tf }};transition:{{ c.tr }}"></div></sc-for>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s11.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)">
+        <li><span class="type-mono" style="color:var(--faint)">none</span> The shell never moves. Route transitions stay banned.</li>
+        <li><span class="type-mono" style="color:var(--faint)">tint · 120</span> The page's own header tints in.</li>
+        <li><span class="type-mono" style="color:var(--faint)">arrive</span> Its first cards follow, 40ms apart. Only what's above the fold, only when you navigated here: never on back, a refresh or a filter.</li>
+      </ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the page is simply there.</p>
+    </div>
+
+    <div class="card" style="padding:22px;display:flex;flex-direction:column;gap:12px;background:var(--surface-0)">
+      <span class="type-label" style="color:var(--label)">S12 · the undoing flow</span>
+      <p style="margin:0;font-size:14px;line-height:1.6;text-wrap:pretty">The ask arriving, the longer list and Keep it are S2. Going ahead is press, the button's spinner, then Moment 1. A cancelled row leaving Pending changes is S5.</p>
+      <a href="flow-cancel-queued.dc.html" style="font-size:13.5px;font-weight:600">The whole flow, frame by frame →</a>
+    </div>
+
+  </div>
+</section>
+
+<section data-screen-label="Delight" style="display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px"><span class="type-label" style="color:var(--label)">Added by design · owner, 17 Oct</span><h2 class="type-section-title" style="margin:0">Six moments of delight</h2><p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">The places an operator feels something: finishing, choosing, committing, checking. Each is built only from the six movements, travels 6px at most, and has a still form. None loops, and none plays for something the reader didn't do.</p></div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start">
+    <div id="S13" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S13</span><span style="font-size:15.5px;font-weight:600">Everything sent</span></div>
+      <div style="position:relative;height:260px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);overflow:hidden;">
+        <div style="position:absolute;inset:14px 16px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="flex:1;font-family:var(--font-display);font-size:16px;font-weight:600">Pending changes</span><span style="display:inline-flex;opacity:{{ s13.btnOp }};transform:{{ s13.press }};transition:{{ s13.btnTr }}"><x-import component-from-global-scope="Syndra.Button" variant="accent" size="sm" is-pending="{{ s13.busy }}" hint-size="130px,34px">Send 3 changes</x-import></span></div>
+          <div style="display:grid;grid-template-rows:{{ s13.rows }};opacity:{{ s13.listOp }};transition:{{ s13.listTr }}"><div style="overflow:hidden"><div style="border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)">
+            <div style="padding:10px 14px;font-size:13px"><strong style="font-weight:600">Giving</strong> Supervisor to Rohan Mehta</div>
+            <div style="padding:10px 14px;font-size:13px;border-top:1px solid var(--line)"><strong style="font-weight:600">Giving</strong> Bandsaw to Omar Haddad</div>
+            <div style="padding:10px 14px;font-size:13px;border-top:1px solid var(--line)"><strong style="font-weight:600">Removing</strong> Studio from Lena Brandt</div>
+          </div></div></div>
+          <div style="display:grid;grid-template-rows:{{ s13.doneRows }};opacity:{{ s13.doneOp }};transform:{{ s13.doneTf }};transition:{{ s13.doneTr }}"><div style="overflow:hidden"><div style="display:flex;flex-direction:column;gap:4px;padding:6px 2px">
+            <span style="display:inline-flex;align-items:center;gap:10px;font-family:var(--font-display);font-size:18px;font-weight:600"><span style="width:8px;height:8px;border-radius:var(--radius-pill);background:var(--healthy);box-shadow:{{ s13.ring }};transition:{{ s13.ringTr }}"></span>Everything has reached Zitadel</span>
+            <span style="padding-left:18px;font-size:12.5px;color:var(--faint)">3 changes sent at 11:20 · nothing is waiting for you</span>
+          </div></div></div>
+        </div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s13.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">press · breathe</span> Send presses 3% and shows its own busy state.</li><li><span class="type-mono" style="color:var(--faint)">tint, then settle</span> The sent rows fade first, then the list folds.</li><li><span class="type-mono" style="color:var(--faint)">settle + bloom</span> One line rises 6px into its place and its lime dot blooms once. The button fades: there's nothing left to send.</li></ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the line replaces the list. Only after a send you made: a queue that empties because others sent it just shows the line.</p>
+    </div>
+    <div id="S14" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S14</span><span style="font-size:15.5px;font-weight:600">Daylight</span></div>
+      <div style="position:relative;height:260px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);overflow:hidden;">
+        <div data-theme="dark" style="position:absolute;inset:0;background:var(--ground);color:var(--ink)">{{ dayDark }}</div>
+        <div data-theme="light" style="position:absolute;inset:0;background:var(--ground);color:var(--ink);opacity:{{ s14.lightOp }};transition:{{ s14.tr }}">{{ dayLight }}</div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s14.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">settle · 260</span> Every colour crossfades at once: ground, surfaces, lines, ink. Nothing moves.</li><li><span class="type-mono" style="color:var(--faint)">settle</span> The toggle's own thumb glides to the new side (S10).</li><li><span class="type-mono" style="color:var(--faint)">both ways</span> Dark is home; going back is the same 260ms, so neither direction feels like the default being broken.</li></ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the theme switches instantly.</p>
+    </div>
+    <div id="S15" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S15</span><span style="font-size:15.5px;font-weight:600">Choosing a role</span></div>
+      <div style="position:relative;height:280px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);overflow:hidden;">
+        <div style="position:absolute;inset:14px 16px;display:flex;flex-direction:column;gap:10px">
+          <div style="height:30px;display:flex;align-items:center;gap:8px"><span style="font-size:12px;font-weight:600;color:var(--label);white-space:nowrap">Asking for</span><span style="display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 12px;border-radius:var(--radius-pill);border:1px solid var(--accent-line);background:var(--accent-soft);font-size:12.5px;font-weight:600;white-space:nowrap;opacity:{{ s15.chipOp }};transform:{{ s15.chipTf }};transition:{{ s15.chipTr }}">Staff · Network storage<span style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);background:{{ s15.xBg }};color:var(--muted);transition:background-color var(--duration-tint) var(--ease-tint)">×</span></span></div>
+          <div style="border-radius:var(--radius-inner);border:1px solid var(--line)">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 12px"><span style="flex:1;font-size:13.5px;font-weight:600">Network storage</span><span style="font-size:12px;font-weight:600;color:{{ s15.countInk }};transition:color var(--duration-tint) var(--ease-tint)">{{ s15.count }}</span></div>
+            <div style="display:flex;flex-direction:column;gap:6px;padding:0 10px 10px 30px">
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;background:var(--surface-0)"><span style="width:16px;height:16px;flex:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong);background:var(--surface-2);color:var(--faint);font-size:10px;font-weight:700">✓</span><span style="flex:1;font-size:13px;color:var(--muted)">Member</span><span style="font-size:11.5px;font-weight:600;color:var(--muted)">You have this</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;border:1px solid {{ s15.rowEdge }};background:{{ s15.rowBg }};transition:background-color var(--duration-tint) var(--ease-tint), border-color var(--duration-tint) var(--ease-tint)"><span style="width:16px;height:16px;flex:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid {{ s15.seatEdge }};background:{{ s15.seatBg }};transition:background-color var(--duration-tint) var(--ease-tint), border-color var(--duration-tint) var(--ease-tint)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent-ink);transform:{{ s15.dotTf }};transition:{{ s15.dotTr }}"></span></span><span style="flex:1;font-size:13px;font-weight:600">Staff</span></div>
+            </div>
+          </div>
+        </div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s15.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">press · tint</span> The row darkens under the finger; the seat fills with accent and its dot grows in from the centre (settle), 40ms behind the fill.</li><li><span class="type-mono" style="color:var(--faint)">tint + settle</span> The chip tints in its reserved seat, rising 4px. The fold's count tints to "1 chosen".</li><li><span class="type-mono" style="color:var(--faint)">tint</span> Removing the chip runs it backwards, quicker. The seat empties last.</li></ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the seat, chip and count change at once.</p>
+    </div>
+    <div id="S16" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S16</span><span style="font-size:15.5px;font-weight:600">Typing the name to confirm</span></div>
+      <div style="position:relative;height:240px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);overflow:hidden;">
+        <div style="position:absolute;inset:18px 18px;display:flex;flex-direction:column;gap:10px">
+          <span style="font-size:13px;line-height:1.5">Type <span class="type-mono" style="font-weight:600">kiosk</span> to remove this account from TrueNAS.</span>
+          <div style="height:44px;box-sizing:border-box;display:flex;align-items:center;padding:0 14px;border-radius:14px;border:1.5px solid {{ s16.edge }};background:var(--surface-0);transition:border-color var(--duration-tint) var(--ease-tint)"><span class="type-mono" style="font-size:14px">{{ s16.typed }}</span><span style="width:1.5px;height:18px;margin-left:1px;background:var(--ink)"></span></div>
+          <div style="display:grid;justify-items:start;margin-top:4px">
+            <span style="grid-area:1/1;display:inline-flex;opacity:{{ s16.offOp }};transition:opacity var(--duration-tint) var(--ease-tint)"><x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" disabled="{{ true }}" hint-size="130px,40px">Remove kiosk</x-import></span>
+            <span style="grid-area:1/1;display:inline-flex;opacity:{{ s16.onOp }};transition:opacity var(--duration-tint) var(--ease-tint)"><x-import component-from-global-scope="Syndra.Button" variant="dangerConfirm" hint-size="130px,40px">Remove kiosk</x-import></span>
+          </div>
+        </div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s16.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">tint</span> Each matching letter warms the field's border one step toward danger. A wrong letter returns it to neutral: no shake, no red text.</li><li><span class="type-mono" style="color:var(--faint)">tint · on the last letter</span> The confirm tints from disabled to live. The only signal is the button waking.</li><li><span class="type-mono" style="color:var(--faint)">still</span> Nothing about it is playful: it warms because what it unlocks is serious.</li></ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the border holds neutral; the button changes at once on the last letter.</p>
+    </div>
+    <div id="S17" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S17</span><span style="font-size:15.5px;font-weight:600">Refreshed</span></div>
+      <div style="position:relative;height:200px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);overflow:hidden;">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 22px">
+          <div style="flex:1;display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)">
+            <span style="width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--healthy);box-shadow:{{ s17.ring }};transition:{{ s17.ringTr }}"></span>
+            <span style="flex:1;display:grid"><span style="grid-area:1/1;font-size:13.5px;color:var(--muted);opacity:{{ s17.oldOp }};transition:opacity var(--duration-tint) var(--ease-tint)">Read from Zitadel 4 min ago</span><span style="grid-area:1/1;font-size:13.5px;color:var(--ink);opacity:{{ s17.newOp }};transition:opacity var(--duration-tint) var(--ease-tint)">Read from Zitadel just now</span></span>
+            <span style="display:inline-flex;transform:{{ s17.press }};transition:transform var(--duration-press) var(--ease-press)"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" is-pending="{{ s17.busy }}" hint-size="90px,34px">Refresh</x-import></span>
+          </div>
+        </div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s17.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">press · busy</span> Refresh presses and shows its own busy state. The line keeps the old age: nothing new has been read yet.</li><li><span class="type-mono" style="color:var(--faint)">tint</span> When the read lands, "just now" crossfades in.</li><li><span class="type-mono" style="color:var(--faint)">flash · bloom</span> The freshness dot blooms once in its own colour. Rows that changed tint; rows that didn't stay still (§2.10).</li></ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the words change; no bloom. A background read never blooms.</p>
+    </div>
+    <div id="S18" class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12px;font-weight:600">S18</span><span style="font-size:15.5px;font-weight:600">Copied</span></div>
+      <div style="position:relative;height:200px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--ground);overflow:hidden;">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 22px">
+          <div style="flex:1;display:flex;align-items:center;gap:14px;min-height:52px;padding:8px 10px 8px 16px;border-radius:var(--radius-inner);border:1px solid var(--line);background:var(--surface-0)">
+            <span class="type-mono" style="flex:1;font-size:13.5px">smb://truenas.local/home</span>
+            <span style="width:96px;display:grid;justify-items:end">
+              <span style="grid-area:1/1;display:inline-flex;opacity:{{ s18.btnOp }};transform:{{ s18.press }};transition:opacity var(--duration-tint) var(--ease-tint), transform var(--duration-press) var(--ease-press)"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="70px,34px">Copy</x-import></span>
+              <span role="status" style="grid-area:1/1;align-self:center;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;opacity:{{ s18.okOp }};transition:opacity var(--duration-tint) var(--ease-tint)"><span style="width:7px;height:7px;border-radius:var(--radius-pill);background:var(--healthy);box-shadow:{{ s18.ring }};transition:{{ s18.ringTr }}"></span>Copied</span>
+            </span>
+          </div>
+        </div></div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)"><span style="width:6px;height:6px;border-radius:var(--radius-pill);background:var(--accent)"></span>{{ s18.cap }}</div>
+      <ol style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;line-height:1.5;color:var(--muted)"><li><span class="type-mono" style="color:var(--faint)">press</span> Copy presses 3%.</li><li><span class="type-mono" style="color:var(--faint)">tint + bloom</span> It crossfades to a lime dot and "Copied" in the same seat; the dot blooms once.</li><li><span class="type-mono" style="color:var(--faint)">tint · after 900</span> Then it returns to Copy (#85). Where the browser can't copy, the control reads Select and none of this plays.</li></ol>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:var(--faint)">Still form: the word swaps for 900ms; no bloom.</p>
+    </div>
+
+  </div>
+</section>
+
+<section data-screen-label="Answers" style="display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:900px"><span class="type-label" style="color:var(--label)">§2 · where the board disagreed with itself</span><h2 class="type-section-title" style="margin:0">Settled</h2></div>
+  <div class="card" style="padding:4px 0">
+    <sc-for list="{{ answers }}" as="a" hint-placeholder-count="11">
+      <div class="{{ a.divider }}" style="display:grid;grid-template-columns:44px 260px minmax(0,1fr);gap:0 22px;padding:15px 22px;align-items:baseline">
+        <span class="type-mono" style="font-size:12.5px;color:var(--accent-text)">{{ a.n }}</span>
+        <span style="font-size:14.5px;font-weight:600;text-wrap:pretty">{{ a.q }}</span>
+        <span style="font-size:14px;line-height:1.6;color:var(--muted);text-wrap:pretty">{{ a.a }}</span>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;speed&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;Full&quot;, &quot;Half&quot;, &quot;Quarter&quot;], &quot;default&quot;: &quot;Full&quot;, &quot;tsType&quot;: &quot;\&quot;Full\&quot; | \&quot;Half\&quot; | \&quot;Quarter\&quot;&quot;}, &quot;reducedMotion&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+class Component extends DCLogic {
+  static SEQ = {
+    s1: { c: 4400, s: [0, 900, 3200] },
+    s2: { c: 8000, s: [0, 1300, 1500, 3700, 5900] },
+    s3: { c: 6600, s: [0, 700, 2200, 2700, 3700, 4500, 5600] },
+    s4: { c: 5200, s: [0, 2000] },
+    s5: { c: 6200, s: [0, 1200, 3200, 3340, 5600] },
+    s6: { c: 4400, s: [0, 700] },
+    s7: { c: 5400, s: [0, 300, 1900, 2020] },
+    s8: { c: 3800, s: [0, 700, 1700, 1950, 2900] },
+    s9: { c: 3800, s: [0, 900, 2600] },
+    s10: { c: 3600, s: [0, 1200, 2400] },
+    s11: { c: 4600, s: [0, 500, 620] },
+    s13: { c: 6800, s: [0, 900, 1100, 2800, 3060] },
+    s14: { c: 4400, s: [0, 2200] },
+    s15: { c: 6000, s: [0, 900, 1100, 3600, 3900] },
+    s16: { c: 5400, s: [0, 800, 1050, 1300, 1550, 1800] },
+    s17: { c: 5600, s: [0, 900, 1100, 2600] },
+    s18: { c: 4200, s: [0, 900, 1100, 2000] },
+  };
+  state = { ph: {} };
+  constructor(props) { super(props); this.rootData = [{ key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } }]; }
+  componentDidMount() { this.t = 0; this.last = performance.now(); this.iv = setInterval(() => this.tick(), 50); }
+  componentWillUnmount() { clearInterval(this.iv); }
+  rate() { const s = this.props.speed; return s === "Quarter" ? 0.25 : s === "Half" ? 0.5 : 1; }
+  tick() {
+    const now = performance.now(); this.t += (now - this.last) * this.rate(); this.last = now;
+    const seq = Component.SEQ, ph = {}; let changed = false;
+    for (const k in seq) { const d = seq[k], m = this.t % d.c; let i = 0; d.s.forEach((v, j) => { if (m >= v) i = j; }); ph[k] = i; if (this.state.ph[k] !== i) changed = true; }
+    if (changed) this.setState({ ph });
+  }
+  renderVals() {
+    const P = this.state.ph, g = (k) => P[k] || 0, rm = !!this.props.reducedMotion, rate = this.rate();
+    const d = (ms) => (rm ? "1ms" : Math.round(ms / rate) + "ms"), dl = (ms) => (rm ? "0ms" : Math.round(ms / rate) + "ms");
+    const TINT = "var(--duration-tint) var(--ease-tint)", SETTLE = "var(--duration-settle) var(--ease-settle)", FLASH = "var(--duration-flash) var(--ease-flash)", ARRIVE = "var(--duration-arrive) var(--ease-arrive)";
+    const ENTER = `grid-template-rows ${SETTLE} ${dl(120)}, opacity ${TINT} ${dl(260)}`, LEAVE = `opacity ${TINT}, grid-template-rows ${SETTLE} ${dl(120)}`;
+    const BLOOM0 = (c) => `0 0 0 0 color-mix(in oklch, var(--${c}) 60%, transparent)`, BLOOM1 = "0 0 0 9px transparent";
+
+    const p1 = g("s1");
+    const s1 = { scrimOp: p1 === 1 ? 1 : 0, scrimTr: p1 === 1 ? `opacity ${TINT}` : p1 === 2 ? `opacity ${TINT} ${dl(40)}` : "none",
+      dOp: p1 === 1 ? 1 : 0, dTf: p1 === 1 ? "translateY(0) scale(1)" : p1 === 2 ? "translateY(4px) scale(1)" : "translateY(8px) scale(0.98)",
+      dTr: p1 === 1 ? `opacity ${TINT} ${dl(40)}, transform ${SETTLE} ${dl(80)}` : p1 === 2 ? `opacity ${TINT}, transform ${TINT}` : "none",
+      cap: ["Closed", "Opening: the scrim tints, then the sheet rises 8px and lands", "Closing: the sheet fades and sinks first; the scrim follows"][p1] };
+
+    const p2 = g("s2"), form = p2 <= 1 || p2 === 4, step = p2 === 2 || p2 === 3;
+    const s2 = { title: step ? "This cancels a change that's waiting" : "Give Rohan Mehta a role",
+      aRows: form ? "1fr" : "0fr", aOp: form ? 1 : 0, aTr: form ? ENTER : LEAVE,
+      bRows: step ? "1fr" : "0fr", bOp: step ? 1 : 0, bTr: step ? ENTER : LEAVE,
+      cRows: p2 === 3 || p2 === 4 ? "1fr" : "0fr", cOp: p2 === 3 || p2 === 4 ? 1 : 0,
+      cBg: p2 === 3 || p2 === 4 ? "var(--accent-soft)" : "color-mix(in oklch, var(--accent) 32%, transparent)",
+      cTr: p2 === 3 ? `grid-template-rows ${SETTLE}, opacity ${TINT} ${dl(140)}, background-color ${FLASH} ${dl(300)}` : "none",
+      fTr: `opacity ${TINT} ${form || step ? dl(260) : "0ms"}`, press: p2 === 1 ? "scale(0.97)" : "scale(1)", go: p2 === 3 ? "Cancel both and give" : "Cancel it and give",
+      cap: ["The form", "Pressing Give Member", "Refused with one waiting change: the form fades, the sheet settles to the step", "Asked again with one more: it settles in at the top and washes once", "Keep it: the step fades, the form returns as it was"][p2] };
+
+    const p3 = g("s3");
+    const s3 = { y: ["110%", "0px", "34px", "0px", "120px", "110%", "110%"][p3],
+      tr: ["none", `transform ${SETTLE}`, `transform ${d(400)} linear`, `transform ${SETTLE}`, `transform ${d(700)} linear`, `transform var(--duration-settle) var(--ease-tint)`, "none"][p3],
+      scrimOp: [0, 1, 0.82, 1, 0.4, 0, 0][p3], scrimTr: ["none", `opacity ${TINT}`, `opacity ${d(400)} linear`, `opacity ${TINT}`, `opacity ${d(700)} linear`, `opacity ${TINT}`, "none"][p3],
+      finger: p3 === 2 || p3 === 4 ? 1 : 0,
+      cap: ["Closed", "Opens: it rises from the bottom edge and lands", "Held: it follows the finger, 1:1", "Let go short of a third: it settles back", "A longer drag: the page shows through", "Let go past a third: it leaves, easing out", "Gone"][p3] };
+
+    const p4 = g("s4");
+    const s4 = { waitOp: p4 === 0 ? 1 : 0, sentOp: p4 === 1 ? 1 : 0, wordTr: p4 === 1 ? `opacity ${TINT}` : "none",
+      dot: p4 === 1 ? "var(--healthy)" : "var(--warn)", ring: p4 === 1 ? BLOOM1 : BLOOM0("healthy"),
+      dotTr: p4 === 1 && !rm ? `background-color ${TINT}, box-shadow ${FLASH} ${dl(120)}` : "none",
+      cap: ["Given, waiting for you to send", "Sent while you watch: the words cross, the dot turns, then blooms once"][p4] };
+
+    const p5 = g("s5");
+    const s5 = { rows: p5 === 3 ? "0fr" : "1fr", op: p5 === 2 || p5 === 3 ? 0 : 1, tr: p5 === 2 ? `opacity ${TINT}` : p5 === 3 ? `grid-template-rows ${SETTLE}` : "none",
+      aOp: p5 === 0 || p5 === 4 ? 1 : 0, bOp: p5 === 1 || p5 === 2 || p5 === 3 ? 1 : 0,
+      cap: ["Pending changes, reading", "Sam cancels it from his own dialog: the row keeps its seat and says so", "The next read: the row fades first", "Then its gap closes and the rows below settle up", "Reading on"][p5] };
+
+    const p6 = g("s6"), on6 = p6 === 1;
+    const s6 = { op: on6 ? 1 : 0, tf: on6 ? "translateY(0)" : "translateY(6px)", tr: on6 ? `opacity ${TINT}, transform ${SETTLE}` : "none",
+      ring: on6 ? BLOOM1 : BLOOM0("healthy"), ringTr: on6 && !rm ? `box-shadow ${FLASH} ${dl(200)}` : "none", errTr: on6 ? `opacity ${TINT}` : "none",
+      cap: ["Working", "The two outcomes land: one lifts and blooms, the other is simply there"][p6] };
+
+    const p7 = g("s7");
+    const s7 = { skOp: p7 === 1 ? 1 : 0, skTr: p7 === 1 || p7 === 2 ? `opacity ${TINT}` : "none", bars: [1, 2, 3, 4],
+      rows: [["Aanya Rao", "3 roles"], ["Omar Haddad", "1 role"], ["Priya Nair", "4 roles"], ["Rohan Mehta", "3 roles"]].map(([name, sub], i) => ({ name, sub, op: p7 === 3 ? 1 : 0, tf: p7 === 3 ? "translateY(0)" : "translateY(8px)", tr: p7 === 3 ? `opacity ${ARRIVE} ${dl(i * 40)}, transform ${ARRIVE} ${dl(i * 40)}` : "none" })),
+      cap: ["Reading: nothing shows for the first 200ms", "Still reading: the skeleton tints in and breathes", "The read lands: the skeleton fades first", "Then the rows arrive, 40ms apart"][p7] };
+
+    const p8 = g("s8"), hov = p8 >= 1 && p8 <= 3, prs = p8 === 2;
+    const s8 = { rowBg: prs ? "var(--surface-2)" : hov ? "var(--hover)" : "var(--surface-0)", linkInk: hov ? "var(--accent-text)" : "var(--ink)", linkLine: hov ? "var(--accent-text)" : "transparent",
+      navBg: hov ? "var(--hover)" : "transparent", navTf: prs ? "scale(0.97)" : "scale(1)",
+      cap: ["At rest", "Pointer over: colour only", "Pressed: the nav item scales 3%; the row darkens one step", "Released", "At rest"][p8] };
+    const p9 = g("s9");
+    const s9 = { ring: p9 === 1 ? "0 0 0 2px var(--ground), 0 0 0 4px var(--focus-ring)" : "0 0 0 2px var(--ground), 0 0 0 4px transparent", tr: p9 === 2 ? `box-shadow ${TINT}` : "none" };
+
+    const i10 = g("s10");
+    const s10 = { thumb: `calc(${i10} * (100% - 6px) / 3 + 3px)`, bar: `calc(${i10} * 100% / 3)`,
+      seg: ["A week", "A month", "End of term"].map((t, i) => ({ t, color: i === i10 ? "var(--accent-ink)" : "var(--muted)" })),
+      tabs: ["Grants", "People", "History"].map((t, i) => ({ t, color: i === i10 ? "var(--ink)" : "var(--muted)" })),
+      cap: ["A week, then Grants", "A month, then People", "End of term, then History"][i10] };
+
+    const p11 = g("s11");
+    const s11 = { hOp: p11 >= 1 ? 1 : 0, hTr: p11 >= 1 ? `opacity ${TINT}` : "none",
+      cards: [0, 1, 2].map(i => ({ op: p11 === 2 ? 1 : 0, tf: p11 === 2 ? "translateY(0)" : "translateY(8px)", tr: p11 === 2 ? `opacity ${ARRIVE} ${dl(i * 40)}, transform ${ARRIVE} ${dl(i * 40)}` : "none" })),
+      cap: ["The shell is already there, and stays still", "The page's own header tints in", "Its first cards arrive, 40ms apart"][p11] };
+
+    const p13 = g("s13"), sent = p13 >= 3, fold = p13 >= 4;
+    const s13 = { press: p13 === 1 ? "scale(0.97)" : "scale(1)", busy: p13 === 2, btnOp: sent ? 0 : 1, btnTr: sent ? `opacity ${TINT}, transform var(--duration-press) var(--ease-press)` : "transform var(--duration-press) var(--ease-press)",
+      rows: fold ? "0fr" : "1fr", listOp: sent ? 0 : 1, listTr: p13 === 3 ? `opacity ${TINT}` : p13 === 4 ? `grid-template-rows ${SETTLE}` : "none",
+      doneRows: fold ? "1fr" : "0fr", doneOp: fold ? 1 : 0, doneTf: fold ? "translateY(0)" : "translateY(6px)", doneTr: fold ? `grid-template-rows ${SETTLE}, opacity ${TINT} ${dl(120)}, transform ${SETTLE} ${dl(120)}` : "none",
+      ring: fold ? BLOOM1 : BLOOM0("healthy"), ringTr: fold && !rm ? `box-shadow ${FLASH} ${dl(360)}` : "none",
+      cap: ["Three changes waiting", "Pressing Send 3 changes", "Sending", "Zitadel confirms: the rows fade first", "The list folds; the line rises into its place and blooms"][p13] };
+    const p14 = g("s14");
+    const s14 = { lightOp: p14 === 1 ? 1 : 0, tr: `opacity var(--duration-settle) var(--ease-tint)`, cap: ["Dark, home", "Daylight: every colour crossfades; nothing moves"][p14] };
+    const p15 = g("s15"), chosen = p15 === 2 || p15 === 3;
+    const s15 = { rowBg: p15 === 1 ? "var(--surface-2)" : chosen ? "var(--accent-soft)" : "transparent", rowEdge: chosen ? "var(--accent-line)" : "transparent",
+      seatEdge: chosen ? "var(--accent)" : "var(--line-strong)", seatBg: chosen ? "var(--accent)" : "transparent",
+      dotTf: chosen ? "scale(1)" : "scale(0)", dotTr: chosen ? `transform ${SETTLE} ${dl(40)}` : `transform ${TINT}`,
+      chipOp: chosen ? 1 : 0, chipTf: chosen ? "translateY(0)" : "translateY(4px)", chipTr: chosen ? `opacity ${TINT} ${dl(80)}, transform ${SETTLE} ${dl(80)}` : `opacity ${TINT}, transform ${TINT}`,
+      xBg: p15 === 3 ? "var(--hover)" : "transparent", count: chosen ? "1 chosen" : "2 roles", countInk: chosen ? "var(--accent-text)" : "var(--faint)",
+      cap: ["Nothing chosen", "Pressing Staff", "Chosen: the seat fills, the chip and count follow", "Pointer on the chip's ×", "Removed: it runs backwards, quicker"][p15] };
+    const p16 = g("s16"), word = "kiosk";
+    const s16 = { typed: word.slice(0, p16), edge: p16 === 0 ? "var(--line-strong)" : `color-mix(in oklch, var(--danger) ${Math.round(p16 / 5 * 70)}%, var(--line-strong))`, offOp: p16 === 5 ? 0 : 1, onOp: p16 === 5 ? 1 : 0,
+      cap: ["Waiting for the name", "k", "ki", "kio", "kios", "kiosk: the border is warm, and the confirm wakes"][p16] };
+    const p17 = g("s17"), landed = p17 === 3;
+    const s17 = { press: p17 === 1 ? "scale(0.97)" : "scale(1)", busy: p17 === 2, oldOp: landed ? 0 : 1, newOp: landed ? 1 : 0,
+      ring: landed ? BLOOM1 : BLOOM0("healthy"), ringTr: landed && !rm ? `box-shadow ${FLASH} ${dl(120)}` : "none",
+      cap: ["Read 4 minutes ago", "Pressing Refresh", "Reading: the old age stays until the new read lands", "Read just now: the words cross and the dot blooms"][p17] };
+    const p18 = g("s18"), ok = p18 === 2;
+    const s18 = { press: p18 === 1 ? "scale(0.97)" : "scale(1)", btnOp: ok ? 0 : 1, okOp: ok ? 1 : 0, ring: ok ? BLOOM1 : BLOOM0("healthy"), ringTr: ok && !rm ? `box-shadow ${FLASH} ${dl(80)}` : "none",
+      cap: ["An address to copy", "Pressing Copy", "Copied: a lime dot blooms in the button's seat", "900ms later, back to Copy"][p18] };
+    const miniPage = (lightSide) => React.createElement("div", { style: { position: "absolute", inset: "16px 18px", display: "flex", flexDirection: "column", gap: 10 } },
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+        React.createElement("span", { style: { flex: 1, fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 600 } }, "People"),
+        React.createElement("span", { style: { position: "relative", width: 64, height: 30, boxSizing: "border-box", borderRadius: "var(--radius-pill)", border: "1px solid var(--line-strong)", background: "var(--surface-1)" } },
+          React.createElement("span", { style: { position: "absolute", top: 3, left: lightSide ? 37 : 3, width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--accent)", transition: "left var(--duration-settle) var(--ease-settle)" } }))),
+      ["Aanya Rao", "Omar Haddad", "Priya Nair"].map((n, i) => React.createElement("div", { key: n, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid var(--line)", background: "var(--surface-0)" } },
+        React.createElement("span", { style: { width: 7, height: 7, borderRadius: "var(--radius-pill)", background: i === 1 ? "var(--warn)" : "var(--healthy)" } }),
+        React.createElement("span", { style: { flex: 1, fontSize: 13.5, fontWeight: 600 } }, n),
+        React.createElement("span", { style: { fontSize: 12, color: "var(--muted)" } }, i === 1 ? "Ends 2 Nov" : "3 roles"))));
+    const tokens = [
+      { name: "tint", value: "--duration-tint · 120ms", curve: "--ease-tint · (0.4, 0, 0.6, 1)", use: "Colour and opacity only. Hover, focus fading out, a word or a dot changing, anything closing (it fades first).", still: "Instant." },
+      { name: "press", value: "--duration-press · 180ms", curve: "--ease-press · (0.22, 0.61, 0.36, 1)", use: "A gesture, not a duration: the 3% scale on a control under the finger. Popovers and hover no longer borrow its timing.", still: "Kept. It's 3%, under the finger, and travels nowhere." },
+      { name: "settle", value: "--duration-settle · 260ms", curve: "--ease-settle · (0.16, 1, 0.3, 1)", use: "Things that open: disclosures, notices, a sheet, a popover (4px), a step inside a sheet, an indicator gliding. Pushes; never overlaps.", still: "Instant." },
+      { name: "arrive", value: "--duration-arrive · 420ms · --arrive-step 40ms · --arrive-cap 5", curve: "--ease-arrive · (0.16, 1, 0.3, 1) · new, settle's curve", use: "First paint only: a list or a page's first cards rise 8px, 40ms apart. Rows after the fifth arrive with the fifth.", still: "Instant." },
+      { name: "breathe", value: "--duration-breathe · 2400ms", curve: "--ease-breathe · (0.37, 0, 0.63, 1) · new", use: "The only loop inside the product: still happening (a queued dot, a skeleton, a button working).", still: "Rests at full strength." },
+      { name: "flash", value: "--duration-flash · 900ms", curve: "--ease-flash · (0.33, 1, 0.68, 1) · new", use: "Light, once. Two forms: a wash on a row that changed because of what you did on this screen, and a bloom on a dot that just went well.", still: "Kept as colour (no travel); the bloom goes." },
+      { name: "glide", value: "--duration-glide · 520ms · new", curve: "--ease-settle", use: "Scrolling only: a jump to a section, Back to 10. Replaces the 600, 520 and 900ms glides. The landing heading flashes once the glide ends.", still: "A jump." },
+      { name: "cap", value: "--travel-cap · 10px · new", curve: "", use: "The furthest anything inside the page travels. 3a's bar rises 10px, not 12. A sheet from the screen's edge and a control's own indicator are not page content.", still: "No travel at all." },
+    ].map(t => Object.assign(t, { curveColor: t.curve.includes("new") ? "var(--accent-text)" : "var(--faint)" }));
+    const answers = [
+      ["2.1", "Six or three?", "Six. The guideline card is redrawn as six. Arrive and flash stay: arrive is how a list first appears, and flash is the only way light says \u201cthis just changed\u201d without moving anything."],
+      ["2.2", "Easing for arrive, breathe and flash", "Named: --ease-arrive is settle's curve; --ease-breathe is a sine in-out (0.37, 0, 0.63, 1); --ease-flash is an ease-out (0.33, 1, 0.68, 1), bright at once and long to fade."],
+      ["2.3", "Press: gesture or duration?", "A gesture. Hover and focus ride on tint. A popover opens on settle with 4px of travel and closes on tint, like everything that opens and closes."],
+      ["2.4", "The 10px cap", "The cap wins and becomes a token. 3a's bar rises 10px. Arrive stays at 8."],
+      ["2.5", "One loop?", "Inside the product, yes: breathe. Insights' halo and travelling lights go. When a question is asked the lights travel once along the answer, then rest; while it computes, the answer's node breathes. The login is outside the product, so its two ambient loops are licensed there only, and stop with reduced motion."],
+      ["2.6", "Sorting", "The spec wins: rows never travel. Re-sorting is one tint: the list fades to 0 and back in its new order, 120ms each way. 8c's two keyframes go. Filtering is the same, and rows that stay don't replay arrive (that's §4's defect too)."],
+      ["2.7", "Durations without a token", "Retimed. Every glide is --duration-glide. Every \u201cfade first, then close\u201d delay is one tint (120; the 140 goes). A flash after a glide starts when the glide ends (the 280 goes). +40 is --arrive-step. NotOpenYet.md now says 260."],
+      ["2.8", "Reduced motion, everywhere", "Every movement's still form is in the table above. Press survives, glides become jumps, flash survives as colour without the bloom, breathe rests at full strength. A drag in 7a: the sheet doesn't move at all, and the sentence answers with a tint."],
+      ["2.9", "7a's heavy resistance", "While busy, the sheet follows a drag at 15% of the finger's travel, capped at 10px, and settles back on release. It never closes, at any distance or speed."],
+      ["2.10", "Refresh, filter, \u201cunder your eye\u201d", "Key rows by id. Arrive only on a list's first paint after you navigated to it, or a fold opening. Every later change (refresh, filter, sort, search) leaves rows that stay still; new rows tint in; leaving rows tint out, then their gap settles. \u201cUnder your eye\u201d means a row changed by something you did on this screen in the last two seconds, and on screen now. Background reads never flash."],
+      ["2.11", "5b's 900ms beat", "It stands, because it isn't on the critical path. The next row's buttons are live during the beat; only the fold waits for it. If the queue empties, the fold follows the flash."],
+    ].map(([n, q, a], i) => ({ n, q, a, divider: i ? "row-divider" : "" }));
+    return { rootData: this.rootData, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s13, s14, s15, s16, s17, s18, dayDark: miniPage(p14 === 1), dayLight: miniPage(p14 === 1), tokens, answers,
+      dTint: d(120), dPress: d(180), dSettle: d(260), dArrive: d(420), dFlash: d(900), dBreathe: rm ? "1ms" : Math.round(2400 / rate) + "ms", dStep: dl(40) };
+  }
+}
+</script>
+</body>
+</html>

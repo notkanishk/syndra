@@ -19,9 +19,9 @@
 <sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
 <div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
   <header data-screen-label="Expiring access board" style="display:flex;flex-direction:column;gap:12px;max-width:980px">
-    <span class="type-label" style="color:var(--label)">Route · /review/expiring-access</span>
+    <span class="type-label" style="color:var(--label)">Route · /review/expiring-access · Final, 23 Oct 2026</span>
     <h1 class="type-page-title" style="margin:0">Expiring access</h1>
-    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Direct access that ends in the next 30 days. Two answers per row: Extend, which changes the access, and Let it lapse, which changes nothing and records that somebody looked. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Direct access that ends in the next 14 days, or 30 with the pill. Two answers per row: Extend, which changes the access, and Let it lapse, which changes nothing and records that somebody looked. Each frame is the real shell and components; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
   </header>
   <section style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;max-width:2000px">
     <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">#54</strong> Let it lapse is per row and never bulk; it reopens when the date changes; decided rows sit under a counted heading, keep Extend and lose the checkbox; bulk extend works on the ticked roles; on a phone, no "given by" · <strong style="color:var(--ink)">#103</strong> the 500 ceiling counts people, not roles · <strong style="color:var(--ink)">#104</strong> the dialog becomes its result.</p></div>
@@ -65,7 +65,7 @@
       </div>
     </div></sc-if>
 
-  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Expiring access" meta="{{ meta }}" lede="Direct access that ends in the next 30 days. Syndra ends each on its date whether or not you visit this page. Extend gives 90 more days. Let it lapse changes nothing: it records that you looked, and the row asks again if the date changes." hint-size="100%,130px"></x-import></div>
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Expiring access" meta="{{ meta }}" lede="Direct access that ends in the next 14 or 30 days. Syndra ends each on its date whether or not you visit this page. Extend gives 90 more days. Let it lapse changes nothing: it records that you looked, and the row asks again if the date changes." hint-size="100%,130px"></x-import></div>
 
   <div style="display:flex;flex-direction:column;gap:14px">
     <sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" trailing="{{ selectEl }}" hint-size="100%,44px"></x-import></sc-if>
@@ -83,7 +83,7 @@
     <sc-if value="{{ showPlain }}" hint-placeholder-val="{{ false }}">
     <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
       <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" label="Loading expiring access" hint-size="100%,280px"></x-import></sc-if>
-      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Nothing expires in the next 30 days." guidance="Direct access appears here a month before it ends." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
+      <sc-if value="{{ stEmpty }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.EmptyState" title="Nothing ends in the next 14 days." guidance="Direct access appears here 14 days before it ends, or 30 with the pill." resolved="{{ true }}" hint-size="100%,140px"></x-import></sc-if>
     </x-import>
     </sc-if>
 
@@ -152,7 +152,7 @@
       </div></sc-if>
       <sc-if value="{{ dialogDone }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ActionOutcome" outcome="{{ lapseOutcome }}" hint-size="100%,70px"></x-import></sc-if>
     </div>
-    <sc-if value="{{ dialogOpen }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.ModalFooter" note="Extend instead if the access should continue." hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="170px,40px">Record the decision</x-import><x-import component-from-global-scope="Syndra.Button" variant="ghost" hint-size="90px,40px">Cancel</x-import></x-import></sc-if>
+    <sc-if value="{{ dialogOpen }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.ModalFooter" note="Extend instead if the access should continue." hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Cancel</x-import><x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="170px,40px">Record the decision</x-import></x-import></sc-if>
     <sc-if value="{{ dialogDone }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px"><x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="90px,40px">Close</x-import></x-import></sc-if>
   </x-import>
   </sc-if>
@@ -227,6 +227,7 @@ class Component extends DCLogic {
       for (let i = 0; i < 32; i++) { const r = RL[(i * 3) % 5]; rows.push(B("u", fn[i % 16] + " " + ln[(i * 7) % 15], r[0], r[1], i % 3 ? "Kanishk Singh" : "Lena Brandt", 40 + i, Math.min(30, 3 + Math.floor(i * 27 / 32)))); }
       for (let i = 0; i < 4; i++) { const r = RL[i]; rows.push(B("l", fn[15 - i] + " " + ln[(i * 4) % 15], r[0], r[1], "Kanishk Singh", 60, 8 + i * 5, { by: "Lena Brandt", on: D(-3), note: "." })); }
     }
+    const win = st === "window-30" ? 30 : 14; rows = rows.filter(r => r.days <= win);
     const so = this.state.sort, dir = this.state.dir;
     const keyOf = { who: r => r.who, what: r => r.role, given: r => r.by };
     const runs = so === "what" || so === "given";
@@ -266,7 +267,7 @@ class Component extends DCLogic {
         selectAll: sel && k === "u" });
     }).filter(g => g.count);
     this.navIds = groups.map(g => g.id);
-    const jn = this.jumpNav(list && !sel ? groups.map(g => ({ id: g.id, label: g.short, count: g.count, tone: g.tone, go: () => this.jump(null, g.k) })) : [], "Sections of expiring access", this.chips === "left" ? "start" : undefined);
+    const jn = this.jumpNav(list ? groups.map(g => ({ id: g.id, label: g.short, count: g.count, tone: g.tone, go: () => this.jump(null, g.k) })) : [], "Sections of expiring access", this.chips === "left" ? "start" : undefined);
     const SH = (k, key) => ({ ["sort" + k]: () => this.setSort(key), ["rot" + k]: so === key && dir < 0 ? "rotate(180deg)" : "none", ["op" + k]: so === key ? 1 : 0, ["col" + k]: so === key ? "var(--ink)" : "inherit" });
     const u = groups.find(g => g.k === "u"), people = new Set(rows.map(r => r.who)).size;
     const f = (frame, label, note, phone) => phone ? { src: "route-expiring.dc.html?frame=" + frame, label, note, w: 390, h: 844, boxW: 390, boxH: 844, scale: 1 } : { src: "route-expiring.dc.html?frame=" + frame, label, note, w: 1440, h: 1100, boxW: 720, boxH: 550, scale: 0.5 };
@@ -279,7 +280,7 @@ class Component extends DCLogic {
       hasRead: !!jn.rest, jumpRest: this.chips === "fresh" && S ? [h("span", { key: "sw", style: { display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13.5, color: late ? "var(--warn-text)" : "var(--muted)" } }, h(S.StatusDot, { tone: late ? "warn" : "healthy" }), late ? "Access last ended on schedule at 06:00, 3 hours ago · it was due again at 07:00" : "Access last ended on schedule at 09:00, 14 minutes ago · next at 10:00"), h(React.Fragment, { key: "jn" }, jn.rest)] : jn.rest, hasJump: !!jn.float, jumpFloat: jn.float,
       meta: list && S ? h(S.MetaRow, null, [rows.length + (rows.length === 1 ? " role" : " roles") + " · " + people + " people", u ? "soonest ends " + D(minU) : "every one decided"]) : undefined,
       searchEl: S && known && st !== "empty" ? h(S.Input, { placeholder: "Search person or role…", "aria-label": "Search expiring access by person or role" }) : null,
-      filtersEl: S && known && st !== "empty" ? h(S.FilterPanel, { activeCount: 0, onClear: () => {} }, h(S.FilterField, { label: "Project" }, h(S.Select, { value: "", onChange: () => {}, "aria-label": "Filter by project" }, h("option", { value: "" }, "All projects")))) : null,
+      filtersEl: S && known ? h(S.FilterPills, { label: "Ending within", value: st === "window-30" ? "30" : "14", onChange: () => {}, options: [{ value: "14", label: "14 days" }, { value: "30", label: "30 days" }] }) : null,
       selectEl: S && list && u ? h(S.SelectModeToggle, { active: sel, onToggle: () => {} }) : null,
       lapseOutcome: { kind: "applied", message: "Recorded. It lapses on 7 Oct.", detail: "Nothing about the access changed. The list shows your name against the decision and stops asking." },
       boardGroups: [
@@ -288,10 +289,11 @@ class Component extends DCLogic {
           f("extended", "After Extend", "The row reports in its own seat: Extended to 4 Jan, and it leaves the list on the next read. Nothing moves under the hand that pressed it (#96)."),
           f("extended-queued", "After Extend, sending by hand", "Where changes wait for the operator, the seat reads Waiting for you to send → and opens Pending changes, with the new date beneath."),
           f("dialog", "Let it lapse", "A dialog, because the note is what makes the record useful to the next person, and it says plainly that nothing changes."),
-          f("dialog-done", "Let it lapse · recorded", "The dialog becomes its result (#104): Record the decision retires, and Cancel becomes Done."),
+          f("dialog-done", "Let it lapse · recorded", "The dialog becomes its result (#104): Record the decision retires, and Cancel becomes Close (96b)."),
           f("selecting", "Selecting", "Checkboxes only on undecided rows. The bar counts roles and the people they belong to; the 500 ceiling counts people (#103). Letting it lapse is one row at a time."),
           f("all-decided", "Everything decided", "The Undecided section goes, and one healthy line says so; the decided rows stay, with Extend."),
-          f("empty", "Empty", "Nothing ends in the next 30 days: the healthy dot."),
+          f("empty", "Empty", "Nothing ends in the next 14 days: the healthy dot."),
+          f("window-30", "30 days", "FilterPills 14 days | 30 days in the FilterBar\u2019s pill seat (4a), 14 first. Home\u2019s tile, the rail and Insights\u2019 Ending soon land on 14."),
           f("loading", "Loading", "The title and lede are known; no counts or chips until the list is read."),
           f("error", "Error", "The red notice in the list's place. Access still ends on its dates."),
           f("late", "Access not ending on schedule", "The read line turns amber when the hourly run is late, and the amber Notice says what that means: access due to end is still in place. Needs backend work: see the card above."),

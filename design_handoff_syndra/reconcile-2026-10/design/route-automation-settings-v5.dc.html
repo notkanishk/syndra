@@ -20,7 +20,7 @@
 <div style="padding:80px 72px 120px;display:flex;flex-direction:column;gap:72px;background:var(--ground);min-height:100vh">
 
   <header data-screen-label="Waits for you board" style="display:flex;flex-direction:column;gap:16px;max-width:900px">
-    <span class="type-label" style="color:var(--label)">Changes · Roles that wait · N14 to N18 · replaces route-automation-settings-v4</span>
+    <span class="type-label" style="color:var(--label)">Changes · Roles that wait · N14 to N18 · replaces route-automation-settings-v4 · Final, 23 Oct 2026</span>
     <h1 class="type-page-title" style="margin:0;font-size:44px;line-height:1.1">Some access should wait for you</h1>
     <p style="margin:0;font-size:17px;line-height:1.65;color:var(--muted);text-wrap:pretty">Most changes to access can go straight through: a front door, a print queue, the bandsaw. A few deserve a look every time someone gains or loses them, like supervising the laser cutter. You mark those roles in one place. Everywhere else you choose a role, Syndra shows whether it waits, using the same picker, the same rows and the same words. And when something you did isn't finished yet, the thing you changed says so until it is.</p>
   </header>
@@ -247,7 +247,7 @@
       <span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-automation-settings-v5.dc.html?frame=pending">Waiting for you to send →</a></span><span style="font-size:13.5px;color:var(--muted)">13 changes to these roles</span>
     </div>
   </x-import>
-  <span style="padding:0 20px;font-size:13.5px;color:var(--muted)">The sound when drift is found is set for each browser, in your Account.</span>
+  
   </sc-if>
 </sc-if>
 
@@ -661,7 +661,7 @@ class Component extends DCLogic {
 
     return {
       isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
-      pathname: { project: "/projects/laser", newrole: "/projects/laser", newrule: "/policies", rulepick: "/policies", rules: "/policies", newbundle: "/bundles", bundle: "/bundles", give: "/users/rohan", rohan: "/users/rohan", requests: "/requests", pending: "/governance/pending" }[f] || "/automation/settings",
+      pathname: { project: "/projects/laser", newrole: "/projects/laser", newrule: "/policies", rulepick: "/policies", rules: "/policies", newbundle: "/bundles", bundle: "/bundles", give: "/users/rohan", rohan: "/users/rohan", requests: "/requests", pending: "/governance/pending" }[f] || "/changes/roles-that-wait",
       fSettings: ["settings", "add", "move"].includes(f), fProject: ["project", "newrole"].includes(f), fRulesPage: ["newrule", "rulepick", "rules"].includes(f), fBundlesPage: f === "newbundle", fBundle: f === "bundle", fPerson: ["give", "rohan"].includes(f), fRequests: f === "requests", fPending: f === "pending",
       pickerOpen: !!mode, pk,
       howLongOpts: [{ value: "7", label: "A week" }, { value: "30", label: "A month" }, { value: "term", label: "Until the end of term" }],
