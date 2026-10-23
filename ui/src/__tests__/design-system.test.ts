@@ -2,6 +2,13 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import {
+  ARRIVE_CAP,
+  ARRIVE_MS,
+  ARRIVE_SETTLED_MS,
+  ARRIVE_STEP_MS,
+} from "@/components/ui/ArriveList";
+
 /**
  * Design-system canary.
  *
@@ -419,6 +426,34 @@ describe("design system", () => {
     // The dialog's own rise, and a success's lift (S1, S6).
     expect(namedAtRuleBody(css, "@keyframes", "settle-in")).toContain("translateY(8px) scale(0.98)");
     expect(namedAtRuleBody(css, "@keyframes", "lift")).toContain("translateY(6px)");
+  });
+
+  // The arrive timers in TS are derived from the tokens, not repeated: a list
+  // is settled when its last distinct delay plus one arrive has run, and the
+  // sixth row onward waits no longer than the fifth (S11).
+  it("derives the arrive timers from the tokens and caps the stagger at row five", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const token = (name: string) => Number(new RegExp(`${name}:\\s*(\\d+)`).exec(css)?.[1]);
+    expect(ARRIVE_MS, "ARRIVE_MS must equal --duration-arrive").toBe(token("--duration-arrive"));
+    expect(ARRIVE_STEP_MS, "ARRIVE_STEP_MS must equal --arrive-step").toBe(token("--arrive-step"));
+    expect(ARRIVE_CAP, "ARRIVE_CAP must equal --arrive-cap").toBe(token("--arrive-cap"));
+    expect(ARRIVE_SETTLED_MS).toBe(420 + 4 * 40);
+
+    const list = atRuleBody(css, "@utility arrive-list");
+    expect(list).toContain("animation-delay: calc((var(--arrive-cap) - 1) * var(--arrive-step))");
+    expect(list).not.toContain("nth-child(6)");
+  });
+
+  // S3: a phone sheet rises from its edge on settle; wider, it is the dialog's
+  // own rise. Rows the reader asked for arrive on the list's own cap.
+  it("rises a phone sheet from the bottom edge, and only below the tablet breakpoint", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(namedAtRuleBody(css, "@keyframes", "sheet-rise")).toContain("translateY(100%)");
+    const sheet = atRuleBody(css, "@utility sheet-in");
+    expect(sheet).toContain("animation: settle-in var(--duration-settle)");
+    expect(atRuleBody(sheet, "@media (width < theme(--breakpoint-tablet))")).toContain(
+      "animation: sheet-rise var(--duration-settle) var(--ease-settle) 40ms both",
+    );
   });
 
   // Delays the answer removed: unfold's content waits one tint, not 140ms, and

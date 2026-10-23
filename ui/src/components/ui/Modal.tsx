@@ -212,7 +212,7 @@ function leaveAsCopy(scrim: HTMLElement) {
   copy.classList.remove("settle-scrim");
   copy.classList.add("leave-scrim", "pointer-events-none");
   const card = copy.firstElementChild;
-  card?.classList.remove("settle-in");
+  card?.classList.remove("sheet-in");
   card?.classList.add("leave-panel");
   document.body.appendChild(copy);
   setTimeout(() => copy.remove(), TINT_MS + LIGHT_LEAD_MS + 20);
@@ -270,7 +270,8 @@ export function Modal({
         if (event.target === event.currentTarget && !busy) onClose();
       }}
     >
-      {/* The scrim tints, then the card rises 8px from 98% 40ms behind it.
+      {/* The scrim tints, then the card rises 8px from 98% 40ms behind it, or,
+          on a phone, the sheet rises from the bottom edge (`sheet-in`).
           It never zooms out of screen centre — the destination is where the
           dialog will live, so the eye lands there and stays. */}
       {/* The panel is bounded by the viewport and scrolls inside that bound.
@@ -284,7 +285,7 @@ export function Modal({
       {/* Long names, emails and ids in a title or row wrap inside the dialog instead of widening it. */}
       <div
         ref={panelRef}
-        className={`flex w-full ${SIZE_CLASS[size]} settle-in flex-col overflow-y-auto [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
+        className={`flex w-full ${SIZE_CLASS[size]} sheet-in flex-col overflow-y-auto [overflow-wrap:anywhere] rounded-t-[24px] border border-line-strong bg-surface-2 pb-[env(safe-area-inset-bottom)] shadow-dialog tablet:rounded-[22px] tablet:pb-0`}
       >
         <SheetGrabber busy={busy} onClose={onClose} drag={grabber} />
         {children}

@@ -409,6 +409,9 @@ export function MapTab({ url }: { url: InsightsUrl }) {
             model={shown}
             highlight={highlight}
             focusId={focus}
+            // An answer's lights travel once; a line you hover or follow only tints.
+            answered={Boolean(asked && answer.answer && !lit)}
+            breathing={answer.computing ? answer.pin : null}
             count={asOn ? (id) => thenHeld.get(id) ?? null : lensRead ? (id) => lensRead.counts.get(id) ?? null : held}
             unit={lensRead?.unit}
             note={lensRead?.note}

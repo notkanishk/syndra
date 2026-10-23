@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { createRef } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ArriveList } from "@/components/ui/ArriveList";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
+import { motionInTests } from "@/test-utils/motion";
 
 const noop = () => {};
 const row = (props: Partial<React.ComponentProps<typeof PaginationRow>>) =>
@@ -81,6 +83,53 @@ describe("one pagination row (A-04 section 7.4)", () => {
   it("names the first page in Back to, whatever it is", () => {
     row({ shown: 30, total: 61, initial: 5 });
     expect(screen.getByRole("button", { name: "Back to 5" })).toBeInTheDocument();
+  });
+});
+
+/** Motion 8c: Show more arrives only the new rows; Back to 10 glides first, then trims. */
+describe("PaginationRow motion", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    document.querySelectorAll("h2").forEach((h) => h.remove());
+  });
+
+  it("Back to 10 glides to the heading before the rows leave, and trims out of sight", () => {
+    vi.useFakeTimers();
+    motionInTests();
+    const heading = document.createElement("h2");
+    document.body.appendChild(heading);
+    const scrollIntoView = vi.fn();
+    heading.scrollIntoView = scrollIntoView;
+    const onBack = vi.fn();
+    row({ shown: 35, total: 61, onBack, anchor: { current: heading } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to 10" }));
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(onBack).not.toHaveBeenCalled();
+
+    act(() => void vi.advanceTimersByTime(519));
+    expect(onBack).not.toHaveBeenCalled();
+    act(() => void vi.advanceTimersByTime(2));
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it("Show 25 more makes only the rows it adds arrive", async () => {
+    const rows = (n: number) => (
+      <>
+        <ArriveList startSettled>
+          {Array.from({ length: n }, (_, i) => (
+            <p key={i}>row {i}</p>
+          ))}
+        </ArriveList>
+        <PaginationRow shown={n} total={61} onMore={noop} onBack={noop} />
+      </>
+    );
+    const { container, rerender } = render(rows(10));
+    fireEvent.click(screen.getByRole("button", { name: "Show 25 more" }));
+    rerender(rows(12));
+    await act(async () => {});
+    const arriving = Array.from(container.querySelectorAll("[data-arriving]")).map((el) => el.textContent);
+    expect(arriving).toEqual(["row 10", "row 11"]);
   });
 });
 
