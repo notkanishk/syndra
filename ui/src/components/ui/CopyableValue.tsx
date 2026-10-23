@@ -134,10 +134,20 @@ export function CopyableValue({
           copied || selected ? "text-healthy" : "text-muted hover:bg-[var(--hover)] hover:text-ink"
         }`}
       >
-        {/* Only a copy blooms: it went somewhere. A selection is still the
-            reader's to finish. */}
-        {copied && <StatusDot tone="healthy" bloom />}
-        {canCopy ? (copied ? "Copied" : "Copy") : selected ? "Selected" : "Select"}
+        {/* One seat, sized to the wider label, so the button never changes width (S18).
+            Copy and Copied crossfade on tint. Only a copy blooms: it went somewhere. A
+            selection is still the reader's to finish. */}
+        <span className="grid items-center justify-items-start [&>*]:col-start-1 [&>*]:row-start-1">
+          <span className={`motion-tint ${copied || selected ? "opacity-0" : "opacity-100"}`}>
+            {canCopy ? "Copy" : "Select"}
+          </span>
+          <span
+            className={`inline-flex items-center gap-2 motion-tint ${copied || selected ? "opacity-100" : "opacity-0"}`}
+          >
+            {canCopy && <StatusDot tone="healthy" bloom={copied} />}
+            {canCopy ? "Copied" : "Selected"}
+          </span>
+        </span>
       </button>
 
       {/* Announced rather than only coloured: the label change is the whole

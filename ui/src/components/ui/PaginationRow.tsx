@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
+import { armArrive } from "@/components/ui/ArriveList";
 import { Button } from "@/components/ui/Button";
+import { glideTo, stillMotion } from "@/lib/motion";
 
 /** The first page of every long list, and what Show more adds (A-04 section 7.4). */
 export const PAGE_FIRST = 10;
@@ -62,20 +64,43 @@ export function PaginationRow({
   anchor?: RefObject<HTMLElement | null>;
 }) {
   const known = total !== undefined;
+  // The trim waits on the glide; a row that unmounted meanwhile has nothing to trim.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const remaining = known ? total - shown : 0;
   const ended = known ? remaining <= 0 : !hasMore;
 
   // A list that fits its first page has no paging to say.
   if (known && ended && total <= initial) return null;
 
+  // The rows the reader asked for arrive; the ones already there hold (8c).
+  const more = () => {
+    armArrive();
+    onMore();
+  };
+  const all = () => {
+    armArrive();
+    onAll?.();
+  };
+
+  // Glide to the heading first, then trim the list out of sight (8c): trimmed
+  // first, the page would shrink under the reader's eyes and the scroll would
+  // be a jump from wherever the browser clamped it.
   const back = () => {
-    onBack();
     const target = anchor?.current ?? document.querySelector<HTMLElement>("h1");
-    if (!target) return;
+    if (!target) return onBack();
     if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
     target.focus({ preventScroll: true });
-    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    target.scrollIntoView?.({ behavior: still ? "auto" : "smooth", block: "start" });
+    const gliding = glideTo(target);
+    if (stillMotion()) return onBack(); // it jumped; nothing to wait for
+    void gliding.then((landed) => {
+      if (landed && mounted.current) onBack();
+    });
   };
 
   const dot = (
@@ -94,13 +119,13 @@ export function PaginationRow({
       {!ended && (
         <>
           {dot}
-          <Button variant="ghost" size="sm" isPending={pending} onClick={onMore}>
+          <Button variant="ghost" size="sm" isPending={pending} onClick={more}>
             Show {known ? Math.min(step, remaining) : step} more
           </Button>
           {known && remaining > step && onAll && (
             <>
               {dot}
-              <Button variant="ghost" size="sm" onClick={onAll}>
+              <Button variant="ghost" size="sm" onClick={all}>
                 Show all {total}
               </Button>
             </>

@@ -97,6 +97,10 @@ export function AnchoredPanel({
   // Closing is quicker than opening and has no travel: opacity on tint, then
   // gone. Opening's rise (4px, settle) is the caller's `popover-in`.
   const { rendered, leaving } = useExitPhase(open, TINT_MS);
+  // It often closes because its content went (a suggestion list that emptied):
+  // what fades is what it was showing, not an empty box.
+  const [shown, setShown] = useState(children);
+  if (open && shown !== children) setShown(children);
   if (!rendered) return null;
   return (
     <ToBody>
@@ -107,7 +111,7 @@ export function AnchoredPanel({
         className={leaving ? `${className} pointer-events-none` : className}
         aria-hidden={leaving ? true : undefined}
       >
-        {children}
+        {leaving ? shown : children}
       </div>
     </ToBody>
   );

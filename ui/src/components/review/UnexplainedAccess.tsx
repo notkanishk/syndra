@@ -19,9 +19,10 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
-import { ReadFreshness } from "@/components/ui/ReadFreshness";
+import { ReadFreshness, useRefreshPress } from "@/components/ui/ReadFreshness";
 import { FilterPills, Select } from "@/components/ui/Select";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
 import { RunLabel, SortHead, runStarts, useSort } from "@/components/ui/SortHead";
 import { Unfold } from "@/components/ui/Unfold";
 import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
@@ -167,7 +168,7 @@ export function UnexplainedAccess() {
   const projects = useProjects();
   // Search is not a filter in the URL: it finds a row, it does not make a view.
   const [query, setQuery] = useState("");
-  const [sort, flipSort] = useSort<DriftSortKey>("found");
+  const [sort, flipSort, view] = useSort<DriftSortKey>("found");
   const [open, setOpen] = useState<Record<SectionKind, boolean>>({
     target_only: true,
     syndra_only: true,
@@ -281,20 +282,35 @@ export function UnexplainedAccess() {
     return rows;
   }, [diff.data, returned, filters, query, resolver]);
 
+  const sorted = useMemo(
+    () => sortDrift(items, view.sort.key, view.sort.dir, names),
+    [items, view.sort, names],
+  );
+  // S5: a finding that goes on a later read (somebody adopted it elsewhere, Zitadel changed)
+  // fades where it was and closes its gap after, and not under the pointer. Counts and
+  // selection stay on the live findings; only what is drawn keeps the ones that are going.
+  const leaving = useLeavingRows(sorted, (item) => item.id, !drift.isLoading && !drift.error, {
+    scope: `${query}|${JSON.stringify(filters)}`,
+  });
   const sections = useMemo(() => {
-    const sorted = sortDrift(items, sort.key, sort.dir, names);
     return SECTIONS.map((section) => {
-      const rows = sorted.filter((item) => item.drift_type === section.kind);
+      const rows = leaving.rows.filter((item) => item.drift_type === section.kind);
       const read = readRows.filter((row) => row.kind === section.kind);
-      return { ...section, items: rows, read, count: rows.length + read.length };
-    }).filter((section) => section.count > 0);
-  }, [items, sort, names, readRows]);
+      const live = sorted.filter((item) => item.drift_type === section.kind).length;
+      return { ...section, items: rows, read, count: live + read.length };
+    }).filter((section) => section.items.length + section.read.length > 0);
+  }, [leaving.rows, sorted, readRows]);
   // The order the rows are drawn in, so shift-click ranges mean what they look
   // like. Selection spans the whole queue, not what a section has rendered: a
   // triage backlog is exactly the case where paging four times before you can
   // act is the tedium worth removing.
   const selection = useRowSelection(
-    useMemo(() => sections.flatMap((section) => section.items.map((item) => item.id)), [sections]),
+    useMemo(() => {
+      const live = new Set(sorted.map((item) => item.id));
+      return sections.flatMap((section) =>
+        section.items.filter((item) => live.has(item.id)).map((item) => item.id),
+      );
+    }, [sections, sorted]),
   );
   // A triage row is read before it is resolved, so the seats arrive behind a
   // named control rather than in front of every row by default.
@@ -307,6 +323,7 @@ export function UnexplainedAccess() {
     () => (drift.dataUpdatedAt ? new Date(drift.dataUpdatedAt).toISOString() : null),
     [drift.dataUpdatedAt],
   );
+  const refreshed = useRefreshPress(readAt);
   const unread = summary.data?.unreconciled_targets ?? [];
 
   const selectedIds = useMemo(() => Array.from(selection.selected), [selection.selected]);
@@ -429,7 +446,7 @@ export function UnexplainedAccess() {
             />
           </Card>
         )}
-        <div data-selection-scope {...selection.containerProps} className="flex flex-col gap-4">
+        <div data-selection-scope {...selection.containerProps} {...leaving.listProps} className="flex flex-col gap-4">
           {sections.map((section) => (
             <DriftSection
               key={section.kind}
@@ -438,10 +455,12 @@ export function UnexplainedAccess() {
               open={open[section.kind]}
               onToggle={() => setOpen((cur) => ({ ...cur, [section.kind]: !cur[section.kind] }))}
               head={head}
+              leave={leaving.props}
+              fade={view.className}
               runOf={
-                sort.key === "what"
+                view.sort.key === "what"
                   ? names.what
-                  : sort.key === "why"
+                  : view.sort.key === "why"
                     ? (item) => REASON_LABELS[driftReason(item)]
                     : null
               }
@@ -493,26 +512,32 @@ export function UnexplainedAccess() {
         }
         actions={
           <Button
-            isPending={reconcile.isPending}
+            isPending={reconcile.isPending || refreshed.pressing}
             disabled={paused}
-            onClick={async () => {
-              setScanOutcome(null);
-              try {
-                await reconcile.mutateAsync();
-                // The comparison is a second read of the same two sides.
-                void diff.refetch();
-                // A scan is a read, so it applies nothing — saying "applied"
-                // about a comparison would be the queue claiming it had
-                // acted on what it found.
-                setScanOutcome({
-                  kind: "no_change",
-                  message: "Checked again",
-                  detail: "The list below is what the check found just now.",
-                });
-              } catch (error) {
-                setScanOutcome(outcomeFromError(error));
-              }
-            }}
+            // The same press the freshness line below answers (S17): busy, the old age
+            // stays until the read lands, then "just now" crossfades in and the dot blooms.
+            onClick={() =>
+              refreshed.press(async () => {
+                setScanOutcome(null);
+                try {
+                  await reconcile.mutateAsync();
+                  // The comparison is a second read of the same two sides.
+                  void diff.refetch();
+                  // The invalidation has already started the new read: join it, never restart it.
+                  await drift.refetch({ cancelRefetch: false });
+                  // A scan is a read, so it applies nothing — saying "applied"
+                  // about a comparison would be the queue claiming it had
+                  // acted on what it found.
+                  setScanOutcome({
+                    kind: "no_change",
+                    message: "Checked again",
+                    detail: "The list below is what the check found just now.",
+                  });
+                } catch (error) {
+                  setScanOutcome(outcomeFromError(error));
+                }
+              })
+            }
           >
             Check Zitadel again
           </Button>
@@ -640,6 +665,7 @@ export function UnexplainedAccess() {
             state={{ readAt, current: true }}
             subject="This list"
             onRefresh={() => drift.refetch()}
+            refresh={refreshed}
           />
         </ReadLine>
       )}
@@ -745,6 +771,8 @@ function DriftSection({
   open,
   onToggle,
   head,
+  leave,
+  fade,
   runOf,
   renderRow,
   comparedAt,
@@ -754,6 +782,9 @@ function DriftSection({
   onToggle: () => void;
   comparedAt: string;
   head: ReactNode;
+  leave: (key: string) => LeaveProps;
+  /** The re-sort's fade, on the rows and not the headings. */
+  fade: string;
   runOf: ((item: DriftTriageItem) => string) | null;
   renderRow: (item: DriftTriageItem) => ReactNode;
 }) {
@@ -795,15 +826,17 @@ function DriftSection({
         <Unfold open={open}>
           <div id={`${section.id}-body`}>
             {head}
-            {visible.map((item, index) => {
-              const run = runAt(index);
-              return (
-                <div key={item.id}>
-                  {run && <RunLabel {...run} />}
-                  {renderRow(item)}
-                </div>
-              );
-            })}
+            <div className={fade}>
+              {visible.map((item, index) => {
+                const run = runAt(index);
+                return (
+                  <LeavingRow key={item.id} {...leave(item.id)}>
+                    {run && <RunLabel {...run} />}
+                    {renderRow(item)}
+                  </LeavingRow>
+                );
+              })}
+            </div>
             {visibleRead.map((row) => (
               <ComparedRow key={row.key} row={row} comparedAt={comparedAt} />
             ))}

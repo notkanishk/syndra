@@ -150,7 +150,8 @@ function NavRow({
         (count > 0 ? (
           <span
             className={`rounded-pill px-2 py-0.5 text-[12.5px] font-semibold ${
-              changed ? "flash-value " : ""
+              // A count never travels: a changed one only tints in.
+              changed ? "tint-in " : ""
             }${BADGE_TONE[item.tone ?? "accent"]}`}
           >
             {count}

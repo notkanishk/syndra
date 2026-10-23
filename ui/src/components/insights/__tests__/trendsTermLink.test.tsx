@@ -75,19 +75,35 @@ describe("Ending soon", () => {
     expect(rows).toEqual(["Wood shop25", "Laser room12"]);
   });
 
+  it("opens Expiring access in the same window from each number", async () => {
+    query = "tab=trends";
+    respond.mockResolvedValue({
+      ...trends("Monsoon 2026"),
+      ending_soon: [{ project_id: "p1", project_name: "Laser room", d14: 1, d30: 2 }],
+    });
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Mount />
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Laser room");
+    expect(screen.getByRole("link", { name: "1 in 14 days: open Expiring access" })).toHaveAttribute("href", "/review/expiring-access?within=14");
+    expect(screen.getByRole("link", { name: "2 in 30 days: open Expiring access" })).toHaveAttribute("href", "/review/expiring-access?within=30");
+  });
+
 });
 
 describe("Trends and the term dates", () => {
   it("links to Makerspace settings beside the term it shows", async () => {
     mount("tab=trends", "Monsoon 2026");
-    await screen.findByText("Monsoon 2026");
+    await screen.findByText(/This term is Monsoon 2026/);
     const link = screen.getByRole("link", { name: /Set in Makerspace settings/ });
     expect(link.getAttribute("href")).toBe("/settings");
   });
 
   it("says which term it is reading, with its dates, ahead of the link", async () => {
     mount("tab=trends", "Monsoon 2026");
-    expect(await screen.findByText("1 Aug – 31 Dec")).toBeInTheDocument();
+    expect(await screen.findByText(/This term is Monsoon 2026, 1 Aug to\s+31 Dec/)).toBeInTheDocument();
   });
 
   it("says nothing about term dates when the period is not a term", async () => {

@@ -114,6 +114,16 @@ describe("AddRolesToBundle", () => {
     expect(screen.queryByRole("button", { name: /^Add \d+ roles?$/ })).toBeNull();
   });
 
+  // S15: a chosen chip tints in and rises 4px, the same as the one-role picker's.
+  it("a chosen role's chip arrives with the chip rise, not a bare tint", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Maintainer/ }));
+    const remove = screen.getByRole("button", { name: "Remove Maintainer" });
+    expect(remove.closest(".chip-in")).not.toBeNull();
+    expect(remove.closest(".tint-in")).toBeNull();
+  });
+
   it("searches across projects, not within one", async () => {
     open();
     fireEvent.change(screen.getByLabelText("Search roles"), { target: { value: "metal" } });

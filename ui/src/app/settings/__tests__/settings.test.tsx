@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api-client";
+import { motionInTests } from "@/test-utils/motion";
 
 // Makerspace settings (owner, 19 Oct 2026): the term dates are read by Trends,
 // "new this term", the keep dialog and Ask for access, so they are edited in
@@ -280,6 +281,22 @@ describe("Edit term dates", () => {
     for (let i = 0; i < 2; i++) fireEvent.click(within(dialog()).getAllByRole("button", { name: /^Remove/ })[0]);
     expect(dialog().querySelectorAll("[data-term-row]")).toHaveLength(1);
     expect((within(dialog()).getByRole("button", { name: /^Remove/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("fades a removed term where it was, inert, before its gap settles", async () => {
+    const d = await open();
+    motionInTests();
+    try {
+      fireEvent.click(within(d).getAllByRole("button", { name: /^Remove/ })[2]);
+      const gone = within(dialog()).getByLabelText("Monsoon, name", { hidden: true });
+      expect(gone.closest(".tint-out")).not.toBeNull();
+      expect(gone.closest("[inert]")).not.toBeNull();
+      expect(gone.closest(".close-gap")).not.toBeNull();
+      // The two that stay are the same rows, untouched.
+      expect(within(dialog()).getByLabelText("Spring, name").closest(".tint-out")).toBeNull();
+    } finally {
+      motionInTests(false);
+    }
   });
 
   it("stops at twelve terms: Add a term is off, with the reason beside it, and Remove is outline", async () => {

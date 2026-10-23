@@ -206,11 +206,13 @@ describe("a bundle that others include", () => {
 
   it("opens the People tab and glides to the group when a count is pressed", async () => {
     const scroll = vi.fn();
-    Element.prototype.scrollIntoView = scroll; // jsdom has none
+    window.scrollTo = scroll as unknown as typeof window.scrollTo; // jsdom's is a stub
     render(<BundlePage bundleId="sb" />);
     fireEvent.click(screen.getByRole("link", { name: "Through bundles" }));
     expect(screen.getByText("who has it")).toBeInTheDocument();
+    // The one glide every jump to a section uses; the landing heading flashes.
     await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(document.getElementById("through-bundles")!.classList.contains("flash")).toBe(true);
   });
 
   it("shows the bundles that include it on the People tab, and updates one's working copy", async () => {

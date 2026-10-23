@@ -39,6 +39,8 @@ import { ArriveList } from "@/components/ui/ArriveList";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
+import { Unfold } from "@/components/ui/Unfold";
+import { Crossfade } from "@/components/ui/Crossfade";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { formatShortDate, formatWeekday, daysUntil, whyNotChecked } from "@/lib/format";
@@ -259,49 +261,66 @@ export function Home({ session }: { session: SessionUser }) {
             {/* Time-sensitive: access ends, stays wrong, or goes unseen if you wait.
                 Drift leads, and a target Syndra cannot read stays beside the
                 findings it qualifies, in the same column. */}
-            {(expiring.length > 0 ||
-              (advanced &&
-                ((drift?.count ?? 0) > 0 || unvouched.length > 0 || unconfirmedWrites.count > 0))) && (
+            {/* A block or a column that empties while you are here folds (5b): it fades, then its
+                gap closes. It never just vanishes under the pointer. */}
+            <Unfold
+              open={
+                expiring.length > 0 ||
+                (advanced &&
+                  ((drift?.count ?? 0) > 0 || unvouched.length > 0 || unconfirmedWrites.count > 0))
+              }
+              className="min-w-0 desktop:col-start-1"
+            >
               <QueueColumn
                 title="Time-sensitive"
                 note="Access ends, stays wrong, or goes unseen if you wait."
-                className="desktop:col-start-1"
               >
-                {advanced && (drift?.count ?? 0) > 0 && <UnexplainedAccess count={drift!.count} />}
-                {expiring.length > 0 && <ExpiringSoon grants={expiring} />}
-                {advanced && unvouched.length > 0 && <UnvouchedTargets targets={unvouched} />}
-                {advanced && unconfirmedWrites.count > 0 && (
+                <Block open={advanced && (drift?.count ?? 0) > 0}>
+                  <UnexplainedAccess count={drift?.count ?? 0} />
+                </Block>
+                <Block open={expiring.length > 0}>
+                  <ExpiringSoon grants={expiring} />
+                </Block>
+                <Block open={advanced && unvouched.length > 0}>
+                  <UnvouchedTargets targets={unvouched} />
+                </Block>
+                <Block open={advanced && unconfirmedWrites.count > 0}>
                   <UnconfirmedWrites summary={unconfirmedWrites} />
-                )}
+                </Block>
               </QueueColumn>
-            )}
+            </Unfold>
             {/* When you're ready: nothing changes until you act. */}
-            {(queue.rows.length > 0 ||
-              onboardingGaps > 0 ||
-              gaps.rows.length > 0 ||
-              unowned.length > 0 ||
-              (advanced && (findings > 0 || (propagation?.count ?? 0) > 0))) && (
-              <QueueColumn
-                title="When you're ready"
-                note="Nothing changes until you act."
-                className="desktop:col-start-2"
-              >
-                {queue.rows.length > 0 && (
+            <Unfold
+              open={
+                queue.rows.length > 0 ||
+                onboardingGaps > 0 ||
+                gaps.rows.length > 0 ||
+                unowned.length > 0 ||
+                (advanced && (findings > 0 || (propagation?.count ?? 0) > 0))
+              }
+              className="min-w-0 desktop:col-start-2"
+            >
+              <QueueColumn title="When you're ready" note="Nothing changes until you act.">
+                <Block open={queue.rows.length > 0}>
                   <OpenRequests rows={queue.rows} decisions={decisions} queue={queue} />
-                )}
-                {(onboardingGaps > 0 || gaps.rows.length > 0) && (
+                </Block>
+                <Block open={onboardingGaps > 0 || gaps.rows.length > 0}>
                   <OnboardingGaps report={onboarding.data!} gaps={gaps} />
-                )}
-                {unowned.length > 0 && <ServiceAccountsToLookAt accounts={unowned} />}
-                {advanced && findings > 0 && <MergeFindingsWaiting count={findings} />}
-                {advanced && (propagation?.count ?? 0) > 0 && (
+                </Block>
+                <Block open={unowned.length > 0}>
+                  <ServiceAccountsToLookAt accounts={unowned} />
+                </Block>
+                <Block open={advanced && findings > 0}>
+                  <MergeFindingsWaiting count={findings} />
+                </Block>
+                <Block open={advanced && (propagation?.count ?? 0) > 0}>
                   <PendingChanges
-                    count={propagation!.count}
-                    reachable={propagation!.zitadel_reachable}
+                    count={propagation?.count ?? 0}
+                    reachable={propagation?.zitadel_reachable ?? true}
                   />
-                )}
+                </Block>
               </QueueColumn>
-            )}
+            </Unfold>
           </div>
 
           {!advanced && (
@@ -321,23 +340,21 @@ export function Home({ session }: { session: SessionUser }) {
 }
 
 /**
- * One of the queue's two columns. `className` pins its side, so a column that
- * leaves never pulls the other across into its place.
+ * One of the queue's two columns. Its `Unfold` pins its side (`col-start`), so a
+ * column that leaves never pulls the other across into its place.
  */
 function QueueColumn({
   title,
   note,
-  className,
   children,
 }: {
   title: string;
   note: string;
-  className: string;
   children: React.ReactNode;
 }) {
   const id = `home-col-${title.replace(/\W+/g, "-").toLowerCase()}`;
   return (
-    <section aria-labelledby={id} className={`flex min-w-0 flex-col gap-3.5 ${className}`}>
+    <section aria-labelledby={id} className="flex min-w-0 flex-col">
       <div className="flex flex-col gap-1">
         <h2 id={id} className="type-card-title">
           {title}
@@ -346,6 +363,18 @@ function QueueColumn({
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * One work block in a column. The 14px above it is inside what folds, so closing
+ * the block takes its gap with it and nothing hops when it is gone.
+ */
+function Block({ open, children }: { open: boolean; children: React.ReactNode }) {
+  return (
+    <Unfold open={open}>
+      <div className="pt-3.5">{children}</div>
+    </Unfold>
   );
 }
 
@@ -431,6 +460,7 @@ function OpenRequests({
               <Relative iso={entry.created_at} />
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-[196px] sm:shrink-0">
+              <Crossfade id={resolved.has(entry.id) ? "outcome" : "open"}>
               {resolved.has(entry.id) ? (
                 outcomes[entry.id] && (
                   <ActionOutcome
@@ -457,10 +487,11 @@ function OpenRequests({
                   </div>
                   {/* A failed write puts the buttons back and says why under them. */}
                   {outcomes[entry.id] && (
-                    <ActionOutcome placement="seat" outcome={outcomes[entry.id].outcome} />
+                    <ActionOutcome placement="seat" className="tint-in" outcome={outcomes[entry.id].outcome} />
                   )}
                 </>
               )}
+              </Crossfade>
             </div>
 
             {!resolved.has(entry.id) && <HoldingNote request={entry} />}
@@ -651,7 +682,12 @@ function OnboardingGaps({
 function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
   return (
     <Card>
-      <CardHeader title="Service accounts to look at" count={accounts.length} tone="warn" />
+      <CardHeader
+        title="Service accounts to look at"
+        count={accounts.length}
+        tone="warn"
+        action={<CardHeaderLink href="/system/service-accounts">Open Service accounts →</CardHeaderLink>}
+      />
       <Capped items={accounts} href="/system/service-accounts">
         {(account) => (
           <CardRow key={account.id}>
@@ -717,7 +753,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
         // A disabled action states its reason in the row, not on hover: hover
         // doesn't exist on touch and doesn't survive a screenshot.
         <div className="border-t border-dashed border-warn-line bg-warn-soft px-[18px] py-3 text-[13.5px] text-warn-text">
-          Disabled — Zitadel is not answering. Changes wait here, in order, and nothing is lost.
+          Sending waits until Zitadel answers. Changes wait here, in order, and nothing is lost.
         </div>
       )}
     </Card>

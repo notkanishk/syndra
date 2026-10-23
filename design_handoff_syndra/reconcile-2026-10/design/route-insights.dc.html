@@ -19,7 +19,7 @@
 <sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
 <div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
   <header data-screen-label="Insights board" style="display:flex;flex-direction:column;gap:12px;max-width:1000px">
-    <span class="type-label" style="color:var(--label)">Route · /insights · replaces /graph · Option B</span>
+    <span class="type-label" style="color:var(--label)">Route · /insights · replaces /graph · Option B · Final, 23 Oct 2026</span>
     <h1 class="type-page-title" style="margin:0">Insights: the map, and how access is changing</h1>
     <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">One nav item, two tabs. <strong style="color:var(--ink)">Map</strong> opens first and answers questions about how access is shaped today, or on any past date. <strong style="color:var(--ink)">Trends</strong> covers what a map cannot draw: how long things take, what is ending, what is held but never used, and how delivery has behaved. Every number on Trends opens the map or a filtered list in the matching state. The map is one click from the sidebar, as it is now. Every frame is live; open one alone with <span class="type-mono">?frame=</span>.</p>
   </header>
@@ -143,6 +143,7 @@
   <sc-if value="{{ isTrends }}" hint-placeholder-val="{{ false }}">
   <div style="display:flex;flex-direction:column;gap:16px">
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px">{{ trendsReadEl }}<span style="flex:1"></span>{{ periodEl }}</div>
+        <p style="margin:-6px 0 0;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty">This term is Monsoon, 3 Aug to 18 Dec. <a href="route-settings.dc.html?frame=default" style="font-weight:600">Set in Makerspace settings →</a></p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
       <x-import component-from-global-scope="Syndra.StatCard" label="Time to decide a request" value="9 h" detail="Median this term, down from 1.4 days last term" hint-size="100%,120px"></x-import>
       <x-import component-from-global-scope="Syndra.StatCard" label="Approved, then sent" value="3 h" detail="Median time a change waits for you to send" hint-size="100%,120px"></x-import>
@@ -150,12 +151,12 @@
     </div>
 
     <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:16px">
-      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px"><h2 class="type-card-title" style="margin:0">Access given and taken away, by week</h2><span style="font-size:13px;color:var(--muted)">This term · 296 given · 37 taken away</span><span style="flex:1"></span><a href="route-events.dc.html">Open the audit log →</a></div>
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px"><h2 class="type-card-title" style="margin:0">Access given and revoked, by week</h2><span style="font-size:13px;color:var(--muted)">This term · 296 given · 37 revoked</span><span style="flex:1"></span><a href="route-events.dc.html">Open the audit log →</a></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12.5px;color:var(--muted)">
         <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--ink)"></span>Through a bundle</span>
         <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--muted)"></span>By request</span>
         <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--faint)"></span>By hand</span>
-        <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--danger)"></span>Taken away</span>
+        <span style="display:inline-flex;align-items:center;gap:7px"><span aria-hidden="true" style="width:10px;height:10px;border-radius:3px;background:var(--danger)"></span>Revoked</span>
       </div>
       <div style="display:flex;flex-direction:column">
         <div style="display:flex;align-items:flex-end;gap:14px;height:190px">
@@ -208,12 +209,12 @@
       <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
         <div style="display:flex;align-items:baseline;gap:12px"><h2 class="type-card-title" style="margin:0">Ending soon</h2><span style="font-size:13px;color:var(--muted)">People, by project</span><span style="flex:1"></span><a href="route-expiring.dc.html">Open Expiring access →</a></div>
         <div style="display:flex;flex-direction:column">
-          <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:6px"><span class="type-label" style="flex:1;color:var(--label)">Project</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">30 days</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">60 days</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">90 days ↓</span></div>
+          <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:6px"><span class="type-label" style="flex:1;color:var(--label)">Project</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">14 days</span><span class="type-label" style="width:110px;text-align:right;color:var(--label)">30 days ↑</span></div>
           <sc-for list="{{ ending }}" as="r" hint-placeholder-count="4">
-            <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--divider)"><a href="route-projects-id.dc.html?frame=default" style="flex:1;color:var(--ink);font-weight:600" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.p }}</a><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.a }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.b }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.c }}</span></div>
+            <div style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--divider)"><a href="route-projects-id.dc.html?frame=default" style="flex:1;color:var(--ink);font-weight:600" style-hover="color:var(--accent-text);text-decoration:underline">{{ r.p }}</a><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.a }}</span><span style="width:110px;text-align:right;font-variant-numeric:tabular-nums">{{ r.b }}</span></div>
           </sc-for>
         </div>
-        <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Most of the 90-day number is the end of term on 30 Nov, when term bundles end together.</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Each number opens Expiring access in the same window, so the two always agree.</p>
       </div>
 
       <div class="card" style="padding:20px 22px;display:flex;flex-direction:column;gap:14px">
@@ -465,7 +466,7 @@ class Component extends DCLogic {
     const legend = [];
     if (s.lens === "people") legend.push(sw({ height: 2, background: "var(--line-strong)" }, "Given"), sw({ borderTop: "2px dashed var(--line-strong)" }, "Automatic"), sw({ height: 3, background: "linear-gradient(90deg, var(--line-strong), var(--line-strong))", borderRadius: 2 }, "Weight is people"));
     if (s.lens === "use") legend.push(sw({ height: 3, background: "var(--line-strong)" }, "Used this week"), sw({ height: 3, background: "var(--line-strong)", opacity: 0.45 }, "Used this term"), sw({ height: 3, background: "var(--line-strong)", opacity: 0.15 }, "Not in 90 days"));
-    if (s.lens === "ending") legend.push(sw({ height: 3, background: "linear-gradient(90deg, var(--ink), transparent)" }, "Ends within 30 days"), sw({ height: 2, background: "var(--line-strong)", opacity: 0.5 }, "Continues"));
+    if (s.lens === "ending") legend.push(sw({ height: 3, background: "linear-gradient(90deg, var(--ink), transparent)" }, "Ends within 14 days"), sw({ height: 2, background: "var(--line-strong)", opacity: 0.5 }, "Continues"));
     if (s.lens === "group") legend.push(sw({ height: 3, background: "var(--ink)" }, "Weight is their share"));
     if (s.asof) legend.push(sw({ height: 2, background: "var(--line-strong)", opacity: 0.2 }, "Added since 3 Sept"), sw({ height: 8, width: 8, borderRadius: 999, background: "var(--accent-text)" }, "Count then"));
     else legend.push(sw({ height: 2, background: "linear-gradient(90deg, transparent, var(--danger))" }, "Not explained by Syndra"), sw({ borderTop: "2px dashed var(--warn)" }, "Waiting for you to send"), sw({ height: 7, width: 7, borderRadius: 999, background: "var(--warn)" }, "Single route"));
@@ -553,7 +554,7 @@ class Component extends DCLogic {
     } else if (s.lens === "use") {
       panel = pv({ eyebrow: "Recent use · badge taps and sign-ins, 90 days", title: "48 people hold a locker they haven't used", meta: "Lockers · Main lab · last tap 2 Jun", hasOpen: true, open: "Open Main lab →", href: "route-projects-id.dc.html?frame=default", lines: [L(Q, "Not used in 90 days:", "Lockers. Everyone who holds it got it through Safety basics."), L(Q, "Used by a few:", "Storage · Member, 4 of 15 this term."), L(Q, "Used every day:", "Front door and Bandsaw · Member.")] });
     } else if (s.lens === "ending") {
-      panel = pv({ eyebrow: "Ending soon · next 30 days", title: "12 people lose something by 11 Nov", meta: "Lines fade toward where they end", hasOpen: true, open: "Open Expiring access →", href: "route-expiring.dc.html", lines: [L(Q, "Studio", "ends on 31 Oct for its 9 people, with the half-term."), L(Q, "By hand:", "Priya Nair's Laser cutter · Operator ends 20 Oct. Lab Tech still gives it to her."), L(Q, "Laser cutter · Supervisor", "ends for 2 people on 1 Nov.")] });
+      panel = pv({ eyebrow: "Ending soon · next 14 days", title: "7 people lose something by 31 Oct", meta: "Lines fade toward where they end", hasOpen: true, open: "Open Expiring access →", href: "route-expiring.dc.html", lines: [L(Q, "Studio", "ends on 31 Oct for its 9 people, with the half-term."), L(Q, "By hand:", "Priya Nair's Laser cutter · Operator ends 20 Oct. Lab Tech still gives it to her."), L(Q, "Laser cutter · Supervisor", "ends for 2 people on 1 Nov.")] });
     } else if (s.lens === "group") {
       panel = pv({ eyebrow: "A group", title: "People who left the makerspace", meta: "6 people · still holding 9 roles", hasOpen: true, open: "See them in People →", href: "route-users.dc.html", lines: [L(I, "4 of them", "can still badge into the Main lab, through Safety basics."), L(I, "2", "still hold Laser cutter · Member and the wood shop, through Lab Tech."), L(I, "1", "holds Laser cutter · Supervisor, given by hand.")] });
     } else {
@@ -601,7 +602,7 @@ class Component extends DCLogic {
     const fchip = (id, dot, text) => h("button", { key: id, type: "button", "aria-pressed": s.finding === id, onClick: () => this.setState(st => ({ finding: st.finding === id ? null : id, mode: "rest", focus: null, pins: [], drawn: null })), style: { padding: 0, border: 0, background: "transparent", font: "inherit", color: "inherit", cursor: "pointer", borderRadius: 999 } }, h(S.Chip, { style: s.finding === id ? { background: "var(--surface-2)", borderColor: "var(--line-strong)" } : undefined }, h("span", { style: { display: "inline-flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" } }, h("span", { "aria-hidden": true, style: { width: 7, height: 7, borderRadius: 999, background: dot } }), text)));
     const findingsEl = !S || s.asof ? null : [fchip("drift", D, "3 drift"), fchip("send", W, "2 waiting for you to send"), fchip("single", W, "1 single route"), fchip("unused", "var(--faint)", "4 unused"), fchip("overlap", "var(--faint)", "1 overlap")];
 
-    const weeks = [["3 Aug", 41, 3, 1, 2], ["10 Aug", 18, 6, 2, 4], ["17 Aug", 9, 5, 1, 3], ["24 Aug", 6, 4, 0, 6], ["31 Aug", 4, 3, 1, 2], ["7 Sept", 5, 2, 0, 3], ["14 Sept", 11, 4, 1, 5], ["21 Sept", 3, 3, 2, 2], ["28 Sept", 2, 2, 0, 7], ["5 Oct", 4, 3, 1, 3]].map(([d, b, r, hh, x]) => { const k = 3.3; return { d, tip: d + " · " + (b + r + hh) + " given: " + b + " through a bundle, " + r + " by request, " + hh + " by hand · " + x + " taken away", given: b + r + hh, taken: x, hB: Math.round(b * k), hR: Math.round(r * k), hH: Math.round(hh * k), hX: Math.round(x * 3.3) }; });
+    const weeks = [["3 Aug", 41, 3, 1, 2], ["10 Aug", 18, 6, 2, 4], ["17 Aug", 9, 5, 1, 3], ["24 Aug", 6, 4, 0, 6], ["31 Aug", 4, 3, 1, 2], ["7 Sept", 5, 2, 0, 3], ["14 Sept", 11, 4, 1, 5], ["21 Sept", 3, 3, 2, 2], ["28 Sept", 2, 2, 0, 7], ["5 Oct", 4, 3, 1, 3]].map(([d, b, r, hh, x]) => { const k = 3.3; return { d, tip: d + " · " + (b + r + hh) + " given: " + b + " through a bundle, " + r + " by request, " + hh + " by hand · " + x + " revoked", given: b + r + hh, taken: x, hB: Math.round(b * k), hR: Math.round(r * k), hH: Math.round(hh * k), hX: Math.round(x * 3.3) }; });
     const go = (patch) => (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState(Object.assign({ tab: "map", mode: "rest", focus: null, finding: null, asof: false, lens: "people", drawn: null }, patch)); };
     const f = (frame, label, note, tall) => ({ src: "route-insights.dc.html?frame=" + frame, label, note, h: tall ? 1000 : 720, ih: tall ? 2000 : 1440 });
     return {
@@ -613,7 +614,7 @@ class Component extends DCLogic {
       trendsReadEl: S ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 30000).toISOString(), current: true }, subject: "Trends" }) : null,
       periodEl: S ? h(S.Segmented, { size: "sm", label: "Period", value: "term", onChange: () => {}, options: [{ value: "30", label: "30 days" }, { value: "term", label: "This term" }, { value: "year", label: "This year" }] }) : null,
       weeks,
-      ending: [{ p: "Main lab", a: 0, b: 4, c: 40 }, { p: "Wood shop", a: 0, b: 2, c: 22 }, { p: "3D printing", a: 9, b: 9, c: 12 }, { p: "Laser Lab", a: 3, b: 5, c: 9 }],
+      ending: [{ p: "3D printing", a: 9, b: 9 }, { p: "Laser Lab", a: 3, b: 5 }, { p: "Main lab", a: 0, b: 4 }, { p: "Wood shop", a: 0, b: 2 }],
       idle: [{ role: "Lockers", p: "Main lab", last: "2 Jun", n: 48 }, { role: "Storage · Member", p: "Network storage", last: "4 of 15 this term", n: 11 }, { role: "Laser cutter · Supervisor", p: "Laser Lab", last: "18 Jun", n: 2 }],
       upkeep: [{ label: "People who left, still holding roles", n: 6, href: "#", go: go({ lens: "group" }) }, { label: "Drift still open", n: 3, href: "route-drift.dc.html" }, { label: "Roles nobody has", n: 2, href: "#", go: go({ finding: "unused" }) }, { label: "Bundles that give nothing new", n: 1, href: "#", go: go({ finding: "unused" }) }, { label: "Bundles that overlap", n: 1, href: "#", go: go({ finding: "overlap" }) }],
       toUse: go({ lens: "use" }), toSingle: go({ finding: "single" }),
@@ -634,14 +635,14 @@ class Component extends DCLogic {
         ] },
         { title: "Lenses", note: "One lens at a time changes what a line's weight means. No new colours.", frames: [
           f("use", "Recent use", "Lines fade by how recently anyone used them. Lockers is held by 48 people and nobody has tapped it since 2 Jun. Needs usage events from Badge reader and app sign-ins."),
-          f("ending", "Ending soon", "Lines that end within 30 days fade toward their end. Studio, Priya's by-hand Operator, and two Supervisors. Links to Expiring access."),
+          f("ending", "Ending soon", "Lines that end within 14 days fade toward their end (14 | 30, as on Expiring access and Home). Studio, Priya's by-hand Operator, and two Supervisors. Links to Expiring access."),
           f("group", "A group", "Pick a group and the weight becomes their share. People who left the makerspace still reach the Main lab through Safety basics. Groups: people who left, new this term, or a team."),
         ] },
         { title: "Many threads, and beyond Zitadel", note: "Pins hold up to three threads in three shades. TrueNAS folds out into its own lane from its node, so the lane is there only when you want it.", frames: [
           f("pins", "Pinned, with TrueNAS groups and keys", "Three pins, each its own shade; the panel says where they cross. Clicking TrueNAS opens a fifth lane of its groups, with the connection's state on the lane heading (amber when paused, neutral when offline). Keys sit behind ?."),
         ] },
         { title: "Trends", note: "What a map can't draw. Every count leads to the map or a list in the matching state.", frames: [
-          f("trends", "Trends tab", "Three medians first (deciding, sending, clearing drift). Then access given and taken away by week, with the two weeks that explain the shape. Then Requests, Ending soon by project, Held but not used, Upkeep, Single routes and Delivery. No scores, no rankings of people.", true),
+          f("trends", "Trends tab", "Three medians first (deciding, sending, clearing drift). Then access given and revoked by week, with the two weeks that explain the shape. Then Requests, Ending soon by project, Held but not used, Upkeep, Single routes and Delivery. No scores, no rankings of people.", true),
         ] },
       ],
     };

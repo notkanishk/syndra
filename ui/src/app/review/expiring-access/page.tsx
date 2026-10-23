@@ -7,6 +7,7 @@ import { useMemo, useRef, useState } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
+import { Crossfade } from "@/components/ui/Crossfade";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -15,6 +16,7 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
 import { FilterPills } from "@/components/ui/Select";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
 import { RunLabel, SortHead, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Unfold } from "@/components/ui/Unfold";
 import {
@@ -114,7 +116,7 @@ export default function ExpiringAccessPage() {
   // is what is seen.
   const resolver = useNameResolver();
   const [query, setQuery] = useState("");
-  const [sort, flipSort] = useSort<SortKey>("ends");
+  const [sort, flipSort, view] = useSort<SortKey>("ends");
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({ undecided: true, lapse: true });
   const text = useMemo(
     () => ({
@@ -141,7 +143,7 @@ export default function ExpiringAccessPage() {
       ),
     [rows, needle, text],
   );
-  const ordered = useMemo(() => sortExpiring(matched, sort, text), [matched, sort, text]);
+  const ordered = useMemo(() => sortExpiring(matched, view.sort, text), [matched, view.sort, text]);
   const soonestId = matched.find((grant) => !grant.acknowledged)?.id;
 
   // Two groups, not a filter. The cost this screen imposes is rescanning rows somebody has
@@ -149,6 +151,14 @@ export default function ExpiringAccessPage() {
   // behind a control an operator has to remember to check.
   const undecided = useMemo(() => ordered.filter((grant) => !grant.acknowledged), [ordered]);
   const acknowledged = useMemo(() => ordered.filter((grant) => grant.acknowledged), [ordered]);
+  // S5: a grant that goes on a later read (extended elsewhere, ended, revoked) fades where it
+  // was and closes its gap after, and not under the pointer. Counts and selection stay on the
+  // live rows; only what is drawn keeps the ones that are going.
+  const leaving = useLeavingRows(ordered, (grant) => grant.id, !grants.isLoading && !grants.error, {
+    scope: `${within}|${needle}`,
+  });
+  const undecidedShown = useMemo(() => leaving.rows.filter((grant) => !grant.acknowledged), [leaving.rows]);
+  const acknowledgedShown = useMemo(() => leaving.rows.filter((grant) => grant.acknowledged), [leaving.rows]);
   // Across the whole window: "every one decided" is a fact about the queue, not about a search.
   const anyUndecided = rows.some((grant) => !grant.acknowledged);
 
@@ -204,6 +214,9 @@ export default function ExpiringAccessPage() {
     <ExpiringSection
       {...SECTIONS[key]}
       rows={list}
+      count={(key === "undecided" ? undecided : acknowledged).length}
+      leave={leaving.props}
+      view={view}
       open={open[key]}
       onToggle={() => setOpen((cur) => ({ ...cur, [key]: !cur[key] }))}
       sort={sort}
@@ -311,7 +324,7 @@ export default function ExpiringAccessPage() {
           />
         </Card>
       ) : showRows ? (
-        <div data-selection-scope {...selection.containerProps} className="flex flex-col gap-4">
+        <div data-selection-scope {...selection.containerProps} {...leaving.listProps} className="flex flex-col gap-4">
           {/* Everything in the window has been judged. Said outright, because a queue whose only
               rows are acknowledged ones looks identical to a queue nobody has touched. */}
           <SectionPill sections={sections} label="Sections of expiring access" onOpen={openSection} />
@@ -322,8 +335,8 @@ export default function ExpiringAccessPage() {
               been looked at.
             </span>
           )}
-          {undecided.length > 0 && section("undecided", undecided, true)}
-          {acknowledged.length > 0 && section("lapse", acknowledged, false)}
+          {undecidedShown.length > 0 && section("undecided", undecidedShown, true)}
+          {acknowledgedShown.length > 0 && section("lapse", acknowledgedShown, false)}
         </div>
       ) : (
         <Card>
@@ -415,6 +428,9 @@ function ExpiringSection({
   hint,
   tone,
   rows,
+  count,
+  leave,
+  view,
   open,
   onToggle,
   sort,
@@ -430,6 +446,10 @@ function ExpiringSection({
   hint: string;
   tone?: "warn";
   rows: ExpiringGrantRow[];
+  /** The live rows: the ones going are still drawn, but not counted. */
+  count: number;
+  leave: (key: string) => LeaveProps;
+  view: { sort: Sort<SortKey>; className: string };
   open: boolean;
   onToggle: () => void;
   sort: Sort<SortKey>;
@@ -447,9 +467,9 @@ function ExpiringSection({
   // What and Given by gather equal values under a counted label; Who and Ends in do not.
   const runAt = runStarts(
     rows,
-    sort.key === "what"
+    view.sort.key === "what"
       ? (grant) => `${resolver.resolveProject(grant.project_id).value?.name ?? ""} · ${humanizeKey(grant.role_key)}`
-      : sort.key === "given"
+      : view.sort.key === "given"
         ? (grant) => resolver.resolveUser(grant.granted_by).value?.display_name ?? "somebody no longer listed"
         : null,
   );
@@ -459,7 +479,7 @@ function ExpiringSection({
         <div ref={anchor}>
           <CardHeader
             tone={tone}
-            count={rows.length}
+            count={count}
             note={hint}
             title={
               <button
@@ -501,21 +521,23 @@ function ExpiringSection({
               <span className="min-w-[300px]" />
             </CardColumns>
             {selectAll}
-            {shown.map((grant, index) => {
-              const run = runAt(index);
-              return (
-                <div key={grant.id}>
-                  {run && <RunLabel {...run} />}
-                  <ExpiringRow
-                    grant={grant}
-                    soonest={grant.id === soonestId}
-                    selecting={selecting}
-                    selection={selection}
-                    onLetLapse={() => onLetLapse(grant)}
-                  />
-                </div>
-              );
-            })}
+            <div className={view.className}>
+              {shown.map((grant, index) => {
+                const run = runAt(index);
+                return (
+                  <LeavingRow key={grant.id} {...leave(grant.id)}>
+                    {run && <RunLabel {...run} />}
+                    <ExpiringRow
+                      grant={grant}
+                      soonest={grant.id === soonestId}
+                      selecting={selecting}
+                      selection={selection}
+                      onLetLapse={() => onLetLapse(grant)}
+                    />
+                  </LeavingRow>
+                );
+              })}
+            </div>
             <PaginationRow
               shown={shown.length}
               total={rows.length}
@@ -641,6 +663,7 @@ function ExpiringRow({
       </div>
 
       <div className="flex w-full min-w-0 flex-col items-start gap-2 desktop:w-auto desktop:min-w-[300px] desktop:items-end">
+        <Crossfade id={reported ? "outcome" : "open"} className="w-full tablet:w-auto">
         {reported ? (
           <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />
         ) : (
@@ -698,8 +721,9 @@ function ExpiringRow({
             )}
           </div>
         )}
+        </Crossfade>
         {step.element}
-        {outcome && !reported && <ActionOutcome placement="seat" outcome={outcome} />}
+        {outcome && !reported && <ActionOutcome placement="seat" className="tint-in" outcome={outcome} />}
       </div>
     </div>
   );

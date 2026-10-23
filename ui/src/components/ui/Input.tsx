@@ -1,6 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
+
+import { TINT_MS, useExitPhase } from "@/lib/motion";
 
 /**
  * Text input. 14px radius rather than a pill: a field the operator types a
@@ -66,4 +68,31 @@ export function FieldLabel({
 /** The helper line beneath a field — plain language, never a spec. */
 export function FieldHint({ children }: { children: React.ReactNode }) {
   return <p className="mt-[7px] text-[13px] text-faint">{children}</p>;
+}
+
+/**
+ * What is wrong with a field, under it. It appears still, on tint, and goes on
+ * tint when the field is edited and the error stops being true; while it goes it
+ * still reads what it said. Nothing moves: the page is pushed by the line, not
+ * by the line's own motion. Renders nothing for no message.
+ */
+export function FieldError({
+  children,
+  className = "",
+  ...rest
+}: { children?: React.ReactNode } & Omit<React.HTMLAttributes<HTMLParagraphElement>, "children">) {
+  const open = Boolean(children);
+  const said = useRef(children);
+  if (open) said.current = children;
+  const { rendered, leaving } = useExitPhase(open, TINT_MS);
+  if (!rendered) return null;
+  return (
+    <p
+      role="alert"
+      className={`mt-[7px] text-[13px] text-danger-text ${leaving ? "tint-out" : "tint-in"} ${className}`}
+      {...rest}
+    >
+      {said.current}
+    </p>
+  );
 }

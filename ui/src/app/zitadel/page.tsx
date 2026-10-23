@@ -338,10 +338,10 @@ function HealthLine({
         </span>
         <span className="text-muted">
           {live
-            ? `replied in ${latency ?? 0} ms`
+            ? `in ${latency ?? 0} ms, and sees ${projectCount} project${projectCount === 1 ? "" : "s"}`
             : notConfigured
               ? "Syndra is not set up to talk to Zitadel"
-              : "the other checks wait for it"}
+              : "the projects check waits for it"}
         </span>
         <span className="flex-1" />
         {live && (
@@ -370,7 +370,8 @@ function HealthLine({
             <div className="row-divider flex flex-col gap-1 px-5 py-3.5 tablet:flex-row tablet:items-baseline tablet:gap-[18px]">
               <span className="text-[14px] font-semibold tablet:w-[180px] tablet:shrink-0">Projects</span>
               <span className="text-[13.5px] leading-[1.55] text-muted">
-                {projectCount} in Zitadel, as Zitadel reported them just now.
+                Syndra&apos;s own Zitadel account can read the {projectCount} project{projectCount === 1 ? "" : "s"} it
+                manages.
               </span>
             </div>
           </Card>

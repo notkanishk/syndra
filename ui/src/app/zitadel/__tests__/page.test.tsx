@@ -87,14 +87,14 @@ describe("Identity provider · health line and its fold", () => {
     health.value = { status: "ok", mode: "live", latency_ms: 42, projects_total: 6 };
     renderPage();
     expect(await screen.findByText("Answering")).toBeInTheDocument();
-    expect(screen.getByText("replied in 42 ms")).toBeInTheDocument();
+    expect(screen.getByText(/^in 42 ms, and sees \d+ projects?$/)).toBeInTheDocument();
     const toggle = screen.getByRole("button", { name: "Show checks" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("As Zitadel reported them just now.")).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
     expect(screen.getByRole("button", { name: "Hide checks" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText(/6 in Zitadel, as Zitadel reported them just now/)).toBeInTheDocument();
+    expect(screen.getByText(/can read the 6 projects it\s+manages/)).toBeInTheDocument();
   });
 
   it("counts projects as Zitadel reported them once the connection is healthy", async () => {

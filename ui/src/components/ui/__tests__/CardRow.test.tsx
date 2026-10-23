@@ -124,8 +124,8 @@ describe("a row opened by a control inside it", () => {
       </Card>,
     );
 
-    // The wrapper the panel lives in: `settle-in` box, then the row wrapper.
-    const owner = screen.getByText("adopt sana").parentElement!.parentElement!;
+    // The wrapper the panel lives in: the unfolding region, then the row wrapper.
+    const owner = screen.getByText("adopt sana").closest(".unfold")!.parentElement!;
     expect(owner.textContent, "the panel belongs to the row it is about").toContain("sana");
     expect(
       owner.textContent,
@@ -146,15 +146,16 @@ describe("a row opened by a control inside it", () => {
     expect(screen.getByRole("button")).toHaveTextContent("Adopt");
   });
 
-  // Everything in this product that opens rises into place. A panel that simply
-  // appears is the one thing on the screen that did not.
-  it("settles in like every other thing that opens", () => {
+  // A region opens to its own height and pushes the rows below it down (S, 8a):
+  // a card never scales, so the panel does not.
+  it("opens as an unfold, never a scale", () => {
     render(
       <CardRow expanded disclosure={<span>body</span>}>
         <span>sana</span>
       </CardRow>,
     );
-    expect(screen.getByText("body").parentElement!.className).toContain("settle-in");
+    expect(screen.getByText("body").closest(".unfold")).not.toBeNull();
+    expect(document.querySelector(".settle-in")).toBeNull();
   });
 
   it("renders nothing while it is closed", () => {

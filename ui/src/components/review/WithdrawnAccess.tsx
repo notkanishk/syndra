@@ -16,6 +16,7 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
 import { Select } from "@/components/ui/Select";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
 import { RunLabel, SortHead, orderBy, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Relative } from "@/components/ui/Time";
 import { Unfold } from "@/components/ui/Unfold";
@@ -109,7 +110,7 @@ export function WithdrawnAccess() {
   const [search, setSearch] = useState("");
   const [where, setWhere] = useState("");
   // Most recent first, as the board draws it: `when` is how long ago, so ascending is newest.
-  const [sort, flipSort] = useSort<SortKey>("when");
+  const [sort, flipSort, view] = useSort<SortKey>("when");
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({ spent: true, queued: true });
 
   const text = useMemo(
@@ -125,18 +126,23 @@ export function WithdrawnAccess() {
   const filtered = needle !== "" || where !== "";
   const matched = useMemo(
     () =>
-      orderBy(rows, sort, text).filter(
+      orderBy(rows, view.sort, text).filter(
         (row) =>
           (!where || row.target === where) &&
           (!needle || [text.who(row), text.what(row), text.where(row)].some((part) => part.toLowerCase().includes(needle))),
       ),
-    [rows, sort, text, where, needle],
+    [rows, view.sort, text, where, needle],
   );
   // Only systems with a row, so nothing on offer returns nothing.
   const systems = useMemo(() => Array.from(new Set(rows.map((row) => row.target))).sort(), [rows]);
 
   const spent = matched.filter((row) => row.spent);
   const queued = matched.filter((row) => !row.spent);
+  // S5: a revocation that clears on a later read (it reached the system, or somebody ended it)
+  // fades where it was and closes its gap after, and not under the pointer.
+  const leaving = useLeavingRows(matched, (row) => row.id, !query.isLoading && !query.error, {
+    scope: `${where}|${needle}`,
+  });
   // The meta line counts the whole list: a search narrows what is shown, not what is outstanding.
   const givenUp = rows.filter((row) => row.spent).length;
   const people = new Set(rows.map((row) => row.user_id)).size;
@@ -219,13 +225,16 @@ export function WithdrawnAccess() {
         )}
 
         {showRows ? (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4" {...leaving.listProps}>
             <SectionPill sections={sections} label="Sections of unfinished revocations" onOpen={openSection} />
             {(["spent", "queued"] as const).map((key) => (
               <RevocationSection
                 key={key}
                 {...SECTIONS[key]}
-                rows={key === "spent" ? spent : queued}
+                rows={leaving.rows.filter((row) => row.spent === (key === "spent"))}
+                count={(key === "spent" ? spent : queued).length}
+                leave={leaving.props}
+                view={view}
                 // A search that finds nothing here does not say nothing has been given up on.
                 empty={filtered ? "Nothing here matches." : SECTIONS[key].empty}
                 open={open[key]}
@@ -274,6 +283,9 @@ function RevocationSection({
   tone,
   empty,
   rows,
+  count,
+  leave,
+  view,
   open,
   onToggle,
   sort,
@@ -285,6 +297,10 @@ function RevocationSection({
   tone?: "danger";
   empty: string;
   rows: UnconfirmedRevocation[];
+  /** The live rows: the ones going are still drawn, but not counted. */
+  count: number;
+  leave: (key: string) => LeaveProps;
+  view: { sort: Sort<SortKey>; className: string };
   open: boolean;
   onToggle: () => void;
   sort: Sort<SortKey>;
@@ -297,9 +313,9 @@ function RevocationSection({
   // What and Where gather equal values under a counted label; Who and Revoked do not.
   const runAt = runStarts(
     rows,
-    sort.key === "what"
+    view.sort.key === "what"
       ? (row) => whatText(row, resolver.resolveProject(row.project_id).value?.name ?? "")
-      : sort.key === "where"
+      : view.sort.key === "where"
         ? (row) => targetLabel(row.target)
         : null,
   );
@@ -309,7 +325,7 @@ function RevocationSection({
         <div ref={anchor}>
           <CardHeader
             tone={tone}
-            count={rows.length}
+            count={count}
             note={hint}
             title={
               <button
@@ -358,15 +374,17 @@ function RevocationSection({
                     <span className="sr-only">What happens next</span>
                   </span>
                 </CardColumns>
-                {shown.map((row, index) => {
-                  const run = runAt(index);
-                  return (
-                    <div key={row.id}>
-                      {run && <RunLabel {...run} />}
-                      <Row row={row} />
-                    </div>
-                  );
-                })}
+                <div className={view.className}>
+                  {shown.map((row, index) => {
+                    const run = runAt(index);
+                    return (
+                      <LeavingRow key={row.id} {...leave(row.id)}>
+                        {run && <RunLabel {...run} />}
+                        <Row row={row} />
+                      </LeavingRow>
+                    );
+                  })}
+                </div>
                 <PaginationRow
                   shown={shown.length}
                   total={rows.length}

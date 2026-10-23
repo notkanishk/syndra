@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { setMediaQuery } from "@/test-utils/media";
@@ -39,6 +39,12 @@ const animationEnd = (el: Element) => act(() => void fireEvent(el, new Event("we
 beforeEach(() => motionInTests());
 
 describe("a row leaving after a read", () => {
+  it("does not mistake a new array of the same rows for a read", () => {
+    const { rerender } = render(<List ids={["a", "b"]} />);
+    rerender(<List ids={["a", "b"]} />);
+    expect(screen.getByText("b").parentElement).not.toHaveClass("tint-out");
+  });
+
   it("fades where it was, then closes its gap, then is gone; the rows that stay never move", () => {
     const { rerender } = render(<List ids={["a", "b", "c"]} />);
     const a = screen.getByText("a");
@@ -55,6 +61,19 @@ describe("a row leaving after a read", () => {
 
     animationEnd(gone);
     expect(screen.queryByText("b")).not.toBeInTheDocument();
+  });
+
+  it("is gone after its own duration even if no animation ever ends", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(<List ids={["a", "b"]} />);
+      rerender(<List ids={["a"]} />);
+      expect(screen.getByText("b")).toBeInTheDocument();
+      act(() => void vi.advanceTimersByTime(120 + 260 + 100));
+      expect(screen.queryByText("b")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("waits for the pointer to leave the list before the gap closes", () => {

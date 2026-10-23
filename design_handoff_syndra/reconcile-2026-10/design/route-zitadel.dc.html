@@ -19,7 +19,7 @@
 <sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
 <div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
   <header data-screen-label="Zitadel board" style="display:flex;flex-direction:column;gap:12px;max-width:1000px">
-    <span class="type-label" style="color:var(--label)">Route · /zitadel and its five pages</span>
+    <span class="type-label" style="color:var(--label)">Route · /zitadel and its five pages · Final, 23 Oct 2026</span>
     <h1 class="type-page-title" style="margin:0">Zitadel, reading kept apart from writing</h1>
     <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Built from the picks on <a href="explore-zitadel-questions.dc.html">the questions board</a>: red doors (4a), the standing line and dashed frame (5b), a folding Projects list and a list-beside-detail People page (6b, 6a), one checks line that opens (7c), recent direct changes inside the fold (8a), and the guided key replacement (2c). Every band follows one path in order. Code notes are in <span class="type-mono">proposed/Zitadel-code-notes.md</span>.</p>
   </header>
@@ -49,7 +49,7 @@
     <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
     <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
       <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">Zitadel isn't answering. This is what it held at 09:40.</span>
-      <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Everything below is real, read 14 minutes ago, and may have changed since. Giving and revoking access is paused until Zitadel answers, because a decision made on an old read can be wrong.</p>
+      <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Everything below is real, read 14 minutes ago, and may have changed since. Anything you give or revoke now waits until Zitadel answers.</p>
       <p style="margin:0;font-size:13px;color:var(--muted)">For the person who runs the Syndra server: Zitadel at auth.makerspace.edu did not answer within 5 seconds.</p>
       <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px"><span style="flex:none;white-space:nowrap;display:inline-flex"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="110px,34px">Check again</x-import></span><span style="font-size:12.5px;color:var(--muted)">Syndra also tries by itself every minute.</span></div>
     </div>
@@ -321,10 +321,7 @@ class Component extends DCLogic {
       Object.assign({ name: "Reachable", word: "Not answering", long: "Last answered at 09:40. Syndra tried again just now.", hasLink: false }, { tone: "warn", ink: "var(--warn-text)" }),
     ] : [
       Object.assign({ name: "Reachable", word: "Answering", long: "Replied in 42 ms, checked just now.", hasLink: false }, pass),
-      Object.assign({ name: "Allowed to change", word: "Can read and change", long: "Syndra's own Zitadel account may read and change projects, roles and people's roles, so what you send will land.", hasLink: false }, pass),
-      events ? Object.assign({ name: "Events", word: "14 events behind", long: "Zitadel holds 14 events Syndra hasn't received, the oldest from 22 minutes ago, so a new person may not have been noticed yet. Syndra compares with Zitadel's own log, so a quiet night never reads as this.", hasLink: true, link: "Incoming events" }, { tone: "warn", ink: "var(--warn-text)" })
-        : Object.assign({ name: "Events", word: "Up to date", long: "Last event 3 minutes ago. Zitadel has none that Syndra hasn't received.", hasLink: true, link: "Incoming events" }, pass),
-      Object.assign({ name: "Sign-in details", word: "Given every time", long: "212 sign-ins today, each given its access details by Syndra.", hasLink: false }, pass),
+      Object.assign({ name: "Projects", word: "Sees 5 projects", long: "Syndra's own Zitadel account can read the 5 projects it manages.", hasLink: false }, pass),
     ];
     const M = (t) => S ? h(S.Mono, null, t) : t;
     const CB = (command, caption) => S ? h(S.CommandBlock, { command, caption }) : null;
@@ -358,8 +355,8 @@ class Component extends DCLogic {
       meta: S ? h(S.MetaRow, null, loading ? [h(S.Mono, { key: "d" }, "auth.makerspace.edu")] : [h(S.Mono, { key: "d" }, "auth.makerspace.edu"), "5 projects", "212 people"]) : undefined,
       readTone: unreach ? "warn" : "healthy", readWord: unreach ? "Not answering" : "Answering",
       readA: unreach ? "last answered at 09:40, 14 minutes ago · " : "replied in 42 ms · ",
-      readB: unreach ? "the other checks wait for it" : events ? "1 of 4 checks needs a look" : "all four checks pass",
-      readBInk: events ? "var(--warn-text)" : "var(--muted)", readC: unreach ? "" : " · checked just now",
+      readB: unreach ? "the projects check waits for it" : "sees 5 projects",
+      readBInk: "var(--muted)", readC: unreach ? "" : " · checked just now",
       canToggle: !unreach, checksOpen: this.state.checksOpen && !unreach, checksVerb: this.state.checksOpen ? "Hide checks" : "Show checks", checksChev: this.state.checksOpen ? "none" : "rotate(-90deg)",
       toggleChecks: () => this.setState(s => ({ checksOpen: !s.checksOpen })), checks,
       keyWord: due ? "Past its limit" : "Within its limit", keyTone: due ? "warn" : "healthy", keyInk: due ? "var(--warn-text)" : "var(--ink)",
@@ -395,9 +392,8 @@ class Component extends DCLogic {
       dVerb: D ? D.verb : "", dVariant: D ? D.variant : "accent", dCancel: D ? D.cancel : "Cancel", dDoneTitle: D ? D.doneT : "", dDoneBody: D ? D.doneB : "",
       bands: [
         { title: "1 · The Zitadel page", lede: "Health first, as one line that opens; then the key as one row; then the three read-only pages; then the folded way to write.", frames: [
-          fr("v=z", "Default", "Answering in 42 ms, all four checks pass. The key is one row. Look inside is links only. Change Zitadel directly stays folded.", 1200),
-          fr("v=z&c=1", "Checks opened", "Show checks opens four rows: reachable, allowed to change, events (with Incoming events →), sign-in details.", 1300),
-          fr("v=z&s=events", "A check needs a look", "Events are behind Zitadel's own log: the line says 1 of 4, and the checks open by themselves on arrival.", 1300),
+          fr("v=z", "Default", "Answering in 42 ms, and sees 5 projects: the two checks the backend makes (A-07 §25). The key is one row. Look inside is links only. Change Zitadel directly stays folded.", 1200),
+          fr("v=z&c=1", "Checks opened", "Show checks opens two rows: Reachable and Projects.", 1300),
           fr("v=z&o=1", "Change Zitadel directly, opened", "One warning, then two red doors, each with its Syndra route beside it. Below, the last three direct changes and what became of each, then All in Audit.", 1700),
           fr("v=z&s=unreach", "Zitadel not answering", "The amber Notice with Check again. The line says when it last answered; the other checks wait; the read-only links go quiet.", 1300),
           fr("v=z&s=loading", "Loading", "The address is known; no counts, no checks, until Zitadel answers.", 1100),

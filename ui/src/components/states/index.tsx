@@ -254,6 +254,13 @@ export function ListStates({
     if (isLoading) setShown(false);
     else if (shown && !stillMotion()) setFading(true);
   }
+  // The rows arrive once per list on the page: a filter that empties it and
+  // fills it again, or a read that shows the skeleton again, is not a first paint.
+  const [arrived, setArrived] = useState(false);
+  const showingRows = !isLoading && !fading && !error && !isEmpty;
+  useEffect(() => {
+    if (showingRows) setArrived(true);
+  }, [showingRows]);
   useEffect(() => {
     if (!fading) return;
     const timer = setTimeout(() => {
@@ -278,5 +285,5 @@ export function ListStates({
   // `contents` keeps the wrapper out of the layout entirely: this sits inside
   // flex and grid parents everywhere, and a real box here would collapse the
   // gaps between rows.
-  return <ArriveList>{children}</ArriveList>;
+  return <ArriveList startSettled={arrived}>{children}</ArriveList>;
 }
