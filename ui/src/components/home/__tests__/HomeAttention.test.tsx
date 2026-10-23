@@ -118,6 +118,7 @@ describe("Service accounts to look at", () => {
     renderHome();
 
     expect(await screen.findByText("Service accounts to look at")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Service accounts →" })).toHaveAttribute("href", "/system/service-accounts");
     expect(screen.getByRole("link", { name: "door panel" })).toHaveAttribute(
       "href",
       "/system/service-accounts/s2",
