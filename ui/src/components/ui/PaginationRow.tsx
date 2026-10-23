@@ -2,7 +2,9 @@
 
 import { useCallback, useState, type RefObject } from "react";
 
+import { armArrive } from "@/components/ui/ArriveList";
 import { Button } from "@/components/ui/Button";
+import { stillMotion } from "@/lib/motion";
 
 /** The first page of every long list, and what Show more adds (A-04 section 7.4). */
 export const PAGE_FIRST = 10;
@@ -68,14 +70,34 @@ export function PaginationRow({
   // A list that fits its first page has no paging to say.
   if (known && ended && total <= initial) return null;
 
+  // The rows the reader asked for arrive; the ones already there hold (8c).
+  const more = () => {
+    armArrive();
+    onMore();
+  };
+  const all = () => {
+    armArrive();
+    onAll?.();
+  };
+
+  // Glide to the heading first, then trim the list out of sight (8c): trimmed
+  // first, the page would shrink under the reader's eyes and the scroll would
+  // be a jump from wherever the browser clamped it.
+  // ponytail: switch to glideTo once it lands.
   const back = () => {
-    onBack();
     const target = anchor?.current ?? document.querySelector<HTMLElement>("h1");
-    if (!target) return;
+    if (!target) return onBack();
     if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
     target.focus({ preventScroll: true });
-    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    target.scrollIntoView?.({ behavior: still ? "auto" : "smooth", block: "start" });
+    if (stillMotion()) {
+      target.scrollIntoView?.({ behavior: "auto", block: "start" });
+      return onBack();
+    }
+    target.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    const glide = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--duration-glide"),
+    );
+    setTimeout(onBack, glide || 520);
   };
 
   const dot = (
@@ -94,13 +116,13 @@ export function PaginationRow({
       {!ended && (
         <>
           {dot}
-          <Button variant="ghost" size="sm" isPending={pending} onClick={onMore}>
+          <Button variant="ghost" size="sm" isPending={pending} onClick={more}>
             Show {known ? Math.min(step, remaining) : step} more
           </Button>
           {known && remaining > step && onAll && (
             <>
               {dot}
-              <Button variant="ghost" size="sm" onClick={onAll}>
+              <Button variant="ghost" size="sm" onClick={all}>
                 Show all {total}
               </Button>
             </>

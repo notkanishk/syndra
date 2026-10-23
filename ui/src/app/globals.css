@@ -246,6 +246,31 @@
     }
   }
 
+  /* A phone sheet rises from the bottom edge of the screen and nothing else:
+     the scrim carries the fade. Its own travel, so not held to --travel-cap. */
+  @keyframes sheet-rise {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: none;
+    }
+  }
+
+  /* The answer's lights travel once, along the map's own direction: the lit
+     threads are uncovered left to right. A reveal rather than a dash sweep
+     because the threads are dashed (Automatic) and non-scaling, and a dash
+     offset means nothing at their stretched length. The 4px margin keeps the
+     stroke's own width from being clipped. */
+  @keyframes light-sweep {
+    from {
+      clip-path: inset(-4px 100% -4px -4px);
+    }
+    to {
+      clip-path: inset(-4px);
+    }
+  }
+
   /* A popover opens on settle, rising 4px and nothing else: it is a small
      thing next to a trigger, so it must not look like a dialog. */
   @keyframes popover-in {
@@ -800,6 +825,18 @@
   transition-timing-function: var(--ease-settle);
 }
 
+/* A dialog's card where it is a sheet (S3): below the tablet breakpoint it
+   rises from the bottom edge on settle, 40ms behind its scrim. That travel is
+   the screen's own edge, so it is outside the 10px cap. Wider, it is the
+   dialog's `settle-in`. Worn by `Modal` and the touch navigation sheet. */
+@utility sheet-in {
+  animation: settle-in var(--duration-settle) var(--ease-settle) 40ms both;
+
+  @media (width < theme(--breakpoint-tablet)) {
+    animation: sheet-rise var(--duration-settle) var(--ease-settle) 40ms both;
+  }
+}
+
 /* Popovers: opens on settle, rising 4px. No scrim, so no delay. */
 @utility popover-in {
   animation: popover-in var(--duration-settle) var(--ease-settle) both;
@@ -809,6 +846,12 @@
    movement, on tint's duration and curve. */
 @utility chip-in {
   animation: flash-value var(--duration-tint) var(--ease-tint) both;
+}
+
+/* Insights' answer (Motion v2): the lit threads travel once, on arrive's
+   duration and curve, then rest. Reduced motion lands them at once. */
+@utility light-sweep {
+  animation: light-sweep var(--duration-arrive) var(--ease-arrive) both;
 }
 
 /* A result that went well: lifts 6px on settle. Failure never uses this; it
@@ -1025,7 +1068,8 @@ html.theme-fading *::after {
  *
  * The cap is the load-bearing part. A queue of forty must not take two
  * seconds to become readable, so the sixth row and everything after it arrive
- * together — the whole list is resolved inside 620ms however long it is. */
+ * WITH the fifth (4 steps, 160ms) — the whole list is resolved inside 580ms
+ * however long it is. */
 @utility arrive-list {
   /* Plays on the list's first paint only. `ArriveList` sets data-settled once
      the stagger has run, and from then on a child that mounts (a refresh, a
@@ -1034,9 +1078,17 @@ html.theme-fading *::after {
     animation: none;
   }
 
+  /* The exception is rows the reader asked for (Show 25 more): `ArriveList`
+     marks those as they land, numbering them from the first new row, and they
+     arrive on the same cap while the rows already there hold. */
+  &[data-settled] > [data-arriving] {
+    animation: arrive var(--duration-arrive) var(--ease-arrive) both;
+    animation-delay: calc(min(var(--i), var(--arrive-cap) - 1) * var(--arrive-step));
+  }
+
   > * {
     animation: arrive var(--duration-arrive) var(--ease-arrive) both;
-    animation-delay: calc(var(--arrive-cap) * var(--arrive-step));
+    animation-delay: calc((var(--arrive-cap) - 1) * var(--arrive-step));
   }
 
   > *:nth-child(1) {
@@ -1051,8 +1103,33 @@ html.theme-fading *::after {
   > *:nth-child(4) {
     animation-delay: calc(3 * var(--arrive-step));
   }
-  > *:nth-child(5) {
-    animation-delay: calc(4 * var(--arrive-step));
+}
+
+/* The screen's first paint (S11): the header tints in, then what follows it
+   arrives, 40ms apart on the same cap as a list, and the shell never moves.
+   `PageHeader` marks itself settled once that has run, and after that — or on
+   a Back — the page is simply there. Only the header's following siblings are
+   named, so nothing outside the page content can be pulled into it. */
+@utility page-head {
+  &:not([data-settled]) {
+    animation: fade var(--duration-tint) var(--ease-tint) both;
+  }
+
+  &:not([data-settled]) ~ * {
+    animation: arrive var(--duration-arrive) var(--ease-arrive) both;
+    animation-delay: calc(var(--duration-tint) + (var(--arrive-cap) - 1) * var(--arrive-step));
+  }
+  &:not([data-settled]) + * {
+    animation-delay: var(--duration-tint);
+  }
+  &:not([data-settled]) + * + * {
+    animation-delay: calc(var(--duration-tint) + 1 * var(--arrive-step));
+  }
+  &:not([data-settled]) + * + * + * {
+    animation-delay: calc(var(--duration-tint) + 2 * var(--arrive-step));
+  }
+  &:not([data-settled]) + * + * + * + * {
+    animation-delay: calc(var(--duration-tint) + 3 * var(--arrive-step));
   }
 }
 

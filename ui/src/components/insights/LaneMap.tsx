@@ -57,6 +57,8 @@ export function LaneMap({
   keysOpen,
   onKeys,
   onPick,
+  answered = false,
+  breathing = null,
 }: {
   model: Model;
   highlight: Highlight | null;
@@ -72,6 +74,10 @@ export function LaneMap({
   keysOpen: boolean;
   onKeys: () => void;
   onPick: (id: string | null) => void;
+  /** The lit threads are an answer's: their lights travel once, then rest. Hovering or following a line only tints it in. */
+  answered?: boolean;
+  /** The node whose answer is being computed: it breathes, the one loop Insights has. */
+  breathing?: string | null;
 }) {
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const keysButton = useRef<HTMLButtonElement | null>(null);
@@ -165,7 +171,7 @@ export function LaneMap({
               className="motion-tint"
             />
           ))}
-          <g key={litKey} className="tint-in">
+          <g key={litKey} className={answered ? "light-sweep" : "tint-in"}>
             {lit.map(({ t, d }) => (
               <path
                 key={t.id}
@@ -201,7 +207,7 @@ export function LaneMap({
                     aria-pressed={node.id === focusId}
                     aria-label={people != null ? `${name}, ${people} ${people === 1 ? "person" : "people"} ${unit}`.trim() : name}
                     onClick={() => onPick(node.id === focusId ? null : node.id)}
-                    className="motion-tint flex min-h-[44px] desktop:min-h-[38px] w-full items-center gap-2 rounded-nav border px-3 py-1.5 text-left"
+                    className={`motion-tint flex min-h-[44px] desktop:min-h-[38px] w-full items-center gap-2 rounded-nav border px-3 py-1.5 text-left ${node.id === breathing ? "breathe" : ""}`}
                     style={nodeSurface(tone, node.id === focusId, unused.has(node.id), Boolean(highlight) && !tone)}
                   >
                     <NodeGlyph kind={node.kind} />

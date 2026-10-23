@@ -48,7 +48,8 @@ export function useAnswer(model: Model | null, q: Question | null, people: Map<s
   const whatIf = useInsightsWhatIf(change);
 
   return useMemo(() => {
-    if (!model || !q || q.kind === "follow") return { answer: null as Answer | null, status: null as Panel | null, pin: null as string | null };
+    if (!model || !q || q.kind === "follow")
+      return { answer: null as Answer | null, status: null as Panel | null, pin: null as string | null, computing: false };
     const name = (id: string, fallback?: string) => people.get(id)?.name ?? fallback ?? UNKNOWN_ACCOUNT;
     const role = (id: string) => model.byId.get(id);
 
@@ -89,13 +90,15 @@ export function useAnswer(model: Model | null, q: Question | null, people: Map<s
 
     const result = settled();
     const pin = q.kind === "path" || q.kind === "compare" ? q.role : q.kind === "who" ? q.has : q.bundle;
-    if (typeof result !== "string") return { answer: result, status: null, pin };
+    if (typeof result !== "string") return { answer: result, status: null, pin, computing: false };
     // Nothing is said about an answer that has not been read.
     const line = result === "loading" ? "Working it out." : "Couldn't load this answer.";
     return {
       answer: null,
       status: { tone: "neutral", eyebrow: "Asking", title, lines: [{ tone: "ink", text: line }] } satisfies Panel,
       pin,
+      // Its node breathes while it is read; a failed read is not still happening.
+      computing: result === "loading",
     };
   }, [model, q, people, title, a.data, a.isError, b.data, b.isError, who.data, who.isError, whatIf.data, whatIf.isError, change]);
 }

@@ -197,7 +197,7 @@ function Picker({
           {chosenBundles.map((b) => (
             <span
               key={b.id}
-              className="tint-in inline-flex items-center gap-1 rounded-pill border border-accent-line bg-accent-soft py-1 pl-3 pr-1 text-[13px] font-semibold"
+              className="chip-in inline-flex items-center gap-1 rounded-pill border border-accent-line bg-accent-soft py-1 pl-3 pr-1 text-[13px] font-semibold"
             >
               {b.name}
               <span className="font-normal text-muted"> · bundle · {plural(b.roleIds.length, "role", "roles")}</span>
@@ -216,7 +216,7 @@ function Picker({
           {chosen.map((id) => (
             <span
               key={id}
-              className="tint-in inline-flex items-center gap-1 rounded-pill border border-line-strong bg-surface-2 py-1 pl-3 pr-1 text-[13px] font-semibold"
+              className="chip-in inline-flex items-center gap-1 rounded-pill border border-line-strong bg-surface-2 py-1 pl-3 pr-1 text-[13px] font-semibold"
             >
               {label(id)}
               <Button

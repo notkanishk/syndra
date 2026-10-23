@@ -47,7 +47,7 @@ describe("Modal closing (S1)", () => {
     expect(copy.querySelector(".leave-panel")).not.toBeNull();
     // Opening's classes are off it, or its own animation would run again.
     expect(copy.classList.contains("settle-scrim")).toBe(false);
-    expect(copy.querySelector(".settle-in")).toBeNull();
+    expect(copy.querySelector(".sheet-in")).toBeNull();
     // Ids would answer a second dialog's aria-labelledby.
     expect(copy.querySelector("[id]")).toBeNull();
 
