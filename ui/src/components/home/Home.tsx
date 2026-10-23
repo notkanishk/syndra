@@ -682,7 +682,12 @@ function OnboardingGaps({
 function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
   return (
     <Card>
-      <CardHeader title="Service accounts to look at" count={accounts.length} tone="warn" />
+      <CardHeader
+        title="Service accounts to look at"
+        count={accounts.length}
+        tone="warn"
+        action={<CardHeaderLink href="/system/service-accounts">Open Service accounts →</CardHeaderLink>}
+      />
       <Capped items={accounts} href="/system/service-accounts">
         {(account) => (
           <CardRow key={account.id}>
