@@ -250,6 +250,7 @@ func (c *managementClient) GetUser(ctx context.Context, userID string) (*Zitadel
 					Email string `json:"email"`
 				} `json:"email"`
 			} `json:"human"`
+			Machine *struct{} `json:"machine"`
 		} `json:"user"`
 	}
 	if err := json.Unmarshal(respBody, &raw); err != nil {
@@ -262,6 +263,7 @@ func (c *managementClient) GetUser(ctx context.Context, userID string) (*Zitadel
 		DisplayName: raw.User.Human.Profile.DisplayName,
 		Email:       raw.User.Human.Email.Email,
 		State:       raw.User.State,
+		Machine:     raw.User.Machine != nil,
 		Created:     parseCreationDate(raw.User.Details.CreationDate),
 	}, nil
 }
@@ -312,6 +314,9 @@ func (c *managementClient) ListUsers(ctx context.Context, p SearchParams) (*Sear
 					Email string `json:"email"`
 				} `json:"email"`
 			} `json:"human"`
+			// A pointer so the key's presence is the answer: Zitadel sends
+			// `human` or `machine` per user, never both.
+			Machine *struct{} `json:"machine"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
@@ -326,6 +331,7 @@ func (c *managementClient) ListUsers(ctx context.Context, p SearchParams) (*Sear
 			DisplayName: r.Human.Profile.DisplayName,
 			Email:       r.Human.Email.Email,
 			State:       r.State,
+			Machine:     r.Machine != nil,
 			Created:     parseCreationDate(r.Details.CreationDate),
 		}
 	}

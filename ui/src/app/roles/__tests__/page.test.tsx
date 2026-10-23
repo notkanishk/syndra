@@ -119,14 +119,16 @@ describe("the roles index, as drawn", () => {
   });
 
   // Zitadel unreachable: the API sends the project's id, or nothing, for a name
-  // it could not read. The id is never the Project column's label.
-  it("says Unknown project, never the project's id, when the name could not be read", () => {
+  // it could not read. The id is never the Project column's label; it sits beside the words,
+  // in both views, because it is the only thing anyone can look up in Zitadel (A-07 §7).
+  it("says Unknown project, with the id beside it and never as the label, when the name could not be read", () => {
     state.roles = [
       role("gamma", { display_name: "Gamma", project_id: "365951028870251526", project_name: "" }),
       role("alpha", { display_name: "Alpha", project_id: "382075332397630470", project_name: "382075332397630470" }),
     ];
     render(<RolesPage />);
     expect(screen.getAllByText("Unknown project")).toHaveLength(2);
-    expect(document.body.textContent).not.toMatch(/365951028870251526|382075332397630470/);
+    expect(document.body.textContent).toContain("Unknown project 365951028870251526");
+    expect(document.body.textContent).toContain("Unknown project 382075332397630470");
   });
 });

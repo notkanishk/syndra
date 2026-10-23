@@ -209,7 +209,19 @@ describe("Home › The makerspace", () => {
     renderMakerspace();
     const tile = screen.getByRole("link", { name: "People" });
     expect(tile).toHaveTextContent("2");
-    expect(tile).toHaveTextContent("2 whose access ends in the next 14 days");
+    expect(tile).toHaveTextContent("2 whose access ends in 14 days");
+  });
+
+  it("leaves service accounts out of the people count and out of 'no access'", () => {
+    const machine = person({
+      user: { ...person().user, id: "svc", name: "netbird", kind: "machine" },
+      effective_role_count: 0,
+    });
+    state.users = [person(), machine];
+    renderMakerspace();
+    expect(screen.getByRole("link", { name: "People" })).toHaveTextContent("1");
+    expect(screen.queryByRole("link", { name: /no access at all/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Everybody here has something.")).toBeInTheDocument();
   });
 
   it("shows no people count while the list is still being read", () => {

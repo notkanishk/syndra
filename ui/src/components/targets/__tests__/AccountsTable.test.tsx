@@ -16,6 +16,12 @@ function account(i: number) {
 
 const state = { count: 2 };
 
+// Who is a service account comes from one cached list; these rows are all people.
+vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
+  ...(await original<typeof import("@/lib/queries/useServiceAccounts")>()),
+  useServiceAccountIds: () => new Set<string>(),
+}));
+
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargetInventory: () => ({
     data: { bound: state.count, accounts: Array.from({ length: state.count }, (_, i) => account(i)) },

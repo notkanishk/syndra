@@ -6,6 +6,7 @@ import {
   EMPTY_FILTERS,
   hasAccess,
   hasAnyFilter,
+  isPerson,
   parseFilters,
   peopleHref,
   serializeFilters,
@@ -248,5 +249,50 @@ describe("the version dimension", () => {
       "on v2 of the Safety bundle",
     );
     expect(describeFilters({ ...EMPTY_FILTERS, bundle: "Safety" })).toBe("in the Safety bundle");
+  });
+});
+
+describe("isPerson", () => {
+  // The backend's `service_account` is the effective answer: Zitadel's machine
+  // type OR an operator's mark. `kind` is only the fallback for a payload that
+  // doesn't carry it yet.
+  it("reads service_account, and an operator's mark wins over a human kind", () => {
+    expect(isPerson(person())).toBe(true);
+    expect(isPerson(person({ user: { ...person().user, service_account: true, kind: "human" } }))).toBe(false);
+  });
+
+  it("an explicit false beats a machine kind, and the kind is the fallback", () => {
+    expect(isPerson(person({ user: { ...person().user, service_account: false, kind: "machine" } }))).toBe(true);
+    expect(isPerson(person({ user: { ...person().user, kind: "machine" } }))).toBe(false);
+  });
+});
+
+describe("?bundle=none", () => {
+  const bundled = person({ bundle_names: ["Lab Tech"] });
+  const bare = person({ user: { ...person().user, id: "u2" }, bundle_names: [] });
+
+  it("lists only people who hold no bundle, rather than a bundle called none", () => {
+    const rows = applyFilters([bundled, bare], { ...EMPTY_FILTERS, bundle: "none" });
+    expect(rows.map((row) => row.user.id)).toEqual(["u2"]);
+  });
+
+  // Home's "New people without a bundle" is active people only (the backend's
+  // definition), and "and N more" opens this: the two must count the same people.
+  it("leaves out service accounts and people who are no longer active", () => {
+    const user = (id: string, extra: object) => person({ user: { ...person().user, id, ...extra }, bundle_names: [] });
+    const rows = applyFilters(
+      [
+        bare,
+        user("u3", { service_account: true }),
+        user("u4", { status: "inactive" }),
+        user("u5", { status: "locked" }),
+      ],
+      { ...EMPTY_FILTERS, bundle: "none" },
+    );
+    expect(rows.map((row) => row.user.id)).toEqual(["u2"]);
+  });
+
+  it("states itself in the scope sentence", () => {
+    expect(describeFilters({ ...EMPTY_FILTERS, bundle: "none" })).toBe("in no bundle");
   });
 });

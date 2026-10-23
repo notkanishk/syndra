@@ -41,6 +41,27 @@ export interface UserProfile {
   team: string;
   status: string;
   avatar: string;
+  kind?: "human" | "machine";
+  /** Effective: a machine account, or a human-type account an operator marked. */
+  service_account?: boolean;
+  /** When the account was created in Zitadel (RFC3339). */
+  joined?: string;
+}
+
+/** What a service account is for (A-07 §26). */
+export type ServiceAccountKind = "integration" | "device" | "agent" | "shared_login";
+
+/** GET /service-accounts: every machine user plus every marked human, by name. */
+export interface ServiceAccount {
+  id: string;
+  name: string;
+  kind: ServiceAccountKind;
+  zitadel_type: "machine" | "human";
+  purpose: string;
+  owner_id: string;
+  role_count: number;
+  marked_by: string;
+  marked_at: string | null;
 }
 
 export interface CatalogResponse {

@@ -52,7 +52,7 @@ vi.mock("@/lib/queries/useTargets", () => ({
 }));
 vi.mock("@/lib/queries/useOperations", () => ({
   useMissedOnboarding: () => ({
-    data: { welcome_bundle_configured: true, missed: [] },
+    data: EMPTY_REPORT,
     isLoading: false,
     error: null,
     refetch: vi.fn(),
@@ -60,6 +60,9 @@ vi.mock("@/lib/queries/useOperations", () => ({
 }));
 vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
+
+// One object, as the query cache gives: a fresh one per render reads as a new list.
+const EMPTY_REPORT = { welcome_bundle_configured: true, missed: [] };
 
 const session = { id: "u1", name: "Ada", email: "ada@example.org" } as unknown as SessionUser;
 

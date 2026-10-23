@@ -644,7 +644,7 @@ function ReachNotice({
       <Notice
         tone="warn"
         live={offline}
-        title={offline ? `${name} isn't answering.` : `Syndra is waiting before it calls ${name} again.`}
+        title={offline ? `${name} isn't answering.` : `Syndra is waiting to retry ${name}.`}
       >
         {reading.sentence} {offline && reading.look}
         {!health.reachable && <LastKnown name={name} readAt={health.snapshot_taken_at} />}

@@ -4,6 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 
+// Who is a service account comes from one cached list; these rows are all people.
+vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
+  ...(await original<typeof import("@/lib/queries/useServiceAccounts")>()),
+  useServiceAccountIds: () => new Set<string>(),
+}));
+
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargetInventory: () => ({
     data: {

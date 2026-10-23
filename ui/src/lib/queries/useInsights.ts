@@ -142,7 +142,8 @@ export interface InsightsTrends {
   };
   sending: { median_minutes_approval_to_sent: number | null; sample: number };
   drift: { found: number; cleared: number; median_hours_to_clear: number | null };
-  ending_soon: Array<{ project_id: string; project_name: string; d30: number; d60: number; d90: number }>;
+  /** Distinct people whose grant ends within 14 and 30 days: the one window and its wider pill. */
+  ending_soon: Array<{ project_id: string; project_name: string; d14: number; d30: number }>;
   upkeep: {
     people_who_left_holding: number;
     drift_open: number;

@@ -13,7 +13,7 @@ import { EventSentence } from "@/components/audit/EventLine";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { formatShortDate, formatWhen, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
-import { hasAccess, isDeparted, peopleHref } from "@/lib/people-filters";
+import { hasAccess, isDeparted, isPerson, peopleHref } from "@/lib/people-filters";
 import { useAuditEntries } from "@/lib/queries/useAudit";
 import { useBundles } from "@/lib/queries/useBundles";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
@@ -117,13 +117,13 @@ function Tiles() {
       <StatCard
         label="People"
         href="/users"
-        value={users.isLoading || users.error || !users.data ? "—" : String(users.data.length)}
+        value={users.isLoading || users.error || !users.data ? "—" : String(users.data.filter(isPerson).length)}
         detail={
           !endingKnown
             ? notRead(!!summary.isLoading, !!summary.error)
             : endingSoon === 0
               ? "Nobody's access ends in the next 14 days."
-              : `${endingSoon} whose access ends in the next 14 days`
+              : `${endingSoon} whose access ends in 14 days`
         }
       />
       <StatCard
@@ -166,7 +166,9 @@ function Gaps() {
     );
   }
 
-  const noAccess = rows.filter((entry) => !hasAccess(entry)).length;
+  // A service account with no roles is not somebody who arrived and was never
+  // set up; one that left and still holds roles is exactly what the next row is for.
+  const noAccess = rows.filter((entry) => isPerson(entry) && !hasAccess(entry)).length;
   const departedHolding = rows.filter(
     (entry) => isDeparted(entry.user.status) && hasAccess(entry),
   ).length;

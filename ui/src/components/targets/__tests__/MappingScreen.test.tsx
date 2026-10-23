@@ -94,6 +94,6 @@ describe("the mappings header", () => {
 
     expect(document.body.textContent).not.toMatch(/one of 's roles/);
     expect(screen.getByText(/holds one of the project's roles/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Unknown project" }).getAttribute("href")).toBe("/projects/p_storage");
+    expect(screen.getByRole("link", { name: /^Unknown project/ }).getAttribute("href")).toBe("/projects/p_storage");
   });
 });

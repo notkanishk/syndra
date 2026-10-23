@@ -32,13 +32,13 @@
 
 ### Requirement: The system MUST be able to answer "who joined and got no welcome bundle" from state
 
-A reconciler MUST answer this question by reading current state — who the directory confirms is an active member, and who actually holds the welcome bundle — rather than relying on the onboarding trigger log, which reflects only events a webhook happened to report. A webhook that never arrives MUST NOT make a missed onboarding permanently invisible.
+A reconciler MUST answer this question by reading current state — who the directory confirms is an active member, and who actually holds any bundle (A-07 §33, 23 Oct: Home's block and People's no-bundle filter are one definition) — rather than relying on the onboarding trigger log, which reflects only events a webhook happened to report. A webhook that never arrives MUST NOT make a missed onboarding permanently invisible.
 
 The answer MUST carry whether a welcome bundle is configured at all as an explicit fact, separate from the list of missed people: no bundle configured means nobody can be checked against a default that does not exist, which MUST NOT be reported the same way as "everybody has it."
 
 #### Scenario: A silently missed webhook is still found
 
-- **WHEN** a person is an active member of the directory and does not hold the welcome bundle, regardless of whether any onboarding_triggers row exists for them
+- **WHEN** a person is an active member of the directory and holds no bundle, regardless of whether any onboarding_triggers row exists for them
 - **THEN** the reconciler MUST include them in the missed list
 
 #### Scenario: No welcome bundle configured reports the gap, not a false positive

@@ -119,7 +119,10 @@ export function useDialogFocusTrap(
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
-    focusableIn(panelRef.current)[0]?.focus();
+    // Not an id's copy control sitting in the header: the safe exit must be
+    // what takes focus, and the id stays one Tab away.
+    const inPanel = focusableIn(panelRef.current);
+    (inPanel.find((el) => !el.hasAttribute("data-skip-initial-focus")) ?? inPanel[0])?.focus();
 
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape" && !busyRef.current) {

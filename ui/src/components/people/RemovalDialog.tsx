@@ -11,6 +11,7 @@ import {
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
@@ -195,6 +196,7 @@ function DirectDialog({
   onClose: () => void;
 }) {
   const remove = useRemoveDirectGrant();
+  const waits = useWaitsBeforeLine();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const retained = others.length > 0;
   const roleLabel = `${removal.projectName} / ${removal.roleKey}`;
@@ -278,7 +280,9 @@ function DirectDialog({
               ? "Waiting · Syndra is still reading this person's direct grants, so it cannot yet tell whether there is one to revoke."
               : blocked
                 ? "Refused · this role was not given directly, so there is no direct access to revoke. Only direct access can be revoked here."
-                : undefined
+                : outcome
+                  ? undefined
+                  : waits
         }
       >
         {/* Cancel/Close comes FIRST in the markup, not just visually — the
@@ -355,6 +359,7 @@ function BundleDialog({
 }) {
   const bundleName = source.bundle_name ?? "this bundle";
   const removeBundle = useRemoveBundle(userId ?? "");
+  const waits = useWaitsBeforeLine();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const step = useCancelStep({
     host: `Remove the ${bundleName} bundle from ${subject}`,
@@ -424,7 +429,8 @@ function BundleDialog({
           step.note ??
           (source.queued
             ? undefined
-            : "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit.")
+            : ((!outcome && waits) ||
+              "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."))
         }
       >
         {/* First in the markup, same reason as the direct dialog: the focus

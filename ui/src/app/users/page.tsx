@@ -12,6 +12,7 @@ import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { FilterChip } from "@/components/ui/FilterChip";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -36,6 +37,8 @@ import {
   describeFilters,
   hasAnyFilter,
   isDeparted,
+  isPerson,
+  NO_BUNDLE,
   EMPTY_FILTERS,
   parseFilters,
   serializeFilters,
@@ -140,7 +143,16 @@ export default function PeoplePage() {
     if (!bulkMode) setWholeFilter(false);
   }, [bulkMode]);
 
-  const all = useMemo(() => users.data ?? [], [users.data]);
+  // People never includes a service account — not listed, not counted (A-07 §30).
+  // A search that lands on one says so below, and points at where it lives.
+  const all = useMemo(() => (users.data ?? []).filter(isPerson), [users.data]);
+  const matchedServiceAccounts = useMemo(() => {
+    const query = filters.q.trim().toLowerCase();
+    if (!query) return [];
+    return (users.data ?? []).filter(
+      (entry) => !isPerson(entry) && entry.user.name.toLowerCase().includes(query),
+    );
+  }, [users.data, filters.q]);
   const holders = useMemo(() => {
     if (!filters.role || !roleMembers.data) return null;
     return new Set(roleMembers.data.members.map((member) => member.user.id));
@@ -148,7 +160,10 @@ export default function PeoplePage() {
 
   // The board's default: Person, A to Z. Sorting is local to the view; the
   // filters in the URL decide who is listed, the headings only their order.
-  const [sort, setSort] = useSort<PeopleSort>("person");
+  const [sort, setSort] = useSort<PeopleSort>(
+    // Who just arrived, from Home's "and N more" (A-07 §33).
+    filters.bundle === NO_BUNDLE ? "joined" : "person",
+  );
   const rows = useMemo(
     () => orderBy(applyFilters(all, filters, holders), sort, PEOPLE_SORT),
     [all, filters, holders, sort],
@@ -285,6 +300,12 @@ export default function PeoplePage() {
         <ReadFreshness state={readState} subject="The people list" className="-mt-1.5 px-[2px]" />
       )}
 
+      {matchedServiceAccounts.map((entry) => (
+        <ArrowLink key={entry.user.id} href={`/system/service-accounts/${entry.user.id}`}>
+          {`${entry.user.name} is a service account`}
+        </ArrowLink>
+      ))}
+
       {bulkMode && give.roleKey && (
         <p className="text-[14px] text-muted">
           Pick who should get <RoleRef projectId={give.projectId} roleKey={give.roleKey} />, then choose
@@ -294,7 +315,7 @@ export default function PeoplePage() {
       {bulkMode && give.bundleId && (
         <p className="text-[14px] text-muted">
           Pick who should get {bundles.data?.find((b) => b.id === give.bundleId)?.name ?? "the bundle"}, then
-          choose Add to a bundle.
+          choose Give a bundle.
         </p>
       )}
 
@@ -308,7 +329,12 @@ export default function PeoplePage() {
               {`Holding ${filters.role}${projectName ? ` in ${projectName}` : ""}`}
             </FilterChip>
           )}
-          {filters.bundle && (
+          {filters.bundle === NO_BUNDLE && (
+            <FilterChip onClear={() => setParams({ bundle: "" })} clearLabel="Clear filter: no bundle">
+              No bundle
+            </FilterChip>
+          )}
+          {filters.bundle && filters.bundle !== NO_BUNDLE && (
             // Two chips, not one, because they clear independently: dropping
             // the version to see the whole bundle is the move an operator makes
             // constantly once they have found the stragglers.
@@ -448,7 +474,7 @@ export default function PeoplePage() {
             Give a role
           </SelectionAction>
           <SelectionAction onClick={() => setBulkOp("assign_bundle")}>
-            Add to a bundle
+            Give a bundle
           </SelectionAction>
           <SelectionAction onClick={() => setBulkOp("extend")}>
             Extend what ends
@@ -641,7 +667,7 @@ function attentionOf(entry: UserListEntry): { text: string; tone: string; rank: 
     const n = entry.expiring_count;
     const when = days === null ? "soon" : days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
     return {
-      text: n === 1 ? `Expires ${when}` : `${n} expire, the first ${when}`,
+      text: n === 1 ? `Ends ${when}` : `${n} end, the first ${when}`,
       tone: "text-warn-text",
       rank: -2_000 - n,
     };
@@ -657,13 +683,20 @@ function attentionOf(entry: UserListEntry): { text: string; tone: string; rank: 
   return null;
 }
 
-type PeopleSort = "person" | "bundles" | "attention";
+type PeopleSort = "person" | "bundles" | "attention" | "joined";
 
 const PEOPLE_SORT: Record<PeopleSort, (entry: UserListEntry) => string | number> = {
   person: (entry) => entry.user.name,
   // Nobody-in-a-bundle sorts after the last bundle name, not before the first.
   bundles: (entry) => entry.bundle_names?.[0] ?? "\uffff",
   attention: (entry) => attentionOf(entry)?.rank ?? 0,
+  // Newest first is its natural order (A-07 §18), so it ascends on the negated
+  // time. Nobody with no date goes last, not first. No heading of its own: it
+  // is only ever the default for a view that is about who just arrived.
+  joined: (entry) => {
+    const at = Date.parse(entry.user.joined ?? "");
+    return Number.isNaN(at) ? Number.MAX_SAFE_INTEGER : -at;
+  },
 };
 
 /**

@@ -18,6 +18,7 @@ func withTriageDeps(t *testing.T, items []models.DriftItem, users map[string]mod
 	origFacts := svcRoleHolderFacts
 	origRefs := svcDbGetAllReferencedRoleKeys
 	origFind := directoryFindUser
+	stubServiceMarks(t)
 	origGrants, origBases, origLanded := svcGetAllDirectGrants, svcMergeBases, svcPropagations
 	t.Cleanup(func() {
 		svcGetAllDirectGrants, svcMergeBases, svcPropagations = origGrants, origBases, origLanded
@@ -158,7 +159,7 @@ func TestDriftTriageQueue_MarksServiceAccounts(t *testing.T) {
 	withTriageDeps(t,
 		[]models.DriftItem{{ID: "x", Target: db.TargetZitadel, UserID: "svc1", ProjectID: "p_wiki", RoleKeys: []string{"read"}, DetectedAt: time.Now()}},
 		map[string]models.UserProfile{
-			"svc1": {ID: "svc1", Name: "svc-bookings", Email: "svc-bookings@makerspace.local", Status: "active"},
+			"svc1": {ID: "svc1", Name: "svc-bookings", Email: "svc-bookings@makerspace.local", Status: "active", Kind: models.UserKindMachine},
 		})
 
 	got, err := DriftTriageQueue(context.Background())

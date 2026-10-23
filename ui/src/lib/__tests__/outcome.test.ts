@@ -6,6 +6,7 @@ import {
   OUTCOME_TONE,
   PLAN_EFFECT_LABEL,
   outcomeFromError,
+  outcomeFromExtend,
   sentence,
   statesNothingChanged,
 } from "@/lib/outcome";
@@ -114,5 +115,25 @@ describe("sentence", () => {
 
   it("returns nothing for nothing, rather than a bare full stop", () => {
     expect(sentence("   ")).toBe("");
+  });
+});
+
+// This endpoint enqueues to the outbox in manual mode ("pending"); saying
+// "Extended" then would report Zitadel as holding what only Syndra's ledger does.
+describe("outcomeFromExtend", () => {
+  it("says it was extended when the grant went through", () => {
+    expect(outcomeFromExtend({ outbox_id: "o1", status: "done" }, 90, "It leaves on the next read.")).toEqual({
+      kind: "applied",
+      message: "Extended by 90 days",
+      detail: "It leaves on the next read.",
+    });
+  });
+
+  it("says it waits to be sent when the outbox holds it, and drops the leaves-on-next-read line", () => {
+    expect(outcomeFromExtend({ outbox_id: "o1", status: "pending" }, 90, "It leaves on the next read.")).toEqual({
+      kind: "queued",
+      message: "Will extend by 90 days once sent",
+      detail: undefined,
+    });
   });
 });

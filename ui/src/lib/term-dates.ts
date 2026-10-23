@@ -64,3 +64,21 @@ export function termFieldErrors(details: Record<string, string> | undefined): Re
       .map(([key, why]) => [key, `${why.charAt(0).toUpperCase()}${why.slice(1)}.`]),
   );
 }
+
+/**
+ * Which term is this one and which is next, by index, so the page can say it
+ * after the dates (A-07 §1). "This term" holds today; "Next term" is the first
+ * to start after today, so between two terms nothing is this one. Dates are
+ * calendar days, compared as text like `validateTerms` does.
+ */
+export function termStanding(terms: Term[], now: Date = new Date()): (string | null)[] {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  let next = -1;
+  terms.forEach((t, i) => {
+    if (t.start > today && (next < 0 || t.start < terms[next].start)) next = i;
+  });
+  return terms.map((t, i) =>
+    t.start <= today && today <= t.end ? "This term" : i === next ? "Next term" : null,
+  );
+}
