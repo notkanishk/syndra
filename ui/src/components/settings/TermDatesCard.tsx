@@ -7,13 +7,13 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { FieldLabel, Input } from "@/components/ui/Input";
+import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { ApiError } from "@/lib/api-client";
 import { formatShortDate } from "@/lib/format";
 import { describeFailure, sentence } from "@/lib/outcome";
-import { MAX_NAME, MAX_TERMS, shortDay, termFieldErrors, validateTerms } from "@/lib/term-dates";
+import { MAX_NAME, MAX_TERMS, shortDay, termFieldErrors, termStanding, validateTerms } from "@/lib/term-dates";
 import { useSaveTerms, useTermSetting, type Term } from "@/lib/queries/useTerms";
 
 /**
@@ -29,12 +29,12 @@ export function TermDatesCard() {
   const terms = setting.data?.terms ?? [];
   const setBy = setting.data?.set_by;
   const setAt = setting.data?.set_at;
+  const standing = termStanding(terms);
 
   return (
     <Card>
       <CardHeader
         title="Term dates"
-        note="For the whole makerspace"
         action={
           setting.data && (
             <Button size="sm" onClick={() => setEditing(true)}>
@@ -65,6 +65,7 @@ export function TermDatesCard() {
             <span className="w-[170px] shrink-0 text-[14px] text-muted">{t.name}</span>
             <span className="text-[15px] tabular-nums">
               {shortDay(t.start)} to {shortDay(t.end)}
+              {standing[i] && <span className="text-faint">{` · ${standing[i]}`}</span>}
             </span>
           </div>
         ))}
@@ -83,24 +84,42 @@ export function TermDatesCard() {
   );
 }
 
-type Row = Term & { key: number };
 
-/** Where a server key lands: `terms[1].start` → that row's Start. Anything else is said once, below the rows. */
+type Row = Term & { key: number };
+type Day = "start" | "end";
+
+/** Where a server key lands: `terms[1].start` → that row's First day. Anything else is said once, at the top. */
 const FIELD = /^terms\[(\d+)\]\.(name|start|end)$/;
+
+/**
+ * 2b (A-07 §1-3): one row per term, the field names said once above the rows.
+ * Desktop: Name · First day · Last day · Remove. Phone: Name, then the two days
+ * side by side, the error under the pair, Remove at the right.
+ */
+const ROW_GRID =
+  "grid grid-cols-2 items-start gap-x-3 gap-y-2.5 tablet:grid-cols-[minmax(0,1fr)_9.5rem_9.5rem_auto] tablet:gap-x-3.5";
+/** The visible field name on a phone, drawn by CSS so the words are in the DOM once, above the rows. */
+const PHONE_NAME =
+  "before:mb-[7px] before:block before:text-[12.5px] before:font-semibold before:text-faint before:content-[attr(data-label)] tablet:before:hidden";
 
 function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void }) {
   const next = useRef(terms.length);
   const [rows, setRows] = useState<Row[]>(() => terms.map((t, key) => ({ ...t, key })));
-  // Shown after a Save, and gone on the next edit: an error about what was
-  // typed stops being true the moment it changes.
+  // Shown after a Save, and gone when the field is edited: an error about what
+  // was typed stops being true the moment it changes.
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ text: string; reference?: string } | null>(null);
+  const [added, setAdded] = useState<number[]>([]);
   const [saved, setSaved] = useState(false);
   const save = useSaveTerms();
 
-  const edit = (key: number, patch: Partial<Term>) => {
-    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-    setErrors({});
+  const edit = (i: number, patch: Partial<Term>) => {
+    setRows((rs) => rs.map((r, n) => (n === i ? { ...r, ...patch } : r)));
+    setErrors((es) => {
+      const rest = { ...es };
+      for (const f of Object.keys(patch)) delete rest[`terms[${i}].${f}`];
+      return rest;
+    });
     setFailure(null);
   };
 
@@ -118,7 +137,10 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
     } catch (e) {
       const fields = e instanceof ApiError && e.code === "VALIDATION_FAILED" ? termFieldErrors(e.details) : {};
       if (Object.keys(fields).length) setErrors(fields);
-      else setFailure(sentence(describeFailure(e)));
+      else {
+        const ref = e instanceof ApiError ? e.details?.request_id : undefined;
+        setFailure({ text: sentence(describeFailure(e)), reference: typeof ref === "string" ? ref : undefined });
+      }
     }
   }
 
@@ -127,9 +149,10 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
     return Boolean(m && Number(m[1]) < rows.length);
   };
   const general = Object.entries(errors).filter(([k]) => !aboutRows(k));
+  const atMost = rows.length >= MAX_TERMS;
 
   return (
-    <Modal open onClose={onClose} busy={save.isPending} size="md" labelledBy="edit-terms-title">
+    <Modal open onClose={onClose} busy={save.isPending} size="lg" labelledBy="edit-terms-title">
       <ModalHeader
         title="Edit term dates"
         titleId="edit-terms-title"
@@ -139,80 +162,111 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
         {saved ? (
           <ActionOutcome
             word="Saved"
-            outcome={{ kind: "applied", message: "Trends and new this term now use these dates." }}
+            outcome={{
+              kind: "applied",
+              message: "Trends and new this term now use these dates.",
+              detail: "Asking and giving use them from now on. Access already given keeps the end it was given.",
+            }}
           />
         ) : (
           <>
-            {rows.map((r, i) => (
-              <div key={r.key} className="flex flex-col gap-2.5 rounded-inner border border-line-strong p-3.5">
-                <Field id={`term-${r.key}-name`} label="Name" error={errors[`terms[${i}].name`]} at={`terms[${i}].name`}>
-                  <Input
-                    id={`term-${r.key}-name`}
-                    value={r.name}
-                    maxLength={MAX_NAME + 20}
-                    aria-invalid={Boolean(errors[`terms[${i}].name`])}
-                    onChange={(e) => edit(r.key, { name: e.target.value })}
-                  />
-                </Field>
-                <div className="grid gap-2.5 tablet:grid-cols-2">
-                  {(["start", "end"] as const).map((f) => (
-                    <Field
-                      key={f}
-                      id={`term-${r.key}-${f}`}
-                      label={f === "start" ? "Start" : "End"}
-                      error={errors[`terms[${i}].${f}`]}
-                      at={`terms[${i}].${f}`}
-                    >
-                      <Input
-                        id={`term-${r.key}-${f}`}
-                        type="date"
-                        value={r[f]}
-                        aria-invalid={Boolean(errors[`terms[${i}].${f}`])}
-                        onChange={(e) => edit(r.key, { [f]: e.target.value })}
-                      />
-                    </Field>
-                  ))}
-                </div>
-                <div>
-                  <Button
-                    size="sm"
-                    aria-label={`Remove ${r.name.trim() || "this term"}`}
-                    disabled={rows.length === 1 || save.isPending}
-                    onClick={() => {
-                      setRows((rs) => rs.filter((x) => x.key !== r.key));
-                      setErrors({});
-                    }}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </div>
-            ))}
+            {general.length > 0 && (
+              <Notice tone="danger" blocking title="That needs another look.">
+                {general.map(([, m]) => m).join(" ")} Nothing was changed.
+              </Notice>
+            )}
+            {failure && (
+              <Notice tone="danger" blocking title="The term dates didn't save." reference={failure.reference}>
+                {failure.text} Nothing was changed.
+              </Notice>
+            )}
             <div>
+              <div aria-hidden className={`${ROW_GRID} hidden pb-2 text-[12.5px] font-semibold text-faint tablet:grid`}>
+                <span>Name</span>
+                <span>First day</span>
+                <span>Last day</span>
+                <span className="invisible">Remove</span>
+              </div>
+              {/* Twelve is the most, and the list scrolls inside the sheet rather than growing it. */}
+              <div className="tablet:max-h-[52dvh] tablet:overflow-y-auto">
+                {rows.map((r, i) => {
+                  const who = r.name.trim() || `Term ${i + 1}`;
+                  const wrong = (f: keyof Term) => errors[`terms[${i}].${f}`];
+                  return (
+                    <div
+                      key={r.key}
+                      data-term-row
+                      className={`row-divider ${ROW_GRID} py-3.5 ${added.includes(r.key) ? "tint-in" : ""}`}
+                    >
+                      <div data-label="Name" className={`col-span-2 tablet:col-span-1 ${PHONE_NAME}`}>
+                        <Input
+                          aria-label={`${who}, name`}
+                          value={r.name}
+                          maxLength={MAX_NAME + 20}
+                          aria-invalid={Boolean(wrong("name"))}
+                          className={wrong("name") ? "border-danger-line" : ""}
+                          onChange={(e) => edit(i, { name: e.target.value })}
+                        />
+                      </div>
+                      {(["start", "end"] as Day[]).map((f) => (
+                        <div key={f} data-label={f === "start" ? "First day" : "Last day"} className={PHONE_NAME}>
+                          <Input
+                            aria-label={`${who}, ${f === "start" ? "first" : "last"} day`}
+                            type="date"
+                            value={r[f]}
+                            aria-invalid={Boolean(wrong(f))}
+                            className={wrong(f) ? "border-danger-line" : ""}
+                            onChange={(e) => edit(i, { [f]: e.target.value })}
+                          />
+                        </div>
+                      ))}
+                      <div className="order-last col-span-2 justify-self-end tablet:order-none tablet:col-span-1 tablet:self-center">
+                        <Button
+                          size="sm"
+                          aria-label={`Remove ${who}`}
+                          disabled={rows.length === 1 || save.isPending}
+                          onClick={() => {
+                            setRows((rs) => rs.filter((x) => x.key !== r.key));
+                            setErrors({});
+                          }}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      {(["name", "start", "end"] as const).map(
+                        (f) =>
+                          wrong(f) && (
+                            <p
+                              key={f}
+                              role="alert"
+                              data-term-field={`terms[${i}].${f}`}
+                              className="col-span-2 text-[13px] text-danger-text tablet:col-span-full"
+                            >
+                              {wrong(f)}
+                            </p>
+                          ),
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5">
               <Button
                 variant="ghost"
-                disabled={rows.length >= MAX_TERMS || save.isPending}
+                size="sm"
+                disabled={atMost || save.isPending}
                 onClick={() => {
-                  setRows((rs) => [...rs, { key: next.current++, name: "", start: "", end: "" }]);
+                  const key = next.current++;
+                  setRows((rs) => [...rs, { key, name: "", start: "", end: "" }]);
+                  setAdded((a) => [...a, key]);
                   setErrors({});
                 }}
               >
                 Add a term
               </Button>
-              {rows.length >= MAX_TERMS && (
-                <span className="ml-2.5 text-[13px] text-faint">Twelve is the most.</span>
-              )}
+              {atMost && <span className="text-[13px] text-faint">Twelve is the most.</span>}
             </div>
-            {general.length > 0 && (
-              <Notice tone="danger" title="That needs another look.">
-                {general.map(([, m]) => m).join(" ")} Nothing was changed.
-              </Notice>
-            )}
-            {failure && (
-              <Notice tone="danger" title="The term dates didn't save.">
-                {failure} Nothing was changed.
-              </Notice>
-            )}
           </>
         )}
       </div>
@@ -228,39 +282,12 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
             <Button variant="accent" isPending={save.isPending} disabled={save.isPending} onClick={send}>
               Save term dates
             </Button>
-            <Button variant="ghost" disabled={save.isPending} onClick={onClose}>
+            <Button disabled={save.isPending} onClick={onClose}>
               Cancel
             </Button>
           </>
         )}
       </ModalFooter>
     </Modal>
-  );
-}
-
-function Field({
-  id,
-  label,
-  at,
-  error,
-  children,
-}: {
-  id: string;
-  label: string;
-  /** The key the server's 400 uses for this field. */
-  at: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div data-term-field={at}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      {children}
-      {error && (
-        <p role="alert" className="mt-[7px] text-[13px] text-danger-text">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

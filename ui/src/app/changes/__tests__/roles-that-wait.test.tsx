@@ -116,6 +116,11 @@ describe("Roles that wait for you", () => {
       expect(screen.getByText("1 change to these roles")).toBeInTheDocument();
     });
 
+    it("does not point at the drift sound (A-07 §1: it is about drift, and lives in Account)", () => {
+      render(<RolesThatWaitPage />);
+      expect(screen.queryByText(/sound/i)).toBeNull();
+    });
+
     it("stops a role waiting with its row's verb", async () => {
       render(<RolesThatWaitPage />);
       fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));

@@ -152,6 +152,9 @@ export function useApplyBulk() {
         "propagations",
         "audit",
         "review",
+        // Home's "New people without a bundle" is read from here: a bundle given
+        // to one of them takes the row off on this read, not the next poll.
+        "operations",
       ]) {
         qc.invalidateQueries({ queryKey: [key] });
       }
@@ -181,7 +184,7 @@ export function describeBulkOp(op: BulkOp): string {
     case "remove_role":
       return "Remove a role";
     case "assign_bundle":
-      return "Add to a bundle";
+      return "Give a bundle";
     case "remove_bundle":
       return "Remove from a bundle";
     case "extend":

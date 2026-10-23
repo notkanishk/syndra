@@ -78,12 +78,88 @@ beforeEach(() => {
 });
 
 describe("People index", () => {
+  // A-07 §30: People never includes them, in the list or in the count.
+  it("leaves a service account out of the list and the count, marked or machine", () => {
+    users.data = [
+      person(),
+      person({ user: { ...person().user, id: "svc", name: "netbird", title: "", team: "", kind: "machine" } }),
+      person({ user: { ...person().user, id: "svc2", name: "Ingestion Station", service_account: true } }),
+    ];
+    renderPeople();
+    expect(screen.getByText("Tomas Beck")).toBeInTheDocument();
+    expect(screen.queryByText("netbird")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ingestion Station")).not.toBeInTheDocument();
+    expect(screen.queryByText("Service account")).not.toBeInTheDocument();
+    expect(screen.getByText("1 person")).toBeInTheDocument();
+  });
+
+  // A-07 §26: a search that lands on one says so, and points at where it lives.
+  it("offers the service account a search matched, linking to its own page", () => {
+    nav.url = "/users?q=netb";
+    users.data = [
+      person(),
+      person({ user: { ...person().user, id: "svc", name: "netbird", kind: "machine" } }),
+    ];
+    renderPeople();
+    expect(screen.getByRole("link", { name: "netbird is a service account" })).toHaveAttribute(
+      "href",
+      "/system/service-accounts/svc",
+    );
+  });
+
+  it("says nothing about service accounts when the search is empty or matches none", () => {
+    users.data = [person({ user: { ...person().user, id: "svc", name: "netbird", kind: "machine" } })];
+    renderPeople();
+    expect(screen.queryByText(/is a service account/)).not.toBeInTheDocument();
+  });
+
+  // Home's "and 26 more →" lands here (A-07 §33).
+  it("honours ?bundle=none: a chip in force, newest joined first, undated last", () => {
+    nav.url = "/users?bundle=none";
+    const bare = { bundle_names: [], bundle_count: 0 };
+    users.data = [
+      person({ ...bare, user: { ...person().user, id: "a", name: "Old Hand", joined: "2026-01-05T00:00:00Z" } }),
+      person({ ...bare, user: { ...person().user, id: "b", name: "Undated" } }),
+      person({ ...bare, user: { ...person().user, id: "c", name: "Newcomer", joined: "2026-10-20T00:00:00Z" } }),
+      person({ user: { ...person().user, id: "d", name: "Bundled" } }),
+    ];
+    renderPeople();
+    expect(screen.getByText("No bundle")).toBeInTheDocument();
+    expect(screen.queryByText("Bundled")).not.toBeInTheDocument();
+    const order = screen.getAllByRole("link").map((link) => link.textContent ?? "");
+    const at = (name: string) => order.findIndex((text) => text.includes(name));
+    expect(at("Newcomer")).toBeLessThan(at("Old Hand"));
+    expect(at("Old Hand")).toBeLessThan(at("Undated"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Clear filter: no bundle/ }));
+    expect(nav.replaced.at(-1)).toBe("/users");
+  });
+
+  it("gives Select's bundle verb its one name", () => {
+    nav.url = "/users?bulk=1";
+    renderPeople();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+    expect(screen.getByRole("button", { name: "Give a bundle" })).toBeInTheDocument();
+    expect(screen.queryByText("Add to a bundle")).not.toBeInTheDocument();
+  });
+
+  it("keeps a machine account out of 'no access yet', which is for people who arrived", () => {
+    nav.url = "/users?attention=no-access";
+    users.data = [
+      person({ user: { ...person().user, id: "svc", name: "netbird", kind: "machine" }, effective_role_count: 0 }),
+      person({ user: { ...person().user, id: "u2", name: "Ines Ward" }, effective_role_count: 0 }),
+    ];
+    renderPeople();
+    expect(screen.getByText("Ines Ward")).toBeInTheDocument();
+    expect(screen.queryByText("netbird")).not.toBeInTheDocument();
+  });
+
   it("carries what a person needs, not just what they have", () => {
     users.data = [
       person({ expiring_count: 1, soonest_expiry: new Date(Date.now() + 2 * 86400_000).toISOString() }),
     ];
     renderPeople();
-    expect(screen.getByText("Expires in 2 days")).toBeInTheDocument();
+    expect(screen.getByText("Ends in 2 days")).toBeInTheDocument();
   });
 
   it("shows the most serious signal when a person has more than one", () => {
@@ -397,7 +473,7 @@ describe("People · the board", () => {
       named("Four", { open_request_count: 2 }),
     ];
     renderPeople();
-    expect(screen.getByText("Expires in 2 days")).toBeInTheDocument();
+    expect(screen.getByText("Ends in 2 days")).toBeInTheDocument();
     expect(screen.getByText("3 unexplained roles")).toBeInTheDocument();
     expect(screen.getByText("Open request")).toBeInTheDocument();
     expect(screen.getByText("2 open requests")).toBeInTheDocument();

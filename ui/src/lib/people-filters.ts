@@ -154,6 +154,21 @@ export function isDeparted(status: string | undefined): boolean {
 }
 
 /**
+ * THE ONE COPY of "does this account count as a person". A service account
+ * stays in every audit, but People leaves it out entirely: not listed, not
+ * counted, never "arrived, never set up" (A-07 §29–30).
+ *
+ * `service_account` is the backend's effective answer (Zitadel's machine type
+ * OR an operator's mark); `kind` only covers a payload that doesn't carry it.
+ */
+export function isPerson(entry: UserListEntry): boolean {
+  return !(entry.user.service_account ?? entry.user.kind === "machine");
+}
+
+/** `?bundle=none`: Home's "and N more" into People, for the active people who hold no bundle. */
+export const NO_BUNDLE = "none";
+
+/**
  * Whether Zitadel — or, absent an observation, Syndra's record — shows this
  * person holding anything at all. THE ONE COPY: "no access" and "departed,
  * still has access" are the same question asked in opposite directions, and
@@ -198,7 +213,7 @@ function matchesAttention(entry: UserListEntry, attention: Attention): boolean {
     case "requests":
       return entry.open_request_count > 0;
     case "no-access":
-      return !hasAccess(entry);
+      return isPerson(entry) && !hasAccess(entry);
     case "departed":
       // Only departed people who still hold something: a cleanly offboarded
       // account is not work, and listing it as such would bury the ones that are.
@@ -224,7 +239,11 @@ export function applyFilters(
   return rows.filter((entry) => {
     if (filters.project && !(entry.key_project_ids ?? []).includes(filters.project)) return false;
     if (filters.role && roleHolders && !roleHolders.has(entry.user.id)) return false;
-    if (filters.bundle && !(entry.bundle_names ?? []).includes(filters.bundle)) return false;
+    if (filters.bundle === NO_BUNDLE) {
+      // The same people as Home's "New people without a bundle", which is what
+      // opens this: active people (the backend's FindMissedOnboarding), holding none.
+      if (!isPerson(entry) || entry.user.status !== "active" || (entry.bundle_names ?? []).length > 0) return false;
+    } else if (filters.bundle && !(entry.bundle_names ?? []).includes(filters.bundle)) return false;
     if (filters.version && String(entry.bundle_versions?.[filters.bundle] ?? "") !== filters.version) {
       return false;
     }
@@ -245,7 +264,9 @@ export function describeFilters(filters: PeopleFilters, projectName?: string): s
   if (filters.project) parts.push(`in ${projectName || "the selected project"}`);
   // A key is not a word; the humanised form is the fallback prose already uses.
   if (filters.role) parts.push(`holding ${humanizeKey(filters.role)}`);
-  if (filters.bundle) {
+  if (filters.bundle === NO_BUNDLE) {
+    parts.push("in no bundle");
+  } else if (filters.bundle) {
     parts.push(
       filters.version
         ? `on v${filters.version} of the ${filters.bundle} bundle`

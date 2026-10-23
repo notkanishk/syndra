@@ -47,7 +47,8 @@ export interface OnboardingTriggerRow {
  */
 export interface MissedOnboardingReport {
   welcome_bundle_configured: boolean;
-  missed: Array<{ user_id: string; name: string; email: string }>;
+  /** `joined` is when Zitadel created the account (RFC3339); absent when it gave none. */
+  missed: Array<{ user_id: string; name: string; email: string; joined?: string }>;
 }
 
 export type OperationsStatus =

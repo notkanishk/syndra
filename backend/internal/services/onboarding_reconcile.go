@@ -4,21 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"syndra/internal/db"
 )
 
-// MissedOnboarding is a person Zitadel confirms is an active member who does
-// not hold the welcome bundle. Not a row from onboarding_triggers — that
+// MissedOnboarding is a person Zitadel confirms is an active member who holds
+// no bundle at all (any bundle, not only the welcome one: Home's "New people
+// without a bundle" and People's no-bundle filter are one definition, A-07
+// §32-33, so the count and the list behind "and N more" agree). Not a row from onboarding_triggers — that
 // table is only a log of what a webhook told Syndra, and a webhook that never
 // arrived (dropped, misrouted, or an event Syndra never learned to translate)
 // leaves no row there at all. This answers "who joined and got nothing" from
 // the two things that are actually true right now: who Zitadel says exists,
-// and who the welcome bundle was actually given to.
+// and who was actually given a bundle.
 type MissedOnboarding struct {
 	UserID string `json:"user_id"`
 	Name   string `json:"name"`
 	Email  string `json:"email"`
+	// Joined is when Zitadel created the account, so a reader can put the newest
+	// first; omitted when Zitadel gave none.
+	Joined *time.Time `json:"joined,omitempty"`
 }
 
 // MissedOnboardingReport is the reconciler's whole answer, not just the list.
@@ -35,7 +41,7 @@ type MissedOnboardingReport struct {
 	Missed                  []MissedOnboarding `json:"missed"`
 }
 
-// FindMissedOnboarding answers "who joined and got no welcome bundle" by
+// FindMissedOnboarding answers "who joined and holds no bundle" by
 // reading current state, per the one-truth-many-checks rule: never trust
 // that a trigger row's absence means nothing happened, ask Zitadel and the
 // assignment table directly.
@@ -56,7 +62,7 @@ type MissedOnboardingReport struct {
 // comes back empty rather than flagging every active person, and
 // WelcomeBundleConfigured=false is how a caller still learns the gap exists.
 func FindMissedOnboarding(ctx context.Context) (MissedOnboardingReport, error) {
-	welcomeBundleID, err := svcGetWelcomeBundle(ctx)
+	_, err := svcGetWelcomeBundle(ctx)
 	if err != nil {
 		if errors.Is(err, db.ErrNoWelcomeBundleConfigured) {
 			return MissedOnboardingReport{WelcomeBundleConfigured: false, Missed: []MissedOnboarding{}}, nil
@@ -64,9 +70,9 @@ func FindMissedOnboarding(ctx context.Context) (MissedOnboardingReport, error) {
 		return MissedOnboardingReport{}, fmt.Errorf("find missed onboarding: %w", err)
 	}
 
-	holders, err := svcGetUsersForBundle(ctx, welcomeBundleID)
+	holders, err := svcGetBundleHolders(ctx)
 	if err != nil {
-		return MissedOnboardingReport{}, fmt.Errorf("find missed onboarding: load welcome bundle holders: %w", err)
+		return MissedOnboardingReport{}, fmt.Errorf("find missed onboarding: load bundle holders: %w", err)
 	}
 	holderSet := make(map[string]struct{}, len(holders))
 	for _, id := range holders {
@@ -78,17 +84,27 @@ func FindMissedOnboarding(ctx context.Context) (MissedOnboardingReport, error) {
 		return MissedOnboardingReport{}, fmt.Errorf("find missed onboarding: list people: %w", err)
 	}
 
+	marks, err := serviceAccountMarks(ctx)
+	if err != nil {
+		return MissedOnboardingReport{}, fmt.Errorf("find missed onboarding: read service accounts: %w", err)
+	}
+
 	missed := []MissedOnboarding{}
 	for _, p := range people {
-		// Only active members are expected to hold the welcome bundle — someone
+		// Only active members are expected to hold a bundle — someone
 		// deactivated, locked or already gone is not "missed", they are gone.
 		if p.Status != "active" {
+			continue
+		}
+		// A service account is not a person missing a bundle; it stays in every
+		// access audit, just not in this list.
+		if isServiceAccountIn(marks, p) {
 			continue
 		}
 		if _, ok := holderSet[p.ID]; ok {
 			continue
 		}
-		missed = append(missed, MissedOnboarding{UserID: p.ID, Name: p.Name, Email: p.Email})
+		missed = append(missed, MissedOnboarding{UserID: p.ID, Name: p.Name, Email: p.Email, Joined: p.Joined})
 	}
 	return MissedOnboardingReport{WelcomeBundleConfigured: true, Missed: missed}, nil
 }

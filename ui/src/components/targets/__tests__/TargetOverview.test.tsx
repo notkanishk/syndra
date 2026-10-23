@@ -472,7 +472,7 @@ describe("one target's page", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active", status: "waiting_to_retry", health: { status: "online", recent: ["answered"] } };
     const { unmount } = renderTarget();
-    expect(screen.getByText("Syndra is waiting before it calls TrueNAS again.")).toBeInTheDocument();
+    expect(screen.getByText("Syndra is waiting to retry TrueNAS.")).toBeInTheDocument();
     expect(screen.getByText(/look at the Syndra server/)).toBeInTheDocument();
     unmount();
 

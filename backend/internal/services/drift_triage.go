@@ -95,6 +95,14 @@ func enrichForTriage(ctx context.Context, items, population []models.DriftItem) 
 	// queue rather than once per row.
 	provenance := grantProvenance(ctx, items)
 
+	// Marked service accounts, read once. A failed read leaves only Zitadel's
+	// machines and the older naming hint: this is display on a queue that must
+	// still load, and the row is kept either way.
+	marks, err := serviceAccountMarks(ctx)
+	if err != nil {
+		log.Printf("[DRIFT] triage: service-account marks unreadable, flagging machines only: %v", err)
+	}
+
 	out := make([]models.DriftTriageItem, 0, len(items))
 	for _, item := range items {
 		// Subtract this row only if the population actually contains it.
@@ -116,7 +124,7 @@ func enrichForTriage(ctx context.Context, items, population []models.DriftItem) 
 		}
 		if user, ok, err := directoryFindUser(ctx, item.UserID); err == nil && ok {
 			enriched.UserStatus = user.Status
-			enriched.UserIsServiceAccount = isServiceAccount(user)
+			enriched.UserIsServiceAccount = isServiceAccount(marks, user)
 		}
 		if len(item.RoleKeys) > 0 {
 			if p, found := provenance[grantKey(item.UserID, item.ProjectID, item.RoleKeys[0])]; found {
@@ -297,15 +305,10 @@ func isSafetyGated(group string) bool {
 	return strings.Contains(strings.ToLower(group), "safety")
 }
 
-// isServiceAccount marks machine accounts, for which "adopt" is the wrong verb
+// isServiceAccount marks service accounts, for which "adopt" is the wrong verb
 // — an integration that provisions itself on every deploy will re-create the
-// grant tomorrow no matter what Syndra records.
-func isServiceAccount(user models.UserProfile) bool {
-	local := strings.ToLower(user.Email)
-	if at := strings.Index(local, "@"); at >= 0 {
-		local = local[:at]
-	}
-	return strings.EqualFold(user.Status, "service") ||
-		strings.HasPrefix(strings.ToLower(user.Name), "svc-") ||
-		strings.HasPrefix(local, "svc-")
+// grant tomorrow no matter what Syndra records. The one shared rule, machine
+// or marked: no naming rule (A-07 §28).
+func isServiceAccount(marks map[string]db.ServiceAccountRow, user models.UserProfile) bool {
+	return isServiceAccountIn(marks, user)
 }

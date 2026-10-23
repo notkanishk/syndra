@@ -40,7 +40,7 @@ export function ProjectName({ id, name, fallback, className = "" }: ProjectNameP
     );
   }
   if (!value?.name) {
-    return <Unresolved label={fallback ?? UNKNOWN_PROJECT} id={id} className={className} />;
+    return <Unresolved label={fallback ?? UNKNOWN_PROJECT} id={id} idLabel="project id" className={className} />;
   }
 
   return (
@@ -72,5 +72,5 @@ export function ResolvedProjectName({
   if (resolved) {
     return <span className={className}>{name}</span>;
   }
-  return <Unresolved label={UNKNOWN_PROJECT} id={id ?? name} className={className} />;
+  return <Unresolved label={UNKNOWN_PROJECT} id={id ?? name} idLabel="project id" className={className} />;
 }

@@ -134,6 +134,9 @@ export const ADVANCED_NAV: NavEntry[] = [
     // row in this file. The per-target rows are appended after it by
     // `targetNav`, which is deployment configuration and may legitimately vary.
     leaf("Connected systems", "/system/targets", { pattern: /^\/system\/targets$/ }),
+    // How systems reach Zitadel, so it sits with them: `targetNav` slices the
+    // first two rows, so this lands after the targets and before Incoming events.
+    leaf("Service accounts", "/system/service-accounts"),
     // The LLDAP bridge's row. Gone with the bridge: it named a service that no
     // longer exists, and a nav entry for a deleted subsystem is worse than a
     // missing one — an operator clicks it before they read anything.

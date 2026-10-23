@@ -43,11 +43,12 @@ var (
 	// A missing welcome bundle is not a fault (migration 000046) — see
 	// TriggerOnboarding's use of this seam.
 	svcMarkOnboardingTriggerUnconfigured = db.MarkOnboardingTriggerUnconfigured
+	// Who holds any bundle at all: the reconciler's "has something" set.
+	svcGetBundleHolders = db.GetAllBundleHolderIDs
 
 	// The missed-onboarding reconciler's other read (onboarding_reconcile.go):
-	// everybody Zitadel confirms exists. svcGetUsersForBundle (cascade.go)
-	// already answers "who was actually handed this bundle" — reused rather
-	// than re-declared. Neither is the onboarding_triggers log: that log is
+	// everybody Zitadel confirms exists. svcGetBundleHolders (above) answers
+	// "who was actually handed a bundle". Neither is the onboarding_triggers log: that log is
 	// only what a webhook told Syndra, and the whole point of the reconciler
 	// is to answer from state instead.
 	//

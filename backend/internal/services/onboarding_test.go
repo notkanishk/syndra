@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // resetOnboardingDeps restores all onboarding injectable vars after a test.
@@ -25,8 +26,15 @@ func resetOnboardingDeps(t *testing.T) (
 	origComplete = svcCompleteOnboardingTrigger
 	origFail = svcFailOnboardingTrigger
 	origUnconfigured := svcMarkOnboardingTriggerUnconfigured
+	origFind := svcFindUser
+	stubServiceMarks(t)
+	// Nobody is a machine unless a test says so; never the live directory.
+	svcFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
+		return models.UserProfile{}, false, nil
+	}
 
 	t.Cleanup(func() {
+		svcFindUser = origFind
 		svcInsertOnboardingTrigger = origInsert
 		svcGetWelcomeBundle = origBundle
 		svcCascadeWelcomeBundle = origAssign

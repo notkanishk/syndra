@@ -13,12 +13,15 @@ import { ApiError } from "@/lib/api-client";
  */
 
 const state = vi.hoisted(() => ({
+  down: false,
   mutateAsync: vi.fn(),
   grants: [] as unknown[],
   queued: [] as string[],
   queuedAt: undefined as string | undefined,
   terms: undefined as Array<{ name: string; start: string; end: string }> | undefined,
 }));
+
+vi.mock("@/components/states/DegradedBanner", () => ({ useDegraded: () => state.down }));
 
 vi.mock("@/lib/queries/useTerms", () => ({
   useTerms: () => ({ data: state.terms }),
@@ -73,6 +76,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
 }));
 
 beforeEach(() => {
+  state.down = false;
   state.grants = [];
   state.queued = [];
   state.queuedAt = undefined;
@@ -241,5 +245,21 @@ describe("GrantDirectAccess · its result", () => {
     fireEvent.click(screen.getByRole("button", { name: "Grant access" }));
     expect(await screen.findByText("Not given")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Grant access" })).toBeEnabled();
+  });
+});
+
+// A-07 §9: a person's page stays on while Zitadel is down, and says before the
+// operator acts that the change will wait.
+describe("GrantDirectAccess · while Zitadel is not answering", () => {
+  it("says before the grant that it will wait, instead of promising it works at once", () => {
+    state.down = true;
+    open();
+    choose("Operator");
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Zitadel isn't answering, so this will wait for you to send it once it does."),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText(/as soon as you give it/)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Grant access" })).toBeEnabled();
   });
 });

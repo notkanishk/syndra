@@ -5,6 +5,7 @@ import { useState } from "react";
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePickerOne";
 import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
+import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button, PILL } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
@@ -95,6 +96,7 @@ function GrantDirectAccessOpen({
   // A grant that would cancel a removal still waiting for you to send turns the
   // sheet to a step first (A-04 §14); Keep it comes back here as it was.
   const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${roleName}` });
+  const waits = useWaitsBeforeLine();
 
   const ready = Boolean(value) && (preset !== "date" || Boolean(customDate));
   // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
@@ -215,13 +217,17 @@ function GrantDirectAccessOpen({
 
       <ModalFooter
         note={
-          step.note ?? (result || !selectedRole ? undefined : selectedRole.waits_for_send ? (
-            <span className="rounded-inner bg-warn-soft px-2.5 py-1.5 text-warn-text">
-              {roleName} always waits for you, so {first} gets it once you send it.
-            </span>
-          ) : (
-            `${first} can use it as soon as you give it.`
-          ))
+          step.note ??
+          (result || !selectedRole
+            ? undefined
+            : (waits ??
+              (selectedRole.waits_for_send ? (
+                <span className="rounded-inner bg-warn-soft px-2.5 py-1.5 text-warn-text">
+                  {roleName} always waits for you, so {first} gets it once you send it.
+                </span>
+              ) : (
+                `${first} can use it as soon as you give it.`
+              ))))
         }
       >
         {done ? (

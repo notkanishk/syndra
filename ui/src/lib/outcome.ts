@@ -144,6 +144,26 @@ export function outcomeFromError(error: unknown): ActionOutcome {
 }
 
 /**
+ * The result of extending a grant, as an outcome. The grant endpoint enqueues to
+ * the outbox in manual mode ("pending") rather than applying inline, so reporting
+ * "extended" unconditionally would say Zitadel has it when only Syndra's own
+ * ledger does. `leaves` is the closing line for a surface whose row goes on the
+ * next read; it is not said while the change is still held back.
+ */
+export function outcomeFromExtend(
+  result: { status?: string } | undefined,
+  days: number,
+  leaves?: string,
+): ActionOutcome {
+  const waiting = result?.status === "pending";
+  return {
+    kind: waiting ? "queued" : "applied",
+    message: waiting ? `Will extend by ${days} days once sent` : `Extended by ${days} days`,
+    detail: waiting ? undefined : leaves,
+  };
+}
+
+/**
  * Every refusal and every failure ends the same way, and it is the sentence an
  * operator most needs: whatever else went wrong, the state they were looking at
  * is the state that still holds.
