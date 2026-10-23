@@ -6,8 +6,6 @@ import { useTheme } from "@/lib/theme";
  * Dark is home; light is daylight. The toggle is a quiet neighbour of the
  * account chip — it changes how the room looks, never what is in it.
  */
-const GLIDE = "transition-[opacity,transform] duration-[var(--duration-settle)] ease-[var(--ease-settle)]";
-
 export function ThemeToggle() {
   const { theme, toggle } = useTheme();
   const next = theme === "dark" ? "light" : "dark";
@@ -29,12 +27,12 @@ export function ThemeToggle() {
         data-thumb
         className="relative flex h-8 w-8 items-center justify-center rounded-pill border border-line-strong"
       >
-        {/* Both glyphs are always drawn; the one for now fades in on settle and
-            turns a quarter as it arrives (S14). Nothing else in the page moves. */}
-        <span suppressHydrationWarning className={`absolute ${GLIDE} ${theme === "dark" ? "opacity-100 rotate-0" : "opacity-0 -rotate-45"}`}>
+        {/* Both glyphs are always drawn; the one for now tints in where it sits
+            (S14: every colour crossfades and nothing moves). */}
+        <span suppressHydrationWarning className={`absolute motion-tint ${theme === "dark" ? "opacity-100" : "opacity-0"}`}>
           <SunIcon />
         </span>
-        <span suppressHydrationWarning className={`absolute ${GLIDE} ${theme === "dark" ? "opacity-0 rotate-45" : "opacity-100 rotate-0"}`}>
+        <span suppressHydrationWarning className={`absolute motion-tint ${theme === "dark" ? "opacity-0" : "opacity-100"}`}>
           <MoonIcon />
         </span>
       </span>

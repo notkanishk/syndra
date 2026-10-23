@@ -122,6 +122,30 @@ describe("the floating pill", () => {
     expect(links[0]).toHaveTextContent("↑");
   });
 
+  it("drops in once the read line has gone, and leaves where it stands", () => {
+    render(<Page />);
+    place(80, { "sec-a": 200, "sec-b": 900 });
+    expect(pill().classList.contains("drop-in")).toBe(false);
+    place(-40, { "sec-a": 10, "sec-b": 900 });
+    expect(pill().classList.contains("drop-in")).toBe(true);
+    place(80, { "sec-a": 200, "sec-b": 900 });
+    // Leaving is a fade on tint: no drop class, no movement.
+    expect(pill().classList.contains("drop-in")).toBe(false);
+    expect(pill().className).toContain("motion-tint");
+    expect(pill().className).toContain("opacity-0");
+  });
+
+  it("flashes the heading it lands on, once the glide has arrived", () => {
+    vi.useFakeTimers();
+    render(<Page />);
+    document.getElementById("sec-b")!.getBoundingClientRect = () => rect(900);
+    fireEvent.click(screen.getByRole("link", { name: /Let lapse/ }));
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(document.getElementById("sec-b")!.classList.contains("flash")).toBe(true);
+  });
+
   it("opens a folded section from the pill, as the chips do", () => {
     const onOpen = vi.fn();
     render(<Page onOpen={onOpen} />);

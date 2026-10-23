@@ -3,6 +3,7 @@
 import React from "react";
 
 import { PILL } from "@/components/ui/Button";
+import { GlideIndicator, useGlideIndicator } from "@/components/ui/GlideIndicator";
 
 /**
  * Native select, styled to match Input. Native rather than a custom listbox:
@@ -62,13 +63,16 @@ export function Segmented<T extends string>({
     size === "sm"
       ? "min-h-[44px] px-3 text-[12.5px] desktop:min-h-0 desktop:py-1"
       : "min-h-[44px] px-4 text-[13px] desktop:min-h-0 desktop:py-1.5";
+  const { ref, box } = useGlideIndicator();
   return (
     <div
+      ref={ref}
       role="radiogroup"
       aria-label={label}
       aria-describedby={describedBy}
-      className={`${fill ? "flex w-full" : "inline-flex"} rounded-pill bg-tint-2 p-[3px]`}
+      className={`${fill ? "flex w-full" : "inline-flex"} relative rounded-pill bg-tint-2 p-[3px]`}
     >
+      <GlideIndicator box={box} kind="fill" className="bg-accent-dense" />
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -80,8 +84,8 @@ export function Segmented<T extends string>({
             title={option.title}
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
-            className={`rounded-pill font-semibold control ${fill ? "flex-1" : ""} ${pad} ${
-              active ? "bg-accent-dense text-accent-ink" : "text-muted hover:text-ink"
+            className={`relative rounded-pill font-semibold control ${fill ? "flex-1" : ""} ${pad} ${
+              active ? `${box ? "" : "bg-accent-dense "}text-accent-ink` : "text-muted hover:text-ink"
             } ${option.disabled ? "cursor-not-allowed opacity-50" : ""}`}
           >
             {option.label}
@@ -105,8 +109,10 @@ export function FilterPills<T extends string>({
   onChange: (next: T) => void;
   label: string;
 }) {
+  const { ref, box } = useGlideIndicator();
   return (
-    <div role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-1">
+    <div ref={ref} role="radiogroup" aria-label={label} className="relative flex flex-wrap items-center gap-1">
+      <GlideIndicator box={box} kind="fill" className="bg-tint-3" />
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -125,8 +131,8 @@ export function FilterPills<T extends string>({
             // within 120px of each other, where three sizes read as three
             // accidents. Shape and fill carry the difference between them now,
             // which is what was meant to carry it.
-            className={`rounded-pill control ${PILL.md} ${
-              active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
+            className={`relative rounded-pill control ${PILL.md} ${
+              active ? `${box ? "" : "bg-tint-3 "}font-semibold text-ink` : "text-muted hover:text-ink"
             } disabled:cursor-not-allowed disabled:text-faint disabled:hover:text-faint`}
           >
             {option.label}

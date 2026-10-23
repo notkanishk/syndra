@@ -3,6 +3,7 @@
 import React from "react";
 
 import { PILL } from "@/components/ui/Button";
+import { GlideIndicator, useGlideIndicator } from "@/components/ui/GlideIndicator";
 
 /**
  * The page-level tab row: two or three views of one subject, switched in place.
@@ -22,7 +23,9 @@ import { PILL } from "@/components/ui/Button";
  * box: an action, a filter and a tab sit within a hundred pixels of each other
  * on the drift queue, and they were 13.5px, 13px and 14.5px respectively. Three
  * sizes there read as three accidents rather than three kinds of control — the
- * difference between them is carried by shape and fill.
+ * difference between them is carried by shape and fill. The current tab is
+ * marked by an underline that glides to the choice (S10, `GlideIndicator`),
+ * and its content swaps in place with no slide.
  *
  * `label` is a node rather than a string because a tab may carry its own count,
  * and a count beside a tab label is the one place a number belongs inside a
@@ -42,8 +45,14 @@ export function Tabs<T extends string>({
   label: string;
   className?: string;
 }) {
+  const { ref, box } = useGlideIndicator();
   return (
-    <div aria-label={label} className={`flex flex-wrap items-center gap-2 ${className}`}>
+    <div
+      ref={ref}
+      aria-label={label}
+      className={`relative flex flex-wrap items-center gap-2 border-b border-line ${className}`}
+    >
+      <GlideIndicator box={box} kind="underline" className="bg-accent" />
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -52,8 +61,8 @@ export function Tabs<T extends string>({
             type="button"
             onClick={() => onSelect(option.value)}
             aria-current={active ? "page" : undefined}
-            className={`rounded-pill control ${PILL.md} ${
-              active ? "bg-tint-3 font-semibold text-ink" : "text-muted hover:text-ink"
+            className={`relative rounded-pill control ${PILL.md} ${
+              active ? "font-semibold text-ink" : "text-muted hover:text-ink"
             }`}
           >
             {option.label}

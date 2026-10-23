@@ -1,6 +1,7 @@
 import Link from "next/link";
 import React from "react";
 import { ARROW_LINK } from "@/components/ui/ArrowLink";
+import { Unfold } from "@/components/ui/Unfold";
 
 /**
  * The container surface: 20px radius, one hairline, no padding of its own so
@@ -120,10 +121,13 @@ export function CardRow({
 
   // Pushed, never overlapped. The rows below move down and the operator keeps
   // their place in the list; an overlay would cover the row they were comparing
-  // this one against. `settle-in` because everything in this product that opens
-  // rises into place — a panel that simply appears is the one thing on the
-  // screen that did not.
-  const panel = expanded ? <div className="settle-in px-5 pb-4 pt-1">{disclosure}</div> : null;
+  // this one against. `Unfold`: the height settles and the contents tint in,
+  // because a card never scales.
+  const panel = (
+    <Unfold open={expanded}>
+      <div className="px-5 pb-4 pt-1">{disclosure}</div>
+    </Unfold>
+  );
 
   // `first` on the inner line so the divider is not drawn twice: it belongs to
   // the wrapper now, which is what the next row sits under.

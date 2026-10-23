@@ -5,8 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 import { AccountSheet } from "@/components/shell/AccountSheet";
 import type { SessionUser } from "@/lib/session";
 
+const setTheme = vi.fn();
 vi.mock("@/lib/theme", () => ({
-  useTheme: () => ({ theme: "dark", toggle: vi.fn() }),
+  useTheme: () => ({ theme: "dark", toggle: vi.fn(), setTheme }),
 }));
 
 const session = {
@@ -68,7 +69,11 @@ describe("the account sheet", () => {
 
   it("offers appearance where a narrow header has no room for a toggle", () => {
     open();
-    expect(screen.getByRole("button", { name: /Appearance/ })).toBeTruthy();
+    // Two values, so the Segmented whose fill glides (S14); Dark is the one in force.
+    const group = screen.getByRole("radiogroup", { name: "Appearance" });
+    expect(within(group).getByRole("radio", { name: "Dark" })).toBeChecked();
+    fireEvent.click(within(group).getByRole("radio", { name: "Light" }));
+    expect(setTheme).toHaveBeenCalledWith("light");
   });
 
   it("offers the drift sound as a browser-only setting", () => {
@@ -81,9 +86,13 @@ describe("the account sheet", () => {
   // Every control in here is something a thumb has to land on.
   it("gives every control a real target", () => {
     open();
-    for (const name of [/Appearance/, /Sign out/]) {
-      const control = screen.getByRole("button", { name });
-      expect(control.className, `${name} must clear the touch floor`).toContain("min-h-[44px]");
+    const controls = [
+      screen.getByRole("radio", { name: "Dark" }),
+      screen.getByRole("radio", { name: "Light" }),
+      screen.getByRole("button", { name: /Sign out/ }),
+    ];
+    for (const control of controls) {
+      expect(control.className, `${control.textContent} must clear the touch floor`).toContain("min-h-[44px]");
     }
   });
 
