@@ -126,23 +126,30 @@
   --breakpoint-desktop: 67.5rem; /* 1080px */
 
   /* ── Motion ──────────────────────────────────────────────────────────────
-   * Six durations for the whole product, and nothing on the critical path is
-   * slower than 260ms: an operator clearing a queue of twelve should never
-   * wait for the interface.
+   * Tint 120, press 180, settle 260, arrive 420, flash 900, breathe 2400, and
+   * one more for scrolling only: glide 520, on settle's curve. Nothing on the
+   * critical path is slower than 260ms. FINAL §4 is the spec; this is its
+   * shape in CSS.
    *
    * Motion does three jobs here and no others — it softens the arrival of
    * things you did not ask for, it confirms the thing you touched, and it
-   * marks the one state that is still changing. Three rules govern all of it:
+   * marks the one state that is still changing. The rules that govern it:
    *
-   *   1. Direction carries meaning. Things the system produced RISE. Things
-   *      you opened SCALE from where you clicked. Nothing slides sideways and
-   *      nothing travels more than 10px.
-   *   2. Only one thing loops. A repeating animation means "this is still
-   *      happening" — degraded breathes, skeletons breathe. Nothing healthy
-   *      and no decoration is ever allowed to loop.
-   *   3. Never on a number. Counts, dates and ids are read, not watched. What
-   *      animates is the row around them, once, and only when the value
-   *      arrived while the operator was looking elsewhere.
+   *   1. Direction carries meaning. Things the system produced RISE. A sheet
+   *      you opened rises 8px from 98%; a card never scales, a region opens
+   *      to its own height (`unfold`). Nothing slides sideways and nothing in
+   *      the page travels more than 10px (`--travel-cap`). A phone sheet from
+   *      its edge and a control's own indicator are outside the cap.
+   *   2. Only breathe loops. A repeating animation means "this is still
+   *      happening": an amber Notice's dot, Insights' node while an answer is
+   *      computed, a Button's own pending indicator. A skeleton is still, and
+   *      so is everything healthy or decorative.
+   *   3. Never on a number. Counts, dates and ids are read, not watched; a
+   *      changed count tints and does not travel. What animates is the row
+   *      around it, once, and only when the value arrived while the operator
+   *      was looking elsewhere.
+   *   4. Light leads shape by 40ms. Closing fades first, then folds, and is
+   *      quicker. Hover is colour only.
    *
    * Use the motion-* / arrive / flash / breathe utilities below rather than
    * these raw values, so a duration and its easing can never drift apart.
@@ -225,8 +232,9 @@
     }
   }
 
-  /* Things you opened scale from where you clicked (rising 8px from 98%), so the
-     dialog grows into the place it is going to live rather than zooming out of screen centre. */
+  /* A sheet rises 8px from 98% (S1), so the dialog grows into the place it is
+     going to live rather than zooming out of screen centre. Sheets only: a
+     card never scales, and a region that opens uses `unfold`. */
   @keyframes settle-in {
     from {
       opacity: 0;
@@ -244,6 +252,18 @@
     from {
       opacity: 0;
       transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* The floating section pill drops in from 10px above on settle (8d). */
+  @keyframes drop {
+    from {
+      opacity: 0;
+      transform: translateY(calc(-1 * var(--travel-cap)));
     }
     to {
       opacity: 1;
@@ -303,8 +323,8 @@
     }
   }
 
-  /* The one concession to rule 3: the value lifts into place, once. It does
-     not roll, count up, or tick. */
+  /* A chosen chip rises 4px into its seat (`chip-in`, S15). Never a number:
+     a count changing tints (`tint-in`) and does not travel. */
   @keyframes flash-value {
     from {
       opacity: 0;
@@ -610,8 +630,7 @@
       animation: none !important;
       opacity: 0 !important;
     }
-    .breathe,
-    .skeleton-bar {
+    .breathe {
       animation: none !important;
       opacity: 1 !important;
     }
@@ -764,6 +783,21 @@
    will live, so the eye lands there and stays. */
 @utility settle-in {
   animation: settle-in var(--duration-settle) var(--ease-settle) 40ms both;
+}
+
+/* The pill that follows the read line: 10px down into place on settle. It
+   leaves on tint, by its own opacity transition, where it stands. */
+@utility drop-in {
+  animation: drop var(--duration-settle) var(--ease-settle) both;
+}
+
+/* A control's own indicator (Segmented's fill, Tabs' underline) gliding to
+   the choice on settle. Outside the travel cap: it goes where you sent it.
+   Absent under reduced motion, where it jumps. */
+@utility indicator-glide {
+  transition-property: left, top, width, height;
+  transition-duration: var(--duration-settle);
+  transition-timing-function: var(--ease-settle);
 }
 
 /* Popovers: opens on settle, rising 4px. No scrim, so no delay. */
@@ -1029,12 +1063,9 @@ html.theme-fading *::after {
   animation: flash var(--duration-flash) var(--ease-flash) 1;
 }
 
-@utility flash-value {
-  animation: flash-value var(--duration-settle) var(--ease-settle) 1;
-}
-
 /* breathe · 2.4s — the only licensed loop, and it means "still happening".
-   Degraded mode and skeletons, nothing else. */
+   An amber Notice's dot, Insights' node while it computes, a Button's own
+   pending indicator; nothing else. */
 @utility breathe {
   animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
 }
@@ -1185,9 +1216,8 @@ html.theme-fading *::after {
 @utility skeleton-bar {
   background-color: var(--tint-2);
   border-radius: var(--radius-pill);
-  /* One of the product's two licensed loops. It says "still loading", and it
-     stops the moment the row it stands in becomes real. */
-  animation: breathe var(--duration-breathe) var(--ease-breathe) infinite alternate;
+  /* Still: only breathe loops, and it means "this is still happening"
+     (FINAL §4). A skeleton waits quietly and fades when the rows arrive. */
 }
 
 /* ── Avatar ───────────────────────────────────────────────────────────────

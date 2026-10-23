@@ -75,10 +75,11 @@ describe("S14 Daylight: the theme switch crossfades every colour, once", () => {
     expect(html.classList.contains("theme-fading")).toBe(false);
   });
 
-  it("the toggle's glyph glides on settle: the other icon is present, hidden, ready to fade in", () => {
+  it("the toggle's glyphs crossfade where they sit: both drawn, neither one turns or travels", () => {
     toggle();
     const ring = screen.getByRole("button", { name: /Switch to/ }).querySelector("[data-thumb]");
     expect(ring).not.toBeNull();
     expect(ring!.querySelectorAll("svg").length).toBe(2);
+    expect(ring!.innerHTML).not.toMatch(/rotate|translate/);
   });
 });

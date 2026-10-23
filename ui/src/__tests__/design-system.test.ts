@@ -439,7 +439,25 @@ describe("design system", () => {
     expect(reduce).toMatch(/\.control,\s*\.press-scale\s*{[^}]*transition-duration: var\(--duration-press\)/);
     expect(reduce).toMatch(/\.flash\s*{[^}]*animation-duration: var\(--duration-flash\)/);
     expect(reduce).toMatch(/\.bloom::after\s*{[^}]*animation: none/);
-    expect(reduce).toMatch(/\.breathe,\s*\.skeleton-bar\s*{[^}]*animation: none[^}]*opacity: 1/);
+    expect(reduce).toMatch(/\.breathe\s*{[^}]*animation: none[^}]*opacity: 1/);
+  });
+
+  // Never: a loop other than breathe, a count that travels, a card that scales.
+  it("keeps the skeleton still", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    expect(atRuleBody(css, "@utility skeleton-bar")).not.toContain("animation");
+  });
+
+  it("scales only a sheet, never a card, a pill or a row", () => {
+    const found = offenders(["settle-in"]).filter(
+      (f) => !/(globals\.css|Modal\.tsx|TouchNav\.tsx|__tests__)/.test(f.file),
+    );
+    expect(found, `settle-in scales from 98% and is for sheets only:\n${describeOffenders(found)}`).toEqual([]);
+  });
+
+  it("moves no count: nothing but a chip uses flash-value", () => {
+    const found = offenders(["flash-value"]).filter((f) => !/(globals\.css|__tests__)/.test(f.file));
+    expect(found, describeOffenders(found)).toEqual([]);
   });
 
   // Hover is colour only; controls press, rows never scale.

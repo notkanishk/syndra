@@ -24,6 +24,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
 import { Unfold } from "@/components/ui/Unfold";
+import { glideTo } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatList, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
 import {
@@ -111,9 +112,10 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
     if (!link?.hash) return;
     event.preventDefault();
     setTab("people");
-    requestAnimationFrame(() =>
-      document.getElementById(link.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    );
+    requestAnimationFrame(() => {
+      const target = document.getElementById(link.hash.slice(1));
+      if (target) glideTo(target);
+    });
   }
 
   if (!bundle) {

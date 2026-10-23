@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ChimeToggle } from "@/components/settings/ChimeToggle";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
+import { Segmented } from "@/components/ui/Select";
 import { ACCOUNT_NAV } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
@@ -31,7 +32,7 @@ const OWN_NOTES: Record<string, string> = {
 
 export function AccountSheet({ session }: { session: SessionUser }) {
   const [open, setOpen] = useState(false);
-  const { theme, toggle } = useTheme();
+  const { theme, setTheme } = useTheme();
   const installer = useInstallPrompt();
 
   return (
@@ -99,14 +100,19 @@ export function AccountSheet({ session }: { session: SessionUser }) {
 
           {/* A setting about this device, in a sheet about this device. The
               header keeps its own toggle where there is room for one. */}
-          <button
-            type="button"
-            onClick={toggle}
-            className="flex min-h-[44px] items-center justify-between rounded-inner border border-line px-4 text-[14.5px] motion-press"
-          >
+          <div className="flex items-center justify-between gap-3 rounded-inner border border-line py-1.5 pl-4 pr-2 text-[14.5px]">
             <span>Appearance</span>
-            <span className="text-muted">{theme === "dark" ? "Dark" : "Light"}</span>
-          </button>
+            <Segmented
+              label="Appearance"
+              size="sm"
+              value={theme ?? "dark"}
+              onChange={setTheme}
+              options={[
+                { value: "dark", label: "Dark" },
+                { value: "light", label: "Light" },
+              ]}
+            />
+          </div>
 
           {/* Another setting about this device: the chime is a browser
               preference, so it sits beside Appearance rather than among the

@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { Chip, StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { stillMotion } from "@/lib/motion";
+import { glideTo } from "@/lib/motion";
 
 /**
  * Getting to a section on a page that has two or more (RULES, grouped lists).
@@ -41,16 +41,7 @@ function go<T extends NavSection>(section: T, onOpen?: (section: T) => void) {
   setTimeout(() => {
     const target = document.getElementById(section.id);
     if (!target) return;
-    // The shell's own scroller where there is one, so a narrow page never
-    // moves sideways; the window otherwise (a page outside the shell).
-    const container = document.getElementById("app-scroll");
-    const behavior = stillMotion() ? "auto" : "smooth";
-    if (container) {
-      const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
-      container.scrollTo?.({ top: container.scrollTop + offset - 64, behavior });
-    } else {
-      window.scrollTo?.({ top: window.scrollY + target.getBoundingClientRect().top - 64, behavior });
-    }
+    glideTo(target);
   }, 0);
 }
 
@@ -151,7 +142,9 @@ export function SectionPill<T extends NavSection>({
         aria-label={`${label} (while scrolling)`}
         aria-hidden={!spy.away}
         className={`absolute left-1/2 top-3 flex max-w-[calc(100%-24px)] -translate-x-1/2 gap-0.5 overflow-x-auto whitespace-nowrap rounded-pill border border-line-strong bg-surface-1 p-1 shadow-dialog motion-tint ${
-          spy.away ? "opacity-100" : "pointer-events-none opacity-0"
+          // Drops in 10px on settle once the read line has gone; leaves on tint,
+          // where it stands (opacity only).
+          spy.away ? "drop-in opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
         {sections.map((section, index) => {
