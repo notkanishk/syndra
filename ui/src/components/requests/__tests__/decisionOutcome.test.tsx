@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
 import { WouldCancelQueued } from "@/lib/api-client";
+import { motionInTests } from "@/test-utils/motion";
 import type { QueuedChange } from "@/lib/cancel-confirm";
 import type { AccessRequest } from "@/lib/queries/useRequests";
 
@@ -108,6 +109,18 @@ describe("a decided request names its person and its next step", () => {
     expect(seat.textContent).toBe("ApprovedSent · not yet seen in Zitadel");
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByText("Applied")).toBeNull();
+  });
+
+  // Motion v2 S4: the buttons and the decision share one seat; they crossfade, and
+  // the dot blooms because the decision went well, because of you, on screen.
+  it("approving fades the decision in, in the seat the buttons held, and blooms once", async () => {
+    motionInTests();
+    renderQueue();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    const seat = await decisionSeat();
+    expect(seat.closest(".tint-in")).not.toBeNull();
+    expect(seat.querySelector(".bloom")).not.toBeNull();
+    motionInTests(false);
   });
 
   it("approving a role that always waits says why and points at Pending changes", async () => {

@@ -46,6 +46,31 @@ describe("AnchoredPanel closing", () => {
     expect(screen.queryByText("Given by hand")).toBeNull();
   });
 
+  // A suggestion list closes because its options emptied: the popover must
+  // fade the words it was showing, not an empty box.
+  it("keeps what it showed while it fades, even when the caller's content has gone", () => {
+    function Suggestions({ options }: { options: string[] }) {
+      const anchor = createRef<HTMLButtonElement>();
+      return (
+        <>
+          <button ref={anchor} type="button">
+            Ask
+          </button>
+          <AnchoredPanel anchor={anchor} open={options.length > 0} width={200}>
+            {options.map((o) => (
+              <p key={o}>{o}</p>
+            ))}
+          </AnchoredPanel>
+        </>
+      );
+    }
+    const { rerender } = render(<Suggestions options={["Aanya Rao"]} />);
+    rerender(<Suggestions options={[]} />);
+    expect(screen.getByText("Aanya Rao")).toBeInTheDocument();
+    act(() => void vi.advanceTimersByTime(121));
+    expect(screen.queryByText("Aanya Rao")).toBeNull();
+  });
+
   it("is gone at once in reduced motion", () => {
     setMediaQuery("(prefers-reduced-motion: reduce)", true);
     const { rerender } = render(<Popover open />);

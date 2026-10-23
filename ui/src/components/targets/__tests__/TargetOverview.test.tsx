@@ -968,7 +968,7 @@ describe("adopting an account", () => {
     expect(state.adopted).toEqual([{ username: "sai", subjectId: "s-99" }]);
     expect(screen.queryByRole("dialog")).toBeNull();
     const outcome = screen.getByText(/bound to that person/).closest("[role=status]")!;
-    expect(outcome.parentElement!.parentElement!.textContent).toContain("sai");
+    expect(outcome.closest(".unfold")!.parentElement!.textContent).toContain("sai");
     expect(screen.getByText(/Assigned to/)).toBeInTheDocument();
   });
 });

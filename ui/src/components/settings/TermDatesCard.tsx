@@ -7,7 +7,9 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
+import { FormPart } from "@/components/ui/FormPart";
+import { FieldError, Input } from "@/components/ui/Input";
+import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { ApiError } from "@/lib/api-client";
@@ -112,6 +114,8 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
   const [added, setAdded] = useState<number[]>([]);
   const [saved, setSaved] = useState(false);
   const save = useSaveTerms();
+  // A removed row fades where it was and its gap settles after; one added opens to its height.
+  const drawn = useLeavingRows(rows, (r) => String(r.key));
 
   const edit = (i: number, patch: Partial<Term>) => {
     setRows((rs) => rs.map((r, n) => (n === i ? { ...r, ...patch } : r)));
@@ -189,15 +193,15 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
               </div>
               {/* Twelve is the most, and the list scrolls inside the sheet rather than growing it. */}
               <div className="tablet:max-h-[52dvh] tablet:overflow-y-auto">
-                {rows.map((r, i) => {
+                {drawn.rows.map((r) => {
+                  // A row that is going has no place in the form any more: its index is -1 and it
+                  // reads what it said (it is inert, so nothing in it can be edited).
+                  const i = rows.findIndex((x) => x.key === r.key);
                   const who = r.name.trim() || `Term ${i + 1}`;
                   const wrong = (f: keyof Term) => errors[`terms[${i}].${f}`];
                   return (
-                    <div
-                      key={r.key}
-                      data-term-row
-                      className={`row-divider ${ROW_GRID} py-3.5 ${added.includes(r.key) ? "tint-in" : ""}`}
-                    >
+                    <FormPart key={r.key} appear={added.includes(r.key)} {...drawn.props(String(r.key))}>
+                    <div data-term-row className={`row-divider ${ROW_GRID} py-3.5`}>
                       <div data-label="Name" className={`col-span-2 tablet:col-span-1 ${PHONE_NAME}`}>
                         <Input
                           aria-label={`${who}, name`}
@@ -233,20 +237,17 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
                           Remove
                         </Button>
                       </div>
-                      {(["name", "start", "end"] as const).map(
-                        (f) =>
-                          wrong(f) && (
-                            <p
-                              key={f}
-                              role="alert"
-                              data-term-field={`terms[${i}].${f}`}
-                              className="col-span-2 text-[13px] text-danger-text tablet:col-span-full"
-                            >
-                              {wrong(f)}
-                            </p>
-                          ),
-                      )}
+                      {(["name", "start", "end"] as const).map((f) => (
+                        <FieldError
+                          key={f}
+                          data-term-field={`terms[${i}].${f}`}
+                          className="col-span-2 mt-0! tablet:col-span-full"
+                        >
+                          {wrong(f)}
+                        </FieldError>
+                      ))}
                     </div>
+                    </FormPart>
                   );
                 })}
               </div>

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { glideTo } from "@/lib/motion";
 import type { Audience, UiView } from "@/lib/nav";
 import { parseUiView, writeViewCookie } from "@/lib/ui-view-cookie";
 
@@ -91,11 +92,7 @@ export function UiViewProvider({
     if (!pendingPanel) return;
     const frame = requestAnimationFrame(() => {
       const target = document.getElementById(pendingPanel);
-      const container = document.getElementById("app-scroll");
-      if (target && container) {
-        const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
-        container.scrollTo({ top: container.scrollTop + offset - 24, behavior: "smooth" });
-      }
+      if (target) glideTo(target, 24);
       setPendingPanel(null);
     });
     return () => cancelAnimationFrame(frame);

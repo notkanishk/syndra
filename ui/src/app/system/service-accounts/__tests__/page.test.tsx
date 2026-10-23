@@ -3,6 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ServiceAccountsPage from "@/app/system/service-accounts/page";
+import { motionInTests } from "@/test-utils/motion";
 import type { ServiceAccount } from "@/lib/types";
 
 const list = vi.hoisted(() => ({
@@ -80,5 +81,21 @@ describe("Service accounts list", () => {
     rerender(<ServiceAccountsPage />);
     expect(screen.getByText("No service accounts.")).toBeInTheDocument();
     expect(screen.getByTestId("card-count")).toHaveTextContent("0");
+  });
+});
+
+describe("Service accounts list leaving (S5)", () => {
+  it("fades an account that is gone on the next read, where it was, and does not count it", () => {
+    motionInTests();
+    list.state.data = [account(), account({ id: "b", name: "zed" })];
+    const { rerender } = render(<ServiceAccountsPage />);
+    list.state.data = [account()];
+    rerender(<ServiceAccountsPage />);
+
+    const gone = screen.getByRole("link", { name: "zed", hidden: true }).closest("[data-account-row]") as HTMLElement;
+    expect(gone.closest("[aria-hidden]")).not.toBeNull();
+    expect(gone.parentElement).toHaveClass("tint-out");
+    expect(screen.getByTestId("card-count")).toHaveTextContent("1");
+    motionInTests(false);
   });
 });

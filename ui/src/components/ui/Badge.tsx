@@ -119,7 +119,7 @@ export function StatusDot({
   return (
     <span
       aria-hidden
-      className={`size-1.5 shrink-0 rounded-pill ${STATUS_TONE[tone].dot} ${bloom ? "bloom" : ""} ${className}`}
+      className={`size-1.5 shrink-0 rounded-pill motion-tint ${STATUS_TONE[tone].dot} ${bloom ? "bloom" : ""} ${className}`}
     />
   );
 }

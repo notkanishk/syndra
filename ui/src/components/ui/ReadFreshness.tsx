@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { Crossfade } from "@/components/ui/Crossfade";
 import { formatRelative } from "@/lib/format";
 
 /**
@@ -88,6 +89,52 @@ const TONE: Record<Freshness, string> = {
   provisional: "text-warn-text",
 };
 
+export interface RefreshPress {
+  /** A press is in flight: show the control busy, and the old age stays until the read lands. */
+  pressing: boolean;
+  /** The age of the read a press brought, for a second only: the bloom is for it alone. */
+  landed: string | null;
+  /** Records the age on screen, runs the read, and never throws. */
+  press: (run: () => unknown) => Promise<void>;
+}
+
+/**
+ * S17. Only a read the reader asked for blooms. Pressing records the age on
+ * screen; the next read that differs from it is the answer to the press. A
+ * background read finds nothing recorded and lands quietly, and a press whose
+ * read never arrives is forgotten shortly after it settles, so it cannot claim
+ * the next background read.
+ */
+export function useRefreshPress(readAt: string | null | undefined): RefreshPress {
+  const [pressedAt, setPressedAt] = useState<string | null | undefined>(undefined);
+  const [pressing, setPressing] = useState(false);
+  const [landed, setLanded] = useState<string | null>(null);
+  // Decided in the render the new read arrives in, so the line that says so is drawn with it:
+  // an effect would let one frame of the new age through before the crossfade began.
+  if (pressedAt !== undefined && (readAt ?? null) !== pressedAt) {
+    setPressedAt(undefined);
+    setLanded(readAt ?? null);
+  }
+  useEffect(() => {
+    if (landed === null) return;
+    const t = setTimeout(() => setLanded(null), 1000);
+    return () => clearTimeout(t);
+  }, [landed]);
+  async function press(run: () => unknown) {
+    setPressedAt(readAt ?? null);
+    setPressing(true);
+    try {
+      await run();
+    } catch {
+      // The read failed: the button comes back, nothing blooms.
+    } finally {
+      setPressing(false);
+      setTimeout(() => setPressedAt(undefined), 250);
+    }
+  }
+  return { pressing, landed, press };
+}
+
 /**
  * The strip itself.
  *
@@ -101,12 +148,15 @@ export function ReadFreshness({
   subject = "This",
   onRefresh,
   refreshing = false,
+  refresh,
   className = "",
 }: {
   state: ReadState;
   subject?: string;
   onRefresh?: () => unknown;
   refreshing?: boolean;
+  /** When the press is somewhere else on the page (a header button), its `useRefreshPress`. */
+  refresh?: RefreshPress;
   className?: string;
 }) {
   // The age is a function of now, so it is computed on the client only — the
@@ -124,44 +174,15 @@ export function ReadFreshness({
     return () => clearInterval(id);
   }, [state.readAt, state.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // S17. Only a read the reader asked for blooms. Pressing records the age on
-  // screen; the next read that differs from it is the answer to the press. A
-  // background read finds nothing recorded and lands quietly, and a press whose
-  // read never arrives is forgotten shortly after it settles, so it cannot
-  // claim the next background read.
-  const pressedAt = useRef<string | null | undefined>(undefined);
-  const [pressing, setPressing] = useState(false);
-  const [landed, setLanded] = useState<string | null>(null);
-  useEffect(() => {
-    if (pressedAt.current === undefined || (state.readAt ?? null) === pressedAt.current) return;
-    pressedAt.current = undefined;
-    setLanded(state.readAt ?? null);
-    const t = setTimeout(() => setLanded(null), 1000);
-    return () => clearTimeout(t);
-  }, [state.readAt]);
-  function press() {
-    pressedAt.current = state.readAt ?? null;
-    setPressing(true);
-    let result: unknown;
-    try {
-      result = onRefresh?.();
-    } catch {
-      // The read failed to start: the button comes back, nothing blooms.
-    }
-    Promise.resolve(result)
-      .catch(() => {})
-      .finally(() => {
-        setPressing(false);
-        setTimeout(() => {
-          pressedAt.current = undefined;
-        }, 250);
-      });
-  }
+  // S17: a refresh the reader pressed here, or one pressed on a button elsewhere on the page
+  // and handed in as `refresh`.
+  const own = useRefreshPress(state.readAt);
+  const { pressing, landed, press } = refresh ?? own;
 
   const reading = freshness ?? classifyRead(state, new Date(state.readAt ?? 0).getTime());
   const age = state.readAt ? formatRelative(state.readAt) : null;
 
-  const blooming = landed !== null && landed === state.readAt && (reading === "live" || reading === "ageing");
+  const blooming = landed !== null && landed === (state.readAt ?? null) && (reading === "live" || reading === "ageing");
 
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] ${className}`}>
@@ -182,9 +203,10 @@ export function ReadFreshness({
               : "border border-warn"
         }`}
       />
-      <span key={blooming ? landed : "read"} className={`${TONE[reading]}${blooming ? " tint-in" : ""}`}>
-        {sentence(reading, subject, age, Boolean(onRefresh))}
-      </span>
+      {/* The new line crossfades in over the old one when a read the reader asked for lands (S17). */}
+      <Crossfade id={blooming ? `landed:${landed}` : "read"}>
+        <span className={TONE[reading]}>{sentence(reading, subject, age, Boolean(onRefresh))}</span>
+      </Crossfade>
       {state.truncated && (
         // Its own clause, never folded into the age. A capped read is complete
         // about what it saw and silent about the rest, and an operator who
@@ -193,7 +215,7 @@ export function ReadFreshness({
         <span className="text-faint">· not the whole list — only the first part was read</span>
       )}
       {onRefresh && reading === "stale" && (
-        <Button variant="outline" size="sm" onClick={press} isPending={refreshing || pressing}>
+        <Button variant="outline" size="sm" onClick={() => void press(onRefresh)} isPending={refreshing || pressing}>
           {refreshing || pressing ? "Reading" : "Read again"}
         </Button>
       )}

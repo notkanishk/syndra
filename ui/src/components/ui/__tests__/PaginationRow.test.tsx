@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { createRef } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ArriveList } from "@/components/ui/ArriveList";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
+import { motionInTests } from "@/test-utils/motion";
 
 const noop = () => {};
 const row = (props: Partial<React.ComponentProps<typeof PaginationRow>>) =>
@@ -81,6 +83,81 @@ describe("one pagination row (A-04 section 7.4)", () => {
   it("names the first page in Back to, whatever it is", () => {
     row({ shown: 30, total: 61, initial: 5 });
     expect(screen.getByRole("button", { name: "Back to 5" })).toBeInTheDocument();
+  });
+});
+
+/** Motion 8c: Show more arrives only the new rows; Back to 10 glides first, then trims. */
+describe("PaginationRow motion", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    document.querySelectorAll("h2").forEach((h) => h.remove());
+  });
+
+  /** The one glide (lib/motion): the heading sits 900px down, the page is at 0. */
+  function glidePage() {
+    vi.useFakeTimers();
+    motionInTests();
+    document.documentElement.style.setProperty("--duration-glide", "520ms");
+    document.documentElement.style.setProperty("--ease-settle", "cubic-bezier(0.16, 1, 0.3, 1)");
+    const scroller = document.createElement("div");
+    scroller.id = "app-scroll";
+    scroller.scrollTo = vi.fn(({ top }: ScrollToOptions) => void (scroller.scrollTop = top ?? 0)) as never;
+    scroller.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+    const heading = document.createElement("h2");
+    heading.getBoundingClientRect = () => ({ top: 900 - scroller.scrollTop }) as DOMRect;
+    scroller.append(heading);
+    document.body.append(scroller);
+    return { scroller, heading };
+  }
+
+  afterEach(() => {
+    document.getElementById("app-scroll")?.remove();
+    document.documentElement.style.cssText = "";
+  });
+
+  it("Back to 10 glides to the heading before the rows leave, and trims once it has landed", async () => {
+    const { scroller, heading } = glidePage();
+    const onBack = vi.fn();
+    row({ shown: 35, total: 61, onBack, anchor: { current: heading } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to 10" }));
+    await act(async () => void vi.advanceTimersByTime(260));
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    expect(scroller.scrollTop).toBeLessThan(836);
+    expect(onBack).not.toHaveBeenCalled();
+
+    await act(async () => void vi.advanceTimersByTime(300));
+    expect(scroller.scrollTop).toBe(836);
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it("trims nothing if the row went away during the glide", async () => {
+    const { heading } = glidePage();
+    const onBack = vi.fn();
+    const { unmount } = row({ shown: 35, total: 61, onBack, anchor: { current: heading } });
+    fireEvent.click(screen.getByRole("button", { name: "Back to 10" }));
+    unmount();
+    await act(async () => void vi.advanceTimersByTime(700));
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("Show 25 more makes only the rows it adds arrive", async () => {
+    const rows = (n: number) => (
+      <>
+        <ArriveList startSettled>
+          {Array.from({ length: n }, (_, i) => (
+            <p key={i}>row {i}</p>
+          ))}
+        </ArriveList>
+        <PaginationRow shown={n} total={61} onMore={noop} onBack={noop} />
+      </>
+    );
+    const { container, rerender } = render(rows(10));
+    fireEvent.click(screen.getByRole("button", { name: "Show 25 more" }));
+    rerender(rows(12));
+    await act(async () => {});
+    const arriving = Array.from(container.querySelectorAll("[data-arriving]")).map((el) => el.textContent);
+    expect(arriving).toEqual(["row 10", "row 11"]);
   });
 });
 

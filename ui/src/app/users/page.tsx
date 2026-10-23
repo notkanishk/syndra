@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
@@ -160,15 +161,21 @@ export default function PeoplePage() {
 
   // The board's default: Person, A to Z. Sorting is local to the view; the
   // filters in the URL decide who is listed, the headings only their order.
-  const [sort, setSort] = useSort<PeopleSort>(
+  const [sort, setSort, view] = useSort<PeopleSort>(
     // Who just arrived, from Home's "and N more" (A-07 §33).
     filters.bundle === NO_BUNDLE ? "joined" : "person",
   );
   const rows = useMemo(
-    () => orderBy(applyFilters(all, filters, holders), sort, PEOPLE_SORT),
-    [all, filters, holders, sort],
+    () => orderBy(applyFilters(all, filters, holders), view.sort, PEOPLE_SORT),
+    [all, filters, holders, view.sort],
   );
+  // S5: somebody who leaves the list on a later read (marked as a service account, no longer
+  // matching) fades where they were and closes the gap after, and not under the pointer.
+  const leaving = useLeavingRows(rows, (entry) => entry.user.id, !users.isLoading && !users.error, {
+    scope: JSON.stringify(filters),
+  });
   const visible = rows.slice(0, limit);
+  const drawn = leaving.rows.slice(0, limit);
   // Selection spans the whole filter, not the rendered page.
   const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
   const { selfId } = useUiView();
@@ -382,7 +389,8 @@ export default function PeoplePage() {
           />
         )}
 
-        <div data-selection-scope {...selection.containerProps}>
+        <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
+        <div className={view.className}>
         <ListStates
           isLoading={users.isLoading}
           error={users.error}
@@ -412,13 +420,10 @@ export default function PeoplePage() {
             />
           }
         >
-          {visible.map((entry) => (
-            <PersonRow
-              key={entry.user.id}
-              entry={entry}
-              bulkMode={bulkMode}
-              selection={selection}
-            />
+          {drawn.map((entry) => (
+            <LeavingRow key={entry.user.id} {...leaving.props(entry.user.id)}>
+              <PersonRow entry={entry} bulkMode={bulkMode} selection={selection} />
+            </LeavingRow>
           ))}
 
           <PaginationRow
@@ -429,6 +434,7 @@ export default function PeoplePage() {
             onBack={paging.back}
           />
         </ListStates>
+        </div>
         </div>
       </Card>
 

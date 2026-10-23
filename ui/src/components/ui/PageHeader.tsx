@@ -1,3 +1,10 @@
+"use client";
+
+import { useEffect, useLayoutEffect, useState } from "react";
+
+import { ARRIVE_SETTLED_MS, returnedToThisPage } from "@/components/ui/ArriveList";
+import { TINT_MS } from "@/lib/motion";
+
 /**
  * The page's own title block. The breadcrumb says where you are; this says
  * what you are looking at, with its actions on the right.
@@ -9,6 +16,10 @@
  * sentence saying what they were for. The two are separate props so that a
  * count never displaces the sentence, and so the guard can see which pages
  * still lack one.
+ *
+ * It is also the screen's first paint (S11): it tints in, then what follows
+ * it arrives (`page-head` in globals.css), and only when you navigate to the
+ * page: coming Back to it, it is simply there.
  */
 export function PageHeader({
   eyebrow,
@@ -28,8 +39,23 @@ export function PageHeader({
   actions?: React.ReactNode;
   className?: string;
 }) {
+  const [settled, setSettled] = useState(false);
+  // After mount rather than in the initial state: the server cannot know about
+  // a Back, and a different first render is a hydration mismatch.
+  useLayoutEffect(() => {
+    if (returnedToThisPage()) setSettled(true);
+  }, []);
+  useEffect(() => {
+    if (settled) return;
+    const timer = setTimeout(() => setSettled(true), TINT_MS + ARRIVE_SETTLED_MS);
+    return () => clearTimeout(timer);
+  }, [settled]);
+
   return (
-    <div className={`flex flex-wrap items-end gap-4 ${className}`}>
+    <div
+      className={`page-head flex flex-wrap items-end gap-4 ${className}`}
+      data-settled={settled ? "" : undefined}
+    >
       {/* `flex-auto` (basis: auto), not `flex-1` (basis: 0%) — with a 0%
           basis this block reports zero size to the wrap decision, so `actions`
           claims the whole line and this text is squeezed into whatever sliver

@@ -26,6 +26,35 @@ function renderList(error: unknown, isOperator = true) {
   );
 }
 
+describe("ListStates arrival", () => {
+  const list = (isEmpty: boolean) => (
+    <QueryClientProvider client={new QueryClient()}>
+      <UiViewProvider isOperator>
+        <ListStates
+          isLoading={false}
+          error={null}
+          isEmpty={isEmpty}
+          errorTitle="People couldn't be loaded."
+          empty={<p>Nobody yet</p>}
+        >
+          <p>Aanya Rao</p>
+        </ListStates>
+      </UiViewProvider>
+    </QueryClientProvider>
+  );
+
+  // Filtering to nothing and back is not a first paint (S11): the rows that
+  // return are simply there, however soon after the first paint they come.
+  it("does not replay the arrival when a filter empties the list and fills it again", () => {
+    const { container, rerender } = render(list(false));
+    expect(container.querySelector(".arrive-list")).not.toHaveAttribute("data-settled");
+    rerender(list(true));
+    expect(container.querySelector(".arrive-list")).toBeNull();
+    rerender(list(false));
+    expect(container.querySelector(".arrive-list")).toHaveAttribute("data-settled");
+  });
+});
+
 describe("ListStates", () => {
   // N23: a directory Zitadel has never answered has nothing to show. The
   // degraded Notice above the page says so; the list adds no failure of its own.

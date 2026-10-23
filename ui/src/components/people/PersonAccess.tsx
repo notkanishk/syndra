@@ -26,6 +26,7 @@ import { Chip, Mono } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
+import { Crossfade } from "@/components/ui/Crossfade";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
@@ -774,10 +775,12 @@ function ExtendSeat({
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  if (outcome && !statesNothingChanged(outcome.kind)) {
-    return <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />;
-  }
+  const done = outcome !== null && !statesNothingChanged(outcome.kind);
   return (
+    <Crossfade id={done ? "outcome" : "open"}>
+      {outcome && done ? (
+        <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />
+      ) : (
     <>
       <Button
         size="sm"
@@ -806,6 +809,8 @@ function ExtendSeat({
       </Button>
       {step.element}
     </>
+      )}
+    </Crossfade>
   );
 }
 
