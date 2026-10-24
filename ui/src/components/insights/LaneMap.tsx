@@ -59,6 +59,7 @@ export function LaneMap({
   onPick,
   answered = false,
   breathing = null,
+  startSettled = false,
 }: {
   model: Model;
   highlight: Highlight | null;
@@ -78,6 +79,8 @@ export function LaneMap({
   answered?: boolean;
   /** The node whose answer is being computed: it breathes, the one loop Insights has. */
   breathing?: string | null;
+  /** The reader switched to this view from the other: the page has arrived already, so its nodes are simply there. */
+  startSettled?: boolean;
 }) {
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const keysButton = useRef<HTMLButtonElement | null>(null);
@@ -189,7 +192,7 @@ export function LaneMap({
         </svg>
 
         {lanes.map((lane) => (
-          <ArriveList key={lane.kind} className="">
+          <ArriveList key={lane.kind} className="" startSettled={startSettled}>
             {lane.shown.map((node) => {
               const p = pos.get(node.id)!;
               const tone = highlight?.nodes.get(node.id);

@@ -19,6 +19,7 @@ import { Unfold } from "@/components/ui/Unfold";
 export function FormPart({
   appear = false,
   children,
+  fresh: _fresh, // a part opens by its own Unfold; a second fade over it would double
   ...leave
 }: LeaveProps & { appear?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(!appear);

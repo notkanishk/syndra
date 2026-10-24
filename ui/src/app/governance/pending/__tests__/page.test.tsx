@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PendingChangesPage from "@/app/governance/pending/page";
 import type { PendingRow } from "@/lib/queries/usePropagation";
+import { motionInTests } from "@/test-utils/motion";
 import type { BundleRow } from "@/lib/queries/useBundles";
 import type { MappingRuleRow } from "@/lib/queries/useMappingRules";
 
@@ -364,6 +365,18 @@ describe("Pending changes · board layout", () => {
       type("omar");
       expect(screen.getByText(/These 2 changes come from one edit/)).toBeInTheDocument();
       expect(screen.getByText(/1 of 2 shown\./)).toBeInTheDocument();
+    });
+
+    // A-05 §2.10: a search is not a new list. What matches holds still; what does not fades where it was.
+    it("fades the changes a search drops, and holds the one that matches", () => {
+      motionInTests();
+      renderPending();
+      const omar = screen.getByText("Omar Haddad");
+      type("omar");
+      expect(screen.getByText("Omar Haddad")).toBe(omar);
+      expect(omar.closest(".tint-out")).toBeNull();
+      expect(screen.getByText("Lena Brandt").closest(".tint-out")).not.toBeNull();
+      expect(screen.getByText("Lena Brandt").closest(".close-gap")).not.toBeNull();
     });
 
     it("narrows by role", () => {

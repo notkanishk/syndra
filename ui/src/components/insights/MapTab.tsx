@@ -258,6 +258,10 @@ export function MapTab({ url }: { url: InsightsUrl }) {
   }, []);
 
   const view = touch ? "list" : url.view;
+  // The page arrives once. Switching between Map and List swaps the view and nothing replays (S10).
+  const [firstView] = useState(view);
+  const [switched, setSwitched] = useState(false);
+  if (!switched && view !== firstView) setSwitched(true);
   const chips = FINDINGS.filter((f) => findings.counts[f] > 0);
 
   return (
@@ -414,6 +418,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
             breathing={answer.computing ? answer.pin : null}
             count={asOn ? (id) => thenHeld.get(id) ?? null : lensRead ? (id) => lensRead.counts.get(id) ?? null : held}
             unit={lensRead?.unit}
+            startSettled={switched}
             note={lensRead?.note}
             unused={asOn ? NO_IDS : findings.unused}
             marks={asOn ? NO_MARKS : findings.marks}
@@ -425,6 +430,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
         )}
         {shown && !phone && view === "list" && (
           <NodeList
+            startSettled={switched}
             model={shown}
             highlight={highlight}
             focusId={focus}

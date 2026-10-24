@@ -172,7 +172,7 @@ export default function PeoplePage() {
   // S5: somebody who leaves the list on a later read (marked as a service account, no longer
   // matching) fades where they were and closes the gap after, and not under the pointer.
   const leaving = useLeavingRows(rows, (entry) => entry.user.id, !users.isLoading && !users.error, {
-    scope: JSON.stringify(filters),
+    narrowedBy: JSON.stringify(filters),
   });
   const visible = rows.slice(0, limit);
   const drawn = leaving.rows.slice(0, limit);
@@ -394,7 +394,8 @@ export default function PeoplePage() {
         <ListStates
           isLoading={users.isLoading}
           error={users.error}
-          isEmpty={rows.length === 0}
+          // Not `rows`: the last rows of a search fade where they were before "Nobody matches that" takes the place.
+          isEmpty={leaving.rows.length === 0}
           onRetry={() => users.refetch()}
           errorTitle="Couldn't load people."
           skeleton={<RowSkeleton rows={6} label="Loading people" />}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FocusEvent, type PointerEvent, type ReactNode } from "react";
 
+import { ARRIVE_MEMORY_MS, armedRecently } from "@/components/ui/ArriveList";
 import { SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 
 /**
@@ -22,6 +23,10 @@ interface Kept<T> {
   key: string;
   /** No longer in the read. It leaves once nothing holds it (see `stay`). */
   gone: boolean;
+  /** Came in on a later read, not with the list: it tints in where it lands. */
+  fresh: boolean;
+  /** Dropped out because the reader changed what they are looking through: its gap never waits on the pointer. */
+  eager: boolean;
 }
 
 const NOBODY: ReadonlySet<string> = new Set();
@@ -32,9 +37,18 @@ function merge<T>(
   keyOf: (row: T) => string,
   stay: ReadonlySet<string>,
   still: boolean,
+  arrives: boolean,
+  byReader: boolean,
 ): Kept<T>[] {
   const next = new Set(rows.map(keyOf));
-  const out: Kept<T>[] = rows.map((row) => ({ row, key: keyOf(row), gone: false }));
+  const known = new Map(before.map((was) => [was.key, was]));
+  // Rows that stay keep what they were; only a key not seen before is new. One that is back
+  // before its fade ended is new too: it was leaving, and it tints in rather than snapping back.
+  const out: Kept<T>[] = rows.map((row) => {
+    const key = keyOf(row);
+    const was = known.get(key);
+    return { row, key, gone: false, fresh: was ? was.fresh || (was.gone && !stay.has(key)) : arrives, eager: false };
+  });
   before.forEach((was, index) => {
     if (next.has(was.key)) return;
     // Nothing to fade, so nothing to keep: only a row held for its outcome stays.
@@ -48,13 +62,15 @@ function merge<T>(
         break;
       }
     }
-    out.splice(at, 0, { ...was, gone: true });
+    out.splice(at, 0, { ...was, gone: true, eager: was.gone ? was.eager : byReader });
   });
   return out;
 }
 
 export interface LeaveProps {
   leaving: boolean;
+  /** New on a later read: it tints in. Rows the reader asked for arrive instead (see `armArrive`). */
+  fresh?: boolean;
   held: boolean;
   onGone: () => void;
 }
@@ -68,10 +84,20 @@ export interface LeavingOptions {
    */
   stay?: ReadonlySet<string>;
   /**
-   * What the rows are a reading of (a filter's value). When it changes the list
-   * is a different list: nothing fades out of it, the old rows are just gone.
+   * What the rows are a reading of, for a list whose tabs are different reads
+   * (Requests' status). When it changes the list is a different list: nothing
+   * fades out of it, the old rows are just gone.
    */
   scope?: string;
+  /**
+   * What the reader is looking through (a filter's value, a search). Not a
+   * different list: the rows that drop out leave like any other, and the rows it
+   * brings in tint in. But their gap does not wait for the pointer: it is on the
+   * reader's own control, or parked over the list they are narrowing, and a gap
+   * held open there is a hole. The window is `ARRIVE_MEMORY_MS`, because a
+   * search's read lands after the keystroke (A-05 §2.10).
+   */
+  narrowedBy?: string;
 }
 
 /**
@@ -85,26 +111,38 @@ export function useLeavingRows<T>(
   rows: T[],
   keyOf: (row: T) => string,
   ready = true,
-  { stay = NOBODY, scope }: LeavingOptions = {},
+  { stay = NOBODY, scope, narrowedBy }: LeavingOptions = {},
 ) {
-  const [kept, setKept] = useState<Kept<T>[]>(() => rows.map((row) => ({ row, key: keyOf(row), gone: false })));
+  const [kept, setKept] = useState<Kept<T>[]>(() => rows.map((row) => ({ row, key: keyOf(row), gone: false, fresh: false, eager: false })));
+  // Rows are new only once the list has been read: what a first read brings is
+  // the list arriving, not rows that came in.
+  const [read, setRead] = useState(ready);
   const [seen, setSeen] = useState(rows);
   const [was, setWas] = useState(scope);
+  const [narrowedWas, setNarrowedWas] = useState(narrowedBy);
+  const [narrowedAt, setNarrowedAt] = useState(0);
   const [pointer, setPointer] = useState(false);
   const [focus, setFocus] = useState(false);
 
   const other = scope !== was;
+  const narrowed = narrowedBy !== narrowedWas;
+  const byReader = narrowed || Date.now() - narrowedAt <= ARRIVE_MEMORY_MS;
   // A new array of the same rows (a memo that re-ran, a sort that changed nothing) is not a read.
   const same = rows.length === seen.length && rows.every((row, index) => row === seen[index]);
-  if ((rows !== seen && !same) || other) {
+  if ((rows !== seen && !same) || other || narrowed) {
     setSeen(rows);
     setWas(scope);
+    if (narrowed) {
+      setNarrowedWas(narrowedBy);
+      setNarrowedAt(Date.now());
+    }
     setKept(
       ready && !other
-        ? merge(kept, rows, keyOf, stay, stillMotion())
-        : rows.map((row) => ({ row, key: keyOf(row), gone: false })),
+        ? merge(kept, rows, keyOf, stay, stillMotion(), read && !armedRecently(), byReader)
+        : rows.map((row) => ({ row, key: keyOf(row), gone: false, fresh: false, eager: false })),
     );
   }
+  if (ready && !read) setRead(true);
 
   const leaves = (entry: Kept<T>) => entry.gone && !stay.has(entry.key);
   // Nothing animates under reduced motion, so a row that is going is already gone.
@@ -117,11 +155,15 @@ export function useLeavingRows<T>(
 
   return {
     rows: shown.map((entry) => entry.row),
-    props: (key: string): LeaveProps => ({
-      leaving: kept.some((entry) => entry.key === key && leaves(entry)),
-      held,
-      onGone: () => setKept((now) => now.filter((entry) => !(entry.key === key && entry.gone))),
-    }),
+    props: (key: string): LeaveProps => {
+      const entry = kept.find((one) => one.key === key);
+      return {
+        leaving: entry ? leaves(entry) : false,
+        fresh: entry?.fresh ?? false,
+        held: held && !entry?.eager,
+        onGone: () => setKept((now) => now.filter((one) => !(one.key === key && one.gone))),
+      };
+    },
     listProps: {
       onPointerEnter: () => setPointer(true),
       // A focused button that is removed (Approve, once decided) never says it
@@ -137,7 +179,7 @@ export function useLeavingRows<T>(
   };
 }
 
-export function LeavingRow({ leaving, held, onGone, children }: LeaveProps & { children: ReactNode }) {
+export function LeavingRow({ leaving, fresh, held, onGone, children }: LeaveProps & { children: ReactNode }) {
   // Once the gap has started to close it carries on, whatever the pointer does.
   const [closing, setClosing] = useState(false);
   if (leaving && !held && !closing) setClosing(true);
@@ -167,7 +209,7 @@ export function LeavingRow({ leaving, held, onGone, children }: LeaveProps & { c
         if (closing && event.target === event.currentTarget) onGone();
       }}
     >
-      <div className={leaving ? "tint-out" : undefined}>{children}</div>
+      <div className={leaving ? "tint-out" : fresh ? "tint-in" : undefined}>{children}</div>
     </div>
   );
 }

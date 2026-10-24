@@ -141,7 +141,7 @@ export function WithdrawnAccess() {
   // S5: a revocation that clears on a later read (it reached the system, or somebody ended it)
   // fades where it was and closes its gap after, and not under the pointer.
   const leaving = useLeavingRows(matched, (row) => row.id, !query.isLoading && !query.error, {
-    scope: `${where}|${needle}`,
+    narrowedBy: `${where}|${needle}`,
   });
   // The meta line counts the whole list: a search narrows what is shown, not what is outstanding.
   const givenUp = rows.filter((row) => row.spent).length;

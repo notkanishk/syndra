@@ -7,6 +7,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
@@ -67,6 +68,10 @@ export default function ProjectsPage() {
       ),
     [all, needle, appsByProject, view.sort],
   );
+  // A search drops projects: they fade where they were and the gap settles after (A-05 §2.10).
+  const leaving = useLeavingRows(rows, (entry) => entry.project.id, !projects.isLoading && !projects.error, {
+    narrowedBy: needle,
+  });
   const servedCount = new Set((apps.data ?? []).map((a) => a.application.id)).size;
 
   // One basis for the whole page — every row carries an identical copy, so
@@ -125,7 +130,7 @@ export default function ProjectsPage() {
         <ListStates
           isLoading={projects.isLoading}
           error={projects.error}
-          isEmpty={rows.length === 0}
+          isEmpty={leaving.rows.length === 0}
           onRetry={() => projects.refetch()}
           errorTitle="Couldn't load projects."
           skeleton={<RowSkeleton rows={5} avatar={false} label="Loading projects" />}
@@ -144,7 +149,7 @@ export default function ProjectsPage() {
             )
           }
         >
-          {rows.map((entry) => {
+          {leaving.rows.map((entry) => {
             const people = holdersLine(
               entry.member_count,
               entry.confirmed_member_count,
@@ -152,8 +157,8 @@ export default function ProjectsPage() {
             );
             const roleCount = entry.role_keys.length;
             return (
+            <LeavingRow key={entry.project.id} {...leaving.props(entry.project.id)}>
             <Link
-              key={entry.project.id}
               href={`/projects/${entry.project.id}`}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
@@ -207,6 +212,7 @@ export default function ProjectsPage() {
                 )}
               </span>
             </Link>
+            </LeavingRow>
             );
           })}
         </ListStates>

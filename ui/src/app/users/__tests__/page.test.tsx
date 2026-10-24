@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import PeoplePage from "@/app/users/page";
 import type { UserListEntry } from "@/lib/queries/useUsers";
 import { setMediaQuery } from "@/test-utils/media";
+import { motionInTests } from "@/test-utils/motion";
 
 const users = vi.hoisted(() => ({ data: [] as UserListEntry[] }));
 const nav = vi.hoisted(() => ({ url: "/users", replaced: [] as string[] }));
@@ -491,5 +492,45 @@ describe("People · the board", () => {
     renderPeople();
     expect(screen.getByText("6 roles across 4 projects").className).not.toMatch(/truncate/);
     expect(screen.getByText("Unexplained role").className).not.toMatch(/truncate|whitespace-nowrap/);
+  });
+
+  // Seen live: typing in the search dropped 10 rows to 2 by removing every row and adding two,
+  // because the new read was a loading list. The rows that match are the same rows (A-05 §2.10).
+  describe("a search narrowing the list", () => {
+    it("holds the rows that still match, fades the rest where they were, and settles the gap after", () => {
+      motionInTests();
+      const named = (id: string, name: string) => person({ user: { ...person().user, id, name } });
+      const everyone = [named("a", "Ada Lin"), named("b", "Bo Chen"), named("c", "Cy Ward")];
+      users.data = everyone;
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const page = () => (
+        <QueryClientProvider client={client}>
+          <PeoplePage />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(page());
+      const ada = screen.getByText("Ada Lin");
+
+      // The query is typed first; the read for it lands after.
+      nav.url = "/users?q=ada";
+      rerender(page());
+      users.data = [everyone[0]];
+      rerender(page());
+
+      expect(screen.getByText("Ada Lin")).toBe(ada);
+      expect(ada.closest(".tint-out")).toBeNull();
+      expect(screen.getByText("Bo Chen").closest(".tint-out")).not.toBeNull();
+      expect(screen.getByText("Cy Ward").closest(".tint-out")).not.toBeNull();
+      expect(screen.getByText("Bo Chen").closest(".close-gap")).not.toBeNull();
+
+      // Clearing it brings them back, tinting in.
+      nav.url = "/users";
+      rerender(page());
+      users.data = everyone;
+      rerender(page());
+      expect(screen.getByText("Ada Lin")).toBe(ada);
+      expect(screen.getByText("Bo Chen").closest(".tint-in")).not.toBeNull();
+      expect(ada.closest(".tint-in")).toBeNull();
+    });
   });
 });

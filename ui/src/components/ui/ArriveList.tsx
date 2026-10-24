@@ -51,6 +51,8 @@ let armedAt = 0;
 export const armArrive = () => {
   armedAt = Date.now();
 };
+/** True while rows the reader asked for are landing: they arrive, so nothing else announces them. */
+export const armedRecently = () => Date.now() - armedAt <= ARRIVE_MEMORY_MS;
 
 /**
  * A list's rows rise in on its first paint, and never again while it stays
@@ -99,7 +101,7 @@ export function ArriveList({
     const list = node.current;
     if (!settled || !list) return;
     const watch = new MutationObserver((records) => {
-      if (Date.now() - armedAt > ARRIVE_MEMORY_MS) return;
+      if (!armedRecently()) return;
       let index = 0;
       records.forEach((record) =>
         record.addedNodes.forEach((added) => {
