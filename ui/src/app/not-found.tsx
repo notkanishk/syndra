@@ -1,4 +1,7 @@
+"use client";
+
 import { EmptyState } from "@/components/states";
+import { usePageHead } from "@/components/ui/PageHeader";
 
 /**
  * An address that matches no route.
@@ -17,11 +20,15 @@ import { EmptyState } from "@/components/states";
  * here.
  */
 export default function NotFound() {
+  // A screen's first paint (S11): it tints in, and nothing else on it moves.
+  const head = usePageHead();
   return (
-    <EmptyState
-      title="There’s nothing at this address."
-      guidance="No page in Syndra has this address. If you followed a link, the link itself is wrong; nothing has been deleted. A person or a bundle that was removed would say so on its own page."
-      action={{ label: "Go to the home page", href: "/" }}
-    />
+    <div className={head.className} data-settled={head["data-settled"]}>
+      <EmptyState
+        title="There’s nothing at this address."
+        guidance="No page in Syndra has this address. If you followed a link, the link itself is wrong; nothing has been deleted. A person or a bundle that was removed would say so on its own page."
+        action={{ label: "Go to the home page", href: "/" }}
+      />
+    </div>
   );
 }

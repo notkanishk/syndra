@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { UserName } from "@/components/names";
 import { RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
@@ -152,20 +153,6 @@ function Gaps() {
   const users = useUsers("");
   const rows = useMemo(() => users.data ?? [], [users.data]);
 
-  // Neither "still reading" nor "couldn't read" is an answer about anybody.
-  if (users.isLoading || users.error || !users.data) {
-    return (
-      <Card>
-        <CardHeader title="Gaps" />
-        {users.isLoading ? (
-          <RowSkeleton rows={3} label="Loading gaps" />
-        ) : (
-          <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
-        )}
-      </Card>
-    );
-  }
-
   // A service account with no roles is not somebody who arrived and was never
   // set up; one that left and still holds roles is exactly what the next row is for.
   const noAccess = rows.filter((entry) => isPerson(entry) && !hasAccess(entry)).length;
@@ -176,20 +163,30 @@ function Gaps() {
   return (
     <Card>
       <CardHeader title="Gaps" />
-      <GapRow
-        count={noAccess}
-        href={peopleHref({ attention: "no-access" })}
-        headline={noAccess === 1 ? "person has no access at all" : "people have no access at all"}
-        note="Arrived, never set up."
-        clear="Everybody here has something."
-      />
-      <GapRow
-        count={departedHolding}
-        href={peopleHref({ attention: "departed" })}
-        headline={departedHolding === 1 ? "departed account still holds roles" : "departed accounts still hold roles"}
-        note="Left, never cleaned up."
-        clear="Nobody who left still holds anything."
-      />
+      {/* One hand-over (S7): a skeleton only if the read is slow, then the rows arrive. */}
+      <ReadGate loading={users.isLoading} skeleton={<RowSkeleton rows={3} label="Loading gaps" />}>
+        {/* Neither "still reading" nor "couldn't read" is an answer about anybody. */}
+        {users.error || !users.data ? (
+          <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
+        ) : (
+          <>
+            <GapRow
+              count={noAccess}
+              href={peopleHref({ attention: "no-access" })}
+              headline={noAccess === 1 ? "person has no access at all" : "people have no access at all"}
+              note="Arrived, never set up."
+              clear="Everybody here has something."
+            />
+            <GapRow
+              count={departedHolding}
+              href={peopleHref({ attention: "departed" })}
+              headline={departedHolding === 1 ? "departed account still holds roles" : "departed accounts still hold roles"}
+              note="Left, never cleaned up."
+              clear="Nobody who left still holds anything."
+            />
+          </>
+        )}
+      </ReadGate>
     </Card>
   );
 }
@@ -267,9 +264,9 @@ function AccessShape() {
   return (
     <Card>
       <CardHeader title="Roles most people hold" />
-      {loading ? (
-        <RowSkeleton rows={3} label="Loading where access lives" />
-      ) : failed ? (
+      {/* One hand-over (S7): a skeleton only if the read is slow, then the rows arrive. */}
+      <ReadGate loading={loading} skeleton={<RowSkeleton rows={3} label="Loading where access lives" />}>
+      {failed ? (
         <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
       ) : (
         <>
@@ -357,6 +354,7 @@ function AccessShape() {
           )}
         </div>
       )}
+      </ReadGate>
     </Card>
   );
 }
@@ -369,9 +367,7 @@ function RecentActivity() {
   const entries = useAuditEntries({ limit: 8 });
   const rows = entries.data ?? [];
   // Nothing is "recorded" until the log has been read.
-  const empty = entries.isLoading ? (
-    <RowSkeleton rows={3} label="Loading recent activity" />
-  ) : entries.error ? (
+  const empty = entries.error ? (
     <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
   ) : (
     <div className="px-5 py-3.5 text-[14px] text-faint">Nothing recorded yet.</div>
@@ -385,6 +381,8 @@ function RecentActivity() {
           <CardHeaderLink href="/audit">Full audit log →</CardHeaderLink>
         }
       />
+      {/* One hand-over (S7): a skeleton only if the read is slow, then the lines arrive. */}
+      <ReadGate loading={entries.isLoading} skeleton={<RowSkeleton rows={3} label="Loading recent activity" />}>
       {rows.length === 0 ? (
         empty
       ) : (
@@ -409,6 +407,7 @@ function RecentActivity() {
           </div>
         ))
       )}
+      </ReadGate>
     </Card>
   );
 }

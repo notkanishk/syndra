@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
 import { useApplications } from "@/lib/queries/useApplications";
@@ -45,6 +45,8 @@ export default function ProjectDetailPage({
     (entry) => entry.project.id === id,
   );
   useCrumb(project?.project.name);
+  // The title that lands after its skeleton tints in, not snaps (S7).
+  const titleTint = useTintAfterSkeleton(projects.isLoading && !project);
 
   const projectRoles = useMemo(
     () => (roles.data ?? []).filter((role) => role.project_id === id),
@@ -79,7 +81,7 @@ export default function ProjectDetailPage({
         // list doesn't carry is said so in words.
         title={
           project ? (
-            project.project.name
+            <span className={titleTint}>{project.project.name}</span>
           ) : projects.isLoading ? (
             <Skeleton className="h-7 w-56" aria-label="Loading project" />
           ) : (

@@ -21,6 +21,7 @@ import { PersonActivity } from "@/components/people/PersonActivity";
 import { PersonRequests } from "@/components/people/PersonRequests";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, Mono } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -88,6 +89,23 @@ interface AccessRole {
  * generic "revoke role".
  */
 export function PersonAccess({ userId, isOperator }: { userId: string; isOperator: boolean }) {
+  const access = useUserAccess(userId);
+  // One hand-over (S7): a skeleton only if the read is slow, then the page arrives.
+  return (
+    <ReadGate
+      loading={access.isLoading}
+      skeleton={
+        <Card>
+          <RowSkeleton rows={5} label="Loading this person's access" />
+        </Card>
+      }
+    >
+      <ReadPersonAccess userId={userId} isOperator={isOperator} />
+    </ReadGate>
+  );
+}
+
+function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: boolean }) {
   const access = useUserAccess(userId);
   const grants = useUserGrants(userId);
   const advanced = useIsAdvanced();
@@ -166,13 +184,6 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   // crowds out the part that actually differs.
   const readAt = upstreamGrants.data?.observedAt;
 
-  if (access.isLoading) {
-    return (
-      <Card>
-        <RowSkeleton rows={5} label="Loading this person's access" />
-      </Card>
-    );
-  }
   if (access.error) {
     return (
       <ErrorState

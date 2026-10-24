@@ -10,9 +10,11 @@ import { Makerspace } from "@/components/home/Makerspace";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Card, CardHeader, CardHeaderLink, CardRow } from "@/components/ui/Card";
+import { usePageHead } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import {
@@ -87,6 +89,8 @@ import { formatShortDate, formatWeekday, daysUntil, whyNotChecked } from "@/lib/
  * in Advanced.
  */
 export function Home({ session }: { session: SessionUser }) {
+  // Home is the most-visited first paint (S11): the greeting tints in, then the blocks arrive.
+  const head = usePageHead();
   const advanced = useIsAdvanced();
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
@@ -195,7 +199,7 @@ export function Home({ session }: { session: SessionUser }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
+      <div className={head.className} data-settled={head["data-settled"]}>
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and
@@ -236,11 +240,17 @@ export function Home({ session }: { session: SessionUser }) {
             onboarding.refetch();
           }}
         />
-      ) : loading ? (
-        <Card>
-          <RowSkeleton rows={4} label="Loading today's work" />
-        </Card>
-      ) : blocks === 0 && queue.rows.length === 0 && gaps.rows.length === 0 ? (
+      ) : (
+        // One hand-over (S7): a skeleton only if the read is slow, then the blocks arrive.
+        <ReadGate
+          loading={loading}
+          skeleton={
+            <Card>
+              <RowSkeleton rows={4} label="Loading today's work" />
+            </Card>
+          }
+        >
+        {blocks === 0 && queue.rows.length === 0 && gaps.rows.length === 0 ? (
         // The last decided row is still on its beat: the empty state waits for it.
         // One calm line, not a full-page card: the page continues below, and a
         // hero-sized empty state would read as the end of it.
@@ -331,10 +341,12 @@ export function Home({ session }: { session: SessionUser }) {
             </p>
           )}
         </>
-      )}
+        )}
 
-      {/* The work zone above never moves. This is appended, never inserted. */}
-      {!error && !loading && <Makerspace />}
+        {/* The work zone above never moves. This is appended, never inserted. */}
+        <Makerspace />
+        </ReadGate>
+      )}
     </div>
   );
 }

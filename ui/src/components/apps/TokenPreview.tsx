@@ -6,6 +6,7 @@ import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
 
 import { Badge } from "@/components/ui/Badge";
 import { ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -123,9 +124,12 @@ export function TokenPreview({
       )}
 
       <div className="flex-1 px-[22px] pb-5">
-        {simulation.isLoading ? (
-          <RowSkeleton rows={3} avatar={false} label="Running the preview" />
-        ) : simulation.error ? (
+        {/* One hand-over (S7): a skeleton only if the run is slow, then the token arrives. */}
+        <ReadGate
+          loading={simulation.isLoading}
+          skeleton={<RowSkeleton rows={3} avatar={false} label="Running the preview" />}
+        >
+        {simulation.error ? (
           <ErrorState
             title="Couldn't run the preview."
             error={simulation.error}
@@ -184,6 +188,7 @@ export function TokenPreview({
           </div>
           </>
         )}
+        </ReadGate>
 
         <Unfold open={showRaw && Boolean(simulation.data)}>
           {simulation.data && (
