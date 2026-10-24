@@ -36,6 +36,7 @@ function merge<T>(
   rows: T[],
   keyOf: (row: T) => string,
   stay: ReadonlySet<string>,
+  drawn: ReadonlySet<string>,
   still: boolean,
   arrives: boolean,
   byReader: boolean,
@@ -53,6 +54,9 @@ function merge<T>(
     if (next.has(was.key)) return;
     // Nothing to fade, so nothing to keep: only a row held for its outcome stays.
     if (still && !stay.has(was.key)) return;
+    // A row that was never on screen (past the page's limit, in a closed fold) has nothing
+    // to fade either. Kept, it would take a shown row's seat and then fade in from nowhere.
+    if (!drawn.has(was.key) && !stay.has(was.key)) return;
     // Where it was: straight after the nearest row before it that is still shown.
     let at = 0;
     for (let back = index - 1; back >= 0; back--) {
@@ -73,6 +77,8 @@ export interface LeaveProps {
   fresh?: boolean;
   held: boolean;
   onGone: () => void;
+  /** Tells the list this row is on screen: only a row that was drawn can fade out. */
+  track?: (drawn: boolean) => void;
 }
 
 export interface LeavingOptions {
@@ -123,6 +129,9 @@ export function useLeavingRows<T>(
   const [narrowedAt, setNarrowedAt] = useState(0);
   const [pointer, setPointer] = useState(false);
   const [focus, setFocus] = useState(false);
+  // Which rows are on screen now, from each LeavingRow's own mount. A list draws a window
+  // of its rows (a page's limit, open folds), and only the hook's caller knows which.
+  const drawn = useRef(new Set<string>());
 
   const other = scope !== was;
   const narrowed = narrowedBy !== narrowedWas;
@@ -138,7 +147,7 @@ export function useLeavingRows<T>(
     }
     setKept(
       ready && !other
-        ? merge(kept, rows, keyOf, stay, stillMotion(), read && !armedRecently(), byReader)
+        ? merge(kept, rows, keyOf, stay, drawn.current, stillMotion(), read && !armedRecently(), byReader)
         : rows.map((row) => ({ row, key: keyOf(row), gone: false, fresh: false, eager: false })),
     );
   }
@@ -148,6 +157,14 @@ export function useLeavingRows<T>(
   // Nothing animates under reduced motion, so a row that is going is already gone.
   const shown = stillMotion() ? kept.filter((entry) => !leaves(entry)) : kept;
 
+  // A leaving row pushed out of the window (rows came in above it) will never end its own
+  // fade: it goes now. Rows report their mount before this runs, children first.
+  useEffect(() => {
+    if (kept.some((entry) => entry.gone && !stay.has(entry.key) && !drawn.current.has(entry.key))) {
+      setKept((now) => now.filter((entry) => !(entry.gone && !stay.has(entry.key) && !drawn.current.has(entry.key))));
+    }
+  }, [kept, stay]);
+
   const held = pointer || focus;
   const leftFocus = (event: FocusEvent<HTMLElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocus(false);
@@ -155,6 +172,24 @@ export function useLeavingRows<T>(
 
   return {
     rows: shown.map((entry) => entry.row),
+    /**
+     * The first `limit` rows of the read, with the leaving rows among them, for a list that
+     * draws a page of its rows. A row on its way out never takes a row's seat on the page.
+     */
+    window: (limit: number) => {
+      const out: T[] = [];
+      let live = 0;
+      for (const entry of shown) {
+        if (leaves(entry)) {
+          if (live < limit) out.push(entry.row);
+          continue;
+        }
+        if (live === limit) break;
+        out.push(entry.row);
+        live++;
+      }
+      return out;
+    },
     props: (key: string): LeaveProps => {
       const entry = kept.find((one) => one.key === key);
       return {
@@ -162,6 +197,10 @@ export function useLeavingRows<T>(
         fresh: entry?.fresh ?? false,
         held: held && !entry?.eager,
         onGone: () => setKept((now) => now.filter((one) => !(one.key === key && one.gone))),
+        track: (on) => {
+          if (on) drawn.current.add(key);
+          else drawn.current.delete(key);
+        },
       };
     },
     listProps: {
@@ -179,7 +218,7 @@ export function useLeavingRows<T>(
   };
 }
 
-export function LeavingRow({ leaving, fresh, held, onGone, children }: LeaveProps & { children: ReactNode }) {
+export function LeavingRow({ leaving, fresh, held, onGone, track, children }: LeaveProps & { children: ReactNode }) {
   // Once the gap has started to close it carries on, whatever the pointer does.
   const [closing, setClosing] = useState(false);
   if (leaving && !held && !closing) setClosing(true);
@@ -194,6 +233,11 @@ export function LeavingRow({ leaving, fresh, held, onGone, children }: LeaveProp
   useEffect(() => {
     gone.current = onGone;
   });
+  const tracked = useRef(track);
+  useEffect(() => {
+    tracked.current?.(true);
+    return () => tracked.current?.(false);
+  }, []);
   useEffect(() => {
     if (!closing) return;
     const timer = setTimeout(() => gone.current(), TINT_MS + SETTLE_MS + 100);

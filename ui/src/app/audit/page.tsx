@@ -82,7 +82,7 @@ export default function AuditPage() {
   const leaving = useLeavingRows(rows, (entry) => entry.id, !entries.isLoading && !entries.error, {
     narrowedBy: `${window}|${debounced}|${scopedUser}`,
   });
-  const drawn = leaving.rows.slice(0, paging.limit);
+  const drawn = leaving.window(paging.limit);
   const cutoff = window === "all" ? null : Date.now() - Number(window) * 24 * 60 * 60 * 1000;
   // A window needs nothing older than itself, so once the loaded tail is past it
   // there is no more to ask for.
