@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Term } from "@/components/ui/Term";
 import { GLOSSARY } from "@/lib/glossary";
+import { motionInTests } from "@/test-utils/motion";
 
 /**
  * The point of a defined term is that everybody can reach the definition.
@@ -106,5 +107,35 @@ describe("the open definition escapes the card that would clip it", () => {
     expect(document.getElementById(describedBy)).not.toBeNull();
     fireEvent.click(trigger);
     expect(document.getElementById(describedBy)).not.toBeNull();
+  });
+});
+
+/** The definition closes on tint, opacity only, then goes (A-05 §2.3). */
+describe("Term closing", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    motionInTests();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("fades out on tint, ignores the pointer and gives its id to the shut copy, then unmounts", () => {
+    render(<Term name="outbox">outbox</Term>);
+    const word = screen.getByRole("button", { name: "outbox" });
+    const id = word.getAttribute("aria-describedby")!;
+
+    fireEvent.mouseEnter(word.parentElement!);
+    expect(document.querySelector(".popover-in")).not.toBeNull();
+
+    fireEvent.mouseLeave(word.parentElement!);
+    const leaving = document.querySelector(".tint-out")!;
+    expect(leaving).not.toBeNull();
+    expect(leaving).toHaveClass("pointer-events-none");
+    expect(leaving).not.toHaveClass("popover-in");
+    // One node answers to the id at a time.
+    expect(document.querySelectorAll(`[id="${id}"]`)).toHaveLength(1);
+
+    act(() => void vi.advanceTimersByTime(121));
+    expect(document.querySelector(".tint-out")).toBeNull();
+    expect(document.querySelectorAll(`[id="${id}"]`)).toHaveLength(1);
   });
 });

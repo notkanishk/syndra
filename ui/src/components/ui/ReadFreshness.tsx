@@ -25,6 +25,10 @@ import { formatRelative } from "@/lib/format";
 export const STALE_AFTER_MS = 10 * 60_000;
 /** Below this, the read is the present tense. */
 const LIVE_UNTIL_MS = 60_000;
+/** How long a press that landed keeps its bloom: flash's 900ms, and a beat. */
+const LANDED_HOLD_MS = 1000;
+/** How long a press is remembered once it settles, in case its read is still on its way. */
+const PRESS_FORGET_MS = 250;
 
 export type Freshness = "live" | "ageing" | "stale" | "provisional";
 
@@ -117,7 +121,7 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
   }
   useEffect(() => {
     if (landed === null) return;
-    const t = setTimeout(() => setLanded(null), 1000);
+    const t = setTimeout(() => setLanded(null), LANDED_HOLD_MS);
     return () => clearTimeout(t);
   }, [landed]);
   async function press(run: () => unknown) {
@@ -129,7 +133,7 @@ export function useRefreshPress(readAt: string | null | undefined): RefreshPress
       // The read failed: the button comes back, nothing blooms.
     } finally {
       setPressing(false);
-      setTimeout(() => setPressedAt(undefined), 250);
+      setTimeout(() => setPressedAt(undefined), PRESS_FORGET_MS);
     }
   }
   return { pressing, landed, press };
@@ -195,7 +199,7 @@ export function ReadFreshness({
       <span
         aria-hidden
         data-freshness-dot
-        className={`size-1.5 flex-none rounded-pill ${blooming ? "bloom " : ""}${
+        className={`size-1.5 flex-none rounded-pill motion-tint ${blooming ? "bloom " : ""}${
           reading === "live" || reading === "ageing"
             ? "bg-healthy"
             : reading === "stale"
@@ -215,9 +219,14 @@ export function ReadFreshness({
         <span className="text-faint">· not the whole list — only the first part was read</span>
       )}
       {onRefresh && reading === "stale" && (
-        <Button variant="outline" size="sm" onClick={() => void press(onRefresh)} isPending={refreshing || pressing}>
-          {refreshing || pressing ? "Reading" : "Read again"}
-        </Button>
+        // It tints in where the line ends. Its slot is zero tall, so the button
+        // overflows the line's own height instead of making the line taller: the
+        // sentence beside it stays where it was.
+        <span className="tint-in flex h-0 items-center">
+          <Button variant="outline" size="sm" onClick={() => void press(onRefresh)} isPending={refreshing || pressing}>
+            {refreshing || pressing ? "Reading" : "Read again"}
+          </Button>
+        </span>
       )}
     </div>
   );

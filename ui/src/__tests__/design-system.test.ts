@@ -485,7 +485,11 @@ describe("design system", () => {
   it("lets press and flash survive reduced motion, drops the bloom, rests the breathing", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     const reduce = atRuleBody(css, "@media (prefers-reduced-motion: reduce)");
-    expect(reduce).toMatch(/\.control,\s*\.press-scale\s*{[^}]*transition-duration: var\(--duration-press\)/);
+    expect(reduce).toMatch(/\.press-scale\s*{[^}]*transition-duration: var\(--duration-press\)/);
+    // A control keeps colour on tint and holds only the transform at press; the
+    // seat's own press survives the same way.
+    expect(reduce).toMatch(/\.control\s*{[^}]*var\(--duration-tint\)[^}]*var\(--duration-press\) !important/);
+    expect(reduce).toMatch(/\.seat > span\s*{[^}]*var\(--duration-press\) !important/);
     expect(reduce).toMatch(/\.flash\s*{[^}]*animation-duration: var\(--duration-flash\)/);
     expect(reduce).toMatch(/\.bloom::after\s*{[^}]*animation: none/);
     expect(reduce).toMatch(/\.breathe\s*{[^}]*animation: none[^}]*opacity: 1/);
@@ -515,7 +519,33 @@ describe("design system", () => {
     expect(atRuleBody(css, "@utility control")).toContain("scale(0.97)");
     const hover = atRuleBody(css, "@utility hover-tint");
     expect(hover).not.toContain("transform");
-    expect(hover).toContain("var(--surface-2)");
+    // Pressed is one step beyond hover, in both themes, not a surface colour.
+    expect(hover).toContain("var(--hover-press)");
+    expect(hover).not.toContain("var(--surface-2)");
+    expect(css.match(/--hover-press:/g)).toHaveLength(2);
+  });
+
+  // The focus ring fades out on tint wherever a motion utility is present; the
+  // utilities replace the base layer's transition, so each lists outline-color.
+  it("lists outline-color in every motion utility, so a ring fades on tint", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    for (const name of ["motion-tint", "motion-press", "control", "hover-tint"]) {
+      expect(atRuleBody(css, `@utility ${name}`), `${name} must transition outline-color`).toContain("outline-color");
+    }
+    expect(atRuleBody(css, "@utility seat")).toContain("outline-color");
+    // A hover:brightness fill tints too.
+    expect(atRuleBody(css, "@utility motion-tint")).toContain("filter");
+    expect(atRuleBody(css, "@utility control")).toContain("filter");
+  });
+
+  // Tailwind compiles rotate-90 to `rotate`, not `transform`: a chevron that
+  // only lists transform snaps. Turning is settle's, the Unfold's own timing.
+  it("turns a fold's chevron on settle, listing rotate", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const turn = atRuleBody(css, "@utility motion-turn");
+    expect(turn).toContain("transition-property: rotate, transform");
+    expect(turn).toContain("var(--duration-settle), var(--duration-settle)");
+    expect(turn).toContain("var(--ease-settle)");
   });
 
   // ── Colour roles ────────────────────────────────────────────────────────

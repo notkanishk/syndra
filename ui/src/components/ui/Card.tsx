@@ -148,7 +148,7 @@ export function CardRow({
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className="w-full text-left motion-press"
+        className="w-full text-left hover-tint"
       >
         <div className={line}>{children}</div>
       </button>

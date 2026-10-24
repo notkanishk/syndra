@@ -433,7 +433,7 @@ function StartFrom({
           </span>
           <button
             type="button"
-            className="font-semibold text-accent-text hover:brightness-110"
+            className="font-semibold text-accent-text motion-tint hover:brightness-110"
             onClick={() => {
               setSource("none");
               setCopied(null);

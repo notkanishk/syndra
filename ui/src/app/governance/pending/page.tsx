@@ -247,7 +247,7 @@ function PendingGroups({
                   {/* The 28px round chevron is the look; the 44px button around it is the touch floor. */}
                   <span
                     aria-hidden
-                    className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press group-hover:bg-[var(--hover)] ${
+                    className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn group-hover:bg-[var(--hover)] ${
                       open ? "rotate-90" : ""
                     }`}
                   >

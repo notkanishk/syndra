@@ -23,7 +23,7 @@ export function FoldHeading({
     >
       <span
         aria-hidden
-        className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press ${
+        className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn ${
           open ? "rotate-90" : ""
         }`}
       >

@@ -35,8 +35,8 @@ describe("AnchoredPanel closing", () => {
 
     rerender(<Popover open={false} />);
     const panel = screen.getByText("Given by hand").parentElement!;
-    expect(panel.style.animation).toContain("fade-out");
-    expect(panel.style.animation).not.toContain("sink");
+    expect(panel).toHaveClass("tint-out");
+    expect(panel.className).not.toContain("sink");
     expect(panel).toHaveClass("pointer-events-none");
     expect(panel).toHaveAttribute("aria-hidden", "true");
 

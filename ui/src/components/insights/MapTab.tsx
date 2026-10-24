@@ -346,7 +346,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
                 type="button"
                 aria-pressed={finding === f}
                 onClick={() => url.set({ ...toParams(null), ...NO_LENS, finding: finding === f ? null : f })}
-                className={`motion-tint inline-flex items-center gap-2 rounded-pill font-semibold ${PILL.sm} ${finding === f ? "bg-tint-3" : "bg-tint-2"}`}
+                className={`control press-scale inline-flex items-center gap-2 rounded-pill font-semibold ${PILL.sm} ${finding === f ? "bg-tint-3" : "bg-tint-2"}`}
               >
                 <span aria-hidden className={`size-1.5 rounded-pill ${DOT[f]}`} />
                 {findings.counts[f]} {CHIP_WORDS[f][findings.counts[f] === 1 ? 0 : 1]}

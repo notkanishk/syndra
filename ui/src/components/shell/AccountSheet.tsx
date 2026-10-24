@@ -42,7 +42,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-[44px] items-center gap-[9px] rounded-pill pl-1 pr-1 text-left motion-press tablet:pr-3"
+        className="flex min-h-[44px] items-center gap-[9px] rounded-pill pl-1 pr-1 text-left control press-scale hover:bg-[var(--hover)] tablet:pr-3"
       >
         <span
           aria-hidden
@@ -89,7 +89,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
                   key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
-                  className="flex min-h-[44px] flex-col justify-center gap-0.5 py-1.5 motion-press"
+                  className="-mx-2 flex min-h-[44px] flex-col justify-center gap-0.5 rounded-inner px-2 py-1.5 hover-tint"
                 >
                   <span className="text-[14.5px] font-semibold text-accent-text">{item.label} →</span>
                   <span className="text-[13px] text-muted">{OWN_NOTES[item.href]}</span>
@@ -134,7 +134,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             <button
               type="button"
               onClick={() => void installer.install()}
-              className="flex min-h-[44px] items-center justify-between rounded-inner border border-line px-4 text-[14.5px] motion-press"
+              className="flex min-h-[44px] items-center justify-between rounded-inner border border-line px-4 text-[14.5px] control press-scale hover:bg-[var(--hover)]"
             >
               <span>Install as an app</span>
               <span className="text-muted">Adds a home-screen icon</span>

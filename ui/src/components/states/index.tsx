@@ -108,7 +108,7 @@ export function EmptyState({
   resolved?: boolean;
 }) {
   return (
-    <div role="status" className="flex flex-col justify-center gap-2.5 px-6 py-8">
+    <div role="status" className="tint-in flex flex-col justify-center gap-2.5 px-6 py-8">
       <div className="flex items-center gap-2.5">
         {resolved && (
           <span aria-hidden className="h-2 w-2 flex-none rounded-pill bg-healthy" />
@@ -120,7 +120,7 @@ export function EmptyState({
         ("href" in action ? (
           <Link
             href={action.href}
-            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline"
+            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
           >
             {action.label}
           </Link>
@@ -128,7 +128,7 @@ export function EmptyState({
           <button
             type="button"
             onClick={action.onClick}
-            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline"
+            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
           >
             {action.label}
           </button>

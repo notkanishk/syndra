@@ -1,6 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+
+import { TINT_MS, stillMotion } from "@/lib/motion";
 
 /**
  * A filter that is in force, with the way out attached to it.
@@ -26,12 +28,27 @@ export function FilterChip({
   /** What the ✕ does, for anybody who cannot see which chip it sits in. */
   clearLabel: string;
 }) {
+  // A chip tints in where it appears and tints out when its own ✕ clears it:
+  // the clear runs one tint later, once the chip has gone. (A chip that goes
+  // because another control changed the filter is unmounted by its parent and
+  // simply goes.)
+  const [leaving, setLeaving] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  function clear() {
+    if (leaving) return;
+    if (stillMotion()) return onClear();
+    setLeaving(true);
+    timer.current = setTimeout(onClear, TINT_MS);
+  }
   return (
-    <span className="inline-flex items-center gap-1 self-start rounded-pill bg-tint-2 py-1.5 pl-4 pr-1 text-[13.5px]">
+    <span
+      className={`${leaving ? "tint-out pointer-events-none" : "tint-in"} inline-flex items-center gap-1 self-start rounded-pill bg-tint-2 py-1.5 pl-4 pr-1 text-[13.5px]`}
+    >
       <span>{children}</span>
       <button
         type="button"
-        onClick={onClear}
+        onClick={clear}
         aria-label={clearLabel}
         className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-pill font-semibold text-muted control hover:text-ink desktop:min-h-0 desktop:min-w-0 desktop:px-2 desktop:py-0.5"
       >

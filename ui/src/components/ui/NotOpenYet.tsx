@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 
 import { StatusDot } from "@/components/ui/Badge";
 
@@ -27,7 +29,12 @@ export function NotOpenYet({
   size?: "card" | "page";
   children: ReactNode;
 }) {
-  if (open) return <>{children}</>;
+  // Opening is a swap of the dashed frame for the live contents; the contents
+  // tint in rather than the frame and the dimming snapping away. One that was
+  // never closed here (it is open on first paint) is only its contents.
+  const [wasClosed, setWasClosed] = useState(!open);
+  if (!open && !wasClosed) setWasClosed(true);
+  if (open) return wasClosed ? <div className="tint-in">{children}</div> : <>{children}</>;
   const page = size === "page";
   return (
     <div

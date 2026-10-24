@@ -70,7 +70,7 @@ export function Timeline({
         ))}
         <span
           aria-hidden
-          className="pointer-events-none absolute top-[5px] size-4 -translate-x-1/2 rounded-pill bg-accent shadow-[0_0_0_4px_var(--accent-soft)] peer-focus-visible:shadow-[0_0_0_4px_var(--focus-ring)]"
+          className="pointer-events-none absolute top-[5px] size-4 -translate-x-1/2 rounded-pill bg-accent motion-tint shadow-[0_0_0_4px_var(--accent-soft)] peer-focus-visible:shadow-[0_0_0_4px_var(--focus-ring)]"
           style={{ left: at(here / last) }}
         />
         <span
