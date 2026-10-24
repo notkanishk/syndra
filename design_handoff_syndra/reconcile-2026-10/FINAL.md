@@ -1,4 +1,4 @@
-# FINAL · what to build, as of 23 Oct 2026
+# FINAL · what to build, as of 24 Oct 2026
 
 This is the index. It says which choice won everywhere there was more than one, which board and frame to build each screen from, and which motion each surface uses. Where any older file disagrees with this one, this one wins.
 
@@ -7,7 +7,8 @@ This is the index. It says which choice won everywhere there was more than one, 
 1. **`CLAUDE.md`** (project root): the standing rules. Build to them wherever a board is silent.
 2. **This file.**
 3. **The answers, newest first.** Each one overrides the ones before it:
-   - `from-design/A-07-makerspace-settings.md` (23 Oct)
+   - `from-design/A-08-motion-coverage.md` (24 Oct, accepted by the owner)
+   - `A-07` (23 Oct)
    - `A-06` (17 Oct)
    - `A-05` motion (17 Oct)
    - `A-04` (17 Oct)
@@ -102,7 +103,7 @@ Each line is the choice that stands, the date it was settled, and where it's dra
 - Events: "Syndra chose not to act".
 - Zitadel: "Answering, and sees 5 projects", two checks only (Reachable, Projects).
 
-**Motion:** A-05 and the **Motion v2** board. Six movements, the 10px cap, one loop. §4 maps every surface.
+**Motion:** A-05 and the **Motion v2** board. Six movements, the 10px cap, one loop. §4 maps every surface. A-08 and the **Motion coverage** board settle press, link hover, the view switch and narrowing a list.
 
 **Benched, not built**
 - `route-additions` (N24–N27).
@@ -161,6 +162,7 @@ What to build from on each board, and the answers that last touched it. Frames a
 - `route-login`: the login. Its two ambient loops are allowed, outside the product.
 - `Motion`: the picks 1b, 2a, 3a, 4a, 5b, 6a, 7a and 8a–8d. Read with Motion v2.
 - `Motion v2`: **the motion spec**, S1–S18 and the token table. A-05.
+- **`Motion coverage`** (new, 24 Oct): §1 press, **2a** link hover (2b is history), §3 Basic and Advanced, §4 narrowing a list, §5 the small calls. A-08.
 - `shell-account`: the Account sheet, proposed-both (A-03): Network storage, My access, Appearance and the drift sound on this device.
 
 **Operator**
@@ -223,8 +225,10 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 |---|---|---|
 | A screen's first paint | **S11**: the shell never moves; the header tints in, then cards arrive (stagger 40ms, cap 5). Only when you navigate there; never on back, refresh, filter or sort. No route transitions. | Every route |
 | Loading → content | **S7**: skeleton only after 200ms; skeleton fades, then rows arrive. No crossfade. | Every list and card that reads |
-| Hover, press, focus | **S8** and **S9**: colour only on hover; 3% press on buttons, chips, nav items and segments; rows and cards darken one step (`--surface-2`) when pressed; the focus ring appears at once and fades on tint | Everywhere |
-| Refresh, filter, search, sort | **A-05 §2.6, §2.10**: rows keyed by id; rows that stay hold still; new rows tint in; leaving rows tint out, then the gap settles. A re-sort fades the list out and back in (120ms each way); rows never travel. | People, Projects, Roles, Requests, Drift, Expiring, Holds, Revocations, Pending, Events, Service accounts, TrueNAS accounts, Bundles, Insights lists |
+| Hover, press, focus | **S8** and **S9**: colour only on hover; 3% press on buttons, chips, nav items and segments; rows and cards darken to `--tint-3` when pressed (A-08 §1; on an opaque card, a layer over its surface); the focus ring appears at once and fades on tint | Everywhere |
+| A link on hover | **A-08 2a**: every link ends on `--accent-text` with its underline tinted in from transparent (tint). A name link goes ink to accent; a violet link and ArrowLink keep their colour. No brightness lift. | Every link |
+| Basic ↔ Advanced | **A-08 §3**: the switch glides (S10); every Advanced part, rail and page, opens by Unfold and closes fade first, quicker. Nothing arrives. Above the view, what you're reading stays put. | The ViewSwitch |
+| Refresh, filter, search, sort | **A-05 §2.6, §2.10**: rows keyed by id; rows that stay hold still; new rows tint in; leaving rows tint out, then the gap settles. A re-sort fades the list out and back in (120ms each way); rows never travel. **A search or filter closes gaps at once, pointer or not; a refresh waits (A-08 §4).** A row returning mid-fade reverses. Discard in an editor is the same change in place: nothing arrives (A-08 §5). | People, Projects, Roles, Requests, Drift, Expiring, Holds, Revocations, Pending, Events, Service accounts, TrueNAS accounts, Bundles, Insights lists |
 | Folds and long lists | **Motion 8a–8d** with A-06 §5: fold opens on settle with contents fading in 120ms behind; closing fades first. Show 25 more: only new rows arrive. Back to 10: glide to the heading, trim out of sight. | Drift's two directions, Expiring sections, Pending batches, a person's projects, a bundle's versions, the RolePicker's folds |
 | Jump to a section | **8d**: glide (520ms), then the landing heading flashes once. A folded section opens on the way. | Read-line chips on Drift, Expiring, a person's page, a bundle's People |
 | Floating section pill | **8d**: drops in 10px on settle once the read line scrolls away; leaves on tint | Same pages as the chips |
@@ -235,6 +239,7 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 | A step pushed inside a sheet | **S2**: the form fades, the sheet's height settles to the step; the sheet doesn't move; Keep it reverses | Cancel a queued change (flow-cancel-queued), any confirm inside a dialog |
 | A phone sheet | **S3**: from the bottom edge on settle; follows the finger 1:1; let go short of a third and it settles back; while busy, 7a (15% resistance, capped at 10px, never closes) | Every dialog below tablet, Filters sheet, the AnchoredPanel you act in |
 | A dialog's result | **S6**: success rises 6px and its dot blooms once (`role="status"`); failure appears still on tint, steady danger dot (`role="alert"`) | Every dialog's end: Asked, Given, Extended, Saved, Marked, Not sent, Didn't save |
+| A Notice after first paint | **A-08 §5**: still, no rise; its space opens by Unfold, it tints in 120ms behind; leaves fade first, then folds. At first paint it arrives with its page. | Every Notice |
 | A field error | Failure: appears still on tint under its field; goes on tint when the field is edited | Term dates, Ask's Why, every form |
 | Adding or removing a part in a form | New row tints in, then its height settles; a removed row fades first, then its gap settles | Term dates' rows, bundle roles, mapping groups |
 | Tabs, Segmented, Select | **S10**: the fill or underline glides on settle and labels tint; tab content swaps with no slide; Select is native and still | A person's page tabs, Insights tabs, Period on Trends, How long, Home on/off |
