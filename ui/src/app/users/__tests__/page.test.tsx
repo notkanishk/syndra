@@ -8,7 +8,7 @@ import type { UserListEntry } from "@/lib/queries/useUsers";
 import { setMediaQuery } from "@/test-utils/media";
 import { motionInTests } from "@/test-utils/motion";
 
-const users = vi.hoisted(() => ({ data: [] as UserListEntry[] }));
+const users = vi.hoisted(() => ({ data: [] as UserListEntry[], isPlaceholderData: false }));
 const nav = vi.hoisted(() => ({ url: "/users", replaced: [] as string[] }));
 const roleMembers = vi.hoisted(() => ({ data: undefined as { members: Array<{ user: { id: string } }> } | undefined }));
 
@@ -351,6 +351,20 @@ describe("People index — bulk mode", () => {
     // when you meant 10 is dozens of people's access.
     expect(await screen.findByText(/All 60 people selected/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /select only the 10 people shown/ })).toBeInTheDocument();
+  });
+
+  it("won't select every match while a new search is still being read", () => {
+    users.data = Array.from({ length: 60 }, (_, index) =>
+      person({ user: { ...person().user, id: `u${index}`, name: `Person ${index}` } }),
+    );
+    // The rows on screen still answer the last search.
+    users.isPlaceholderData = true;
+    nav.url = "/users?bulk=1";
+    renderPeople();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 60 people/ }));
+    expect(screen.queryByText(/All 60 people selected/)).toBeNull();
+    users.isPlaceholderData = false;
   });
 
   // The name is the largest thing in a row and the obvious place a thumb
