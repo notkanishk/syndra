@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
 import { VIEW_EXPLANATION, ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
-import { leafMatches, navFor, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
+import { Unfold } from "@/components/ui/Unfold";
+import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
 import { useIndicators } from "@/lib/queries/useIndicators";
 import { useTargets } from "@/lib/queries/useTargets";
 import {
@@ -19,6 +20,9 @@ import {
   type TouchDestination,
 } from "@/lib/touch-nav";
 import { useUiView } from "@/lib/ui-view";
+
+/** A destination of the sheet, which draws both views' rows and folds Advanced's away in Basic. */
+type SheetDestination = TouchDestination & { advancedOnly?: boolean };
 
 /** The scrim's strength at rest (`bg-black/70`), which a drag thins from. */
 const NAV_SCRIM_ALPHA = 0.7;
@@ -51,6 +55,17 @@ export function TouchNav() {
       : navFor(audience);
   const destinations = touchDestinations(entries);
   const counts = isPlaceholderData ? undefined : indicators;
+  // The sheet draws Advanced's whole tree in either view and folds what Basic
+  // lacks (A-08 §3). `touchDestinations` is one destination per entry, in order.
+  const operatorEntries = audience === "member" ? entries : operatorNav((targets ?? []).map((t) => t.target));
+  const sheetDestinations: SheetDestination[] = touchDestinations(operatorEntries).map((destination, index) => ({
+    ...destination,
+    advancedOnly: operatorEntries[index].advancedOnly,
+  }));
+  // Lifted from the trigger: switching to Basic from inside the sheet turns the
+  // bar into tabs, and the sheet must stay mounted to fold Advanced's rows away.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const shape = sheetOpen ? "sheet" : navShape(destinations);
 
   return (
     <nav
@@ -59,10 +74,17 @@ export function TouchNav() {
       // width, and one of the two is always the only one visible.
       className="flex-none border-t border-line bg-rail px-1.5 pb-[env(safe-area-inset-bottom)] pt-2 tablet:hidden"
     >
-      {navShape(destinations) === "tabs" ? (
+      {shape === "tabs" ? (
         <TabBar destinations={destinations} pathname={pathname} counts={counts} />
       ) : (
-        <SheetTrigger destinations={destinations} pathname={pathname} counts={counts} />
+        <SheetTrigger
+          destinations={destinations}
+          sheetDestinations={sheetDestinations}
+          open={sheetOpen}
+          setOpen={setSheetOpen}
+          pathname={pathname}
+          counts={counts}
+        />
       )}
     </nav>
   );
@@ -161,14 +183,19 @@ function Tab({
  */
 function SheetTrigger({
   destinations,
+  sheetDestinations,
+  open,
+  setOpen,
   pathname,
   counts,
 }: {
   destinations: TouchDestination[];
+  sheetDestinations: SheetDestination[];
+  open: boolean;
+  setOpen: (open: boolean) => void;
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
 }) {
-  const [open, setOpen] = useState(false);
   const here = destinations.find((destination) => destinationMatches(destination, pathname));
   const wanting = destinationsWantingAttention(destinations, counts);
   const tone = loudestTone(
@@ -212,7 +239,7 @@ function SheetTrigger({
 
       {open && (
         <NavSheet
-          destinations={destinations}
+          destinations={sheetDestinations}
           pathname={pathname}
           counts={counts}
           onClose={() => setOpen(false)}
@@ -228,7 +255,7 @@ function NavSheet({
   counts,
   onClose,
 }: {
-  destinations: TouchDestination[];
+  destinations: SheetDestination[];
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
   onClose: () => void;
@@ -237,7 +264,7 @@ function NavSheet({
   const scrimRef = useRef<HTMLDivElement>(null);
   // The sheet was dragged off the screen: it has already left, so it leaves no copy.
   const draggedAway = useRef(false);
-  const { isOperator } = useUiView();
+  const { isOperator, audience } = useUiView();
 
   // Held in a ref for the same reason the focus trap holds its own: `onClose`
   // is a fresh closure every render, and this component re-renders on the
@@ -350,7 +377,9 @@ function NavSheet({
           <p className="mb-3 px-3.5 text-[12.5px] leading-[1.5] text-faint">{VIEW_EXPLANATION}</p>
         )}
 
-        <div className="flex flex-col gap-0.5">
+        {/* No `gap`: each row carries its own 2px above it (`mt-0.5`), so a part
+            that folds takes its gap with it. */}
+        <div className="-mt-0.5 flex flex-col">
           {destinations.map((destination) => (
             <SheetSection
               key={destination.href}
@@ -358,6 +387,7 @@ function NavSheet({
               pathname={pathname}
               counts={counts}
               onPick={onClose}
+              advanced={audience === "advanced"}
             />
           ))}
         </div>
@@ -367,16 +397,57 @@ function NavSheet({
   );
 }
 
+/** A part Basic lacks opens and folds with the view; one both views have is just there. */
+function FollowsView({
+  advancedOnly,
+  advanced,
+  children,
+}: {
+  advancedOnly: boolean | undefined;
+  advanced: boolean;
+  children: React.ReactNode;
+}) {
+  return advancedOnly ? <Unfold open={advanced}>{children}</Unfold> : <>{children}</>;
+}
+
 function SheetSection({
   destination,
   pathname,
   counts,
   onPick,
+  advanced,
 }: {
-  destination: TouchDestination;
+  destination: SheetDestination;
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
   onPick: () => void;
+  advanced: boolean;
+}) {
+  return (
+    <FollowsView advancedOnly={destination.advancedOnly} advanced={advanced}>
+      <SheetSectionBody
+        destination={destination}
+        pathname={pathname}
+        counts={counts}
+        onPick={onPick}
+        advanced={advanced}
+      />
+    </FollowsView>
+  );
+}
+
+function SheetSectionBody({
+  destination,
+  pathname,
+  counts,
+  onPick,
+  advanced,
+}: {
+  destination: SheetDestination;
+  pathname: string;
+  counts: Partial<Record<IndicatorKey, number>> | undefined;
+  onPick: () => void;
+  advanced: boolean;
 }) {
   const here = destinationMatches(destination, pathname);
 
@@ -411,22 +482,27 @@ function SheetSection({
   }
 
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className="px-3.5 pb-1 pt-3">
+    <div className="flex flex-col">
+      <div className="mt-0.5 px-3.5 pb-1 pt-3">
         <span className="type-nav-group">{destination.label}</span>
       </div>
       {destination.children.map((child) => (
-        <SheetRow
+        <FollowsView
           key={child.href}
-          href={child.href}
-          label={child.label}
-          active={leafMatches(child, pathname)}
-          indicator={child.indicator}
-          tone={child.tone}
-          counts={counts}
-          onPick={onPick}
-          nested
-        />
+          advancedOnly={!destination.advancedOnly && child.advancedOnly}
+          advanced={advanced}
+        >
+          <SheetRow
+            href={child.href}
+            label={child.label}
+            active={leafMatches(child, pathname)}
+            indicator={child.indicator}
+            tone={child.tone}
+            counts={counts}
+            onPick={onPick}
+            nested
+          />
+        </FollowsView>
       ))}
     </div>
   );
@@ -460,7 +536,7 @@ function SheetRow({
       href={href}
       onClick={onPick}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
+      className={`mt-0.5 flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
       } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-ink/80"}`}
     >

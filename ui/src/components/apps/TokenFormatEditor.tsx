@@ -12,6 +12,7 @@ import { FormPart } from "@/components/ui/FormPart";
 import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
+import { Unfold } from "@/components/ui/Unfold";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Segmented, Select } from "@/components/ui/Select";
 import { RowSkeleton, ErrorState } from "@/components/states";
@@ -598,7 +599,7 @@ function TokenKeyInventory({
         ))}
       </div>
 
-      {conflicts.length > 0 && (
+      <Unfold open={conflicts.length > 0}>
         <Notice tone="warn" title="Two apps share a claim name." className="mt-3">
           <div className="flex flex-col gap-1">
             {conflicts.map((conflict) => (
@@ -610,7 +611,7 @@ function TokenKeyInventory({
             ))}
           </div>
         </Notice>
-      )}
+      </Unfold>
     </div>
   );
 }

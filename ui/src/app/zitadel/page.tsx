@@ -56,12 +56,12 @@ export default function IdentityProviderPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {keyOverdue && rotation.data?.age_days !== undefined && (
-        <Notice tone="warn" title={`The action signing key is ${rotation.data.age_days} days old.`} live>
-          It is past the {rotation.data.threshold_days ?? 90}-day limit and still works. Replace it
+      <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
+        <Notice tone="warn" title={`The action signing key is ${rotation.data?.age_days} days old.`} live>
+          It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works. Replace it
           when nobody is working: How to replace it, below, walks through it.
         </Notice>
-      )}
+      </Unfold>
 
       <PageHeader
         title="Zitadel"
@@ -378,7 +378,7 @@ function HealthLine({
         </Unfold>
       )}
 
-      {!live && (
+      <Unfold open={!live} gap={16}>
         <Notice
           tone={notConfigured ? "warn" : "danger"}
           title={notConfigured ? "Not connected" : "Unreachable"}
@@ -389,7 +389,7 @@ function HealthLine({
           {detail ||
             "Syndra is showing what it last knew. Nothing is lost: changes waiting for you to send stay in order and go through when Zitadel is back."}
         </Notice>
-      )}
+      </Unfold>
     </div>
   );
 }
