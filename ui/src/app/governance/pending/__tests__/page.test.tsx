@@ -374,9 +374,9 @@ describe("Pending changes · board layout", () => {
       const omar = screen.getByText("Omar Haddad");
       type("omar");
       expect(screen.getByText("Omar Haddad")).toBe(omar);
-      expect(omar.closest(".tint-out")).toBeNull();
-      expect(screen.getByText("Lena Brandt").closest(".tint-out")).not.toBeNull();
-      expect(screen.getByText("Lena Brandt").closest(".close-gap")).not.toBeNull();
+      expect(omar.closest("[data-leaving]")).toBeNull();
+      expect(screen.getByText("Lena Brandt").closest("[data-leaving]")).not.toBeNull();
+      expect(screen.getByText("Lena Brandt").closest("[data-closing]")).not.toBeNull();
     });
 
     it("narrows by role", () => {

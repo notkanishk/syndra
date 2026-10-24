@@ -7,6 +7,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button, PILL } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Crossfade } from "@/components/ui/Crossfade";
 import { FormPart } from "@/components/ui/FormPart";
 import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -260,11 +261,21 @@ function ProfileForm({
   const vocabulary = useClaimVocabulary();
   const [claimName, setClaimName] = useState(profile.claim_name);
   const [format, setFormat] = useState<ClaimFormat>(profile.format_type);
-  const [extras, setExtras] = useState<ExtraClaim[]>(() => toExtras(profile));
+  // What the profile holds, with ids that last as long as the profile does: Discard puts these
+  // rows back, and a row that was never touched must be the same row (the same key) after it.
+  const fromProfile = useMemo(() => toExtras(profile), [profile]);
+  const [extras, setExtras] = useState<ExtraClaim[]>(fromProfile);
   // A claim added while the reader is here opens to its height; one removed fades
   // first and its gap settles after (Motion v2, form parts).
   const [added, setAdded] = useState<number[]>([]);
-  const drawn = useLeavingRows(extras, (extra) => String(extra.id));
+  // Discard is a change in place (A-08 §5): untouched rows hold still, a claim added since
+  // fades and its gap settles, one removed since opens its gap and tints in. Counting the
+  // discards is what tells the list the reader asked, so the gaps do not wait on anything.
+  const [discards, setDiscards] = useState(0);
+  const drawn = useLeavingRows(extras, (extra) => String(extra.id), true, { narrowedBy: String(discards) });
+  // Which seats had their words put back by a Discard ("name", or a claim's id): each one
+  // crossfades, and a seat that was not edited does not.
+  const [reverted, setReverted] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // What was last written, so "unsaved" can be judged against it rather than
@@ -282,7 +293,7 @@ function ProfileForm({
   const baseline = savedSnapshot ?? {
     claimName: profile.claim_name,
     format: profile.format_type,
-    extras: toExtras(profile),
+    extras: fromProfile,
   };
   const dirty =
     claimName !== baseline.claimName ||
@@ -354,14 +365,16 @@ function ProfileForm({
           </p>
         )}
         <div className="flex flex-wrap items-center gap-2.5">
-          <Input
-            id="claim-name"
-            value={claimName}
-            spellCheck={false}
-            onChange={(event) => setClaimName(event.target.value)}
-            className="min-w-[240px] flex-1 font-mono text-[13.5px]"
-            placeholder="syndra.laser.roles"
-          />
+          <Crossfade id={String(reverted.name ?? 0)} className="min-w-[240px] flex-1">
+            <Input
+              id="claim-name"
+              value={claimName}
+              spellCheck={false}
+              onChange={(event) => setClaimName(event.target.value)}
+              className="font-mono text-[13.5px]"
+              placeholder="syndra.laser.roles"
+            />
+          </Crossfade>
           <Segmented<ClaimFormat>
             label="Sent as"
             size="sm"
@@ -407,6 +420,7 @@ function ProfileForm({
           <div className="-mb-2 flex flex-col">
             {drawn.rows.map((extra) => (
               <FormPart key={extra.id} appear={added.includes(extra.id)} {...drawn.props(String(extra.id))}>
+              <Crossfade id={String(reverted[String(extra.id)] ?? 0)}>
               <div className="flex flex-wrap items-center gap-2 pb-2">
                 <Input
                   value={extra.key}
@@ -462,6 +476,7 @@ function ProfileForm({
                   Remove
                 </Button>
               </div>
+              </Crossfade>
               </FormPart>
             ))}
           </div>
@@ -482,6 +497,18 @@ function ProfileForm({
             onClick={() => {
               // Back to `baseline`, not `profile` directly — after a save that
               // has not refetched yet, `profile` is still the pre-save value.
+              setReverted((now) => {
+                const next = { ...now };
+                if (claimName !== baseline.claimName) next.name = (now.name ?? 0) + 1;
+                for (const was of baseline.extras) {
+                  const edited = extras.find((extra) => extra.id === was.id);
+                  if (edited && JSON.stringify(withoutId(edited)) !== JSON.stringify(withoutId(was))) {
+                    next[String(was.id)] = (now[String(was.id)] ?? 0) + 1;
+                  }
+                }
+                return next;
+              });
+              setDiscards((count) => count + 1);
               setClaimName(baseline.claimName);
               setFormat(baseline.format);
               setExtras(baseline.extras);

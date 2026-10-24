@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ARRIVE_MEMORY_MS, armArrive } from "@/components/ui/ArriveList";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { setMediaQuery } from "@/test-utils/media";
+import { gapSettled } from "@/test-utils/leaving";
 import { motionInTests } from "@/test-utils/motion";
 
 /** Motion v2 S5: a row that leaves on a later read fades, then its gap closes. */
@@ -39,8 +40,6 @@ function List({
 }
 
 const rowOf = (id: string) => screen.getByText(id).parentElement!.parentElement!;
-// jsdom has no AnimationEvent, so React listens for the prefixed name here.
-const animationEnd = (el: Element) => act(() => void fireEvent(el, new Event("webkitAnimationEnd", { bubbles: true })));
 
 beforeEach(() => motionInTests());
 
@@ -48,7 +47,7 @@ describe("a row leaving after a read", () => {
   it("does not mistake a new array of the same rows for a read", () => {
     const { rerender } = render(<List ids={["a", "b"]} />);
     rerender(<List ids={["a", "b"]} />);
-    expect(screen.getByText("b").parentElement).not.toHaveClass("tint-out");
+    expect(rowOf("b")).not.toHaveAttribute("data-leaving");
   });
 
   it("fades where it was, then closes its gap, then is gone; the rows that stay never move", () => {
@@ -59,13 +58,13 @@ describe("a row leaving after a read", () => {
     expect(screen.getAllByText(/^[abc]$/).map((p) => p.textContent)).toEqual(["a", "b", "c"]);
     const gone = rowOf("b");
     expect(gone).toHaveAttribute("aria-hidden", "true");
-    expect(screen.getByText("b").parentElement).toHaveClass("tint-out");
-    expect(gone).toHaveClass("close-gap");
+    expect(rowOf("b")).toHaveAttribute("data-leaving");
+    expect(gone).toHaveAttribute("data-closing");
     // The ones that stayed are the same elements: nothing remounted, nothing replayed.
     expect(screen.getByText("a")).toBe(a);
-    expect(rowOf("a")).not.toHaveClass("close-gap");
+    expect(rowOf("a")).not.toHaveAttribute("data-closing");
 
-    animationEnd(gone);
+    gapSettled(gone);
     expect(screen.queryByText("b")).not.toBeInTheDocument();
   });
 
@@ -87,11 +86,11 @@ describe("a row leaving after a read", () => {
     fireEvent.pointerEnter(screen.getByTestId("list"));
     rerender(<List ids={["a"]} />);
 
-    expect(screen.getByText("b").parentElement).toHaveClass("tint-out");
-    expect(rowOf("b")).not.toHaveClass("close-gap");
+    expect(rowOf("b")).toHaveAttribute("data-leaving");
+    expect(rowOf("b")).not.toHaveAttribute("data-closing");
 
     fireEvent.pointerLeave(screen.getByTestId("list"));
-    expect(rowOf("b")).toHaveClass("close-gap");
+    expect(rowOf("b")).toHaveAttribute("data-closing");
   });
 
   it("waits for focus to leave the list too", () => {
@@ -99,10 +98,10 @@ describe("a row leaving after a read", () => {
     const inside = screen.getByRole("button", { name: "inside" });
     fireEvent.focus(inside);
     rerender(<List ids={["a"]} />);
-    expect(rowOf("b")).not.toHaveClass("close-gap");
+    expect(rowOf("b")).not.toHaveAttribute("data-closing");
 
     fireEvent.blur(inside, { relatedTarget: document.body });
-    expect(rowOf("b")).toHaveClass("close-gap");
+    expect(rowOf("b")).toHaveAttribute("data-closing");
   });
 
   it("focus moving from one place in the list to another is not leaving it", () => {
@@ -111,7 +110,7 @@ describe("a row leaving after a read", () => {
     fireEvent.focus(inside);
     rerender(<List ids={["a"]} />);
     fireEvent.blur(inside, { relatedTarget: screen.getByText("a") });
-    expect(rowOf("b")).not.toHaveClass("close-gap");
+    expect(rowOf("b")).not.toHaveAttribute("data-closing");
   });
 
   it("is a row again if the next read brings it back", () => {
@@ -120,7 +119,7 @@ describe("a row leaving after a read", () => {
     rerender(<List ids={["a"]} />);
     rerender(<List ids={["a", "b"]} />);
     expect(rowOf("b")).not.toHaveAttribute("aria-hidden");
-    expect(screen.getByText("b").parentElement).not.toHaveClass("tint-out");
+    expect(rowOf("b")).not.toHaveAttribute("data-leaving");
   });
 
   it("is gone at once in reduced motion", () => {
@@ -144,11 +143,11 @@ describe("a row held for what it is still saying", () => {
     const { rerender } = render(<List ids={["a", "b"]} stay={HELD} />);
     rerender(<List ids={["a"]} stay={HELD} />);
     expect(rowOf("b")).not.toHaveAttribute("aria-hidden");
-    expect(screen.getByText("b").parentElement).not.toHaveClass("tint-out");
+    expect(rowOf("b")).not.toHaveAttribute("data-leaving");
 
     rerender(<List ids={["a"]} stay={new Set()} />);
-    expect(screen.getByText("b").parentElement).toHaveClass("tint-out");
-    expect(rowOf("b")).toHaveClass("close-gap");
+    expect(rowOf("b")).toHaveAttribute("data-leaving");
+    expect(rowOf("b")).toHaveAttribute("data-closing");
   });
 
   it("in reduced motion stays while held, then is simply gone", () => {
@@ -169,14 +168,92 @@ describe("a row held for what it is still saying", () => {
 });
 
 describe("rows narrowed by the reader (a search or a filter)", () => {
-  it("what it drops leaves, its gap does not wait on the pointer, and what it brings tints in", () => {
+  it("what it drops leaves, its gap does not wait on the pointer, and what it brings opens its gap, then tints in", () => {
     const { rerender } = render(<List ids={["a", "b"]} narrowedBy="open" />);
     // A search is typed with the pointer parked over the list it narrows.
     fireEvent.pointerEnter(screen.getByTestId("list"));
     rerender(<List ids={["c"]} narrowedBy="done" />);
-    expect(screen.getByText("a").parentElement).toHaveClass("tint-out");
-    expect(rowOf("a")).toHaveClass("close-gap");
-    expect(screen.getByText("c").parentElement).toHaveClass("tint-in");
+    expect(rowOf("a")).toHaveAttribute("data-leaving");
+    expect(rowOf("a")).toHaveAttribute("data-closing");
+    expect(rowOf("c")).toHaveAttribute("data-opens");
+    // One element carries both moves: `leave-row` opens the gap, then the contents tint in behind.
+    expect(rowOf("c")).not.toHaveAttribute("data-fresh");
+  });
+
+  it("a row the reader brings back after it has gone opens, and is an ordinary row once its gap has settled", () => {
+    const { rerender } = render(<List ids={["a", "b"]} narrowedBy="" />);
+    rerender(<List ids={["a"]} narrowedBy="a" />);
+    gapSettled(rowOf("b"));
+    expect(screen.queryByText("b")).toBeNull();
+
+    rerender(<List ids={["a", "b"]} narrowedBy="" />);
+    expect(rowOf("b")).toHaveAttribute("data-opens");
+    expect(rowOf("a")).not.toHaveAttribute("data-opens");
+    gapSettled(rowOf("b"));
+    // Nothing is left on it to clip a focus ring once it has opened.
+    expect(rowOf("b")).not.toHaveAttribute("data-opens");
+  });
+
+  it("a row new from a refresh nobody asked for only tints in: no gap opens", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(<List ids={["a"]} narrowedBy="" />);
+      rerender(<List ids={["a"]} narrowedBy="a" />);
+      act(() => void vi.advanceTimersByTime(ARRIVE_MEMORY_MS + 1000));
+      rerender(<List ids={["a", "c"]} narrowedBy="a" />);
+      expect(rowOf("c")).toHaveAttribute("data-fresh");
+      expect(rowOf("c")).not.toHaveAttribute("data-opens");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a row back while it is still fading turns round: the same element in the same seat, nothing remounted or replayed", () => {
+    const { rerender } = render(<List ids={["a", "b", "c"]} narrowedBy="" />);
+    const b = screen.getByText("b");
+    const row = rowOf("b");
+    // Typing "ac" starts b's fade...
+    rerender(<List ids={["a", "c"]} narrowedBy="ac" />);
+    expect(row).toHaveAttribute("data-leaving");
+    expect(row).toHaveAttribute("data-closing");
+    // ...and a backspace brings it back before it is gone. It keeps its node and its seat, and loses
+    // its leaving state: `leave-row` is a transition, so dropping the state is what turns it round.
+    rerender(<List ids={["a", "b", "c"]} narrowedBy="a" />);
+    expect(screen.getByText("b")).toBe(b);
+    expect(rowOf("b")).toBe(row);
+    expect(screen.getAllByText(/^[abc]$/).map((p) => p.textContent)).toEqual(["a", "b", "c"]);
+    expect(row).not.toHaveAttribute("data-leaving");
+    expect(row).not.toHaveAttribute("data-closing");
+    expect(row).not.toHaveAttribute("aria-hidden");
+    // Nothing that would replay: no entry move for a row that never left the page.
+    expect(row).not.toHaveAttribute("data-opens");
+    expect(row).not.toHaveAttribute("data-fresh");
+    // The fold it had started does not take it away later.
+    gapSettled(row);
+    expect(screen.getByText("b")).toBe(b);
+  });
+
+  it("a row back while its gap was held open by the pointer turns round too", () => {
+    const { rerender } = render(<List ids={["a", "b"]} />);
+    fireEvent.pointerEnter(screen.getByTestId("list"));
+    rerender(<List ids={["a"]} />);
+    const row = rowOf("b");
+    expect(row).toHaveAttribute("data-leaving");
+    expect(row).not.toHaveAttribute("data-closing");
+    rerender(<List ids={["a", "b"]} />);
+    expect(rowOf("b")).toBe(row);
+    expect(row).not.toHaveAttribute("data-leaving");
+    expect(row).not.toHaveAttribute("data-fresh");
+  });
+
+  it("a row is gone in reduced motion with nothing to open: a returning row is simply there", () => {
+    motionInTests(false);
+    const { rerender } = render(<List ids={["a", "b"]} narrowedBy="" />);
+    rerender(<List ids={["a"]} narrowedBy="a" />);
+    expect(screen.queryByText("b")).toBeNull();
+    rerender(<List ids={["a", "b"]} narrowedBy="" />);
+    // Its attributes stay; the stylesheet collapses their durations. The row is in at once.
+    expect(screen.getByText("b")).toBeInTheDocument();
   });
 
   it("holds for a read that lands after what is typed has changed: its gaps do not wait either", () => {
@@ -185,7 +262,7 @@ describe("rows narrowed by the reader (a search or a filter)", () => {
     // The query is typed: nothing has changed yet but what is being looked through.
     rerender(<List ids={["a", "b"]} narrowedBy="a" />);
     rerender(<List ids={["a"]} narrowedBy="a" />);
-    expect(rowOf("b")).toHaveClass("close-gap");
+    expect(rowOf("b")).toHaveAttribute("data-closing");
   });
 
   it("is the reader's only for a while: a later read nobody asked for still waits on the pointer", () => {
@@ -196,7 +273,7 @@ describe("rows narrowed by the reader (a search or a filter)", () => {
       act(() => void vi.advanceTimersByTime(ARRIVE_MEMORY_MS + 1000));
       fireEvent.pointerEnter(screen.getByTestId("list"));
       rerender(<List ids={["a"]} narrowedBy="a" />);
-      expect(rowOf("b")).not.toHaveClass("close-gap");
+      expect(rowOf("b")).not.toHaveAttribute("data-closing");
     } finally {
       vi.useRealTimers();
     }
@@ -207,7 +284,7 @@ describe("rows narrowed by the reader (a search or a filter)", () => {
     const b = screen.getByText("b");
     rerender(<List ids={["b"]} narrowedBy="b" />);
     expect(screen.getByText("b")).toBe(b);
-    expect(b.parentElement).not.toHaveClass("tint-in");
+    expect(rowOf("b")).not.toHaveAttribute("data-fresh");
   });
 });
 
@@ -222,7 +299,7 @@ describe("a list that draws a window of its rows (a page's limit)", () => {
     // The nine rows that were on screen fade where they were; the matches are all drawn now.
     expect(drawn.filter((id) => ["r25", "r26", "r27"].includes(id!))).toEqual(["r25", "r26", "r27"]);
     expect(drawn).not.toContain("r12");
-    expect(screen.getByText("r0").parentElement).toHaveClass("tint-out");
+    expect(rowOf("r0")).toHaveAttribute("data-leaving");
   });
 
   it("lets a fading row pushed out of the window go, rather than hold a seat it never shows in", () => {
@@ -239,46 +316,46 @@ describe("a list that draws a window of its rows (a page's limit)", () => {
 describe("a row that comes in on a later read", () => {
   it("tints in where it lands; the rows that stayed, and the first read's rows, do not", () => {
     const { rerender } = render(<List ids={["a", "b"]} />);
-    expect(screen.getByText("a").parentElement).not.toHaveClass("tint-in");
+    expect(rowOf("a")).not.toHaveAttribute("data-fresh");
     rerender(<List ids={["a", "b", "c"]} />);
-    expect(screen.getByText("c").parentElement).toHaveClass("tint-in");
-    expect(screen.getByText("a").parentElement).not.toHaveClass("tint-in");
+    expect(rowOf("c")).toHaveAttribute("data-fresh");
+    expect(rowOf("a")).not.toHaveAttribute("data-fresh");
   });
 
   it("keeps its tint through the next read, so it is never cut off", () => {
     const { rerender } = render(<List ids={["a"]} />);
     rerender(<List ids={["a", "c"]} />);
     rerender(<List ids={["a", "c", "d"]} />);
-    expect(screen.getByText("c").parentElement).toHaveClass("tint-in");
-    expect(screen.getByText("d").parentElement).toHaveClass("tint-in");
+    expect(rowOf("c")).toHaveAttribute("data-fresh");
+    expect(rowOf("d")).toHaveAttribute("data-fresh");
   });
 
   it("fades out, not in, when it goes", () => {
     const { rerender } = render(<List ids={["a"]} />);
     rerender(<List ids={["a", "c"]} />);
     rerender(<List ids={["a"]} />);
-    expect(screen.getByText("c").parentElement).toHaveClass("tint-out");
-    expect(screen.getByText("c").parentElement).not.toHaveClass("tint-in");
+    expect(rowOf("c")).toHaveAttribute("data-leaving");
+    expect(rowOf("c")).not.toHaveAttribute("data-fresh");
   });
 
   it("is not new when it is what the first read brought, even after an empty read", () => {
     const { rerender } = render(<List ids={[]} ready={false} />);
     rerender(<List ids={["a", "b"]} />);
-    expect(screen.getByText("a").parentElement).not.toHaveClass("tint-in");
+    expect(rowOf("a")).not.toHaveAttribute("data-fresh");
   });
 
   it("is new when it follows a first read that found nothing", () => {
     const { rerender } = render(<List ids={[]} ready={false} />);
     rerender(<List ids={[]} />);
     rerender(<List ids={["a"]} />);
-    expect(screen.getByText("a").parentElement).toHaveClass("tint-in");
+    expect(rowOf("a")).toHaveAttribute("data-fresh");
   });
 
   it("arrives instead when the reader asked for it (Show more)", () => {
     const { rerender } = render(<List ids={["a"]} />);
     armArrive();
     rerender(<List ids={["a", "b"]} />);
-    expect(screen.getByText("b").parentElement).not.toHaveClass("tint-in");
+    expect(rowOf("b")).not.toHaveAttribute("data-fresh");
   });
 });
 
@@ -292,6 +369,6 @@ describe("focus that went with a removed button", () => {
     (document.activeElement as HTMLElement | null)?.blur();
 
     fireEvent.pointerLeave(screen.getByTestId("list"));
-    expect(rowOf("b")).toHaveClass("close-gap");
+    expect(rowOf("b")).toHaveAttribute("data-closing");
   });
 });

@@ -20,6 +20,7 @@ export function FormPart({
   appear = false,
   children,
   fresh: _fresh, // a part opens by its own Unfold; a second fade over it would double
+  opens,
   ...leave
 }: LeaveProps & { appear?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(!appear);
@@ -27,7 +28,9 @@ export function FormPart({
     if (!open) setOpen(true);
   }, [open]);
   return (
-    <LeavingRow {...leave}>
+    // A part the reader added opens by its Unfold. One brought back (Discard) is not `appear`ing,
+    // so it opens as any returning row does, and the Unfold has nothing left to do.
+    <LeavingRow {...leave} opens={appear ? false : opens}>
       <Unfold open={open}>{children}</Unfold>
     </LeavingRow>
   );

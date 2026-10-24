@@ -94,7 +94,7 @@ describe("Service accounts list leaving (S5)", () => {
 
     const gone = screen.getByRole("link", { name: "zed", hidden: true }).closest("[data-account-row]") as HTMLElement;
     expect(gone.closest("[aria-hidden]")).not.toBeNull();
-    expect(gone.parentElement).toHaveClass("tint-out");
+    expect(gone.closest("[data-leaving]")).not.toBeNull();
     expect(screen.getByTestId("card-count")).toHaveTextContent("1");
     motionInTests(false);
   });

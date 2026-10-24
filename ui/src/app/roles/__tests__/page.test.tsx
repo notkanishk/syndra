@@ -145,8 +145,8 @@ describe("the roles index, searched", () => {
       target: { value: "alpha" },
     });
     expect(screen.getByText("Alpha")).toBe(alpha);
-    expect(alpha.closest(".tint-out")).toBeNull();
-    expect(screen.getByText("Beta").closest(".tint-out")).not.toBeNull();
-    expect(screen.getByText("Beta").closest(".close-gap")).not.toBeNull();
+    expect(alpha.closest("[data-leaving]")).toBeNull();
+    expect(screen.getByText("Beta").closest("[data-leaving]")).not.toBeNull();
+    expect(screen.getByText("Beta").closest("[data-closing]")).not.toBeNull();
   });
 });
