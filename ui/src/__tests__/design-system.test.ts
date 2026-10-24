@@ -806,8 +806,7 @@ describe("design system", () => {
   it("no hover underline, and no link changes colour on hover without a transition", () => {
     const found: Array<{ file: string; matches: string[] }> = [];
     for (const file of Array.from(walk(SRC_ROOT))) {
-      // states/index.tsx is exempt until the EmptyState actions drop their hover underline.
-      if (!file.endsWith(".tsx") || file.endsWith("components/states/index.tsx")) continue;
+      if (!file.endsWith(".tsx")) continue;
       const source = readFileSync(file, "utf8");
       const matches: string[] = [];
       if (/(?<![-\w])hover:underline/.test(source)) matches.push("hover:underline");
