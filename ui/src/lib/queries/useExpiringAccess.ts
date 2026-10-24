@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 
@@ -54,6 +54,8 @@ export function useExpiringGrants(withinDays = 30) {
           `/review/expiring-grants?within_days=${withinDays}`,
         )
       ).grants ?? [],
+    // Another window keeps the rows already shown until its own arrive.
+    placeholderData: keepPreviousData,
   });
 }
 

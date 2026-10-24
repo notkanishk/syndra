@@ -290,7 +290,7 @@ export function UnexplainedAccess() {
   // fades where it was and closes its gap after, and not under the pointer. Counts and
   // selection stay on the live findings; only what is drawn keeps the ones that are going.
   const leaving = useLeavingRows(sorted, (item) => item.id, !drift.isLoading && !drift.error, {
-    scope: `${query}|${JSON.stringify(filters)}`,
+    narrowedBy: `${query}|${JSON.stringify(filters)}`,
   });
   const sections = useMemo(() => {
     return SECTIONS.map((section) => {

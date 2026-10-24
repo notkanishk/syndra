@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
@@ -93,6 +93,8 @@ export function useDriftItems(filter?: DriftFilter) {
     queryFn: async () =>
       (await request<{ drift: DriftTriageItem[] }>(`/governance/drift${qs ? `?${qs}` : ""}`))
         .drift ?? [],
+    // A filter keeps the rows already shown until its own arrive.
+    placeholderData: keepPreviousData,
   });
 }
 

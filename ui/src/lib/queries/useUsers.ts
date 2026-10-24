@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
@@ -170,6 +170,9 @@ export function useUsers(q: string = "") {
       const data = await request<unknown>(path);
       return Array.isArray(data) ? (data as UserListEntry[]) : [];
     },
+    // A search is a new read, but the rows on screen are not a loading list: they stay
+    // until the answer lands, and the ones it drops leave (A-05 §2.10).
+    placeholderData: keepPreviousData,
   });
 }
 

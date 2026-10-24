@@ -155,7 +155,7 @@ export default function ExpiringAccessPage() {
   // was and closes its gap after, and not under the pointer. Counts and selection stay on the
   // live rows; only what is drawn keeps the ones that are going.
   const leaving = useLeavingRows(ordered, (grant) => grant.id, !grants.isLoading && !grants.error, {
-    scope: `${within}|${needle}`,
+    narrowedBy: `${within}|${needle}`,
   });
   const undecidedShown = useMemo(() => leaving.rows.filter((grant) => !grant.acknowledged), [leaving.rows]);
   const acknowledgedShown = useMemo(() => leaving.rows.filter((grant) => grant.acknowledged), [leaving.rows]);

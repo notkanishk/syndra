@@ -22,9 +22,20 @@ vi.mock("@/lib/queries/useServiceAccounts", async (original) => ({
   useServiceAccountIds: () => new Set<string>(),
 }));
 
+// A read is one object until it is read again, as the query cache's is; a list
+// that is a new array of new rows on every render would be a read on every render.
+const read: { count: number; data?: { bound: number; accounts: ReturnType<typeof account>[] } } = { count: -1 };
+function inventory() {
+  if (read.count !== state.count) {
+    read.count = state.count;
+    read.data = { bound: state.count, accounts: Array.from({ length: state.count }, (_, i) => account(i)) };
+  }
+  return read.data;
+}
+
 vi.mock("@/lib/queries/useTargets", () => ({
   useTargetInventory: () => ({
-    data: { bound: state.count, accounts: Array.from({ length: state.count }, (_, i) => account(i)) },
+    data: inventory(),
     isLoading: false,
     error: null,
     refetch: () => {},

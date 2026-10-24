@@ -160,11 +160,13 @@ function OperatorQueue({ userId }: { userId?: string }) {
   // What is drawn: the read, plus the rows that just left it. A decided row
   // keeps its place and its outcome for the beat (Motion 5b), then fades and its
   // gap closes (S5) — it never goes the instant the refetch lands, taking its
-  // own "Approved" with it. A different filter is a different list, so nothing
-  // fades out of it.
+  // own "Approved" with it. A different status is a different list, so nothing
+  // fades out of it; a search is not, so what it drops leaves, and its gap does
+  // not wait for the pointer (A-05 §2.10).
   const leaving = useLeavingRows(rows, (entry) => entry.id, !requests.isLoading && !requests.error, {
     stay: staying,
     scope: status,
+    narrowedBy: needle,
   });
   const drawn = leaving.rows;
   // The columns belong to the list as drawn: they stay while a decided row is
