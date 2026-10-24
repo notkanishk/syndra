@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { ArriveList } from "@/components/ui/ArriveList";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Mono, StatusDot } from "@/components/ui/Badge";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -227,22 +228,25 @@ export function WithdrawnAccess() {
         {showRows ? (
           <div className="flex flex-col gap-4" {...leaving.listProps}>
             <SectionPill sections={sections} label="Sections of unfinished revocations" onOpen={openSection} />
-            {(["spent", "queued"] as const).map((key) => (
-              <RevocationSection
-                key={key}
-                {...SECTIONS[key]}
-                rows={leaving.rows.filter((row) => row.spent === (key === "spent"))}
-                count={(key === "spent" ? spent : queued).length}
-                leave={leaving.props}
-                view={view}
-                // A search that finds nothing here does not say nothing has been given up on.
-                empty={filtered ? "Nothing here matches." : SECTIONS[key].empty}
-                open={open[key]}
-                onToggle={() => setOpen((cur) => ({ ...cur, [key]: !cur[key] }))}
-                sort={sort}
-                onSort={flipSort}
-              />
-            ))}
+            {/* The two sections are the page's cards: they arrive on first paint (S11). */}
+            <ArriveList>
+              {(["spent", "queued"] as const).map((key) => (
+                <RevocationSection
+                  key={key}
+                  {...SECTIONS[key]}
+                  rows={leaving.rows.filter((row) => row.spent === (key === "spent"))}
+                  count={(key === "spent" ? spent : queued).length}
+                  leave={leaving.props}
+                  view={view}
+                  // A search that finds nothing here does not say nothing has been given up on.
+                  empty={filtered ? "Nothing here matches." : SECTIONS[key].empty}
+                  open={open[key]}
+                  onToggle={() => setOpen((cur) => ({ ...cur, [key]: !cur[key] }))}
+                  sort={sort}
+                  onSort={flipSort}
+                />
+              ))}
+            </ArriveList>
           </div>
         ) : (
           <Card>

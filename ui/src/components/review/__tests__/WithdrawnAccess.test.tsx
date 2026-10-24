@@ -73,6 +73,13 @@ describe("what has not gone away yet", () => {
     expect(screen.getByText(/Nothing has been given up on/)).toBeInTheDocument();
   });
 
+  it("arrives its two sections on first paint, as every page's cards do (S11)", async () => {
+    await renderPage();
+    for (const section of document.querySelectorAll("section")) {
+      expect(section.parentElement?.classList.contains("arrive-list")).toBe(true);
+    }
+  });
+
   it("does not insert a card above the queue when one goes terminal", async () => {
     payload = { revocations: [row("r1", false), row("r2", true, { user_id: "u2" })] };
     await renderPage();
