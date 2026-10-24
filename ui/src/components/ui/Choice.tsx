@@ -8,7 +8,8 @@ type ChoiceProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type">;
  * Each screen used to draw its own: 16px everywhere in one picker, 24px on a
  * phone in the selection bar, a top nudge in some labels and not others. One
  * glyph now, the selection bar's `Seat`: the fill tints, the tick or dot grows
- * from 60% behind it, and it presses. Inside a label the whole label is the
+ * from 60% behind it, and it presses. 16px with a mouse, 24px on touch (`seat` in
+ * globals.css); the row, not the glyph, is what you hit. Inside a label the whole label is the
  * target, so the glyph needs no box of its own; `className` carries only
  * placement (`mt-1` beside a paragraph).
  */
@@ -43,8 +44,8 @@ export function Seat({
       />
       <span aria-hidden>
         {single && !locked ? (
-          <svg className="seat-mark" width="10" height="10" viewBox="0 0 10 10">
-            <circle cx="5" cy="5" r="4" fill="currentColor" />
+          <svg className="seat-mark" width="12" height="12" viewBox="0 0 12 12">
+            <circle cx="6" cy="6" r="4" fill="currentColor" />
           </svg>
         ) : (
           <>

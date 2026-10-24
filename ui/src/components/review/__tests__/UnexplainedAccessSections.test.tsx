@@ -233,9 +233,9 @@ describe("Drift — a finding that goes on a later read (S5)", () => {
       const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
       expect(within(zitadel).getByTestId("card-count")).toHaveTextContent("1");
       const gone = within(zitadel).getByRole("link", { name: "Arjun Das", hidden: true });
-      expect(gone.closest(".tint-out")).not.toBeNull();
+      expect(gone.closest("[data-leaving]")).not.toBeNull();
       expect(gone.closest("[inert]")).not.toBeNull();
-      expect(within(zitadel).getByRole("link", { name: "Meera Pillai" }).closest(".tint-out")).toBeNull();
+      expect(within(zitadel).getByRole("link", { name: "Meera Pillai" }).closest("[data-leaving]")).toBeNull();
     } finally {
       motionInTests(false);
     }

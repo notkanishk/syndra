@@ -9,6 +9,12 @@ import { SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
  * A row that leaves on a later read (Motion v2 S5): it fades where it was, then
  * its gap closes on settle. Rows that stay are the same elements throughout.
  *
+ * A row the reader's search or filter brings back opens its gap on settle, its
+ * contents tinting in behind; one new from a refresh only tints in. A row that
+ * comes back while it is still going turns round from where it is (A-08 §4):
+ * it keeps its element, and the fade and the fold are transitions (`leave-row`),
+ * so dropping the leaving state reverses them rather than replaying anything.
+ *
  * If the pointer or focus is inside the list, the gap waits until it leaves: a
  * list that closes up under a cursor is a list whose next click lands on the
  * wrong row.
@@ -25,6 +31,8 @@ interface Kept<T> {
   gone: boolean;
   /** Came in on a later read, not with the list: it tints in where it lands. */
   fresh: boolean;
+  /** Came in because the reader widened what they look through: its gap opens, then it tints in. */
+  opens: boolean;
   /** Dropped out because the reader changed what they are looking through: its gap never waits on the pointer. */
   eager: boolean;
 }
@@ -43,12 +51,19 @@ function merge<T>(
 ): Kept<T>[] {
   const next = new Set(rows.map(keyOf));
   const known = new Map(before.map((was) => [was.key, was]));
-  // Rows that stay keep what they were; only a key not seen before is new. One that is back
-  // before its fade ended is new too: it was leaving, and it tints in rather than snapping back.
+  // Rows that stay keep what they were; only a key not seen before is new.
   const out: Kept<T>[] = rows.map((row) => {
     const key = keyOf(row);
     const was = known.get(key);
-    return { row, key, gone: false, fresh: was ? was.fresh || (was.gone && !stay.has(key)) : arrives, eager: false };
+    // A row back before its fade ended keeps its element and turns round from where it is.
+    return {
+      row,
+      key,
+      gone: false,
+      fresh: was ? was.fresh : arrives,
+      opens: was ? was.opens : arrives && byReader,
+      eager: false,
+    };
   });
   before.forEach((was, index) => {
     if (next.has(was.key)) return;
@@ -75,6 +90,8 @@ export interface LeaveProps {
   leaving: boolean;
   /** New on a later read: it tints in. Rows the reader asked for arrive instead (see `armArrive`). */
   fresh?: boolean;
+  /** Brought back by the reader's own narrowing: its gap opens, then it tints in. */
+  opens?: boolean;
   held: boolean;
   onGone: () => void;
   /** Tells the list this row is on screen: only a row that was drawn can fade out. */
@@ -119,7 +136,7 @@ export function useLeavingRows<T>(
   ready = true,
   { stay = NOBODY, scope, narrowedBy }: LeavingOptions = {},
 ) {
-  const [kept, setKept] = useState<Kept<T>[]>(() => rows.map((row) => ({ row, key: keyOf(row), gone: false, fresh: false, eager: false })));
+  const [kept, setKept] = useState<Kept<T>[]>(() => rows.map((row) => ({ row, key: keyOf(row), gone: false, fresh: false, opens: false, eager: false })));
   // Rows are new only once the list has been read: what a first read brings is
   // the list arriving, not rows that came in.
   const [read, setRead] = useState(ready);
@@ -148,7 +165,7 @@ export function useLeavingRows<T>(
     setKept(
       ready && !other
         ? merge(kept, rows, keyOf, stay, drawn.current, stillMotion(), read && !armedRecently(), byReader)
-        : rows.map((row) => ({ row, key: keyOf(row), gone: false, fresh: false, eager: false })),
+        : rows.map((row) => ({ row, key: keyOf(row), gone: false, fresh: false, opens: false, eager: false })),
     );
   }
   if (ready && !read) setRead(true);
@@ -195,6 +212,7 @@ export function useLeavingRows<T>(
       return {
         leaving: entry ? leaves(entry) : false,
         fresh: entry?.fresh ?? false,
+        opens: entry?.opens ?? false,
         held: held && !entry?.eager,
         onGone: () => setKept((now) => now.filter((one) => !(one.key === key && one.gone))),
         track: (on) => {
@@ -218,13 +236,17 @@ export function useLeavingRows<T>(
   };
 }
 
-export function LeavingRow({ leaving, fresh, held, onGone, track, children }: LeaveProps & { children: ReactNode }) {
+export function LeavingRow({ leaving, fresh, opens, held, onGone, track, children }: LeaveProps & { children: ReactNode }) {
   // Once the gap has started to close it carries on, whatever the pointer does.
   const [closing, setClosing] = useState(false);
   if (leaving && !held && !closing) setClosing(true);
   if (!leaving && closing) setClosing(false);
+  // Opening is what the row does as it mounts; it is over when the gap has settled, and
+  // then the row is an ordinary one (an `overflow: hidden` left on would clip its focus ring).
+  const [opening, setOpening] = useState(Boolean(opens));
+  if (opening && leaving) setOpening(false);
 
-  // The gap is gone when its fold ends. If no animation runs to say so (none
+  // The gap is gone when its fold ends. If no transition runs to say so (none
   // matched, or the styles never loaded), it is removed after the fold's own
   // delay and duration anyway rather than left as an inert row.
   // `onGone` is new on every render, so it is read through a ref: a parent
@@ -244,17 +266,28 @@ export function LeavingRow({ leaving, fresh, held, onGone, track, children }: Le
     const timer = setTimeout(() => gone.current(), TINT_MS + SETTLE_MS + 100);
     return () => clearTimeout(timer);
   }, [closing]);
+  useEffect(() => {
+    if (!opening) return;
+    const timer = setTimeout(() => setOpening(false), TINT_MS + SETTLE_MS + 100);
+    return () => clearTimeout(timer);
+  }, [opening]);
 
   return (
     <div
-      className={closing ? "close-gap" : undefined}
+      className="leave-row"
+      data-leaving={leaving ? "" : undefined}
+      data-closing={closing ? "" : undefined}
+      data-opens={opening ? "" : undefined}
+      data-fresh={fresh && !opens && !leaving ? "" : undefined}
       aria-hidden={leaving ? true : undefined}
       inert={leaving ? true : undefined}
-      onAnimationEnd={(event) => {
-        if (closing && event.target === event.currentTarget) onGone();
+      onTransitionEnd={(event) => {
+        if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows") return;
+        if (closing) onGone();
+        else setOpening(false);
       }}
     >
-      <div className={leaving ? "tint-out" : fresh ? "tint-in" : undefined}>{children}</div>
+      <div>{children}</div>
     </div>
   );
 }

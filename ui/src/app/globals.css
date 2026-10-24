@@ -972,15 +972,27 @@ html.theme-fading *::after {
 }
 
 /* The selection seat (proposed/SelectionSeat.md): how a choice is marked
-   everywhere. A real input, transparent over a 24px round seat it styles.
-   Chosen fills accent and the mark settles in from 60%; some chosen is the
-   same fill with a dash; locked is grey, ticked, and can't change here. */
+   everywhere. A real input, transparent over a round seat it styles: 24px on
+   touch and 16px with a mouse, the desktop breakpoint being where this
+   product stops being touch (A-08 §5). Chosen fills accent and the mark settles
+   in from 60%; some chosen is the same fill with a dash; locked is grey,
+   ticked, and can't change here. The row is the hit area, and the input keeps
+   the 24px it always covered, so a smaller seat is not a smaller target. */
 @utility seat {
   position: relative;
   display: inline-flex;
   flex: none;
   width: 24px;
   height: 24px;
+
+  @media (width >= theme(--breakpoint-desktop)) {
+    width: 16px;
+    height: 16px;
+
+    & > input {
+      inset: -4px;
+    }
+  }
 
   & > input {
     position: absolute;
@@ -1008,8 +1020,11 @@ html.theme-fading *::after {
     transition-timing-function: var(--ease-tint), var(--ease-tint), var(--ease-tint),
       var(--ease-press);
   }
-  /* The tick settles in from 60%, 40ms behind the fill. */
+  /* The tick settles in from 60%, 40ms behind the fill. It is half the seat's width, so
+     it scales with the seat. */
   & > span > svg {
+    width: 50%;
+    height: 50%;
     opacity: 0;
     transform: scale(0.6);
     transition-property: opacity, transform;
@@ -1103,6 +1118,49 @@ html.theme-fading *::after {
   > * {
     min-height: 0;
     overflow: hidden;
+  }
+}
+
+/* A row of a list the reader reads again (S5, A-08 §4), worn by `LeavingRow`.
+   Unlike `close-gap` this is a TRANSITION, not an animation, and that is the
+   point: a row that comes back while it is still going turns round from
+   wherever its fade and its fold have got to, because removing the state
+   reverses the transition. A keyframe animation would restart.
+     data-leaving  fades on tint            data-closing  then its gap settles
+     data-fresh    a row new from a read    data-opens    a row the reader brought back:
+                   tints in                               its gap opens on settle, its
+                                                          contents tinting in one tint behind
+   The grid row is what travels, so the height is the row's own. */
+@utility leave-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--duration-settle) var(--ease-settle);
+
+  > * {
+    min-height: 0;
+    transition: opacity var(--duration-tint) var(--ease-tint);
+  }
+  &[data-leaving] > * {
+    opacity: 0;
+  }
+  &[data-closing] {
+    grid-template-rows: 0fr;
+    transition-delay: var(--duration-tint);
+  }
+  &[data-closing] > * {
+    overflow: hidden;
+  }
+  &[data-fresh] > * {
+    animation: fade var(--duration-tint) var(--ease-tint) backwards;
+  }
+  &[data-opens] {
+    @starting-style {
+      grid-template-rows: 0fr;
+    }
+  }
+  &[data-opens] > * {
+    overflow: hidden;
+    animation: fade var(--duration-settle) var(--ease-tint) var(--duration-tint) backwards;
   }
 }
 

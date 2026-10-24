@@ -42,20 +42,25 @@ describe("Projects, searched", () => {
   const search = (value: string) =>
     fireEvent.change(screen.getByRole("textbox", { name: "Search projects by name or app" }), { target: { value } });
 
-  it("holds the rows that match, fades the others where they were, and tints them back in", () => {
+  it("holds the rows that match, fades the others where they were, and opens them back", () => {
     render(<ProjectsPage />);
     const laser = screen.getByText("Laser Lab");
 
     search("laser");
     expect(screen.getByText("Laser Lab")).toBe(laser);
-    expect(laser.closest(".tint-out")).toBeNull();
+    expect(laser.closest("[data-leaving]")).toBeNull();
     // Still in the page, fading, and its gap closing: not removed under the reader.
-    expect(screen.getByText("Wood Shop").closest(".tint-out")).not.toBeNull();
-    expect(screen.getByText("Wood Shop").closest(".close-gap")).not.toBeNull();
+    expect(screen.getByText("Wood Shop").closest("[data-leaving]")).not.toBeNull();
+    expect(screen.getByText("Wood Shop").closest("[data-closing]")).not.toBeNull();
     expect(screen.getByText("Wood Shop").closest("[aria-hidden]")).not.toBeNull();
 
+    // Backspaced before it was gone: it turns round from where it is. Same element, no replay.
+    const wood = screen.getByText("Wood Shop");
     search("");
     expect(screen.getByText("Laser Lab")).toBe(laser);
-    expect(screen.getByText("Wood Shop").closest(".tint-in")).not.toBeNull();
+    expect(screen.getByText("Wood Shop")).toBe(wood);
+    expect(wood.closest("[data-leaving]")).toBeNull();
+    expect(wood.closest("[data-fresh]")).toBeNull();
+    expect(wood.closest("[data-opens]")).toBeNull();
   });
 });

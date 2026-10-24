@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PeoplePage from "@/app/users/page";
 import type { UserListEntry } from "@/lib/queries/useUsers";
+import { gapSettled } from "@/test-utils/leaving";
 import { setMediaQuery } from "@/test-utils/media";
 import { motionInTests } from "@/test-utils/motion";
 
@@ -532,19 +533,24 @@ describe("People · the board", () => {
       rerender(page());
 
       expect(screen.getByText("Ada Lin")).toBe(ada);
-      expect(ada.closest(".tint-out")).toBeNull();
-      expect(screen.getByText("Bo Chen").closest(".tint-out")).not.toBeNull();
-      expect(screen.getByText("Cy Ward").closest(".tint-out")).not.toBeNull();
-      expect(screen.getByText("Bo Chen").closest(".close-gap")).not.toBeNull();
+      expect(ada.closest("[data-leaving]")).toBeNull();
+      expect(screen.getByText("Bo Chen").closest("[data-leaving]")).not.toBeNull();
+      expect(screen.getByText("Cy Ward").closest("[data-leaving]")).not.toBeNull();
+      expect(screen.getByText("Bo Chen").closest("[data-closing]")).not.toBeNull();
 
-      // Clearing it brings them back, tinting in.
+      // Their gaps have settled and they are gone. Clearing it brings them back: the gap
+      // opens, then they tint in. The rows that stayed hold still.
+      gapSettled(screen.getByText("Bo Chen").closest("[data-closing]")!);
+      gapSettled(screen.getByText("Cy Ward").closest("[data-closing]")!);
+      expect(screen.queryByText("Bo Chen")).toBeNull();
       nav.url = "/users";
       rerender(page());
       users.data = everyone;
       rerender(page());
       expect(screen.getByText("Ada Lin")).toBe(ada);
-      expect(screen.getByText("Bo Chen").closest(".tint-in")).not.toBeNull();
-      expect(ada.closest(".tint-in")).toBeNull();
+      expect(screen.getByText("Bo Chen").closest("[data-opens]")).not.toBeNull();
+      expect(ada.closest("[data-opens]")).toBeNull();
+      expect(ada.closest("[data-fresh]")).toBeNull();
     });
   });
 });
