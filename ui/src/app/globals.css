@@ -1100,7 +1100,10 @@ html.theme-fading *::after {
   &[data-phase="closing"] {
     /* Its own keyframes, not `unfold reverse`: reversing also reverses the
        easing, and the gap would start slow and snap shut. */
-    animation: fold var(--duration-settle) var(--ease-settle) var(--duration-tint) both;
+    /* A-08 §3: the gap folds quicker than it opened, 200ms. No token was
+       granted for it, so it is the settle less half a tint (260 - 60). */
+    animation: fold calc(var(--duration-settle) - var(--duration-tint) / 2) var(--ease-settle)
+      var(--duration-tint) both;
   }
   &[data-phase="closing"] > * {
     overflow: hidden;

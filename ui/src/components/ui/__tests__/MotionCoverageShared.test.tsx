@@ -108,18 +108,23 @@ describe("Button", () => {
 });
 
 describe("Notice", () => {
-  // The first paint is just there; a Notice that mounts after it fades in on
-  // tint, in place and without a rise.
-  it("tints in once the app has painted, and never rises", async () => {
-    const { Notice } = await import("@/components/ui/Notice");
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    render(
-      <Notice tone="danger" title="Could not load">
-        Nothing was changed.
-      </Notice>,
-    );
-    const box = screen.getByRole("status");
-    expect(box).toHaveClass("tint-in");
-    expect(box.className).not.toMatch(/lift-in|arrive|popover-in/);
+  // The first paint is just there; a Notice that mounts after it opens its
+  // space by Unfold (A-08 §5), in place and without a rise.
+  it("opens by Unfold once the app has painted, and never rises", async () => {
+    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+    try {
+      const { Notice } = await import("@/components/ui/Notice");
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      render(
+        <Notice tone="danger" title="Could not load">
+          Nothing was changed.
+        </Notice>,
+      );
+      const box = screen.getByRole("status");
+      expect(box.closest(".unfold")).toHaveAttribute("data-phase", "opening");
+      expect(box.className).not.toMatch(/tint-in|lift-in|arrive|popover-in/);
+    } finally {
+      delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
+    }
   });
 });

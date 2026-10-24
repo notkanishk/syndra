@@ -20,6 +20,7 @@ import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
+import { Tinted } from "@/components/ui/Unfold";
 import { useIsAdvanced } from "@/lib/ui-view";
 
 /**
@@ -116,7 +117,9 @@ export default function ProjectDetailPage({
                 {people.note}
               </span>
             )}
-            {advanced && <Mono className="text-faint">{id}</Mono>}
+            <Tinted show={advanced}>
+              <Mono className="text-faint">{id}</Mono>
+            </Tinted>
             {/* Its own line, as the board draws it. */}
             <span className="basis-full">
               <ReadFreshness state={readState} subject="What Zitadel confirmed" />

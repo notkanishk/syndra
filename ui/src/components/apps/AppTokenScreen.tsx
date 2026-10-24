@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useClaimShape } from "@/lib/queries/useClaimShape";
 import { useCrumb } from "@/lib/page-crumb";
+import { Tinted } from "@/components/ui/Unfold";
 import { useIsAdvanced } from "@/lib/ui-view";
 
 /**
@@ -104,12 +105,11 @@ function ReadAppTokenScreen({ applicationId }: { applicationId: string }) {
             <ArrowLink href={`/projects/${app.application.project_id}`}>
               <ProjectName id={app.application.project_id} />
             </ArrowLink>
-            {advanced && (
-              <>
-                {" "}
-                · id <Mono>{app.application.id}</Mono>
-              </>
-            )}
+            {/* An inline bit, not a region: it tints with the view (A-08 §3). */}
+            <Tinted show={advanced}>
+              {" "}
+              · id <Mono>{app.application.id}</Mono>
+            </Tinted>
           </span>
         }
       />

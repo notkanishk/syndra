@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
+import { Unfold } from "@/components/ui/Unfold";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
@@ -149,14 +150,14 @@ function TargetCard({ view }: { view: MyTargetView }) {
         <Steps reached={reached} state={state} />
       </div>
 
-      {offline && (
+      <Unfold open={Boolean(offline)}>
         <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]">
           It stopped answering{view.reachable_since ? ` at ${formatClock(view.reachable_since)}` : ""}, so your
           folders won&apos;t open until it&apos;s back. Your account and files are safe, and your access
           hasn&apos;t changed. Makerspace staff can see this too, and this page updates on its own when{" "}
           {label} returns.
         </Notice>
-      )}
+      </Unfold>
 
       <div className="flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">
         <h2 className="font-display text-[24px] font-semibold leading-[1.25] tracking-[-0.01em] [text-wrap:pretty]">
@@ -181,12 +182,14 @@ function TargetCard({ view }: { view: MyTargetView }) {
         </div>
       )}
 
-      {notice && !hasAccount && (
-        <Notice tone="warn" title={notice.title} className="mx-5 mb-[22px]">
-          {notice.body}
-          {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
-        </Notice>
-      )}
+      <Unfold open={Boolean(notice) && !hasAccount}>
+        {notice && (
+          <Notice tone="warn" title={notice.title} className="mx-5 mb-[22px]">
+            {notice.body}
+            {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
+          </Notice>
+        )}
+      </Unfold>
 
       {hasAccount && view.account && (
         <>
@@ -206,12 +209,14 @@ function TargetCard({ view }: { view: MyTargetView }) {
             passwordBlocked={passwordBlocked}
           />
 
-          {notice && (
-            <Notice tone="warn" title={notice.title} className="mx-5 mb-5">
-              {notice.body}
-              {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
-            </Notice>
-          )}
+          <Unfold open={Boolean(notice)}>
+            {notice && (
+              <Notice tone="warn" title={notice.title} className="mx-5 mb-5">
+                {notice.body}
+                {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
+              </Notice>
+            )}
+          </Unfold>
 
           {!passwordStep && (
             <div className="row-divider flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">

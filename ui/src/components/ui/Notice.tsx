@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
+import { UnfoldOnArrival, useInsideUnfold } from "@/components/ui/Unfold";
 
 /**
  * The one way Syndra says something is wrong with what you are looking at
@@ -24,11 +25,14 @@ const TONES = {
 } as const;
 
 /**
- * True once the app has painted. A Notice that is part of the first paint is
- * just there; one that mounts after it (a read that failed, a state that went
- * stale) fades in on tint, in place and without a rise: failure appears still.
- * Two frames after this module loads is past first paint and before any
- * later mount.
+ * True once the app has painted. A Notice that is part of the first paint
+ * arrives with its page; one that mounts after it (a read that failed, a state
+ * that went stale) opens its space by Unfold and tints in behind it, still and
+ * without a rise, so what is below settles rather than jumps (A-08 §5). It
+ * leaves by fading, then folding: a caller that can drop it while the page is
+ * open wraps it in `<Unfold open={…}>`, which also opens it, so it is not
+ * opened twice. Two frames after this module loads is past first paint and
+ * before any later mount.
  */
 let painted = false;
 if (typeof window !== "undefined") {
@@ -61,11 +65,12 @@ export function Notice({
   className?: string;
 }) {
   const t = TONES[tone];
-  const [late] = useState(() => painted);
-  return (
+  const wrapped = useInsideUnfold();
+  const [late] = useState(() => painted && !wrapped);
+  const box = (
     <div
       role={blocking ? "alert" : "status"}
-      className={`flex items-start gap-3.5 rounded-panel border px-5 py-4 ${late ? "tint-in " : ""}${t.box} ${className}`}
+      className={`flex items-start gap-3.5 rounded-panel border px-5 py-4 ${t.box} ${className}`}
     >
       <span
         aria-hidden
@@ -89,4 +94,5 @@ export function Notice({
       </div>
     </div>
   );
+  return late ? <UnfoldOnArrival>{box}</UnfoldOnArrival> : box;
 }

@@ -47,6 +47,8 @@ export interface NavLeaf {
    * /projects/{id}/roles/{key} is Roles, and a prefix cannot tell them apart.
    */
   pattern?: RegExp;
+  /** Set by `operatorNav`: this row is in Advanced and not in Basic. */
+  advancedOnly?: boolean;
 }
 
 export interface NavGroup {
@@ -54,6 +56,8 @@ export interface NavGroup {
   /** A section label, not a link. */
   label: string;
   children: NavLeaf[];
+  /** Set by `operatorNav`: this whole section is in Advanced and not in Basic. */
+  advancedOnly?: boolean;
 }
 
 export type NavEntry = NavLeaf | NavGroup;
@@ -178,6 +182,28 @@ export function targetNav(targets: string[]): NavEntry[] {
       ...entry.children.slice(2),
     ]);
   });
+}
+
+/**
+ * What an operator's rail and sheet draw, whichever view is on: Advanced's
+ * whole tree, in Advanced's order, each part Basic does not have marked
+ * `advancedOnly`. The rail wraps those parts in an Unfold that follows the
+ * view (A-08 §3), so a row both views share is the same row in both and
+ * never remounts. Derived from the two lists above, never restated: a row
+ * added to `ADVANCED_NAV` is Advanced-only until it is added to Basic.
+ *
+ * A group Basic does not have is marked as a whole (its rows follow it); in a
+ * group both views have, each row is judged on its own.
+ */
+export function operatorNav(targets: string[]): NavEntry[] {
+  const basicLeaves = new Set(navLeaves(BASIC_NAV).map((entry) => entry.href));
+  const basicGroups = new Set(BASIC_NAV.flatMap((entry) => (entry.kind === "group" ? [entry.label] : [])));
+  const mark = (entry: NavLeaf): NavLeaf => ({ ...entry, advancedOnly: !basicLeaves.has(entry.href) });
+  return targetNav(targets).map((entry) =>
+    entry.kind === "leaf"
+      ? mark(entry)
+      : { ...entry, advancedOnly: !basicGroups.has(entry.label), children: entry.children.map(mark) },
+  );
 }
 
 /**

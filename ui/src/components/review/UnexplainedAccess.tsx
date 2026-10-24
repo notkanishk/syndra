@@ -684,17 +684,17 @@ export function UnexplainedAccess() {
         </Notice>
       ))}
 
-      {diff.data?.truncated && (
+      <Unfold open={Boolean(diff.data?.truncated)} gap={16}>
         <Notice tone="warn" title="The comparison stopped early.">
           The list was too long, so what the comparison adds to the findings is incomplete. Treat a
           missing row as “nothing found so far”, not as “nothing exists”.
         </Notice>
-      )}
-      {diff.error && (
+      </Unfold>
+      <Unfold open={Boolean(diff.error)} gap={16}>
         <Notice tone="warn" title="The comparison didn’t load.">
           The findings below are still current. Differences only the comparison shows are missing.
         </Notice>
-      )}
+      </Unfold>
 
       {list}
 

@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 
 import { useTargets } from "@/lib/queries/useTargets";
 import { useIndicators, type Indicators } from "@/lib/queries/useIndicators";
-import { leafMatches, navFor, targetNav, type NavLeaf } from "@/lib/nav";
+import { leafMatches, navFor, operatorNav, type NavLeaf } from "@/lib/nav";
 // Shared with the tab bar, because the rail and the tab bar are two renderings
 // of one tree and a count that is danger in one cannot be accent in the other.
 import { BADGE_TONE } from "@/components/shell/navTones";
 import { useUiView } from "@/lib/ui-view";
 import { useFlashOnChange } from "@/lib/useFlashOnChange";
+import { Unfold } from "@/components/ui/Unfold";
 import { SyndraMark } from "./SyndraMark";
 
 /**
@@ -34,10 +35,20 @@ export default function Sidebar() {
   // The rail renders without it and gains the rows when it arrives: a structure
   // that waited for a fetch would be a rail that moves in response to a poll.
   const { data: targets } = useTargets(isOperator);
+  // An operator's rail is Advanced's whole tree in both views; what Basic
+  // lacks is folded shut, so a row both share is the same row in each and
+  // switching moves only the parts that come and go (A-08 §3).
+  const advanced = audience === "advanced";
   const entries =
-    audience === "advanced"
-      ? targetNav((targets ?? []).map((t) => t.target))
-      : navFor(audience);
+    audience === "member" ? navFor(audience) : operatorNav((targets ?? []).map((t) => t.target));
+  const followsView = (advancedOnly: boolean | undefined, key: string, part: React.ReactNode) =>
+    advancedOnly ? (
+      <Unfold key={key} open={advanced}>
+        {part}
+      </Unfold>
+    ) : (
+      part
+    );
   const viewLabel =
     audience === "member" ? "Member" : audience === "advanced" ? "Advanced" : "Basic";
 
@@ -59,35 +70,47 @@ export default function Sidebar() {
         </span>
       </div>
 
-      <nav className="flex flex-col gap-[3px]" aria-label="Main navigation">
+      {/* No `gap`: each row carries its own 3px above it (`mt-[3px]`), so a part
+          that folds takes its gap with it and the rows after it do not hop. */}
+      <nav className="-mt-[3px] flex flex-col" aria-label="Main navigation">
         {entries.map((entry) =>
-          entry.kind === "leaf" ? (
-            <NavRow
-              key={entry.href}
-              item={entry}
-              pathname={pathname}
-              indicators={indicators}
-              settled={!isPlaceholderData}
-              nested={false}
-            />
-          ) : (
-            <div key={entry.label} className="contents">
-              {/* A parent with children is a section label, not a link. */}
-              <div className="px-3 pb-[5px] pt-4">
-                <span className="type-nav-group">{entry.label}</span>
-              </div>
-              {entry.children.map((child) => (
+          entry.kind === "leaf"
+            ? followsView(
+                entry.advancedOnly,
+                entry.href,
                 <NavRow
-                  key={child.href}
-                  item={child}
+                  key={entry.href}
+                  item={entry}
                   pathname={pathname}
                   indicators={indicators}
                   settled={!isPlaceholderData}
-                  nested
-                />
-              ))}
-            </div>
-          ),
+                  nested={false}
+                />,
+              )
+            : followsView(
+                entry.advancedOnly,
+                entry.label,
+                <div key={entry.label} className="contents">
+                  {/* A parent with children is a section label, not a link. */}
+                  <div className="mt-[3px] px-3 pb-[5px] pt-4">
+                    <span className="type-nav-group">{entry.label}</span>
+                  </div>
+                  {entry.children.map((child) =>
+                    followsView(
+                      !entry.advancedOnly && child.advancedOnly,
+                      child.href,
+                      <NavRow
+                        key={child.href}
+                        item={child}
+                        pathname={pathname}
+                        indicators={indicators}
+                        settled={!isPlaceholderData}
+                        nested
+                      />,
+                    ),
+                  )}
+                </div>,
+              ),
         )}
       </nav>
     </div>
@@ -127,7 +150,7 @@ function NavRow({
       // `min-h-11` up to desktop: the rail appears at the tablet breakpoint and
       // a tablet is still a thumb, which is the whole argument
       // touch-targets.test.tsx makes. Its own links were 38-43px there.
-      className={`flex min-h-11 items-center gap-[9px] rounded-nav text-[14.5px] control desktop:min-h-0 ${
+      className={`mt-[3px] flex min-h-11 items-center gap-[9px] rounded-nav text-[14.5px] control desktop:min-h-0 ${
         changed ? "flash " : ""
       }${
         nested ? "py-2 pl-[21px] pr-3" : "px-3 py-[9px]"

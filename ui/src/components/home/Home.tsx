@@ -266,7 +266,9 @@ export function Home({ session }: { session: SessionUser }) {
           </span>
         </div>
       ) : (
-        <>
+        // One wrapper, so the Basic footnote's Unfold is not a direct child of the
+        // arriving list (its settled rule would stop the unfold playing).
+        <div className="flex flex-col gap-6">
           <div className="grid items-start gap-6 desktop:grid-cols-2">
             {/* Time-sensitive: access ends, stays wrong, or goes unseen if you wait.
                 Drift leads, and a target Syndra cannot read stays beside the
@@ -333,14 +335,16 @@ export function Home({ session }: { session: SessionUser }) {
             </Unfold>
           </div>
 
-          {!advanced && (
+          {/* Basic's own sentence folds when Advanced opens (A-08 §3), by the same
+              Unfold as everything else the switch moves. */}
+          <Unfold open={!advanced} gap={24}>
             <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
               In Basic these blocks are your whole queue. Pending changes and unexplained access
               aren&rsquo;t hidden from you — they belong to the machine, and the machine lives in
               Advanced.
             </p>
-          )}
-        </>
+          </Unfold>
+        </div>
         )}
 
         {/* The work zone above never moves. This is appended, never inserted. */}

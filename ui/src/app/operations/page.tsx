@@ -14,6 +14,7 @@ import { FilterChip } from "@/components/ui/FilterChip";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
 import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
+import { Unfold } from "@/components/ui/Unfold";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
@@ -124,12 +125,14 @@ export default function EventActivityPage() {
 
   return (
     <div className="flex flex-col gap-[18px]">
-      {stale && (
+      {/* A notice that can come and go while the page is open leaves by fading,
+          then folding (A-08 §5): the Unfold opens it, and closes it. */}
+      <Unfold open={Boolean(stale)} gap={18}>
         <Notice tone="warn" live title={`Events haven't been read since ${formatWhen(readAt)}.`}>
           Syndra&apos;s server stopped answering this page. The list below is what had arrived by
           then; anything newer will appear when it answers again.
         </Notice>
-      )}
+      </Unfold>
 
       <PageHeader
         title="Incoming events"
@@ -210,7 +213,7 @@ export default function EventActivityPage() {
         </>
       )}
 
-      {(eventsDown !== triggersDown) && (
+      <Unfold open={eventsDown !== triggersDown} gap={18}>
         <Notice
           tone="danger"
           blocking
@@ -220,7 +223,7 @@ export default function EventActivityPage() {
           The list below has only what {eventsDown ? "new people" : "Zitadel"} sent, and that part
           is current. Nothing was changed.
         </Notice>
-      )}
+      </Unfold>
 
       <Card>
         <ListStates
