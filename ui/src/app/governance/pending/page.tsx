@@ -526,7 +526,7 @@ function CausedBy({
         <Link
           href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
           aria-label="See what this change set off, in Change history"
-          className="motion-tint hover:text-accent-text"
+          className="link-hover"
         >
           <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
         </Link>

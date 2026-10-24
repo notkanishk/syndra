@@ -38,7 +38,7 @@ export function UpstreamShell({
           // Standalone navigation, not a link in a sentence: this is the
           // back affordance on these two screens, and on a phone it is what a
           // thumb reaches for first.
-          className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
+          className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text link-hover"
         >
           <span aria-hidden="true">← </span>Zitadel
         </Link>
@@ -56,7 +56,7 @@ export function UpstreamShell({
           {lede}{" "}
           <Link
             href={syndraHref}
-            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0 motion-tint hover:text-ink"
+            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0 link-hover"
           >
             {syndraLabel} <span aria-hidden="true">→</span>
           </Link>

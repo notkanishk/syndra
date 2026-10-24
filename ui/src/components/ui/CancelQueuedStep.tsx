@@ -346,7 +346,7 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
                 armArrive();
                 setShowAll(true);
               }}
-              className="font-semibold text-accent-text motion-tint hover:brightness-110"
+              className="font-semibold text-accent-text link-hover"
             >
               Show all {n}
             </button>

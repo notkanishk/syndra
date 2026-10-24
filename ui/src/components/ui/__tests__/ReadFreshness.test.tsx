@@ -96,4 +96,17 @@ describe("the strip", () => {
     rerender(<ReadFreshness state={{ readAt: ago(20), current: true }} onRefresh={() => {}} />);
     expect(screen.getByRole("button", { name: /read again/i })).toBeInTheDocument();
   });
+
+  // A-08 §5: the slot stays zero tall; the pill drawn is the line and a hair, and
+  // the 44px thumb target is an unpainted box on touch only.
+  it("draws a short pill in a zero-height slot, with the touch target unpainted", () => {
+    render(<ReadFreshness state={{ readAt: ago(20), current: true }} onRefresh={() => {}} />);
+    const button = screen.getByRole("button", { name: /read again/i });
+    expect(button.parentElement?.parentElement).toHaveClass("h-0");
+    // Beats the Button's 44px floor and its desktop padding.
+    expect(button).toHaveClass("min-h-0!", "py-px!");
+    // The target: a 44px `before` box, centred on the line, gone on desktop.
+    expect(button).toHaveClass("before:h-11", "before:top-1/2", "desktop:before:hidden");
+    expect(button.className).not.toMatch(/before:(bg|border)/);
+  });
 });

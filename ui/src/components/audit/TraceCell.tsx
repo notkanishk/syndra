@@ -25,7 +25,7 @@ export function TraceCell({ entry, className }: { entry: AuditEntry; className?:
         <Link
           href={trace.href}
           aria-label="See what this change set off, in Change history"
-          className="text-[13px] font-semibold text-accent-text motion-tint hover:text-ink"
+          className="text-[13px] font-semibold text-accent-text link-hover"
         >
           <Mono>{trace.label}</Mono>
         </Link>

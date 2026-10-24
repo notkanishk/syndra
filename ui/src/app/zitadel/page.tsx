@@ -349,7 +349,7 @@ function HealthLine({
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
-            className="inline-flex min-h-11 items-center gap-2 font-semibold text-muted motion-tint hover:text-ink desktop:min-h-6"
+            className="inline-flex min-h-11 items-center gap-2 font-semibold text-muted link-hover desktop:min-h-6"
           >
             {open ? "Hide checks" : "Show checks"}
             <Chevron open={open} />
@@ -527,7 +527,7 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{door.warning}</span>
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
                 {door.instead}{" "}
-                <a href={door.syndraHref} className="font-semibold text-accent-text motion-tint hover:text-ink">
+                <a href={door.syndraHref} className="font-semibold text-accent-text link-hover">
                   {door.syndra} →
                 </a>
               </span>

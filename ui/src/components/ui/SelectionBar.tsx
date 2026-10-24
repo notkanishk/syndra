@@ -135,7 +135,7 @@ function SelectionBarBody({
             <button
               type="button"
               onClick={onSelectVisibleOnly}
-              className="font-semibold text-accent-text motion-tint hover:text-ink"
+              className="font-semibold text-accent-text link-hover"
             >
               select only the {visibleCount} {noun[1]} shown
             </button>

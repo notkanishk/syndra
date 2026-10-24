@@ -416,7 +416,7 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
         <UserAvatar id={row.user_id} />
         <Link
           href={`/users/${row.user_id}`}
-          className="min-w-0 text-[15px] font-semibold motion-tint hover:text-accent-text"
+          className="min-w-0 text-[15px] font-semibold link-hover"
         >
           <UserName id={row.user_id} />
         </Link>
@@ -445,7 +445,7 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
             <Link
               href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
               aria-label="See the edit that set off this revocation, in Change history"
-              className="motion-tint hover:text-accent-text"
+              className="link-hover"
             >
               <Mono>{shortId(row.cascade_id, "c")}</Mono>
             </Link>

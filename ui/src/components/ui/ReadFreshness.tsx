@@ -93,6 +93,13 @@ const TONE: Record<Freshness, string> = {
   provisional: "text-warn-text",
 };
 
+/**
+ * Read again's pill: the line plus a few px (the `!`s beat the Button's 44px
+ * floor), with the 44px target on touch moved to an unpainted `before` box.
+ */
+export const READ_AGAIN_PILL =
+  "min-h-0! py-px! before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 desktop:before:hidden";
+
 export interface RefreshPress {
   /** A press is in flight: show the control busy, and the old age stays until the read lands. */
   pressing: boolean;
@@ -221,9 +228,18 @@ export function ReadFreshness({
       {onRefresh && reading === "stale" && (
         // It tints in where the line ends. Its slot is zero tall, so the button
         // overflows the line's own height instead of making the line taller: the
-        // sentence beside it stays where it was.
+        // sentence beside it stays where it was. The pill drawn is the line and
+        // a hair, never the 44px a thumb needs: on touch that comes from the
+        // `before` box, a hit area with nothing painted, so no visible edge
+        // reaches the cards below (A-08 §5).
         <span className="tint-in flex h-0 items-center">
-          <Button variant="outline" size="sm" onClick={() => void press(onRefresh)} isPending={refreshing || pressing}>
+          <Button
+            variant="outline"
+            size="sm"
+            className={READ_AGAIN_PILL}
+            onClick={() => void press(onRefresh)}
+            isPending={refreshing || pressing}
+          >
             {refreshing || pressing ? "Reading" : "Read again"}
           </Button>
         </span>
