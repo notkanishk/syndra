@@ -11,6 +11,8 @@ export const TINT_MS = 120;
 export const SETTLE_MS = 260;
 /** Closing's second beat: the scrim follows the sheet by this much (S1). */
 export const LIGHT_LEAD_MS = 40;
+/** How long "Copied" stays before the control is Copy again (S18). */
+export const COPIED_MS = 900;
 
 /**
  * True when nothing should move: the reader asked for less motion, or this is a

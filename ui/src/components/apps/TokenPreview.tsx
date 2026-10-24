@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
+
 import { Badge } from "@/components/ui/Badge";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Unfold } from "@/components/ui/Unfold";
 import { selectContents, useClipboardAvailable } from "@/lib/clipboard";
 import { Select } from "@/components/ui/Select";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
@@ -52,6 +55,7 @@ export function TokenPreview({
   const [userId, setUserId] = useState("");
   const [showRaw, setShowRaw] = useState(false);
   const [copied, setCopied] = useState(false);
+  const confirmFor = useConfirmFor();
   const [revealed, setRevealed] = useState(false);
   const payloadRef = useRef<HTMLPreElement>(null);
   const canCopy = useClipboardAvailable();
@@ -181,7 +185,8 @@ export function TokenPreview({
           </>
         )}
 
-        {showRaw && simulation.data && (
+        <Unfold open={showRaw && Boolean(simulation.data)}>
+          {simulation.data && (
           <div className="mt-3 rounded-inner border border-line bg-surface-0 px-[18px] py-3.5">
             <div className="mb-1.5 type-label">Roles before formatting</div>
             <div className="flex flex-wrap gap-1.5">
@@ -196,16 +201,17 @@ export function TokenPreview({
               )}
             </div>
           </div>
-        )}
+          )}
+        </Unfold>
 
-        {revealed && (
+        <Unfold open={revealed}>
           <pre
             ref={payloadRef}
             className="type-mono mt-3.5 max-h-[40vh] overflow-y-auto whitespace-pre-wrap break-all rounded-inner bg-surface-0 px-3.5 py-3 text-ink"
           >
             {payload}
           </pre>
-        )}
+        </Unfold>
 
         <div className="mt-3.5 flex gap-2.5">
           {/* The button reports itself, the way every copy affordance in the
@@ -224,11 +230,15 @@ export function TokenPreview({
                 setRevealed(true);
                 requestAnimationFrame(() => selectContents(payloadRef.current));
               }
-              setCopied(true);
-              setTimeout(() => setCopied(false), 900);
+              confirmFor(setCopied);
             }}
           >
-            {copied ? (canCopy ? "Copied" : "Selected") : canCopy ? "Copy preview" : "Select preview"}
+            <CopiedSeat
+              done={copied}
+              idle={canCopy ? "Copy preview" : "Select preview"}
+              word={canCopy ? "Copied" : "Selected"}
+              dot={canCopy}
+            />
           </Button>
           <Button size="sm" onClick={() => setShowRaw((value) => !value)}>
             {showRaw ? "Hide the role list" : "Show the role list"}

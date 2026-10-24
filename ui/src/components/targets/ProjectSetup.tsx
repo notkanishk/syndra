@@ -122,11 +122,11 @@ export function ProjectSet({ target, project }: { target: string; project: strin
   return (
     <section
       role="status"
-      className="flex flex-col gap-3.5 rounded-panel border border-accent-line bg-accent-soft px-6 pb-6 pt-[22px]"
+      className="lift-in flex flex-col gap-3.5 rounded-panel border border-accent-line bg-accent-soft px-6 pb-6 pt-[22px]"
     >
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
         <h2 className="flex items-center gap-2.5 font-display text-[19px] font-semibold text-ink">
-          <StatusDot tone="healthy" />
+          <StatusDot tone="healthy" bloom />
           {name} uses {project}.
         </h2>
         <StepBar step={2} />
@@ -286,7 +286,7 @@ function HomeLocationDialog({
           </FieldHint>
         </div>
         {none && (
-          <div role="status" className="panel flex flex-col gap-1.5 px-4 py-3.5 text-[14px] leading-[1.55]">
+          <div role="status" className="tint-in panel flex flex-col gap-1.5 px-4 py-3.5 text-[14px] leading-[1.55]">
             <span className="font-semibold">{share} has no folder to make homes in.</span>
             <span className="text-muted [text-wrap:pretty]">
               Homes go inside a folder at the top of the {share} share, and {share} has none yet. Make one on {name},

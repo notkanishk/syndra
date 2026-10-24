@@ -1051,7 +1051,9 @@ function TriageRow({
         </div>
       </div>
 
-      {expanded && <ExpandedEvidence item={item} />}
+      <Unfold open={expanded}>
+        <ExpandedEvidence item={item} />
+      </Unfold>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { Mono, StatusDot } from "@/components/ui/Badge";
+import { armArrive, ArriveList } from "@/components/ui/ArriveList";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
@@ -308,6 +309,8 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
         </p>
       )}
       <div className="mx-6 overflow-hidden rounded-inner border border-line-strong">
+        {/* Show all: only the sections that were not there arrive. */}
+        <ArriveList startSettled>
         {visible.map((g, index) => (
           <section
             key={g.key}
@@ -333,12 +336,16 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
             )}
           </section>
         ))}
+        </ArriveList>
         {capped && (
           <p className="flex items-center gap-2 border-t border-line px-4 py-2.5 text-[13px] text-muted">
             Showing {CAP} of {n} <span aria-hidden>·</span>
             <button
               type="button"
-              onClick={() => setShowAll(true)}
+              onClick={() => {
+                armArrive();
+                setShowAll(true);
+              }}
               className="font-semibold text-accent-text motion-tint hover:brightness-110"
             >
               Show all {n}

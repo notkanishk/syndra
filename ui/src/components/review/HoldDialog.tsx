@@ -88,7 +88,7 @@ export function HoldDialog({
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-[14px]">What happens if nobody comes back to this</legend>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
+          <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] motion-tint has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
             <Radio
               name="hold-ending"
               className="mt-1"
@@ -104,7 +104,7 @@ export function HoldDialog({
             </span>
           </label>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
+          <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] motion-tint has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
             <Radio
               name="hold-ending"
               className="mt-1"
