@@ -269,3 +269,22 @@ describe("MemberAccess recent changes", () => {
     ).toBeTruthy();
   });
 });
+
+// S11: the member's home is a screen's first paint. The greeting tints in, the cards arrive after it.
+describe("MemberAccess first paint", () => {
+  it("wears the arrival on the greeting", () => {
+    reset();
+    access.value = view(COMPLETE, ["laser"]);
+    render(<MemberAccess session={session} />);
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).toHaveClass("page-head");
+  });
+
+  // S7: a read that is slow shows its skeleton only after the delay; the greeting is there throughout.
+  it("is greeted before the read lands, with no skeleton until it is slow", () => {
+    reset();
+    access.value = { isLoading: true, error: null, data: undefined };
+    render(<MemberAccess session={session} />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hi Sam.");
+    expect(screen.queryByLabelText("Loading your access")).toBeNull();
+  });
+});

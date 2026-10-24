@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { TokenFormatEditor } from "@/components/apps/TokenFormatEditor";
 import { TokenPreview } from "@/components/apps/TokenPreview";
 import { ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Mono } from "@/components/ui/Badge";
 import { ProjectName } from "@/components/names";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -27,6 +28,23 @@ import { useIsAdvanced } from "@/lib/ui-view";
  */
 export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   const apps = useApplications();
+  // One hand-over (S7): a skeleton only if the read is slow, then the screen arrives.
+  return (
+    <ReadGate
+      loading={apps.isLoading}
+      skeleton={
+        <Card>
+          <RowSkeleton rows={4} avatar={false} label="Loading app" />
+        </Card>
+      }
+    >
+      <ReadAppTokenScreen applicationId={applicationId} />
+    </ReadGate>
+  );
+}
+
+function ReadAppTokenScreen({ applicationId }: { applicationId: string }) {
+  const apps = useApplications();
   const advanced = useIsAdvanced();
   const app = (apps.data ?? []).find((entry) => entry.application.id === applicationId);
   const shape = useClaimShape(app?.application.project_id);
@@ -47,13 +65,6 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
     [apps.data, app?.application.project_id, applicationId],
   );
 
-  if (apps.isLoading) {
-    return (
-      <Card>
-        <RowSkeleton rows={4} avatar={false} label="Loading app" />
-      </Card>
-    );
-  }
   if (apps.error) {
     return (
       <ErrorState

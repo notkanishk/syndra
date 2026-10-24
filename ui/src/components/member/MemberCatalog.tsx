@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Unfold } from "@/components/ui/Unfold";
 import { ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import type { ProjectCatalog } from "@/lib/types";
 
@@ -24,16 +25,26 @@ import type { ProjectCatalog } from "@/lib/types";
  */
 export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>> }) {
   const catalog = useCatalogProjects();
+  // One hand-over (S7): a skeleton only if the read is slow, then the rooms arrive.
+  return (
+    <ReadGate
+      loading={catalog.isLoading}
+      skeleton={
+        <Card>
+          <RowSkeleton rows={3} avatar={false} label="Loading what's available" />
+        </Card>
+      }
+    >
+      <ReadCatalog heldByProject={heldByProject} />
+    </ReadGate>
+  );
+}
+
+function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>> }) {
+  const catalog = useCatalogProjects();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
 
-  if (catalog.isLoading) {
-    return (
-      <Card>
-        <RowSkeleton rows={3} avatar={false} label="Loading what's available" />
-      </Card>
-    );
-  }
   if (catalog.error) {
     return (
       <ErrorState
@@ -44,7 +55,7 @@ export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Se
     );
   }
 
-  const projects = catalog.data.filter((project) => project.roles.length > 0);
+  const projects = (catalog.data ?? []).filter((project) => project.roles.length > 0);
   if (projects.length === 0) return null;
 
   const q = query.trim().toLowerCase();
