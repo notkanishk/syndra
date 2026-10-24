@@ -392,7 +392,11 @@ export function UnexplainedAccess() {
 
   const list = (
     <ListStates
-      isLoading={drift.isLoading || (sections.length === 0 && !!(diff.isLoading || summary.isLoading))}
+      // Rows from the last filters are not this read: nothing here is "explained" until it lands.
+      isLoading={
+        drift.isLoading ||
+        (sections.length === 0 && (drift.isPlaceholderData || !!(diff.isLoading || summary.isLoading)))
+      }
       error={drift.error}
       isEmpty={sections.length === 0}
       onRetry={() => drift.refetch()}

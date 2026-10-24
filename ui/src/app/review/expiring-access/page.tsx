@@ -253,7 +253,7 @@ export default function ExpiringAccessPage() {
                 // that matches nothing has decided nothing.
                 soonest
                   ? `soonest ends ${formatShortDate(soonest)}`
-                  : !anyUndecided
+                  : !anyUndecided && !grants.isPlaceholderData
                     ? "every one decided"
                     : "",
               ]}
@@ -328,7 +328,8 @@ export default function ExpiringAccessPage() {
           {/* Everything in the window has been judged. Said outright, because a queue whose only
               rows are acknowledged ones looks identical to a queue nobody has touched. */}
           <SectionPill sections={sections} label="Sections of expiring access" onOpen={openSection} />
-          {!anyUndecided && (
+          {/* Not while another window is read: these rows answer the last one. */}
+          {!anyUndecided && !grants.isPlaceholderData && (
             <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
               <StatusDot tone="healthy" />
               Nothing here is waiting on a decision. Every role that ends in the next {within} days has
@@ -341,7 +342,8 @@ export default function ExpiringAccessPage() {
       ) : (
         <Card>
           <ListStates
-            isLoading={grants.isLoading}
+            // The last window's emptiness says nothing about this one.
+            isLoading={grants.isLoading || grants.isPlaceholderData}
             error={grants.error}
             isEmpty
             onRetry={() => grants.refetch()}
