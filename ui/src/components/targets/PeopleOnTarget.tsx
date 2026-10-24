@@ -42,7 +42,7 @@ export function PeopleOnTarget({ target }: { target: string }) {
   // S5: somebody whose access has been revoked leaves on the next read, fading where they were and
   // closing the gap after, and not under the pointer.
   const leaving = useLeavingRows(accounts, (a) => a.subject_id, !inventory.isLoading && !inventory.error);
-  const drawn = leaving.rows.slice(0, paging.limit);
+  const drawn = leaving.window(paging.limit);
   // A limit verb widens the actions seat (A-03 §3); the heads follow the rows.
   const seat = accounts.some((a) => limitVerb(homeOf.get(a.subject_id))) ? "tablet:w-[380px]" : "tablet:w-[260px]";
 

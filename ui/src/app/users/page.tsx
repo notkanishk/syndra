@@ -175,7 +175,7 @@ export default function PeoplePage() {
     narrowedBy: JSON.stringify(filters),
   });
   const visible = rows.slice(0, limit);
-  const drawn = leaving.rows.slice(0, limit);
+  const drawn = leaving.window(limit);
   // Selection spans the whole filter, not the rendered page.
   const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
   const { selfId } = useUiView();

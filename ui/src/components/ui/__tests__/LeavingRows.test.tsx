@@ -15,18 +15,21 @@ function List({
   stay,
   scope,
   narrowedBy,
+  limit,
 }: {
   ids: string[];
   ready?: boolean;
   stay?: ReadonlySet<string>;
   scope?: string;
   narrowedBy?: string;
+  /** A page's limit: the caller draws only the first rows (People, Audit). */
+  limit?: number;
 }) {
   const leaving = useLeavingRows(ids, (id) => id, ready, { stay, scope, narrowedBy });
   return (
     <div data-testid="list" {...leaving.listProps}>
       <button type="button">inside</button>
-      {leaving.rows.map((id) => (
+      {(limit === undefined ? leaving.rows : leaving.window(limit)).map((id) => (
         <LeavingRow key={id} {...leaving.props(id)}>
           <p>{id}</p>
         </LeavingRow>
@@ -205,6 +208,31 @@ describe("rows narrowed by the reader (a search or a filter)", () => {
     rerender(<List ids={["b"]} narrowedBy="b" />);
     expect(screen.getByText("b")).toBe(b);
     expect(b.parentElement).not.toHaveClass("tint-in");
+  });
+});
+
+describe("a list that draws a window of its rows (a page's limit)", () => {
+  const ids = Array.from({ length: 30 }, (_, index) => `r${index}`);
+
+  it("fades only what was on screen: a search's matches past the old page show at once", () => {
+    const { rerender } = render(<List ids={ids} narrowedBy="" limit={10} />);
+    // A search keeps r2 and r25..r27: r25 was never drawn under the old page.
+    rerender(<List ids={["r2", "r25", "r26", "r27"]} narrowedBy="x" limit={10} />);
+    const drawn = screen.getAllByText(/^r\d+$/).map((p) => p.textContent);
+    // The nine rows that were on screen fade where they were; the matches are all drawn now.
+    expect(drawn.filter((id) => ["r25", "r26", "r27"].includes(id!))).toEqual(["r25", "r26", "r27"]);
+    expect(drawn).not.toContain("r12");
+    expect(screen.getByText("r0").parentElement).toHaveClass("tint-out");
+  });
+
+  it("lets a fading row pushed out of the window go, rather than hold a seat it never shows in", () => {
+    const { rerender } = render(<List ids={["a", "b", "c"]} limit={3} />);
+    // b leaves, and two new rows land above it: the window of three no longer reaches it.
+    rerender(<List ids={["n1", "n2", "a", "c"]} limit={3} />);
+    expect(screen.queryByText("b")).toBeNull();
+    // ...and it is gone from the list, not waiting past the limit for a fade that never runs.
+    rerender(<List ids={["n1", "n2", "a", "c"]} limit={10} />);
+    expect(screen.queryByText("b")).toBeNull();
   });
 });
 
