@@ -48,7 +48,7 @@ export function StatCard({
     <a
       href={href}
       aria-label={label}
-      className={`${frame} block text-inherit no-underline motion-tint hover:shadow-[0_0_0_1px_var(--accent-line)]`}
+      className={`${frame} block text-inherit no-underline motion-tint hover:shadow-[0_0_0_1px_var(--accent-line)] active:bg-[var(--hover-press)]`}
     >
       {body}
     </a>

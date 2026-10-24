@@ -20,7 +20,7 @@ export const Select = React.forwardRef<
   return (
     <select
       ref={ref}
-      className={`block w-full appearance-none rounded-inner border bg-transparent px-[15px] py-3 text-[15px] text-ink motion-tint disabled:cursor-not-allowed disabled:text-faint ${
+      className={`block w-full appearance-none rounded-inner border bg-transparent px-[15px] py-3 text-[15px] text-ink motion-tint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${
         emphasis ? "border-accent-line" : "border-line-strong"
       } ${className}`}
       {...props}

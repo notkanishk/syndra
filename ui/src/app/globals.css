@@ -174,13 +174,16 @@
   --duration-breathe: 2400ms;
   /* Scrolling only, on settle's curve: the one glide the page performs. */
   --duration-glide: 520ms;
+  /* The focus ring fades out on tint and appears at once (S9). The outline-color
+     slot of each motion utility reads this; `:focus-visible` zeroes it. */
+  --ring-fade: var(--duration-tint);
 
   /* Nothing in the page content travels further than this. A phone sheet
      entering from the screen's edge and a control's own indicator (Segmented's
      fill, Tabs' underline) are not page content and fall outside it. */
   --travel-cap: 10px;
 
-  /* Rows stagger 40ms apart, and the stagger caps at six: a queue of forty
+  /* Rows stagger 40ms apart, and the stagger caps at five: a queue of forty
      must not take two seconds to become readable. */
   --arrive-step: 40ms;
   --arrive-cap: 5;
@@ -486,6 +489,8 @@
     --tint-2: rgba(243, 245, 239, 0.07);
     --tint-3: rgba(243, 245, 239, 0.09);
     --hover: rgba(243, 245, 239, 0.05);
+    /* One step beyond --hover: a pressed row darkens past its hover fill. */
+    --hover-press: rgba(243, 245, 239, 0.09);
     --divider: rgba(255, 255, 255, 0.05);
 
     --shadow-dialog: 0 22px 50px rgba(0, 0, 0, 0.55);
@@ -555,6 +560,7 @@
     --tint-2: rgba(37, 28, 66, 0.06);
     --tint-3: rgba(37, 28, 66, 0.08);
     --hover: rgba(37, 28, 66, 0.04);
+    --hover-press: rgba(37, 28, 66, 0.08);
     --divider: rgba(37, 28, 66, 0.06);
 
     --shadow-dialog: 0 22px 50px rgba(60, 40, 120, 0.18);
@@ -594,7 +600,9 @@
      4px offset is what lets the ring clear a violet button instead of
      merging with it. The ring appears instantly, because a keyboard user is waiting on it, and
      fades out on tint (A-05 S9): the fade lives on the resting state, so it
-     governs leaving, and the focused state carries no transition. */
+     governs leaving. The motion utilities list outline-color too (they replace
+     this rule's transition), reading --ring-fade, which the focused state
+     zeroes. */
   a,
   button,
   input,
@@ -612,6 +620,7 @@
     outline-offset: 4px;
     border-radius: 4px;
     transition: none;
+    --ring-fade: 0s;
   }
 
   ::selection {
@@ -642,9 +651,22 @@
          flash   colour only; the wash still says "this changed".
          bloom   goes: it is the one thing that is only movement.
          breathe rests at full strength rather than pulsing. */
-    .control,
     .press-scale {
       transition-duration: var(--duration-press) !important;
+      transition-delay: 0s !important;
+    }
+    /* Colour stays on tint and only the transform is held at press. */
+    .control {
+      transition-duration:
+        var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+        var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+        var(--ring-fade), var(--duration-press) !important;
+      transition-delay: 0s !important;
+    }
+    /* The seat's press is the same 3% gesture. */
+    .seat > span {
+      transition-duration:
+        var(--duration-tint), var(--duration-tint), var(--ring-fade), var(--duration-press) !important;
       transition-delay: 0s !important;
     }
     .flash {
@@ -774,17 +796,39 @@
    of forty rows where each one lifts on hover is a table that flickers as you
    read down it. */
 @utility motion-tint {
-  transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow;
-  transition-duration: var(--duration-tint);
+  transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow,
+    filter, outline-color;
+  transition-duration:
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+    var(--ring-fade);
   transition-timing-function: var(--ease-tint);
 }
 
 /* press · 180ms — anything that answers a click. */
 @utility motion-press {
   transition-property: color, background-color, border-color, opacity, box-shadow, transform,
-    filter;
-  transition-duration: var(--duration-press);
-  transition-timing-function: var(--ease-press);
+    filter, outline-color;
+  transition-duration:
+    var(--duration-press), var(--duration-press), var(--duration-press), var(--duration-press),
+    var(--duration-press), var(--duration-press), var(--duration-press), var(--ring-fade);
+  transition-timing-function:
+    var(--ease-press), var(--ease-press), var(--ease-press), var(--ease-press), var(--ease-press),
+    var(--ease-press), var(--ease-press), var(--ease-tint);
+}
+
+/* A fold's chevron (or a sort arrow) turning: settle's duration and curve, the
+   same as the Unfold it controls. Tailwind compiles rotate-90 / rotate-180 to
+   the `rotate` property, not `transform`, so both are listed. Its colour and
+   opacity stay on tint, so a chevron that also tints on hover keeps doing so. */
+@utility motion-turn {
+  transition-property: rotate, transform, color, background-color, border-color, opacity;
+  transition-duration:
+    var(--duration-settle), var(--duration-settle), var(--duration-tint), var(--duration-tint),
+    var(--duration-tint), var(--duration-tint);
+  transition-timing-function:
+    var(--ease-settle), var(--ease-settle), var(--ease-tint), var(--ease-tint), var(--ease-tint),
+    var(--ease-tint);
 }
 
 /* The press itself: a 3% scale-down, never a translate, so the button stays
@@ -897,13 +941,14 @@ html.theme-fading *::after {
    darkens one step instead (hover-tint). */
 @utility control {
   transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow,
-    transform;
+    filter, outline-color, transform;
   transition-duration:
     var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
-    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-press);
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+    var(--ring-fade), var(--duration-press);
   transition-timing-function:
     var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-tint),
-    var(--ease-tint), var(--ease-tint), var(--ease-press);
+    var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-press);
 
   &:active:not(:disabled) {
     transform: scale(0.97);
@@ -956,10 +1001,15 @@ html.theme-fading *::after {
     border-radius: 9999px;
     border: 1.5px solid var(--line-strong);
     color: var(--accent-ink);
-    /* The fill changes on tint; press is the 3% gesture only (A-06 §5). */
-    transition-property: background-color, border-color, transform;
-    transition-duration: var(--duration-tint), var(--duration-tint), var(--duration-press);
-    transition-timing-function: var(--ease-tint), var(--ease-tint), var(--ease-press);
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+    /* The fill changes on tint; press is the 3% gesture only (A-06 §5). The
+       focus mark fades out on tint and appears at once, like every ring. */
+    transition-property: background-color, border-color, outline-color, transform;
+    transition-duration:
+      var(--duration-tint), var(--duration-tint), var(--ring-fade), var(--duration-press);
+    transition-timing-function: var(--ease-tint), var(--ease-tint), var(--ease-tint),
+      var(--ease-press);
   }
   /* The tick settles in from 60%, 40ms behind the fill. */
   & > span > svg {
@@ -986,8 +1036,8 @@ html.theme-fading *::after {
     transform: scale(0.97);
   }
   & > input:focus-visible + span {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 3px;
+    outline-color: var(--focus-ring);
+    --ring-fade: 0s;
   }
   & > input:disabled {
     cursor: not-allowed;
@@ -1273,16 +1323,17 @@ html.theme-fading *::after {
    shadow, no border change. Nav rows use the same tint as table rows, so the
    sidebar and the table read as one surface. */
 @utility hover-tint {
-  transition-property: color, background-color;
-  transition-duration: var(--duration-tint);
+  transition-property: color, background-color, border-color, outline-color;
+  transition-duration:
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--ring-fade);
   transition-timing-function: var(--ease-tint);
 
   &:hover {
     background-color: var(--hover);
   }
-  /* A pressed row darkens one step and never scales (A-05 S8). */
+  /* A pressed row darkens one step past hover and never scales (A-05 S8). */
   &:active {
-    background-color: var(--surface-2);
+    background-color: var(--hover-press);
   }
 }
 

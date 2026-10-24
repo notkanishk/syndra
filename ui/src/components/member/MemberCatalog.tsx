@@ -146,7 +146,7 @@ export function MemberCatalog({ heldByProject }: { heldByProject: Map<string, Se
                     strokeWidth="2.2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className={`motion-press ${isOpen ? "" : "-rotate-90"}`}
+                    className={`motion-turn ${isOpen ? "" : "-rotate-90"}`}
                   >
                     <path d="M6 9l6 6 6-6" />
                   </svg>

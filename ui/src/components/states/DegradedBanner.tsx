@@ -135,7 +135,7 @@ export function DegradedBanner() {
             >
               <span
                 aria-hidden
-                className={`inline-block motion-press ${serverOpen ? "rotate-90" : ""}`}
+                className={`inline-block motion-turn ${serverOpen ? "rotate-90" : ""}`}
               >
                 ›
               </span>

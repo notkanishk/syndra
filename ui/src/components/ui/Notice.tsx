@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
@@ -20,6 +22,22 @@ const TONES = {
     title: "text-ink",
   },
 } as const;
+
+/**
+ * True once the app has painted. A Notice that is part of the first paint is
+ * just there; one that mounts after it (a read that failed, a state that went
+ * stale) fades in on tint, in place and without a rise: failure appears still.
+ * Two frames after this module loads is past first paint and before any
+ * later mount.
+ */
+let painted = false;
+if (typeof window !== "undefined") {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      painted = true;
+    }),
+  );
+}
 
 export function Notice({
   tone,
@@ -43,10 +61,11 @@ export function Notice({
   className?: string;
 }) {
   const t = TONES[tone];
+  const [late] = useState(() => painted);
   return (
     <div
       role={blocking ? "alert" : "status"}
-      className={`flex items-start gap-3.5 rounded-panel border px-5 py-4 ${t.box} ${className}`}
+      className={`flex items-start gap-3.5 rounded-panel border px-5 py-4 ${late ? "tint-in " : ""}${t.box} ${className}`}
     >
       <span
         aria-hidden

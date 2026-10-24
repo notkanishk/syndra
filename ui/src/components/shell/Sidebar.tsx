@@ -140,7 +140,7 @@ function NavRow({
       {!nested && (
         <span
           aria-hidden
-          className={`h-1.5 w-1.5 flex-none rounded-pill ${
+          className={`h-1.5 w-1.5 flex-none rounded-pill motion-tint ${
             active ? "bg-accent" : "bg-ink/20"
           }`}
         />

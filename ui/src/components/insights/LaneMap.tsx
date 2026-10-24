@@ -265,7 +265,7 @@ export function LaneMap({
             type="button"
             onClick={onKeys}
             aria-expanded={keysOpen}
-            className={`motion-tint ml-auto inline-flex items-center gap-2 rounded-pill border border-line bg-surface-1 text-muted hover:text-ink ${PILL.sm}`}
+            className={`control press-scale ml-auto inline-flex items-center gap-2 rounded-pill border border-line bg-surface-1 text-muted hover:text-ink ${PILL.sm}`}
           >
             Keys
             <span className="type-mono text-ink">?</span>
