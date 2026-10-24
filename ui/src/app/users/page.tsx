@@ -223,6 +223,9 @@ export default function PeoplePage() {
   // is the tedium this mode exists to remove. `wholeFilter` only remembers that
   // it happened, so the bar can offer to narrow back to what is on screen.
   function toggleAll() {
+    // While a new search is read, the rows on screen still answer the last
+    // one: "every match" would select the wrong people.
+    if (users.isPlaceholderData) return;
     const wasAll = selection.allSelected;
     selection.toggleAll();
     setWholeFilter(!wasAll && rows.length > visible.length);
