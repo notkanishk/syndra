@@ -116,7 +116,7 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
       <div className="w-[min(260px,40%)] min-w-0">
         <Link
           href={`/bundles/${encodeURIComponent(bundle.id)}`}
-          className="text-[15px] font-semibold text-ink motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+          className="text-[15px] font-semibold text-ink motion-tint hover:text-accent-text"
         >
           {bundle.name}
         </Link>

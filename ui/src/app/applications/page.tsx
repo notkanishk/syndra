@@ -128,7 +128,7 @@ export default function AppsPage() {
             <Link
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
               <span className="w-full min-w-0 tablet:w-[250px] tablet:min-w-[170px] tablet:shrink-0">
                 <span className="block text-[15.5px] font-semibold [text-wrap:pretty]">

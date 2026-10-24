@@ -222,7 +222,7 @@ export default function ProjectDetailPage({
 
                 <Link
                   href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
-                  className="flex min-h-11 w-[110px] shrink-0 flex-col items-end justify-center gap-0.5 text-[15px] font-semibold text-accent-text desktop:min-h-6"
+                  className="flex min-h-11 w-[110px] shrink-0 flex-col items-end justify-center gap-0.5 text-[15px] font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
                 >
                   <span>{members.headline} →</span>
                   {members.note && (

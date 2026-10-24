@@ -188,7 +188,7 @@ export default function RoleMembersPage({
             <Link
               key={person.id}
               href={`/users/${person.id}`}
-              className="row-divider flex min-h-[60px] items-center gap-3 px-5 py-3 motion-tint hover:bg-[var(--hover)]"
+              className="row-divider flex min-h-[60px] items-center gap-3 px-5 py-3 hover-tint"
             >
               <Avatar name={person.name} />
               <span className="min-w-0 flex-1">
@@ -242,7 +242,7 @@ function MemberRow({
       <Avatar name={member.user.name} />
       <Link
         href={`/users/${member.user.id}`}
-        className="w-[210px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+        className="w-[210px] shrink-0 truncate text-[15px] font-semibold motion-tint hover:text-accent-text"
       >
         {member.user.name}
       </Link>
@@ -289,7 +289,7 @@ function MemberRow({
         <button
           type="button"
           onClick={() => open("mapping")}
-          className="shrink-0 text-[13px] font-semibold text-accent-text hover:underline"
+          className="shrink-0 text-[13px] font-semibold text-accent-text motion-tint hover:text-ink"
         >
           Open the rule
         </button>

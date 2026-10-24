@@ -278,7 +278,7 @@ function Choice({
       aria-checked={selected}
       onClick={onSelect}
       className={`rounded-inner border px-4 py-3 text-left motion-tint ${
-        selected ? "border-accent bg-accent-soft" : "border-line-strong hover:bg-[var(--hover)]"
+        selected ? "border-accent bg-accent-soft" : "border-line-strong hover-tint"
       }`}
     >
       <span className="block text-[14.5px] font-semibold">{title}</span>

@@ -384,7 +384,7 @@ function ProfileForm({
             onClick={() =>
               setExtras((prev) => [...prev, { key: "", kind: "attribute", value: "email" }])
             }
-            className="text-[13px] font-semibold text-accent-text"
+            className="text-[13px] font-semibold text-accent-text motion-tint hover:text-ink"
           >
             Add a claim
           </button>

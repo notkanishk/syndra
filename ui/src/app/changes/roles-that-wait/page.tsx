@@ -356,7 +356,7 @@ function OneTimeMove({
           <label
             key={id}
             className={`row-divider flex cursor-pointer items-center gap-[18px] px-5 py-3.5 motion-tint ${
-              on ? "bg-accent-soft" : "hover:bg-[var(--hover)]"
+              on ? "bg-accent-soft" : "hover-tint"
             }`}
           >
             <Seat

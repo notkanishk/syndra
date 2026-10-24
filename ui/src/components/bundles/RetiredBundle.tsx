@@ -188,7 +188,7 @@ function RetiredBundleRows() {
         <Link
           key={b.id}
           href={`/bundles/${encodeURIComponent(b.id)}`}
-          className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5 motion-tint hover:bg-[var(--hover)]"
+          className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5 hover-tint"
         >
           <span className="min-w-0 flex-1 text-[14.5px] font-semibold">{b.name}</span>
           <span className="text-[13px] text-faint">Retired {formatShortDate(b.retired_at ?? "")}</span>

@@ -164,7 +164,7 @@ export function SetupStrip({ target, project }: { target: string; project: { id:
   return (
     <Card>
       <SettingRow label="Zitadel project">
-        <Link href={`/projects/${project.id}`} className="text-[15px] font-semibold text-ink hover:text-accent-text hover:underline">
+        <Link href={`/projects/${project.id}`} className="text-[15px] font-semibold text-ink motion-tint hover:text-accent-text">
           {project.name || resolver.resolveProject(project.id).value?.name || UNKNOWN_PROJECT}
         </Link>
       </SettingRow>

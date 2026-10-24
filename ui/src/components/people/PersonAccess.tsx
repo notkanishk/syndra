@@ -245,7 +245,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   <Link
                     key="trail"
                     href={`/audit?user=${encodeURIComponent(user.id)}`}
-                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
                   >
                     Full audit trail
                   </Link>
@@ -332,7 +332,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <button
                 type="button"
                 onClick={() => setBundlesOpen(true)}
-                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6"
+                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
               >
                 Manage bundles
               </button>
@@ -444,7 +444,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   </button>
                   <Link
                     href={`/projects/${encodeURIComponent(project.project_id)}`}
-                    className="hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+                    className="motion-tint hover:text-accent-text"
                   >
                     <ResolvedProjectName
                       className="type-card-title"

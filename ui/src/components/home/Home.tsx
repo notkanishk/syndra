@@ -217,7 +217,7 @@ export function Home({ session }: { session: SessionUser }) {
             {clear.map(([name, href], index) => (
               <span key={href} className="inline-flex items-center gap-2">
                 {index > 0 && <span aria-hidden>·</span>}
-                <Link href={href} className="text-ink hover:text-accent-text hover:underline">
+                <Link href={href} className="text-ink motion-tint hover:text-accent-text">
                   {name}
                 </Link>
               </span>
@@ -647,7 +647,7 @@ function OnboardingGaps({
               <UserAvatar id={person.user_id} size="list" />
               <Link
                 href={`/users/${person.user_id}`}
-                className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+                className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold motion-tint hover:text-accent-text"
               >
                 <UserName id={person.user_id} />
               </Link>
@@ -693,7 +693,7 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
           <CardRow key={account.id}>
             <Link
               href={serviceAccountHref(account.id)}
-              className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere] hover:text-accent-text"
+              className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere] motion-tint hover:text-accent-text"
             >
               {account.name}
             </Link>
@@ -799,7 +799,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
             <UserAvatar id={row.user_id} size="list" />
             <Link
               href={`/users/${row.user_id}`}
-              className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold hover:underline"
+              className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold motion-tint hover:text-accent-text"
             >
               <UserName id={row.user_id} />
             </Link>

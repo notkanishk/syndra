@@ -238,7 +238,7 @@ function MappingRow({
       <span className="flex w-[260px] flex-none flex-col gap-0.5">
         <Link
           href={`/projects/${mapping.project_id}`}
-          className="text-[14.5px] font-semibold text-ink hover:text-accent-text hover:underline"
+          className="text-[14.5px] font-semibold text-ink motion-tint hover:text-accent-text"
         >
           {label}
         </Link>

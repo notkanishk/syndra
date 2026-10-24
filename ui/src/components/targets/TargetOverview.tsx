@@ -86,7 +86,7 @@ export function TargetOverview({ target }: { target: string }) {
       <div className="flex flex-col gap-1">
         <Link
           href="/system/targets"
-          className="inline-flex min-h-11 items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline desktop:min-h-6"
+          className="inline-flex min-h-11 items-center self-start text-[13.5px] font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
         >
           <span aria-hidden>←&nbsp;</span>
           Connected systems
