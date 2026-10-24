@@ -165,7 +165,7 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
     <div className="flex flex-col gap-7">
       <PageHeader
         eyebrow={
-          <Link href="/bundles" className="motion-tint hover:text-ink">
+          <Link href="/bundles" className="link-hover">
             Bundles
           </Link>
         }
@@ -487,7 +487,7 @@ function WhatItGives({
                 <>
                   <Link
                     href={`/projects/${encodeURIComponent(projectId)}`}
-                    className="motion-tint hover:text-accent-text"
+                    className="link-hover"
                   >
                     <ProjectName id={projectId} name={project} />
                   </Link>
@@ -1101,7 +1101,7 @@ function IncludedBundleCard({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-4">
         <Link
           href={childHref}
-          className="type-card-title text-ink motion-tint hover:text-accent-text"
+          className="type-card-title text-ink link-hover"
         >
           {child}
         </Link>
@@ -1154,7 +1154,7 @@ function IncludedBundleCard({
                 ·{" "}
                 <Link
                   href={`/projects/${encodeURIComponent(role.zitadel_project_id)}`}
-                  className="motion-tint hover:text-accent-text"
+                  className="link-hover"
                 >
                   <ProjectName id={role.zitadel_project_id} name={entry?.project_name} />
                 </Link>

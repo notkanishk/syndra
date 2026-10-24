@@ -489,8 +489,6 @@
     --tint-2: rgba(243, 245, 239, 0.07);
     --tint-3: rgba(243, 245, 239, 0.09);
     --hover: rgba(243, 245, 239, 0.05);
-    /* One step beyond --hover: a pressed row darkens past its hover fill. */
-    --hover-press: rgba(243, 245, 239, 0.09);
     --divider: rgba(255, 255, 255, 0.05);
 
     --shadow-dialog: 0 22px 50px rgba(0, 0, 0, 0.55);
@@ -560,7 +558,6 @@
     --tint-2: rgba(37, 28, 66, 0.06);
     --tint-3: rgba(37, 28, 66, 0.08);
     --hover: rgba(37, 28, 66, 0.04);
-    --hover-press: rgba(37, 28, 66, 0.08);
     --divider: rgba(37, 28, 66, 0.06);
 
     --shadow-dialog: 0 22px 50px rgba(60, 40, 120, 0.18);
@@ -1331,9 +1328,36 @@ html.theme-fading *::after {
   &:hover {
     background-color: var(--hover);
   }
-  /* A pressed row darkens one step past hover and never scales (A-05 S8). */
+  /* A pressed row darkens one step past hover (--tint-3, the step that already
+     exists in both themes) and never scales (A-05 S8, A-08 §1). */
   &:active {
-    background-color: var(--hover-press);
+    background-color: var(--tint-3);
+  }
+}
+
+/* A text link's hover, whichever link it is (A-08 §2a): the words go to
+   --accent-text and the underline tints in from transparent. The line is
+   always drawn, in a colour that starts as nothing, so hover stays colour
+   only: switching `text-decoration-line` on would be a jump, which the guard
+   against `hover:underline` forbids. A link already accent at rest only gains
+   the underline. One that is underlined at rest (`link-hover underline`) keeps
+   it: only its colour moves. Whole rows and cards that are links use
+   hover-tint or a ring, not this. */
+@utility link-hover {
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition-property: color, text-decoration-color, outline-color;
+  transition-duration: var(--duration-tint), var(--duration-tint), var(--ring-fade);
+  transition-timing-function: var(--ease-tint);
+
+  &.underline {
+    text-decoration-color: currentColor;
+  }
+  &:hover {
+    color: var(--accent-text);
+    text-decoration-color: currentColor;
   }
 }
 

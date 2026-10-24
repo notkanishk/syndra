@@ -129,7 +129,7 @@ function PersonRow({
           <span className="min-w-0">
             <Link
               href={accountHref(account.subject_id)}
-              className="[overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink motion-tint hover:text-accent-text"
+              className="[overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink link-hover"
             >
               <UserName id={account.subject_id} />
             </Link>

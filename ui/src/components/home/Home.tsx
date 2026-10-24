@@ -221,7 +221,7 @@ export function Home({ session }: { session: SessionUser }) {
             {clear.map(([name, href], index) => (
               <span key={href} className="inline-flex items-center gap-2">
                 {index > 0 && <span aria-hidden>·</span>}
-                <Link href={href} className="text-ink motion-tint hover:text-accent-text">
+                <Link href={href} className="text-ink link-hover">
                   {name}
                 </Link>
               </span>
@@ -659,7 +659,7 @@ function OnboardingGaps({
               <UserAvatar id={person.user_id} size="list" />
               <Link
                 href={`/users/${person.user_id}`}
-                className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold motion-tint hover:text-accent-text"
+                className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold link-hover"
               >
                 <UserName id={person.user_id} />
               </Link>
@@ -705,7 +705,7 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
           <CardRow key={account.id}>
             <Link
               href={serviceAccountHref(account.id)}
-              className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere] motion-tint hover:text-accent-text"
+              className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere] link-hover"
             >
               {account.name}
             </Link>
@@ -811,7 +811,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
             <UserAvatar id={row.user_id} size="list" />
             <Link
               href={`/users/${row.user_id}`}
-              className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold motion-tint hover:text-accent-text"
+              className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold link-hover"
             >
               <UserName id={row.user_id} />
             </Link>

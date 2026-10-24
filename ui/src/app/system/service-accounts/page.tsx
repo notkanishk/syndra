@@ -74,7 +74,7 @@ export default function ServiceAccountsPage() {
               <span className="order-1 min-w-0 flex-1 tablet:w-[220px] tablet:flex-none">
                 <Link
                   href={serviceAccountHref(account.id)}
-                  className="block text-[15px] font-semibold [overflow-wrap:anywhere] motion-tint hover:text-accent-text"
+                  className="block text-[15px] font-semibold [overflow-wrap:anywhere] link-hover"
                 >
                   {account.name}
                 </Link>

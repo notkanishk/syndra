@@ -264,7 +264,7 @@ function Holders({
                     <UserAvatar id={holder.user_id} size="row" />
                     <Link
                       href={`/users/${encodeURIComponent(holder.user_id)}`}
-                      className="text-[14.5px] font-semibold text-ink motion-tint hover:text-accent-text"
+                      className="text-[14.5px] font-semibold text-ink link-hover"
                     >
                       <UserName id={holder.user_id} />
                     </Link>
@@ -435,7 +435,7 @@ function IncluderTile({
           <span className="flex min-w-0 flex-col gap-px">
             <Link
               href={href}
-              className="text-[15px] font-semibold text-ink motion-tint hover:text-accent-text"
+              className="text-[15px] font-semibold text-ink link-hover"
             >
               {includer.name}
             </Link>

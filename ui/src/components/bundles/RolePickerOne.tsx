@@ -257,7 +257,7 @@ function noteSeat(role: PickerRole, audience: "member" | "operator"): ReactNode 
           <span>Has this until {formatShortDate(n.until)}</span>
           <Link
             href="/review/expiring-access?within=30"
-            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text motion-tint hover:brightness-110 desktop:min-h-0"
+            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text link-hover desktop:min-h-0"
           >
             Extend <span aria-hidden>→</span>
           </Link>

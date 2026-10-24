@@ -91,7 +91,7 @@ function ServiceAccountView({
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         eyebrow={
-          <Link href="/system/service-accounts" className="motion-tint hover:text-accent-text">
+          <Link href="/system/service-accounts" className="link-hover">
             Service accounts
           </Link>
         }
@@ -221,7 +221,7 @@ function Holds({ userId, name }: { userId: string; name: string }) {
               <span className="min-w-0 flex-1 text-[15px] font-semibold tablet:flex-none tablet:basis-[260px]">
                 <Link
                   href={`/projects/${encodeURIComponent(project.project_id)}`}
-                  className="motion-tint hover:text-accent-text"
+                  className="link-hover"
                 >
                   <ResolvedProjectName
                     name={project.project_name}

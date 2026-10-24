@@ -256,7 +256,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                   <Link
                     key="trail"
                     href={`/audit?user=${encodeURIComponent(user.id)}`}
-                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
+                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 link-hover"
                   >
                     Full audit trail
                   </Link>
@@ -343,7 +343,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
               <button
                 type="button"
                 onClick={() => setBundlesOpen(true)}
-                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
+                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 link-hover"
               >
                 Manage bundles
               </button>
@@ -455,7 +455,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                   </button>
                   <Link
                     href={`/projects/${encodeURIComponent(project.project_id)}`}
-                    className="motion-tint hover:text-accent-text"
+                    className="link-hover"
                   >
                     <ResolvedProjectName
                       className="type-card-title"

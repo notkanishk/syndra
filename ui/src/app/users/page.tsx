@@ -556,7 +556,7 @@ function PersonRow({
             <Link
               href={`/users/${entry.user.id}`}
               onClick={(event) => event.stopPropagation()}
-              className="block truncate text-[15px] font-semibold motion-tint hover:text-accent-text"
+              className="block truncate text-[15px] font-semibold link-hover"
             >
               {entry.user.name}
             </Link>

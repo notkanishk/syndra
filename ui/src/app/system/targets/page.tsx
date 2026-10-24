@@ -198,7 +198,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
       className={`flex flex-col items-start gap-2 px-5 py-4 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px] ${first ? "" : "row-divider"}`}
     >
       <span className="flex min-w-[min(220px,100%)] flex-1 flex-col gap-0.5">
-        <Link href={href} className="text-[15.5px] font-semibold motion-tint hover:text-accent-text">
+        <Link href={href} className="text-[15.5px] font-semibold link-hover">
           {name}
         </Link>
         <span className={`text-[13px] ${product ? "text-muted" : "text-faint"}`}>
@@ -209,7 +209,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         {row.project ? (
           <span className="text-[13px] text-muted">
             Zitadel project{" "}
-            <Link href={`/projects/${row.project.id}`} className="text-ink motion-tint hover:text-accent-text">
+            <Link href={`/projects/${row.project.id}`} className="text-ink link-hover">
               {row.project.name || UNKNOWN_PROJECT}
             </Link>
           </span>

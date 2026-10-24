@@ -519,10 +519,12 @@ describe("design system", () => {
     expect(atRuleBody(css, "@utility control")).toContain("scale(0.97)");
     const hover = atRuleBody(css, "@utility hover-tint");
     expect(hover).not.toContain("transform");
-    // Pressed is one step beyond hover, in both themes, not a surface colour.
-    expect(hover).toContain("var(--hover-press)");
+    // Pressed is one step beyond hover, in both themes, not a surface colour:
+    // --tint-3 already is that step, so there is no token of its own (A-08 §1).
+    expect(hover).toContain("var(--tint-3)");
     expect(hover).not.toContain("var(--surface-2)");
-    expect(css.match(/--hover-press:/g)).toHaveLength(2);
+    expect(css).not.toContain("--hover-press");
+    expect(css.match(/--tint-3:/g)).toHaveLength(2);
   });
 
   // The focus ring fades out on tint wherever a motion utility is present; the
@@ -811,12 +813,51 @@ describe("design system", () => {
       const matches: string[] = [];
       if (/(?<![-\w])hover:underline/.test(source)) matches.push("hover:underline");
       for (const tag of openingTags(source, "(?:Link|a)")) {
-        if (/hover:text-/.test(tag.text) && !/motion-tint|control|motion-press|transition/.test(tag.text)) {
+        if (/hover:text-/.test(tag.text) && !/motion-tint|control|motion-press|transition|link-hover/.test(tag.text)) {
           matches.push(`link line ${source.slice(0, tag.at).split("\n").length}: hover:text-* with no transition`);
         }
       }
       if (matches.length > 0) found.push({ file: file.replace(SRC_ROOT, "src"), matches });
     }
     expect(found, `Hover is colour only, on tint:\n${describeOffenders(found)}`).toEqual([]);
+  });
+
+  // A-08 §2a: every text link ends its hover in the same place, accent with its
+  // underline tinted in, so a link's hover never depends on which link it is.
+  // A brightness lift or an ink hover on a link is the old two-kinds-of-link.
+  // A row that is a link (a nav item, a filled row) has a fill hover and stays.
+  it("gives every text link `link-hover`, not its own hover colour or brightness", () => {
+    const found: Array<{ file: string; matches: string[] }> = [];
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      if (!file.endsWith(".tsx")) continue;
+      const source = readFileSync(file, "utf8");
+      const matches: string[] = [];
+      for (const tag of openingTags(source, "(?:Link|a)")) {
+        const line = source.slice(0, tag.at).split("\n").length;
+        if (/hover:brightness/.test(tag.text)) matches.push(`link line ${line}: hover:brightness`);
+        if (/hover:text-(?:ink|accent-text)/.test(tag.text) && !/hover:bg-|hover-tint/.test(tag.text)) {
+          matches.push(`link line ${line}: hover:text-ink / accent-text instead of link-hover`);
+        }
+      }
+      if (matches.length > 0) found.push({ file: file.replace(SRC_ROOT, "src"), matches });
+    }
+    expect(found, `A link's hover is link-hover:\n${describeOffenders(found)}`).toEqual([]);
+  });
+
+  it("draws link-hover's underline from transparent and keeps a resting underline", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const body = atRuleBody(css, "@utility link-hover");
+    // The line is always on and only its colour moves: switching it on is a jump.
+    expect(body).toMatch(/text-decoration-line:\s*underline/);
+    expect(body).toMatch(/text-decoration-color:\s*transparent/);
+    const hover = body.slice(body.indexOf("&:hover"));
+    expect(hover).toContain("var(--accent-text)");
+    expect(hover).toMatch(/text-decoration-color:\s*currentColor/);
+    expect(hover).not.toContain("text-decoration-line");
+    // On tint, ring included, like every motion utility.
+    expect(body).toContain("var(--duration-tint)");
+    expect(body).toContain("outline-color");
+    // `link-hover underline`: a link underlined at rest keeps it.
+    expect(body).toMatch(/&\.underline\s*\{[^}]*text-decoration-color:\s*currentColor/);
   });
 });

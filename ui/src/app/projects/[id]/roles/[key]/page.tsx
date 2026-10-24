@@ -242,7 +242,7 @@ function MemberRow({
       <Avatar name={member.user.name} />
       <Link
         href={`/users/${member.user.id}`}
-        className="w-[210px] shrink-0 truncate text-[15px] font-semibold motion-tint hover:text-accent-text"
+        className="w-[210px] shrink-0 truncate text-[15px] font-semibold link-hover"
       >
         {member.user.name}
       </Link>
@@ -289,7 +289,7 @@ function MemberRow({
         <button
           type="button"
           onClick={() => open("mapping")}
-          className="shrink-0 text-[13px] font-semibold text-accent-text motion-tint hover:text-ink"
+          className="shrink-0 text-[13px] font-semibold text-accent-text link-hover"
         >
           Open the rule
         </button>
