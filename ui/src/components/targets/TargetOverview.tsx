@@ -1,6 +1,7 @@
 "use client";
 
 import { describeFailure, sentence } from "@/lib/outcome";
+import { glideTo } from "@/lib/motion";
 import { Radio } from "@/components/ui/Choice";
 import { roleCount } from "@/lib/role-mapping-plan";
 import Link from "next/link";
@@ -873,8 +874,19 @@ function RegionChips({
       </div>
       <nav aria-label="Regions of this page" className="ml-auto flex flex-wrap gap-2">
         {chips.map((chip) => (
-          <a key={chip.id} href={`#${chip.id}`} className="rounded-pill text-ink no-underline">
-            <Chip className="gap-2">
+          <a
+            key={chip.id}
+            href={`#${chip.id}`}
+            // A jump glides there and the region's heading flashes once (8d); the chip is a control.
+            onClick={(event) => {
+              const target = document.getElementById(`${chip.id}-heading`) ?? document.getElementById(chip.id);
+              if (!target) return;
+              event.preventDefault();
+              glideTo(target);
+            }}
+            className="group control press-scale rounded-pill text-ink no-underline"
+          >
+            <Chip className="gap-2 motion-tint group-hover:bg-tint-3">
               {chip.dot && <StatusDot tone="warn" />}
               {chip.label}
               {chip.count != null && <span className="text-faint">{chip.count}</span>}
