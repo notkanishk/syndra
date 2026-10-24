@@ -21,6 +21,7 @@ import { PersonActivity } from "@/components/people/PersonActivity";
 import { PersonRequests } from "@/components/people/PersonRequests";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, Mono } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -88,6 +89,23 @@ interface AccessRole {
  * generic "revoke role".
  */
 export function PersonAccess({ userId, isOperator }: { userId: string; isOperator: boolean }) {
+  const access = useUserAccess(userId);
+  // One hand-over (S7): a skeleton only if the read is slow, then the page arrives.
+  return (
+    <ReadGate
+      loading={access.isLoading}
+      skeleton={
+        <Card>
+          <RowSkeleton rows={5} label="Loading this person's access" />
+        </Card>
+      }
+    >
+      <ReadPersonAccess userId={userId} isOperator={isOperator} />
+    </ReadGate>
+  );
+}
+
+function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: boolean }) {
   const access = useUserAccess(userId);
   const grants = useUserGrants(userId);
   const advanced = useIsAdvanced();
@@ -166,13 +184,6 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   // crowds out the part that actually differs.
   const readAt = upstreamGrants.data?.observedAt;
 
-  if (access.isLoading) {
-    return (
-      <Card>
-        <RowSkeleton rows={5} label="Loading this person's access" />
-      </Card>
-    );
-  }
   if (access.error) {
     return (
       <ErrorState
@@ -245,7 +256,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   <Link
                     key="trail"
                     href={`/audit?user=${encodeURIComponent(user.id)}`}
-                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
                   >
                     Full audit trail
                   </Link>
@@ -332,7 +343,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <button
                 type="button"
                 onClick={() => setBundlesOpen(true)}
-                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6"
+                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
               >
                 Manage bundles
               </button>
@@ -435,7 +446,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                     {/* The 28px round chevron is the look; the 44px button around it is the touch floor. */}
                     <span
                       aria-hidden
-                      className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press group-hover:bg-[var(--hover)] ${
+                      className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn group-hover:bg-[var(--hover)] ${
                         open ? "rotate-90" : ""
                       }`}
                     >
@@ -444,7 +455,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   </button>
                   <Link
                     href={`/projects/${encodeURIComponent(project.project_id)}`}
-                    className="hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+                    className="motion-tint hover:text-accent-text"
                   >
                     <ResolvedProjectName
                       className="type-card-title"

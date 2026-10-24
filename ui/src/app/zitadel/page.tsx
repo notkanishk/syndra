@@ -298,7 +298,7 @@ function Chevron({ open }: { open: boolean }) {
   return (
     <span
       aria-hidden
-      className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press ${
+      className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn ${
         open ? "rotate-90" : ""
       }`}
     >
@@ -527,7 +527,7 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{door.warning}</span>
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
                 {door.instead}{" "}
-                <a href={door.syndraHref} className="font-semibold text-accent-text">
+                <a href={door.syndraHref} className="font-semibold text-accent-text motion-tint hover:text-ink">
                   {door.syndra} →
                 </a>
               </span>

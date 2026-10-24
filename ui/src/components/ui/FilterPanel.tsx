@@ -7,7 +7,7 @@ import { Button, PILL } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useIsPhone } from "@/lib/useViewport";
 
-const PILL_BOX = `inline-flex items-center justify-center rounded-pill font-semibold motion-tint ${PILL.md}`;
+const PILL_BOX = `inline-flex items-center justify-center rounded-pill font-semibold control press-scale ${PILL.md}`;
 
 /**
  * A page's filters, behind one button.
@@ -141,7 +141,7 @@ export function FilterPanel({
               type="button"
               onClick={onClear}
               disabled={activeCount === 0}
-              className="text-[13.5px] font-semibold text-muted motion-tint hover:text-ink disabled:cursor-not-allowed disabled:text-faint"
+              className="text-[13.5px] font-semibold text-muted control press-scale hover:text-ink disabled:cursor-not-allowed disabled:text-faint"
             >
               Clear all
             </button>

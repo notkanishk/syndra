@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { Select } from "@/components/ui/Select";
@@ -76,6 +77,12 @@ export default function AuditPage() {
   // knows how many it has, never how many there are (A-04 section 7.4).
   const paging = usePaging();
   const visible = rows.slice(0, paging.limit);
+  // A date range or a search drops entries: they fade where they were and the gap settles after
+  // (A-05 §2.10). A log is append-only, so nothing else ever leaves it.
+  const leaving = useLeavingRows(rows, (entry) => entry.id, !entries.isLoading && !entries.error, {
+    narrowedBy: `${window}|${debounced}|${scopedUser}`,
+  });
+  const drawn = leaving.window(paging.limit);
   const cutoff = window === "all" ? null : Date.now() - Number(window) * 24 * 60 * 60 * 1000;
   // A window needs nothing older than itself, so once the loaded tail is past it
   // there is no more to ask for.
@@ -155,7 +162,7 @@ export default function AuditPage() {
         <ListStates
           isLoading={entries.isLoading}
           error={entries.error}
-          isEmpty={rows.length === 0}
+          isEmpty={drawn.length === 0}
           onRetry={() => entries.refetch()}
           errorTitle="Couldn't load the audit log."
           skeleton={<RowSkeleton rows={6} avatar={false} label="Loading audit entries" />}
@@ -181,9 +188,9 @@ export default function AuditPage() {
             />
           }
         >
-          {visible.map((entry) => (
+          {drawn.map((entry) => (
+            <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              key={entry.id}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-4"
             >
               <Mono className="text-faint tablet:w-[124px] tablet:shrink-0">
@@ -197,6 +204,7 @@ export default function AuditPage() {
               </span>
               <TraceCell entry={entry} className="tablet:w-[80px] tablet:shrink-0 tablet:text-right" />
             </div>
+            </LeavingRow>
           ))}
 
           {/* The end of the log is stated, not implied by a button that stops

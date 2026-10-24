@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
 
 type SkeletonProps = React.HTMLAttributes<HTMLDivElement>;
 
@@ -15,6 +17,18 @@ export function Skeleton({ className = "", ...props }: SkeletonProps) {
       {...props}
     />
   );
+}
+
+/**
+ * What a thing that was a skeleton wears when it lands (S7): `tint-in`, so the
+ * swap fades rather than snaps. Only if a skeleton was drawn first; a name that
+ * was there on the first render is simply there. `loading` is whether it is
+ * still a skeleton.
+ */
+export function useTintAfterSkeleton(loading: boolean): string {
+  const [waited, setWaited] = useState(loading);
+  if (loading && !waited) setWaited(true);
+  return waited && !loading ? "tint-in" : "";
 }
 
 /** Convenience: a stack of card-sized skeletons. */

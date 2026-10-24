@@ -193,13 +193,13 @@ describe("GrantDirectAccess · End of term", () => {
   it("is the end of the term holding today, from the term setting", () => {
     state.terms = [{ name: "Monsoon", start: "2026-08-03", end: "2026-11-27" }];
     open();
-    fireEvent.click(screen.getByRole("button", { name: "End of term" }));
+    fireEvent.click(screen.getByRole("radio", { name: "End of term" }));
     expect(screen.getByText("27 Nov")).toBeInTheDocument();
   });
 
   it("falls back to 18 December when the setting can't be read", () => {
     open();
-    fireEvent.click(screen.getByRole("button", { name: "End of term" }));
+    fireEvent.click(screen.getByRole("radio", { name: "End of term" }));
     expect(screen.getByText("18 Dec")).toBeInTheDocument();
   });
 });

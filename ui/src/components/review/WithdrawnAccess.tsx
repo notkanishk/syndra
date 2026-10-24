@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { ArriveList } from "@/components/ui/ArriveList";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Mono, StatusDot } from "@/components/ui/Badge";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
@@ -141,7 +142,7 @@ export function WithdrawnAccess() {
   // S5: a revocation that clears on a later read (it reached the system, or somebody ended it)
   // fades where it was and closes its gap after, and not under the pointer.
   const leaving = useLeavingRows(matched, (row) => row.id, !query.isLoading && !query.error, {
-    scope: `${where}|${needle}`,
+    narrowedBy: `${where}|${needle}`,
   });
   // The meta line counts the whole list: a search narrows what is shown, not what is outstanding.
   const givenUp = rows.filter((row) => row.spent).length;
@@ -227,22 +228,25 @@ export function WithdrawnAccess() {
         {showRows ? (
           <div className="flex flex-col gap-4" {...leaving.listProps}>
             <SectionPill sections={sections} label="Sections of unfinished revocations" onOpen={openSection} />
-            {(["spent", "queued"] as const).map((key) => (
-              <RevocationSection
-                key={key}
-                {...SECTIONS[key]}
-                rows={leaving.rows.filter((row) => row.spent === (key === "spent"))}
-                count={(key === "spent" ? spent : queued).length}
-                leave={leaving.props}
-                view={view}
-                // A search that finds nothing here does not say nothing has been given up on.
-                empty={filtered ? "Nothing here matches." : SECTIONS[key].empty}
-                open={open[key]}
-                onToggle={() => setOpen((cur) => ({ ...cur, [key]: !cur[key] }))}
-                sort={sort}
-                onSort={flipSort}
-              />
-            ))}
+            {/* The two sections are the page's cards: they arrive on first paint (S11). */}
+            <ArriveList>
+              {(["spent", "queued"] as const).map((key) => (
+                <RevocationSection
+                  key={key}
+                  {...SECTIONS[key]}
+                  rows={leaving.rows.filter((row) => row.spent === (key === "spent"))}
+                  count={(key === "spent" ? spent : queued).length}
+                  leave={leaving.props}
+                  view={view}
+                  // A search that finds nothing here does not say nothing has been given up on.
+                  empty={filtered ? "Nothing here matches." : SECTIONS[key].empty}
+                  open={open[key]}
+                  onToggle={() => setOpen((cur) => ({ ...cur, [key]: !cur[key] }))}
+                  sort={sort}
+                  onSort={flipSort}
+                />
+              ))}
+            </ArriveList>
           </div>
         ) : (
           <Card>
@@ -337,7 +341,7 @@ function RevocationSection({
               >
                 <span
                   aria-hidden
-                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-press ${
+                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-turn ${
                     open ? "rotate-90" : ""
                   }`}
                 >
@@ -412,7 +416,7 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
         <UserAvatar id={row.user_id} />
         <Link
           href={`/users/${row.user_id}`}
-          className="min-w-0 text-[15px] font-semibold hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+          className="min-w-0 text-[15px] font-semibold motion-tint hover:text-accent-text"
         >
           <UserName id={row.user_id} />
         </Link>
@@ -441,7 +445,7 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
             <Link
               href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
               aria-label="See the edit that set off this revocation, in Change history"
-              className="hover:text-accent-text"
+              className="motion-tint hover:text-accent-text"
             >
               <Mono>{shortId(row.cascade_id, "c")}</Mono>
             </Link>

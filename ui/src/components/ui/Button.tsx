@@ -97,8 +97,13 @@ export function Button({
           already means "this is still happening" everywhere else in the
           system, and a second idiom for the same statement is one the
           operator has to learn twice. */}
+      {/* Seated in the button's own left padding, out of the flow: the label
+          sits where it sat before the dot came, and nothing shifts. */}
       {isPending && (
-        <span aria-hidden className="breathe h-2 w-2 flex-none rounded-pill bg-current" />
+        <span
+          aria-hidden
+          className="breathe absolute left-1 top-1/2 -mt-1 h-2 w-2 flex-none rounded-pill bg-current"
+        />
       )}
       {children}
     </button>
@@ -178,7 +183,7 @@ function buttonClasses({
   // `press`, and a 3% scale-down rather than a translate, so the button stays
   // under the finger. Destructive buttons behave identically — muscle memory
   // must never depend on what a button does.
-  return `inline-flex items-center justify-center gap-2 rounded-pill font-semibold motion-press press-scale disabled:cursor-not-allowed ${sizeClass} ${
+  return `inline-flex items-center justify-center gap-2 relative rounded-pill font-semibold control press-scale disabled:cursor-not-allowed ${sizeClass} ${
     disabled ? DISABLED[variant] : VARIANTS[variant]
   } ${className}`;
 }

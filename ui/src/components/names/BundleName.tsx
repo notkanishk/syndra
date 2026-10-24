@@ -1,6 +1,6 @@
 "use client";
 
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { SHOW_DEBUG_IDS } from "@/components/names/UserName";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 
@@ -12,12 +12,13 @@ interface BundleNameProps {
 
 export function BundleName({ id, fallback = "—", className = "" }: BundleNameProps) {
   const resolver = useNameResolver();
+  const { value, resolved } = id ? resolver.resolveBundle(id) : { value: undefined, resolved: true };
+  // The name that lands after a skeleton tints in, not snaps (S7).
+  const tint = useTintAfterSkeleton(Boolean(id) && !value && !resolved);
 
   if (!id) {
     return <span className={className}>{fallback}</span>;
   }
-
-  const { value, resolved } = resolver.resolveBundle(id);
 
   if (!value) {
     if (!resolved) {
@@ -28,14 +29,14 @@ export function BundleName({ id, fallback = "—", className = "" }: BundleNameP
       );
     }
     return (
-      <span className={className} title={SHOW_DEBUG_IDS ? id : undefined}>
+      <span className={`${className} ${tint}`} title={SHOW_DEBUG_IDS ? id : undefined}>
         {fallback}
       </span>
     );
   }
 
   return (
-    <span className={className} title={SHOW_DEBUG_IDS ? id : undefined}>
+    <span className={`${className} ${tint}`} title={SHOW_DEBUG_IDS ? id : undefined}>
       {value.name || (fallback as React.ReactNode)}
     </span>
   );

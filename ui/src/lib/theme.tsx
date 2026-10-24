@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
+import { LIGHT_LEAD_MS, SETTLE_MS } from "@/lib/motion";
+
 type Theme = "light" | "dark";
 type Resolved = Theme | null;
 
@@ -67,7 +69,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** S14 Daylight: how long html wears `theme-fading` after a switch (settle's 260ms, and a beat). */
-const FADE_MS = 300;
+const FADE_MS = SETTLE_MS + LIGHT_LEAD_MS;
 let fadeTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**

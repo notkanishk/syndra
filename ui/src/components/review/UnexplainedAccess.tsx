@@ -114,7 +114,7 @@ type SectionKind = (typeof SECTIONS)[number]["kind"];
 
 /** A quiet text control that sits among a row's buttons. */
 const QUIET_LINK =
-  "inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted underline-offset-2 motion-tint hover:text-accent-text hover:underline desktop:min-h-6";
+  "inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted motion-tint hover:text-accent-text desktop:min-h-6";
 
 const isSafety = (item: DriftTriageItem) => (item.role_group ?? "").toLowerCase().includes("safety");
 
@@ -290,7 +290,7 @@ export function UnexplainedAccess() {
   // fades where it was and closes its gap after, and not under the pointer. Counts and
   // selection stay on the live findings; only what is drawn keeps the ones that are going.
   const leaving = useLeavingRows(sorted, (item) => item.id, !drift.isLoading && !drift.error, {
-    scope: `${query}|${JSON.stringify(filters)}`,
+    narrowedBy: `${query}|${JSON.stringify(filters)}`,
   });
   const sections = useMemo(() => {
     return SECTIONS.map((section) => {
@@ -392,7 +392,11 @@ export function UnexplainedAccess() {
 
   const list = (
     <ListStates
-      isLoading={drift.isLoading || (sections.length === 0 && !!(diff.isLoading || summary.isLoading))}
+      // Rows from the last filters are not this read: nothing here is "explained" until it lands.
+      isLoading={
+        drift.isLoading ||
+        (sections.length === 0 && (drift.isPlaceholderData || !!(diff.isLoading || summary.isLoading)))
+      }
       error={drift.error}
       isEmpty={sections.length === 0}
       onRetry={() => drift.refetch()}
@@ -812,7 +816,7 @@ function DriftSection({
               >
                 <span
                   aria-hidden
-                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-press ${
+                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-turn ${
                     open ? "rotate-90" : ""
                   }`}
                 >
@@ -878,7 +882,7 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
           <UserAvatar id={row.userId} size="row" />
           <Link
             href={accountHref(row.userId)}
-            className="text-[14.5px] font-semibold motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+            className="text-[14.5px] font-semibold motion-tint hover:text-accent-text"
           >
             <UserName id={row.userId} />
           </Link>
@@ -886,7 +890,7 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
         <div className="flex w-full flex-col items-start gap-[3px] tablet:w-[200px] tablet:shrink-0">
           <Link
             href={`/projects/${row.projectId}`}
-            className="text-[14px] leading-[1.45] motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+            className="text-[14px] leading-[1.45] motion-tint hover:text-accent-text"
           >
             <ProjectName id={row.projectId} /> · {humanizeKey(row.role)}
           </Link>
@@ -898,7 +902,7 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
             It is in the comparison and has not been raised as a finding, so there is nothing to
             resolve here yet.{" "}
             {!inZitadel && (
-              <Link href="/governance/pending" className="font-semibold text-muted hover:text-accent-text hover:underline">
+              <Link href="/governance/pending" className="font-semibold text-muted motion-tint hover:text-accent-text">
                 Check Pending changes
               </Link>
             )}
@@ -970,7 +974,7 @@ function TriageRow({
           <span className="min-w-0">
             <Link
               href={item.user_is_service_account ? serviceAccountHref(item.user_id) : `/users/${item.user_id}`}
-              className="block text-[14.5px] font-semibold motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+              className="block text-[14.5px] font-semibold motion-tint hover:text-accent-text"
             >
               <UserName id={item.user_id} />
             </Link>
@@ -981,7 +985,7 @@ function TriageRow({
         <div className="order-2 flex w-full flex-col items-start gap-[3px] tablet:w-[200px] tablet:shrink-0">
           <Link
             href={`/projects/${item.project_id}`}
-            className="text-[14px] leading-[1.45] motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+            className="text-[14px] leading-[1.45] motion-tint hover:text-accent-text"
           >
             <ProjectName id={item.project_id} /> · {humanizeKey(role)}
           </Link>
@@ -1051,7 +1055,9 @@ function TriageRow({
         </div>
       </div>
 
-      {expanded && <ExpandedEvidence item={item} />}
+      <Unfold open={expanded}>
+        <ExpandedEvidence item={item} />
+      </Unfold>
     </div>
   );
 }

@@ -171,7 +171,7 @@ export function RoleMappingDialog({
                 </Select>
                 <FieldHint>{neverRead ? "Not read yet." : list ? <>Read from {name} <Relative iso={list.read_at} />.</> : " "}</FieldHint>
                 {(neverRead || noGroups) && (
-                  <div role="status" className="panel flex flex-col gap-1.5 px-4 py-3.5 text-[14px] leading-[1.55]">
+                  <div role="status" className="tint-in panel flex flex-col gap-1.5 px-4 py-3.5 text-[14px] leading-[1.55]">
                     <span className="font-semibold">
                       {neverRead ? `${name} hasn't listed its groups yet.` : `${name} has no groups of its own yet.`}
                     </span>

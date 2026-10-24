@@ -1,6 +1,7 @@
 "use client";
 
 import { describeFailure, sentence } from "@/lib/outcome";
+import { glideTo } from "@/lib/motion";
 import { Radio } from "@/components/ui/Choice";
 import { roleCount } from "@/lib/role-mapping-plan";
 import Link from "next/link";
@@ -25,6 +26,7 @@ import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
+import { Unfold } from "@/components/ui/Unfold";
 import { UserName } from "@/components/names";
 import { formatBytes, formatShortDate, personLine, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
@@ -86,7 +88,7 @@ export function TargetOverview({ target }: { target: string }) {
       <div className="flex flex-col gap-1">
         <Link
           href="/system/targets"
-          className="inline-flex min-h-11 items-center self-start text-[13.5px] font-semibold text-accent-text hover:underline desktop:min-h-6"
+          className="inline-flex min-h-11 items-center self-start text-[13.5px] font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
         >
           <span aria-hidden>←&nbsp;</span>
           Connected systems
@@ -872,8 +874,19 @@ function RegionChips({
       </div>
       <nav aria-label="Regions of this page" className="ml-auto flex flex-wrap gap-2">
         {chips.map((chip) => (
-          <a key={chip.id} href={`#${chip.id}`} className="rounded-pill text-ink no-underline">
-            <Chip className="gap-2">
+          <a
+            key={chip.id}
+            href={`#${chip.id}`}
+            // A jump glides there and the region's heading flashes once (8d); the chip is a control.
+            onClick={(event) => {
+              const target = document.getElementById(`${chip.id}-heading`) ?? document.getElementById(chip.id);
+              if (!target) return;
+              event.preventDefault();
+              glideTo(target);
+            }}
+            className="group control press-scale rounded-pill text-ink no-underline"
+          >
+            <Chip className="gap-2 motion-tint group-hover:bg-tint-3">
               {chip.dot && <StatusDot tone="warn" />}
               {chip.label}
               {chip.count != null && <span className="text-faint">{chip.count}</span>}
@@ -967,6 +980,7 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
  */
 function LogFinding({ anchor }: { anchor: LogAnchor }) {
   const [resolving, setResolving] = useState(false);
+  const [detail, setDetail] = useState(false);
   const name = targetLabel(anchor.target);
   // Read from the two counts, not from the verdict.
   //
@@ -1004,8 +1018,16 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         is the only thing that can notice entries disappearing, and resolving replaces it with a
         new <Term name="baseline">baseline</Term>.
       </p>
-      <details className="mt-1 text-[13px] text-faint">
-        <summary className="cursor-pointer">Technical detail</summary>
+      <div className="mt-1 text-[13px] text-faint">
+        <button
+          type="button"
+          aria-expanded={detail}
+          onClick={() => setDetail(!detail)}
+          className="-mx-1.5 rounded-inner px-1.5 py-1 text-left hover-tint"
+        >
+          Technical detail
+        </button>
+        <Unfold open={detail}>
         <p className="mt-1">
           Syndra&rsquo;s note: {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
           ending <Mono>{anchor.head.slice(0, 12)}</Mono>, made{" "}
@@ -1018,7 +1040,8 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
           ) : null}
           <Relative iso={anchor.violation_at} />.
         </p>
-      </details>
+        </Unfold>
+      </div>
       <div className="mt-3">
         <Button variant="outline" size="sm" onClick={() => setResolving(true)}>
           Resolve this finding
@@ -1130,7 +1153,7 @@ function ResolveConflictDialog({
           ].map((claimant) => (
             <label
               key={claimant.id}
-              className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft"
+              className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] motion-tint has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft"
             >
               <Radio
                 name="conflict-owner"
@@ -1710,10 +1733,12 @@ function AdoptionOutcome({
   return (
     <div
       role="status"
-      className={`flex flex-wrap items-baseline gap-2 text-[13.5px] ${
+      // Assigned lifts and blooms once; not confirmed appears still, on tint (S6).
+      className={`${unconfirmed ? "tint-in" : "lift-in"} flex flex-wrap items-baseline gap-2 text-[13.5px] ${
         unconfirmed ? "text-warn-text" : "text-muted"
       }`}
     >
+      {!unconfirmed && <StatusDot tone="healthy" bloom className="self-center" />}
       <span>
         {/* The backend's own `detail` never names the person — it is written
             for the audit trail, not the row. Named here so the operator sees

@@ -116,7 +116,7 @@ function BundleListRow({ bundle }: { bundle: BundleRow }) {
       <div className="w-[min(260px,40%)] min-w-0">
         <Link
           href={`/bundles/${encodeURIComponent(bundle.id)}`}
-          className="text-[15px] font-semibold text-ink motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+          className="text-[15px] font-semibold text-ink motion-tint hover:text-accent-text"
         >
           {bundle.name}
         </Link>
@@ -433,7 +433,7 @@ function StartFrom({
           </span>
           <button
             type="button"
-            className="font-semibold text-accent-text hover:brightness-110"
+            className="font-semibold text-accent-text motion-tint hover:brightness-110"
             onClick={() => {
               setSource("none");
               setCopied(null);

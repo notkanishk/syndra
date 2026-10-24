@@ -158,3 +158,13 @@ describe("pending changes says one true thing, once", () => {
     expect(screen.queryByText(/nothing (there )?has changed/i)).toBeNull();
   });
 });
+
+// S11: Home is the most-visited first paint. The greeting tints in and the blocks arrive after it.
+describe("Home's first paint", () => {
+  it("wears the screen's arrival on its greeting, and holds the rest in one read gate", () => {
+    renderHome();
+    const greeting = screen.getByRole("heading", { level: 1 }).parentElement!;
+    expect(greeting).toHaveClass("page-head");
+    expect(greeting).not.toHaveAttribute("data-settled");
+  });
+});

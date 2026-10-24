@@ -7,9 +7,10 @@ import { type PickerPlace, type RoleNote } from "@/components/bundles/RolePicker
 import { givenAt, nothingSentYet } from "@/components/access/AccessSource";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Button, PILL } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { FieldLabel, Input } from "@/components/ui/Input";
+import { Segmented } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
@@ -126,30 +127,22 @@ function GrantDirectAccessOpen({
 
         <div>
           <FieldLabel htmlFor="grant-expiry-date">Ends</FieldLabel>
-          <div className="mb-2.5 flex flex-wrap gap-2">
-            {(
-              [
-                ["30", "30 days"],
-                ["term", "End of term"],
-                ["date", "Pick a date"],
-                ["never", "Never"],
-              ] as Array<[Preset, string]>
-            ).map(([choice, label]) => (
-              // The same control as the request form's "how long", and now the
-              // same box: it had restated the pill by hand at 13px/7px, which
-              // is both a drifted surface and a 30px target on a phone.
-              <button
-                key={choice}
-                type="button"
-                aria-pressed={preset === choice}
-                onClick={() => setPreset(choice)}
-                className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
-                  preset === choice ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          {/* The same control as the request form's "how long": one segmented
+              pill, whose fill glides to the choice. Four options span the
+              sheet so a phone never scrolls sideways. */}
+          <div className="mb-2.5">
+            <Segmented<Preset>
+              label="Ends"
+              fill
+              value={preset}
+              onChange={setPreset}
+              options={[
+                { value: "30", label: "30 days" },
+                { value: "term", label: "End of term" },
+                { value: "date", label: "Pick a date" },
+                { value: "never", label: "Never" },
+              ]}
+            />
           </div>
 
           {preset === "date" ? (

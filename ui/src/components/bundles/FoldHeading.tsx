@@ -19,11 +19,11 @@ export function FoldHeading({
       type="button"
       aria-expanded={open}
       onClick={onClick}
-      className="flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left motion-tint hover:bg-[var(--hover)]"
+      className="flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left hover-tint"
     >
       <span
         aria-hidden
-        className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press ${
+        className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn ${
           open ? "rotate-90" : ""
         }`}
       >

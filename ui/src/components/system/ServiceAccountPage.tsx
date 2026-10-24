@@ -8,6 +8,7 @@ import { ResolvedProjectName } from "@/components/names";
 import { UserName } from "@/components/names/UserName";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, ListStates, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { ServiceAccountDialog, UnmarkDialog } from "@/components/system/ServiceAccountDialogs";
 import { Button } from "@/components/ui/Button";
@@ -36,7 +37,17 @@ export function ServiceAccountPage({ id }: { id: string }) {
 
   return (
     <>
-      <ServiceAccountView id={id} one={one} dialog={dialog} setDialog={setDialog} />
+      {/* One hand-over (S7): a skeleton only if the read is slow, then the page arrives. */}
+      <ReadGate
+        loading={one.isLoading}
+        skeleton={
+          <Card>
+            <RowSkeleton rows={4} avatar={false} label="Loading this service account" />
+          </Card>
+        }
+      >
+        <ServiceAccountView id={id} one={one} dialog={dialog} setDialog={setDialog} />
+      </ReadGate>
       {dialog === "person" && last.current && <UnmarkDialog account={last.current} onClose={() => setDialog(null)} />}
     </>
   );
@@ -56,13 +67,6 @@ function ServiceAccountView({
   setDialog: (dialog: Dialog) => void;
 }) {
   const account = one.data;
-  if (one.isLoading) {
-    return (
-      <Card>
-        <RowSkeleton rows={4} avatar={false} label="Loading this service account" />
-      </Card>
-    );
-  }
   // The route is for service accounts only: a person's id gets a way to their own page.
   if (one.error instanceof ApiError && one.error.status === 404) {
     return (
@@ -87,7 +91,7 @@ function ServiceAccountView({
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         eyebrow={
-          <Link href="/system/service-accounts" className="hover:text-accent-text hover:underline">
+          <Link href="/system/service-accounts" className="motion-tint hover:text-accent-text">
             Service accounts
           </Link>
         }
@@ -217,7 +221,7 @@ function Holds({ userId, name }: { userId: string; name: string }) {
               <span className="min-w-0 flex-1 text-[15px] font-semibold tablet:flex-none tablet:basis-[260px]">
                 <Link
                   href={`/projects/${encodeURIComponent(project.project_id)}`}
-                  className="hover:text-accent-text hover:underline"
+                  className="motion-tint hover:text-accent-text"
                 >
                   <ResolvedProjectName
                     name={project.project_name}

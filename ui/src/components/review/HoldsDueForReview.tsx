@@ -87,7 +87,7 @@ function Subject({ id }: { id: string }) {
   const accountHref = useAccountHref();
   return (
     <span className="text-[14px]">
-      <Link href={accountHref(id)} className="hover:text-accent-text hover:underline hover:underline-offset-[3px]">
+      <Link href={accountHref(id)} className="motion-tint hover:text-accent-text">
         <UserName id={id} />
       </Link>
       <ServiceAccountTag id={id} />

@@ -2,6 +2,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ARRIVE_MEMORY_MS, armArrive } from "@/components/ui/ArriveList";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { setMediaQuery } from "@/test-utils/media";
 import { motionInTests } from "@/test-utils/motion";
@@ -13,17 +14,22 @@ function List({
   ready = true,
   stay,
   scope,
+  narrowedBy,
+  limit,
 }: {
   ids: string[];
   ready?: boolean;
   stay?: ReadonlySet<string>;
   scope?: string;
+  narrowedBy?: string;
+  /** A page's limit: the caller draws only the first rows (People, Audit). */
+  limit?: number;
 }) {
-  const leaving = useLeavingRows(ids, (id) => id, ready, { stay, scope });
+  const leaving = useLeavingRows(ids, (id) => id, ready, { stay, scope, narrowedBy });
   return (
     <div data-testid="list" {...leaving.listProps}>
       <button type="button">inside</button>
-      {leaving.rows.map((id) => (
+      {(limit === undefined ? leaving.rows : leaving.window(limit)).map((id) => (
         <LeavingRow key={id} {...leaving.props(id)}>
           <p>{id}</p>
         </LeavingRow>
@@ -159,6 +165,120 @@ describe("a row held for what it is still saying", () => {
     rerender(<List ids={["c"]} scope="done" />);
     expect(screen.queryByText("a")).not.toBeInTheDocument();
     expect(screen.getByText("c")).toBeInTheDocument();
+  });
+});
+
+describe("rows narrowed by the reader (a search or a filter)", () => {
+  it("what it drops leaves, its gap does not wait on the pointer, and what it brings tints in", () => {
+    const { rerender } = render(<List ids={["a", "b"]} narrowedBy="open" />);
+    // A search is typed with the pointer parked over the list it narrows.
+    fireEvent.pointerEnter(screen.getByTestId("list"));
+    rerender(<List ids={["c"]} narrowedBy="done" />);
+    expect(screen.getByText("a").parentElement).toHaveClass("tint-out");
+    expect(rowOf("a")).toHaveClass("close-gap");
+    expect(screen.getByText("c").parentElement).toHaveClass("tint-in");
+  });
+
+  it("holds for a read that lands after what is typed has changed: its gaps do not wait either", () => {
+    const { rerender } = render(<List ids={["a", "b"]} narrowedBy="" />);
+    fireEvent.pointerEnter(screen.getByTestId("list"));
+    // The query is typed: nothing has changed yet but what is being looked through.
+    rerender(<List ids={["a", "b"]} narrowedBy="a" />);
+    rerender(<List ids={["a"]} narrowedBy="a" />);
+    expect(rowOf("b")).toHaveClass("close-gap");
+  });
+
+  it("is the reader's only for a while: a later read nobody asked for still waits on the pointer", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(<List ids={["a", "b"]} narrowedBy="" />);
+      rerender(<List ids={["a", "b"]} narrowedBy="a" />);
+      act(() => void vi.advanceTimersByTime(ARRIVE_MEMORY_MS + 1000));
+      fireEvent.pointerEnter(screen.getByTestId("list"));
+      rerender(<List ids={["a"]} narrowedBy="a" />);
+      expect(rowOf("b")).not.toHaveClass("close-gap");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the rows that stay: the same elements, nothing remounted", () => {
+    const { rerender } = render(<List ids={["a", "b", "c"]} narrowedBy="" />);
+    const b = screen.getByText("b");
+    rerender(<List ids={["b"]} narrowedBy="b" />);
+    expect(screen.getByText("b")).toBe(b);
+    expect(b.parentElement).not.toHaveClass("tint-in");
+  });
+});
+
+describe("a list that draws a window of its rows (a page's limit)", () => {
+  const ids = Array.from({ length: 30 }, (_, index) => `r${index}`);
+
+  it("fades only what was on screen: a search's matches past the old page show at once", () => {
+    const { rerender } = render(<List ids={ids} narrowedBy="" limit={10} />);
+    // A search keeps r2 and r25..r27: r25 was never drawn under the old page.
+    rerender(<List ids={["r2", "r25", "r26", "r27"]} narrowedBy="x" limit={10} />);
+    const drawn = screen.getAllByText(/^r\d+$/).map((p) => p.textContent);
+    // The nine rows that were on screen fade where they were; the matches are all drawn now.
+    expect(drawn.filter((id) => ["r25", "r26", "r27"].includes(id!))).toEqual(["r25", "r26", "r27"]);
+    expect(drawn).not.toContain("r12");
+    expect(screen.getByText("r0").parentElement).toHaveClass("tint-out");
+  });
+
+  it("lets a fading row pushed out of the window go, rather than hold a seat it never shows in", () => {
+    const { rerender } = render(<List ids={["a", "b", "c"]} limit={3} />);
+    // b leaves, and two new rows land above it: the window of three no longer reaches it.
+    rerender(<List ids={["n1", "n2", "a", "c"]} limit={3} />);
+    expect(screen.queryByText("b")).toBeNull();
+    // ...and it is gone from the list, not waiting past the limit for a fade that never runs.
+    rerender(<List ids={["n1", "n2", "a", "c"]} limit={10} />);
+    expect(screen.queryByText("b")).toBeNull();
+  });
+});
+
+describe("a row that comes in on a later read", () => {
+  it("tints in where it lands; the rows that stayed, and the first read's rows, do not", () => {
+    const { rerender } = render(<List ids={["a", "b"]} />);
+    expect(screen.getByText("a").parentElement).not.toHaveClass("tint-in");
+    rerender(<List ids={["a", "b", "c"]} />);
+    expect(screen.getByText("c").parentElement).toHaveClass("tint-in");
+    expect(screen.getByText("a").parentElement).not.toHaveClass("tint-in");
+  });
+
+  it("keeps its tint through the next read, so it is never cut off", () => {
+    const { rerender } = render(<List ids={["a"]} />);
+    rerender(<List ids={["a", "c"]} />);
+    rerender(<List ids={["a", "c", "d"]} />);
+    expect(screen.getByText("c").parentElement).toHaveClass("tint-in");
+    expect(screen.getByText("d").parentElement).toHaveClass("tint-in");
+  });
+
+  it("fades out, not in, when it goes", () => {
+    const { rerender } = render(<List ids={["a"]} />);
+    rerender(<List ids={["a", "c"]} />);
+    rerender(<List ids={["a"]} />);
+    expect(screen.getByText("c").parentElement).toHaveClass("tint-out");
+    expect(screen.getByText("c").parentElement).not.toHaveClass("tint-in");
+  });
+
+  it("is not new when it is what the first read brought, even after an empty read", () => {
+    const { rerender } = render(<List ids={[]} ready={false} />);
+    rerender(<List ids={["a", "b"]} />);
+    expect(screen.getByText("a").parentElement).not.toHaveClass("tint-in");
+  });
+
+  it("is new when it follows a first read that found nothing", () => {
+    const { rerender } = render(<List ids={[]} ready={false} />);
+    rerender(<List ids={[]} />);
+    rerender(<List ids={["a"]} />);
+    expect(screen.getByText("a").parentElement).toHaveClass("tint-in");
+  });
+
+  it("arrives instead when the reader asked for it (Show more)", () => {
+    const { rerender } = render(<List ids={["a"]} />);
+    armArrive();
+    rerender(<List ids={["a", "b"]} />);
+    expect(screen.getByText("b").parentElement).not.toHaveClass("tint-in");
   });
 });
 
