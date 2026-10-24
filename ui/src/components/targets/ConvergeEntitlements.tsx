@@ -13,6 +13,7 @@ import {
   type EntitlementApplyResult,
   type EntitlementPlan,
 } from "@/lib/queries/useEntitlements";
+import { TINT_MS, useExitPhase } from "@/lib/motion";
 import { targetLabel } from "@/lib/nav";
 
 /**
@@ -38,12 +39,17 @@ import { targetLabel } from "@/lib/nav";
  *
  * The apply carries the plan id and never the original submission, which is the
  * whole mechanism: what gets queued is what was on screen.
+ *
+ * `open` is false once the dialog is closed and the component is kept mounted
+ * for the one thing that outlives it: the dock under it tints out rather than
+ * vanishing with the dialog.
  */
 export function ConvergeEntitlements({
   target,
   subjectIds,
   label,
   onClose,
+  open = true,
 }: {
   target: string;
   /** Who to converge. Always an explicit list — never "everybody". */
@@ -51,13 +57,24 @@ export function ConvergeEntitlements({
   /** What this cohort IS, for the lede. "everybody holding Trained operator". */
   label: string;
   onClose: () => void;
+  open?: boolean;
 }) {
   const rehearse = useRehearseEntitlements(target);
   const apply = useApplyEntitlements(target);
   const [plan, setPlan] = useState<EntitlementPlan | null>(null);
+  // What leaves is the plan it was showing; a dialog opened again starts with none.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setPlan(null);
+  }
+  const [lastPlan, setLastPlan] = useState(plan);
+  if (plan && plan !== lastPlan) setLastPlan(plan);
+  const dock = useExitPhase(open && plan !== null, TINT_MS);
 
   return (
     <>
+      {open && (
       <RehearsalDialog
         title={`Reconcile accounts on ${targetLabel(target)}`}
         lede={`Compares what ${label} should have on ${targetLabel(target)} with what they have, and records the differences as changes waiting for you to send. Nothing reaches ${targetLabel(target)} until somebody sends them from Pending changes.`}
@@ -73,10 +90,11 @@ export function ConvergeEntitlements({
         }}
         onClose={onClose}
       />
+      )}
       {/* Outside the dialog's own body so it survives every step of it: the age
           of the state a provisional plan was computed against is exactly as
           relevant on the review step as on the result. */}
-      {plan && <PlanProvenance plan={plan} />}
+      {dock.rendered && lastPlan && <PlanProvenance plan={lastPlan} leaving={dock.leaving} />}
     </>
   );
 }
@@ -90,7 +108,7 @@ export function ConvergeEntitlements({
  * state from fourteen minutes ago", and only the second one lets an operator
  * decide whether that matters.
  */
-function PlanProvenance({ plan }: { plan: EntitlementPlan }) {
+function PlanProvenance({ plan, leaving }: { plan: EntitlementPlan; leaving: boolean }) {
   return (
     // Above the page, below a dialog. It sat at z-60 — the highest number in
     // the product — which put a passive freshness read on top of the scrim of
@@ -106,10 +124,13 @@ function PlanProvenance({ plan }: { plan: EntitlementPlan }) {
       className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-6"
       style={{ bottom: "calc(var(--touch-nav-height) + 24px)" }}
     >
-      {/* The dock lifts into place, 6px and no scale. The transform is on the
-          pill and not on the `fixed` parent, which would drag it off its own
-          edge. */}
-      <div className="lift-in pointer-events-auto rounded-pill border border-line bg-surface-1 px-4 py-2 shadow-popover">
+      {/* The dock lifts into place, 6px and no scale, and tints out on leave. The
+          transform is on the pill and not on the `fixed` parent, which would drag
+          it off its own edge. */}
+      <div
+        aria-hidden={leaving ? true : undefined}
+        className={`${leaving ? "tint-out pointer-events-none" : "lift-in pointer-events-auto"} rounded-pill border border-line bg-surface-1 px-4 py-2 shadow-popover`}
+      >
         <ReadFreshness
           subject="What this preview is based on"
           state={{
@@ -230,14 +251,13 @@ export function ConvergeButton({
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         Reconcile accounts
       </Button>
-      {open && (
-        <ConvergeEntitlements
-          target={target}
-          subjectIds={subjectIds}
-          label={label}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      <ConvergeEntitlements
+        open={open}
+        target={target}
+        subjectIds={subjectIds}
+        label={label}
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }

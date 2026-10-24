@@ -25,6 +25,7 @@ import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
+import { Unfold } from "@/components/ui/Unfold";
 import { UserName } from "@/components/names";
 import { formatBytes, formatShortDate, personLine, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
@@ -967,6 +968,7 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
  */
 function LogFinding({ anchor }: { anchor: LogAnchor }) {
   const [resolving, setResolving] = useState(false);
+  const [detail, setDetail] = useState(false);
   const name = targetLabel(anchor.target);
   // Read from the two counts, not from the verdict.
   //
@@ -1004,8 +1006,16 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
         is the only thing that can notice entries disappearing, and resolving replaces it with a
         new <Term name="baseline">baseline</Term>.
       </p>
-      <details className="mt-1 text-[13px] text-faint">
-        <summary className="cursor-pointer">Technical detail</summary>
+      <div className="mt-1 text-[13px] text-faint">
+        <button
+          type="button"
+          aria-expanded={detail}
+          onClick={() => setDetail(!detail)}
+          className="-mx-1.5 rounded-inner px-1.5 py-1 text-left hover-tint"
+        >
+          Technical detail
+        </button>
+        <Unfold open={detail}>
         <p className="mt-1">
           Syndra&rsquo;s note: {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
           ending <Mono>{anchor.head.slice(0, 12)}</Mono>, made{" "}
@@ -1018,7 +1028,8 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
           ) : null}
           <Relative iso={anchor.violation_at} />.
         </p>
-      </details>
+        </Unfold>
+      </div>
       <div className="mt-3">
         <Button variant="outline" size="sm" onClick={() => setResolving(true)}>
           Resolve this finding
@@ -1130,7 +1141,7 @@ function ResolveConflictDialog({
           ].map((claimant) => (
             <label
               key={claimant.id}
-              className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft"
+              className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] motion-tint has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft"
             >
               <Radio
                 name="conflict-owner"
@@ -1710,10 +1721,12 @@ function AdoptionOutcome({
   return (
     <div
       role="status"
-      className={`flex flex-wrap items-baseline gap-2 text-[13.5px] ${
+      // Assigned lifts and blooms once; not confirmed appears still, on tint (S6).
+      className={`${unconfirmed ? "tint-in" : "lift-in"} flex flex-wrap items-baseline gap-2 text-[13.5px] ${
         unconfirmed ? "text-warn-text" : "text-muted"
       }`}
     >
+      {!unconfirmed && <StatusDot tone="healthy" bloom className="self-center" />}
       <span>
         {/* The backend's own `detail` never names the person — it is written
             for the audit trail, not the row. Named here so the operator sees

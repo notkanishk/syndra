@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
@@ -97,5 +97,21 @@ describe("what the log anchor says was done to the log", () => {
 
     expect(screen.getByText(/Entries were added, but the log still ends where it did/)).toBeInTheDocument();
     expect(screen.queryByText(/number of entries is the same/)).toBeNull();
+  });
+
+  // A disclosure button, not a native <details>, so the detail opens to its own height (Unfold).
+  it("keeps the technical detail folded until it is asked for", () => {
+    currentAnchor = anchor(10, 7);
+    renderTarget();
+    const toggle = screen.getByRole("button", { name: "Technical detail" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/Syndra’s note:/)).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/Syndra’s note:/)).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(screen.queryByText(/Syndra’s note:/)).toBeNull();
   });
 });

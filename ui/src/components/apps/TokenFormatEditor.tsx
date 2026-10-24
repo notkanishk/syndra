@@ -5,8 +5,10 @@ import type { UseQueryResult } from "@tanstack/react-query";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, PILL } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FormPart } from "@/components/ui/FormPart";
+import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -259,6 +261,10 @@ function ProfileForm({
   const [claimName, setClaimName] = useState(profile.claim_name);
   const [format, setFormat] = useState<ClaimFormat>(profile.format_type);
   const [extras, setExtras] = useState<ExtraClaim[]>(() => toExtras(profile));
+  // A claim added while the reader is here opens to its height; one removed fades
+  // first and its gap settles after (Motion v2, form parts).
+  const [added, setAdded] = useState<number[]>([]);
+  const drawn = useLeavingRows(extras, (extra) => String(extra.id));
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // What was last written, so "unsaved" can be judged against it rather than
@@ -281,7 +287,7 @@ function ProfileForm({
   const dirty =
     claimName !== baseline.claimName ||
     format !== baseline.format ||
-    JSON.stringify(baseline.extras) !== JSON.stringify(extras);
+    JSON.stringify(baseline.extras.map(withoutId)) !== JSON.stringify(extras.map(withoutId));
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -381,31 +387,34 @@ function ProfileForm({
           <span className="flex-1" />
           <button
             type="button"
-            onClick={() =>
-              setExtras((prev) => [...prev, { key: "", kind: "attribute", value: "email" }])
-            }
-            className="text-[13px] font-semibold text-accent-text motion-tint hover:text-ink"
+            onClick={() => {
+              const id = nextExtraId++;
+              setAdded((prev) => [...prev, id]);
+              setExtras((prev) => [...prev, { id, key: "", kind: "attribute", value: "email" }]);
+            }}
+            className={`-mr-3.5 rounded-pill font-semibold text-accent-text control press-scale hover:bg-[var(--hover)] ${PILL.sm}`}
           >
             Add a claim
           </button>
         </div>
 
-        {extras.length === 0 ? (
+        {drawn.rows.length === 0 ? (
           <p className="text-[13.5px] text-faint">
             Only the roles are sent. Add a claim when the app also needs the person&rsquo;s email
             or team.
           </p>
         ) : (
-          <div className="flex flex-col gap-2">
-            {extras.map((extra, index) => (
-              <div key={index} className="flex flex-wrap items-center gap-2">
+          <div className="-mb-2 flex flex-col">
+            {drawn.rows.map((extra) => (
+              <FormPart key={extra.id} appear={added.includes(extra.id)} {...drawn.props(String(extra.id))}>
+              <div className="flex flex-wrap items-center gap-2 pb-2">
                 <Input
                   value={extra.key}
                   spellCheck={false}
                   aria-label="Claim name"
                   placeholder="syndra.laser.email"
                   onChange={(event) =>
-                    setExtras((prev) => replace(prev, index, { ...extra, key: event.target.value }))
+                    setExtras((prev) => replace(prev, extra.id, { ...extra, key: event.target.value }))
                   }
                   className="min-w-[200px] flex-1 font-mono text-[13.5px]"
                 />
@@ -416,7 +425,7 @@ function ProfileForm({
                     setExtras((prev) =>
                       replace(
                         prev,
-                        index,
+                        extra.id,
                         event.target.value === "__static"
                           ? { ...extra, kind: "static", value: "" }
                           : { ...extra, kind: "attribute", value: event.target.value },
@@ -439,7 +448,7 @@ function ProfileForm({
                     placeholder="makerspace"
                     onChange={(event) =>
                       setExtras((prev) =>
-                        replace(prev, index, { ...extra, value: event.target.value }),
+                        replace(prev, extra.id, { ...extra, value: event.target.value }),
                       )
                     }
                     className="w-[150px]"
@@ -448,11 +457,12 @@ function ProfileForm({
                 <Button
                   size="sm"
                   aria-label={`Remove ${extra.key || "claim"}`}
-                  onClick={() => setExtras((prev) => prev.filter((_, i) => i !== index))}
+                  onClick={() => setExtras((prev) => prev.filter((entry) => entry.id !== extra.id))}
                 >
                   Remove
                 </Button>
               </div>
+              </FormPart>
             ))}
           </div>
         )}
@@ -579,18 +589,26 @@ function TokenKeyInventory({
 }
 
 interface ExtraClaim {
+  /** Which row this is while it is edited, added or removed; never sent. */
+  id: number;
   key: string;
   kind: "attribute" | "static";
   value: string;
 }
 
+let nextExtraId = 0;
+
+const withoutId = ({ key, kind, value }: ExtraClaim) => ({ key, kind, value });
+
 function toExtras(profile: ClaimProfile): ExtraClaim[] {
   const attributes = Object.entries(profile.attribute_claims ?? {}).map(([key, value]) => ({
+    id: nextExtraId++,
     key,
     kind: "attribute" as const,
     value,
   }));
   const statics = Object.entries(profile.static_claims ?? {}).map(([key, value]) => ({
+    id: nextExtraId++,
     key,
     kind: "static" as const,
     value: String(value ?? ""),
@@ -610,8 +628,8 @@ function fromExtras(extras: ExtraClaim[]) {
   return { attributes, statics };
 }
 
-function replace(list: ExtraClaim[], index: number, next: ExtraClaim): ExtraClaim[] {
-  return list.map((entry, i) => (i === index ? next : entry));
+function replace(list: ExtraClaim[], id: number, next: ExtraClaim): ExtraClaim[] {
+  return list.map((entry) => (entry.id === id ? next : entry));
 }
 
 function slug(name: string): string {

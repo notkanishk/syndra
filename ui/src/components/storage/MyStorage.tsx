@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
@@ -352,8 +353,8 @@ function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
     </>
   ) : null;
   return (
-    <span role="status" className={`inline-flex items-center gap-[7px] text-[13px] leading-[1.4] ${offline ? "text-warn-text" : "text-muted"}`}>
-      <span aria-hidden className={`h-[7px] w-[7px] flex-none rounded-pill ${offline ? "bg-warn" : held ? "bg-line-strong" : "bg-healthy"}`} />
+    <span role="status" className={`tint-in inline-flex items-center gap-[7px] text-[13px] leading-[1.4] motion-tint ${offline ? "text-warn-text" : "text-muted"}`}>
+      <span aria-hidden className={`h-[7px] w-[7px] flex-none rounded-pill motion-tint ${offline ? "bg-warn" : held ? "bg-line-strong" : "bg-healthy"}`} />
       {offline ? (
         <>Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
       ) : held ? (
@@ -702,7 +703,12 @@ function PasswordForm({
       </p>
       {set.data && (
         // An outcome the target didn't confirm is not success, and doesn't get the calm voice.
-        <p role="status" className={`text-[13.5px] ${unconfirmed ? "text-warn-text" : "text-muted"}`}>
+        <p
+          role="status"
+          // Done lifts and blooms once; not confirmed appears still, on tint (S6).
+          className={`${unconfirmed ? "tint-in text-warn-text" : "lift-in flex items-center gap-2 text-muted"} text-[13.5px]`}
+        >
+          {!unconfirmed && <StatusDot tone="healthy" bloom />}
           {set.data.detail}
         </p>
       )}

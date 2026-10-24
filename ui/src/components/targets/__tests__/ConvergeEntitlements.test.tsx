@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConvergeEntitlements } from "@/components/targets/ConvergeEntitlements";
+import { motionInTests } from "@/test-utils/motion";
 import type { EntitlementApplyResult, EntitlementPlan } from "@/lib/queries/useEntitlements";
 
 /**
@@ -141,5 +142,34 @@ describe("converging a cohort", () => {
     renderConverge();
 
     await waitFor(() => expect(screen.getByText(/not the whole list/i)).toBeInTheDocument());
+  });
+});
+
+describe("the dock under the dialog", () => {
+  afterEach(() => motionInTests(false));
+
+  // Closing the dialog takes the dock with it, on tint rather than at once.
+  it("tints out when the dialog closes, then is gone", async () => {
+    motionInTests();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (open: boolean) => (
+      <QueryClientProvider client={client}>
+        <ConvergeEntitlements
+          open={open}
+          target="truenas"
+          subjectIds={["u1", "u2"]}
+          label="everybody holding maker"
+          onClose={() => {}}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree(true));
+    const dock = async () => (await screen.findByText(/What this preview is based on/)).closest(".shadow-popover");
+    expect((await dock())?.className).toContain("lift-in");
+
+    rerender(tree(false));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect((await dock())?.className).toContain("tint-out");
+    await waitFor(() => expect(screen.queryByText(/What this preview is based on/)).toBeNull());
   });
 });

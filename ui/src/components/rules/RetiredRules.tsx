@@ -8,6 +8,7 @@ import { ProjectName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { Unfold } from "@/components/ui/Unfold";
 import { useRetiredMappingRules } from "@/lib/queries/useMappingRules";
 
 /**
@@ -24,7 +25,9 @@ export function RetiredRulesFold() {
   return (
     <Card>
       <FoldHeading open={open} onClick={() => setOpen(!open)} title="Retired rules" count={n ? String(n) : ""} picked={false} />
-      {open && <RetiredRuleRows />}
+      <Unfold open={open}>
+        <RetiredRuleRows />
+      </Unfold>
     </Card>
   );
 }

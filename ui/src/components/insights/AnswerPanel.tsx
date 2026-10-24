@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
+
 import type { Lit, Tone } from "@/components/insights/model";
 import { TONE_COLOUR } from "@/components/insights/tone";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -65,11 +67,7 @@ export function AnswerPanel({
 }) {
   const clipboard = useClipboardAvailable();
   const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 1600);
-    return () => clearTimeout(t);
-  }, [copied]);
+  const confirmFor = useConfirmFor();
 
   // The answer going away lets go of the map, or its last hover would stay lit.
   useEffect(() => () => onLight?.(null), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -77,7 +75,7 @@ export function AnswerPanel({
   async function copy() {
     try {
       await navigator.clipboard.writeText(panelText(panel));
-      setCopied(true);
+      confirmFor(setCopied);
     } catch {
       // Refused (a permission, an insecure page): the button stays as it was.
     }
@@ -158,7 +156,7 @@ export function AnswerPanel({
         )}
         {clipboard && (
           <Button variant={phone ? "outline" : "ghost"} size="sm" onClick={copy}>
-            {copied ? "Copied" : "Copy as sentences"}
+            <CopiedSeat done={copied} idle="Copy as sentences" word="Copied" />
           </Button>
         )}
       </div>
