@@ -269,7 +269,15 @@ function NavSheet({
   // navigation pushes its own entry on top, so back from the new screen lands
   // on this one — and racing `history.back()` against a Next.js push would
   // undo the navigation the tap asked for.
-  const dismiss = useCallback(() => window.history.back(), []);
+  //
+  // Once only: a second tap, Esc or scrim tap while the sheet is leaving (a drag away
+  // waits for its settle) would go back past the screen behind it.
+  const dismissed = useRef(false);
+  const dismiss = useCallback(() => {
+    if (dismissed.current) return;
+    dismissed.current = true;
+    window.history.back();
+  }, []);
 
   // Never busy: a nav sheet runs nothing, so nothing can make it undismissable.
   useDialogFocusTrap(panelRef, true, false, dismiss);

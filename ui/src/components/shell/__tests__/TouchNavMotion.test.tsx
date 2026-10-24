@@ -136,6 +136,16 @@ describe("the navigation sheet dragged by its grabber (S3)", () => {
     expect(ghost()).toBeNull();
   });
 
+  it("goes back once, however many ways it is dismissed while it leaves", () => {
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const { scrim, grabber } = open();
+    fireEvent.click(grabber);
+    fireEvent.click(grabber);
+    fireEvent.keyDown(scrim, { key: "Escape" });
+    // A second back would leave the screen behind the sheet.
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
   it("a drag is not a tap: the click that ends it does not close", () => {
     const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
     const { grabber } = open();

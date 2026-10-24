@@ -395,7 +395,8 @@ export default function PeoplePage() {
         <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
         <div className={view.className}>
         <ListStates
-          isLoading={users.isLoading}
+          // The last search's empty answer is not this one's: "Nobody matches" waits for it.
+          isLoading={users.isLoading || (users.isPlaceholderData && leaving.rows.length === 0)}
           error={users.error}
           // Not `rows`: the last rows of a search fade where they were before "Nobody matches that" takes the place.
           isEmpty={leaving.rows.length === 0}
