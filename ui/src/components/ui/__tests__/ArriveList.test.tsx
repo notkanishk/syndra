@@ -7,6 +7,7 @@ import {
   ARRIVE_SETTLED_MS,
   ArriveList,
   armArrive,
+  markViewSwitched,
 } from "@/components/ui/ArriveList";
 
 describe("ArriveList", () => {
@@ -86,6 +87,18 @@ describe("ArriveList never replays", () => {
   it("forgets the Back once it is long past", () => {
     act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
     vi.advanceTimersByTime(ARRIVE_MEMORY_MS + 1);
+    expect(settledOf(render(<ArriveList><div>a</div></ArriveList>).container)).toBe(false);
+  });
+
+  it("a list the Basic/Advanced switch brings onto this page is simply there (A-08 §3)", () => {
+    // A path of its own: the switch is remembered for this page, and the
+    // other tests read theirs at the same frozen time.
+    window.history.replaceState({}, "", "/view-switch");
+    markViewSwitched();
+    expect(settledOf(render(<ArriveList><div>a</div></ArriveList>).container)).toBe(true);
+
+    // A page reached after the switch still arrives.
+    window.history.pushState({}, "", "/roles");
     expect(settledOf(render(<ArriveList><div>a</div></ArriveList>).container)).toBe(false);
   });
 

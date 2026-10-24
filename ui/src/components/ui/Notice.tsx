@@ -4,7 +4,8 @@ import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
-import { UnfoldOnArrival, useInsideUnfold } from "@/components/ui/Unfold";
+import { pageSettled } from "@/components/ui/ArriveList";
+import { UnfoldOnArrival, useUnfoldOpening } from "@/components/ui/Unfold";
 
 /**
  * The one way Syndra says something is wrong with what you are looking at
@@ -25,13 +26,15 @@ const TONES = {
 } as const;
 
 /**
- * True once the app has painted. A Notice that is part of the first paint
- * arrives with its page; one that mounts after it (a read that failed, a state
+ * True once the app has painted. A Notice that is part of its page's first
+ * paint (the app's, or a page reached by a link) arrives with its page; one
+ * that mounts after it (a read that failed, a state
  * that went stale) opens its space by Unfold and tints in behind it, still and
  * without a rise, so what is below settles rather than jumps (A-08 §5). It
  * leaves by fading, then folding: a caller that can drop it while the page is
- * open wraps it in `<Unfold open={…}>`, which also opens it, so it is not
- * opened twice. Two frames after this module loads is past first paint and
+ * open wraps it in `<Unfold open={…}>`, which also opens it, so one that
+ * mounts as that Unfold opens is not opened twice. One that mounts later
+ * inside an Unfold already open opens itself. Two frames after this module loads is past first paint and
  * before any later mount.
  */
 let painted = false;
@@ -65,8 +68,8 @@ export function Notice({
   className?: string;
 }) {
   const t = TONES[tone];
-  const wrapped = useInsideUnfold();
-  const [late] = useState(() => painted && !wrapped);
+  const opening = useUnfoldOpening();
+  const [late] = useState(() => painted && pageSettled() && !opening);
   const box = (
     <div
       role={blocking ? "alert" : "status"}

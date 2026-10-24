@@ -2,16 +2,17 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { TINT_MS, useExitPhase } from "@/lib/motion";
+import { SETTLE_MS, TINT_MS, useExitPhase } from "@/lib/motion";
 
 type Phase = "opening" | "open" | "closing";
 
 /**
- * True inside an `Unfold`. A part that opens itself when it arrives late (a
- * Notice) asks, so a caller that already wraps it to give it a way out does
- * not get two openings, one inside the other.
+ * True inside an `Unfold` while it is opening. A part that opens itself when it
+ * arrives late (a Notice) asks, so a caller that wraps it to give it a way out
+ * does not get two openings, one inside the other. Only while opening: a part
+ * that mounts later inside a region long open (a Home block) still opens itself.
  */
-export const InsideUnfold = createContext(false);
+const UnfoldOpening = createContext(false);
 
 // A browser without the Web Animations API (jsdom, under test) would never
 // report the end of a close, and the region would never leave. There it opens
@@ -73,6 +74,18 @@ export function Unfold({
     if (phase === null && !open) onClosed?.();
   }, [phase, open, onClosed]);
 
+  // The end of the move says it is over. Where no animation runs to say so (a
+  // region inside a rail hidden on a phone), it is over after the move's own
+  // length anyway, rather than left half open to play later in front of the reader.
+  useEffect(() => {
+    if (phase !== "opening" && phase !== "closing") return;
+    const timer = setTimeout(
+      () => setPhase((p) => (p === "closing" ? null : p === "opening" ? "open" : p)),
+      TINT_MS + SETTLE_MS + 100,
+    );
+    return () => clearTimeout(timer);
+  }, [phase]);
+
   if (phase === null) return null;
 
   return (
@@ -81,12 +94,17 @@ export function Unfold({
       style={gap ? { marginBottom: -gap } : undefined}
       data-phase={phase}
       onAnimationEnd={(e) => {
-        if (e.target !== e.currentTarget) return;
-        setPhase((p) => (p === "closing" ? null : p === "opening" ? "open" : p));
+        // Each move ends on its last part: a close on the fold of the gap, an
+        // opening on the fade of its contents, which runs one tint past the
+        // height. Ended on the height, the fade would be cut off and the words
+        // jump to full strength.
+        const gap = e.target === e.currentTarget;
+        const contents = e.target === e.currentTarget.firstElementChild;
+        setPhase((p) => (p === "closing" && gap ? null : p === "opening" && contents ? "open" : p));
       }}
     >
       <div>
-        <InsideUnfold.Provider value>
+        <UnfoldOpening.Provider value={phase === "opening"}>
           {gap ? (
             <div style={{ paddingBottom: gap }}>{open ? children : shown.current}</div>
           ) : open ? (
@@ -94,7 +112,7 @@ export function Unfold({
           ) : (
             shown.current
           )}
-        </InsideUnfold.Provider>
+        </UnfoldOpening.Provider>
       </div>
     </div>
   );
@@ -129,6 +147,6 @@ export function UnfoldOnArrival({ children }: { children: ReactNode }) {
   return <Unfold open={open}>{children}</Unfold>;
 }
 
-export function useInsideUnfold(): boolean {
-  return useContext(InsideUnfold);
+export function useUnfoldOpening(): boolean {
+  return useContext(UnfoldOpening);
 }

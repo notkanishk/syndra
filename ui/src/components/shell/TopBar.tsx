@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { AccountSheet } from "@/components/shell/AccountSheet";
 import { ThemeToggle } from "@/components/shell/ThemeToggle";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
+import { notePage } from "@/components/ui/ArriveList";
 import { usePageCrumb } from "@/lib/page-crumb";
 import { crumbsFor } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
@@ -18,6 +19,9 @@ import { useUiView } from "@/lib/ui-view";
  */
 export function TopBar({ session }: { session: SessionUser }) {
   const pathname = usePathname();
+  // In render, not an effect: the page's parts render after this in the same
+  // pass and ask whether they are its first paint (a Notice, A-08 §5).
+  notePage(pathname);
   const { audience } = useUiView();
   const { crumb } = usePageCrumb();
 
