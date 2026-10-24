@@ -235,8 +235,9 @@ export function LeavingRow({ leaving, fresh, held, onGone, track, children }: Le
   });
   const tracked = useRef(track);
   useEffect(() => {
-    tracked.current?.(true);
-    return () => tracked.current?.(false);
+    const track = tracked.current;
+    track?.(true);
+    return () => track?.(false);
   }, []);
   useEffect(() => {
     if (!closing) return;
