@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
 import { VIEW_EXPLANATION, ViewSwitch } from "@/components/shell/ViewSwitch";
-import { ToBody, useDialogFocusTrap } from "@/components/ui/Modal";
+import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { leafMatches, navFor, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
 import { useIndicators } from "@/lib/queries/useIndicators";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -19,6 +19,9 @@ import {
   type TouchDestination,
 } from "@/lib/touch-nav";
 import { useUiView } from "@/lib/ui-view";
+
+/** The scrim's strength at rest (`bg-black/70`), which a drag thins from. */
+const NAV_SCRIM_ALPHA = 0.7;
 
 /**
  * Navigation for a thumb.
@@ -109,13 +112,13 @@ function Tab({
     <Link
       href={destination.href}
       aria-current={active ? "page" : undefined}
-      className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 motion-press press-scale ${
+      className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
         active ? "bg-accent-soft" : ""
       }`}
     >
       <span
         aria-hidden
-        className={`h-[7px] w-[7px] rounded-pill ${active ? "bg-accent-text" : "bg-ink/30"}`}
+        className={`h-[7px] w-[7px] rounded-pill motion-tint ${active ? "bg-accent-text" : "bg-ink/30"}`}
       />
       <span
         className={`max-w-full truncate text-[12.5px] ${
@@ -137,7 +140,7 @@ function Tab({
       {groupTone && (
         <span
           aria-hidden
-          className={`absolute right-3 top-2 h-[7px] w-[7px] rounded-pill ${DOT_TONE[groupTone]}`}
+          className={`absolute right-3 top-2 h-[7px] w-[7px] rounded-pill motion-tint ${DOT_TONE[groupTone]}`}
         />
       )}
       {/* Colour never carries meaning alone. The dot above is decoration; this
@@ -181,7 +184,7 @@ function SheetTrigger({
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-[44px] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink motion-press press-scale"
+        className="flex min-h-[44px] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink control press-scale"
       >
         <span aria-hidden className="text-faint">
           •••
@@ -189,7 +192,7 @@ function SheetTrigger({
         <span className="flex-1 truncate text-left">{here?.label ?? "Go to"}</span>
         {wanting > 0 && tone && (
           <>
-            <span aria-hidden className={`h-[7px] w-[7px] rounded-pill ${DOT_TONE[tone]}`} />
+            <span aria-hidden className={`h-[7px] w-[7px] rounded-pill motion-tint ${DOT_TONE[tone]}`} />
             {/* One string rather than interpolated fragments: the dot is
                 decoration and this sentence is the whole of what a screen
                 reader — or a test — is given.
@@ -231,6 +234,9 @@ function NavSheet({
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrimRef = useRef<HTMLDivElement>(null);
+  // The sheet was dragged off the screen: it has already left, so it leaves no copy.
+  const draggedAway = useRef(false);
   const { isOperator } = useUiView();
 
   // Held in a ref for the same reason the focus trap holds its own: `onClose`
@@ -268,9 +274,22 @@ function NavSheet({
   // Never busy: a nav sheet runs nothing, so nothing can make it undismissable.
   useDialogFocusTrap(panelRef, true, false, dismiss);
 
+  // Closing fades and sinks the sheet, then the scrim (S1), and the grabber drags it
+  // (S3): the same pieces Modal's sheet is made of, not a second copy of them.
+  useSheetLeave(scrimRef, draggedAway, true);
+  const drag = useSheetDrag({
+    panelRef,
+    scrimRef,
+    busy: false,
+    onClose: dismiss,
+    draggedAway,
+    scrimAlpha: NAV_SCRIM_ALPHA,
+  });
+
   return (
     <ToBody>
     <div
+      ref={scrimRef}
       role="dialog"
       aria-modal="true"
       aria-label="Go to a page"
@@ -285,7 +304,11 @@ function NavSheet({
       >
         <button
           type="button"
-          onClick={dismiss}
+          {...drag.handlers}
+          onClick={() => {
+            // The click that ends a drag is not a tap.
+            if (!drag.wasDrag()) dismiss();
+          }}
           // The same words Modal's grabber answers to. Two sheets whose
           // handles have different names are two sheets to anything querying
           // by accessible name, a screen reader included.
@@ -301,7 +324,7 @@ function NavSheet({
           // border pushes everything a pixel that arithmetic on the padding
           // alone does not see, and a first attempt computed that way put the
           // bar 6px low.
-          className="-mb-[1px] -mt-[11px] mx-auto flex h-11 w-full max-w-[120px] items-center justify-center"
+          className="-mb-[1px] -mt-[11px] mx-auto flex h-11 w-full max-w-[120px] touch-none items-center justify-center"
         >
           <span aria-hidden className="h-1 w-[38px] rounded-pill bg-ink/20" />
         </button>
@@ -429,7 +452,7 @@ function SheetRow({
       href={href}
       onClick={onPick}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] motion-press press-scale ${
+      className={`flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
       } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-ink/80"}`}
     >
@@ -437,7 +460,7 @@ function SheetRow({
 
       {dot && (
         <>
-          <span aria-hidden className={`h-[7px] w-[7px] rounded-pill ${DOT_TONE[dot]}`} />
+          <span aria-hidden className={`h-[7px] w-[7px] rounded-pill motion-tint ${DOT_TONE[dot]}`} />
           <span className="sr-only">Needs attention</span>
         </>
       )}
