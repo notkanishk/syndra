@@ -262,7 +262,7 @@ export default function RolesPage() {
             <Link
               key={`${role.project_id}:${role.role_key}`}
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
               <span className="w-full text-[12.5px] text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-[14.5px]">
                 <ProjectName id={role.project_id} name={role.project_name} />

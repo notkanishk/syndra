@@ -343,7 +343,7 @@ function EventRow({
             type="button"
             onClick={onToggle}
             aria-expanded={open}
-            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted motion-tint hover:text-accent-text hover:underline hover:underline-offset-[3px] desktop:min-h-6"
+            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted motion-tint hover:text-accent-text desktop:min-h-6"
           >
             {open ? "Hide details" : "Show details"}
           </button>
@@ -404,7 +404,7 @@ interface StreamRow {
 
 function Person({ id }: { id: string }) {
   return (
-    <Link href={`/users/${id}`} className="text-ink hover:text-accent-text hover:underline hover:underline-offset-[3px]">
+    <Link href={`/users/${id}`} className="text-ink motion-tint hover:text-accent-text">
       <UserName id={id} />
     </Link>
   );
@@ -412,7 +412,7 @@ function Person({ id }: { id: string }) {
 
 function Project({ id }: { id: string }) {
   return (
-    <Link href={`/projects/${id}`} className="text-ink hover:text-accent-text hover:underline hover:underline-offset-[3px]">
+    <Link href={`/projects/${id}`} className="text-ink motion-tint hover:text-accent-text">
       <ProjectName id={id} />
     </Link>
   );

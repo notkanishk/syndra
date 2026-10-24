@@ -107,7 +107,7 @@ export function RemovalDialog({
               key={source.kind}
               type="button"
               onClick={() => setChosen(source.kind as SourceKind)}
-              className="flex items-center gap-3 rounded-inner border border-line-strong px-4 py-3 text-left motion-tint hover:bg-[var(--hover)]"
+              className="flex items-center gap-3 rounded-inner border border-line-strong px-4 py-3 text-left hover-tint"
             >
               <SourceChip kind={source.kind as SourceKind} />
               <span className="flex-1 text-[14.5px]">{actionName(source.kind as SourceKind)}</span>

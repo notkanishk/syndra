@@ -58,7 +58,7 @@ export function ChoiceRow({
     <label
       className={`flex min-h-[44px] items-start gap-3 rounded-inner border px-3.5 py-2.5 motion-tint ${
         chosen ? "border-accent-line bg-accent-soft" : outlined ? "border-line-strong" : "border-transparent"
-      } ${inert ? "" : "cursor-pointer hover:bg-[var(--hover)]"} ${chosen ? "hover:bg-accent-soft" : ""}`}
+      } ${inert ? "" : chosen ? "cursor-pointer" : "cursor-pointer hover-tint"}`}
     >
       <Seat
         single={single}

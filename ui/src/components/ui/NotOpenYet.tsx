@@ -48,7 +48,7 @@ export function NotOpenYet({
         {step && (
           <a
             href={step.href}
-            className="ml-auto inline-flex min-h-[44px] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0"
+            className="ml-auto inline-flex min-h-[44px] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0 motion-tint hover:text-ink"
           >
             {step.label}
           </a>

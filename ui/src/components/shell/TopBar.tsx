@@ -43,7 +43,7 @@ export function TopBar({ session }: { session: SessionUser }) {
                   // This measured 18px on every detail route.
                   <Link
                     href={entry.href}
-                    className="inline-flex min-h-11 items-center text-muted hover:text-ink desktop:min-h-6"
+                    className="inline-flex min-h-11 items-center text-muted motion-tint hover:text-ink desktop:min-h-6"
                   >
                     {entry.label}
                   </Link>

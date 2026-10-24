@@ -771,4 +771,23 @@ describe("design system", () => {
     // home screen.
     expect(Array.from(readFileSync(icon).subarray(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
   });
+  // Hover is colour only (FINAL §4): an underline cannot transition, and a
+  // colour change with no transition class snaps. Both were on most name links.
+  it("no hover underline, and no link changes colour on hover without a transition", () => {
+    const found: Array<{ file: string; matches: string[] }> = [];
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      // states/index.tsx is exempt until the EmptyState actions drop their hover underline.
+      if (!file.endsWith(".tsx") || file.endsWith("components/states/index.tsx")) continue;
+      const source = readFileSync(file, "utf8");
+      const matches: string[] = [];
+      if (/(?<![-\w])hover:underline/.test(source)) matches.push("hover:underline");
+      for (const tag of openingTags(source, "(?:Link|a)")) {
+        if (/hover:text-/.test(tag.text) && !/motion-tint|control|motion-press|transition/.test(tag.text)) {
+          matches.push(`link line ${source.slice(0, tag.at).split("\n").length}: hover:text-* with no transition`);
+        }
+      }
+      if (matches.length > 0) found.push({ file: file.replace(SRC_ROOT, "src"), matches });
+    }
+    expect(found, `Hover is colour only, on tint:\n${describeOffenders(found)}`).toEqual([]);
+  });
 });

@@ -218,7 +218,7 @@ function GapRow({
   return (
     <Link
       href={href}
-      className="row-divider flex items-baseline gap-3 px-5 py-3.5 motion-tint hover:bg-[var(--hover)]"
+      className="row-divider flex items-baseline gap-3 px-5 py-3.5 hover-tint"
     >
       <span className="font-display text-[20px] leading-none text-accent-text">{count}</span>
       <span className="text-[14.5px]">{headline}</span>
@@ -294,7 +294,7 @@ function AccessShape() {
                   // and People lists only those Syndra has a record of, so
                   // the unexplained holders the note counts never appeared.
                   href={`/projects/${encodeURIComponent(role.project_id)}/roles/${encodeURIComponent(role.role_key)}`}
-                  className="row-divider flex items-baseline gap-3 px-5 py-3 motion-tint hover:bg-[var(--hover)]"
+                  className="row-divider flex items-baseline gap-3 px-5 py-3 hover-tint"
                 >
                   <span className="w-[36px] shrink-0 font-display text-[18px] leading-none">
                     {holders.headline}
@@ -339,7 +339,7 @@ function AccessShape() {
               {unused > 0 && (
                 <Link
                   href="/roles?unused=1"
-                  className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+                  className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
                 >
                   {unused} {unused === 1 ? "role" : "roles"} nobody holds
                 </Link>
@@ -348,7 +348,7 @@ function AccessShape() {
               {emptyBundles > 0 && (
                 <Link
                   href="/bundles"
-                  className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+                  className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 motion-tint hover:text-ink"
                 >
                   {emptyBundles} empty {emptyBundles === 1 ? "bundle" : "bundles"}
                 </Link>

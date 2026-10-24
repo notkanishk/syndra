@@ -155,7 +155,7 @@ export default function ProjectsPage() {
             <Link
               key={entry.project.id}
               href={`/projects/${entry.project.id}`}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
               {/* The project's name, and — when there are no roles — the fact
                   that nothing in it can be granted. The sentence lives HERE and

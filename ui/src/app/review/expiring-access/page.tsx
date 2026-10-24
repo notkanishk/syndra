@@ -615,7 +615,7 @@ function ExpiringRow({
         <span className="min-w-0">
           <Link
             href={accountHref(grant.user_id)}
-            className="text-[15px] font-semibold hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+            className="text-[15px] font-semibold motion-tint hover:text-accent-text"
           >
             <UserName id={grant.user_id} />
           </Link>

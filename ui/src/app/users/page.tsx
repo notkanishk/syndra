@@ -551,7 +551,7 @@ function PersonRow({
             <Link
               href={`/users/${entry.user.id}`}
               onClick={(event) => event.stopPropagation()}
-              className="block truncate text-[15px] font-semibold hover:text-accent-text"
+              className="block truncate text-[15px] font-semibold motion-tint hover:text-accent-text"
             >
               {entry.user.name}
             </Link>
@@ -604,7 +604,7 @@ function PersonRow({
   // anything about them needs doing — plus the sentence explaining why they
   // are in the list. Team and bundles fold away: both are one tap deeper, on
   // the person's own page, and neither is what this screen is scanned for.
-  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px] ${
+  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px] ${
     departed ? "opacity-60" : ""
   }`;
 

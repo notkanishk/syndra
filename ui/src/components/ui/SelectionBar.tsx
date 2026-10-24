@@ -119,7 +119,7 @@ export function SelectionBar({
             <button
               type="button"
               onClick={onSelectVisibleOnly}
-              className="font-semibold text-accent-text underline-offset-2 hover:underline"
+              className="font-semibold text-accent-text motion-tint hover:text-ink"
             >
               select only the {visibleCount} {noun[1]} shown
             </button>

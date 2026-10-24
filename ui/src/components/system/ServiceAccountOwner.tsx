@@ -12,7 +12,7 @@ export function Owner({ id }: { id: string }) {
   return (
     <Crossfade id={id || "none"} className="justify-items-start">
       {id ? (
-        <Link href={`/users/${encodeURIComponent(id)}`} className="hover:text-accent-text hover:underline">
+        <Link href={`/users/${encodeURIComponent(id)}`} className="motion-tint hover:text-accent-text">
           <UserName id={id} />
         </Link>
       ) : (
