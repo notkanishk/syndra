@@ -18,6 +18,9 @@ describe("the selection seat's size", () => {
 
   it("keeps the input as big as it was, so the smaller seat is not a smaller target", () => {
     expect(seat).toMatch(/width: 16px;\s*height: 16px;\s*& > input \{\s*inset: -4px;/);
+    // Equal specificity, so the later rule wins: drawn before the input's own
+    // `inset: 0`, the target shrank to 16px with the seat (seen live).
+    expect(seat.indexOf("inset: -4px")).toBeGreaterThan(seat.indexOf("inset: 0"));
   });
 
   it("scales its tick and dot with the seat rather than drawing them at a fixed size", () => {

@@ -44,6 +44,29 @@ export function returnedToThisPage(): boolean {
   );
 }
 
+// The page on screen, and when it was shown. The top bar notes it as it
+// renders, which is before the page's own parts render in the same pass, so a
+// part can ask whether it is part of the page's first paint or came after it.
+let page: { path: string; at: number } | null = null;
+export function notePage(path: string) {
+  if (page?.path !== path) page = { path, at: Date.now() };
+}
+/** True once this page's first paint is over (or no page was noted): what mounts now is late. */
+export const pageSettled = () => page === null || Date.now() - page.at > ARRIVE_SETTLED_MS;
+
+// Switching Basic and Advanced opens and closes parts of the page you are on
+// by Unfold, and nothing arrives (A-08 §3): a list inside a part the switch
+// opened, or one its first read fills a moment later, is simply there. Kept
+// by path like `returned`, so a page reached after the switch still arrives.
+let switched: { path: string; at: number } | null = null;
+export const markViewSwitched = () => {
+  switched = { path: window.location.pathname, at: Date.now() };
+};
+const switchedViewHere = () =>
+  switched !== null &&
+  switched.path === window.location.pathname &&
+  Date.now() - switched.at < ARRIVE_MEMORY_MS;
+
 // Rows the reader asked for (Show 25 more, Show all) arrive; rows a refresh,
 // a filter or a search brings simply appear. Only the reader's own click says
 // which, so the click arms this and the next rows to land are the ones.
@@ -64,7 +87,8 @@ export const armedRecently = () => Date.now() - armedAt <= ARRIVE_MEMORY_MS;
  * has run the list is marked settled and the CSS stops animating children:
  * rows that stay hold still, new rows simply appear. A list that mounts anew
  * (navigating to the page, a fold opening) is a new first paint and arrives;
- * one that mounts because the reader went Back to its page does not.
+ * one that mounts because the reader went Back to its page, or switched
+ * Basic and Advanced on it, does not.
  *
  * Rows the reader asked for (see `armArrive`) are the exception: they arrive,
  * staggered from the first new one, while the rows already there hold.
@@ -88,7 +112,7 @@ export function ArriveList({
   // After mount, not in the initial state: the server cannot know about a Back,
   // and a different first render is a hydration mismatch.
   useLayoutEffect(() => {
-    if (returnedToThisPage()) setSettled(true);
+    if (returnedToThisPage() || switchedViewHere()) setSettled(true);
   }, []);
 
   useEffect(() => {

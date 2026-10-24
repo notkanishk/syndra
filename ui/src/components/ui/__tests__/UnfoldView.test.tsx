@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { notePage } from "@/components/ui/ArriveList";
 import { Notice } from "@/components/ui/Notice";
 import { Tinted, Unfold } from "@/components/ui/Unfold";
 import { setMediaQuery } from "@/test-utils/media";
@@ -40,7 +41,10 @@ describe("closing an Unfold (A-08 §3)", () => {
     rerender(<Unfold open>part</Unfold>);
     const region = screen.getByText("part").closest(".unfold")!;
     expect(region).toHaveAttribute("data-phase", "opening");
+    // The height settling is not the end: the contents' fade runs one tint past it.
     animationEnd(region);
+    expect(region).toHaveAttribute("data-phase", "opening");
+    animationEnd(region.firstElementChild!);
     expect(region).toHaveAttribute("data-phase", "open");
 
     rerender(<Unfold open={false}>part</Unfold>);
@@ -48,6 +52,22 @@ describe("closing an Unfold (A-08 §3)", () => {
     expect(screen.getByText("part")).toBeInTheDocument();
     animationEnd(region);
     expect(screen.queryByText("part")).toBeNull();
+  });
+
+  it("is over after its own length when no animation ends to say so (a rail hidden on a phone)", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(<Unfold open={false}>part</Unfold>);
+      rerender(<Unfold open>part</Unfold>);
+      const region = screen.getByText("part").closest(".unfold")!;
+      act(() => void vi.advanceTimersByTime(500));
+      expect(region).toHaveAttribute("data-phase", "open");
+      rerender(<Unfold open={false}>part</Unfold>);
+      act(() => void vi.advanceTimersByTime(500));
+      expect(screen.queryByText("part")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("is simply there when it is open at first paint", () => {
@@ -118,5 +138,37 @@ describe("a Notice that can leave (A-08 §5)", () => {
     expect(screen.getByRole("status").closest(".unfold")).toHaveAttribute("data-phase", "closing");
     animationEnd(box.closest(".unfold")!);
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("a Notice and its page's first paint (A-08 §5)", () => {
+  // Past the app's first paint, so a Notice can be late at all.
+  beforeEach(() => new Promise((resolve) => setTimeout(resolve, 80)));
+
+  it("opens itself when it mounts inside a region that has long been open", () => {
+    const block = (stale: boolean) => (
+      <Unfold open>
+        {stale && (
+          <Notice tone="warn" title="Stale">
+            Nothing changed.
+          </Notice>
+        )}
+      </Unfold>
+    );
+    const { rerender } = render(block(false));
+    rerender(block(true));
+    // The block is open; the Notice's own space opens inside it.
+    expect(screen.getByRole("status").closest(".unfold")?.parentElement?.closest(".unfold")).not.toBeNull();
+  });
+
+  // Last in the file: it notes a page, which the tests above must not see.
+  it("arrives with a page reached by a link: it is part of that page's first paint", () => {
+    notePage("/reached-by-a-link");
+    render(
+      <Notice tone="warn" title="Stale">
+        Nothing changed.
+      </Notice>,
+    );
+    expect(screen.getByRole("status").closest(".unfold")).toBeNull();
   });
 });

@@ -189,7 +189,11 @@ describe("rows narrowed by the reader (a search or a filter)", () => {
     rerender(<List ids={["a", "b"]} narrowedBy="" />);
     expect(rowOf("b")).toHaveAttribute("data-opens");
     expect(rowOf("a")).not.toHaveAttribute("data-opens");
+    // The gap settling is not the end: its words fade one tint past it.
     gapSettled(rowOf("b"));
+    expect(rowOf("b")).toHaveAttribute("data-opens");
+    // jsdom has no AnimationEvent, so React listens for the prefixed name.
+    act(() => void fireEvent(rowOf("b").firstElementChild!, new Event("webkitAnimationEnd", { bubbles: true })));
     // Nothing is left on it to clip a focus ring once it has opened.
     expect(rowOf("b")).not.toHaveAttribute("data-opens");
   });
@@ -231,6 +235,28 @@ describe("rows narrowed by the reader (a search or a filter)", () => {
     // The fold it had started does not take it away later.
     gapSettled(row);
     expect(screen.getByText("b")).toBe(b);
+  });
+
+  it("a row that came in on a read and is back mid-fade turns round too: its tint-in never replays", () => {
+    const { rerender } = render(<List ids={["a"]} narrowedBy="" />);
+    rerender(<List ids={["a", "c"]} narrowedBy="" />);
+    const row = rowOf("c");
+    expect(row).toHaveAttribute("data-fresh");
+    rerender(<List ids={["a"]} narrowedBy="a" />);
+    rerender(<List ids={["a", "c"]} narrowedBy="" />);
+    expect(rowOf("c")).toBe(row);
+    expect(row).not.toHaveAttribute("data-fresh");
+  });
+
+  it("stays clipped while a gap it had started to close opens again, then is an ordinary row", () => {
+    const { rerender } = render(<List ids={["a", "b"]} narrowedBy="" />);
+    rerender(<List ids={["a"]} narrowedBy="a" />);
+    const row = rowOf("b");
+    expect(row).toHaveAttribute("data-closing");
+    rerender(<List ids={["a", "b"]} narrowedBy="" />);
+    expect(row).toHaveAttribute("data-turning");
+    gapSettled(row);
+    expect(row).not.toHaveAttribute("data-turning");
   });
 
   it("a row back while its gap was held open by the pointer turns round too", () => {

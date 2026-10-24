@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { markViewSwitched } from "@/components/ui/ArriveList";
 import { glideTo } from "@/lib/motion";
 import type { Audience, UiView } from "@/lib/nav";
 import { parseUiView, writeViewCookie } from "@/lib/ui-view-cookie";
@@ -70,6 +71,7 @@ export function UiViewProvider({
   const setView = useCallback(
     (next: UiView) => {
       if (!isOperator) return;
+      markViewSwitched();
       setViewState(next);
       writeViewCookie(next);
       window.localStorage.setItem(STORAGE_KEY, next);

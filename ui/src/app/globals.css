@@ -985,6 +985,15 @@ html.theme-fading *::after {
   width: 24px;
   height: 24px;
 
+  & > input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  /* After the input's own rule, or its `inset: 0` would win and the target
+     would shrink with the seat. */
   @media (width >= theme(--breakpoint-desktop)) {
     width: 16px;
     height: 16px;
@@ -992,14 +1001,6 @@ html.theme-fading *::after {
     & > input {
       inset: -4px;
     }
-  }
-
-  & > input {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    opacity: 0;
-    cursor: pointer;
   }
   & > span {
     display: flex;
@@ -1150,7 +1151,8 @@ html.theme-fading *::after {
     grid-template-rows: 0fr;
     transition-delay: var(--duration-tint);
   }
-  &[data-closing] > * {
+  &[data-closing] > *,
+  &[data-turning] > * {
     overflow: hidden;
   }
   &[data-fresh] > * {

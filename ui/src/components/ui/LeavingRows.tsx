@@ -60,7 +60,8 @@ function merge<T>(
       row,
       key,
       gone: false,
-      fresh: was ? was.fresh : arrives,
+      // A row that comes back has already arrived: its fade turns round, never replays.
+      fresh: was ? was.fresh && !was.gone : arrives,
       opens: was ? was.opens : arrives && byReader,
       eager: false,
     };
@@ -239,8 +240,14 @@ export function useLeavingRows<T>(
 export function LeavingRow({ leaving, fresh, opens, held, onGone, track, children }: LeaveProps & { children: ReactNode }) {
   // Once the gap has started to close it carries on, whatever the pointer does.
   const [closing, setClosing] = useState(false);
+  // A row that comes back mid-fold turns round from a partly closed gap; it stays
+  // clipped until the gap is whole again, or its words spill over the row below.
+  const [turning, setTurning] = useState(false);
   if (leaving && !held && !closing) setClosing(true);
-  if (!leaving && closing) setClosing(false);
+  if (!leaving && closing) {
+    setClosing(false);
+    setTurning(true);
+  }
   // Opening is what the row does as it mounts; it is over when the gap has settled, and
   // then the row is an ordinary one (an `overflow: hidden` left on would clip its focus ring).
   const [opening, setOpening] = useState(Boolean(opens));
@@ -271,6 +278,11 @@ export function LeavingRow({ leaving, fresh, opens, held, onGone, track, childre
     const timer = setTimeout(() => setOpening(false), TINT_MS + SETTLE_MS + 100);
     return () => clearTimeout(timer);
   }, [opening]);
+  useEffect(() => {
+    if (!turning) return;
+    const timer = setTimeout(() => setTurning(false), SETTLE_MS + 100);
+    return () => clearTimeout(timer);
+  }, [turning]);
 
   return (
     <div
@@ -278,13 +290,19 @@ export function LeavingRow({ leaving, fresh, opens, held, onGone, track, childre
       data-leaving={leaving ? "" : undefined}
       data-closing={closing ? "" : undefined}
       data-opens={opening ? "" : undefined}
+      data-turning={turning ? "" : undefined}
       data-fresh={fresh && !opens && !leaving ? "" : undefined}
       aria-hidden={leaving ? true : undefined}
       inert={leaving ? true : undefined}
       onTransitionEnd={(event) => {
         if (event.target !== event.currentTarget || event.propertyName !== "grid-template-rows") return;
         if (closing) onGone();
-        else setOpening(false);
+        else setTurning(false);
+      }}
+      // An opening ends on the fade of its contents, one tint past the gap:
+      // ended on the gap, the fade would be cut off.
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget.firstElementChild) setOpening(false);
       }}
     >
       <div>{children}</div>
