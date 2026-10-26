@@ -58,3 +58,14 @@ From Claude Code, 15 Oct 2026. What is built against the boards, and where code 
 - **route-storage:** the folder's "Full" line, for a limit set below what is saved.
 
 Departed: the limit dialog says "they" rather than "her", because Syndra doesn't know anyone's pronouns. See BUILD-NOTES, "A-03, read against the code".
+
+## A-08 · Motion coverage (24 Oct 2026)
+
+Built as answered (task 6.103): press to `--tint-3`, link hover 2a (`link-hover`), Basic ↔ Advanced by Unfold in the rail and on the page, narrowing a list (returning rows open, then tint in; a row back mid-fade turns round), seats 16 with a mouse and 24 on touch, Discard in place, a late Notice by Unfold, Read again's short pill.
+
+Departed:
+- Touch is "below the desktop breakpoint" (1080px), the product's one definition, not `pointer: coarse`. A tablet in landscape gets the 16px seat.
+- Ten text-styled buttons that sit beside links also take `link-hover`, so a link and its neighbour hover alike.
+- An inline Advanced id (in a sentence or a header line) tints in and out (`Tinted`): it has no height to unfold.
+- Home's calm panel and its block grid still swap at once when the view changes on a quiet day; animating it would also animate the data-driven swap, which A-08 doesn't settle.
+
