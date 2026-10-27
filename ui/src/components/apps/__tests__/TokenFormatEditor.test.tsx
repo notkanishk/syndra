@@ -242,7 +242,7 @@ describe("token format editor", () => {
     const open = () => {
       renderEditor("app_badge", badge);
       fireEvent.click(screen.getByRole("radio", { name: "Badge Reader only" }));
-      fireEvent.click(screen.getByRole("button", { name: "Use the project default instead" }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete this app’s claim" }));
     };
 
     it("asks first and deletes nothing until confirmed", async () => {
