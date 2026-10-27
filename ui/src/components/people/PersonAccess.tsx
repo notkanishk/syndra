@@ -44,7 +44,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
@@ -771,8 +771,6 @@ function ZitadelWord({ isOperator }: { isOperator: boolean }) {
 
 /** The one window for ending access (A-04 §4): a row inside it offers Extend. */
 const EXTEND_WITHIN_DAYS = 14;
-/** How long an extension buys. Stated in the row's own result, never implied. */
-const EXTEND_DAYS = 90;
 
 /**
  * Extend, in the seat beside a row's end date (A-07 §19), the same write Expiring access

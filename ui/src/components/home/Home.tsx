@@ -31,7 +31,7 @@ import { useTargets } from "@/lib/queries/useTargets";
 import { serviceAccountHref, useServiceAccounts } from "@/lib/queries/useServiceAccounts";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
-import { outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import type { ServiceAccount } from "@/lib/types";
@@ -604,13 +604,13 @@ function ExpiringRow({
                 project_id: grant.project_id,
                 role_key: grant.role_key,
                 reason: "Extended from Home",
-                duration_days: 90,
+                duration_days: EXTEND_DAYS,
                 extend: true,
               }),
             );
             if (made === KEPT) return;
             setExtended(true);
-            setOutcome(outcomeFromExtend(made, 90, "The row leaves this block on the next read."));
+            setOutcome(outcomeFromExtend(made, EXTEND_DAYS,"The row leaves this block on the next read."));
           } catch (error) {
             setOutcome(outcomeFromError(error));
           }
