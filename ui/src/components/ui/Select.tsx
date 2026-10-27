@@ -47,6 +47,8 @@ function radioGroup<T extends string>(
   return {
     tabIndexOf: (optionValue: T) => (optionValue === stop?.value ? 0 : -1),
     onKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+      // Alt+Left is Back, Cmd+Arrow scrolls or navigates: the browser's own.
+      if (event.altKey || event.metaKey || event.ctrlKey) return;
       const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
       if (!step && event.key !== "Home" && event.key !== "End") return;
       if (enabled.length === 0) return;

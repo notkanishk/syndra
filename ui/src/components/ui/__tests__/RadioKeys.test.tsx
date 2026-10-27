@@ -59,6 +59,15 @@ describe.each([
     expect(radio("Alpha")).toHaveAttribute("aria-checked", "true");
     expect(fireEvent.keyDown(radio("Alpha"), { key: "a" })).toBe(true);
   });
+
+  it("leaves browser shortcuts alone: Alt+Left (Back), Cmd+Arrow and Ctrl+Arrow neither select nor are cancelled", () => {
+    render(<Group />);
+    for (const mod of [{ altKey: true }, { metaKey: true }, { ctrlKey: true }]) {
+      expect(fireEvent.keyDown(radio("Alpha"), { key: "ArrowRight", ...mod })).toBe(true);
+      expect(fireEvent.keyDown(radio("Alpha"), { key: "End", ...mod })).toBe(true);
+    }
+    expect(radio("Alpha")).toHaveAttribute("aria-checked", "true");
+  });
 });
 
 describe("Segmented with nothing checked", () => {
