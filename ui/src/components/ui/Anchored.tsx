@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type CSSProperties,
+  type HTMLAttributes,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { ToBody } from "@/components/ui/Modal";
 import { TINT_MS, useExitPhase } from "@/lib/motion";
@@ -80,6 +89,8 @@ export function AnchoredPanel({
   panelRef,
   id,
   className = "",
+  panelProps,
+  focusOnOpen = false,
   children,
 }: {
   anchor: RefObject<HTMLElement | null>;
@@ -91,9 +102,19 @@ export function AnchoredPanel({
   /** For an outside-click check: the panel is no longer inside the trigger. */
   panelRef?: RefObject<HTMLDivElement | null>;
   className?: string;
+  /** Role, label and tabIndex for a panel that is a dialog rather than a list. */
+  panelProps?: HTMLAttributes<HTMLDivElement>;
+  /** Move focus onto the panel once it is placed. Needs `panelRef`. */
+  focusOnOpen?: boolean;
   children: ReactNode;
 }) {
   const box = useAnchoredBox(anchor, open, width, expectHeight, align);
+  // Placed, not merely mounted: until measured it is `visibility: hidden`, and
+  // a hidden element refuses focus.
+  const placed = box !== null;
+  useEffect(() => {
+    if (focusOnOpen && open && placed) panelRef?.current?.focus({ preventScroll: true });
+  }, [focusOnOpen, open, placed, panelRef]);
   // Closing is quicker than opening and has no travel: opacity on tint, then
   // gone. Opening's rise (4px, settle) is the caller's `popover-in`.
   const { rendered, leaving } = useExitPhase(open, TINT_MS);
@@ -105,6 +126,7 @@ export function AnchoredPanel({
   return (
     <ToBody>
       <div
+        {...panelProps}
         ref={panelRef}
         id={id}
         style={anchoredStyle(box)}

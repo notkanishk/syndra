@@ -54,7 +54,16 @@ export function AppShell({
   return (
     <UiViewProvider isOperator={session.role === "admin"} selfId={session.id} initialView={initialView}>
       <PageCrumbProvider>
-        <div className="flex h-dvh flex-col overflow-hidden bg-canvas tablet:flex-row">
+        {/* `app-root` is what a dialog makes inert (Modal): overlays portal to <body>, outside it. */}
+        <div id="app-root" className="flex h-dvh flex-col overflow-hidden bg-canvas tablet:flex-row">
+          {/* First in the tab order, off-screen until focused: a keyboard user
+              reaches the page without tabbing through the whole rail first. */}
+          <a
+            href="#main"
+            className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:rounded-pill focus:border focus:border-line-strong focus:bg-surface-2 focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-ink"
+          >
+            Skip to content
+          </a>
           <Sidebar />
           {/* `min-h-0` on both, and it is load-bearing rather than tidy. A flex
               item defaults to `min-height: auto`, which refuses to shrink below
@@ -77,7 +86,8 @@ export function AppShell({
                   network the mode read cannot refresh either, so a degraded
                   Notice underneath is reporting a state nobody can currently
                   confirm. */}
-              <main className="px-4 pb-9 pt-5 tablet:px-[26px] tablet:pt-[30px]">
+              {/* tabIndex -1 so the skip link's jump moves focus here, not only the scroll. */}
+              <main id="main" tabIndex={-1} className="px-4 pb-9 pt-5 tablet:px-[26px] tablet:pt-[30px]">
                 <OfflineBanner />
                 <DegradedBanner />
                 {children}

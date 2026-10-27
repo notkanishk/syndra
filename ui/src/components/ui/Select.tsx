@@ -31,6 +31,42 @@ export const Select = React.forwardRef<
 });
 
 /**
+ * The WAI-ARIA radio-group keyboard pattern, shared by the two radiogroups
+ * below: one tab stop (the checked option, or the first enabled one when none
+ * is), arrows move to the next enabled option and select it, Home/End jump to
+ * the ends. Both are controlled, so selecting is `onChange` and the focus
+ * follows by hand.
+ */
+function radioGroup<T extends string>(
+  options: Array<{ value: T; disabled?: boolean }>,
+  value: T,
+  onChange: (next: T) => void,
+) {
+  const enabled = options.filter((option) => !option.disabled);
+  const stop = enabled.find((option) => option.value === value) ?? enabled[0];
+  return {
+    tabIndexOf: (optionValue: T) => (optionValue === stop?.value ? 0 : -1),
+    onKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+      if (!step && event.key !== "Home" && event.key !== "End") return;
+      if (enabled.length === 0) return;
+      const at = enabled.findIndex((option) => option.value === value);
+      // Nothing checked yet: forward starts at the first option, back at the last.
+      const toFirst = event.key === "Home" || (at < 0 && step === 1);
+      const toLast = event.key === "End" || (at < 0 && step === -1);
+      const next = toFirst
+        ? enabled[0]
+        : toLast
+          ? enabled[enabled.length - 1]
+          : enabled[(at + step! + enabled.length) % enabled.length];
+      event.preventDefault();
+      onChange(next.value);
+      event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[options.indexOf(next)]?.focus();
+    },
+  };
+}
+
+/**
  * A segmented pill — two or more mutually exclusive options, all legible at
  * once. Used for the token format, the access-map depth, and the source
  * filters. Never a dropdown where the options are this few: a dropdown hides
@@ -64,12 +100,14 @@ export function Segmented<T extends string>({
       ? "min-h-[44px] px-3 text-[12.5px] desktop:min-h-0 desktop:py-1"
       : "min-h-[44px] px-4 text-[13px] desktop:min-h-0 desktop:py-1.5";
   const { ref, box } = useGlideIndicator(value);
+  const keys = radioGroup(options, value, onChange);
   return (
     <div
       ref={ref}
       role="radiogroup"
       aria-label={label}
       aria-describedby={describedBy}
+      onKeyDown={keys.onKeyDown}
       className={`${fill ? "flex w-full" : "inline-flex"} relative rounded-pill bg-tint-2 p-[3px]`}
     >
       <GlideIndicator box={box} kind="fill" className="bg-accent-dense" />
@@ -80,6 +118,7 @@ export function Segmented<T extends string>({
             key={option.value}
             type="button"
             role="radio"
+            tabIndex={keys.tabIndexOf(option.value)}
             aria-checked={active}
             title={option.title}
             disabled={option.disabled}
@@ -110,8 +149,9 @@ export function FilterPills<T extends string>({
   label: string;
 }) {
   const { ref, box } = useGlideIndicator(value);
+  const keys = radioGroup(options, value, onChange);
   return (
-    <div ref={ref} role="radiogroup" aria-label={label} className="relative flex flex-wrap items-center gap-1">
+    <div ref={ref} role="radiogroup" aria-label={label} onKeyDown={keys.onKeyDown} className="relative flex flex-wrap items-center gap-1">
       <GlideIndicator box={box} kind="fill" className="bg-tint-3" />
       {options.map((option) => {
         const active = option.value === value;
@@ -120,6 +160,7 @@ export function FilterPills<T extends string>({
             key={option.value}
             type="button"
             role="radio"
+            tabIndex={keys.tabIndexOf(option.value)}
             aria-checked={active}
             disabled={option.disabled}
             title={option.title}

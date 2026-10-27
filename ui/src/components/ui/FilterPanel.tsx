@@ -45,7 +45,23 @@ export function FilterPanel({
   const phone = useIsPhone();
   const ref = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const id = useId();
+
+  // The popover is a dialog: it takes focus when it opens (AnchoredPanel,
+  // once placed) and gives it back to its button when it closes, unless the
+  // person has already moved on to something else. The phone sheet is a Modal,
+  // which does both itself.
+  useEffect(() => {
+    if (!open || phone) return;
+    const button = trigger.current;
+    return () => {
+      const active = document.activeElement;
+      // The live node, on purpose: it is read when the popover closes.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (!active || active === document.body || panel.current?.contains(active)) button?.focus();
+    };
+  }, [open, phone]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,6 +86,7 @@ export function FilterPanel({
   return (
     <div ref={ref} className="relative">
       <button
+        ref={trigger}
         type="button"
         aria-expanded={open}
         aria-controls={id}
@@ -122,6 +139,8 @@ export function FilterPanel({
           open={open}
           id={id}
           panelRef={panel}
+          focusOnOpen
+          panelProps={{ role: "dialog", "aria-label": "Filters", tabIndex: -1 }}
           // Right-aligned: the button sits at the end of its row on wide
           // screens, and a panel hanging off the left of it would run past the
           // window edge.
