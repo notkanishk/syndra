@@ -204,7 +204,14 @@ func RoleMembers(ctx context.Context, projectID, key string) (RoleMembersView, e
 		})
 
 		member := RoleMember{User: user, Reasons: reasons, InZitadel: inZitadel}
+		// Pills count people, not reasons: two bundles granting the same role
+		// are one person on the Bundle pill, so each kind counts once per member.
+		seen := map[string]bool{}
 		for _, reason := range reasons {
+			if seen[reason.Kind] {
+				continue
+			}
+			seen[reason.Kind] = true
 			switch reason.Kind {
 			case "direct":
 				view.DirectCount++
