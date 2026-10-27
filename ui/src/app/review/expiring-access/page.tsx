@@ -43,15 +43,14 @@ import {
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
 import {
+  EXTEND_DAYS,
   outcomeFromError,
   outcomeFromExtend,
   statesNothingChanged,
+  succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-
-/** How long an extension buys. Stated in the row's own result, never implied. */
-const EXTEND_DAYS = 90;
 
 /**
  * S7 · Review › Expiring access.
@@ -736,15 +735,6 @@ function ExpiringRow({
  * that makes the record useful to somebody else, and this is the one place to state plainly that
  * recording a decision is not the same as changing anything.
  */
-/**
- * Whether the action ran. A FAILED attempt keeps its button — retiring the
- * control on any outcome at all would leave a refusal on screen with no way to
- * try again.
- */
-function succeeded(outcome: Outcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
-}
-
 function LetItLapseDialog({
   grant,
   onClose,

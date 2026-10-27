@@ -19,7 +19,7 @@ import { useRemoveBundle } from "@/lib/queries/useBundles";
 import { humanizeKey } from "@/lib/format";
 import {
   outcomeFromError,
-  statesNothingChanged,
+  succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 
@@ -158,15 +158,6 @@ export function RemovalDialog({
       onClose={close}
     />
   );
-}
-
-/**
- * Whether the action ran. A FAILED attempt keeps its button — retiring the
- * control on any outcome at all would leave a refusal on screen with no way to
- * try again.
- */
-function succeeded(outcome: Outcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
 }
 
 function actionName(kind: SourceKind): string {

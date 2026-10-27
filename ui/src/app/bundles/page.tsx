@@ -17,7 +17,7 @@ import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { formatList, personLine } from "@/lib/format";
-import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
 import {
   useBundleRoles,
   useBundleRolesByBundle,
@@ -292,11 +292,6 @@ function toggled(prev: ReadonlySet<string>, id: string): ReadonlySet<string> {
   const next = new Set(prev);
   if (!next.delete(id)) next.add(id);
   return next;
-}
-
-/** Whether the action ran; a failed attempt keeps its button so it can be tried again. */
-function succeeded(outcome: Outcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
 }
 
 type Source = "none" | "person" | "bundle";

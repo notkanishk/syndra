@@ -75,7 +75,7 @@ import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { targetLabel } from "@/lib/nav";
 import {
   outcomeFromError,
-  statesNothingChanged,
+  succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 
@@ -1124,15 +1124,6 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       </div>
     </div>
   );
-}
-
-/**
- * Whether the action ran. A FAILED attempt keeps its button — retiring the
- * control on any outcome at all would leave a refusal on screen with no way to
- * try again.
- */
-function succeeded(outcome: Outcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
 }
 
 /**

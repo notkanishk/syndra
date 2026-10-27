@@ -31,7 +31,7 @@ import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatList, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
 import {
   outcomeFromError,
-  statesNothingChanged,
+  succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import { useCrumb } from "@/lib/page-crumb";
@@ -902,15 +902,6 @@ function DeleteBundleDialog({
  * and the tone with it — amber, because this is consequential and has not
  * happened, rather than red, which is reserved for the click that does it.
  */
-/**
- * Whether the action ran. A FAILED attempt keeps its button — retiring the
- * control on any outcome at all would leave a refusal on screen with no way to
- * try again.
- */
-function succeeded(outcome: Outcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
-}
-
 function RemovalImpact({
   bundleId,
   bundleName,
