@@ -8,6 +8,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"syndra/internal/claims"
@@ -47,6 +48,9 @@ type userRoles struct {
 	active  map[string]map[string]bool // projectID -> roleKey -> held
 	profile models.UserProfile
 	hasProf bool
+	// profileErr is a profile read that failed. Not fatal to a compile (a
+	// token without an email still opens doors), but a warm must not store it.
+	profileErr error
 }
 
 // compileUser evaluates all mapping rules against the user's current roles.
@@ -113,6 +117,7 @@ func compileUser(ctx context.Context, userID string) (userRoles, error) {
 		// Non-fatal: roles are the load-bearing part of the token. A missing
 		// email claim is a degraded token; a missing roles claim is a locked door.
 		log.Printf("[CACHE] profile attributes unavailable for %s: %v", userID, err)
+		u.profileErr = err
 	} else if ok {
 		u.profile, u.hasProf = profile, true
 	}
@@ -193,20 +198,47 @@ func CompileUserCache(ctx context.Context, userID, projectID string) error {
 // (and nobody asked for it), or the compile failed, where a stale key could
 // still carry a revoked role and the data plane's degraded path is safer.
 func RefreshUser(ctx context.Context, userID string, projectIDs ...string) error {
+	return refreshUser(ctx, userID, false, projectIDs)
+}
+
+// userLocks serialize refreshes per user, so a slower compile can't store over
+// a newer one (a warm racing a revoke would restore the revoked role for a
+// day). ponytail: in-process only, the backend is one process; several
+// replicas need a Redis lock. One mutex per user ever refreshed, small next to
+// the user table.
+var userLocks sync.Map
+
+// globEscape makes s match itself literally in a SCAN MATCH pattern: a user id
+// carrying * or [ would otherwise refresh (or drop) other users' keys.
+var globEscape = strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`, `]`, `\]`).Replace
+
+// refreshUser is RefreshUser; warm marks a background pass, which must never
+// make a good entry worse: a failed compile there keeps the keys, since
+// nothing changed and the stored claims are as right as they were. A
+// change-driven refresh drops them instead, where a stale key could carry a
+// revoked role.
+func refreshUser(ctx context.Context, userID string, warm bool, projectIDs []string) error {
+	mu, _ := userLocks.LoadOrStore(userID, &sync.Mutex{})
+	mu.(*sync.Mutex).Lock()
+	defer mu.(*sync.Mutex).Unlock()
+
 	prefix := cacheKey(userID, "")
-	keys, err := redisScanKeys(ctx, prefix+"*")
+	keys, err := redisScanKeys(ctx, globEscape(prefix)+"*")
 	if err != nil {
 		return fmt.Errorf("cache refresh: scan error: %w", err)
 	}
 
 	u, err := compileUser(ctx, userID)
 	if err != nil {
-		if len(keys) > 0 {
+		if len(keys) > 0 && !warm {
 			if derr := redisDel(ctx, keys...); derr != nil {
 				log.Printf("[CACHE] could not drop %d stale entries for %s: %v", len(keys), userID, derr)
 			}
 		}
 		return err
+	}
+	if warm && u.profileErr != nil {
+		return fmt.Errorf("cache warm: profile unavailable, keeping entries: %w", u.profileErr)
 	}
 
 	asked := map[string]bool{}
@@ -232,7 +264,9 @@ func RefreshUser(ctx context.Context, userID string, projectIDs ...string) error
 		}
 		if err := store(ctx, facts); err != nil {
 			// A failed write leaves the OLD value, which may hold a revoked role.
-			_ = redisDel(ctx, cacheKey(userID, p))
+			if !warm {
+				_ = redisDel(ctx, cacheKey(userID, p))
+			}
 			errs = append(errs, err)
 		}
 	}
@@ -253,6 +287,12 @@ func RebuildUserCache(ctx context.Context, userID string, projectIDs []string) {
 // changed. Sequential on purpose: it runs beside live traffic and a slow pass
 // costs nothing.
 func Warm(ctx context.Context) error {
+	// A directory that isn't answering fails every user's profile read; say so
+	// once rather than once per user.
+	if !directoryAnswers(ctx) {
+		log.Printf("[CACHE] warm skipped: the directory is not answering")
+		return nil
+	}
 	ids, err := dbGetAllKnownUserIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("cache warm: %w", err)
@@ -262,7 +302,7 @@ func Warm(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := RefreshUser(ctx, id); err != nil {
+		if err := refreshUser(ctx, id, true, nil); err != nil {
 			log.Printf("[CACHE] warm failed for %s: %v", id, err)
 			continue
 		}
