@@ -14,6 +14,10 @@ import type { SessionUser } from "@/lib/session";
  */
 const state = vi.hoisted(() => ({ advanced: true, reason: "target_unreachable" }));
 
+vi.mock("@/lib/queries/useServiceAccounts", () => ({
+  useServiceAccounts: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
+  serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,
+}));
 vi.mock("@/lib/queries/useGovernance", () => ({
   useGovernanceSummary: () => ({
     data: {

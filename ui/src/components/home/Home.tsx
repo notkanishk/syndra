@@ -136,8 +136,9 @@ export function Home({ session }: { session: SessionUser }) {
     [onboarding.data?.missed],
   );
   const gaps = useLeavingRows(missed, (person) => person.user_id, !onboarding.isLoading && !onboarding.error);
-  // Service accounts nobody answers for (A-07 §31). Not a read that can fail the
-  // page: until the list answers there is nothing to look at.
+  // Service accounts nobody answers for (A-07 §31). Until the list answers there
+  // is nothing to look at, but a read that FAILED is a failed read: the headline
+  // may not say "nothing needs you" over a list nobody could see.
   const accounts = useServiceAccounts();
   const unowned = useMemo(() => (accounts.data ?? []).filter((a) => a.owner_id === ""), [accounts.data]);
   // ponytail: "not used in 90 days", the other half of §31, is not built: Zitadel's
@@ -192,9 +193,10 @@ export function Home({ session }: { session: SessionUser }) {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
-  const error = summary.error ?? requests.error ?? onboarding.error;
+  const error = summary.error ?? requests.error ?? onboarding.error ?? accounts.error;
   // While the load is failing the count is unknown, and "nothing needs you" is
   // exactly the wrong thing to say to somebody whose queue might be full.
+  const calm = blocks === 0 && queue.rows.length === 0 && gaps.rows.length === 0;
   const headline = error ? "Couldn't check." : workSentence(blocks, loading);
 
   return (
@@ -210,7 +212,13 @@ export function Home({ session }: { session: SessionUser }) {
           {who ? `, ${who}` : ""}. <span className="text-ink/40">{headline}</span>
         </h1>
         <div className="mt-2 text-[14.5px] text-faint">
-          {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>} · last checked <ClockTime at={summary.dataUpdatedAt} />
+          {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
+          {summary.data && (
+            <>
+              {" "}
+              · last checked <ClockTime at={summary.dataUpdatedAt} />
+            </>
+          )}
         </div>
         {/* #27: a clear block gives up its seat, so this says it was checked. Only
             where there is a queue to read: the one calm line below says the rest. */}
@@ -238,6 +246,7 @@ export function Home({ session }: { session: SessionUser }) {
             summary.refetch();
             requests.refetch();
             onboarding.refetch();
+            accounts.refetch();
           }}
         />
       ) : (
@@ -250,10 +259,12 @@ export function Home({ session }: { session: SessionUser }) {
             </Card>
           }
         >
-        {blocks === 0 && queue.rows.length === 0 && gaps.rows.length === 0 ? (
-        // The last decided row is still on its beat: the empty state waits for it.
-        // One calm line, not a full-page card: the page continues below, and a
-        // hero-sized empty state would read as the end of it.
+        {/* The calm line and the grid hand over by Unfold: the Basic/Advanced switch or a
+            read can flip `calm`, and neither may swap them in one frame (A-08 §3). */}
+        {/* The last decided row is still on its beat: the empty state waits for it.
+            One calm line, not a full-page card: the page continues below, and a
+            hero-sized empty state would read as the end of it. */}
+        <Unfold open={calm} gap={24}>
         <div className="panel flex items-center gap-3 px-5 py-4">
           {/* Healthy, not accent. Violet is what you can act on, and the whole
               statement of this row is that there is nothing to act on. */}
@@ -261,13 +272,14 @@ export function Home({ session }: { session: SessionUser }) {
           <span className="text-[14.5px]">
             <strong className="font-semibold">Nothing here needs you.</strong>{" "}
             <span className="text-muted">
-              No open requests, and no access ending in the next 14 days. Checked <ClockTime />.
+              No open requests, and no access ending in the next 14 days. Checked <ClockTime at={summary.dataUpdatedAt} />.
             </span>
           </span>
         </div>
-      ) : (
-        // One wrapper, so the Basic footnote's Unfold is not a direct child of the
-        // arriving list (its settled rule would stop the unfold playing).
+        </Unfold>
+        <Unfold open={!calm} gap={24}>
+        {/* One wrapper, so the Basic footnote's Unfold is not a direct child of the
+            arriving list (its settled rule would stop the unfold playing). */}
         <div className="flex flex-col gap-6">
           <div className="grid items-start gap-6 desktop:grid-cols-2">
             {/* Time-sensitive: access ends, stays wrong, or goes unseen if you wait.
@@ -345,7 +357,7 @@ export function Home({ session }: { session: SessionUser }) {
             </p>
           </Unfold>
         </div>
-        )}
+        </Unfold>
 
         {/* The work zone above never moves. This is appended, never inserted. */}
         <Makerspace />

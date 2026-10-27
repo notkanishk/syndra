@@ -15,6 +15,8 @@ import { setMediaQuery } from "@/test-utils/media";
  */
 const state = vi.hoisted(() => ({
   accounts: [] as Array<{ id: string; name: string; owner_id: string }>,
+  accountsFailed: false,
+  summaryRead: true,
   missed: [] as Array<{ user_id: string; name: string; email: string; joined?: string }>,
   dialog: null as null | { op: string; userIds: string[] },
   expiring: [] as unknown[],
@@ -23,7 +25,8 @@ const state = vi.hoisted(() => ({
 
 vi.mock("@/lib/queries/useGovernance", () => ({
   useGovernanceSummary: () => ({
-    data: {
+    dataUpdatedAt: Date.UTC(2026, 9, 27, 9, 15),
+    data: !state.summaryRead ? undefined : {
       pending_requests: [],
       expiring_grants: state.expiring,
       cleanup_hints: [],
@@ -61,7 +64,12 @@ vi.mock("@/lib/queries/useOperations", () => ({
   }),
 }));
 vi.mock("@/lib/queries/useServiceAccounts", () => ({
-  useServiceAccounts: () => ({ data: state.accounts, isLoading: false, error: null }),
+  useServiceAccounts: () => ({
+    data: state.accountsFailed ? undefined : state.accounts,
+    isLoading: false,
+    error: state.accountsFailed ? new Error("down") : null,
+    refetch: vi.fn(),
+  }),
   serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,
 }));
 vi.mock("@/components/people/BulkDialog", () => ({
@@ -95,11 +103,30 @@ function renderHome() {
 
 beforeEach(() => {
   state.accounts = [];
+  state.accountsFailed = false;
+  state.summaryRead = true;
   state.missed = [];
   state.dialog = null;
   state.expiring = [];
   state.extended = { outbox_id: "o1", status: "done" };
   setMediaQuery("(max-width: 44.99rem)", false);
+});
+
+describe("Home never claims a read it did not make", () => {
+  it("counts a failed service-accounts read as a failed read, not as nothing to see", async () => {
+    state.accountsFailed = true;
+    renderHome();
+    expect(await screen.findByText("Couldn't load today's work.")).toBeTruthy();
+    expect(screen.getByText("Couldn't check.")).toBeTruthy();
+    expect(screen.queryByText(/Nothing here needs you/)).toBeNull();
+  });
+
+  it("names no 'last checked' time until the summary has been read", async () => {
+    state.summaryRead = false;
+    renderHome();
+    await screen.findByText(/Ada/);
+    expect(screen.queryByText(/last checked/)).toBeNull();
+  });
 });
 
 describe("Service accounts to look at", () => {

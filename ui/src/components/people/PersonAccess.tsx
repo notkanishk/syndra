@@ -351,7 +351,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
               <button
                 type="button"
                 onClick={() => setBundlesOpen(true)}
-                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 link-hover"
+                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 link-tint"
               >
                 Manage bundles
               </button>
@@ -968,7 +968,7 @@ function RoleGroup({
                   ) : strongest?.kind === "mapping" ? (
                     <span className="text-faint">Nobody clicked this</span>
                   ) : (
-                    <span className="text-faint">No end date</span>
+                    <span className="text-faint">{grantsResolved ? "No end date" : "End date unavailable"}</span>
                   )}
                 </>
               )}

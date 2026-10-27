@@ -179,7 +179,7 @@ describe("addresses", () => {
   it("are left out, with the guide, when no host is registered", () => {
     state.targets = [view({ connection: undefined })];
     renderStorage();
-    expect(screen.getByText(/isn't set up in Syndra yet, so ask makerspace staff/)).toBeTruthy();
+    expect(screen.getByText(/doesn't have the address to connect to yet, so ask makerspace staff/)).toBeTruthy();
     expect(screen.queryByText(/^smb:\/\//)).toBeNull();
     expect(screen.queryByRole("button", { name: /How to connect/ })).toBeNull();
   });
@@ -212,6 +212,15 @@ describe("Q-02 states", () => {
     state.targets = [view({ home_kept: true })];
     renderStorage();
     expect(screen.getByText(/It stays, with your files in it, and only you can open it/)).toBeTruthy();
+  });
+
+  it("an account the target never answered for is unread, not ready", () => {
+    state.targets = [view({ storage: undefined, health: "unknown" })];
+    renderStorage();
+    expect(screen.getByText("Couldn't check your account just now")).toBeTruthy();
+    expect(screen.queryByText("Your account is ready")).toBeNull();
+    expect(screen.queryByText(/accepting sign-ins/)).toBeNull();
+    expect(screen.getByText(/couldn't say which folders are open to you just now/)).toBeTruthy();
   });
 
   it("folders that couldn't be read are said to be unread, never empty", () => {

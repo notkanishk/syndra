@@ -7,6 +7,7 @@ import { formatShortDate } from "@/lib/format";
 
 const access = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 const grants = vi.hoisted(() => ({ value: [] as unknown[] }));
+const grantsRead = vi.hoisted(() => ({ failed: false }));
 const changes = vi.hoisted(() => ({ value: [] as unknown[] }));
 
 vi.mock("@/components/member/MemberCatalog", () => ({ MemberCatalog: () => null }));
@@ -17,7 +18,7 @@ vi.mock("@/components/names", () => ({
 }));
 vi.mock("@/lib/queries/useUsers", () => ({
   useUserAccess: () => access.value,
-  useUserGrants: () => ({ data: grants.value }),
+  useUserGrants: () => ({ data: grantsRead.failed ? undefined : grants.value, error: grantsRead.failed ? new Error("down") : null }),
 }));
 vi.mock("@/lib/queries/useMyChanges", () => ({
   useMyChanges: () => ({ data: changes.value }),
@@ -76,6 +77,7 @@ const inDays = (n: number) => new Date(Date.now() + n * 864e5).toISOString();
 
 function reset() {
   grants.value = [];
+  grantsRead.failed = false;
   changes.value = [];
 }
 
@@ -149,6 +151,22 @@ describe("MemberAccess standing", () => {
     expect(screen.queryByText(/waiting to be sent/i)).toBeNull();
     expect(screen.getAllByText("On its way")).toHaveLength(2);
     expect(screen.getAllByText("It starts working once makerspace staff send it.")).toHaveLength(2);
+  });
+});
+
+describe("MemberAccess when the grants were not read", () => {
+  it("says the end date is unavailable, never 'Given to you', and names no end", () => {
+    reset();
+    grantsRead.failed = true;
+    access.value = view(COMPLETE, ["laser", "mill"], { observed_role_count: 2 });
+    render(<MemberAccess session={session} />);
+    expect(screen.getAllByText("End date unavailable")).toHaveLength(2);
+    expect(screen.queryByText("Given to you")).toBeNull();
+    expect(screen.getByText("Two roles across one room.")).toBeTruthy();
+  });
+
+  it("leaves the end out of the summary until the list is read", () => {
+    expect(summarySentence(4, 2, undefined)).toBe("Four roles across two rooms.");
   });
 });
 

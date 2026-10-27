@@ -89,7 +89,10 @@ export default function AppsPage() {
           so the freshness is stated once here rather than once per row. The
           People column's "unexplained" and "not in Zitadel yet" are only
           honest beside it. */}
-      <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
+      {/* Not until a read has landed: no read is not a stale one. */}
+      {apps.data && (
+        <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
+      )}
 
       <Card>
         <CardColumns>
