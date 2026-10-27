@@ -18,6 +18,14 @@ vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
 vi.mock("@/lib/ui-view", () => ({
   useUiView: () => ({ ...view, view: "basic", setView: () => {}, revealInAdvanced: () => {} }),
 }));
+// Next's link has no router to talk to here; what matters is how it is asked to navigate.
+vi.mock("next/link", () => ({
+  default: ({ href, replace, children, ...rest }: React.ComponentProps<"a"> & { replace?: boolean }) => (
+    <a href={href} data-replace={String(Boolean(replace))} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => targets }));
 vi.mock("@/lib/queries/useIndicators", () => ({ useIndicators: () => indicators }));
 
@@ -233,6 +241,16 @@ describe("the sheet is one level of history", () => {
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(back).not.toHaveBeenCalled();
+  });
+
+  // The sheet's entry is spent by the navigation itself: replaced, so back from
+  // the new screen does not land on the sheet's dead entry.
+  it("asks for a replace, not a push, so the sheet's entry is not left behind", () => {
+    renderPolling();
+    const sheet = openSheet();
+    for (const link of within(sheet).getAllByRole("link")) {
+      expect(link).toHaveAttribute("data-replace", "true");
+    }
   });
 });
 
