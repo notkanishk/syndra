@@ -27,6 +27,17 @@ var (
 		return directory.Default.FindUser(ctx, userID)
 	}
 
+	// directoryAnswers is whether the directory is answering now: one real
+	// read, then its own freshness (a read served from its last good copy
+	// leaves it not current).
+	directoryAnswers = func(ctx context.Context) bool {
+		if _, err := directory.Default.Users(ctx); err != nil {
+			return false
+		}
+		_, current := directory.FreshnessOf(directory.Default)
+		return current
+	}
+
 	redisSet = func(ctx context.Context, key string, value string, ttl time.Duration) error {
 		return db.Redis.Set(ctx, key, value, ttl).Err()
 	}

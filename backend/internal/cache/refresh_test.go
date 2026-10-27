@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -168,5 +170,96 @@ func TestWarm_CompilesEveryKnownUser(t *testing.T) {
 	}
 	if len(cachedRoles(t, kv, "mapping:u1:pA")) != 1 || len(cachedRoles(t, kv, "mapping:u2:pA")) != 1 {
 		t.Errorf("not everyone was warmed: %v", kv)
+	}
+}
+
+// A warm is background work: when it can't read what it needs it must leave
+// the stored claims alone, not drop them (the token path would answer degraded
+// for people whose access never changed).
+func TestWarm_NeverDegradesGoodEntries(t *testing.T) {
+	resetCacheDeps(t)
+	kv := fakeRedis(t)
+	origIDs, origFind, origAnswers := dbGetAllKnownUserIDs, cacheFindUser, directoryAnswers
+	t.Cleanup(func() { dbGetAllKnownUserIDs, cacheFindUser, directoryAnswers = origIDs, origFind, origAnswers })
+	dbGetAllKnownUserIDs = func(context.Context) ([]string, error) { return []string{"u1"}, nil }
+	directoryAnswers = func(context.Context) bool { return true }
+	holding(models.DirectGrant{ProjectID: "pA", RoleKey: "viewer"})
+	const good = `{"roles":["admin"]}`
+
+	// Profile read fails: skip the user, keep the keys.
+	kv["mapping:u1:pA"] = good
+	cacheFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
+		return models.UserProfile{}, false, errors.New("directory down")
+	}
+	_ = Warm(context.Background())
+	if kv["mapping:u1:pA"] != good {
+		t.Errorf("a failed profile read rewrote or dropped the entry: %q", kv["mapping:u1:pA"])
+	}
+
+	// Compile fails: keep the keys (a change-driven refresh would drop them).
+	cacheFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
+		return models.UserProfile{}, false, nil
+	}
+	dbGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
+		return nil, errors.New("db down")
+	}
+	_ = Warm(context.Background())
+	if kv["mapping:u1:pA"] != good {
+		t.Errorf("a failed compile dropped the entry: %q", kv["mapping:u1:pA"])
+	}
+
+	// Directory not answering: the pass is skipped outright.
+	holding(models.DirectGrant{ProjectID: "pA", RoleKey: "viewer"})
+	directoryAnswers = func(context.Context) bool { return false }
+	_ = Warm(context.Background())
+	if kv["mapping:u1:pA"] != good {
+		t.Errorf("a pass with the directory down still wrote: %q", kv["mapping:u1:pA"])
+	}
+}
+
+// Two refreshes of one user must run one after the other: the one that
+// started later has the newer facts and must store last. Here the older
+// compile (still holding admin) is stuck mid-flight while a revoke's refresh
+// arrives; unserialized, the old compile stores admin back over the revoke.
+func TestRefreshUser_SerializedPerUser(t *testing.T) {
+	resetCacheDeps(t)
+	kv := fakeRedis(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	dbGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
+		if calls.Add(1) == 1 {
+			close(entered)
+			<-release
+			return []models.DirectGrant{{ProjectID: "pA", RoleKey: "admin"}}, nil
+		}
+		return nil, nil // the revoke has landed
+	}
+	dbGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return nil, nil }
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); _ = RefreshUser(context.Background(), "u1") }()
+	<-entered
+	go func() { defer wg.Done(); _ = RefreshUser(context.Background(), "u1") }()
+	time.Sleep(50 * time.Millisecond) // let the second reach the lock
+	close(release)
+	wg.Wait()
+
+	if raw, ok := kv["mapping:u1:pA"]; ok {
+		t.Errorf("the older compile overwrote the newer one: %s", raw)
+	}
+}
+
+// A user id is not a pattern: * or [ in one must not reach other users' keys.
+func TestRefreshUser_EscapesGlobCharsInTheScan(t *testing.T) {
+	resetCacheDeps(t)
+	fakeRedis(t)
+	var pattern string
+	redisScanKeys = func(_ context.Context, p string) ([]string, error) { pattern = p; return nil, nil }
+	holding()
+
+	_ = RefreshUser(context.Background(), `a*b[c]?\d`)
+	if want := `mapping:a\*b\[c\]\?\\d:*`; pattern != want {
+		t.Errorf("scan pattern = %q, want %q", pattern, want)
 	}
 }
