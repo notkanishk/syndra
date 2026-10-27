@@ -128,7 +128,7 @@ export function EmptyState({
           <button
             type="button"
             onClick={action.onClick}
-            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text link-hover"
+            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text link-tint"
           >
             {action.label}
           </button>

@@ -346,7 +346,7 @@ function EventRow({
             type="button"
             onClick={onToggle}
             aria-expanded={open}
-            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-hover desktop:min-h-6"
+            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-tint desktop:min-h-6"
           >
             {open ? "Hide details" : "Show details"}
           </button>

@@ -289,7 +289,7 @@ function MemberRow({
         <button
           type="button"
           onClick={() => open("mapping")}
-          className="shrink-0 text-[13px] font-semibold text-accent-text link-hover"
+          className="shrink-0 text-[13px] font-semibold text-accent-text link-tint"
         >
           Open the rule
         </button>
