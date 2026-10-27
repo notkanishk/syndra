@@ -77,9 +77,9 @@ export function ReadLine<T extends NavSection>({
                 event.preventDefault();
                 go(section, onOpen);
               }}
-              className="inline-flex min-h-11 items-center rounded-pill desktop:min-h-0"
+              className="group inline-flex min-h-11 items-center rounded-pill control press-scale desktop:min-h-0"
             >
-              <Chip className="gap-2">
+              <Chip className="gap-2 motion-tint group-hover:bg-tint-3">
                 {section.tone && <StatusDot tone={section.tone} />}
                 {section.label}
                 <span className="text-faint">{section.count}</span>
@@ -159,8 +159,8 @@ export function SectionPill<T extends NavSection>({
                 event.preventDefault();
                 go(section, onOpen);
               }}
-              className={`inline-flex min-h-9 items-center gap-2 rounded-pill px-3.5 text-[13px] font-semibold motion-tint ${
-                here ? "bg-surface-2 text-ink" : "text-muted"
+              className={`inline-flex min-h-9 items-center gap-2 rounded-pill px-3.5 text-[13px] font-semibold control press-scale ${
+                here ? "bg-surface-2 text-ink" : "text-muted hover:bg-[var(--hover)] hover:text-ink"
               }`}
             >
               {section.tone && <StatusDot tone={section.tone} />}

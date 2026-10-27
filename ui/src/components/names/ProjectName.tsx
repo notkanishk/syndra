@@ -1,7 +1,7 @@
 "use client";
 
 import { Unresolved, UNKNOWN_PROJECT } from "@/components/names/Unresolved";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { SHOW_DEBUG_IDS } from "@/components/names/UserName";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 
@@ -19,6 +19,10 @@ interface ProjectNameProps {
 
 export function ProjectName({ id, name, fallback, className = "" }: ProjectNameProps) {
   const resolver = useNameResolver();
+  const lookup = Boolean(id) && !(name && name !== id) && id !== "-";
+  const { value, resolved } = lookup ? resolver.resolveProject(id ?? "") : { value: undefined, resolved: true };
+  // The name that lands after a skeleton tints in, not snaps (S7).
+  const tint = useTintAfterSkeleton(lookup && !value && !resolved);
 
   if (!id) {
     return <span className={className}>{fallback ?? "—"}</span>;
@@ -30,8 +34,6 @@ export function ProjectName({ id, name, fallback, className = "" }: ProjectNameP
     return <span className={`text-muted ${className}`}>—</span>;
   }
 
-  const { value, resolved } = resolver.resolveProject(id);
-
   if (!value && !resolved) {
     return (
       <span className={className} title={SHOW_DEBUG_IDS ? id : undefined} aria-busy="true">
@@ -40,11 +42,11 @@ export function ProjectName({ id, name, fallback, className = "" }: ProjectNameP
     );
   }
   if (!value?.name) {
-    return <Unresolved label={fallback ?? UNKNOWN_PROJECT} id={id} idLabel="project id" className={className} />;
+    return <Unresolved label={fallback ?? UNKNOWN_PROJECT} id={id} idLabel="project id" className={`${className} ${tint}`} />;
   }
 
   return (
-    <span className={className} title={SHOW_DEBUG_IDS ? id : undefined}>
+    <span className={`${className} ${tint}`} title={SHOW_DEBUG_IDS ? id : undefined}>
       {value.name}
     </span>
   );

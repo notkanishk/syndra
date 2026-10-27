@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 import { anchoredStyle, useAnchoredBox } from "@/components/ui/Anchored";
 import { GLOSSARY, type TermName } from "@/lib/glossary";
+import { TINT_MS, useExitPhase } from "@/lib/motion";
 
 /**
  * A word that carries its own definition.
@@ -83,12 +84,18 @@ export function Term({ name, children }: { name: TermName; children?: React.Reac
   // Where to draw it, measured from the trigger (shared with every popover).
   const box = useAnchoredBox(ref, shown, 304, 180);
 
+  // Closing is opacity on tint, then gone, with no travel (as AnchoredPanel).
+  // While it fades the shut copy already carries the id, so the fading one
+  // gives it up.
+  const { rendered, leaving } = useExitPhase(shown, TINT_MS);
+
   const panel = (
     <span
-      id={id}
+      id={leaving ? undefined : id}
       role="note"
+      aria-hidden={leaving ? true : undefined}
       style={anchoredStyle(box)}
-      className="popover-in rounded-panel border border-line-strong bg-surface-2 px-3.5 py-3 text-left shadow-popover"
+      className={`${leaving ? "tint-out pointer-events-none" : "popover-in"} rounded-panel border border-line-strong bg-surface-2 px-3.5 py-3 text-left shadow-popover`}
     >
       <span className="block type-label">{entry.title}</span>
       <span className="mt-1 block text-[13.5px] font-normal leading-[1.55] text-muted">
@@ -129,7 +136,7 @@ export function Term({ name, children }: { name: TermName; children?: React.Reac
           </span>
         </span>
       )}
-      {shown && mounted ? createPortal(panel, document.body) : null}
+      {rendered && mounted ? createPortal(panel, document.body) : null}
     </span>
   );
 }

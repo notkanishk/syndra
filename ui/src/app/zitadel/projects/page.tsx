@@ -74,7 +74,7 @@ export default function UpstreamProjectsPage() {
                 onClick={() => setSelected(project.id)}
                 aria-current={activeId === project.id ? "true" : undefined}
                 className={`row-divider flex w-full flex-col items-start px-4 py-3 text-left motion-tint ${
-                  activeId === project.id ? "bg-accent-soft/60" : "hover:bg-[var(--hover)]"
+                  activeId === project.id ? "bg-accent-soft/60" : "hover-tint"
                 }`}
               >
                 <span className="truncate text-[14.5px] font-semibold">{project.name}</span>

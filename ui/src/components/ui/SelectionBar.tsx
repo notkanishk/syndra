@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { Seat } from "@/components/ui/Choice";
+import { TINT_MS, useExitPhase } from "@/lib/motion";
 
 /**
  * The one selection bar.
@@ -51,7 +54,20 @@ interface SelectionBarProps {
   children: React.ReactNode;
 }
 
-export function SelectionBar({
+/**
+ * The bar tints in when the first row is ticked and tints out when the last is
+ * cleared, rather than popping: it stays mounted for one tint, showing what it
+ * last said, and ignores the pointer meanwhile.
+ */
+export function SelectionBar(props: SelectionBarProps) {
+  const { rendered, leaving } = useExitPhase(props.count > 0, TINT_MS);
+  const [last, setLast] = useState(props);
+  if (props.count > 0 && last !== props) setLast(props);
+  if (!rendered) return null;
+  return <SelectionBarBody {...(leaving ? last : props)} leaving={leaving} />;
+}
+
+function SelectionBarBody({
   count,
   noun,
   scope,
@@ -65,9 +81,8 @@ export function SelectionBar({
   onTakeCeiling,
   onClear,
   children,
-}: SelectionBarProps) {
-  if (count === 0) return null;
-
+  leaving = false,
+}: SelectionBarProps & { leaving?: boolean }) {
   const things = `${count} ${count === 1 ? noun[0] : noun[1]}`;
   const canNarrow =
     wholeScope && visibleCount !== undefined && onSelectVisibleOnly && count > visibleCount;
@@ -94,7 +109,8 @@ export function SelectionBar({
     <div
       role="region"
       aria-label="Selection"
-      className={`sticky bottom-4 z-20 mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[18px] border px-5 py-3.5 shadow-dialog ${
+      aria-hidden={leaving ? true : undefined}
+      className={`${leaving ? "tint-out pointer-events-none" : "tint-in"} sticky bottom-4 z-20 mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[18px] border px-5 py-3.5 shadow-dialog ${
         overCeiling ? "border-warn-line bg-warn-soft" : "border-line-strong bg-surface-2"
       }`}
     >
@@ -119,7 +135,7 @@ export function SelectionBar({
             <button
               type="button"
               onClick={onSelectVisibleOnly}
-              className="font-semibold text-accent-text underline-offset-2 hover:underline"
+              className="font-semibold text-accent-text link-hover"
             >
               select only the {visibleCount} {noun[1]} shown
             </button>
@@ -140,7 +156,7 @@ export function SelectionBar({
         <button
           type="button"
           onClick={onClear}
-          className="min-h-[44px] rounded-pill px-3 text-[13px] font-semibold text-muted motion-tint hover:text-ink desktop:min-h-0 desktop:py-1.5"
+          className="min-h-[44px] rounded-pill px-3 text-[13px] font-semibold text-muted control press-scale hover:text-ink desktop:min-h-0 desktop:py-1.5"
         >
           Clear the selection
         </button>
@@ -166,7 +182,7 @@ export function SelectionAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`min-h-[44px] rounded-pill border px-3.5 text-[13px] font-semibold motion-tint disabled:cursor-not-allowed disabled:opacity-50 desktop:min-h-0 desktop:py-1.5 ${
+      className={`min-h-[44px] rounded-pill border px-3.5 text-[13px] font-semibold control press-scale disabled:cursor-not-allowed disabled:opacity-50 desktop:min-h-0 desktop:py-1.5 ${
         tone === "danger"
           ? "border-danger-line text-danger-text hover:bg-danger-soft"
           : "border-line-strong hover:bg-[var(--hover)]"
@@ -234,7 +250,7 @@ export function SelectModeToggle({
       type="button"
       onClick={onToggle}
       aria-pressed={active}
-      className={`min-h-[44px] rounded-pill border px-4 text-[13.5px] font-semibold motion-tint desktop:min-h-0 desktop:py-[7px] ${
+      className={`min-h-[44px] rounded-pill border px-4 text-[13.5px] font-semibold control press-scale desktop:min-h-0 desktop:py-[7px] ${
         active
           ? "border-accent-line bg-accent-soft text-accent-text"
           : "border-line-strong hover:bg-[var(--hover)]"

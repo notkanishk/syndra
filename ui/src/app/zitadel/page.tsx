@@ -56,12 +56,12 @@ export default function IdentityProviderPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {keyOverdue && rotation.data?.age_days !== undefined && (
-        <Notice tone="warn" title={`The action signing key is ${rotation.data.age_days} days old.`} live>
-          It is past the {rotation.data.threshold_days ?? 90}-day limit and still works. Replace it
+      <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
+        <Notice tone="warn" title={`The action signing key is ${rotation.data?.age_days} days old.`} live>
+          It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works. Replace it
           when nobody is working: How to replace it, below, walks through it.
         </Notice>
-      )}
+      </Unfold>
 
       <PageHeader
         title="Zitadel"
@@ -298,7 +298,7 @@ function Chevron({ open }: { open: boolean }) {
   return (
     <span
       aria-hidden
-      className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press ${
+      className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn ${
         open ? "rotate-90" : ""
       }`}
     >
@@ -349,7 +349,7 @@ function HealthLine({
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
-            className="inline-flex min-h-11 items-center gap-2 font-semibold text-muted motion-tint hover:text-ink desktop:min-h-6"
+            className="inline-flex min-h-11 items-center gap-2 font-semibold text-muted link-hover desktop:min-h-6"
           >
             {open ? "Hide checks" : "Show checks"}
             <Chevron open={open} />
@@ -378,7 +378,7 @@ function HealthLine({
         </Unfold>
       )}
 
-      {!live && (
+      <Unfold open={!live} gap={16}>
         <Notice
           tone={notConfigured ? "warn" : "danger"}
           title={notConfigured ? "Not connected" : "Unreachable"}
@@ -389,7 +389,7 @@ function HealthLine({
           {detail ||
             "Syndra is showing what it last knew. Nothing is lost: changes waiting for you to send stay in order and go through when Zitadel is back."}
         </Notice>
-      )}
+      </Unfold>
     </div>
   );
 }
@@ -527,7 +527,7 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{door.warning}</span>
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
                 {door.instead}{" "}
-                <a href={door.syndraHref} className="font-semibold text-accent-text">
+                <a href={door.syndraHref} className="font-semibold text-accent-text link-hover">
                   {door.syndra} →
                 </a>
               </span>

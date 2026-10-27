@@ -223,6 +223,30 @@ function leaveAsCopy(scrim: HTMLElement) {
   setTimeout(() => copy.remove(), TINT_MS + LIGHT_LEAD_MS + 20);
 }
 
+/**
+ * Makes a sheet leave the way a dialog does (S1): when its scrim is taken out of
+ * the page, a picture of it fades and sinks, then its scrim follows. Shared by
+ * every sheet that has a scrim and a panel as its first child, the phone
+ * navigation sheet among them, so there is one way a sheet goes.
+ */
+export function useSheetLeave(
+  scrimRef: React.RefObject<HTMLDivElement | null>,
+  draggedAway: React.RefObject<boolean>,
+  active: boolean,
+) {
+  useEffect(() => {
+    if (!active) return;
+    const scrim = scrimRef.current;
+    // Read when it runs, not now: the drag ends after this effect does.
+    const draggedOff = () => draggedAway.current;
+    // Runs after React has taken the dialog out of the page. In strict mode's
+    // pretend unmount it is still there, and nothing has left.
+    return () => {
+      if (scrim && !scrim.isConnected && !draggedOff()) leaveAsCopy(scrim);
+    };
+  }, [active, scrimRef, draggedAway]);
+}
+
 export function Modal({
   open,
   onClose,
@@ -239,16 +263,7 @@ export function Modal({
   const draggedAway = useRef(false);
   useDialogFocusTrap(panelRef, open, busy, onClose);
 
-  const wasDraggedAway = () => draggedAway.current;
-  useEffect(() => {
-    if (!open) return;
-    const scrim = scrimRef.current;
-    // Runs after React has taken the dialog out of the page. In strict mode's
-    // pretend unmount it is still there, and nothing has left.
-    return () => {
-      if (scrim && !scrim.isConnected && !wasDraggedAway()) leaveAsCopy(scrim);
-    };
-  }, [open]);
+  useSheetLeave(scrimRef, draggedAway, open);
 
   const grabber = useSheetDrag({ panelRef, scrimRef, busy, onClose, draggedAway });
 
@@ -302,7 +317,7 @@ export function Modal({
 }
 
 /** What the sheet's grabber needs to be dragged (S3): handlers, and whether a drag just ended. */
-interface SheetDrag {
+export interface SheetDrag {
   handlers: {
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
     onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
@@ -338,18 +353,21 @@ const SCRIM_ALPHA = 0.55;
  *    back. It never closes. Under reduced motion it does not move at all and
  *    the busy sentence tints instead.
  */
-function useSheetDrag({
+export function useSheetDrag({
   panelRef,
   scrimRef,
   busy,
   onClose,
   draggedAway,
+  scrimAlpha = SCRIM_ALPHA,
 }: {
   panelRef: React.RefObject<HTMLDivElement | null>;
   scrimRef: React.RefObject<HTMLDivElement | null>;
   busy: boolean;
   onClose: () => void;
   draggedAway: React.RefObject<boolean>;
+  /** The scrim's strength at rest, which a drag thins from. */
+  scrimAlpha?: number;
 }): SheetDrag {
   const hold = useRef<{ y: number; at: number } | null>(null);
   const travelled = useRef(false);
@@ -373,7 +391,7 @@ function useSheetDrag({
     if (panel) panel.style.transform = offset ? `translateY(${offset}px)` : "";
     if (scrim) {
       scrim.style.backgroundColor = offset
-        ? `rgba(0, 0, 0, ${SCRIM_ALPHA * (1 - Math.min(1, offset / (height || 1)))})`
+        ? `rgba(0, 0, 0, ${scrimAlpha * (1 - Math.min(1, offset / (height || 1)))})`
         : "";
     }
   };

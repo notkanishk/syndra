@@ -36,6 +36,13 @@ export function ViewSwitch({ fill = false }: { fill?: boolean }) {
   const explanationId = useId();
   if (!isOperator) return null;
 
+  // What you're reading stays put (A-08 §3): the rail and the page open and
+  // fold their Advanced parts by `Unfold`, and the browser's own scroll
+  // anchoring keeps the top visible row where it was when a part above the
+  // view changes height. Nothing disables `overflow-anchor` on the page scroller.
+  // ponytail: a browser without scroll anchoring (older Safari) lets the page
+  // shift. Upgrade path: measure the top visible row before `setView` and
+  // restore its offset in a layout effect, only if that is ever reported.
   return (
     <>
       <span id={explanationId} className="sr-only">

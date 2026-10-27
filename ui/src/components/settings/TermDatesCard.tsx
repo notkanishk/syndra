@@ -12,6 +12,7 @@ import { FieldError, Input } from "@/components/ui/Input";
 import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
+import { Unfold } from "@/components/ui/Unfold";
 import { ApiError } from "@/lib/api-client";
 import { formatShortDate } from "@/lib/format";
 import { describeFailure, sentence } from "@/lib/outcome";
@@ -174,16 +175,18 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
           />
         ) : (
           <>
-            {general.length > 0 && (
+            <Unfold open={general.length > 0} gap={16}>
               <Notice tone="danger" blocking title="That needs another look.">
                 {general.map(([, m]) => m).join(" ")} Nothing was changed.
               </Notice>
-            )}
-            {failure && (
-              <Notice tone="danger" blocking title="The term dates didn't save." reference={failure.reference}>
-                {failure.text} Nothing was changed.
-              </Notice>
-            )}
+            </Unfold>
+            <Unfold open={Boolean(failure)} gap={16}>
+              {failure && (
+                <Notice tone="danger" blocking title="The term dates didn't save." reference={failure.reference}>
+                  {failure.text} Nothing was changed.
+                </Notice>
+              )}
+            </Unfold>
             <div>
               <div aria-hidden className={`${ROW_GRID} hidden pb-2 text-[12.5px] font-semibold text-faint tablet:grid`}>
                 <span>Name</span>

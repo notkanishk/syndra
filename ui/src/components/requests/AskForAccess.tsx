@@ -7,7 +7,7 @@ import { roleId, type PickerPlace } from "@/components/bundles/RolePickerOne";
 import { useAskState, type AskState } from "@/components/requests/Holding";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { Button, PILL } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Select";
@@ -248,26 +248,17 @@ function AskForAccessOpen({
                   choice back into something concrete.
                 */}
                 <FieldLabel>How long do you need it?</FieldLabel>
-                <div className="mb-2 flex flex-wrap gap-2">
-                  {(
-                    [
-                      ["7", "A week"],
-                      ["30", "A month"],
-                      ["term", "Until the end of term"],
-                    ] as Array<[HowLong, string]>
-                  ).map(([v, label]) => (
-                    <button
-                      key={v}
-                      type="button"
-                      aria-pressed={howLong === v}
-                      onClick={() => setHowLong(v)}
-                      className={`rounded-pill font-semibold motion-tint ${PILL.md} ${
-                        howLong === v ? "bg-accent-dense text-accent-ink" : "bg-tint-2 text-ink"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                <div className="mb-2">
+                  <Segmented<HowLong>
+                    label="How long do you need it?"
+                    value={howLong}
+                    onChange={setHowLong}
+                    options={[
+                      { value: "7", label: "A week" },
+                      { value: "30", label: "A month" },
+                      { value: "term", label: "Until the end of term" },
+                    ]}
+                  />
                 </div>
                 <FieldHint>
                   If it&rsquo;s approved, you have it until {formatShortDate(ordinaryUntil)}, and then it

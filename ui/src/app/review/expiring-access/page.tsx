@@ -155,7 +155,7 @@ export default function ExpiringAccessPage() {
   // was and closes its gap after, and not under the pointer. Counts and selection stay on the
   // live rows; only what is drawn keeps the ones that are going.
   const leaving = useLeavingRows(ordered, (grant) => grant.id, !grants.isLoading && !grants.error, {
-    scope: `${within}|${needle}`,
+    narrowedBy: `${within}|${needle}`,
   });
   const undecidedShown = useMemo(() => leaving.rows.filter((grant) => !grant.acknowledged), [leaving.rows]);
   const acknowledgedShown = useMemo(() => leaving.rows.filter((grant) => grant.acknowledged), [leaving.rows]);
@@ -253,7 +253,7 @@ export default function ExpiringAccessPage() {
                 // that matches nothing has decided nothing.
                 soonest
                   ? `soonest ends ${formatShortDate(soonest)}`
-                  : !anyUndecided
+                  : !anyUndecided && !grants.isPlaceholderData
                     ? "every one decided"
                     : "",
               ]}
@@ -328,7 +328,8 @@ export default function ExpiringAccessPage() {
           {/* Everything in the window has been judged. Said outright, because a queue whose only
               rows are acknowledged ones looks identical to a queue nobody has touched. */}
           <SectionPill sections={sections} label="Sections of expiring access" onOpen={openSection} />
-          {!anyUndecided && (
+          {/* Not while another window is read: these rows answer the last one. */}
+          {!anyUndecided && !grants.isPlaceholderData && (
             <span className="inline-flex items-center gap-2.5 px-1 text-[13.5px] text-muted">
               <StatusDot tone="healthy" />
               Nothing here is waiting on a decision. Every role that ends in the next {within} days has
@@ -341,7 +342,8 @@ export default function ExpiringAccessPage() {
       ) : (
         <Card>
           <ListStates
-            isLoading={grants.isLoading}
+            // The last window's emptiness says nothing about this one.
+            isLoading={grants.isLoading || grants.isPlaceholderData}
             error={grants.error}
             isEmpty
             onRetry={() => grants.refetch()}
@@ -491,7 +493,7 @@ function ExpiringSection({
               >
                 <span
                   aria-hidden
-                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-press ${
+                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-turn ${
                     open ? "rotate-90" : ""
                   }`}
                 >
@@ -615,7 +617,7 @@ function ExpiringRow({
         <span className="min-w-0">
           <Link
             href={accountHref(grant.user_id)}
-            className="text-[15px] font-semibold hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+            className="text-[15px] font-semibold link-hover"
           >
             <UserName id={grant.user_id} />
           </Link>

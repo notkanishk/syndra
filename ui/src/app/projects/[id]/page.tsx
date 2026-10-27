@@ -13,13 +13,14 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
+import { Tinted } from "@/components/ui/Unfold";
 import { useIsAdvanced } from "@/lib/ui-view";
 
 /**
@@ -45,6 +46,8 @@ export default function ProjectDetailPage({
     (entry) => entry.project.id === id,
   );
   useCrumb(project?.project.name);
+  // The title that lands after its skeleton tints in, not snaps (S7).
+  const titleTint = useTintAfterSkeleton(projects.isLoading && !project);
 
   const projectRoles = useMemo(
     () => (roles.data ?? []).filter((role) => role.project_id === id),
@@ -79,7 +82,7 @@ export default function ProjectDetailPage({
         // list doesn't carry is said so in words.
         title={
           project ? (
-            project.project.name
+            <span className={titleTint}>{project.project.name}</span>
           ) : projects.isLoading ? (
             <Skeleton className="h-7 w-56" aria-label="Loading project" />
           ) : (
@@ -114,7 +117,9 @@ export default function ProjectDetailPage({
                 {people.note}
               </span>
             )}
-            {advanced && <Mono className="text-faint">{id}</Mono>}
+            <Tinted show={advanced}>
+              <Mono className="text-faint">{id}</Mono>
+            </Tinted>
             {/* Its own line, as the board draws it. */}
             <span className="basis-full">
               <ReadFreshness state={readState} subject="What Zitadel confirmed" />
@@ -222,7 +227,7 @@ export default function ProjectDetailPage({
 
                 <Link
                   href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
-                  className="flex min-h-11 w-[110px] shrink-0 flex-col items-end justify-center gap-0.5 text-[15px] font-semibold text-accent-text desktop:min-h-6"
+                  className="flex min-h-11 w-[110px] shrink-0 flex-col items-end justify-center gap-0.5 text-[15px] font-semibold text-accent-text desktop:min-h-6 link-hover"
                 >
                   <span>{members.headline} →</span>
                   {members.note && (

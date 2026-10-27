@@ -6,8 +6,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
 import { VIEW_EXPLANATION, ViewSwitch } from "@/components/shell/ViewSwitch";
-import { ToBody, useDialogFocusTrap } from "@/components/ui/Modal";
-import { leafMatches, navFor, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
+import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
+import { Unfold } from "@/components/ui/Unfold";
+import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
 import { useIndicators } from "@/lib/queries/useIndicators";
 import { useTargets } from "@/lib/queries/useTargets";
 import {
@@ -19,6 +20,12 @@ import {
   type TouchDestination,
 } from "@/lib/touch-nav";
 import { useUiView } from "@/lib/ui-view";
+
+/** A destination of the sheet, which draws both views' rows and folds Advanced's away in Basic. */
+type SheetDestination = TouchDestination & { advancedOnly?: boolean };
+
+/** The scrim's strength at rest (`bg-black/70`), which a drag thins from. */
+const NAV_SCRIM_ALPHA = 0.7;
 
 /**
  * Navigation for a thumb.
@@ -48,6 +55,17 @@ export function TouchNav() {
       : navFor(audience);
   const destinations = touchDestinations(entries);
   const counts = isPlaceholderData ? undefined : indicators;
+  // The sheet draws Advanced's whole tree in either view and folds what Basic
+  // lacks (A-08 §3). `touchDestinations` is one destination per entry, in order.
+  const operatorEntries = audience === "member" ? entries : operatorNav((targets ?? []).map((t) => t.target));
+  const sheetDestinations: SheetDestination[] = touchDestinations(operatorEntries).map((destination, index) => ({
+    ...destination,
+    advancedOnly: operatorEntries[index].advancedOnly,
+  }));
+  // Lifted from the trigger: switching to Basic from inside the sheet turns the
+  // bar into tabs, and the sheet must stay mounted to fold Advanced's rows away.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const shape = sheetOpen ? "sheet" : navShape(destinations);
 
   return (
     <nav
@@ -56,10 +74,17 @@ export function TouchNav() {
       // width, and one of the two is always the only one visible.
       className="flex-none border-t border-line bg-rail px-1.5 pb-[env(safe-area-inset-bottom)] pt-2 tablet:hidden"
     >
-      {navShape(destinations) === "tabs" ? (
+      {shape === "tabs" ? (
         <TabBar destinations={destinations} pathname={pathname} counts={counts} />
       ) : (
-        <SheetTrigger destinations={destinations} pathname={pathname} counts={counts} />
+        <SheetTrigger
+          destinations={destinations}
+          sheetDestinations={sheetDestinations}
+          open={sheetOpen}
+          setOpen={setSheetOpen}
+          pathname={pathname}
+          counts={counts}
+        />
       )}
     </nav>
   );
@@ -109,13 +134,13 @@ function Tab({
     <Link
       href={destination.href}
       aria-current={active ? "page" : undefined}
-      className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 motion-press press-scale ${
+      className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-[5px] rounded-[13px] px-1 control press-scale ${
         active ? "bg-accent-soft" : ""
       }`}
     >
       <span
         aria-hidden
-        className={`h-[7px] w-[7px] rounded-pill ${active ? "bg-accent-text" : "bg-ink/30"}`}
+        className={`h-[7px] w-[7px] rounded-pill motion-tint ${active ? "bg-accent-text" : "bg-ink/30"}`}
       />
       <span
         className={`max-w-full truncate text-[12.5px] ${
@@ -137,7 +162,7 @@ function Tab({
       {groupTone && (
         <span
           aria-hidden
-          className={`absolute right-3 top-2 h-[7px] w-[7px] rounded-pill ${DOT_TONE[groupTone]}`}
+          className={`absolute right-3 top-2 h-[7px] w-[7px] rounded-pill motion-tint ${DOT_TONE[groupTone]}`}
         />
       )}
       {/* Colour never carries meaning alone. The dot above is decoration; this
@@ -158,14 +183,19 @@ function Tab({
  */
 function SheetTrigger({
   destinations,
+  sheetDestinations,
+  open,
+  setOpen,
   pathname,
   counts,
 }: {
   destinations: TouchDestination[];
+  sheetDestinations: SheetDestination[];
+  open: boolean;
+  setOpen: (open: boolean) => void;
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
 }) {
-  const [open, setOpen] = useState(false);
   const here = destinations.find((destination) => destinationMatches(destination, pathname));
   const wanting = destinationsWantingAttention(destinations, counts);
   const tone = loudestTone(
@@ -181,7 +211,7 @@ function SheetTrigger({
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-[44px] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink motion-press press-scale"
+        className="flex min-h-[44px] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink control press-scale"
       >
         <span aria-hidden className="text-faint">
           •••
@@ -189,7 +219,7 @@ function SheetTrigger({
         <span className="flex-1 truncate text-left">{here?.label ?? "Go to"}</span>
         {wanting > 0 && tone && (
           <>
-            <span aria-hidden className={`h-[7px] w-[7px] rounded-pill ${DOT_TONE[tone]}`} />
+            <span aria-hidden className={`h-[7px] w-[7px] rounded-pill motion-tint ${DOT_TONE[tone]}`} />
             {/* One string rather than interpolated fragments: the dot is
                 decoration and this sentence is the whole of what a screen
                 reader — or a test — is given.
@@ -209,7 +239,7 @@ function SheetTrigger({
 
       {open && (
         <NavSheet
-          destinations={destinations}
+          destinations={sheetDestinations}
           pathname={pathname}
           counts={counts}
           onClose={() => setOpen(false)}
@@ -225,13 +255,16 @@ function NavSheet({
   counts,
   onClose,
 }: {
-  destinations: TouchDestination[];
+  destinations: SheetDestination[];
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const { isOperator } = useUiView();
+  const scrimRef = useRef<HTMLDivElement>(null);
+  // The sheet was dragged off the screen: it has already left, so it leaves no copy.
+  const draggedAway = useRef(false);
+  const { isOperator, audience } = useUiView();
 
   // Held in a ref for the same reason the focus trap holds its own: `onClose`
   // is a fresh closure every render, and this component re-renders on the
@@ -263,14 +296,35 @@ function NavSheet({
   // navigation pushes its own entry on top, so back from the new screen lands
   // on this one — and racing `history.back()` against a Next.js push would
   // undo the navigation the tap asked for.
-  const dismiss = useCallback(() => window.history.back(), []);
+  //
+  // Once only: a second tap, Esc or scrim tap while the sheet is leaving (a drag away
+  // waits for its settle) would go back past the screen behind it.
+  const dismissed = useRef(false);
+  const dismiss = useCallback(() => {
+    if (dismissed.current) return;
+    dismissed.current = true;
+    window.history.back();
+  }, []);
 
   // Never busy: a nav sheet runs nothing, so nothing can make it undismissable.
   useDialogFocusTrap(panelRef, true, false, dismiss);
 
+  // Closing fades and sinks the sheet, then the scrim (S1), and the grabber drags it
+  // (S3): the same pieces Modal's sheet is made of, not a second copy of them.
+  useSheetLeave(scrimRef, draggedAway, true);
+  const drag = useSheetDrag({
+    panelRef,
+    scrimRef,
+    busy: false,
+    onClose: dismiss,
+    draggedAway,
+    scrimAlpha: NAV_SCRIM_ALPHA,
+  });
+
   return (
     <ToBody>
     <div
+      ref={scrimRef}
       role="dialog"
       aria-modal="true"
       aria-label="Go to a page"
@@ -285,7 +339,11 @@ function NavSheet({
       >
         <button
           type="button"
-          onClick={dismiss}
+          {...drag.handlers}
+          onClick={() => {
+            // The click that ends a drag is not a tap.
+            if (!drag.wasDrag()) dismiss();
+          }}
           // The same words Modal's grabber answers to. Two sheets whose
           // handles have different names are two sheets to anything querying
           // by accessible name, a screen reader included.
@@ -301,7 +359,7 @@ function NavSheet({
           // border pushes everything a pixel that arithmetic on the padding
           // alone does not see, and a first attempt computed that way put the
           // bar 6px low.
-          className="-mb-[1px] -mt-[11px] mx-auto flex h-11 w-full max-w-[120px] items-center justify-center"
+          className="-mb-[1px] -mt-[11px] mx-auto flex h-11 w-full max-w-[120px] touch-none items-center justify-center"
         >
           <span aria-hidden className="h-1 w-[38px] rounded-pill bg-ink/20" />
         </button>
@@ -319,7 +377,9 @@ function NavSheet({
           <p className="mb-3 px-3.5 text-[12.5px] leading-[1.5] text-faint">{VIEW_EXPLANATION}</p>
         )}
 
-        <div className="flex flex-col gap-0.5">
+        {/* No `gap`: each row carries its own 2px above it (`mt-0.5`), so a part
+            that folds takes its gap with it. */}
+        <div className="-mt-0.5 flex flex-col">
           {destinations.map((destination) => (
             <SheetSection
               key={destination.href}
@@ -327,6 +387,7 @@ function NavSheet({
               pathname={pathname}
               counts={counts}
               onPick={onClose}
+              advanced={audience === "advanced"}
             />
           ))}
         </div>
@@ -336,16 +397,57 @@ function NavSheet({
   );
 }
 
+/** A part Basic lacks opens and folds with the view; one both views have is just there. */
+function FollowsView({
+  advancedOnly,
+  advanced,
+  children,
+}: {
+  advancedOnly: boolean | undefined;
+  advanced: boolean;
+  children: React.ReactNode;
+}) {
+  return advancedOnly ? <Unfold open={advanced}>{children}</Unfold> : <>{children}</>;
+}
+
 function SheetSection({
   destination,
   pathname,
   counts,
   onPick,
+  advanced,
 }: {
-  destination: TouchDestination;
+  destination: SheetDestination;
   pathname: string;
   counts: Partial<Record<IndicatorKey, number>> | undefined;
   onPick: () => void;
+  advanced: boolean;
+}) {
+  return (
+    <FollowsView advancedOnly={destination.advancedOnly} advanced={advanced}>
+      <SheetSectionBody
+        destination={destination}
+        pathname={pathname}
+        counts={counts}
+        onPick={onPick}
+        advanced={advanced}
+      />
+    </FollowsView>
+  );
+}
+
+function SheetSectionBody({
+  destination,
+  pathname,
+  counts,
+  onPick,
+  advanced,
+}: {
+  destination: SheetDestination;
+  pathname: string;
+  counts: Partial<Record<IndicatorKey, number>> | undefined;
+  onPick: () => void;
+  advanced: boolean;
 }) {
   const here = destinationMatches(destination, pathname);
 
@@ -380,22 +482,27 @@ function SheetSection({
   }
 
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className="px-3.5 pb-1 pt-3">
+    <div className="flex flex-col">
+      <div className="mt-0.5 px-3.5 pb-1 pt-3">
         <span className="type-nav-group">{destination.label}</span>
       </div>
       {destination.children.map((child) => (
-        <SheetRow
+        <FollowsView
           key={child.href}
-          href={child.href}
-          label={child.label}
-          active={leafMatches(child, pathname)}
-          indicator={child.indicator}
-          tone={child.tone}
-          counts={counts}
-          onPick={onPick}
-          nested
-        />
+          advancedOnly={!destination.advancedOnly && child.advancedOnly}
+          advanced={advanced}
+        >
+          <SheetRow
+            href={child.href}
+            label={child.label}
+            active={leafMatches(child, pathname)}
+            indicator={child.indicator}
+            tone={child.tone}
+            counts={counts}
+            onPick={onPick}
+            nested
+          />
+        </FollowsView>
       ))}
     </div>
   );
@@ -429,7 +536,7 @@ function SheetRow({
       href={href}
       onClick={onPick}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] motion-press press-scale ${
+      className={`mt-0.5 flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
       } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-ink/80"}`}
     >
@@ -437,7 +544,7 @@ function SheetRow({
 
       {dot && (
         <>
-          <span aria-hidden className={`h-[7px] w-[7px] rounded-pill ${DOT_TONE[dot]}`} />
+          <span aria-hidden className={`h-[7px] w-[7px] rounded-pill motion-tint ${DOT_TONE[dot]}`} />
           <span className="sr-only">Needs attention</span>
         </>
       )}

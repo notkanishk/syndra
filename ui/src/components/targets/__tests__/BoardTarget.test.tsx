@@ -70,6 +70,14 @@ vi.mock("@/lib/queries/useTargets", async () => {
     useResolveLogFinding: inert,
   };
 });
+const glide = vi.hoisted(() => ({ to: [] as HTMLElement[] }));
+vi.mock("@/lib/motion", async (original) => ({
+  ...(await original<typeof import("@/lib/motion")>()),
+  glideTo: (target: HTMLElement) => {
+    glide.to.push(target);
+    return Promise.resolve(true);
+  },
+}));
 vi.mock("@/components/targets/MergeFindings", () => ({ MergeFindings: () => null }));
 vi.mock("@/components/targets/DormantAccounts", () => ({ DormantAccounts: () => null }));
 vi.mock("@/components/targets/PeopleOnTarget", () => ({ PeopleOnTarget: () => null }));
@@ -125,6 +133,20 @@ describe("the jump chips", () => {
     expect(links[2]).toHaveTextContent("What runs here");
     // Each lands on a region that keeps its seat.
     for (const id of ["land", "waiting", "accounts", "runs"]) expect(document.getElementById(id)).not.toBeNull();
+  });
+
+  // 8d: a jump glides there, and the heading it lands on flashes once. It is a control, not a hash jump.
+  it("glide to the region's heading instead of jumping, and are controls", () => {
+    renderTarget();
+    glide.to = [];
+    const accounts = within(screen.getByRole("navigation", { name: "Regions of this page" })).getByRole("link", {
+      name: /Accounts/,
+    });
+    expect(accounts).toHaveClass("control", "press-scale");
+
+    // false: the click's default, the native jump, was prevented.
+    expect(fireEvent.click(accounts)).toBe(false);
+    expect(glide.to.map((el) => el.id)).toEqual(["accounts-heading"]);
   });
 
   it("leave out a count that has not been read", () => {

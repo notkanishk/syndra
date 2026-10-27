@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { StatusDot } from "@/components/ui/Badge";
+import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
+import { TINT_MS, useExitPhase } from "@/lib/motion";
 
 /**
  * A value somebody retypes into another application.
@@ -45,26 +47,16 @@ export function CopyableValue({
   // that direction offers a control that cannot work.
   const [canCopy, setCanCopy] = useState(true);
   const valueRef = useRef<HTMLElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 900ms, and then the row is a row again. No toast: on a phone a toast
+  // covers the value that was just copied.
+  const confirmFor = useConfirmFor();
+  // Inline, "Copied" is in the text only while it is showing: a value in a
+  // sentence is selected and copied by hand too, and must never carry the word.
+  const word = useExitPhase(copied, TINT_MS);
 
   useEffect(() => {
     setCanCopy(typeof navigator !== "undefined" && Boolean(navigator.clipboard));
   }, []);
-
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  /** 900ms, and then the row is a row again. No toast: on a phone a toast
-      covers the value that was just copied. */
-  function confirmFor(set: (on: boolean) => void) {
-    set(true);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => set(false), 900);
-  }
 
   async function copy() {
     try {
@@ -104,9 +96,25 @@ export function CopyableValue({
           return canCopy ? copy() : select();
         }}
         aria-label={`${canCopy ? "Copy" : "Select"} ${object}`}
-        className={`type-mono text-faint motion-tint hover:text-ink ${copied || selected ? "text-healthy" : ""} ${className}`}
+        className={`type-mono text-faint control press-scale hover:text-ink ${copied || selected ? "text-healthy" : ""} ${className}`}
       >
-        <span ref={valueRef}>{value}</span>
+        {/* The value and "Copied" share one seat, so the line never changes
+            width (S18). A selection keeps the value on screen: it is what is
+            selected. */}
+        <span className="inline-grid items-center justify-items-start [&>*]:col-start-1 [&>*]:row-start-1">
+          <span ref={valueRef} className={`motion-tint ${copied ? "opacity-0" : "opacity-100"}`}>
+            {value}
+          </span>
+          {word.rendered && (
+            <span
+              aria-hidden
+              className={`inline-flex select-none items-center gap-2 ${word.leaving ? "tint-out" : "tint-in"}`}
+            >
+              <StatusDot tone="healthy" bloom={copied} />
+              Copied
+            </span>
+          )}
+        </span>
       </button>
     );
   }
@@ -134,20 +142,14 @@ export function CopyableValue({
           copied || selected ? "text-healthy" : "text-muted hover:bg-[var(--hover)] hover:text-ink"
         }`}
       >
-        {/* One seat, sized to the wider label, so the button never changes width (S18).
-            Copy and Copied crossfade on tint. Only a copy blooms: it went somewhere. A
-            selection is still the reader's to finish. */}
-        <span className="grid items-center justify-items-start [&>*]:col-start-1 [&>*]:row-start-1">
-          <span className={`motion-tint ${copied || selected ? "opacity-0" : "opacity-100"}`}>
-            {canCopy ? "Copy" : "Select"}
-          </span>
-          <span
-            className={`inline-flex items-center gap-2 motion-tint ${copied || selected ? "opacity-100" : "opacity-0"}`}
-          >
-            {canCopy && <StatusDot tone="healthy" bloom={copied} />}
-            {canCopy ? "Copied" : "Selected"}
-          </span>
-        </span>
+        {/* Only a copy blooms: it went somewhere. A selection is still the reader's
+            to finish. */}
+        <CopiedSeat
+          done={copied || selected}
+          idle={canCopy ? "Copy" : "Select"}
+          word={canCopy ? "Copied" : "Selected"}
+          dot={canCopy}
+        />
       </button>
 
       {/* Announced rather than only coloured: the label change is the whole

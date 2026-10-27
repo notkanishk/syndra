@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Makerspace } from "@/components/home/Makerspace";
+import { SKELETON_DELAY_MS } from "@/components/states";
 import type { UserListEntry } from "@/lib/queries/useUsers";
 
 const state = vi.hoisted(() => ({
@@ -17,6 +18,9 @@ const state = vi.hoisted(() => ({
   },
   targets: [{ target: "truenas" }] as Array<{ target: string }>,
 }));
+
+/** The skeleton only shows once the read has run longer than the delay (S7). */
+const afterTheDelay = () => act(() => new Promise<void>((done) => setTimeout(done, SKELETON_DELAY_MS + 30)));
 
 const loading = vi.hoisted(() => ({
   users: false,
@@ -308,20 +312,24 @@ describe("Home › The makerspace", () => {
     expect(screen.getByRole("link", { name: /still holds roles/ })).toHaveTextContent("1");
   });
 
-  it("shows a neutral placeholder while people are still loading, never an affirmative empty state", () => {
+  it("shows a neutral placeholder while people are still loading, never an affirmative empty state", async () => {
     loading.users = true;
     state.users = [];
     renderMakerspace();
 
+    // S7: a read that is quick never shows a skeleton; one that is slow shows it after 200ms.
+    expect(screen.queryByLabelText("Loading gaps")).not.toBeInTheDocument();
+    await afterTheDelay();
     expect(screen.getByLabelText("Loading gaps")).toBeInTheDocument();
     expect(screen.queryByText("Everybody here has something.")).not.toBeInTheDocument();
   });
 
-  it("shows a neutral placeholder while the role catalogue is still loading, never an affirmative empty state", () => {
+  it("shows a neutral placeholder while the role catalogue is still loading, never an affirmative empty state", async () => {
     loading.roles = true;
     state.roles = [];
     renderMakerspace();
 
+    await afterTheDelay();
     expect(screen.getAllByLabelText(/^Loading (gaps|where access lives)$/).length).toBeGreaterThan(0);
     expect(screen.queryByText("Nobody holds a role yet.")).not.toBeInTheDocument();
     expect(screen.queryByText("Every role and bundle is in use.")).not.toBeInTheDocument();
@@ -387,9 +395,10 @@ describe("Home › The makerspace", () => {
       expect(screen.getAllByText("Not read just now.").length).toBeGreaterThanOrEqual(2);
     });
 
-    it("shows Lately a skeleton while loading and a plain line on failure, never 'Nothing recorded yet'", () => {
+    it("shows Lately a skeleton while loading and a plain line on failure, never 'Nothing recorded yet'", async () => {
       loading.audit = true;
       const first = renderMakerspace();
+      await afterTheDelay();
       expect(screen.getByLabelText("Loading recent activity")).toBeInTheDocument();
       expect(screen.queryByText("Nothing recorded yet.")).not.toBeInTheDocument();
       first.unmount();

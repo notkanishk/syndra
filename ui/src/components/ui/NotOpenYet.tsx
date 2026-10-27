@@ -1,6 +1,9 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useState, type ReactNode } from "react";
 
 import { StatusDot } from "@/components/ui/Badge";
+import { glideTo } from "@/lib/motion";
 
 /**
  * A section someone can't use yet (proposed/NotOpenYet.md).
@@ -27,7 +30,12 @@ export function NotOpenYet({
   size?: "card" | "page";
   children: ReactNode;
 }) {
-  if (open) return <>{children}</>;
+  // Opening is a swap of the dashed frame for the live contents; the contents
+  // tint in rather than the frame and the dimming snapping away. One that was
+  // never closed here (it is open on first paint) is only its contents.
+  const [wasClosed, setWasClosed] = useState(!open);
+  if (!open && !wasClosed) setWasClosed(true);
+  if (open) return wasClosed ? <div className="tint-in">{children}</div> : <>{children}</>;
   const page = size === "page";
   return (
     <div
@@ -48,7 +56,14 @@ export function NotOpenYet({
         {step && (
           <a
             href={step.href}
-            className="ml-auto inline-flex min-h-[44px] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0"
+            // A step on this page glides there and the place it lands flashes once (8d).
+            onClick={(event) => {
+              const target = step.href.startsWith("#") ? document.getElementById(step.href.slice(1)) : null;
+              if (!target) return;
+              event.preventDefault();
+              glideTo(target);
+            }}
+            className="ml-auto inline-flex min-h-[44px] items-center whitespace-nowrap text-[14px] font-semibold text-accent-text desktop:min-h-0 link-hover"
           >
             {step.label}
           </a>

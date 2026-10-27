@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageHead } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { Checkbox } from "@/components/ui/Choice";
 import { Notice } from "@/components/ui/Notice";
@@ -27,15 +28,17 @@ export function UpstreamShell({
   syndraLabel: string;
   children: React.ReactNode;
 }) {
+  // A screen's first paint (S11): the title block tints in, then what follows it arrives.
+  const head = usePageHead();
   return (
     <div className="flex flex-col gap-[18px]">
-      <div>
+      <div className={head.className} data-settled={head["data-settled"]}>
         <Link
           href="/zitadel"
           // Standalone navigation, not a link in a sentence: this is the
           // back affordance on these two screens, and on a phone it is what a
           // thumb reaches for first.
-          className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
+          className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text link-hover"
         >
           <span aria-hidden="true">← </span>Zitadel
         </Link>
@@ -53,7 +56,7 @@ export function UpstreamShell({
           {lede}{" "}
           <Link
             href={syndraHref}
-            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0"
+            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0 link-hover"
           >
             {syndraLabel} <span aria-hidden="true">→</span>
           </Link>

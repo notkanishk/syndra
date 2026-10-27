@@ -6,6 +6,28 @@ import { ARRIVE_SETTLED_MS, returnedToThisPage } from "@/components/ui/ArriveLis
 import { TINT_MS } from "@/lib/motion";
 
 /**
+ * A screen's first paint (S11), for a header that is not a `PageHeader`: the
+ * greeting on Home, the member's home, a screen that stands alone. Spread
+ * `className` and `data-settled` onto the first child of the page; what follows
+ * it arrives (`page-head` in globals.css). Only when you navigate there:
+ * coming Back, or once it has run, the page is simply there.
+ */
+export function usePageHead(): { className: string; "data-settled": string | undefined } {
+  const [settled, setSettled] = useState(false);
+  // After mount rather than in the initial state: the server cannot know about
+  // a Back, and a different first render is a hydration mismatch.
+  useLayoutEffect(() => {
+    if (returnedToThisPage()) setSettled(true);
+  }, []);
+  useEffect(() => {
+    if (settled) return;
+    const timer = setTimeout(() => setSettled(true), TINT_MS + ARRIVE_SETTLED_MS);
+    return () => clearTimeout(timer);
+  }, [settled]);
+  return { className: "page-head", "data-settled": settled ? "" : undefined };
+}
+
+/**
  * The page's own title block. The breadcrumb says where you are; this says
  * what you are looking at, with its actions on the right.
  *
@@ -39,22 +61,12 @@ export function PageHeader({
   actions?: React.ReactNode;
   className?: string;
 }) {
-  const [settled, setSettled] = useState(false);
-  // After mount rather than in the initial state: the server cannot know about
-  // a Back, and a different first render is a hydration mismatch.
-  useLayoutEffect(() => {
-    if (returnedToThisPage()) setSettled(true);
-  }, []);
-  useEffect(() => {
-    if (settled) return;
-    const timer = setTimeout(() => setSettled(true), TINT_MS + ARRIVE_SETTLED_MS);
-    return () => clearTimeout(timer);
-  }, [settled]);
+  const head = usePageHead();
 
   return (
     <div
-      className={`page-head flex flex-wrap items-end gap-4 ${className}`}
-      data-settled={settled ? "" : undefined}
+      className={`${head.className} flex flex-wrap items-end gap-4 ${className}`}
+      data-settled={head["data-settled"]}
     >
       {/* `flex-auto` (basis: auto), not `flex-1` (basis: 0%) — with a 0%
           basis this block reports zero size to the wrap decision, so `actions`

@@ -24,6 +24,8 @@ export function StatCard({
   /**
    * The list this number counts (proposed/StatCard-href.md): the whole card is
    * the link, named by its label, with a 1px accent ring on hover and no arrow.
+   * Pressed, --tint-3 is a second background layer over the card's own surface,
+   * never in place of it (A-08 §5).
    */
   href?: string;
 }) {
@@ -48,7 +50,7 @@ export function StatCard({
     <a
       href={href}
       aria-label={label}
-      className={`${frame} block text-inherit no-underline motion-tint hover:shadow-[0_0_0_1px_var(--accent-line)]`}
+      className={`${frame} block text-inherit no-underline motion-tint hover:shadow-[0_0_0_1px_var(--accent-line)] active:[background-image:linear-gradient(var(--tint-3),var(--tint-3))]`}
     >
       {body}
     </a>

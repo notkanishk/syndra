@@ -127,6 +127,31 @@ describe("token format editor", () => {
     );
   });
 
+  // Rows have an identity of their own now (a row added opens, a row removed fades), so
+  // "unsaved" must still be judged by what the rows say and not by which row is which.
+  it("adds and removes a claim row, and is unsaved only while the rows differ", () => {
+    renderEditor("app_bookings");
+    const save = screen.getByRole("button", { name: "Save token format" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a claim" }));
+    expect(screen.getAllByLabelText("Claim name")).toHaveLength(2);
+    expect(save).toBeEnabled();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^Remove / })[1]);
+    expect(screen.getAllByLabelText("Claim name")).toHaveLength(1);
+    expect(save).toBeDisabled();
+  });
+
+  it("edits the row that was edited when two rows are showing", () => {
+    renderEditor("app_bookings");
+    fireEvent.click(screen.getByRole("button", { name: "Add a claim" }));
+    const [first, added] = screen.getAllByLabelText("Claim name");
+    fireEvent.change(added, { target: { value: "syndra.laser.team" } });
+
+    expect(first).toHaveValue("syndra.laser.email");
+    expect(added).toHaveValue("syndra.laser.team");
+  });
+
   it("shows every key the token carries and who owns each one", () => {
     renderEditor("app_badge");
 

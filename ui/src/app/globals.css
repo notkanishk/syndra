@@ -174,13 +174,16 @@
   --duration-breathe: 2400ms;
   /* Scrolling only, on settle's curve: the one glide the page performs. */
   --duration-glide: 520ms;
+  /* The focus ring fades out on tint and appears at once (S9). The outline-color
+     slot of each motion utility reads this; `:focus-visible` zeroes it. */
+  --ring-fade: var(--duration-tint);
 
   /* Nothing in the page content travels further than this. A phone sheet
      entering from the screen's edge and a control's own indicator (Segmented's
      fill, Tabs' underline) are not page content and fall outside it. */
   --travel-cap: 10px;
 
-  /* Rows stagger 40ms apart, and the stagger caps at six: a queue of forty
+  /* Rows stagger 40ms apart, and the stagger caps at five: a queue of forty
      must not take two seconds to become readable. */
   --arrive-step: 40ms;
   --arrive-cap: 5;
@@ -594,7 +597,9 @@
      4px offset is what lets the ring clear a violet button instead of
      merging with it. The ring appears instantly, because a keyboard user is waiting on it, and
      fades out on tint (A-05 S9): the fade lives on the resting state, so it
-     governs leaving, and the focused state carries no transition. */
+     governs leaving. The motion utilities list outline-color too (they replace
+     this rule's transition), reading --ring-fade, which the focused state
+     zeroes. */
   a,
   button,
   input,
@@ -612,6 +617,7 @@
     outline-offset: 4px;
     border-radius: 4px;
     transition: none;
+    --ring-fade: 0s;
   }
 
   ::selection {
@@ -642,9 +648,22 @@
          flash   colour only; the wash still says "this changed".
          bloom   goes: it is the one thing that is only movement.
          breathe rests at full strength rather than pulsing. */
-    .control,
     .press-scale {
       transition-duration: var(--duration-press) !important;
+      transition-delay: 0s !important;
+    }
+    /* Colour stays on tint and only the transform is held at press. */
+    .control {
+      transition-duration:
+        var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+        var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+        var(--ring-fade), var(--duration-press) !important;
+      transition-delay: 0s !important;
+    }
+    /* The seat's press is the same 3% gesture. */
+    .seat > span {
+      transition-duration:
+        var(--duration-tint), var(--duration-tint), var(--ring-fade), var(--duration-press) !important;
       transition-delay: 0s !important;
     }
     .flash {
@@ -774,17 +793,39 @@
    of forty rows where each one lifts on hover is a table that flickers as you
    read down it. */
 @utility motion-tint {
-  transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow;
-  transition-duration: var(--duration-tint);
+  transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow,
+    filter, outline-color;
+  transition-duration:
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+    var(--ring-fade);
   transition-timing-function: var(--ease-tint);
 }
 
 /* press · 180ms — anything that answers a click. */
 @utility motion-press {
   transition-property: color, background-color, border-color, opacity, box-shadow, transform,
-    filter;
-  transition-duration: var(--duration-press);
-  transition-timing-function: var(--ease-press);
+    filter, outline-color;
+  transition-duration:
+    var(--duration-press), var(--duration-press), var(--duration-press), var(--duration-press),
+    var(--duration-press), var(--duration-press), var(--duration-press), var(--ring-fade);
+  transition-timing-function:
+    var(--ease-press), var(--ease-press), var(--ease-press), var(--ease-press), var(--ease-press),
+    var(--ease-press), var(--ease-press), var(--ease-tint);
+}
+
+/* A fold's chevron (or a sort arrow) turning: settle's duration and curve, the
+   same as the Unfold it controls. Tailwind compiles rotate-90 / rotate-180 to
+   the `rotate` property, not `transform`, so both are listed. Its colour and
+   opacity stay on tint, so a chevron that also tints on hover keeps doing so. */
+@utility motion-turn {
+  transition-property: rotate, transform, color, background-color, border-color, opacity;
+  transition-duration:
+    var(--duration-settle), var(--duration-settle), var(--duration-tint), var(--duration-tint),
+    var(--duration-tint), var(--duration-tint);
+  transition-timing-function:
+    var(--ease-settle), var(--ease-settle), var(--ease-tint), var(--ease-tint), var(--ease-tint),
+    var(--ease-tint);
 }
 
 /* The press itself: a 3% scale-down, never a translate, so the button stays
@@ -897,13 +938,14 @@ html.theme-fading *::after {
    darkens one step instead (hover-tint). */
 @utility control {
   transition-property: color, background-color, border-color, fill, stroke, opacity, box-shadow,
-    transform;
+    filter, outline-color, transform;
   transition-duration:
     var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
-    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-press);
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--duration-tint),
+    var(--ring-fade), var(--duration-press);
   transition-timing-function:
     var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-tint),
-    var(--ease-tint), var(--ease-tint), var(--ease-press);
+    var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-tint), var(--ease-press);
 
   &:active:not(:disabled) {
     transform: scale(0.97);
@@ -930,9 +972,12 @@ html.theme-fading *::after {
 }
 
 /* The selection seat (proposed/SelectionSeat.md): how a choice is marked
-   everywhere. A real input, transparent over a 24px round seat it styles.
-   Chosen fills accent and the mark settles in from 60%; some chosen is the
-   same fill with a dash; locked is grey, ticked, and can't change here. */
+   everywhere. A real input, transparent over a round seat it styles: 24px on
+   touch and 16px with a mouse, the desktop breakpoint being where this
+   product stops being touch (A-08 §5). Chosen fills accent and the mark settles
+   in from 60%; some chosen is the same fill with a dash; locked is grey,
+   ticked, and can't change here. The row is the hit area, and the input keeps
+   the 24px it always covered, so a smaller seat is not a smaller target. */
 @utility seat {
   position: relative;
   display: inline-flex;
@@ -947,6 +992,16 @@ html.theme-fading *::after {
     opacity: 0;
     cursor: pointer;
   }
+  /* After the input's own rule, or its `inset: 0` would win and the target
+     would shrink with the seat. */
+  @media (width >= theme(--breakpoint-desktop)) {
+    width: 16px;
+    height: 16px;
+
+    & > input {
+      inset: -4px;
+    }
+  }
   & > span {
     display: flex;
     width: 100%;
@@ -956,13 +1011,21 @@ html.theme-fading *::after {
     border-radius: 9999px;
     border: 1.5px solid var(--line-strong);
     color: var(--accent-ink);
-    /* The fill changes on tint; press is the 3% gesture only (A-06 §5). */
-    transition-property: background-color, border-color, transform;
-    transition-duration: var(--duration-tint), var(--duration-tint), var(--duration-press);
-    transition-timing-function: var(--ease-tint), var(--ease-tint), var(--ease-press);
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+    /* The fill changes on tint; press is the 3% gesture only (A-06 §5). The
+       focus mark fades out on tint and appears at once, like every ring. */
+    transition-property: background-color, border-color, outline-color, transform;
+    transition-duration:
+      var(--duration-tint), var(--duration-tint), var(--ring-fade), var(--duration-press);
+    transition-timing-function: var(--ease-tint), var(--ease-tint), var(--ease-tint),
+      var(--ease-press);
   }
-  /* The tick settles in from 60%, 40ms behind the fill. */
+  /* The tick settles in from 60%, 40ms behind the fill. It is half the seat's width, so
+     it scales with the seat. */
   & > span > svg {
+    width: 50%;
+    height: 50%;
     opacity: 0;
     transform: scale(0.6);
     transition-property: opacity, transform;
@@ -986,8 +1049,8 @@ html.theme-fading *::after {
     transform: scale(0.97);
   }
   & > input:focus-visible + span {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 3px;
+    outline-color: var(--focus-ring);
+    --ring-fade: 0s;
   }
   & > input:disabled {
     cursor: not-allowed;
@@ -1038,7 +1101,10 @@ html.theme-fading *::after {
   &[data-phase="closing"] {
     /* Its own keyframes, not `unfold reverse`: reversing also reverses the
        easing, and the gap would start slow and snap shut. */
-    animation: fold var(--duration-settle) var(--ease-settle) var(--duration-tint) both;
+    /* A-08 §3: the gap folds quicker than it opened, 200ms. No token was
+       granted for it, so it is the settle less half a tint (260 - 60). */
+    animation: fold calc(var(--duration-settle) - var(--duration-tint) / 2) var(--ease-settle)
+      var(--duration-tint) both;
   }
   &[data-phase="closing"] > * {
     overflow: hidden;
@@ -1056,6 +1122,50 @@ html.theme-fading *::after {
   > * {
     min-height: 0;
     overflow: hidden;
+  }
+}
+
+/* A row of a list the reader reads again (S5, A-08 §4), worn by `LeavingRow`.
+   Unlike `close-gap` this is a TRANSITION, not an animation, and that is the
+   point: a row that comes back while it is still going turns round from
+   wherever its fade and its fold have got to, because removing the state
+   reverses the transition. A keyframe animation would restart.
+     data-leaving  fades on tint            data-closing  then its gap settles
+     data-fresh    a row new from a read    data-opens    a row the reader brought back:
+                   tints in                               its gap opens on settle, its
+                                                          contents tinting in one tint behind
+   The grid row is what travels, so the height is the row's own. */
+@utility leave-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--duration-settle) var(--ease-settle);
+
+  > * {
+    min-height: 0;
+    transition: opacity var(--duration-tint) var(--ease-tint);
+  }
+  &[data-leaving] > * {
+    opacity: 0;
+  }
+  &[data-closing] {
+    grid-template-rows: 0fr;
+    transition-delay: var(--duration-tint);
+  }
+  &[data-closing] > *,
+  &[data-turning] > * {
+    overflow: hidden;
+  }
+  &[data-fresh] > * {
+    animation: fade var(--duration-tint) var(--ease-tint) backwards;
+  }
+  &[data-opens] {
+    @starting-style {
+      grid-template-rows: 0fr;
+    }
+  }
+  &[data-opens] > * {
+    overflow: hidden;
+    animation: fade var(--duration-settle) var(--ease-tint) var(--duration-tint) backwards;
   }
 }
 
@@ -1273,16 +1383,44 @@ html.theme-fading *::after {
    shadow, no border change. Nav rows use the same tint as table rows, so the
    sidebar and the table read as one surface. */
 @utility hover-tint {
-  transition-property: color, background-color;
-  transition-duration: var(--duration-tint);
+  transition-property: color, background-color, border-color, outline-color;
+  transition-duration:
+    var(--duration-tint), var(--duration-tint), var(--duration-tint), var(--ring-fade);
   transition-timing-function: var(--ease-tint);
 
   &:hover {
     background-color: var(--hover);
   }
-  /* A pressed row darkens one step and never scales (A-05 S8). */
+  /* A pressed row darkens one step past hover (--tint-3, the step that already
+     exists in both themes) and never scales (A-05 S8, A-08 §1). */
   &:active {
-    background-color: var(--surface-2);
+    background-color: var(--tint-3);
+  }
+}
+
+/* A text link's hover, whichever link it is (A-08 §2a): the words go to
+   --accent-text and the underline tints in from transparent. The line is
+   always drawn, in a colour that starts as nothing, so hover stays colour
+   only: switching `text-decoration-line` on would be a jump, which the guard
+   against `hover:underline` forbids. A link already accent at rest only gains
+   the underline. One that is underlined at rest (`link-hover underline`) keeps
+   it: only its colour moves. Whole rows and cards that are links use
+   hover-tint or a ring, not this. */
+@utility link-hover {
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition-property: color, text-decoration-color, outline-color;
+  transition-duration: var(--duration-tint), var(--duration-tint), var(--ring-fade);
+  transition-timing-function: var(--ease-tint);
+
+  &.underline {
+    text-decoration-color: currentColor;
+  }
+  &:hover {
+    color: var(--accent-text);
+    text-decoration-color: currentColor;
   }
 }
 

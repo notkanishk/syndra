@@ -11,6 +11,7 @@ import { Chip } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
+import { Unfold } from "@/components/ui/Unfold";
 import { formatShortDate } from "@/lib/format";
 import { useCrumb } from "@/lib/page-crumb";
 import { useBundleVersions } from "@/lib/queries/useBundleVersions";
@@ -166,7 +167,9 @@ export function RetiredBundlesFold() {
   return (
     <Card>
       <FoldHeading open={open} onClick={() => setOpen(!open)} title="Retired bundles" count={n ? String(n) : ""} picked={false} />
-      {open && <RetiredBundleRows />}
+      <Unfold open={open}>
+        <RetiredBundleRows />
+      </Unfold>
     </Card>
   );
 }
@@ -188,7 +191,7 @@ function RetiredBundleRows() {
         <Link
           key={b.id}
           href={`/bundles/${encodeURIComponent(b.id)}`}
-          className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5 motion-tint hover:bg-[var(--hover)]"
+          className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5 hover-tint"
         >
           <span className="min-w-0 flex-1 text-[14.5px] font-semibold">{b.name}</span>
           <span className="text-[13px] text-faint">Retired {formatShortDate(b.retired_at ?? "")}</span>

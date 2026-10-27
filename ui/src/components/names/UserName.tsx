@@ -1,7 +1,7 @@
 "use client";
 
 import { Unresolved, UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 
 interface UserNameProps {
@@ -36,6 +36,10 @@ export const SHOW_DEBUG_IDS =
  */
 export function UserName({ id, fallback = "—", showEmail = false, className = "" }: UserNameProps) {
   const resolver = useNameResolver();
+  const named = Boolean(id) && id !== "system" && id !== "-";
+  const { value, resolved } = named ? resolver.resolveUser(id ?? "") : { value: undefined, resolved: true };
+  // The name that lands after a skeleton tints in, not snaps (S7).
+  const tint = useTintAfterSkeleton(named && !value && !resolved);
 
   if (!id) {
     return <span className={className}>{fallback}</span>;
@@ -44,8 +48,6 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
   if (id === "system" || id === "-") {
     return <span className={`text-muted ${className}`}>System</span>;
   }
-
-  const { value, resolved } = resolver.resolveUser(id);
 
   if (!value) {
     if (!resolved) {
@@ -60,11 +62,18 @@ export function UserName({ id, fallback = "—", showEmail = false, className = 
     // mono text in Advanced only (touch cannot open a tooltip, and a screenshot
     // carries what is rendered). It is never the label: an opaque subject id
     // where a name belongs reads as a bug to everyone who sees it.
-    return <Unresolved label={fallback === "—" ? UNKNOWN_ACCOUNT : fallback} id={id} idLabel="account id" className={className} />;
+    return (
+      <Unresolved
+        label={fallback === "—" ? UNKNOWN_ACCOUNT : fallback}
+        id={id}
+        idLabel="account id"
+        className={`${className} ${tint}`}
+      />
+    );
   }
 
   return (
-    <span className={className} title={SHOW_DEBUG_IDS ? id : undefined}>
+    <span className={`${className} ${tint}`} title={SHOW_DEBUG_IDS ? id : undefined}>
       {value.display_name || (fallback as React.ReactNode)}
       {showEmail && value.email ? (
         <span className="text-muted"> · {value.email}</span>

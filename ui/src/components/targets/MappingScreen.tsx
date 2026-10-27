@@ -52,7 +52,7 @@ export function MappingScreen({ target }: { target: string }) {
       <div className="flex flex-col gap-1">
         <Link
           href={`/system/targets/${target}`}
-          className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text hover:underline desktop:min-h-6"
+          className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 link-hover"
         >
           <span aria-hidden>←&nbsp;</span>
           {name}
@@ -68,7 +68,7 @@ export function MappingScreen({ target }: { target: string }) {
                     Zitadel project{" "}
                     <Link
                       href={`/projects/${project.id}`}
-                      className="font-semibold text-ink hover:text-accent-text hover:underline"
+                      className="font-semibold text-ink link-hover"
                     >
                       <ProjectName id={project.id} name={project.name} />
                     </Link>

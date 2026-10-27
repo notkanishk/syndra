@@ -21,6 +21,7 @@ import { PersonActivity } from "@/components/people/PersonActivity";
 import { PersonRequests } from "@/components/people/PersonRequests";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, Mono } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -31,7 +32,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card } from "@/components/ui/Card";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
-import { Unfold } from "@/components/ui/Unfold";
+import { Tinted, Unfold } from "@/components/ui/Unfold";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
@@ -88,6 +89,23 @@ interface AccessRole {
  * generic "revoke role".
  */
 export function PersonAccess({ userId, isOperator }: { userId: string; isOperator: boolean }) {
+  const access = useUserAccess(userId);
+  // One hand-over (S7): a skeleton only if the read is slow, then the page arrives.
+  return (
+    <ReadGate
+      loading={access.isLoading}
+      skeleton={
+        <Card>
+          <RowSkeleton rows={5} label="Loading this person's access" />
+        </Card>
+      }
+    >
+      <ReadPersonAccess userId={userId} isOperator={isOperator} />
+    </ReadGate>
+  );
+}
+
+function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: boolean }) {
   const access = useUserAccess(userId);
   const grants = useUserGrants(userId);
   const advanced = useIsAdvanced();
@@ -166,13 +184,6 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
   // crowds out the part that actually differs.
   const readAt = upstreamGrants.data?.observedAt;
 
-  if (access.isLoading) {
-    return (
-      <Card>
-        <RowSkeleton rows={5} label="Loading this person's access" />
-      </Card>
-    );
-  }
   if (access.error) {
     return (
       <ErrorState
@@ -237,7 +248,13 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                 // Advanced only: the board's Basic header is name, email, role
                 // and team. When it is shown it sits last, after every
                 // human-readable fact, and never stands in for a name.
-                advanced ? <Mono key="id">{user.id}</Mono> : null,
+                // An inline bit, not a region: it tints in with the view. The meta
+                // row drops a falsy item and its dot together, so it goes at once.
+                advanced ? (
+                  <span key="id" className="tint-in">
+                    <Mono>{user.id}</Mono>
+                  </span>
+                ) : null,
                 // Operator-only for the same reason the Activity tab is: /audit
                 // is operator-gated, so a member following this link would land
                 // on a page they cannot read.
@@ -245,7 +262,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   <Link
                     key="trail"
                     href={`/audit?user=${encodeURIComponent(user.id)}`}
-                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6"
+                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 link-hover"
                   >
                     Full audit trail
                   </Link>
@@ -286,7 +303,9 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
         <PersonActivity userId={userId} name={user.name} />
       ) : (
         <>
-          {advanced && isOperator && <AccountKind user={user} />}
+          <Unfold open={advanced && isOperator} gap={18}>
+            <AccountKind user={user} />
+          </Unfold>
           {/* Bundle chips state membership and nothing else — no inline ✕.
               Removal lives behind Manage bundles, which shows the impact. */}
           <div className="panel flex flex-wrap items-center gap-3 px-5 py-4">
@@ -332,7 +351,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
               <button
                 type="button"
                 onClick={() => setBundlesOpen(true)}
-                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6"
+                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 link-hover"
               >
                 Manage bundles
               </button>
@@ -435,7 +454,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                     {/* The 28px round chevron is the look; the 44px button around it is the touch floor. */}
                     <span
                       aria-hidden
-                      className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press group-hover:bg-[var(--hover)] ${
+                      className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn group-hover:bg-[var(--hover)] ${
                         open ? "rotate-90" : ""
                       }`}
                     >
@@ -444,7 +463,7 @@ export function PersonAccess({ userId, isOperator }: { userId: string; isOperato
                   </button>
                   <Link
                     href={`/projects/${encodeURIComponent(project.project_id)}`}
-                    className="hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+                    className="link-hover"
                   >
                     <ResolvedProjectName
                       className="type-card-title"
@@ -730,11 +749,13 @@ function ZitadelGrantId({
     );
   }
   // The read time is on the page's read line; only the handle is left here.
-  if (!showId) return null;
+  // An inline bit of the line, not a region: it tints with the view (A-08 §3).
   return (
-    <span className="text-[13px] text-faint">
-      Grant <Mono className="font-normal text-faint">{id}</Mono>
-    </span>
+    <Tinted show={showId}>
+      <span className="text-[13px] text-faint">
+        Grant <Mono className="font-normal text-faint">{id}</Mono>
+      </span>
+    </Tinted>
   );
 }
 
@@ -877,11 +898,8 @@ function RoleGroup({
         const verb = strongest?.queued ? "Withdraw" : strongest?.kind === "direct" ? "Revoke" : "Remove";
 
         return (
-          <div
-            key={role.role_key}
-            id={`role-${projectId}-${role.role_key}`}
-            className="flex flex-wrap items-center gap-[18px] px-5 py-3"
-          >
+          <div key={role.role_key} id={`role-${projectId}-${role.role_key}`}>
+          <div className="flex flex-wrap items-center gap-[18px] px-5 py-3">
             <div className="w-[230px] shrink-0 text-[15px] font-semibold">
               {humanizeKey(role.role_key)}
               {waitsFor(role.role_key) && <WaitsMark className="ml-2" />}
@@ -995,10 +1013,15 @@ function RoleGroup({
               </Button>
             )}
 
-            {/* Advanced reveals lineage in place, on the same URL. */}
-            {advanced && (
+          </div>
+          {/* Advanced reveals lineage in place, on the same URL, by Unfold (A-08
+              §3). Beside the row rather than inside its wrapping line, whose
+              18px row gap is outside anything that could fold: here the space
+              above it is its own (`pt-2.5`, with the row's own `py-3`). */}
+          <Unfold open={advanced}>
+            <div className="px-5 pb-3 pt-2.5">
               <div className="w-full">
-                <dl className="mt-1 grid grid-cols-[118px_1fr] gap-x-4 gap-y-1.5 rounded-block bg-tint-1 px-4 py-3 text-[13.5px]">
+                <dl className="grid grid-cols-[118px_1fr] gap-x-4 gap-y-1.5 rounded-block bg-tint-1 px-4 py-3 text-[13.5px]">
                   <dt className="text-faint">Grant id</dt>
                   <dd>
                     {grant ? (
@@ -1029,21 +1052,22 @@ function RoleGroup({
                   )}
                 </dl>
               </div>
-            )}
+            </div>
+          </Unfold>
 
-            {/* No dead ends: Basic names the cause and offers one scoped jump. */}
-            {!advanced && strongest?.kind === "mapping" && (
-              <div className="w-full">
-                <Button
-                  variant="accentSoft"
-                  size="sm"
-                  className="mt-1"
-                  onClick={() => onReveal(`role-${projectId}-${role.role_key}`)}
-                >
-                  This came from an automatic rule — Open automation details →
-                </Button>
-              </div>
-            )}
+          {/* No dead ends: Basic names the cause and offers one scoped jump. It
+              leaves the way the lineage arrives, when Advanced opens. */}
+          <Unfold open={!advanced && strongest?.kind === "mapping"}>
+            <div className="px-5 pb-3 pt-2.5">
+              <Button
+                variant="accentSoft"
+                size="sm"
+                onClick={() => onReveal(`role-${projectId}-${role.role_key}`)}
+              >
+                This came from an automatic rule — Open automation details →
+              </Button>
+            </div>
+          </Unfold>
           </div>
         );
       })}

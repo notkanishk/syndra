@@ -111,7 +111,7 @@ export function PlanReview({
                     Left out · this is you. Change your own access from{" "}
                     <Link
                       href={`/users/${encodeURIComponent(left.user_id)}`}
-                      className="font-semibold text-accent-text hover:brightness-110"
+                      className="font-semibold text-accent-text link-hover"
                     >
                       your page
                     </Link>

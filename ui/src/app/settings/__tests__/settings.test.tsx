@@ -289,11 +289,11 @@ describe("Edit term dates", () => {
     try {
       fireEvent.click(within(d).getAllByRole("button", { name: /^Remove/ })[2]);
       const gone = within(dialog()).getByLabelText("Monsoon, name", { hidden: true });
-      expect(gone.closest(".tint-out")).not.toBeNull();
+      expect(gone.closest("[data-leaving]")).not.toBeNull();
       expect(gone.closest("[inert]")).not.toBeNull();
-      expect(gone.closest(".close-gap")).not.toBeNull();
+      expect(gone.closest("[data-closing]")).not.toBeNull();
       // The two that stay are the same rows, untouched.
-      expect(within(dialog()).getByLabelText("Spring, name").closest(".tint-out")).toBeNull();
+      expect(within(dialog()).getByLabelText("Spring, name").closest("[data-leaving]")).toBeNull();
     } finally {
       motionInTests(false);
     }
