@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 
 	"syndra/internal/db"
 	"syndra/internal/models"
@@ -41,6 +42,11 @@ type zitadelSource struct {
 	now func() time.Time
 
 	cache sync.Map // key -> *cacheEntry
+
+	// Collapses concurrent cache misses on the users list into one rebuild: a
+	// rebuild is ListUsers plus a metadata call per user, so N pages missing
+	// together would otherwise multiply that by N.
+	usersFlight singleflight.Group
 
 	// When Zitadel last answered a list read, and since when it hasn't (zero
 	// while it answers). ponytail: one flag for every key, so in a partial
@@ -162,7 +168,22 @@ func (z *zitadelSource) Users(ctx context.Context) ([]models.UserProfile, error)
 	if cached, ok := z.cacheGet(usersCacheKey); ok {
 		return cached.([]models.UserProfile), nil
 	}
+	v, err, _ := z.usersFlight.Do(usersCacheKey, func() (any, error) {
+		// A caller that missed just before the last rebuild landed finds it here.
+		if cached, ok := z.cacheGet(usersCacheKey); ok {
+			return cached, nil
+		}
+		// Detached: the rebuild is shared, so one caller going away must not
+		// fail it for the rest. The client's own per-call timeout still bounds it.
+		return z.rebuildUsers(context.WithoutCancel(ctx))
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]models.UserProfile), nil
+}
 
+func (z *zitadelSource) rebuildUsers(ctx context.Context) ([]models.UserProfile, error) {
 	items, err := paginate(func(p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
 		return z.client.ListUsers(ctx, p)
 	})
