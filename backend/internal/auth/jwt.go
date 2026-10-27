@@ -35,13 +35,29 @@ type keyStore struct {
 	keys      map[string]*rsa.PublicKey
 	fetchedAt time.Time
 	ttl       time.Duration
+
+	// fetchMu serialises fetches and guards lastTry, the time of the last
+	// attempt, successful or not. A token naming a kid we have never seen (a
+	// forged one, say) may refetch at most once per minRefetch, so it cannot make
+	// every request cost a round trip to Zitadel.
+	fetchMu sync.Mutex
+	lastTry time.Time
 }
 
+const minRefetch = time.Minute
+
 var store = &keyStore{ttl: time.Hour}
+
+// jwksClient bounds the key fetch; the default client waits forever and the
+// request context carries no deadline of its own.
+var jwksClient = &http.Client{Timeout: 5 * time.Second}
 
 // SetKeysForTesting injects RSA public keys directly into the key store cache.
 // Intended for use in tests only — bypasses the JWKS network fetch.
 func SetKeysForTesting(keys map[string]*rsa.PublicKey) {
+	store.fetchMu.Lock()
+	store.lastTry = time.Now()
+	store.fetchMu.Unlock()
 	store.mu.Lock()
 	store.keys = keys
 	store.fetchedAt = time.Now()
@@ -70,7 +86,7 @@ func (s *keyStore) refresh(ctx context.Context, domain string) error {
 	if err != nil {
 		return fmt.Errorf("build jwks request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := jwksClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch jwks: %w", err)
 	}
@@ -126,10 +142,17 @@ func (s *keyStore) keyFunc(ctx context.Context, domain string) jwt.Keyfunc {
 			return k, nil
 		}
 
-		// Cache miss or stale — refresh then retry
-		if err := s.refresh(ctx, domain); err != nil {
-			return nil, err
+		// Cache miss or stale: refetch, unless we already tried within the last
+		// minute. Concurrent misses queue on the lock and see that attempt.
+		s.fetchMu.Lock()
+		if time.Since(s.lastTry) >= minRefetch {
+			s.lastTry = time.Now()
+			if err := s.refresh(ctx, domain); err != nil {
+				s.fetchMu.Unlock()
+				return nil, err
+			}
 		}
+		s.fetchMu.Unlock()
 
 		s.mu.RLock()
 		k = s.keys[kid]
