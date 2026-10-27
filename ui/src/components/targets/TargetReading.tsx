@@ -71,12 +71,13 @@ export function targetReading({
         pips: false,
       };
     case "checking": {
-      const started = formatClock(health?.started_at);
+      // The API omits a start time it does not have: no check yet, and no clock to name.
+      const started = health?.started_at ? formatClock(health.started_at) : null;
       return {
         tone: "neutral",
         word: "Checking",
-        line: `No check since restart, ${started}`,
-        sentence: `Syndra restarted at ${started} and hasn't heard from ${name} since. This clears at its first answer, within about 90 seconds.`,
+        line: started ? `No check since restart, ${started}` : "Not checked yet",
+        sentence: `${started ? `Syndra restarted at ${started} and hasn't` : "Syndra hasn't"} heard from ${name} since. This clears at its first answer, within about 90 seconds.`,
         pips: true,
       };
     }
