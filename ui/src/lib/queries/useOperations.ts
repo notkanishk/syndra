@@ -93,7 +93,7 @@ export function useWebhookEvents(filter: { status?: OperationsStatus } = {}) {
 }
 
 /**
- * Returns the onboarding trigger log. The backend returns the full set
+ * Returns the onboarding trigger log. The backend returns the newest 200
  * ordered by created_at desc and does not currently support a status query
  * — client-side filtering covers the four visible buckets.
  */
@@ -110,15 +110,15 @@ export function useOnboardingTriggers() {
 }
 
 /**
- * Returns the missed-onboarding report Home's queue reads. Same 5-second
- * poll as the rest of this file's queries — this is state computed fresh on
- * every read, not a cached inference, so polling it is just re-asking.
+ * Returns the missed-onboarding report Home's queue reads. Computed fresh on
+ * every read, not a cached inference, so polling it is just re-asking — and
+ * Home stays open all day, so once a minute, not the log pages' 5 seconds.
  */
 export function useMissedOnboarding() {
   return useQuery({
     queryKey: KEYS.missedOnboarding,
     queryFn: () => request<MissedOnboardingReport>("/onboarding/missed"),
-    refetchInterval: 5_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
   });
 }
