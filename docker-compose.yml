@@ -40,7 +40,6 @@ services:
       # only when pointing at a database outside this compose file.
       - DB_DSN=${DB_DSN:-postgres://syndra:${POSTGRES_PASSWORD}@postgres:5432/syndradb?sslmode=disable}
       - REDIS_URL=${REDIS_URL:-redis:6379}
-      - PORT=${PORT:-8080}
       - SYNDRA_API_KEY=${SYNDRA_API_KEY:-dev_auth_token_secret}
       # Deliberately has no compose-level default. Unset, the backend seeds
       # only when no live Zitadel client came up — demo data locally, nothing
@@ -164,7 +163,6 @@ services:
     ports:
       - "${UI_HOST_PORT:-3000}:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8080}
       - SYNDRA_API_KEY=${SYNDRA_API_KEY:-dev_auth_token_secret}
       # HMAC key for the session cookie. The UI falls back to SYNDRA_API_KEY
