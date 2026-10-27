@@ -137,10 +137,16 @@ Design answers A-04 to A-06 (17 Oct 2026) are built on `feat/design-answers-04-0
 
 Seven candidates where one question is answered by several copies, ranked, in [`changes/architecture-deepening`](changes/architecture-deepening/tasks.md) with the review page beside them. Top: one access-change planner, so a plan's preview and its apply are the same code.
 
+### Audit of 27 Oct — remediation in batches
+
+The outside audit (`docs/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 are open in `changes/audit-2026-10/tasks.md`. Q-09 (text contrast) is with Design.
+
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
 - **Untraced rule propagation** — `EnforceMappingRules` / `RevokeMappingRules` call the Zitadel Management API **directly**: no ledger row, no outbox row, no audit line, and a failure that is logged and stepped over. Every other Syndra-mediated Zitadel mutation leaves its trace before the call, which is the premise the drift sweep reasons from — `deps.go` states the rule for handlers ("the handlers no longer call Zitadel grant APIs directly"), and nothing stated it for anybody else.
+
+  Also (audit, 27 Oct): rules fire only from webhooks, and the self-mutation guard drops Syndra's own events, so once rules exist they apply only to grants made outside Syndra.
 
   **Dormant, not live:** the loop body runs only when a mapping rule exists, and production has **zero** (`select count(*) from mapping_rules` → 0, checked 2026-08-27). This is a trap that springs on whoever creates the first rule, not a hole open today. Drift does not currently false-positive on it either, because `expectedViaRule` explains rule-derived grants without needing a trace.
 
