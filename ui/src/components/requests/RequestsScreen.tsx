@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
   SelectAllRow,
@@ -55,6 +54,10 @@ import { keptEnds, stillEnds } from "@/lib/keep-ends";
 import { AskForAccess } from "@/components/requests/AskForAccess";
 import { HoldingNote, alreadyHeld, describeAsk, describeAskForMember } from "@/components/requests/Holding";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
 

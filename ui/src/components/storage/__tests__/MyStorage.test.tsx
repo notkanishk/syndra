@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MyStorage } from "@/components/storage/MyStorage";
-import { deviceFrom } from "@/components/storage/ConnectionGuide";
+import { deviceFrom } from "@/components/storage/device";
 import type { MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
 
