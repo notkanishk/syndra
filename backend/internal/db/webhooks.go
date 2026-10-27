@@ -112,7 +112,25 @@ func DropWebhookEventEnrichmentIncomplete(ctx context.Context, eventType, userID
 	return nil
 }
 
-// GetWebhookEvents returns webhook events ordered by creation time.
+// logListLimit bounds the operations log reads. Both pages poll every few
+// seconds, so an unbounded list is the whole table on every tick.
+const logListLimit = 200
+
+// WebhookEventRetentionDays is how long webhook_events rows are kept. The log
+// is for operators watching recent deliveries; it is not the audit trail.
+const WebhookEventRetentionDays = 90
+
+// PruneWebhookEvents deletes events older than retentionDays and says how many.
+func PruneWebhookEvents(ctx context.Context, retentionDays int) (int64, error) {
+	tag, err := querier(ctx).Exec(ctx,
+		`DELETE FROM webhook_events WHERE created_at < NOW() - make_interval(days => $1)`, retentionDays)
+	if err != nil {
+		return 0, fmt.Errorf("prune webhook events: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// GetWebhookEvents returns the newest logListLimit webhook events, newest first.
 // If statusFilter is non-empty, only events with that status are returned.
 func GetWebhookEvents(ctx context.Context, statusFilter string) ([]WebhookEvent, error) {
 	var query string
@@ -125,15 +143,18 @@ func GetWebhookEvents(ctx context.Context, statusFilter string) ([]WebhookEvent,
 			       created_at, processed_at
 			FROM webhook_events
 			WHERE status = $1
-			ORDER BY created_at DESC`
-		args = []any{statusFilter}
+			ORDER BY created_at DESC
+			LIMIT $2`
+		args = []any{statusFilter, logListLimit}
 	} else {
 		query = `
 			SELECT id, event_type, user_id, source_project, COALESCE(role_key, ''),
 			       idempotency_key, status, COALESCE(error_message, ''),
 			       created_at, processed_at
 			FROM webhook_events
-			ORDER BY created_at DESC`
+			ORDER BY created_at DESC
+			LIMIT $1`
+		args = []any{logListLimit}
 	}
 
 	rows, err := querier(ctx).Query(ctx, query, args...)

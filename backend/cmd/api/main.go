@@ -438,6 +438,17 @@ func main() {
 	usagePruneSched := periodic.New("FINDINGS", 24*time.Hour, 24*time.Hour, services.PruneUsageLastSeen)
 	go usagePruneSched.Start(ctx)
 
+	// Webhook log: the operations page lists the newest 200, so rows past the
+	// retention window are only table weight. Same cadence as the usage prune.
+	webhookPruneSched := periodic.New("WEBHOOK", 24*time.Hour, 24*time.Hour, func(ctx context.Context) error {
+		n, err := db.PruneWebhookEvents(ctx, db.WebhookEventRetentionDays)
+		if n > 0 {
+			log.Printf("[WEBHOOK] pruned %d events older than %d days", n, db.WebhookEventRetentionDays)
+		}
+		return err
+	})
+	go webhookPruneSched.Start(ctx)
+
 	// Start server in background
 	go func() {
 		fmt.Println("Control Plane Backend Listening on :8080")
@@ -517,6 +528,12 @@ func main() {
 	case <-usagePruneSched.Done():
 	case <-shutdownCtx.Done():
 		log.Println("[FINDINGS] Shutdown deadline exceeded waiting for the usage prune; closing anyway")
+	}
+
+	select {
+	case <-webhookPruneSched.Done():
+	case <-shutdownCtx.Done():
+		log.Println("[WEBHOOK] Shutdown deadline exceeded waiting for the webhook prune; closing anyway")
 	}
 
 	db.PG.Close()
