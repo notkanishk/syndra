@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -65,6 +66,15 @@ func observationFields(o db.Observation) (*time.Time, *bool) {
 	complete := o.Complete
 	return &at, &complete
 }
+
+// dbLatestOrgObservation is the latest org-wide observation without its rows,
+// for the readers that need to know how fresh the store is, not to refresh it.
+var dbLatestOrgObservation = db.LatestOrgObservation
+
+// observationMaxAge is how old the store may be before a request observes for
+// itself. It is the default sweep cadence: the sweep keeps the store this fresh,
+// so an older observation means the sweep is behind and a read is warranted.
+const observationMaxAge = 5 * time.Minute
 
 // asUserGrants renders the observed shape in the same field names the
 // Zitadel-shape response has always used, so this is the one place that
@@ -250,9 +260,22 @@ func handleDeleteZitadelProjectRole(w http.ResponseWriter, r *http.Request) {
 // the store now holds, rather than from the page the live call itself
 // returned. That is what makes this the same answer db.ObservedGrantsFor and
 // every other reader of zitadel_grants_index would give.
+//
+// Only the first page observes. The caller pages through the one read the
+// first page made; observing again for every later page was a full org read
+// per page, each replacing the store under the pages before it.
 func handleListAllZitadelGrants(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
-	obs, err := observeOrg(r.Context())
+	var obs db.Observation
+	var err error
+	if p.Offset == 0 {
+		obs, err = observeOrg(r.Context())
+	} else {
+		obs, err = dbLatestOrgObservation(r.Context())
+		if errors.Is(err, db.ErrNoObservation) {
+			obs, err = db.Observation{}, nil // never observed: omit the fields, as with no client
+		}
+	}
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
