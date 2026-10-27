@@ -4,8 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/base64"
 	"fmt"
+	"io"
+	"math/big"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -210,13 +214,56 @@ func TestKeyFunc_UnknownKidRefetchesAtMostOncePerMinute(t *testing.T) {
 
 	// A minute on: exactly one fetch, however many forged tokens arrive after it.
 	store.fetchMu.Lock()
-	store.lastTry = time.Now().Add(-2 * minRefetch)
+	store.nextTry = time.Time{}
 	store.fetchMu.Unlock()
 	for range 5 {
 		attempt()
 	}
 	if fetches != 1 {
 		t.Fatalf("fetched %d times for 5 forged tokens; want 1", fetches)
+	}
+}
+
+// A fetch that failed must not lock real tokens out for a minute: it is
+// retried after failRetry, and the retry's good answer is used.
+func TestKeyFunc_FailedFetchRetriesSoon(t *testing.T) {
+	key := newTestRSAKey(t)
+	injectKey(t, "known", key)
+	pub := key.Public().(*rsa.PublicKey)
+	jwks := fmt.Sprintf(`{"keys":[{"kty":"RSA","use":"sig","kid":"rotated","n":%q,"e":%q}]}`,
+		base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
+		base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pub.E)).Bytes()))
+
+	fetches := 0
+	orig := jwksClient
+	jwksClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		fetches++
+		if fetches == 1 {
+			return &http.Response{StatusCode: http.StatusBadGateway, Body: http.NoBody}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(jwks))}, nil
+	})}
+	t.Cleanup(func() { jwksClient = orig })
+
+	token := signToken(t, key, "rotated", validClaims(fmt.Sprintf("https://%s", testDomain), testAudience))
+	store.fetchMu.Lock()
+	store.nextTry = time.Time{}
+	store.fetchMu.Unlock()
+	if _, err := Validate(context.Background(), token, testDomain, testAudience); err == nil {
+		t.Fatal("expected the failed fetch to refuse the token")
+	}
+	store.fetchMu.Lock()
+	wait := time.Until(store.nextTry)
+	store.nextTry = time.Now() // failRetry has passed
+	store.fetchMu.Unlock()
+	if wait > failRetry {
+		t.Fatalf("a failed fetch blocks the next for %v; want at most %v", wait, failRetry)
+	}
+	if _, err := Validate(context.Background(), token, testDomain, testAudience); err != nil {
+		t.Fatalf("the retry's key was not used: %v", err)
+	}
+	if fetches != 2 {
+		t.Fatalf("fetches = %d, want 2", fetches)
 	}
 }
 
