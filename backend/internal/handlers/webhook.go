@@ -254,10 +254,14 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Update event status
 	if eventID != "" {
+		// A status that did not land leaves the row `received`, which a
+		// redelivery retakes after ten minutes: say so rather than discard it.
 		if processingErr != nil {
-			_ = dbFailWebhookEvent(r.Context(), eventID, processingErr.Error())
-		} else {
-			_ = dbCompleteWebhookEvent(r.Context(), eventID)
+			if err := dbFailWebhookEvent(r.Context(), eventID, processingErr.Error()); err != nil {
+				log.Printf("[WEBHOOK] Could not record failure of event %s: %v", eventID, err)
+			}
+		} else if err := dbCompleteWebhookEvent(r.Context(), eventID); err != nil {
+			log.Printf("[WEBHOOK] Could not record completion of event %s: %v", eventID, err)
 		}
 	}
 

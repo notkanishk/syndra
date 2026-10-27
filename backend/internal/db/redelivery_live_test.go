@@ -45,6 +45,55 @@ func TestInsertWebhookEvent_ARedeliveryOfAFailedRowIsTakenAgain(t *testing.T) {
 	}
 }
 
+// A crash mid-processing leaves the row `received` for good. Redeliveries must
+// retake it once it is clearly not a live request, and only then: the retake
+// restarts the clock, so the next redelivery meets a request in progress.
+func TestInsertWebhookEvent_ARowAbandonedMidProcessingIsRetaken(t *testing.T) {
+	ctx := liveDB(t)
+	if _, err := PG.Exec(ctx, `TRUNCATE webhook_events`); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+	id, _, err := InsertWebhookEvent(ctx, "grant_added", "u1", "p1", "viewer", "k1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, again, _ := InsertWebhookEvent(ctx, "grant_added", "u1", "p1", "viewer", "k1"); again {
+		t.Fatal("a row received a moment ago is a live request")
+	}
+
+	if _, err := PG.Exec(ctx, `UPDATE webhook_events SET created_at = NOW() - INTERVAL '11 minutes' WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	retryID, retaken, err := InsertWebhookEvent(ctx, "grant_added", "u1", "p1", "viewer", "k1")
+	if err != nil || !retaken || retryID != id {
+		t.Fatalf("an abandoned row must be retaken as the same row: id=%q retaken=%v err=%v", retryID, retaken, err)
+	}
+	if _, again, _ := InsertWebhookEvent(ctx, "grant_added", "u1", "p1", "viewer", "k1"); again {
+		t.Fatal("a retake restarts the clock: the next redelivery must be a duplicate")
+	}
+}
+
+func TestInsertOnboardingTrigger_AnAbandonedPendingTriggerIsRetaken(t *testing.T) {
+	ctx := liveDB(t)
+	if _, err := PG.Exec(ctx, `TRUNCATE onboarding_triggers`); err != nil {
+		t.Fatalf("truncate: %v", err)
+	}
+	id, _, err := InsertOnboardingTrigger(ctx, "u1", "webhook", "k1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PG.Exec(ctx, `UPDATE onboarding_triggers SET created_at = NOW() - INTERVAL '11 minutes' WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	retryID, retaken, err := InsertOnboardingTrigger(ctx, "u1", "webhook", "k1")
+	if err != nil || !retaken || retryID != id {
+		t.Fatalf("an abandoned pending trigger must be retaken: id=%q retaken=%v err=%v", retryID, retaken, err)
+	}
+	if _, again, _ := InsertOnboardingTrigger(ctx, "u1", "webhook", "k1"); again {
+		t.Fatal("a retake restarts the clock: the next repeat must be a duplicate")
+	}
+}
+
 func TestInsertOnboardingTrigger_ARetryOfAFailedTriggerIsTakenAgain(t *testing.T) {
 	ctx := liveDB(t)
 	if _, err := PG.Exec(ctx, `TRUNCATE onboarding_triggers`); err != nil {
