@@ -266,21 +266,24 @@ func handleDeleteZitadelProjectRole(w http.ResponseWriter, r *http.Request) {
 // per page, each replacing the store under the pages before it.
 func handleListAllZitadelGrants(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
-	var obs db.Observation
-	var err error
+	var (
+		obs   db.Observation
+		items []db.ObservedGrant
+		total int
+		err   error
+	)
 	if p.Offset == 0 {
-		obs, err = observeOrg(r.Context())
+		if obs, err = observeOrg(r.Context()); err == nil {
+			items, total, err = dbObservedGrantsPage(r.Context(), p.Limit, p.Offset)
+		}
 	} else {
-		obs, err = dbLatestOrgObservation(r.Context())
+		// One snapshot: a sweep committing between pages must not pair its
+		// header with the previous generation's rows.
+		obs, items, total, err = dbObservationPage(r.Context(), p.Limit, p.Offset)
 		if errors.Is(err, db.ErrNoObservation) {
-			obs, err = db.Observation{}, nil // never observed: omit the fields, as with no client
+			obs, items, total, err = db.Observation{}, nil, 0, nil // never observed: omit the fields, as with no client
 		}
 	}
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	items, total, err := dbObservedGrantsPage(r.Context(), p.Limit, p.Offset)
 	if err != nil {
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return

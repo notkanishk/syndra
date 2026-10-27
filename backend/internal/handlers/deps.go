@@ -178,6 +178,9 @@ var (
 	// private pipe into Zitadel. Basis and rows come back from ONE snapshot,
 	// so the completeness this reports belongs to the rows it diffed.
 	dbObservationSnapshot = db.ObservationSnapshot
+	// dbObservationPage serves the grant list's later pages: header, total and
+	// rows from one snapshot.
+	dbObservationPage = db.ObservationPage
 
 	// Real-time webhook drift detection (C6): a surviving grant_added event
 	// (already past the self-mutation guard) that Syndra neither expects nor

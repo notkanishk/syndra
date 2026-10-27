@@ -299,3 +299,24 @@ func ObservationSnapshot(ctx context.Context) (Observation, []ObservedGrant, err
 	}
 	return obs, grants, nil
 }
+
+// ObservationPage is ObservationSnapshot for one page: the observation, the
+// total and the rows come from one read, so a sweep committing between a
+// client's pages cannot pair one generation's header with another's rows.
+func ObservationPage(ctx context.Context, limit, offset int) (Observation, []ObservedGrant, int, error) {
+	var obs Observation
+	var items []ObservedGrant
+	var total int
+	err := InReadSnapshot(ctx, func(ctx context.Context) error {
+		var err error
+		if obs, err = LatestOrgObservation(ctx); err != nil {
+			return err
+		}
+		items, total, err = ObservedGrantsPage(ctx, limit, offset)
+		return err
+	})
+	if err != nil {
+		return Observation{}, nil, 0, err
+	}
+	return obs, items, total, nil
+}
