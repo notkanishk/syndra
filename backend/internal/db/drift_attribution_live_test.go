@@ -127,6 +127,30 @@ func TestDriftAttribution_ALogThatDoesNotReachBackMakesNoClaimOfAMiss(t *testing
 	}
 }
 
+// The horizon is compared with when the GRANT was made, not when the sweep
+// first saw it: a grant older than the log, found only today, says nothing
+// about whether an event was missed.
+func TestDriftAttribution_AGrantOlderThanTheLogMakesNoClaimOfAMiss(t *testing.T) {
+	ctx := liveDB(t)
+	truncateDriftAttributionFixtures(t, ctx)
+
+	seedWebhookEventAt(t, ctx, "some-other-grant:user.grant.added:1", time.Now().Add(-time.Hour))
+	created := time.Now().Add(-30 * 24 * time.Hour)
+	id, _, err := UpsertDriftItemWithEvidence(ctx, TargetZitadel, "u1", "p1", []string{"viewer"},
+		"grant-old", "reconciliation_sweep", DriftTargetOnly, DriftEvidence{UpstreamCreatedAt: &created})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	item, err := GetDriftItem(ctx, id)
+	if err != nil {
+		t.Fatalf("GetDriftItem: %v", err)
+	}
+	if item.EventPossiblyMissed {
+		t.Error("the grant predates the log, so its silence proves nothing; no miss may be claimed")
+	}
+}
+
 // A late-arriving event — one inserted after the finding already exists —
 // clears the marker on the very next read, with no row to reconcile. This is
 // the whole point of deriving rather than storing: the sweep and the webhook
