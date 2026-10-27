@@ -33,21 +33,6 @@ export function humanizeKey(key: string): string {
 }
 
 /**
- * How long a request asked for, as the decider reads it.
- *
- * Deliberately says "for N days" rather than a date: the expiry is computed
- * when the request is approved, not when it is made, so a date here would be
- * wrong by however long the request sat in the queue.
- *
- * Absent or zero is not "unspecified" — the backend reads it as no expiry at
- * all, so it is the one value that must never render as blank.
- */
-export function describeDuration(days: number | null | undefined): string {
-  if (!days || days < 1) return "no end date";
-  return `for ${days} ${days === 1 ? "day" : "days"}`;
-}
-
-/**
  * How long an ask is for, in the words people use for it: "a week", "a month",
  * else "N days". The dialog offers a week, a month and the end of term, so the
  * common lengths read as the choice that was made rather than as arithmetic.
@@ -83,46 +68,6 @@ export function askLengthForOperator(
   // An ask that named its end ("until the end of term") is granted to that date, however late it is decided.
   const end = askedUntil ? new Date(askedUntil) : new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   return `For ${lengthWords(days)} · until ${formatShortDate(end.toISOString(), now)}`;
-}
-
-export type UrgencyTone = "critical" | "warning" | "neutral" | "expired";
-
-/**
- * Compute a human countdown ("ends in 3 days", "ends in 2 hours", "ended") plus a
- * semantic tone the UI can use to color-code urgency. Returns `null` for an
- * absent expiry (permanent grants).
- */
-export function describeExpiry(expiresAt: string | null | undefined, now: Date = new Date()):
-  | { countdown: string; tone: UrgencyTone; daysLeft: number }
-  | null {
-  if (!expiresAt) return null;
-  const target = new Date(expiresAt).getTime();
-  if (Number.isNaN(target)) return null;
-  const ms = target - now.getTime();
-  const daysLeft = Math.ceil(ms / (1000 * 60 * 60 * 24));
-
-  if (ms <= 0) {
-    return { countdown: "ended", tone: "expired", daysLeft };
-  }
-  if (daysLeft <= 1) {
-    const hours = Math.max(1, Math.round(ms / (1000 * 60 * 60)));
-    return {
-      countdown: `ends in ${hours} hour${hours === 1 ? "" : "s"}`,
-      tone: "critical",
-      daysLeft,
-    };
-  }
-  if (daysLeft <= 7) {
-    return {
-      countdown: `ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
-      tone: "critical",
-      daysLeft,
-    };
-  }
-  if (daysLeft <= 14) {
-    return { countdown: `ends in ${daysLeft} days`, tone: "warning", daysLeft };
-  }
-  return { countdown: `ends in ${daysLeft} days`, tone: "neutral", daysLeft };
 }
 
 /**
@@ -270,20 +215,6 @@ export function formatList(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
-
-/**
- * The confirmed half of a Recorded/Confirmed count pair — what a role's or
- * project's holder count looks like next to what the observation store backs
- * up of it (`one-truth-many-checks`).
- *
- * `confirmed` is `undefined`, not zero, when the org has never been checked —
- * that must read as "not confirmed", never as a confirmed absence.
- */
-export function confirmedNote(recorded: number, confirmed: number | undefined): string {
-  if (confirmed === undefined) return "not confirmed";
-  if (confirmed === recorded) return "confirmed";
-  return `${confirmed} confirmed`;
 }
 
 /**

@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  confirmedNote,
-  describeDuration,
-  describeExpiry,
   formatAgoShort,
   askLengthForMember,
   askLengthForOperator,
@@ -43,50 +40,6 @@ describe("roleLabel", () => {
   });
 });
 
-describe("describeExpiry", () => {
-  const now = new Date("2026-04-27T12:00:00Z");
-
-  it("returns null for missing expiry", () => {
-    expect(describeExpiry(null, now)).toBeNull();
-    expect(describeExpiry(undefined, now)).toBeNull();
-  });
-
-  it("flags expired grants", () => {
-    const past = new Date("2026-04-25T12:00:00Z").toISOString();
-    const result = describeExpiry(past, now)!;
-    expect(result.tone).toBe("expired");
-    expect(result.countdown).toBe("ended");
-  });
-
-  it("says ends, never expires", () => {
-    const hours = new Date("2026-04-27T20:00:00Z").toISOString();
-    expect(describeExpiry(hours, now)!.countdown).toBe("ends in 8 hours");
-    const soon = new Date("2026-04-30T12:00:00Z").toISOString();
-    expect(describeExpiry(soon, now)!.countdown).toBe("ends in 3 days");
-    const later = new Date("2026-06-01T12:00:00Z").toISOString();
-    expect(describeExpiry(later, now)!.countdown).toMatch(/^ends in \d+ days$/);
-  });
-
-  it("flags critical (≤7 days)", () => {
-    const soon = new Date("2026-04-30T12:00:00Z").toISOString();
-    const result = describeExpiry(soon, now)!;
-    expect(result.tone).toBe("critical");
-    expect(result.daysLeft).toBe(3);
-  });
-
-  it("flags warning (8–14 days)", () => {
-    const target = new Date("2026-05-08T12:00:00Z").toISOString();
-    const result = describeExpiry(target, now)!;
-    expect(result.tone).toBe("warning");
-  });
-
-  it("flags neutral (>14 days)", () => {
-    const target = new Date("2026-06-01T12:00:00Z").toISOString();
-    const result = describeExpiry(target, now)!;
-    expect(result.tone).toBe("neutral");
-  });
-});
-
 describe("humanizeKey", () => {
   it("converts snake_case to Title Case at word boundaries", () => {
     expect(humanizeKey("lab_pin")).toBe("Lab Pin");
@@ -94,42 +47,6 @@ describe("humanizeKey", () => {
   });
   it("returns empty for empty input", () => {
     expect(humanizeKey("")).toBe("");
-  });
-});
-
-describe("describeDuration", () => {
-  it("names the ask in days", () => {
-    expect(describeDuration(30)).toBe("for 30 days");
-    expect(describeDuration(1)).toBe("for 1 day");
-  });
-
-  // Zero is not "unspecified" — the backend reads it as a grant that never
-  // lapses, so it is the one value that must never render as blank.
-  it("says what an absent duration actually means", () => {
-    expect(describeDuration(0)).toBe("no end date");
-    expect(describeDuration(null)).toBe("no end date");
-    expect(describeDuration(undefined)).toBe("no end date");
-  });
-});
-
-describe("confirmedNote", () => {
-  // ErrNoObservation must never render as a confirmed zero — "not checked
-  // yet" is a different fact from "checked, and found nobody".
-  it("reads never-observed as not confirmed, not as zero", () => {
-    expect(confirmedNote(4, undefined)).toBe("not confirmed");
-    expect(confirmedNote(0, undefined)).toBe("not confirmed");
-  });
-
-  it("says confirmed, without repeating the number, when the two agree", () => {
-    expect(confirmedNote(4, 4)).toBe("confirmed");
-    expect(confirmedNote(0, 0)).toBe("confirmed");
-  });
-
-  // Recorded and confirmed are two different, both-useful facts — one can be
-  // lower than the other without either being wrong.
-  it("states the confirmed count on its own when it differs from recorded", () => {
-    expect(confirmedNote(4, 2)).toBe("2 confirmed");
-    expect(confirmedNote(2, 0)).toBe("0 confirmed");
   });
 });
 

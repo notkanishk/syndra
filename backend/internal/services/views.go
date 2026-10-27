@@ -116,12 +116,6 @@ func RoleHolderCounts(ctx context.Context) (map[string]int, error) {
 	return f.Given, err
 }
 
-// RoleHolderConfirmation is the confirmed reading of RoleHolderFacts.
-func RoleHolderConfirmation(ctx context.Context) (map[string]int, models.ObservationBasis, error) {
-	f, err := RoleHolderFacts(ctx)
-	return f.Confirmed, f.Basis, err
-}
-
 // RoleHolderFacts answers every holder question from ONE snapshot.
 //
 // There used to be two counting mechanisms and they disagreed on screen; then
