@@ -107,8 +107,8 @@ export function AnchoredPanel({
       <div
         ref={panelRef}
         id={id}
-        style={leaving ? { ...anchoredStyle(box), animation: "fade-out var(--duration-tint) var(--ease-tint) both" } : anchoredStyle(box)}
-        className={leaving ? `${className} pointer-events-none` : className}
+        style={anchoredStyle(box)}
+        className={leaving ? `${className} tint-out pointer-events-none` : className}
         aria-hidden={leaving ? true : undefined}
       >
         {leaving ? shown : children}

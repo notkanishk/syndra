@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { TokenFormatEditor } from "@/components/apps/TokenFormatEditor";
 import { TokenPreview } from "@/components/apps/TokenPreview";
 import { ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { Mono } from "@/components/ui/Badge";
 import { ProjectName } from "@/components/names";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -14,6 +15,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useClaimShape } from "@/lib/queries/useClaimShape";
 import { useCrumb } from "@/lib/page-crumb";
+import { Tinted } from "@/components/ui/Unfold";
 import { useIsAdvanced } from "@/lib/ui-view";
 
 /**
@@ -26,6 +28,23 @@ import { useIsAdvanced } from "@/lib/ui-view";
  * did not exist.
  */
 export function AppTokenScreen({ applicationId }: { applicationId: string }) {
+  const apps = useApplications();
+  // One hand-over (S7): a skeleton only if the read is slow, then the screen arrives.
+  return (
+    <ReadGate
+      loading={apps.isLoading}
+      skeleton={
+        <Card>
+          <RowSkeleton rows={4} avatar={false} label="Loading app" />
+        </Card>
+      }
+    >
+      <ReadAppTokenScreen applicationId={applicationId} />
+    </ReadGate>
+  );
+}
+
+function ReadAppTokenScreen({ applicationId }: { applicationId: string }) {
   const apps = useApplications();
   const advanced = useIsAdvanced();
   const app = (apps.data ?? []).find((entry) => entry.application.id === applicationId);
@@ -47,13 +66,6 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
     [apps.data, app?.application.project_id, applicationId],
   );
 
-  if (apps.isLoading) {
-    return (
-      <Card>
-        <RowSkeleton rows={4} avatar={false} label="Loading app" />
-      </Card>
-    );
-  }
   if (apps.error) {
     return (
       <ErrorState
@@ -93,12 +105,11 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
             <ArrowLink href={`/projects/${app.application.project_id}`}>
               <ProjectName id={app.application.project_id} />
             </ArrowLink>
-            {advanced && (
-              <>
-                {" "}
-                · id <Mono>{app.application.id}</Mono>
-              </>
-            )}
+            {/* An inline bit, not a region: it tints with the view (A-08 §3). */}
+            <Tinted show={advanced}>
+              {" "}
+              · id <Mono>{app.application.id}</Mono>
+            </Tinted>
           </span>
         }
       />

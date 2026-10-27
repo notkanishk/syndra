@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Select";
+import { Unfold } from "@/components/ui/Unfold";
 
 import { getChimeContext, isChimeEnabled, playDriftChime, setChimeEnabled } from "@/lib/driftChime";
 import { useReducedMotion } from "@/lib/useViewport";
@@ -61,8 +62,8 @@ export function ChimeToggle() {
           setEnabled(next === "on");
         }}
       />
-      {enabled && (
-        <>
+      <Unfold open={enabled}>
+        <div className="flex flex-col items-start gap-2">
           <span className="inline-flex items-start gap-2 text-[13px] text-muted">
             <StatusDot
               tone={quieted ? "neutral" : suspended ? "warn" : "healthy"}
@@ -83,8 +84,8 @@ export function ChimeToggle() {
               Play it once
             </Button>
           )}
-        </>
-      )}
+        </div>
+      </Unfold>
     </div>
   );
 }

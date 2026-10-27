@@ -48,7 +48,7 @@ export default function ChangeHistoryPage() {
         }
         actions={
           asked ? (
-            <Link href="/operations/cascades" className="text-[13.5px] font-semibold text-accent-text">
+            <Link href="/operations/cascades" className="text-[13.5px] font-semibold text-accent-text link-hover">
               Show every edit
             </Link>
           ) : undefined

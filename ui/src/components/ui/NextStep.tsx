@@ -30,7 +30,7 @@ export function NextStep({
         {dot && <StatusDot tone="warn" />}
         <Link
           href={href}
-          className="text-[13.5px] font-semibold text-accent-text motion-tint hover:brightness-110"
+          className="text-[13.5px] font-semibold text-accent-text link-hover"
         >
           Waiting for you to send <span aria-hidden>→</span>
         </Link>

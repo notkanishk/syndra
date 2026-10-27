@@ -251,7 +251,7 @@ describe("Ask for access · only what they lack, once", () => {
   it("becomes its result once sent: Asked, who decides, and only Close left", async () => {
     search.value = "project=pLaser&role=trained";
     renderAs(false);
-    fireEvent.click(screen.getByRole("button", { name: "A month" }));
+    fireEvent.click(screen.getByRole("radio", { name: "A month" }));
     fireEvent.click(sendButton());
     expect(await screen.findByText("Asked")).toBeInTheDocument();
     expect(screen.getByText("Trained operator on Laser Lab, for a month.")).toBeInTheDocument();
@@ -315,7 +315,7 @@ describe("Ask for access · Until the end of term", () => {
   it("a week or a month still sends days only", async () => {
     search.value = "project=pLaser&role=trained";
     renderAs(false);
-    fireEvent.click(screen.getByRole("button", { name: "A week" }));
+    fireEvent.click(screen.getByRole("radio", { name: "A week" }));
     fireEvent.click(sendButton());
     await screen.findByText("Asked");
     expect(create.last).toMatchObject({ duration_days: 7 });

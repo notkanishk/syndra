@@ -4,7 +4,7 @@ import { describeFailure, sentence } from "@/lib/outcome";
 import { formatBytes } from "@/lib/format";
 import { useState } from "react";
 
-import { Mono } from "@/components/ui/Badge";
+import { Mono, StatusDot } from "@/components/ui/Badge";
 import { EmptyState, ListStates } from "@/components/states";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { RowCheckbox } from "@/components/ui/SelectionBar";
@@ -310,14 +310,20 @@ function SweepOutcomes({
   onDismiss: () => void;
 }) {
   const unresolved = result.outcomes.filter((o) => o.outcome !== "removed");
+  const done = result.removed > 0 && unresolved.length === 0;
   const fallback: Record<string, string> = {
     refused: "refused — it gained a role since you loaded this list, so it was left alone",
     unreached: `${name} did not answer, so it was not removed`,
     indeterminate: `not confirmed — check ${name} before trying again`,
   };
   return (
-    <div role="status" className="grid gap-2 border-t border-line px-5 py-4 text-[13.5px]">
-      <p className={result.removed > 0 ? "text-muted" : "text-warn-text"}>
+    <div
+      role="status"
+      // Done lifts and blooms once; anything left unresolved appears still, on tint (S6).
+      className={`${done ? "lift-in" : "tint-in"} grid gap-2 border-t border-line px-5 py-4 text-[13.5px]`}
+    >
+      <p className={`flex items-center gap-2 ${result.removed > 0 ? "text-muted" : "text-warn-text"}`}>
+        {done && <StatusDot tone="healthy" bloom />}
         {result.removed} {result.removed === 1 ? "account" : "accounts"} removed.
       </p>
       {unresolved.map((outcome) => (

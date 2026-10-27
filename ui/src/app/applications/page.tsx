@@ -13,6 +13,7 @@ import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useApplications, type ApplicationView } from "@/lib/queries/useApplications";
 import { Notice } from "@/components/ui/Notice";
+import { Unfold } from "@/components/ui/Unfold";
 
 type AppSort = "app" | "people";
 
@@ -73,7 +74,7 @@ export default function AppsPage() {
         }
       />
 
-      {mixedProjects.size > 0 && (
+      <Unfold open={mixedProjects.size > 0} gap={18}>
         <Notice
           tone="warn"
           title={`${mixedProjects.size === 1 ? "One project is" : `${mixedProjects.size} projects are`} read in more than one format.`}
@@ -82,7 +83,7 @@ export default function AppsPage() {
           &ldquo;this app isn&rsquo;t seeing the roles it expects&rdquo; — so the index surfaces it
           rather than making somebody open every app to find it.
         </Notice>
-      )}
+      </Unfold>
 
       {/* One basis for the whole page — every row carries an identical copy,
           so the freshness is stated once here rather than once per row. The
@@ -128,7 +129,7 @@ export default function AppsPage() {
             <Link
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
               <span className="w-full min-w-0 tablet:w-[250px] tablet:min-w-[170px] tablet:shrink-0">
                 <span className="block text-[15.5px] font-semibold [text-wrap:pretty]">

@@ -94,7 +94,7 @@ export function PersonRequests({
       {isOperator && pending.length > 0 && (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
           {pending.length} still open — deciding here is the same decision as on{" "}
-          <Link href="/requests" className="font-semibold text-accent-text">
+          <Link href="/requests" className="font-semibold text-accent-text link-hover">
             Requests
           </Link>
           .

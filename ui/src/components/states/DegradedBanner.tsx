@@ -131,11 +131,11 @@ export function DegradedBanner() {
               type="button"
               aria-expanded={serverOpen}
               onClick={() => setServerOpen((v) => !v)}
-              className="mt-2 flex min-h-[44px] items-center gap-1.5 text-[13.5px] font-semibold text-ink motion-tint hover:text-accent-text desktop:min-h-[32px]"
+              className="mt-2 flex min-h-[44px] items-center gap-1.5 text-[13.5px] font-semibold text-ink link-hover desktop:min-h-[32px]"
             >
               <span
                 aria-hidden
-                className={`inline-block motion-press ${serverOpen ? "rotate-90" : ""}`}
+                className={`inline-block motion-turn ${serverOpen ? "rotate-90" : ""}`}
               >
                 ›
               </span>

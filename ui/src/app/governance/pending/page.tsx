@@ -65,14 +65,22 @@ export default function PendingChangesPage() {
   // is what is still outstanding.
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  // S5: a row that goes on a later read (cancelled by someone, sent by someone)
-  // fades where it was and closes its gap after, and not under the pointer.
-  const leaving = useLeavingRows(rows, (row) => row.id, !pending.isLoading && !pending.error);
   // Search narrows what is shown, never what Send sends: the note beside it says so.
   const resolver = useNameResolver();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
-  const shown = needle ? leaving.rows.filter((row) => matches(row, needle, resolver)) : leaving.rows;
+  const matched = useMemo(
+    () => (needle ? rows.filter((row) => matches(row, needle, resolver)) : rows),
+    [rows, needle, resolver],
+  );
+  // S5: a row that goes on a later read (cancelled by someone, sent by someone)
+  // fades where it was and closes its gap after, and not under the pointer. A row
+  // a search drops goes the same way, but its gap does not wait for the pointer
+  // (A-05 §2.10), and the rows that still match are the same rows.
+  const leaving = useLeavingRows(matched, (row) => row.id, !pending.isLoading && !pending.error, {
+    narrowedBy: needle,
+  });
+  const shown = leaving.rows;
   const groups = groupByCascade(shown);
   // S13: a queue that empties while you watch says so once.
   const { cleared, beginSend, failedSend } = useQueueCleared(
@@ -185,7 +193,7 @@ export default function PendingChangesPage() {
             >
               <PendingGroups
                 groups={groups}
-                whole={groupByCascade(leaving.rows)}
+                whole={groupByCascade(rows)}
                 bundles={bundles.data}
                 rules={rules.data}
                 leave={leaving.props}
@@ -207,7 +215,7 @@ function PendingGroups({
   leave,
 }: {
   groups: CascadeGroup[];
-  /** The same batches before a search narrowed them: a band speaks for the whole edit, not for what is shown. */
+  /** The same batches as the read has them, before a search narrowed them: a band speaks for the whole edit, not for what is shown. */
   whole?: CascadeGroup[];
   bundles?: BundleRow[];
   rules?: MappingRuleRow[];
@@ -227,8 +235,10 @@ function PendingGroups({
   return (
     <>
       {groups.map((group) => {
-        const all = whole?.find((entry) => entry.key === group.key) ?? group;
-        const count = waiting(all);
+        const read = whole?.find((entry) => entry.key === group.key);
+        const all = read ?? group;
+        // What the read still has of this edit; a batch that has left it is counting down what is going.
+        const count = read ? read.rows.length : waiting(all);
         const shown = waiting(group);
         const open = count < 2 || !folded.has(group.key);
         // One reason for the whole batch is said once, in its band, not on every row.
@@ -247,7 +257,7 @@ function PendingGroups({
                   {/* The 28px round chevron is the look; the 44px button around it is the touch floor. */}
                   <span
                     aria-hidden
-                    className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-press group-hover:bg-[var(--hover)] ${
+                    className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn group-hover:bg-[var(--hover)] ${
                       open ? "rotate-90" : ""
                     }`}
                   >
@@ -516,7 +526,7 @@ function CausedBy({
         <Link
           href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
           aria-label="See what this change set off, in Change history"
-          className="motion-tint hover:text-accent-text"
+          className="link-hover"
         >
           <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
         </Link>

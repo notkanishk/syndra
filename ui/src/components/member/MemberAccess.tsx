@@ -4,9 +4,11 @@ import { ResolvedProjectName } from "@/components/names";
 import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { RecentChanges, askHref } from "@/components/member/RecentChanges";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
+import { ReadGate } from "@/components/states/ReadGate";
 import { ButtonLink } from "@/components/ui/Button";
 import { StatusDot } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { usePageHead } from "@/components/ui/PageHeader";
 import {
   givenAt,
   nothingSentYet,
@@ -32,6 +34,8 @@ import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
  * — no "derived", no effective_role_keys, no role keys.
  */
 export function MemberAccess({ session }: { session: SessionUser }) {
+  // The member's home is a screen's first paint (S11): the greeting tints in, then the cards arrive.
+  const head = usePageHead();
   const access = useUserAccess(session.id);
   const grants = useUserGrants(session.id);
   const changes = useMyChanges();
@@ -50,13 +54,6 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     return observation.current === false || observation.truncated ? "unreachable" : "missing";
   };
 
-  if (access.isLoading) {
-    return (
-      <Card>
-        <RowSkeleton rows={4} avatar={false} label="Loading your access" />
-      </Card>
-    );
-  }
   if (access.error) {
     return (
       <ErrorState
@@ -133,7 +130,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <div className="flex flex-col gap-2">
+      <div className={`${head.className} flex flex-col gap-2`} data-settled={head["data-settled"]}>
         <h1 className="type-page-title">
           Hi {firstName(session.name)}.{" "}
           <span className="text-faint">Here&rsquo;s what you can use.</span>
@@ -141,6 +138,15 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         {summary && <div className="text-[14.5px] text-faint">{summary}</div>}
       </div>
 
+      {/* The read is one hand-over (S7): a skeleton only if it is slow, then the cards arrive. */}
+      <ReadGate
+        loading={access.isLoading}
+        skeleton={
+          <Card>
+            <RowSkeleton rows={4} avatar={false} label="Loading your access" />
+          </Card>
+        }
+      >
       {/* Leads when there's news; gives up its seat on a quiet month. Not
           drawn until the read lands, so nothing unread is shown. */}
       {feed.length > 0 && (
@@ -234,6 +240,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       )}
 
       <MemberCatalog heldByProject={heldByProject} />
+      </ReadGate>
 
       {/*
         The workshop password card used to sit here, last on the page, and is

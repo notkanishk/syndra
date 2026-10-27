@@ -15,6 +15,7 @@ import { motionInTests } from "@/test-utils/motion";
 const drift = vi.hoisted(() => ({
   data: [] as DriftTriageItem[],
   isLoading: false,
+  isPlaceholderData: false,
   error: null as unknown,
   unread: [] as Array<{ target: string; since: string; reason?: string }>,
 }));
@@ -83,6 +84,7 @@ vi.mock("@/lib/queries/useDrift", () => {
     useDriftItems: () => ({
       data: drift.data,
       isLoading: drift.isLoading,
+      isPlaceholderData: drift.isPlaceholderData,
       error: drift.error,
       refetch: () => {},
       dataUpdatedAt: Date.now(),
@@ -143,6 +145,7 @@ beforeEach(() => {
     item({ id: "c", user_id: "u3", drift_type: "syndra_only", detected_at: "2026-10-15T06:00:00Z" }),
   ];
   drift.isLoading = false;
+  drift.isPlaceholderData = false;
   drift.error = null;
   drift.unread = [];
   diff.data = emptyDiff();
@@ -230,9 +233,9 @@ describe("Drift — a finding that goes on a later read (S5)", () => {
       const zitadel = screen.getByRole("region", { name: IN_ZITADEL });
       expect(within(zitadel).getByTestId("card-count")).toHaveTextContent("1");
       const gone = within(zitadel).getByRole("link", { name: "Arjun Das", hidden: true });
-      expect(gone.closest(".tint-out")).not.toBeNull();
+      expect(gone.closest("[data-leaving]")).not.toBeNull();
       expect(gone.closest("[inert]")).not.toBeNull();
-      expect(within(zitadel).getByRole("link", { name: "Meera Pillai" }).closest(".tint-out")).toBeNull();
+      expect(within(zitadel).getByRole("link", { name: "Meera Pillai" }).closest("[data-leaving]")).toBeNull();
     } finally {
       motionInTests(false);
     }
@@ -334,6 +337,14 @@ describe("Drift — states", () => {
     expect(screen.getByText("Everything is explained.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: IN_ZITADEL })).toBeNull();
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
+  });
+
+  it("does not say everything is explained from the last filters' empty answer", () => {
+    // Filters that matched nothing were just cleared: the empty rows on screen answer them.
+    drift.data = [];
+    drift.isPlaceholderData = true;
+    renderPage();
+    expect(screen.queryByText("Everything is explained.")).toBeNull();
   });
 
   it("does not say everything is explained while the comparison is still loading", () => {

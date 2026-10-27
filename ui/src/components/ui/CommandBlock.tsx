@@ -2,6 +2,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
+
 /**
  * A command the operator runs in their own terminal, and the steps around it.
  *
@@ -50,7 +52,7 @@ export function CommandBlock({
   // moment something is already wrong.
   const [canCopy, setCanCopy] = useState(true);
   const commandRef = useRef<HTMLElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const confirmFor = useConfirmFor();
 
   useEffect(() => {
     setCanCopy(typeof navigator !== "undefined" && Boolean(navigator.clipboard));
@@ -64,21 +66,15 @@ export function CommandBlock({
     const range = document.createRange();
     range.selectNodeContents(node);
     selection.addRange(range);
-    setSelected(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setSelected(false), 900);
-  }, []);
-
-  // Without this, copying and then navigating away sets state on an unmounted
-  // component — and in a page that polls, remounts are routine.
-  useEffect(() => () => clearTimeout(timer.current), []);
+    // Reverts on its own and clears on unmount: in a page that polls, remounts
+    // are routine.
+    confirmFor(setSelected);
+  }, [confirmFor]);
 
   const copy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(command);
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 2000);
+      confirmFor(setCopied);
     } catch {
       // Denied at the moment of the tap. Fall through to the same selection
       // the insecure-origin path uses rather than leaving the operator with a
@@ -86,7 +82,7 @@ export function CommandBlock({
       setCanCopy(false);
       select();
     }
-  }, [command, select]);
+  }, [command, select, confirmFor]);
 
   const onWarn = tone === "onWarn";
 
@@ -128,13 +124,19 @@ export function CommandBlock({
           aria-label={
             label ?? `${canCopy ? "Copy" : "Select"} command: ${command}`
           }
-          className={`min-h-[44px] shrink-0 rounded-pill px-3.5 text-[13px] font-semibold motion-tint ${
+          className={`min-h-[44px] shrink-0 rounded-pill px-3.5 text-[13px] font-semibold control press-scale ${
             onWarn
               ? "border border-warn-ink/30 text-warn-ink hover:bg-warn-ink/10"
               : "border border-line-strong text-ink hover:bg-[var(--hover)]"
           }`}
         >
-          {canCopy ? (copied ? "Copied" : "Copy") : selected ? "Selected" : "Select"}
+          {/* One seat, so the button keeps its width while the words change (S18). */}
+          <CopiedSeat
+            done={copied || selected}
+            idle={canCopy ? "Copy" : "Select"}
+            word={canCopy ? "Copied" : "Selected"}
+            dot={canCopy}
+          />
         </button>
       </div>
 

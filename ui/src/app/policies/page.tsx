@@ -97,7 +97,7 @@ export default function AutomaticRulesPage() {
               <button
                 type="button"
                 onClick={() => setEditing(rule)}
-                className="flex min-w-0 flex-1 flex-col items-start gap-1.5 py-3.5 text-left motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
+                className="flex min-w-0 flex-1 flex-col items-start gap-1.5 py-3.5 text-left hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
               >
                 <Mono className="truncate text-faint tablet:w-[110px] tablet:shrink-0">
                   {shortRuleId(rule.id)}

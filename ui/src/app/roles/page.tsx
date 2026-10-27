@@ -15,6 +15,7 @@ import { Card, CardColumns } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Select } from "@/components/ui/Select";
@@ -85,6 +86,10 @@ export default function RolesPage() {
     view.sort,
     ROLE_SORT,
   );
+  // A filter or a search drops roles: they fade where they were and the gap settles after (A-05 §2.10).
+  const leaving = useLeavingRows(rows, (role) => `${role.project_id}:${role.role_key}`, !roles.isLoading && !roles.error, {
+    narrowedBy: `${project}|${group}|${unusedOnly}|${needle}`,
+  });
   const unusedCount = all.filter((role) => role.is_unused).length;
   const filtered = Boolean(project || group || unusedOnly || needle);
 
@@ -226,7 +231,7 @@ export default function RolesPage() {
         <ListStates
           isLoading={roles.isLoading}
           error={roles.error}
-          isEmpty={rows.length === 0}
+          isEmpty={leaving.rows.length === 0}
           onRetry={() => roles.refetch()}
           errorTitle="Couldn't load the role index."
           skeleton={<RowSkeleton rows={6} avatar={false} label="Loading roles" />}
@@ -252,17 +257,20 @@ export default function RolesPage() {
             )
           }
         >
-          {rows.map((role) => {
+          {leaving.rows.map((role) => {
             const holders = holdersLine(
               role.assigned_user_count,
               role.confirmed_user_count,
               role.observed_user_count,
             );
             return (
-            <Link
+            <LeavingRow
               key={`${role.project_id}:${role.role_key}`}
+              {...leaving.props(`${role.project_id}:${role.role_key}`)}
+            >
+            <Link
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px]"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
               <span className="w-full text-[12.5px] text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-[14.5px]">
                 <ProjectName id={role.project_id} name={role.project_name} />
@@ -315,6 +323,7 @@ export default function RolesPage() {
                 )}
               </span>
             </Link>
+            </LeavingRow>
             );
           })}
         </ListStates>

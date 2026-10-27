@@ -15,6 +15,7 @@ import { Seat } from "@/components/ui/Choice";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
 import { Notice } from "@/components/ui/Notice";
+import { Unfold } from "@/components/ui/Unfold";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { holdersLine } from "@/lib/holders";
@@ -270,13 +271,13 @@ function WaitingRoles({
             />
           </div>
         )}
-        {failure && (
+        <Unfold open={Boolean(failure)}>
           <div className="row-divider px-5 py-3">
             <Notice tone="danger" title="That role still waits.">
               {failure} Nothing was changed.
             </Notice>
           </div>
-        )}
+        </Unfold>
     </Card>
   );
 }
@@ -356,7 +357,7 @@ function OneTimeMove({
           <label
             key={id}
             className={`row-divider flex cursor-pointer items-center gap-[18px] px-5 py-3.5 motion-tint ${
-              on ? "bg-accent-soft" : "hover:bg-[var(--hover)]"
+              on ? "bg-accent-soft" : "hover-tint"
             }`}
           >
             <Seat
@@ -385,14 +386,14 @@ function OneTimeMove({
         );
       })}
 
-      {failure && (
+      <Unfold open={Boolean(failure)}>
         <div className="px-5 pt-4">
           <Notice tone="danger" title="That didn't finish.">
             {failure} The roles marked so far stay marked; press it again to
             finish.
           </Notice>
         </div>
-      )}
+      </Unfold>
 
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <Button
@@ -490,14 +491,14 @@ function AddRoles({
           legend={false}
         />
       </div>
-      {failure && (
+      <Unfold open={Boolean(failure)}>
         <div className="mx-6 mt-3">
           <Notice tone="danger" title="Not all of them were marked.">
             {failure} The roles still ticked weren&apos;t marked; press it again
             for the rest.
           </Notice>
         </div>
-      )}
+      </Unfold>
       <ModalFooter
         note={
           chosen.length

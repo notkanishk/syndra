@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import RolesPage from "@/app/roles/page";
 import type { CatalogRole } from "@/lib/queries/useRoles";
+import { motionInTests } from "@/test-utils/motion";
 
 const state = vi.hoisted(() => ({ roles: [] as unknown[] }));
 
@@ -130,5 +131,22 @@ describe("the roles index, as drawn", () => {
     expect(screen.getAllByText("Unknown project")).toHaveLength(2);
     expect(document.body.textContent).toContain("Unknown project 365951028870251526");
     expect(document.body.textContent).toContain("Unknown project 382075332397630470");
+  });
+});
+
+// A-05 §2.10: a search is not a new list. The roles that still match are the same rows, and the
+// ones that do not fade where they were and settle after, never removed under the reader.
+describe("the roles index, searched", () => {
+  it("fades what no longer matches instead of removing it, and holds what does", () => {
+    motionInTests();
+    render(<RolesPage />);
+    const alpha = screen.getByText("Alpha");
+    fireEvent.change(screen.getByRole("textbox", { name: "Search roles by name, key or project" }), {
+      target: { value: "alpha" },
+    });
+    expect(screen.getByText("Alpha")).toBe(alpha);
+    expect(alpha.closest("[data-leaving]")).toBeNull();
+    expect(screen.getByText("Beta").closest("[data-leaving]")).not.toBeNull();
+    expect(screen.getByText("Beta").closest("[data-closing]")).not.toBeNull();
   });
 });

@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
+import { Unfold } from "@/components/ui/Unfold";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
@@ -148,14 +150,14 @@ function TargetCard({ view }: { view: MyTargetView }) {
         <Steps reached={reached} state={state} />
       </div>
 
-      {offline && (
+      <Unfold open={Boolean(offline)}>
         <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]">
           It stopped answering{view.reachable_since ? ` at ${formatClock(view.reachable_since)}` : ""}, so your
           folders won&apos;t open until it&apos;s back. Your account and files are safe, and your access
           hasn&apos;t changed. Makerspace staff can see this too, and this page updates on its own when{" "}
           {label} returns.
         </Notice>
-      )}
+      </Unfold>
 
       <div className="flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">
         <h2 className="font-display text-[24px] font-semibold leading-[1.25] tracking-[-0.01em] [text-wrap:pretty]">
@@ -180,12 +182,14 @@ function TargetCard({ view }: { view: MyTargetView }) {
         </div>
       )}
 
-      {notice && !hasAccount && (
-        <Notice tone="warn" title={notice.title} className="mx-5 mb-[22px]">
-          {notice.body}
-          {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
-        </Notice>
-      )}
+      <Unfold open={Boolean(notice) && !hasAccount}>
+        {notice && (
+          <Notice tone="warn" title={notice.title} className="mx-5 mb-[22px]">
+            {notice.body}
+            {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
+          </Notice>
+        )}
+      </Unfold>
 
       {hasAccount && view.account && (
         <>
@@ -205,12 +209,14 @@ function TargetCard({ view }: { view: MyTargetView }) {
             passwordBlocked={passwordBlocked}
           />
 
-          {notice && (
-            <Notice tone="warn" title={notice.title} className="mx-5 mb-5">
-              {notice.body}
-              {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
-            </Notice>
-          )}
+          <Unfold open={Boolean(notice)}>
+            {notice && (
+              <Notice tone="warn" title={notice.title} className="mx-5 mb-5">
+                {notice.body}
+                {notice.person && <p className="mt-1.5 text-[14px] text-muted">{PERSON}</p>}
+              </Notice>
+            )}
+          </Unfold>
 
           {!passwordStep && (
             <div className="row-divider flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">
@@ -352,8 +358,8 @@ function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
     </>
   ) : null;
   return (
-    <span role="status" className={`inline-flex items-center gap-[7px] text-[13px] leading-[1.4] ${offline ? "text-warn-text" : "text-muted"}`}>
-      <span aria-hidden className={`h-[7px] w-[7px] flex-none rounded-pill ${offline ? "bg-warn" : held ? "bg-line-strong" : "bg-healthy"}`} />
+    <span role="status" className={`tint-in inline-flex items-center gap-[7px] text-[13px] leading-[1.4] motion-tint ${offline ? "text-warn-text" : "text-muted"}`}>
+      <span aria-hidden className={`h-[7px] w-[7px] flex-none rounded-pill motion-tint ${offline ? "bg-warn" : held ? "bg-line-strong" : "bg-healthy"}`} />
       {offline ? (
         <>Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
       ) : held ? (
@@ -702,7 +708,12 @@ function PasswordForm({
       </p>
       {set.data && (
         // An outcome the target didn't confirm is not success, and doesn't get the calm voice.
-        <p role="status" className={`text-[13.5px] ${unconfirmed ? "text-warn-text" : "text-muted"}`}>
+        <p
+          role="status"
+          // Done lifts and blooms once; not confirmed appears still, on tint (S6).
+          className={`${unconfirmed ? "tint-in text-warn-text" : "lift-in flex items-center gap-2 text-muted"} text-[13.5px]`}
+        >
+          {!unconfirmed && <StatusDot tone="healthy" bloom />}
           {set.data.detail}
         </p>
       )}

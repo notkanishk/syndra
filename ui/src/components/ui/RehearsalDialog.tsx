@@ -530,7 +530,7 @@ export function RehearsalDialog({
       {step === "compose" ? (
         <div className="flex flex-col gap-4 px-6">{compose}</div>
       ) : step === "scope" ? (
-        <div className="grid gap-3 px-6">
+        <div className="tint-in grid gap-3 px-6">
           {/* The step did not exist a moment ago and does not appear below the
               limit. Said first, so an operator who crosses the threshold once
               cannot mistake it for a form they filled in wrong — and one who
@@ -567,7 +567,7 @@ export function RehearsalDialog({
               // and a polite live region is announced whenever the screen
               // reader gets round to it.
               role="alert"
-              className="mx-6 mb-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
+              className="tint-in mx-6 mb-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
             >
               <p className="font-medium">{staleHeadline(stalePlan.code)}</p>
               <p className="mt-1">

@@ -242,7 +242,7 @@ function EndingLink({ within, n }: { within: 14 | 30; n: number }) {
     <Link
       href={`/review/expiring-access?within=${within}`}
       aria-label={`${n} in ${within} days: open Expiring access`}
-      className="motion-tint hover:text-accent-text hover:underline"
+      className="link-hover"
     >
       {n}
     </Link>

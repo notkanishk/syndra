@@ -9,6 +9,7 @@ import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAc
 import { TakeAwayDialog } from "@/components/targets/TakeAwayDialog";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
+import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UserAvatar, UserName } from "@/components/names";
 import { formatShortDate } from "@/lib/format";
@@ -38,11 +39,15 @@ export function PeopleOnTarget({ target }: { target: string }) {
   const homeOf = new Map((homes.data?.accounts ?? []).map((h) => [h.subject_id, h]));
   const name = targetLabel(target);
   const paging = usePaging();
+  // S5: somebody whose access has been revoked leaves on the next read, fading where they were and
+  // closing the gap after, and not under the pointer.
+  const leaving = useLeavingRows(accounts, (a) => a.subject_id, !inventory.isLoading && !inventory.error);
+  const drawn = leaving.window(paging.limit);
   // A limit verb widens the actions seat (A-03 §3); the heads follow the rows.
   const seat = accounts.some((a) => limitVerb(homeOf.get(a.subject_id))) ? "tablet:w-[380px]" : "tablet:w-[260px]";
 
   return (
-    <Card>
+    <Card {...leaving.listProps}>
       <CardHeader
         title="Accounts Syndra manages"
         count={inventory.data?.bound}
@@ -51,7 +56,7 @@ export function PeopleOnTarget({ target }: { target: string }) {
       <ListStates
         isLoading={inventory.isLoading}
         error={inventory.error}
-        isEmpty={accounts.length === 0}
+        isEmpty={leaving.rows.length === 0}
         onRetry={() => inventory.refetch()}
         errorTitle="The account list could not be read"
         empty={
@@ -70,14 +75,15 @@ export function PeopleOnTarget({ target }: { target: string }) {
             <span className="w-[110px] flex-none text-right">Since</span>
             <span className={`flex-none ${seat}`} />
           </CardColumns>
-          {accounts.slice(0, paging.limit).map((account) => (
-            <PersonRow
-              key={account.subject_id}
-              target={target}
-              account={account}
-              home={homeOf.get(account.subject_id)}
-              seat={seat}
-            />
+          {drawn.map((account) => (
+            <LeavingRow key={account.subject_id} {...leaving.props(account.subject_id)}>
+              <PersonRow
+                target={target}
+                account={account}
+                home={homeOf.get(account.subject_id)}
+                seat={seat}
+              />
+            </LeavingRow>
           ))}
           <PaginationRow
             shown={Math.min(paging.limit, accounts.length)}
@@ -123,7 +129,7 @@ function PersonRow({
           <span className="min-w-0">
             <Link
               href={accountHref(account.subject_id)}
-              className="[overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink hover:text-accent-text hover:underline hover:underline-offset-[3px]"
+              className="[overflow-wrap:anywhere] text-[14.5px] font-semibold text-ink link-hover"
             >
               <UserName id={account.subject_id} />
             </Link>

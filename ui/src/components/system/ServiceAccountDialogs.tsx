@@ -9,6 +9,7 @@ import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
+import { Unfold } from "@/components/ui/Unfold";
 import { personLine } from "@/lib/format";
 import { describeFailure, sentence } from "@/lib/outcome";
 import {
@@ -149,11 +150,11 @@ export function ServiceAccountDialog({
                 <FieldHint>The person who answers for what it holds.</FieldHint>
               </div>
             )}
-            {failure && (
+            <Unfold open={Boolean(failure)} gap={16}>
               <Notice tone="danger" title="That didn't save.">
                 {failure} Nothing was changed.
               </Notice>
-            )}
+            </Unfold>
           </>
         )}
       </div>
@@ -282,11 +283,11 @@ export function UnmarkDialog({ account, onClose }: { account: { id: string; name
             }}
           />
         ) : (
-          failure && (
+          <Unfold open={Boolean(failure)} gap={16}>
             <Notice tone="danger" title="That didn't save.">
               {failure} Nothing was changed.
             </Notice>
-          )
+          </Unfold>
         )}
       </div>
       <ModalFooter note={done ? undefined : "This finishes now."}>

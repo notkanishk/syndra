@@ -44,6 +44,18 @@ describe("the account sheet", () => {
     expect(out.className).not.toMatch(/bg-tint|text-muted|danger/);
   });
 
+  // A-08 §5: a row with a fill, like a nav item: the fill reaches 8px past the
+  // words on each side, and the words stay flush with the sheet's other text.
+  // It is the row that hovers, so it does not also take the text-link underline.
+  it("fills My access and Network storage 8px past the words, and no link underline", () => {
+    open();
+    for (const name of [/My access/, /Network storage/]) {
+      const row = screen.getByRole("link", { name });
+      expect(row).toHaveClass("-mx-2", "px-2", "hover-tint");
+      expect(row.className).not.toContain("link-hover");
+    }
+  });
+
   it("says what signing out costs, before it is tapped", () => {
     open();
     expect(screen.getByText(/signs you out in every open tab/i)).toBeTruthy();

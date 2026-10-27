@@ -27,12 +27,15 @@ export function NodeList({
   focusId,
   unused,
   onPick,
+  startSettled = false,
 }: {
   model: Model;
   highlight: Highlight | null;
   focusId: string | null;
   unused: Set<string>;
   onPick: (id: string | null) => void;
+  /** The reader switched to this view from the other: the page has arrived already, so its nodes are simply there. */
+  startSettled?: boolean;
 }) {
   const degree = (id: string) => (model.out.get(id)?.length ?? 0) + (model.inn.get(id)?.length ?? 0);
 
@@ -46,7 +49,7 @@ export function NodeList({
               {model.lanes[lane.kind].length} · {BLURB[lane.kind]}
             </span>
           </div>
-          <ArriveList className="grid gap-2.5 tablet:grid-cols-2 desktop:grid-cols-3">
+          <ArriveList className="grid gap-2.5 tablet:grid-cols-2 desktop:grid-cols-3" startSettled={startSettled}>
             {model.lanes[lane.kind].map((node) => {
               const tone = highlight?.nodes.get(node.id);
               return (

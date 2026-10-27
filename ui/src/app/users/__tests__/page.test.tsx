@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PeoplePage from "@/app/users/page";
 import type { UserListEntry } from "@/lib/queries/useUsers";
+import { gapSettled } from "@/test-utils/leaving";
 import { setMediaQuery } from "@/test-utils/media";
+import { motionInTests } from "@/test-utils/motion";
 
-const users = vi.hoisted(() => ({ data: [] as UserListEntry[] }));
+const users = vi.hoisted(() => ({ data: [] as UserListEntry[], isPlaceholderData: false }));
 const nav = vi.hoisted(() => ({ url: "/users", replaced: [] as string[] }));
 const roleMembers = vi.hoisted(() => ({ data: undefined as { members: Array<{ user: { id: string } }> } | undefined }));
 
@@ -352,6 +354,20 @@ describe("People index — bulk mode", () => {
     expect(screen.getByRole("button", { name: /select only the 10 people shown/ })).toBeInTheDocument();
   });
 
+  it("won't select every match while a new search is still being read", () => {
+    users.data = Array.from({ length: 60 }, (_, index) =>
+      person({ user: { ...person().user, id: `u${index}`, name: `Person ${index}` } }),
+    );
+    // The rows on screen still answer the last search.
+    users.isPlaceholderData = true;
+    nav.url = "/users?bulk=1";
+    renderPeople();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Select these 60 people/ }));
+    expect(screen.queryByText(/All 60 people selected/)).toBeNull();
+    users.isPlaceholderData = false;
+  });
+
   // The name is the largest thing in a row and the obvious place a thumb
   // lands. With a mouse it is a precise escape hatch out of the mode; with a
   // thumb it is a trap, so below the desktop breakpoint the whole row selects.
@@ -491,5 +507,50 @@ describe("People · the board", () => {
     renderPeople();
     expect(screen.getByText("6 roles across 4 projects").className).not.toMatch(/truncate/);
     expect(screen.getByText("Unexplained role").className).not.toMatch(/truncate|whitespace-nowrap/);
+  });
+
+  // Seen live: typing in the search dropped 10 rows to 2 by removing every row and adding two,
+  // because the new read was a loading list. The rows that match are the same rows (A-05 §2.10).
+  describe("a search narrowing the list", () => {
+    it("holds the rows that still match, fades the rest where they were, and settles the gap after", () => {
+      motionInTests();
+      const named = (id: string, name: string) => person({ user: { ...person().user, id, name } });
+      const everyone = [named("a", "Ada Lin"), named("b", "Bo Chen"), named("c", "Cy Ward")];
+      users.data = everyone;
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const page = () => (
+        <QueryClientProvider client={client}>
+          <PeoplePage />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(page());
+      const ada = screen.getByText("Ada Lin");
+
+      // The query is typed first; the read for it lands after.
+      nav.url = "/users?q=ada";
+      rerender(page());
+      users.data = [everyone[0]];
+      rerender(page());
+
+      expect(screen.getByText("Ada Lin")).toBe(ada);
+      expect(ada.closest("[data-leaving]")).toBeNull();
+      expect(screen.getByText("Bo Chen").closest("[data-leaving]")).not.toBeNull();
+      expect(screen.getByText("Cy Ward").closest("[data-leaving]")).not.toBeNull();
+      expect(screen.getByText("Bo Chen").closest("[data-closing]")).not.toBeNull();
+
+      // Their gaps have settled and they are gone. Clearing it brings them back: the gap
+      // opens, then they tint in. The rows that stayed hold still.
+      gapSettled(screen.getByText("Bo Chen").closest("[data-closing]")!);
+      gapSettled(screen.getByText("Cy Ward").closest("[data-closing]")!);
+      expect(screen.queryByText("Bo Chen")).toBeNull();
+      nav.url = "/users";
+      rerender(page());
+      users.data = everyone;
+      rerender(page());
+      expect(screen.getByText("Ada Lin")).toBe(ada);
+      expect(screen.getByText("Bo Chen").closest("[data-opens]")).not.toBeNull();
+      expect(ada.closest("[data-opens]")).toBeNull();
+      expect(ada.closest("[data-fresh]")).toBeNull();
+    });
   });
 });

@@ -181,6 +181,44 @@ describe("Home's two columns", () => {
     }
   });
 
+  // A-08 §3: one switch moves everything one way. Advanced's blocks open by Unfold, Basic's own
+  // sentence folds away, and the blocks both views have hold still.
+  it("switching Basic to Advanced opens its blocks by Unfold and folds Basic's footnote", () => {
+    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+    try {
+      state.advanced = false;
+      state.requests = [request];
+      state.governance = { ...quiet(), expiring_grants: [grant], drift: { count: 3, top: [] } };
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const home = () => (
+        <QueryClientProvider client={client}>
+          <Home session={session} />
+        </QueryClientProvider>
+      );
+      const view = render(home());
+      const requests = screen.getByText("Open requests");
+      expect(screen.queryByRole("link", { name: "Review them" })).toBeNull();
+      const footnote = screen.getByText(/In Basic these blocks are your whole queue/);
+      expect(footnote.closest(".unfold")).toHaveAttribute("data-phase", "open");
+
+      state.advanced = true;
+      view.rerender(home());
+
+      expect(screen.getByText("Open requests")).toBe(requests);
+      expect(screen.getByRole("link", { name: "Review them" }).closest(".unfold")).toHaveAttribute(
+        "data-phase",
+        "opening",
+      );
+      // Folding, not gone: it fades first and its gap closes after.
+      expect(screen.getByText(/In Basic these blocks are your whole queue/).closest(".unfold")).toHaveAttribute(
+        "data-phase",
+        "closing",
+      );
+    } finally {
+      delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
+    }
+  });
+
   it("Basic: expiring access is time-sensitive, requests wait", () => {
     state.advanced = false;
     state.requests = [request];

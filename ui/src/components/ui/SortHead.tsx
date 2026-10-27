@@ -114,7 +114,7 @@ export function SortHead<K extends string>({
         {label}
         <span
           aria-hidden
-          className={`inline-block text-[11px] motion-press ${on ? "opacity-100" : "opacity-0"} ${
+          className={`inline-block text-[11px] motion-turn ${on ? "opacity-100" : "opacity-0"} ${
             on && sort.dir < 0 ? "rotate-180" : ""
           }`}
         >

@@ -183,7 +183,7 @@ function ManageBundlesOpen({
               className={`flex items-center gap-3 rounded-inner border px-[15px] py-3 text-left motion-tint ${
                 isSelected
                   ? "border-accent-line bg-accent-soft/70"
-                  : "border-line-strong hover:bg-[var(--hover)]"
+                  : "border-line-strong hover-tint"
               }`}
             >
               <span

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequestsScreen } from "@/components/requests/RequestsScreen";
 import type { AccessRequest } from "@/lib/queries/useRequests";
+import { gapSettled } from "@/test-utils/leaving";
 import { motionInTests } from "@/test-utils/motion";
 
 /**
@@ -78,13 +79,12 @@ function Screen() {
 }
 
 // jsdom has no AnimationEvent, so React listens for the prefixed name here.
-const animationEnd = (el: Element) => act(() => void fireEvent(el, new Event("webkitAnimationEnd", { bubbles: true })));
 const flush = () => act(async () => {});
 const tick = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
 
-/** The row's wrapper (the element that carries the gap) and its fading layer. */
+/** The row's wrapper: it carries the leaving state, the fade and the gap. */
 const rowOf = (text: string) => screen.getByText(text).closest("[class*=row-divider]")!.parentElement!.parentElement!;
-const fadeOf = (text: string) => screen.getByText(text).closest("[class*=row-divider]")!.parentElement!;
+const fadeOf = rowOf;
 const list = () => document.querySelector("[data-selection-scope]")!;
 
 beforeEach(() => {
@@ -108,16 +108,16 @@ describe("a decided request keeps its seat for a beat", () => {
 
     expect(screen.getByText(/why r1/)).toBeInTheDocument();
     expect(within(rowOf(/why r1/)).getByRole("status").textContent).toBe("ApprovedSent · not yet seen in Zitadel");
-    expect(fadeOf(/why r1/)).not.toHaveClass("tint-out");
+    expect(fadeOf(/why r1/)).not.toHaveAttribute("data-leaving");
 
     tick(899);
-    expect(fadeOf(/why r1/)).not.toHaveClass("tint-out");
+    expect(fadeOf(/why r1/)).not.toHaveAttribute("data-leaving");
     tick(1);
-    expect(fadeOf(/why r1/)).toHaveClass("tint-out");
-    expect(rowOf(/why r1/)).toHaveClass("close-gap");
+    expect(fadeOf(/why r1/)).toHaveAttribute("data-leaving");
+    expect(rowOf(/why r1/)).toHaveAttribute("data-closing");
     expect(rowOf(/why r1/)).toHaveAttribute("aria-hidden", "true");
 
-    animationEnd(rowOf(/why r1/));
+    gapSettled(rowOf(/why r1/));
     expect(screen.queryByText(/why r1/)).not.toBeInTheDocument();
     expect(screen.getByText(/why r2/)).toBeInTheDocument();
   });
@@ -144,8 +144,8 @@ describe("a decided request keeps its seat for a beat", () => {
     expect(decide).toHaveBeenLastCalledWith({ id: "r2", status: "approved" });
     // r2's own beat starts when it is decided, not with r1's.
     tick(600);
-    expect(fadeOf(/why r1/)).toHaveClass("tint-out");
-    expect(fadeOf(/why r2/)).not.toHaveClass("tint-out");
+    expect(fadeOf(/why r1/)).toHaveAttribute("data-leaving");
+    expect(fadeOf(/why r2/)).not.toHaveAttribute("data-leaving");
   });
 
   it("keeps the gap open while the pointer is in the list, and closes it when it leaves", async () => {
@@ -157,10 +157,10 @@ describe("a decided request keeps its seat for a beat", () => {
     rerender(<Screen />);
     tick(900);
 
-    expect(fadeOf(/why r1/)).toHaveClass("tint-out");
-    expect(rowOf(/why r1/)).not.toHaveClass("close-gap");
+    expect(fadeOf(/why r1/)).toHaveAttribute("data-leaving");
+    expect(rowOf(/why r1/)).not.toHaveAttribute("data-closing");
     fireEvent.pointerLeave(list());
-    expect(rowOf(/why r1/)).toHaveClass("close-gap");
+    expect(rowOf(/why r1/)).toHaveAttribute("data-closing");
   });
 
   it("shows the empty state only after the last row has left", async () => {
@@ -175,7 +175,7 @@ describe("a decided request keeps its seat for a beat", () => {
     expect(screen.getByRole("status").textContent).toContain("Approved");
     tick(900);
     expect(screen.queryByText("No open requests.")).not.toBeInTheDocument();
-    animationEnd(rowOf(/why r1/));
+    gapSettled(rowOf(/why r1/));
     expect(screen.getByText("No open requests.")).toBeInTheDocument();
   });
 
@@ -190,7 +190,7 @@ describe("a decided request keeps its seat for a beat", () => {
     expect(screen.getAllByRole("button", { name: "Approve" })).toHaveLength(2);
     tick(2000);
     expect(screen.getByText(/why r1/)).toBeInTheDocument();
-    expect(fadeOf(/why r1/)).not.toHaveClass("tint-out");
+    expect(fadeOf(/why r1/)).not.toHaveAttribute("data-leaving");
   });
 
   it("changing the filter is a different list: nothing fades out of it", async () => {
@@ -213,7 +213,7 @@ describe("under reduced motion", () => {
     rerender(<Screen />);
 
     expect(within(rowOf(/why r1/)).getByRole("status").textContent).toContain("Approved");
-    expect(rowOf(/why r1/)).not.toHaveClass("close-gap");
+    expect(rowOf(/why r1/)).not.toHaveAttribute("data-closing");
     tick(900);
     expect(screen.queryByText(/why r1/)).not.toBeInTheDocument();
   });
@@ -252,18 +252,18 @@ describe("a bulk decision from Select mode", () => {
 
     // The operator is reading the dialog's result: nothing leaves behind it.
     tick(5000);
-    expect(fadeOf(/why r1/)).not.toHaveClass("tint-out");
+    expect(fadeOf(/why r1/)).not.toHaveAttribute("data-leaving");
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     tick(899);
-    expect(fadeOf(/why r1/)).not.toHaveClass("tint-out");
+    expect(fadeOf(/why r1/)).not.toHaveAttribute("data-leaving");
     tick(1);
-    expect(fadeOf(/why r1/)).toHaveClass("tint-out");
-    expect(fadeOf(/why r2/)).toHaveClass("tint-out");
+    expect(fadeOf(/why r1/)).toHaveAttribute("data-leaving");
+    expect(fadeOf(/why r2/)).toHaveAttribute("data-leaving");
     expect(screen.queryByText("No open requests.")).not.toBeInTheDocument();
 
-    animationEnd(rowOf(/why r1/));
-    animationEnd(rowOf(/why r2/));
+    gapSettled(rowOf(/why r1/));
+    gapSettled(rowOf(/why r2/));
     expect(screen.getByText("No open requests.")).toBeInTheDocument();
   });
 });

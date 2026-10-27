@@ -172,10 +172,10 @@ export default function PeoplePage() {
   // S5: somebody who leaves the list on a later read (marked as a service account, no longer
   // matching) fades where they were and closes the gap after, and not under the pointer.
   const leaving = useLeavingRows(rows, (entry) => entry.user.id, !users.isLoading && !users.error, {
-    scope: JSON.stringify(filters),
+    narrowedBy: JSON.stringify(filters),
   });
   const visible = rows.slice(0, limit);
-  const drawn = leaving.rows.slice(0, limit);
+  const drawn = leaving.window(limit);
   // Selection spans the whole filter, not the rendered page.
   const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
   const { selfId } = useUiView();
@@ -223,6 +223,9 @@ export default function PeoplePage() {
   // is the tedium this mode exists to remove. `wholeFilter` only remembers that
   // it happened, so the bar can offer to narrow back to what is on screen.
   function toggleAll() {
+    // While a new search is read, the rows on screen still answer the last
+    // one: "every match" would select the wrong people.
+    if (users.isPlaceholderData) return;
     const wasAll = selection.allSelected;
     selection.toggleAll();
     setWholeFilter(!wasAll && rows.length > visible.length);
@@ -392,9 +395,11 @@ export default function PeoplePage() {
         <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
         <div className={view.className}>
         <ListStates
-          isLoading={users.isLoading}
+          // The last search's empty answer is not this one's: "Nobody matches" waits for it.
+          isLoading={users.isLoading || (users.isPlaceholderData && leaving.rows.length === 0)}
           error={users.error}
-          isEmpty={rows.length === 0}
+          // Not `rows`: the last rows of a search fade where they were before "Nobody matches that" takes the place.
+          isEmpty={leaving.rows.length === 0}
           onRetry={() => users.refetch()}
           errorTitle="Couldn't load people."
           skeleton={<RowSkeleton rows={6} label="Loading people" />}
@@ -551,7 +556,7 @@ function PersonRow({
             <Link
               href={`/users/${entry.user.id}`}
               onClick={(event) => event.stopPropagation()}
-              className="block truncate text-[15px] font-semibold hover:text-accent-text"
+              className="block truncate text-[15px] font-semibold link-hover"
             >
               {entry.user.name}
             </Link>
@@ -604,7 +609,7 @@ function PersonRow({
   // anything about them needs doing — plus the sentence explaining why they
   // are in the list. Team and bundles fold away: both are one tap deeper, on
   // the person's own page, and neither is what this screen is scanned for.
-  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 motion-tint hover:bg-[var(--hover)] tablet:flex-row tablet:items-center tablet:gap-[18px] ${
+  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px] ${
     departed ? "opacity-60" : ""
   }`;
 
