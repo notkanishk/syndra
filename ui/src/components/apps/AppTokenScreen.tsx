@@ -3,7 +3,6 @@
 import { Term } from "@/components/ui/Term";
 import { useMemo, useState } from "react";
 
-import { TokenFormatEditor } from "@/components/apps/TokenFormatEditor";
 import { TokenPreview } from "@/components/apps/TokenPreview";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
@@ -17,6 +16,10 @@ import { useClaimShape } from "@/lib/queries/useClaimShape";
 import { useCrumb } from "@/lib/page-crumb";
 import { Tinted } from "@/components/ui/Unfold";
 import { useIsAdvanced } from "@/lib/ui-view";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const TokenFormatEditor = dynamic(() => import("@/components/apps/TokenFormatEditor").then((m) => m.TokenFormatEditor));
 
 /**
  * E6 · One screen, two equal halves: what the token is shaped like on the

@@ -43,7 +43,6 @@ import {
   useRevokeDrift,
   type DriftTriageItem,
 } from "@/lib/queries/useDrift";
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
   SelectAllRow,
@@ -78,6 +77,10 @@ import {
   succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
 type Resolution = "attribute" | "revoke" | "external";
 

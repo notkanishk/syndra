@@ -5,7 +5,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ToBody } from "@/components/ui/Modal";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import {
   useApplyEntitlements,
@@ -15,6 +14,10 @@ import {
 } from "@/lib/queries/useEntitlements";
 import { TINT_MS, useExitPhase } from "@/lib/motion";
 import { targetLabel } from "@/lib/nav";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
 /**
  * Bringing a cohort's accounts back in line with what their roles say

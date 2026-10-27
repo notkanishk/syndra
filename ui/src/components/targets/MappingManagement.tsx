@@ -9,7 +9,6 @@ import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
 import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { AddMappingButton, RefusedFields, RoleMappingDialog, placeName } from "@/components/targets/AddMappingDialog";
 import {
   FIELD_GROUP,
@@ -50,6 +49,10 @@ import { targetLabel } from "@/lib/nav";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useIsTouch } from "@/lib/useViewport";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
 
 /**

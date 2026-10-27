@@ -15,7 +15,8 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
-import { ConnectionGuide, deviceFrom, type Device, type GuideFolder } from "@/components/storage/ConnectionGuide";
+import type { GuideFolder } from "@/components/storage/ConnectionGuide";
+import { deviceFrom, type Device } from "@/components/storage/device";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { formatBytes, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
@@ -28,6 +29,10 @@ import {
   type StoragePlace,
 } from "@/lib/queries/useMyStorage";
 import { oneShot } from "@/lib/secret";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const ConnectionGuide = dynamic(() => import("@/components/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
 
 /**
  * A member's own storage page (route-storage; A-01, A-02).

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { FieldLabel, Input } from "@/components/ui/Input";
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Select } from "@/components/ui/Select";
 import { useBundles } from "@/lib/queries/useBundles";
 import { useProjects } from "@/lib/queries/useProjects";
@@ -15,6 +14,10 @@ import {
   type BulkGrantInput,
   type BulkOp,
 } from "@/lib/queries/useBulkGrants";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
 /**
  * Choosing what to do to a selection of people.
