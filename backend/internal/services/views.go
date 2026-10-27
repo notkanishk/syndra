@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -825,18 +824,11 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 		return models.ApplicationSimulation{}, fmt.Errorf("user %q not found", userID)
 	}
 
-	if err := cache.CompileUserCache(ctx, userID, app.ProjectID); err != nil {
-		return models.ApplicationSimulation{}, err
-	}
-
-	cacheKey := fmt.Sprintf("mapping:%s:%s", userID, app.ProjectID)
-	val, err := db.Redis.Get(ctx, cacheKey).Result()
+	// Computed, not stored: the token path serves what the write paths put in
+	// Redis, and a preview that wrote there would repair the one project being
+	// looked at while the cache everywhere else stayed stale.
+	facts, err := cache.CompileFacts(ctx, userID, app.ProjectID)
 	if err != nil {
-		return models.ApplicationSimulation{}, err
-	}
-
-	var facts claims.Facts
-	if err := json.Unmarshal([]byte(val), &facts); err != nil {
 		return models.ApplicationSimulation{}, err
 	}
 	if facts.ProjectID == "" {

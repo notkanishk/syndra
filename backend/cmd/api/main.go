@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/handlers"
@@ -242,6 +243,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Claims warm-up: the token path serves only compiled claims, which change
+	// events write and a day's TTL removes. One pass now, then twice per TTL, so
+	// a restart or a quiet day never leaves someone's token degraded.
+	warmSched := periodic.New("CACHE", 12*time.Hour, 12*time.Hour, func(ctx context.Context) error {
+		return cache.Warm(ctx)
+	})
+	go warmSched.Start(ctx)
+
 	// Grant-expiry scheduler: periodic sweep of expired direct grants to
 	// emit LLDAP removal intents, hard-delete rows, invalidate cache, and
 	// cascade-revoke derived Zitadel grants. sched is nil when disabled;
@@ -466,6 +475,12 @@ func main() {
 		case <-shutdownCtx.Done():
 			log.Println("[DRIFT] Shutdown deadline exceeded waiting for scheduler; closing anyway")
 		}
+	}
+
+	select {
+	case <-warmSched.Done():
+	case <-shutdownCtx.Done():
+		log.Println("[CACHE] Shutdown deadline exceeded waiting for the warm-up; closing anyway")
 	}
 
 	if revokeSched != nil {

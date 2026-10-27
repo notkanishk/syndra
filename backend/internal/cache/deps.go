@@ -13,6 +13,7 @@ import (
 var (
 	dbGetDirectGrantsForUser = db.GetDirectGrantsForUser
 	dbGetActiveMappingRules  = db.GetActiveMappingRules
+	dbGetAllKnownUserIDs     = db.GetAllKnownUserIDs
 	// Version-aware. The cache compiles the claims a token is issued from, so
 	// resolving bundles through the mutable working copy meant an unpublished
 	// edit reached real tokens on the next rebuild — before anybody published

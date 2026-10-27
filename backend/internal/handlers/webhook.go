@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"syndra/internal/db"
@@ -22,6 +23,10 @@ type WebhookPayload struct {
 	RoleKeys      []string `json:"role_keys"`          // multi-role grants from Zitadel event-trigger payloads
 	ProjectIDs    []string `json:"project_ids"`        // all projects the user touches
 	GrantID       string   `json:"grant_id,omitempty"` // Zitadel user_grant aggregate ID; key for the grants index
+	// EventID is an internal-shape caller's own id for this event, stable across
+	// its retries. It is what lets a redelivery dedupe when the payload itself
+	// has nothing unique to say which delivery it is.
+	EventID string `json:"event_id,omitempty"`
 	// DedupKey is the stable idempotency key for Zitadel-shape events:
 	// aggregateID:eventType:sequence, set by translateZitadelEvent. Stable
 	// across redeliveries — unlike the ZITADEL-Signature header, whose
@@ -200,12 +205,20 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	// aggregateID:eventType:sequence key so redeliveries (retry after timeout,
 	// 5xx, dropped response) dedupe correctly — the signature header can't be
 	// used here because its embedded timestamp changes per delivery (SC5).
-	// Internal-shape callers (operator curl, contracts tests) fall back to
-	// payload-derived deduplication.
+	// Internal-shape callers (operator curl, contracts tests) have no sequence:
+	// the payload alone cannot tell a redelivery from the same role granted
+	// again after a removal, and keying on it dropped that second grant for
+	// good. They dedupe on their own event_id; without one every delivery is a
+	// new event, because re-running an idempotent grant is cheaper than
+	// silently losing a real one.
 	idempotencyKey := event.DedupKey
 	if idempotencyKey == "" {
-		idempotencyKey = fmt.Sprintf("%s:%s:%s:%s",
-			event.EventType, event.UserID, event.SourceProject, event.RoleKey)
+		delivery := event.EventID
+		if delivery == "" {
+			delivery = strconv.FormatInt(time.Now().UnixNano(), 10)
+		}
+		idempotencyKey = fmt.Sprintf("%s:%s:%s:%s:%s",
+			event.EventType, event.UserID, event.SourceProject, event.RoleKey, delivery)
 	}
 
 	eventID, inserted, err := dbInsertWebhookEvent(r.Context(), event.EventType, event.UserID, event.SourceProject, event.RoleKey, idempotencyKey)
@@ -260,11 +273,7 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 // rebuild cache, enforce mapping rules per role, trigger onboarding for new_user,
 // per role, which is what carries the change to any mapped target.
 func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string) error {
-	if len(event.ProjectIDs) > 0 {
-		cacheRebuildUser(ctx, event.UserID, event.ProjectIDs)
-	} else {
-		_ = cacheInvalidateUser(ctx, event.UserID)
-	}
+	cacheRebuildUser(ctx, event.UserID, append([]string{event.SourceProject}, event.ProjectIDs...))
 
 	for _, role := range event.RoleKeys {
 		if err := webhookEnforceMappingRules(ctx, event.UserID, event.SourceProject, role); err != nil {
@@ -376,12 +385,12 @@ func detectWebhookRemoval(ctx context.Context, event WebhookPayload) {
 }
 
 // processGrantRemoved handles grant_removed events:
-// invalidate cache, revoke derived grants per role through mapping rules,
+// recompile the cache, revoke derived grants per role through mapping rules,
 // The target side follows from the role change itself: the closure diff every
 // cascade computes fires the lifecycle trigger, which converges whatever
 // targets that role is mapped to. There is no second queue to write to.
 func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID string) error {
-	_ = cacheInvalidateUser(ctx, event.UserID)
+	cacheRebuildUser(ctx, event.UserID, []string{event.SourceProject})
 	// BEFORE the cascade, deliberately. The revocations below remove derived
 	// intent, so asking afterwards whether Syndra expects this role would be
 	// asking about the world the cascade has just made rather than the one the
@@ -396,7 +405,7 @@ func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID stri
 }
 
 // processUserDeactivated handles user_deactivated and user_locked events: the
-// cache is invalidated, and every system the person has an account on gets a
+// cache is recompiled, and every system the person has an account on gets a
 // convergence. The resolver reads their directory standing and disables the
 // account there; before this it waited for the next resolution, up to six
 // hours, with a departed member's storage account still switched on.
@@ -405,7 +414,7 @@ func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID stri
 // the backstop, and a 5xx here would only make Zitadel redeliver an event this
 // handler has already acted on as far as it can.
 func processUserDeactivated(ctx context.Context, event WebhookPayload) error {
-	_ = cacheInvalidateUser(ctx, event.UserID)
+	cacheRebuildUser(ctx, event.UserID, nil)
 	for _, reg := range addonsRegistered() {
 		if _, bound, err := dbGetTargetBinding(ctx, reg.Target, event.UserID); err != nil || !bound {
 			continue

@@ -135,8 +135,7 @@ var (
 	dbGetStaleHolderCounts  = db.GetStaleHolderCounts
 	dbGetUserBundleVersions = db.GetUserBundleVersions
 
-	cacheRebuildUser    = cache.RebuildUserCache
-	cacheInvalidateUser = cache.InvalidateUser
+	cacheRebuildUser = cache.RebuildUserCache
 
 	// Webhook handler injectable vars.
 	webhookEnforceMappingRules             = zitadel.EnforceMappingRules
