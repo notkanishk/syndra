@@ -46,6 +46,16 @@ export function resolveRequestOrigin(request: RequestLike): string {
 }
 
 /**
+ * A browser write that began on some other origin. `Origin` is sent on every cross-origin
+ * request and on same-origin POSTs; its absence means a non-browser caller, which carries no
+ * ambient session cookie to abuse.
+ */
+export function isForeignOrigin(request: RequestLike): boolean {
+  const origin = request.headers.get("origin");
+  return origin !== null && origin !== resolveRequestOrigin(request);
+}
+
+/**
  * Absolute URL for `path` on the browser-facing origin.
  *
  * `search` is dropped unless supplied — a redirect target inherits nothing from
