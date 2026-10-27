@@ -78,24 +78,33 @@ func CreateAccessRequestOfKind(ctx context.Context, kind, requesterID, projectID
 // Waiting says the role is given but not yet sent: a queued add, from a grant
 // or a bundle. It still counts as held, so nobody asks for or gives it twice;
 // the words just say it may not work yet. A role whose removal is queued is
-// not held, even while Zitadel still shows it: otherwise giving it back
-// before the removal was sent was refused as "already has this".
+// not held, even while Zitadel still shows it or a direct grant still records
+// it: otherwise giving it back before the removal was sent was refused as
+// "already has this". A queued replace that omits the role is a removal.
 func RequestHolding(ctx context.Context, userID, projectID, roleKey string) (models.RequestHolding, error) {
+	// A replace states the whole role set for the project, so one that omits
+	// the role removes it just as a revoke naming it does.
 	const q = `
 		WITH queued AS (
-			SELECT op_type FROM propagation_outbox
+			SELECT op_type, COALESCE($3 = ANY(role_keys), false) AS names_role
+			  FROM propagation_outbox
 			 WHERE target = 'zitadel' AND status IN ('pending', 'in_flight')
-			   AND user_id = $1 AND project_id = $2 AND $3 = ANY(role_keys)
+			   AND user_id = $1 AND project_id = $2
+		), leaving AS (
+			SELECT EXISTS (SELECT 1 FROM queued
+			                WHERE (op_type = 'revoke' AND names_role)
+			                   OR (op_type = 'replace' AND NOT names_role)) AS yes
 		)
 		SELECT
 			(SELECT expires_at FROM direct_role_grants
 			  WHERE user_id = $1 AND zitadel_project_id = $2 AND zitadel_role_key = $3),
 			EXISTS (SELECT 1 FROM direct_role_grants
-			         WHERE user_id = $1 AND zitadel_project_id = $2 AND zitadel_role_key = $3),
+			         WHERE user_id = $1 AND zitadel_project_id = $2 AND zitadel_role_key = $3)
+			  AND NOT (SELECT yes FROM leaving),
 			EXISTS (SELECT 1 FROM zitadel_grants_index
 			         WHERE user_id = $1 AND project_id = $2 AND $3 = ANY(role_keys))
-			  AND NOT EXISTS (SELECT 1 FROM queued WHERE op_type = 'revoke'),
-			EXISTS (SELECT 1 FROM queued WHERE op_type IN ('add', 'replace'))`
+			  AND NOT (SELECT yes FROM leaving),
+			EXISTS (SELECT 1 FROM queued WHERE op_type IN ('add', 'replace') AND names_role)`
 	var until *time.Time
 	var granted, observed, waiting bool
 	if err := querier(ctx).QueryRow(ctx, q, userID, projectID, roleKey).Scan(&until, &granted, &observed, &waiting); err != nil {
