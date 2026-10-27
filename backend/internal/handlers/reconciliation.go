@@ -53,13 +53,14 @@ type ReconciliationDiff struct {
 
 // storeIsCurrent says the sweep has already recorded an observation recent
 // enough to diff against, and the caller did not ask for a fresh one. Any
-// doubt (never observed, unreadable) answers false: a read is the safe side.
+// doubt (never observed, unreadable, cut short or failed) answers false: a read
+// is the safe side, and a partial store would turn into manufactured absences.
 func storeIsCurrent(r *http.Request) bool {
 	if r.URL.Query().Get("fresh") == "1" {
 		return false
 	}
 	last, err := dbLatestOrgObservation(r.Context())
-	return err == nil && time.Since(last.ObservedAt) < observationMaxAge
+	return err == nil && last.Complete && last.Error == "" && time.Since(last.ObservedAt) < observationMaxAge
 }
 
 // handleGetReconciliationDiff is read-only: it surfaces the symmetric

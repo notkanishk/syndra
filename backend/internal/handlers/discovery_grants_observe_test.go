@@ -21,7 +21,9 @@ func resetObserveGrantDeps(t *testing.T) {
 	origPage := dbObservedGrantsPage
 	origFor := dbObservedGrantsFor
 	origLatest := dbLatestOrgObservation
+	origObsPage := dbObservationPage
 	t.Cleanup(func() {
+		dbObservationPage = origObsPage
 		dbLatestOrgObservation = origLatest
 		observeOrg = origOrg
 		observeUser = origUser
