@@ -114,7 +114,7 @@ type SectionKind = (typeof SECTIONS)[number]["kind"];
 
 /** A quiet text control that sits among a row's buttons. */
 const QUIET_LINK =
-  "inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-hover desktop:min-h-6";
+  "inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-tint desktop:min-h-6";
 
 const isSafety = (item: DriftTriageItem) => (item.role_group ?? "").toLowerCase().includes("safety");
 

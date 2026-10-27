@@ -349,7 +349,7 @@ function HealthLine({
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
-            className="inline-flex min-h-11 items-center gap-2 font-semibold text-muted link-hover desktop:min-h-6"
+            className="inline-flex min-h-11 items-center gap-2 font-semibold text-muted link-tint desktop:min-h-6"
           >
             {open ? "Hide checks" : "Show checks"}
             <Chevron open={open} />
