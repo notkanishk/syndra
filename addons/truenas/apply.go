@@ -405,8 +405,14 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 	// second mutation. It is best-effort against the response, though: the
 	// mutation already happened, and refusing to report it because the cache
 	// write failed would lose the only account of it the caller gets.
-	if err := s.store.Remember(req.CallID, kindApply, outcome); err != nil {
-		logStoreFailure("idempotency", req.CallID, err)
+	//
+	// Only a 2xx is remembered. A blocked or refused outcome changed nothing, so
+	// a replay re-runs it (the target may have moved on) instead of returning a
+	// stale refusal as a 200 the caller would read as applied.
+	if status/100 == 2 {
+		if err := s.store.Remember(req.CallID, kindApply, outcome); err != nil {
+			logStoreFailure("idempotency", req.CallID, err)
+		}
 	}
 	writeJSON(w, status, outcome)
 }
@@ -827,7 +833,13 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	if err := s.nas.call("group.create", []any{map[string]any{
 		"name": binding.Username, "gid": id, "smb": false,
 	}}, &groupID); err != nil {
-		return ApplyOutcome{}, statusFor(err), fmt.Errorf("make %s's personal group: %w", binding.Username, err)
+		// An empty group of that name left by an earlier attempt is ours to
+		// take; anything else is somebody's, and the refusal stands.
+		orphan, ok := s.emptyGroupNamed(binding.Username)
+		if !ok {
+			return ApplyOutcome{}, statusFor(err), fmt.Errorf("make %s's personal group: %w", binding.Username, err)
+		}
+		groupID = orphan
 	}
 	create["uid"] = id
 	create["group"] = groupID
@@ -855,14 +867,17 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	// binding recognises an account by its uid across a rename. Read back
 	// rather than assumed: a fingerprint computed from a state this add-on
 	// invented is a fingerprint the next plan verifies against nothing.
-	created, err := s.readBack(binding.Username)
-	if err != nil {
-		return ApplyOutcome{}, statusFor(err),
-			fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, err)
+	created, readErr := s.readBack(binding.Username)
+	// The account exists whether or not it could be read back, so the binding
+	// is recorded either way: left out, the next apply finds the name unbound
+	// and halts as a conflict over an account this add-on made. The uid is the
+	// one it asked for, which is what the account was created with.
+	uid := id
+	if readErr == nil {
+		uid = created.UID
 	}
-
-	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, created.UID, "apply"
-	if err := s.store.PutBinding(binding); err != nil {
+	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, uid, "apply"
+	if err := s.store.BindIfFree(binding); err != nil {
 		// The account exists and the record of whose it is did not land. Not a
 		// silent success: the next apply would derive the same name, find it
 		// unbound, and halt as a binding conflict — which is recoverable but
@@ -870,6 +885,10 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		logStoreFailure("binding", req.Subject, err)
 		return ApplyOutcome{}, http.StatusInternalServerError,
 			fmt.Errorf("account %s was created and its binding could not be recorded: %w", binding.Username, err)
+	}
+	if readErr != nil {
+		return ApplyOutcome{}, statusFor(readErr),
+			fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr)
 	}
 
 	detail := fmt.Sprintf("Created %s.", binding.Username)
@@ -909,6 +928,28 @@ func (s *server) readBack(username string) (*Subject, error) {
 		}
 	}
 	return nil, fmt.Errorf("%w: %s is not on the target after being created", ErrTargetRefused, username)
+}
+
+// emptyGroupNamed finds a group by name that nobody belongs to, primary or
+// secondary, and is not one of the machine's own.
+//
+// A named type rather than an inline one: `users` is not in the recorded read
+// (scripts/lib/record-truenas.py selects four fields), so the shape guard has
+// nothing to check it against.
+func (s *server) emptyGroupNamed(name string) (apiID, bool) {
+	type groupMembers struct {
+		nasGroup
+		Users []apiID `json:"users"`
+	}
+	var groups []groupMembers
+	if err := s.nas.call("group.query", []any{
+		[]any{[]any{"group", "=", name}},
+		map[string]any{"select": []string{"id", "gid", "group", "builtin", "users"}, "limit": 1},
+	}, &groups); err != nil || len(groups) != 1 {
+		return apiID{}, false
+	}
+	g := groups[0]
+	return g.ID, !g.Builtin && len(g.Users) == 0 && g.ID.known()
 }
 
 // record appends to the mutation log, best-effort AFTER the fact.

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -431,6 +432,13 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// Checked again here and not only at adoption. A binding can predate this
 	// guard, or predate a key reissued against a different account, and this is
 	// the one operation that cannot be undone.
+	//
+	// Unlike adoption, an unknown identity refuses here: a purge that cannot
+	// tell whether it is deleting Syndra's own credential is not one to attempt.
+	if _, _, known := s.nas.Self(); !known {
+		return OperationResult{}, http.StatusUnprocessableEntity,
+			errors.New("this add-on could not confirm which target account it authenticates as, so it will not delete one; try again shortly")
+	}
 	if err := s.refuseSelfAccount(binding.Username); err != nil {
 		return OperationResult{}, http.StatusUnprocessableEntity, err
 	}
@@ -460,13 +468,17 @@ func (s *server) purgeAccount(req OperationRequest) (OperationResult, int, error
 	// bound-but-absent path — which re-creates under the recorded name, because
 	// that path exists for an account deleted BEHIND our back. A purge is not
 	// that: we deleted it, on purpose, and it must not resurrect itself.
+	detail := "Deleted " + binding.Username + "."
 	if err := s.store.DeleteBinding(req.Subject); err != nil {
 		logStoreFailure("binding", req.Subject, err)
+		// Still succeeded, the account is gone; but the leftover is said, so it
+		// is not discovered as an account that re-creates itself.
+		detail += " The binding to this subject could not be removed and is still recorded; release it before the next apply."
 	}
 	s.record("account.purge", req.Subject, req.Actor, req.CallID, "succeeded")
 	return OperationResult{
 		Operation: "account.purge", Subject: req.Subject, Outcome: "succeeded",
-		Detail: "Deleted " + binding.Username + ".",
+		Detail: detail,
 	}, http.StatusOK, nil
 }
 
@@ -485,7 +497,12 @@ type ActivityReport struct {
 	// One name over two questions is the defect this whole branch keeps
 	// finding, and a wire field is the worst place to leave an instance of it.
 	UncoveredShares []string `json:"uncovered_shares,omitempty"`
+	// Truncated says older events exist than the newest activityLimit returned.
+	Truncated bool `json:"truncated,omitempty"`
 }
+
+// activityLimit is how many events one activity.get returns.
+const activityLimit = 200
 
 type ActivityEvent struct {
 	At      string `json:"at"`
@@ -566,14 +583,19 @@ func (s *server) smbActivity(req OperationRequest) (OperationResult, int, error)
 		map[string]any{
 			"services":      []string{"SMB"},
 			"query-filters": filters,
-			"query-options": map[string]any{"limit": 200, "order_by": []string{"-message_timestamp"}},
+			"query-options": map[string]any{"limit": activityLimit + 1, "order_by": []string{"-message_timestamp"}},
 		},
 	}
 	if err := s.nas.call("audit.query", query, &rows); err != nil {
 		return OperationResult{}, statusFor(err), fmt.Errorf("the audit log could not be read")
 	}
 
-	report := ActivityReport{Events: make([]ActivityEvent, 0, len(rows))}
+	// One more than is returned asked for, so "exactly the limit" and "more
+	// than the limit" can be told apart; the newest rows are the ones kept.
+	report := ActivityReport{Events: make([]ActivityEvent, 0, len(rows)), Truncated: len(rows) > activityLimit}
+	if report.Truncated {
+		rows = rows[:activityLimit]
+	}
 	for _, r := range rows {
 		event := ActivityEvent{
 			At:      time.Unix(r.Timestamp, 0).UTC().Format(time.RFC3339),
@@ -1081,12 +1103,17 @@ func (s *server) adoptAccount(req OperationRequest) (OperationResult, int, error
 			fmt.Errorf("the target has no adoptable account named %s (system accounts are never adoptable)", username)
 	}
 
-	if err := s.store.PutBinding(Binding{
+	if err := s.store.BindIfFree(Binding{
 		SubjectID: req.Subject, Username: account.Username, UID: account.UID,
 		// Who decided it. An adoption that turns out to be wrong hands somebody
 		// else's data to a member, and the actor is the first thing asked for.
 		BoundBy: req.Actor,
 	}); err != nil {
+		// Taken since the check above: the same refusal, not a 500.
+		var bound ErrUsernameBound
+		if errors.As(err, &bound) {
+			return OperationResult{}, http.StatusConflict, err
+		}
 		return OperationResult{}, http.StatusInternalServerError, err
 	}
 

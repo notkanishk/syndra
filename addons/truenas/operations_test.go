@@ -26,6 +26,9 @@ func opServer(t *testing.T) (*server, *mutatingRPC) {
 	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
 		t.Fatal(err)
 	}
+	// Known, because a purge refuses while the add-on does not know its own
+	// account.
+	s.nas.selfName, s.nas.selfUID = "syndra", 3001
 	return s, m
 }
 

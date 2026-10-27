@@ -379,7 +379,7 @@ services:
     # `TestTheDeploymentAllowsTheShutdownDrainToFinish`; raising the constant
     # without raising this fails that test rather than silently restoring the
     # truncation.
-    stop_grace_period: 30s
+    stop_grace_period: 120s
     # The rest of what "least trusted component" has to mean in practice. Every
     # line below is a capability this container has no use for, and the argument
     # for isolating it at all is that a compromise here must stay here.
