@@ -143,24 +143,47 @@ func TestAnUnknownOwnAccountIsAskedForAgain(t *testing.T) {
 	}
 }
 
-// A group left empty by an earlier attempt is taken over; one with members is
-// somebody's and the refusal stands.
+// A group left empty by an earlier attempt, inside this add-on's id range, is
+// taken over and its number becomes the account's. One with members, or one
+// outside the range (somebody else's, however empty), stays refused.
 func TestACreateAdoptsAnEmptyOrphanGroupAndRefusesOccupiedOnes(t *testing.T) {
 	s, m := applyServer(t, `[]`)
 	m.refuseGroupCreate = true
-	m.fakeRPC.groups = `[{"id":42,"gid":900,"group":"lab_makers"},{"id":93,"gid":5000,"group":"ada","builtin":false,"users":[]}]`
+	m.fakeRPC.groups = `[{"id":42,"gid":900,"group":"lab_makers"},{"id":93,"gid":250000,"group":"ada","builtin":false,"users":[]}]`
 	rr := postApply(t, s, applyBody)
 	if rr.Code != http.StatusOK || len(m.creates) != 1 || fmt.Sprint(m.creates[0]["group"]) != "93" {
 		t.Fatalf("want the empty orphan adopted as the primary group, got %d creates=%v (%s)",
 			rr.Code, m.creates, rr.Body.String())
 	}
+	if fmt.Sprint(m.creates[0]["uid"]) != "250000" {
+		t.Errorf("the account must take the adopted group's number, got uid %v", m.creates[0]["uid"])
+	}
 
-	s2, m2 := applyServer(t, `[]`)
-	m2.refuseGroupCreate = true
-	m2.fakeRPC.groups = `[{"id":42,"gid":900,"group":"lab_makers"},{"id":93,"gid":5000,"group":"ada","builtin":false,"users":[7]}]`
-	rr = postApply(t, s2, applyBody)
-	if rr.Code == http.StatusOK || len(m2.creates) != 0 {
-		t.Fatalf("an occupied group must not be taken, got %d creates=%d", rr.Code, len(m2.creates))
+	for name, groups := range map[string]string{
+		"occupied":     `[{"id":93,"gid":250000,"group":"ada","builtin":false,"users":[7]}]`,
+		"out of range": `[{"id":93,"gid":5000,"group":"ada","builtin":false,"users":[]}]`,
+	} {
+		s2, m2 := applyServer(t, `[]`)
+		m2.refuseGroupCreate = true
+		m2.fakeRPC.groups = groups
+		rr = postApply(t, s2, applyBody)
+		if rr.Code == http.StatusOK || len(m2.creates) != 0 {
+			t.Fatalf("%s group must not be taken, got %d creates=%d", name, rr.Code, len(m2.creates))
+		}
+	}
+}
+
+// An adopted group predates this attempt, so a refused account never deletes it.
+func TestARefusedCreateLeavesAnAdoptedGroupAlone(t *testing.T) {
+	s, m := applyServer(t, `[]`)
+	m.refuseGroupCreate = true
+	m.refuseUserCreate = true
+	m.fakeRPC.groups = `[{"id":93,"gid":250000,"group":"ada","builtin":false,"users":[]}]`
+	if rr := postApply(t, s, applyBody); rr.Code == http.StatusOK {
+		t.Fatalf("a refused account must not read as success: %s", rr.Body.String())
+	}
+	if m.groupDeletes != 0 {
+		t.Fatal("an adopted group was deleted")
 	}
 }
 
