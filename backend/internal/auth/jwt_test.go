@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -171,6 +172,51 @@ func TestValidate_UnknownKid(t *testing.T) {
 	_, err := Validate(context.Background(), token, testDomain, testAudience)
 	if err == nil {
 		t.Fatal("expected error for unknown kid, got nil")
+	}
+}
+
+// roundTripFunc lets a test stand in for the JWKS endpoint.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// A token naming a kid nobody has seen must not make every request fetch the
+// key set: one fetch, then nothing until a minute has passed.
+func TestKeyFunc_UnknownKidRefetchesAtMostOncePerMinute(t *testing.T) {
+	key := newTestRSAKey(t)
+	injectKey(t, "known", key)
+
+	fetches := 0
+	orig := jwksClient
+	jwksClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		fetches++
+		return &http.Response{StatusCode: http.StatusInternalServerError, Body: http.NoBody}, nil
+	})}
+	t.Cleanup(func() { jwksClient = orig })
+
+	token := signToken(t, key, "forged", validClaims(fmt.Sprintf("https://%s", testDomain), testAudience))
+	attempt := func() {
+		t.Helper()
+		if _, err := Validate(context.Background(), token, testDomain, testAudience); err == nil {
+			t.Fatal("expected an unknown kid to be refused")
+		}
+	}
+
+	// Inside the minute SetKeysForTesting started: no fetch at all.
+	attempt()
+	if fetches != 0 {
+		t.Fatalf("fetched %d times inside the minute; want 0", fetches)
+	}
+
+	// A minute on: exactly one fetch, however many forged tokens arrive after it.
+	store.fetchMu.Lock()
+	store.lastTry = time.Now().Add(-2 * minRefetch)
+	store.fetchMu.Unlock()
+	for range 5 {
+		attempt()
+	}
+	if fetches != 1 {
+		t.Fatalf("fetched %d times for 5 forged tokens; want 1", fetches)
 	}
 }
 

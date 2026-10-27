@@ -47,6 +47,30 @@ func requireProductionSigningKeys() {
 	}
 }
 
+// liveAuthConfigProblems names what makes a live deployment (ZITADEL_DOMAIN set)
+// unfit to start. An empty audience makes every token check answer 500 rather
+// than fail at boot, and the dev API key is a published literal; neither should
+// reach a running service.
+func liveAuthConfigProblems() []string {
+	if os.Getenv("ZITADEL_DOMAIN") == "" {
+		return nil // demo mode: the shared key is the whole auth story, by design
+	}
+	var problems []string
+	if os.Getenv("ZITADEL_AUDIENCE") == "" {
+		problems = append(problems, "ZITADEL_AUDIENCE is empty")
+	}
+	if os.Getenv("SYNDRA_API_KEY") == "dev_auth_token_secret" {
+		problems = append(problems, "SYNDRA_API_KEY is the development default")
+	}
+	return problems
+}
+
+func requireLiveAuthConfig() {
+	if p := liveAuthConfigProblems(); len(p) > 0 {
+		log.Fatalf("[STARTUP] Production refusing to start: ZITADEL_DOMAIN is set but %s.", strings.Join(p, " and "))
+	}
+}
+
 // warnIfWelcomeBundleMissing emits an operator-visible warning at startup when
 // no bundle has is_welcome=TRUE. Onboarding triggers that fire in this state
 // will fail with "no welcome bundle configured" until an operator sets one via
@@ -154,6 +178,7 @@ func warnIfWelcomeBundleMissing(ctx context.Context) {
 
 func main() {
 	requireProductionSigningKeys()
+	requireLiveAuthConfig()
 	fmt.Println("Syndra Backend Starting...")
 
 	// Initialize connections safely (They read ENVs and connect)
@@ -205,6 +230,11 @@ func main() {
 	server := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
+		// Slow-header and idle-connection limits only. No WriteTimeout: drain and
+		// reconcile handlers legitimately run for minutes and would be cut off
+		// mid-mutation.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Root context cancelled on SIGINT/SIGTERM. Created before background
