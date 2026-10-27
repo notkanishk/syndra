@@ -830,16 +830,19 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		return ApplyOutcome{}, statusFor(err), err
 	}
 	var groupID apiID
+	adopted := false
 	if err := s.nas.call("group.create", []any{map[string]any{
 		"name": binding.Username, "gid": id, "smb": false,
 	}}, &groupID); err != nil {
-		// An empty group of that name left by an earlier attempt is ours to
-		// take; anything else is somebody's, and the refusal stands.
-		orphan, ok := s.emptyGroupNamed(binding.Username)
+		// An empty group of that name inside this add-on's own range is one an
+		// earlier attempt left, and ours to take; anything else is somebody's,
+		// and the refusal stands. Its number becomes the account's too, so the
+		// pair stays one number (identity.go).
+		orphan, gid, ok := s.emptyGroupNamed(binding.Username)
 		if !ok {
 			return ApplyOutcome{}, statusFor(err), fmt.Errorf("make %s's personal group: %w", binding.Username, err)
 		}
-		groupID = orphan
+		groupID, id, adopted = orphan, gid, true
 	}
 	create["uid"] = id
 	create["group"] = groupID
@@ -849,7 +852,9 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	// the account exists, so a folder that is there at all is someone else's.
 	home, err := s.decideHome(desired, binding.Username, "", -1)
 	if err != nil {
-		s.undoGroup(groupID)
+		if !adopted {
+			s.undoGroup(groupID)
+		}
 		return ApplyOutcome{}, statusFor(err), err
 	}
 	if home.path != "" {
@@ -860,7 +865,11 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 
 	var recordID apiID
 	if err := s.nas.call("user.create", []any{create}, &recordID); err != nil {
-		s.undoGroup(groupID)
+		// An adopted group was there before this attempt: not ours to delete,
+		// however the account fares.
+		if !adopted {
+			s.undoGroup(groupID)
+		}
 		return ApplyOutcome{}, statusFor(err), err
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
@@ -931,12 +940,15 @@ func (s *server) readBack(username string) (*Subject, error) {
 }
 
 // emptyGroupNamed finds a group by name that nobody belongs to, primary or
-// secondary, and is not one of the machine's own.
+// secondary, and is not one of the machine's own, and whose gid is inside this
+// add-on's id range: outside it the group was made by somebody else, and an
+// account created in it would own whatever files carry that gid. It returns the
+// gid, which the account takes as its uid.
 //
 // A named type rather than an inline one: `users` is not in the recorded read
 // (scripts/lib/record-truenas.py selects four fields), so the shape guard has
 // nothing to check it against.
-func (s *server) emptyGroupNamed(name string) (apiID, bool) {
+func (s *server) emptyGroupNamed(name string) (apiID, int64, bool) {
 	type groupMembers struct {
 		nasGroup
 		Users []apiID `json:"users"`
@@ -946,10 +958,11 @@ func (s *server) emptyGroupNamed(name string) (apiID, bool) {
 		[]any{[]any{"group", "=", name}},
 		map[string]any{"select": []string{"id", "gid", "group", "builtin", "users"}, "limit": 1},
 	}, &groups); err != nil || len(groups) != 1 {
-		return apiID{}, false
+		return apiID{}, 0, false
 	}
 	g := groups[0]
-	return g.ID, !g.Builtin && len(g.Users) == 0 && g.ID.known()
+	floor, ceiling := s.idRange()
+	return g.ID, g.GID, !g.Builtin && len(g.Users) == 0 && g.ID.known() && g.GID >= floor && g.GID <= ceiling
 }
 
 // record appends to the mutation log, best-effort AFTER the fact.
