@@ -1103,12 +1103,14 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
+	// One grouped count for every bundle: only "has any holder" is needed here,
+	// so resolving each user's bundles (bundles x users queries) was pure cost.
+	holders, err := svcGetBundleHolderCounts(snap.ctx)
+	if err != nil {
+		return models.GovernanceSummary{}, err
+	}
 	for _, bundle := range bundles {
-		impact, err := bundleImpactFromSnapshot(snap, bundle.ID)
-		if err != nil {
-			return models.GovernanceSummary{}, err
-		}
-		if len(impact.Users) == 0 {
+		if holders[bundle.ID] == 0 {
 			cleanupHints = append(cleanupHints, fmt.Sprintf("Bundle %q is unused and can be reviewed for cleanup.", bundle.Name))
 		}
 	}
