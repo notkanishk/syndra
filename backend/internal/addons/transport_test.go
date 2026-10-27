@@ -1070,6 +1070,39 @@ func TestAnUndecodableApplySuccessIsIndeterminate(t *testing.T) {
 	}
 }
 
+// A refusal that arrives as a 2xx (an older add-on image replayed a remembered
+// refusal as a 200) changed nothing and must not be recorded as a convergence.
+func TestABlockedEffectOnA2xxIsRejected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"effect":"blocked","detail":"An account named ada already exists."}`))
+	}))
+	defer srv.Close()
+	signedAddon(t, srv.URL, "a-test-secret")
+	withBreaker(t, 1000, time.Minute)
+
+	resp := Apply(context.Background(), ApplyRequest{Target: "truenas", Subject: "sub-1", CallID: "c1", Fingerprint: "fp-1"})
+	if resp.Outcome != OutcomeRejected || resp.Err == nil {
+		t.Fatalf("want rejected with a reason, got %s / %v", resp.Outcome, resp.Err)
+	}
+}
+
+// The activity report says when the add-on cut it short.
+func TestActivityCarriesTheTruncatedFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"outcome":"succeeded","activity":{"events":[],"truncated":true}}`))
+	}))
+	defer srv.Close()
+	signedAddon(t, srv.URL, "a-test-secret")
+	withBreaker(t, 1000, time.Minute)
+
+	report := Activity(context.Background(), "truenas", "sub-1", "")
+	if report.Outcome != OutcomeSucceeded || !report.Truncated {
+		t.Fatalf("want a succeeded, truncated report, got %s / %v / truncated=%t", report.Outcome, report.Err, report.Truncated)
+	}
+}
+
 // A well-formed success carries back what the add-on did, including the derived
 // name — which is why account creation needs no separate operation sequenced
 // before the apply.
