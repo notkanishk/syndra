@@ -72,6 +72,9 @@ func resetGovernanceDeps(t *testing.T) {
 	origGetExpiring := svcGetExpiringDirectGrants
 	origGetAllBundles := svcGetAllBundles
 	origGetBundlesForUser := svcGetBundlesForUser
+	origHolderCounts := svcGetBundleHolderCounts
+	svcGetBundleHolderCounts = func(context.Context) (map[string]int, error) { return map[string]int{}, nil }
+	t.Cleanup(func() { svcGetBundleHolderCounts = origHolderCounts })
 	origGetRolesForBundle := svcGetRolesForBundle
 	origUserBundleRoles := svcGetUserBundleRolesGrouped
 	origGetDirectGrants := svcGetDirectGrantsForUser
@@ -1039,5 +1042,39 @@ func TestMarkQueuedDeliveriesCarriesTheEarliestQueueTime(t *testing.T) {
 	raw, _ = json.Marshal(roleMap[roleKey{"p1", "r1"}].Reasons[0])
 	if !strings.Contains(string(raw), `"queued_at":"2026-10-15T09:00:00Z"`) {
 		t.Errorf("queued_at is RFC3339: %s", raw)
+	}
+}
+
+// The summary asks "does this bundle have a holder?" once, in aggregate. A
+// bundle with holders gets no hint, one without does, and the per-user lookup
+// that made this bundles x users queries is never touched.
+func TestGovernance_UnusedBundleHintUsesOneHolderCount(t *testing.T) {
+	resetGovernanceDeps(t)
+
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetAllBundles = func(context.Context) ([]models.Bundle, error) {
+		return []models.Bundle{{ID: "b1", Name: "Busy Bundle"}, {ID: "b2", Name: "Orphan Bundle"}}, nil
+	}
+	calls := 0
+	svcGetBundleHolderCounts = func(context.Context) (map[string]int, error) {
+		calls++
+		return map[string]int{"b1": 3}, nil
+	}
+	svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) {
+		t.Fatal("governance must not resolve bundles per user")
+		return nil, nil
+	}
+
+	summary, err := Governance(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("holder counts read %d times, want 1", calls)
+	}
+	joined := strings.Join(summary.CleanupHints, "|")
+	if !strings.Contains(joined, "Orphan Bundle") || strings.Contains(joined, "Busy Bundle") {
+		t.Fatalf("hints should name only the unheld bundle, got %v", summary.CleanupHints)
 	}
 }
