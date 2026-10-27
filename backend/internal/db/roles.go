@@ -99,6 +99,9 @@ func GetAllLocalRoles(ctx context.Context) ([]models.Role, error) {
 		}
 		roles = append(roles, r)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return roles, nil
 }
 
@@ -128,6 +131,9 @@ func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 		u := usage[key]
 		u.BundleCount = count
 		usage[key] = u
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	// Count mapping_rules: a role can appear as source or target.
@@ -164,6 +170,9 @@ func GetRoleUsageCounts(ctx context.Context) (map[string]RoleUsage, error) {
 		u.RuleCount = count
 		usage[key] = u
 	}
+	if err := rows2.Err(); err != nil {
+		return nil, err
+	}
 
 	return usage, nil
 }
@@ -195,6 +204,9 @@ func GetAllReferencedRoleKeys(ctx context.Context) ([][2]string, error) {
 			return nil, err
 		}
 		refs = append(refs, [2]string{pid, rk})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return refs, nil
 }

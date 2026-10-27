@@ -151,6 +151,9 @@ func GetWebhookEvents(ctx context.Context, statusFilter string) ([]WebhookEvent,
 		}
 		events = append(events, e)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return events, nil
 }
 
