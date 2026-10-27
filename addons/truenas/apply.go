@@ -518,8 +518,29 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		if err != nil {
 			return nil, Binding{}, nil, false, err
 		}
+		floor, ceiling := s.idRange()
+		owned := binding.UID >= floor && binding.UID <= ceiling
 		if found != nil {
+			if owned && found.UID != binding.UID {
+				// A name some other account now holds (the original was deleted
+				// and the name reused). Converging it would hand this subject's
+				// entitlements to a stranger, so it halts like any foreign name.
+				return nil, binding, &BindingConflict{Username: found.Username, UID: found.UID}, false, nil
+			}
+			if !owned && found.UID >= floor && found.UID <= ceiling {
+				// A legacy binding holding a record key, not a uid: record the
+				// real one so the next pass is guarded by the check above.
+				binding.UID = found.UID
+				if err := s.store.PutBinding(binding); err != nil {
+					logStoreFailure("binding", req.Subject, err)
+				}
+			}
 			return found, binding, nil, false, nil
+		}
+		if !owned {
+			// A legacy uid of 0 or a record key must never match root or a
+			// built-in account: with no name hit the account is missing.
+			return nil, binding, nil, cut, nil
 		}
 		// The name moved. A stable uid whose username changed out of band is a
 		// RENAME, not a missing account — reporting it as missing would create

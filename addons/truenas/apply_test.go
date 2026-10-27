@@ -442,8 +442,8 @@ func TestAnEmailChangeDoesNotRenameAnExistingAccount(t *testing.T) {
 // missing account. Reporting it as missing would create a replacement while the
 // original kept the home data.
 func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada_renamed","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, m := applyServer(t, `[{"username":"ada_renamed","id":11,"uid":300001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 300001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -459,6 +459,61 @@ func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
 	b, _, _ := s.store.GetBinding("sub-1")
 	if b.Username != "ada_renamed" {
 		t.Errorf("and the recorded name must be updated to match, got %q", b.Username)
+	}
+}
+
+// A legacy binding holds a record key or 0 where a uid belongs. The uid
+// fallback must not read that as an account: uid 0 is root.
+func TestALegacyBindingUIDNeverMatchesRootOrABuiltIn(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"root","id":1,"uid":0,"locked":false,"smb":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 0}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(m.creates) != 1 || len(m.updates) != 0 {
+		t.Fatalf("the missing account is re-created and root untouched: %d creates %d updates", len(m.creates), len(m.updates))
+	}
+}
+
+// A name hit whose uid differs from the recorded one is a different account
+// that reused the name, not this subject's.
+func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":19,"uid":300777,"locked":false,"smb":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 300001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	out := decodeOutcome(t, rr)
+	if out.Effect != EffectBlocked || out.Conflict == nil || out.Conflict.UID != 300777 || out.Conflict.Adoptable {
+		t.Fatalf("want a non-adoptable conflict naming the stranger's uid: %+v", out)
+	}
+	if len(m.creates) != 0 || len(m.updates) != 0 {
+		t.Fatal("nothing may be written to someone else's account")
+	}
+}
+
+// A legacy record key in the binding is replaced by the real uid on the first
+// name hit, so the guard above applies from the next pass.
+func TestALegacyBindingIsUpgradedToTheRealUIDOnANameHit(t *testing.T) {
+	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":300001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+
+	postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}`)
+	if b, _, _ := s.store.GetBinding("sub-1"); b.UID != 300001 {
+		t.Fatalf("the binding must carry the real uid, got %d", b.UID)
 	}
 }
 
