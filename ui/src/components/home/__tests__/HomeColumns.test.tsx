@@ -31,6 +31,10 @@ const quiet = () => ({
   unconfirmed_writes: { count: 0, top: [] },
 });
 
+vi.mock("@/lib/queries/useServiceAccounts", () => ({
+  useServiceAccounts: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
+  serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,
+}));
 vi.mock("@/lib/queries/useGovernance", () => ({
   useGovernanceSummary: () => ({
     data: state.governance,
@@ -214,6 +218,34 @@ describe("Home's two columns", () => {
         "data-phase",
         "closing",
       );
+    } finally {
+      delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
+    }
+  });
+
+  // The calm line and the block grid hand over by Unfold, not by a ternary: the switch (or a
+  // read) that flips one flips the other, and neither may swap in a single frame.
+  it("hands the calm line over to the grid by Unfold when Advanced brings work", () => {
+    Object.defineProperty(Element.prototype, "getAnimations", { value: () => [], configurable: true });
+    try {
+      state.advanced = false;
+      state.governance = { ...quiet(), drift: { count: 3, top: [] } };
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const home = () => (
+        <QueryClientProvider client={client}>
+          <Home session={session} />
+        </QueryClientProvider>
+      );
+      const view = render(home());
+      expect(screen.getByText("Nothing here needs you.").closest(".unfold")).toHaveAttribute("data-phase", "open");
+      expect(screen.queryByText("Drift")).toBeNull();
+
+      state.advanced = true;
+      view.rerender(home());
+
+      expect(screen.getByText("Nothing here needs you.").closest(".unfold")).toHaveAttribute("data-phase", "closing");
+      expect(screen.getByText("Drift").closest(".unfold[data-phase]")).not.toBeNull();
+      expect(screen.getByRole("region", { name: "Time-sensitive" })).toBeTruthy();
     } finally {
       delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
     }

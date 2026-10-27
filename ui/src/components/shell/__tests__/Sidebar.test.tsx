@@ -8,7 +8,10 @@ import type { Indicators } from "@/lib/queries/useIndicators";
 
 const pathname = vi.hoisted(() => ({ value: "/" }));
 const view = vi.hoisted(() => ({ audience: "basic" as string, isOperator: true }));
-const indicators = vi.hoisted(() => ({ data: undefined as Indicators | undefined }));
+const indicators = vi.hoisted(() => ({
+  data: undefined as Indicators | undefined,
+  isPlaceholderData: false,
+}));
 const targets = vi.hoisted(() => ({ data: [] as Array<{ target: string }> }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
@@ -42,6 +45,7 @@ beforeEach(() => {
   view.audience = "basic";
   view.isOperator = true;
   indicators.data = undefined;
+  indicators.isPlaceholderData = false;
   targets.data = [];
 });
 
@@ -93,6 +97,26 @@ describe("the rail's stable structure", () => {
     const drift = screen.getByRole("link", { name: /Drift/ });
     expect(drift).toBeInTheDocument();
     expect(drift.textContent).toContain("0");
+  });
+
+  // A read that never lands leaves the query's placeholder zeros in place. They
+  // are not readings: a hollow 0 would say "nothing waiting" about a count nobody has.
+  it("shows no badge, not a zero, while the counts are placeholders", () => {
+    indicators.data = {
+      pending_requests: 0,
+      expiring_grants: 0,
+      pending_propagation: 0,
+      drift: 0,
+      unconfirmed_revocations: 0,
+      revocations_escalated: false,
+      zitadel_reachable: true,
+    };
+    indicators.isPlaceholderData = true;
+    view.audience = "advanced";
+    renderRail();
+
+    expect(screen.getByRole("link", { name: /Drift/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Drift/ }).textContent).not.toContain("0");
   });
 
   it("renders Advanced as an append: Basic's rows, in order, then more", () => {

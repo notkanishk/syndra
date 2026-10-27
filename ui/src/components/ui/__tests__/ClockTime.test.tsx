@@ -29,6 +29,14 @@ describe("the clock under 'last checked'", () => {
     await waitFor(() => expect(screen.getByText(expected)).toBeInTheDocument());
   });
 
+  // A query that has not answered reports 0 for `dataUpdatedAt`: that is no read, not the epoch.
+  it("names no time when there is no read", () => {
+    const { container: zero } = render(<ClockTime at={0} />);
+    const { container: none } = render(<ClockTime />);
+    expect(zero.textContent).toBe("");
+    expect(none.textContent).toBe("");
+  });
+
   it("uses the product's 24-hour clock, never a 12-hour one", async () => {
     render(<ClockTime at={Date.UTC(2026, 8, 10, 0, 8)} />);
     await waitFor(() => expect(document.body.textContent).not.toMatch(/AM|PM/i));

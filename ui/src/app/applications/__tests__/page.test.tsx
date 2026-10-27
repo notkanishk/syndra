@@ -4,10 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AppsPage from "@/app/applications/page";
 
-const state = vi.hoisted(() => ({ apps: [] as unknown[] }));
+const state = vi.hoisted(() => ({ apps: [] as unknown[], loading: false }));
 
 vi.mock("@/lib/queries/useApplications", () => ({
-  useApplications: () => ({ data: state.apps, isLoading: false, error: null, refetch: () => {} }),
+  useApplications: () => ({
+    data: state.loading ? undefined : state.apps,
+    isLoading: state.loading,
+    error: null,
+    refetch: () => {},
+  }),
 }));
 vi.mock("@/components/names", () => ({
   ProjectName: ({ id }: { id: string }) => <span>{id === "p1" ? "Laser Lab" : "Studio"}</span>,
@@ -41,6 +46,7 @@ const order = () =>
     .map((a) => ["Bookings", "Badge reader", "Kiosk"].find((n) => a.textContent?.includes(n)));
 
 beforeEach(() => {
+  state.loading = false;
   state.apps = [
     app("kiosk", "Kiosk", "p2", "csv", 9),
     app("bookings", "Bookings", "p1", "array", 41),
@@ -89,6 +95,17 @@ describe("the apps index, as drawn", () => {
     expect(order()).toEqual(["Badge reader", "Bookings", "Kiosk"]);
     fireEvent.click(screen.getByRole("button", { name: "Sort by people" }));
     expect(order()).toEqual(["Kiosk", "Badge reader", "Bookings"]);
+  });
+
+  // No read is not a stale one: the freshness line waits for an answer.
+  it("states how fresh the read is only once there is one", () => {
+    state.loading = true;
+    const { unmount } = render(<AppsPage />);
+    expect(screen.queryByText(/What Zitadel confirmed/)).toBeNull();
+    unmount();
+    state.loading = false;
+    render(<AppsPage />);
+    expect(screen.getByText(/What Zitadel confirmed/)).toBeTruthy();
   });
 
   it("never cuts the name, the claim key or the project", () => {
