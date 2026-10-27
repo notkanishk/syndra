@@ -118,12 +118,22 @@ func (i apiID) known() bool { return i.String() != "" && i.String() != "null" }
 // resolver: mappings bind a role to a group NAME, and comparing a name against
 // a number would make every subject look like drift.
 func (s *server) readSubjects() (Snapshot, error) {
+	return s.readSubjectsWhere([]any{})
+}
+
+// readSubjectsWhere is the same read narrowed by `user.query` filters, for the
+// callers that want one account and were paying for every account to get it.
+// The filter shape is the recorded one (`["username", "=", name]`, see
+// scripts/lib/record-truenas.py). An exact lookup is not capped in any way that
+// matters: its Snapshot.Truncated is false unless the target sent more rows
+// than a lookup of a unique key can match.
+func (s *server) readSubjectsWhere(filters []any) (Snapshot, error) {
 	var users []nasUser
 	// `select` names every field, and only these. The two hash fields are
 	// absent by construction rather than stripped afterwards — stripping is a
 	// step somebody can forget, and the forgetting would not be visible.
 	query := []any{
-		[]any{},
+		filters,
 		map[string]any{
 			"select": []string{"id", "username", "uid", "locked", "smb", "groups", "builtin", "password_disabled", "home"},
 			"limit":  subjectReadCap + 1,
