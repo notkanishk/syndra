@@ -524,7 +524,7 @@ function ProfileForm({
           <>
             <span className="flex-1" />
             <Button variant="danger" size="sm" onClick={() => setConfirmingDelete(true)}>
-              Use the project default instead
+              Delete this app&rsquo;s claim
             </Button>
           </>
         )}
