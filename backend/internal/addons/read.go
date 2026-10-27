@@ -868,6 +868,8 @@ type ActivityReport struct {
 	// an empty result reads as "no activity", which is a different and far more
 	// reassuring statement than "nobody was watching".
 	UncoveredShares []string `json:"uncovered_shares,omitempty"`
+	// Truncated says older events exist than the newest ones returned.
+	Truncated bool `json:"truncated,omitempty"`
 
 	Outcome Outcome `json:"-"`
 	// Status is the add-on's raw HTTP status, carried so a caller can tell a
