@@ -26,12 +26,18 @@ type WebhookEvent struct {
 }
 
 // InsertWebhookEvent records a received webhook event using the idempotency key.
-// Returns (id, true, nil) on insert, ("", false, nil) if the key already exists.
+// Returns (id, true, nil) when this delivery should be processed: a new row, or
+// a redelivery of one that FAILED. Zitadel redelivers precisely because we
+// answered 5xx, so treating a failed row as "already processed" turned the
+// retry it asked for into a dropped event. ("", false, nil) for anything else
+// (received, processed): that delivery is done or in progress.
 func InsertWebhookEvent(ctx context.Context, eventType, userID, sourceProject, roleKey, idempotencyKey string) (string, bool, error) {
 	query := `
 		INSERT INTO webhook_events (event_type, user_id, source_project, role_key, idempotency_key)
 		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (idempotency_key) DO NOTHING
+		ON CONFLICT (idempotency_key) DO UPDATE
+		   SET status = 'received', error_message = NULL, processed_at = NULL
+		 WHERE webhook_events.status = 'failed'
 		RETURNING id`
 
 	var id string

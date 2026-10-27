@@ -76,10 +76,12 @@ func processUser(ctx context.Context, userID string, candidates []models.DirectG
 		expireOne(ctx, userID, candidate)
 	}
 	// Once per user, after every grant of theirs: the compile is per-user, so
-	// invalidating between grants would only rebuild state the next delete
-	// invalidates again.
-	if err := cacheInvalidateUser(ctx, userID); err != nil {
-		log.Printf("[SCHEDULER] Cache invalidate failed user=%s err=%v (non-fatal)", userID, err)
+	// refreshing between grants would only rebuild state the next delete
+	// changes again. A recompile, not an invalidation: the token path serves
+	// only what is stored, so a deleted key is a degraded token until something
+	// else happens to rebuild it.
+	if err := cacheRefreshUser(ctx, userID); err != nil {
+		log.Printf("[SCHEDULER] Cache refresh failed user=%s err=%v (non-fatal)", userID, err)
 	}
 }
 
