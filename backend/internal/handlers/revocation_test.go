@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/db"
@@ -33,10 +34,15 @@ type revokeHarness struct {
 func stubRevocation(t *testing.T) *revokeHarness {
 	t.Helper()
 	h := &revokeHarness{}
-	create, record, dispatch, resolve := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementsFor
+	create, record, dispatch, resolve, unfinished := dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementsFor, dbHasUnfinishedConvergence
 	t.Cleanup(func() {
 		dbCreateAllowance, dbRecordSystemConvergence, svcDispatchOperation, svcResolveEntitlementsFor = create, record, dispatch, resolve
+		dbHasUnfinishedConvergence = unfinished
 	})
+	// What the outbox would say: a convergence queued earlier is still waiting.
+	dbHasUnfinishedConvergence = func(context.Context, string, string) (bool, error) {
+		return len(h.converged) > 0, nil
+	}
 
 	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) {
 		if h.createErr != nil {
@@ -212,6 +218,49 @@ func TestARetryAfterAFailedConvergenceFinishesTheRevocation(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), `"allowance_id":"allow_1"`) {
 		t.Errorf("the response must name the allowance already in force: %s", rr.Body.String())
+	}
+}
+
+// Retrying carries on past a hold that is permanent, and only past that: a hold
+// with an expiry is somebody's time-boxed pause, and "revoke" does not ride on
+// it (nor rotate the credential behind it).
+func TestARetryOnlyCarriesOnPastAPermanentHold(t *testing.T) {
+	h := stubRevocation(t)
+	lapses := time.Now().Add(24 * time.Hour)
+	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) {
+		a.ID, a.ExpiresAt = "allow_1", &lapses
+		return a, db.ErrAllowanceAlreadyInForce
+	}
+
+	rr := revoke(`{"reason":"offboarding","confirmed":true}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("an expiring hold must answer 409, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.converged) != 0 || len(h.dispatched) != 0 {
+		t.Errorf("nothing may be queued or rotated behind a hold that will lapse: %+v %+v", h.converged, h.dispatched)
+	}
+}
+
+// Retrying twice must not queue the lock twice: the second finds the first
+// still waiting. The rotation is the half a retry exists to finish, so it runs
+// every time.
+func TestADoubleRetryQueuesOneConvergence(t *testing.T) {
+	h := stubRevocation(t)
+	dbCreateAllowance = func(_ context.Context, a db.Allowance) (db.Allowance, error) {
+		a.ID = "allow_1" // permanent: ExpiresAt stays nil
+		return a, db.ErrAllowanceAlreadyInForce
+	}
+
+	for i := 1; i <= 2; i++ {
+		if rr := revoke(`{"reason":"offboarding","confirmed":true}`); rr.Code != http.StatusAccepted {
+			t.Fatalf("retry %d: want 202, got %d (%s)", i, rr.Code, rr.Body.String())
+		}
+	}
+	if len(h.converged) != 1 {
+		t.Errorf("want one convergence for two retries, got %d", len(h.converged))
+	}
+	if len(h.dispatched) != 2 {
+		t.Errorf("each retry must still rotate, got %d rotations", len(h.dispatched))
 	}
 }
 
