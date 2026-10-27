@@ -92,6 +92,9 @@ export function useWebhookEvents(filter: { status?: OperationsStatus } = {}) {
   });
 }
 
+/** Each log arrives as its newest rows, this many (the backend's limit). */
+export const LOG_LIMIT = 200;
+
 /**
  * Returns the onboarding trigger log. The backend returns the newest 200
  * ordered by created_at desc and does not currently support a status query
