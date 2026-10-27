@@ -27,7 +27,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => targets }));
-vi.mock("@/lib/queries/useIndicators", () => ({ useIndicators: () => indicators }));
+vi.mock("@/lib/queries/useIndicators", () => ({ useIndicatorsRead: () => indicators }));
 
 function renderNav() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

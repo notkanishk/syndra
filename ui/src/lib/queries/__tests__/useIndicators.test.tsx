@@ -9,7 +9,7 @@ vi.mock("@/lib/driftChime", () => ({ playDriftChime: () => chime() }));
 const respond = vi.fn();
 vi.mock("@/lib/api-client", () => ({ request: () => respond() }));
 
-import { useIndicators } from "@/lib/queries/useIndicators";
+import { useIndicators, useIndicatorsRead } from "@/lib/queries/useIndicators";
 
 /**
  * The rail is backed by `placeholderData`, which hands out four fabricated
@@ -26,6 +26,13 @@ function Probe() {
   );
 }
 
+// The shell mounts the rail and the phone's tab bar together.
+function Both() {
+  useIndicators(true);
+  const { data } = useIndicatorsRead(true);
+  return <span data-testid="drift">{data?.drift}</span>;
+}
+
 function payload(drift: number) {
   return {
     pending_requests: 0,
@@ -36,13 +43,13 @@ function payload(drift: number) {
   };
 }
 
-function mount() {
+function mount(Component: () => React.ReactElement = Probe) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   const view = render(
     <QueryClientProvider client={client}>
-      <Probe />
+      <Component />
     </QueryClientProvider>,
   );
   return { client, ...view };
@@ -98,5 +105,17 @@ describe("useIndicators — the drift chime", () => {
     // A count that stays at seven is not news, and a queue that drained is
     // good news nobody needs to be interrupted for.
     expect(chime).not.toHaveBeenCalled();
+  });
+
+  it("sounds once when the rail and the tab bar both watch the count", async () => {
+    respond.mockResolvedValueOnce(payload(3)).mockResolvedValue(payload(5));
+    const { client, getByTestId } = mount(Both);
+
+    await waitFor(() => expect(getByTestId("drift").textContent).toBe("3"));
+    await client.invalidateQueries({ queryKey: ["governance", "indicators"] });
+    await waitFor(() => expect(getByTestId("drift").textContent).toBe("5"));
+
+    // Only the rail keeps a memory of the last reading, so one rise is one chime.
+    expect(chime).toHaveBeenCalledTimes(1);
   });
 });

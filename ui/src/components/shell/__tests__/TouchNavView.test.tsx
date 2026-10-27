@@ -26,7 +26,7 @@ vi.mock("@/lib/ui-view", () => ({
 }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useIndicators", () => ({
-  useIndicators: () => ({ data: undefined, isPlaceholderData: false }),
+  useIndicatorsRead: () => ({ data: undefined, isPlaceholderData: false }),
 }));
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

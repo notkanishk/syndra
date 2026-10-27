@@ -215,6 +215,8 @@ export function useAssignBundle(userId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.access(userId) });
       qc.invalidateQueries({ queryKey: ["users", "list"] });
+      // The bundle's own holder count and holder list.
+      qc.invalidateQueries({ queryKey: ["bundles"] });
       // An assignment in manual mode puts rows under Pending changes. Not
       // invalidating them left the nav count and that screen a step behind the
       // edit that had just been made from this very screen.

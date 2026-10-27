@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { ArriveList } from "@/components/ui/ArriveList";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Mono, StatusDot } from "@/components/ui/Badge";
@@ -144,9 +145,12 @@ export function WithdrawnAccess() {
   const leaving = useLeavingRows(matched, (row) => row.id, !query.isLoading && !query.error, {
     narrowedBy: `${where}|${needle}`,
   });
-  // The meta line counts the whole list: a search narrows what is shown, not what is outstanding.
-  const givenUp = rows.filter((row) => row.spent).length;
-  const people = new Set(rows.map((row) => row.user_id)).size;
+  // The meta line counts everything outstanding, from the endpoint's own totals:
+  // the list is a 200-row page, and a search narrows what is shown, not what is outstanding.
+  const givenUp = query.data?.summary.spent ?? 0;
+  const onTheWay = query.data?.summary.queued ?? 0;
+  // Only a whole list can say how many people: a capped page would undercount them.
+  const people = rows.length >= givenUp + onTheWay ? new Set(rows.map((row) => row.user_id)).size : null;
   const sections = (["spent", "queued"] as const).map((key) => ({
     key,
     ...SECTIONS[key],
@@ -170,8 +174,8 @@ export function WithdrawnAccess() {
               <MetaRow>
                 {[
                   `${givenUp} given up`,
-                  `${rows.length - givenUp} on the way`,
-                  `${people} ${people === 1 ? "person" : "people"}`,
+                  `${onTheWay} on the way`,
+                  ...(people === null ? [] : [`${people} ${people === 1 ? "person" : "people"}`]),
                 ]}
               </MetaRow>
             ) : undefined
@@ -408,18 +412,19 @@ function RevocationSection({
 
 function Row({ row }: { row: UnconfirmedRevocation }) {
   const resolver = useNameResolver();
+  const accountHref = useAccountHref();
   const first = resolver.resolveUser(row.user_id).value?.display_name?.split(" ")[0];
   const where = targetLabel(row.target);
   return (
     <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
       <span className="flex w-full items-center gap-3 tablet:w-[190px] tablet:shrink-0">
         <UserAvatar id={row.user_id} />
-        <Link
-          href={`/users/${row.user_id}`}
-          className="min-w-0 text-[15px] font-semibold link-hover"
-        >
-          <UserName id={row.user_id} />
-        </Link>
+        <span className="min-w-0">
+          <Link href={accountHref(row.user_id)} className="text-[15px] font-semibold link-hover">
+            <UserName id={row.user_id} />
+          </Link>
+          <ServiceAccountTag id={row.user_id} />
+        </span>
       </span>
 
       <span className="flex w-full min-w-0 flex-col gap-[3px] pt-0.5 tablet:flex-1">

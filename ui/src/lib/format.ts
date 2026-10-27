@@ -184,6 +184,34 @@ export function daysUntil(iso: string | null | undefined, now: Date = new Date()
 }
 
 /**
+ * When an access ends, said once for every screen that says it (no "-2 days",
+ * "1 days" or "0 days left"). Counts calendar days, the way the date beside it
+ * reads: a grant ending tonight ends "today", not in "1 day".
+ *
+ *   short  "3 days"        a column that sits under its own heading
+ *   left   "3 days left"   beside a date
+ *   long   "Ends in 3 days" a sentence on its own
+ *
+ * `null` when there is no end (or it is unreadable); the caller owns that case.
+ */
+export function expiryLabel(
+  iso: string | null | undefined,
+  form: "short" | "left" | "long" = "long",
+  now: Date = new Date(),
+): string | null {
+  if (!iso) return null;
+  const end = new Date(iso);
+  if (Number.isNaN(end.getTime())) return null;
+  if (end.getTime() <= now.getTime()) return "Ended";
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(end) - day(now)) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return form === "short" ? "Today" : "Ends today";
+  if (days === 1 && form === "long") return "Ends tomorrow";
+  const n = `${days} ${days === 1 ? "day" : "days"}`;
+  return form === "short" ? n : form === "left" ? `${n} left` : `Ends in ${n}`;
+}
+
+/**
  * Bytes, in the units the division actually produces.
  *
  * Divides by 1024 and says so. Two copies of this used to live in components

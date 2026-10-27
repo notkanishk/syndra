@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  expiryLabel,
   formatAgoShort,
   askLengthForMember,
   askLengthForOperator,
@@ -10,6 +11,49 @@ import {
   personLine,
   roleLabel,
 } from "@/lib/format";
+
+describe("expiryLabel", () => {
+  // Local noon, so calendar-day maths does not depend on the runner's time zone.
+  const now = new Date(2026, 9, 27, 12, 0, 0);
+  const at = (days: number, hour = 9) => new Date(2026, 9, 27 + days, hour, 0, 0).toISOString();
+
+  it("never says '-2 days', '1 days' or '0 days left'", () => {
+    for (const form of ["short", "left", "long"] as const) {
+      for (let d = -5; d <= 40; d++) {
+        const label = expiryLabel(at(d), form, now)!;
+        expect(label, `${form} ${d}`).not.toMatch(/-\d|\b1 days|\b0 days/);
+      }
+    }
+  });
+
+  it("says ended for anything already past, even by minutes", () => {
+    expect(expiryLabel(at(-2), "long", now)).toBe("Ended");
+    expect(expiryLabel(at(0, 11), "left", now)).toBe("Ended");
+    expect(expiryLabel(at(0, 11), "short", now)).toBe("Ended");
+  });
+
+  it("counts calendar days: later today is today, the next day is tomorrow", () => {
+    expect(expiryLabel(at(0, 23), "long", now)).toBe("Ends today");
+    expect(expiryLabel(at(0, 23), "left", now)).toBe("Ends today");
+    expect(expiryLabel(at(0, 23), "short", now)).toBe("Today");
+    // Eleven hours away but on tomorrow's date, which is how the date beside it reads.
+    expect(expiryLabel(at(1, 6), "long", now)).toBe("Ends tomorrow");
+  });
+
+  it("pluralises, in each form", () => {
+    expect(expiryLabel(at(1), "short", now)).toBe("1 day");
+    expect(expiryLabel(at(1), "left", now)).toBe("1 day left");
+    expect(expiryLabel(at(3), "short", now)).toBe("3 days");
+    expect(expiryLabel(at(3), "left", now)).toBe("3 days left");
+    expect(expiryLabel(at(3), "long", now)).toBe("Ends in 3 days");
+  });
+
+  it("is null when there is no end to say", () => {
+    expect(expiryLabel(null)).toBeNull();
+    expect(expiryLabel(undefined)).toBeNull();
+    expect(expiryLabel("not a date")).toBeNull();
+  });
+});
 
 describe("personLine", () => {
   it("reads title · team", () => {

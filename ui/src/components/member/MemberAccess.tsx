@@ -21,7 +21,7 @@ import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useMyChanges, type MyChange } from "@/lib/queries/useMyChanges";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
-import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 
 /**
  * Member · My access (route-me, 52b + 52c). The landing route for members, and
@@ -117,7 +117,13 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const heldByProject = new Map(
     projects.map((project) => [
       project.project_id,
-      new Set([...project.source_roles, ...project.derived_roles].map((role) => role.role_key)),
+      // What Zitadel shows too: holding is observed, so a role they hold with
+      // no record of why is still held.
+      new Set([
+        ...project.source_roles.map((role) => role.role_key),
+        ...project.derived_roles.map((role) => role.role_key),
+        ...(project.observed_role_keys ?? []),
+      ]),
     ]),
   );
 
@@ -375,10 +381,9 @@ function Reason({
 
   if (strongest.kind === "direct") {
     if (expiresAt) {
-      const left = daysUntil(expiresAt) ?? 0;
       return (
         <span className="text-[13.5px] font-semibold text-warn-text">
-          Given to you until {formatShortDate(expiresAt)} · {left} {left === 1 ? "day" : "days"} left
+          Given to you until {formatShortDate(expiresAt)} · {expiryLabel(expiresAt, "left")}
         </span>
       );
     }
