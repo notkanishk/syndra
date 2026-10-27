@@ -66,13 +66,17 @@ jobs:
       # that URL drifted to a decommissioned IP and every Action silently
       # posted into the void for months. Assert the public path resolves to
       # this deployment: an unsigned POST must reach the handler and be
-      # rejected (4xx), not fail to connect.
+      # refused (401/403), not fail to connect. Anything else is wrong: a 200
+      # is what a demo-mode backend (ZITADEL_DOMAIN empty) returns, and it
+      # accepts unsigned payloads.
       - name: Verify the Action target URL reaches this deployment
         run: |
           set -euo pipefail
           cd /opt/syndra
           url="$(grep -E '^SYNDRA_EXTERNAL_URL=' .env | cut -d= -f2-)"
           [ -n "$url" ] || { echo "SYNDRA_EXTERNAL_URL unset in .env"; exit 1; }
+          zdomain="$(grep -E '^ZITADEL_DOMAIN=' .env | cut -d= -f2-)"
+          [ -n "$zdomain" ] || { echo "ZITADEL_DOMAIN unset in .env: the backend would start in demo mode"; exit 1; }
           code="$(curl -sS -o /dev/null -w '%{http_code}' -m 15 \
             -X POST -H 'Content-Type: application/json' -d '{}' \
             "${url}/api/action/inject")"
@@ -80,7 +84,8 @@ jobs:
           case "$code" in
             000) echo "unreachable — Caddy or DNS is not routing to this host"; exit 1 ;;
             5*)  echo "reached, but the handler errored"; exit 1 ;;
-            *)   echo "reachable" ;;
+            401|403) echo "reachable, and refuses an unsigned request" ;;
+            *)   echo "expected 401 or 403 for an unsigned request; the backend may be in demo mode"; exit 1 ;;
           esac
 
       - name: Report container state on failure
