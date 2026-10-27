@@ -420,6 +420,8 @@ var (
 var (
 	svcInTxLockingAccess      = db.InTxLockingAccess
 	dbRecordSystemConvergence = db.RecordSystemConvergence
+	// A retried revocation asks before queuing a second convergence.
+	dbHasUnfinishedConvergence = db.HasUnfinishedConvergence
 )
 
 // The unmanaged inventory and its one action (1.18/1.19, 6.8).
