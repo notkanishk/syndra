@@ -293,9 +293,10 @@ function NavSheet({
   // entry the sheet never cleaned up.
   //
   // Picking a destination is the exception and keeps calling `onClose`: the
-  // navigation pushes its own entry on top, so back from the new screen lands
-  // on this one — and racing `history.back()` against a Next.js push would
-  // undo the navigation the tap asked for.
+  // row's link REPLACES the sheet's entry rather than pushing on top of it, so
+  // back from the new screen lands on the one before the sheet, not on a dead
+  // entry — and racing `history.back()` against a Next.js push would undo the
+  // navigation the tap asked for.
   //
   // Once only: a second tap, Esc or scrim tap while the sheet is leaving (a drag away
   // waits for its settle) would go back past the screen behind it.
@@ -534,6 +535,7 @@ function SheetRow({
   return (
     <Link
       href={href}
+      replace
       onClick={onPick}
       aria-current={active ? "page" : undefined}
       className={`mt-0.5 flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
