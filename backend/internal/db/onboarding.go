@@ -15,15 +15,18 @@ import (
 
 // InsertOnboardingTrigger records a new onboarding event using the idempotency key.
 // Returns (id, true, nil) on insert or when re-taking a trigger that FAILED (the
-// retry the failure was waiting for), ("", false, nil) if the key already exists
-// in any other state (duplicate).
+// retry the failure was waiting for) or one left `pending` over ten minutes (a
+// crash mid-processing; a live request finishes well inside that, and a retake
+// restarts the clock), ("", false, nil) if the key already exists in any other
+// state (duplicate).
 func InsertOnboardingTrigger(ctx context.Context, userID, source, idempotencyKey string) (string, bool, error) {
 	query := `
 		INSERT INTO onboarding_triggers (user_id, source, idempotency_key)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (idempotency_key) DO UPDATE
-		   SET status = 'pending', error_message = NULL, completed_at = NULL
+		   SET status = 'pending', error_message = NULL, completed_at = NULL, created_at = NOW()
 		 WHERE onboarding_triggers.status = 'failed'
+		    OR (onboarding_triggers.status = 'pending' AND onboarding_triggers.created_at < NOW() - INTERVAL '10 minutes')
 		RETURNING id`
 
 	var id string
