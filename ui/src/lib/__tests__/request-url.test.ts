@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildRedirectUrl, isSecureRequest, resolveRequestOrigin } from "../request-url";
+import { safeReturnPath } from "../return-path";
 
 // Next's standalone server builds request.url from the address it listens on,
 // so in production every request arrives looking like http://localhost:3000/...
@@ -65,6 +66,13 @@ describe("buildRedirectUrl", () => {
     expect(
       buildRedirectUrl(req("http://localhost:3000/auth/callback?code=secret", PROXIED), "/").toString()
     ).toBe("https://syndra.example.org/");
+  });
+
+  it("keeps the landing's own query and hash, as safeReturnPath returns them", () => {
+    const landing = safeReturnPath("/users?q=a#top");
+    expect(
+      buildRedirectUrl(req("http://localhost:3000/auth/callback?code=secret", PROXIED), landing).toString()
+    ).toBe("https://syndra.example.org/users?q=a#top");
   });
 
   it("carries an explicit query through", () => {
