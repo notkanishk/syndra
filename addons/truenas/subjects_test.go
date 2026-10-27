@@ -474,6 +474,9 @@ func TestAnUntestedMajorRefusesMutationsAndKeepsReading(t *testing.T) {
 		t.Errorf("the reason must name the version it saw, got %q", why)
 	}
 	for _, op := range operationSet(s) {
+		if op.ID == "account.release" {
+			continue // local only; see capability_test.go
+		}
 		if op.Available {
 			t.Errorf("%s must be unavailable on an untested major", op.ID)
 		}

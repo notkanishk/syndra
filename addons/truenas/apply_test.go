@@ -45,6 +45,9 @@ type mutatingRPC struct {
 	// state the read-back adds and the one that must not be reported as either
 	// a clean success or a failure.
 	failReadAfterUpdate bool
+	// refuseGroupCreate answers group.create with the "already exists" refusal,
+	// and failReadAfterCreate makes the account unreadable once it is created.
+	refuseGroupCreate, failReadAfterCreate bool
 }
 
 // remember adds a created account to the fixture the next read serves.
@@ -91,7 +94,7 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		m.fakeRPC.calls = append(m.fakeRPC.calls, method)
 		return nil, m.fakeRPC.err
 	}
-	if m.failReadAfterUpdate && len(m.updates) > 0 && method == "user.query" {
+	if method == "user.query" && ((m.failReadAfterUpdate && len(m.updates) > 0) || (m.failReadAfterCreate && len(m.creates) > 0)) {
 		m.fakeRPC.calls = append(m.fakeRPC.calls, method)
 		return nil, errReadAfterWrite
 	}
@@ -112,6 +115,9 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 	case "group.create":
 		// A personal group, as the create path makes one before the account.
 		m.groupCreates++
+		if m.refuseGroupCreate {
+			return errorEnvelope("group_create.name: A group with this name already exists"), nil
+		}
 		if m.refuseUserCreate {
 			return envelope(`93`), nil
 		}

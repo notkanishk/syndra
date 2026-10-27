@@ -199,6 +199,13 @@ func TestAnUntestedMajorOutranksTheMethodProbe(t *testing.T) {
 	s.nas.methods = map[string]bool{}
 
 	for _, op := range operationSet(s) {
+		if op.ID == "account.release" {
+			// Local only: no target version can withdraw it.
+			if !op.Available {
+				t.Errorf("account.release touches nothing on the target and must stay available, got %q", op.UnavailableReason)
+			}
+			continue
+		}
 		if op.Available {
 			t.Errorf("%s must be unavailable on an untested major", op.ID)
 		}
