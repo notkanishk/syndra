@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -99,7 +100,11 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 		Direction: db.AllowanceDeny, ActorID: actor, Reason: req.Reason,
 		ReviewDate: reviewDate,
 	})
-	if err != nil {
+	// The same hold already in force is how a RETRY arrives: the deny committed,
+	// then the resolve, the convergence record or the rotation failed. Refusing
+	// it would leave the lock unqueued and the credential unrotated for good, so
+	// carry on with the existing allowance (CreateAllowance returns its id).
+	if err != nil && !errors.Is(err, db.ErrAllowanceAlreadyInForce) {
 		writeAllowanceError(w, err)
 		return
 	}

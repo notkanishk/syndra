@@ -174,6 +174,47 @@ func TestAFailedRotationLeavesTheSuspensionStandingAndSaysWhatIsLeft(t *testing.
 	}
 }
 
+// A revocation that failed after the deny committed must be finishable by
+// retrying it. The retry meets the same hold already in force; refusing that
+// would leave the lock unqueued and the credential unrotated for good.
+func TestARetryAfterAFailedConvergenceFinishesTheRevocation(t *testing.T) {
+	h := stubRevocation(t)
+	create := dbCreateAllowance
+	record := dbRecordSystemConvergence
+
+	// First attempt: the deny commits, then queuing the convergence fails.
+	dbRecordSystemConvergence = func(context.Context, db.SystemConvergence) (string, string, error) {
+		return "", "", errors.New("outbox unavailable")
+	}
+	rr := revoke(`{"reason":"offboarding","confirmed":true}`)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("first attempt: want 500, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.dispatched) != 0 {
+		t.Fatal("a convergence that was not queued must not be followed by a rotation")
+	}
+
+	// Retry: the same deny is now in force; the convergence works.
+	dbRecordSystemConvergence = record
+	dbCreateAllowance = func(ctx context.Context, a db.Allowance) (db.Allowance, error) {
+		got, _ := create(ctx, a)
+		return got, db.ErrAllowanceAlreadyInForce
+	}
+	rr = revoke(`{"reason":"offboarding","confirmed":true}`)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("retry: want 202, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(h.converged) != 1 {
+		t.Errorf("the retry must queue the convergence, got %d", len(h.converged))
+	}
+	if len(h.dispatched) != 1 || h.dispatched[0].Operation != "password.rotate" {
+		t.Errorf("the retry must rotate the credential, got %+v", h.dispatched)
+	}
+	if !strings.Contains(rr.Body.String(), `"allowance_id":"allow_1"`) {
+		t.Errorf("the response must name the allowance already in force: %s", rr.Body.String())
+	}
+}
+
 // The order matters: the durable half first. Rotating first and failing to
 // record the suspension leaves a member with a credential they cannot use and no
 // record of why.
