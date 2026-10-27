@@ -49,6 +49,10 @@ export function Tabs<T extends string>({
   return (
     <div
       ref={ref}
+      // A group, so the label is announced: a bare div's aria-label is not.
+      // The tabs stay links-in-spirit (`aria-current`), not an ARIA tablist,
+      // because each one changes what the page shows rather than a panel's.
+      role="group"
       aria-label={label}
       className={`relative flex flex-wrap items-center gap-2 border-b border-line ${className}`}
     >

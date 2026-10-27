@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { FLASH_MS } from "@/lib/useFlashOnChange";
@@ -69,6 +69,9 @@ const SIZE_CLASS: Record<NonNullable<ModalProps["size"]>, string> = {
  */
 const InsideDialog = createContext(false);
 
+/** The id a dialog is named by when its header does not bring one (see `ModalHeader`). */
+const DialogTitleId = createContext<string | undefined>(undefined);
+
 const FOCUSABLE_SELECTOR =
   "button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 
@@ -96,6 +99,10 @@ function focusableIn(panel: HTMLElement | null): HTMLElement[] {
  * Shared dialog behaviour for Modal and Drawer: focus the first focusable
  * element on open, trap Tab inside the panel, Esc-to-close (unless busy),
  * restore focus to the previously focused element on close.
+ *
+ * `aria-modal` alone is not honoured everywhere, so the app behind (the shell's
+ * `#app-root`; overlays portal to <body>, outside it) is also made `inert`: out
+ * of the tab order and the accessibility tree while a dialog is open.
  */
 export function useDialogFocusTrap(
   panelRef: React.RefObject<HTMLDivElement | null>,
@@ -125,9 +132,17 @@ export function useDialogFocusTrap(
     const inPanel = focusableIn(panelRef.current);
     (inPanel.find((el) => !el.hasAttribute("data-skip-initial-focus")) ?? inPanel[0])?.focus();
 
+    // After the focus above: making the opener inert would blur it first and
+    // `previouslyFocused` would be <body>. An outer dialog's inert stays its own.
+    const root = document.getElementById("app-root");
+    const madeInert = root !== null && !root.hasAttribute("inert");
+    if (madeInert) root.setAttribute("inert", "");
+
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape" && !busyRef.current) {
         event.preventDefault();
+        // The dialog's Esc is the dialog's: a page behind it must not also act on it.
+        event.stopPropagation();
         closeRef.current();
         return;
       }
@@ -149,6 +164,8 @@ export function useDialogFocusTrap(
     document.addEventListener("keydown", handleKey);
     return () => {
       document.removeEventListener("keydown", handleKey);
+      // Before the focus goes back: an inert opener would refuse it.
+      if (madeInert) root.removeAttribute("inert");
       previouslyFocused?.focus();
     };
   }, [panelRef, open]);
@@ -259,6 +276,9 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const scrimRef = useRef<HTMLDivElement | null>(null);
   const nested = useContext(InsideDialog);
+  // Names the dialog from its header unless the caller names it: without a name
+  // a screen reader announces "dialog" and nothing else.
+  const titleId = useId();
   // The sheet was dragged off the screen: it has already left, so it leaves no copy.
   const draggedAway = useRef(false);
   useDialogFocusTrap(panelRef, open, busy, onClose);
@@ -279,11 +299,12 @@ export function Modal({
   return (
     <ToBody>
     <InsideDialog.Provider value={true}>
+    <DialogTitleId.Provider value={titleId}>
     <div
       ref={scrimRef}
       role="dialog"
       aria-modal="true"
-      aria-labelledby={labelledBy}
+      aria-labelledby={labelledBy ?? titleId}
       aria-describedby={describedBy}
       className="settle-scrim fixed inset-0 z-50 flex items-end justify-center bg-black/55 tablet:items-center tablet:px-4"
       onClick={(event) => {
@@ -311,6 +332,7 @@ export function Modal({
         {children}
       </div>
     </div>
+    </DialogTitleId.Provider>
     </InsideDialog.Provider>
     </ToBody>
   );
@@ -552,10 +574,11 @@ export function ModalHeader({
   lede?: React.ReactNode;
   titleId?: string;
 }) {
+  const dialogTitleId = useContext(DialogTitleId);
   return (
     <div className="px-6 pt-[22px]">
       {chip && <div className="mb-3.5">{chip}</div>}
-      <h2 id={titleId} className="type-dialog-title mb-2.5">
+      <h2 id={titleId ?? dialogTitleId}className="type-dialog-title mb-2.5">
         {title}
       </h2>
       {lede && <p className="mb-4 text-[14.5px] leading-[1.55] text-muted">{lede}</p>}
