@@ -50,8 +50,26 @@ describe("a return path is an allowlist of shapes", () => {
     expect(safeReturnPath("")).toBe("/");
   });
 
-  it("drops a fragment rather than carrying it into a Location header", () => {
-    expect(safeReturnPath("/storage#anchor")).toBe("/storage");
+  it("keeps a fragment, which the browser applies after the redirect", () => {
+    expect(safeReturnPath("/storage#anchor")).toBe("/storage#anchor");
+  });
+
+  // The parser strips tab and newline anywhere in the input, so these read as
+  // `//elsewhere.example` to a browser while passing a prefix check on the string.
+  it("refuses a tab or newline the URL parser would strip", () => {
+    expect(safeReturnPath("/\t/elsewhere.example")).toBe("/");
+    expect(safeReturnPath("/\n/elsewhere.example")).toBe("/");
+    expect(safeReturnPath("/\r/elsewhere.example")).toBe("/");
+    // Still encoded, it is only a path segment on this origin.
+    expect(safeReturnPath("/%09/elsewhere.example")).toBe("/%09/elsewhere.example");
+  });
+
+  it("refuses a dot-segment that normalises into a protocol-relative path", () => {
+    expect(safeReturnPath("/..//elsewhere.example")).toBe("/");
+  });
+
+  it("returns the parsed path and query", () => {
+    expect(safeReturnPath("/users?q=a")).toBe("/users?q=a");
   });
 
   it("keeps a query, which is where a filtered view lives", () => {
