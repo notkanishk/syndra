@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -805,6 +806,62 @@ func TestZitadelSource_InvalidateKeepsTheLastGoodRead(t *testing.T) {
 	}
 	if mc.listUsersCalls != 2 {
 		t.Fatalf("invalidation must make the next read ask Zitadel; got %d calls", mc.listUsersCalls)
+	}
+}
+
+// An edit that lands while a rebuild is in flight: the rebuild read the old
+// directory, so the next read must neither join it nor see what it cached.
+func TestZitadelSource_InvalidateDuringARebuildIsNotUndone(t *testing.T) {
+	mc := newMockClient()
+	var calls atomic.Int32
+	started, release := make(chan struct{}), make(chan struct{})
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+			return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "old"}}}, nil
+		}
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "new"}}}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+
+	done := make(chan struct{})
+	go func() { defer close(done); _, _ = src.Users(context.Background()) }()
+	<-started
+	src.InvalidateUsers()
+
+	users, err := src.Users(context.Background())
+	if err != nil || len(users) != 1 || users[0].ID != "new" {
+		t.Fatalf("a read after the edit must not join the earlier rebuild; got %v %v", users, err)
+	}
+	close(release)
+	<-done
+	if users, _ := src.Users(context.Background()); len(users) != 1 || users[0].ID != "new" {
+		t.Fatalf("the earlier rebuild must not overwrite the cache; got %v", users)
+	}
+}
+
+func TestZitadelSource_ACancelledCallerReturnsWhileTheRebuildCarriesOn(t *testing.T) {
+	mc := newMockClient()
+	release := make(chan struct{})
+	defer close(release)
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		<-release
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { _, err := src.Users(ctx); errc <- err }()
+	select {
+	case err := <-errc:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("want the caller's own context error, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a cancelled caller must not wait for the shared rebuild")
 	}
 }
 
