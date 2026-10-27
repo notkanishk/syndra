@@ -132,37 +132,6 @@ func upsertObserved(ctx context.Context, tx pgx.Tx, grants []ObservedGrant) erro
 	return nil
 }
 
-// LatestObservation returns the most recent observation covering a person.
-//
-// An org sweep covers everybody, so a person's own read and the last complete
-// sweep are both candidates and the NEWER wins. Returns ErrNoObservation when
-// neither exists, because "nobody has looked" must never be readable as
-// "nothing is there".
-func LatestObservation(ctx context.Context, userID string) (Observation, error) {
-	var o Observation
-	var subject *string
-	var readErr *string
-	err := querier(ctx).QueryRow(ctx, `
-		SELECT scope, subject_id, observed_at, complete, grants_seen, error
-		  FROM zitadel_observations
-		 WHERE scope = 'org' OR (scope = 'user' AND subject_id = $1)
-		 ORDER BY observed_at DESC
-		 LIMIT 1`, userID).Scan(&o.Scope, &subject, &o.ObservedAt, &o.Complete, &o.GrantsSeen, &readErr)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Observation{}, ErrNoObservation
-	}
-	if err != nil {
-		return Observation{}, fmt.Errorf("read latest observation: %w", err)
-	}
-	if subject != nil {
-		o.SubjectID = *subject
-	}
-	if readErr != nil {
-		o.Error = *readErr
-	}
-	return o, nil
-}
-
 // LatestOrgObservation is the sweep's own record, for surfaces that state how
 // current the whole picture is.
 func LatestOrgObservation(ctx context.Context) (Observation, error) {

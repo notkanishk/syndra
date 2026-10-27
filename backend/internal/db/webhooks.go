@@ -180,31 +180,6 @@ type ZitadelGrantIndex struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// UpsertGrantIndex inserts or updates the cache row for a Zitadel user_grant
-// aggregate. Called from the grant.added (and grant.changed) processor; the
-// row lets later grant.changed/removed events fill projectId/roleKeys
-// fields Zitadel omits from those payloads.
-func UpsertGrantIndex(ctx context.Context, grantID, userID, projectID string, roleKeys []string) error {
-	if grantID == "" || userID == "" || projectID == "" {
-		return fmt.Errorf("UpsertGrantIndex: grant_id, user_id, project_id are required")
-	}
-	if roleKeys == nil {
-		roleKeys = []string{}
-	}
-	const query = `
-		INSERT INTO zitadel_grants_index (grant_id, user_id, project_id, role_keys)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (grant_id) DO UPDATE SET
-			user_id    = EXCLUDED.user_id,
-			project_id = EXCLUDED.project_id,
-			role_keys  = EXCLUDED.role_keys,
-			updated_at = NOW()`
-	if _, err := querier(ctx).Exec(ctx, query, grantID, userID, projectID, roleKeys); err != nil {
-		return fmt.Errorf("upsert grant index (%s): %w", grantID, err)
-	}
-	return nil
-}
-
 // GetGrantIndex fetches the cached row by grant aggregate ID. Returns
 // ErrGrantIndexNotFound when the grant has never been seen.
 func GetGrantIndex(ctx context.Context, grantID string) (ZitadelGrantIndex, error) {
@@ -268,15 +243,4 @@ func GrantIndexHasRole(ctx context.Context, userID, projectID, role string) (boo
 		return false, fmt.Errorf("grant index has role (%s/%s/%s): %w", userID, projectID, role, err)
 	}
 	return exists, nil
-}
-
-// DeleteGrantIndex removes the cached row. Called from the grant.removed
-// processor after the downstream effects (revoke, cache invalidation) have
-// run; failure is non-fatal — the next reconciliation will clean it up.
-func DeleteGrantIndex(ctx context.Context, grantID string) error {
-	const query = `DELETE FROM zitadel_grants_index WHERE grant_id = $1`
-	if _, err := querier(ctx).Exec(ctx, query, grantID); err != nil {
-		return fmt.Errorf("delete grant index (%s): %w", grantID, err)
-	}
-	return nil
 }

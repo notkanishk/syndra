@@ -235,11 +235,6 @@ export function createOidcSessionValue(payload: OidcSessionCookie): string {
   return encodeSession(payload);
 }
 
-/** Returns the bearer token for backend requests, or undefined for demo sessions. */
-export function getSessionToken(user: SessionUser): string | undefined {
-  return user.sessionType === "oidc" ? user.accessToken : undefined;
-}
-
 // ---------------------------------------------------------------------------
 // getSession — resolves cookie to SessionUser
 // ---------------------------------------------------------------------------
