@@ -9,7 +9,7 @@ import { VIEW_EXPLANATION, ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { Unfold } from "@/components/ui/Unfold";
 import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
-import { useIndicators } from "@/lib/queries/useIndicators";
+import { useIndicatorsRead } from "@/lib/queries/useIndicators";
 import { useTargets } from "@/lib/queries/useTargets";
 import {
   destinationMatches,
@@ -46,7 +46,7 @@ const NAV_SCRIM_ALPHA = 0.7;
 export function TouchNav() {
   const pathname = usePathname();
   const { audience, isOperator } = useUiView();
-  const { data: indicators, isPlaceholderData } = useIndicators(isOperator);
+  const { data: indicators, isPlaceholderData } = useIndicatorsRead(isOperator);
   const { data: targets } = useTargets(isOperator);
 
   const entries =

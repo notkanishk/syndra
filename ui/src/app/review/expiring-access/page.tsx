@@ -41,7 +41,7 @@ import {
   type ExpiringGrantRow,
 } from "@/lib/queries/useExpiringAccess";
 import { useCreateGrant } from "@/lib/queries/useUsers";
-import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import {
   EXTEND_DAYS,
   outcomeFromError,
@@ -578,7 +578,6 @@ function ExpiringRow({
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const clearAck = useClearExpiryAcknowledgement();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const remaining = daysUntil(grant.expires_at);
   // The result takes the seat the buttons held, until the next read. A refusal does not: the
   // buttons stay beside it, so the attempt can be made again.
   const reported = outcome !== null && !statesNothingChanged(outcome.kind);
@@ -654,11 +653,7 @@ function ExpiringRow({
 
       <div className="flex flex-col gap-0.5 tablet:w-[110px] tablet:shrink-0">
         <span className={`text-[13.5px] font-semibold ${soonest ? "text-warn-text" : "text-muted"}`}>
-          {remaining === null
-            ? "—"
-            : remaining <= 0
-              ? "Ends today"
-              : `${remaining} ${remaining === 1 ? "day" : "days"} left`}
+          {expiryLabel(grant.expires_at, "left") ?? "—"}
         </span>
         <span className="text-[12.5px] text-faint">{formatShortDate(grant.expires_at)}</span>
       </div>

@@ -45,7 +45,7 @@ import { Unfold } from "@/components/ui/Unfold";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
-import { formatShortDate, formatWeekday, daysUntil, whyNotChecked } from "@/lib/format";
+import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
 
 /**
  * Home — the operator landing. Two zones, in a fixed order.
@@ -570,7 +570,6 @@ function ExpiringRow({
   // A row has no sheet of its own: if extending would cancel a change still
   // waiting for you to send, a small sheet holds the step (A-04 §14).
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
-  const remaining = daysUntil(grant.expires_at);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Extending again would add another 90 days to the same grant.
   const [extended, setExtended] = useState(false);
@@ -591,7 +590,7 @@ function ExpiringRow({
         </span>
       </div>
       <div className="w-[66px] shrink-0 text-[13.5px] font-semibold text-warn-text">
-        {remaining === null ? "—" : `${remaining} days`}
+        {expiryLabel(grant.expires_at, "short") ?? "—"}
       </div>
       <Button
         size="sm"
