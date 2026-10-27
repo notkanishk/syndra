@@ -305,6 +305,14 @@ describe("connected systems", () => {
     expect(screen.getByRole("img", { name: "Last 3 checks: no check yet, no check yet, no check yet" })).toBeTruthy();
   });
 
+  it("names no clock when the API omits the start time", () => {
+    state.targets = [target({ status: "checking", health: { status: "unknown", recent: [] } })];
+    render(<ConnectedSystemsPage />);
+
+    expect(screen.getByText("Not checked yet")).toBeTruthy();
+    expect(screen.queryByText(/No check since restart/)).toBeNull();
+  });
+
   // 6.5: the project, read-only; none chosen is the row's Needs you.
   it("shows the project it serves, or the way to choose one", () => {
     state.targets = [target()];
