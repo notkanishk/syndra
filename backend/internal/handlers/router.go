@@ -51,7 +51,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/bundles/{id}/draft", withCORS(withOperatorAuth(withLiveBundle(handleDiscardBundleDraft))))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/publish", withCORS(withOperatorAuth(withLiveBundle(handlePublishBundleVersion))))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/holders/move", withCORS(withOperatorAuth(withLiveBundle(handleMoveBundleHolders))))
-	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withUserAuth(handleGetBundleImpact)))
+	mux.HandleFunc("GET /api/v1/bundles/{id}/impact", withCORS(withOperatorAuth(handleGetBundleImpact)))
 	mux.HandleFunc("POST /api/v1/bundles/{id}/roles", withCORS(withOperatorAuth(withLiveBundle(handleAddRoleToBundle))))
 	// Welcome bundle toggle changes global onboarding policy (every newly-created
 	// Zitadel user gets the flagged bundle), so it requires operator role —
@@ -60,7 +60,7 @@ func NewRouter() http.Handler {
 
 	// Explorer Views
 	mux.HandleFunc("GET /api/v1/catalog", withCORS(withUserAuth(handleGetCatalog)))
-	mux.HandleFunc("GET /api/v1/users", withCORS(withUserAuth(handleGetUsers)))
+	mux.HandleFunc("GET /api/v1/users", withCORS(withOperatorAuth(handleGetUsers)))
 	// User-Bundle Assignments. Per-user reads are self-or-operator: members may
 	// inspect their own access, never another user's. Granting is operator-only —
 	// it feeds the claim-injection cache and (via ?apply=true) real Zitadel
@@ -84,7 +84,7 @@ func NewRouter() http.Handler {
 
 	// Application Views
 	mux.HandleFunc("GET /api/v1/applications", withCORS(withUserAuth(handleGetApplications)))
-	mux.HandleFunc("GET /api/v1/applications/{id}/simulate", withCORS(withUserAuth(handleSimulateApplication)))
+	mux.HandleFunc("GET /api/v1/applications/{id}/simulate", withCORS(withOperatorAuth(handleSimulateApplication)))
 
 	// Claim shaping — what an application actually receives in its token.
 	// Reads are operator-only: a claim template names the attributes the
@@ -97,7 +97,7 @@ func NewRouter() http.Handler {
 
 	// Batch UID→name resolver. Powers <UserName/>/<ProjectName/>/<RoleName/>/<BundleName/>
 	// components in the dashboard so raw UUIDs never reach the visible layer.
-	mux.HandleFunc("POST /api/v1/lookup", withCORS(withUserAuth(handleLookup)))
+	mux.HandleFunc("POST /api/v1/lookup", withCORS(withOperatorAuth(handleLookup)))
 
 	// Project Views
 	mux.HandleFunc("GET /api/v1/projects", withCORS(withUserAuth(handleGetProjects)))
@@ -172,7 +172,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/review/expiring-grants/{grantId}/acknowledge", withCORS(withOperatorAuth(handleClearGrantExpiryAcknowledgement)))
 
 	// Role Management
-	mux.HandleFunc("POST /api/v1/roles", withCORS(withUserAuth(handleCreateRole)))
+	mux.HandleFunc("POST /api/v1/roles", withCORS(withOperatorAuth(handleCreateRole)))
 	mux.HandleFunc("GET /api/v1/roles", withCORS(withUserAuth(handleGetGlobalRoleCatalog)))
 	// Role → members: the reverse of "what can this person get into". Every row
 	// carries its access sources so removal can be named after its own source.
@@ -197,11 +197,11 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/me/profile", withCORS(withUserAuth(handleGetMyProfile)))
 
 	// Operator: event and trigger logs
-	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withUserAuth(handleGetOnboardingTriggers)))
+	mux.HandleFunc("GET /api/v1/onboarding/triggers", withCORS(withOperatorAuth(handleGetOnboardingTriggers)))
 	// Who joined and got no welcome bundle, computed from state rather than
 	// from having heard a webhook — see services.FindMissedOnboarding.
-	mux.HandleFunc("GET /api/v1/onboarding/missed", withCORS(withUserAuth(handleGetMissedOnboarding)))
-	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withUserAuth(handleGetWebhookEvents)))
+	mux.HandleFunc("GET /api/v1/onboarding/missed", withCORS(withOperatorAuth(handleGetMissedOnboarding)))
+	mux.HandleFunc("GET /api/v1/webhook/events", withCORS(withOperatorAuth(handleGetWebhookEvents)))
 
 	// Zitadel M2M health check — exercises the full service-account path
 	// (key → token exchange → Management API call). Gated by withOperatorAuth

@@ -136,6 +136,15 @@ func TestRouter_MemberDeniedOnOperatorRoutes(t *testing.T) {
 		{http.MethodGet, "/api/v1/users/someone-else/grants"},
 		{http.MethodGet, "/api/v1/users/someone-else/access"},
 		{http.MethodGet, "/api/v1/users/someone-else/bundles"},
+		// Opened by the 27 Oct audit: the whole roster, every name, every webhook payload.
+		{http.MethodPost, "/api/v1/roles"},
+		{http.MethodGet, "/api/v1/applications/app-1/simulate"},
+		{http.MethodGet, "/api/v1/users"},
+		{http.MethodPost, "/api/v1/lookup"},
+		{http.MethodGet, "/api/v1/bundles/b-1/impact"},
+		{http.MethodGet, "/api/v1/onboarding/triggers"},
+		{http.MethodGet, "/api/v1/onboarding/missed"},
+		{http.MethodGet, "/api/v1/webhook/events"},
 	}
 	for _, tc := range cases {
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{}`))
