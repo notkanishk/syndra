@@ -157,5 +157,8 @@ func GetShadowCredentialAudit(ctx context.Context, userID string) ([]models.Shad
 		}
 		entries = append(entries, e)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return entries, nil
 }

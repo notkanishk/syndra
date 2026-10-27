@@ -167,6 +167,9 @@ func GetAuditLogsForUser(
 		l.Details = details
 		logs = append(logs, l)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return logs, nil
 }
 

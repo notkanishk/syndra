@@ -241,6 +241,9 @@ func GetRolesForBundle(ctx context.Context, bundleID string) ([]models.BundleRol
 		}
 		roles = append(roles, r)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return roles, nil
 }
 
@@ -268,6 +271,9 @@ func GetBundlesForUser(ctx context.Context, userID string) ([]models.Bundle, err
 			return nil, err
 		}
 		bundles = append(bundles, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return bundles, nil
 }

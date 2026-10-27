@@ -191,6 +191,9 @@ func GetAccessRequests(ctx context.Context, status string) ([]models.AccessReque
 		}
 		requests = append(requests, req)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return requests, nil
 }
 

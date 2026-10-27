@@ -115,6 +115,9 @@ func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
 		}
 		triggers = append(triggers, t)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return triggers, nil
 }
 
