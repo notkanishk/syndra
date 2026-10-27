@@ -11,6 +11,7 @@ import { Crossfade } from "@/components/ui/Crossfade";
 import { FormPart } from "@/components/ui/FormPart";
 import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
+import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { Unfold } from "@/components/ui/Unfold";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -279,6 +280,7 @@ function ProfileForm({
   const [reverted, setReverted] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // What was last written, so "unsaved" can be judged against it rather than
   // against `profile` — which stays stale until the parent's refetch lands.
   // Without this, `dirty` stayed true the instant a save succeeded (the local
@@ -521,12 +523,21 @@ function ProfileForm({
         {onDelete && (
           <>
             <span className="flex-1" />
-            <Button variant="danger" size="sm" onClick={onDelete}>
+            <Button variant="danger" size="sm" onClick={() => setConfirmingDelete(true)}>
               Use the project default instead
             </Button>
           </>
         )}
       </div>
+      {onDelete && confirmingDelete && (
+        <DeleteOverrideConfirm
+          onConfirm={async () => {
+            await onDelete();
+            setConfirmingDelete(false);
+          }}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
       {onDelete && (
         <p className="text-[13px] text-faint">
           Using the project default deletes this app&rsquo;s own claim. From the next sign-in it
@@ -534,6 +545,49 @@ function ProfileForm({
         </p>
       )}
     </div>
+  );
+}
+
+/** Deleting an app's own claim changes every token it is next issued, so it asks first. */
+function DeleteOverrideConfirm({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  return (
+    <Modal open onClose={onCancel} busy={busy} size="sm">
+      <ModalHeader
+        title="Delete this app's own claim?"
+        lede="From the next sign-in the app receives what the other apps on the project receive."
+      />
+      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      <ModalFooter>
+        {/* First in the DOM, not first on screen: the dialog opens on the safe exit. */}
+        <Button className="order-2" disabled={busy} onClick={onCancel}>
+          Keep the claim
+        </Button>
+        <Button
+          className="order-1"
+          variant="dangerConfirm"
+          isPending={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onConfirm();
+            } catch (error) {
+              setOutcome(outcomeFromError(error));
+              setBusy(false);
+            }
+          }}
+        >
+          Delete
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
