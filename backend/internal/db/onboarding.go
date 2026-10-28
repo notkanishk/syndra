@@ -14,19 +14,26 @@ import (
 // -------------------------------------------------------------
 
 // InsertOnboardingTrigger records a new onboarding event using the idempotency key.
-// Returns (id, true, nil) on insert, ("", false, nil) if the key already exists (duplicate).
+// Returns (id, true, nil) on insert or when re-taking a trigger that FAILED (the
+// retry the failure was waiting for) or one left `pending` over ten minutes (a
+// crash mid-processing; a live request finishes well inside that, and a retake
+// restarts the clock), ("", false, nil) if the key already exists in any other
+// state (duplicate).
 func InsertOnboardingTrigger(ctx context.Context, userID, source, idempotencyKey string) (string, bool, error) {
 	query := `
 		INSERT INTO onboarding_triggers (user_id, source, idempotency_key)
 		VALUES ($1, $2, $3)
-		ON CONFLICT (idempotency_key) DO NOTHING
+		ON CONFLICT (idempotency_key) DO UPDATE
+		   SET status = 'pending', error_message = NULL, completed_at = NULL, created_at = NOW()
+		 WHERE onboarding_triggers.status = 'failed'
+		    OR (onboarding_triggers.status = 'pending' AND onboarding_triggers.created_at < NOW() - INTERVAL '10 minutes')
 		RETURNING id`
 
 	var id string
 	err := querier(ctx).QueryRow(ctx, query, userID, source, idempotencyKey).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// ON CONFLICT DO NOTHING — idempotency key already exists, safe to skip
+			// the key exists and is not a failed row — safe to skip
 			return "", false, nil
 		}
 		// Real DB fault: surface it so the caller records the failure and retries
@@ -84,16 +91,18 @@ func MarkOnboardingTriggerUnconfigured(ctx context.Context, triggerID, errMsg st
 	return nil
 }
 
-// GetOnboardingTriggers returns all onboarding triggers ordered by creation time.
+// GetOnboardingTriggers returns the newest logListLimit onboarding triggers,
+// newest first.
 func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
 	query := `
 		SELECT id, user_id, source, idempotency_key, status,
 		       COALESCE(bundle_id::text, ''), COALESCE(error_message, ''),
 		       created_at, completed_at
 		FROM onboarding_triggers
-		ORDER BY created_at DESC`
+		ORDER BY created_at DESC
+		LIMIT $1`
 
-	rows, err := querier(ctx).Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query, logListLimit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query onboarding triggers: %w", err)
 	}
@@ -107,6 +116,9 @@ func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
 			return nil, err
 		}
 		triggers = append(triggers, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return triggers, nil
 }

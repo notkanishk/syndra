@@ -58,7 +58,11 @@ export default function RoleMembersPage({
   }, [view, filter]);
 
   const observedOnly = view?.observed_only ?? [];
-  const holdCount = (view?.members.length ?? 0) + observedOnly.length;
+  // Holding is observed: a record Zitadel does not show (`in_zitadel === false`)
+  // explains, it does not hold. Same count the roles index gives.
+  const holdCount =
+    (view?.members.filter((member) => member.in_zitadel !== false).length ?? 0) +
+    observedOnly.length;
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -289,7 +293,7 @@ function MemberRow({
         <button
           type="button"
           onClick={() => open("mapping")}
-          className="shrink-0 text-[13px] font-semibold text-accent-text link-hover"
+          className="shrink-0 text-[13px] font-semibold text-accent-text link-tint"
         >
           Open the rule
         </button>

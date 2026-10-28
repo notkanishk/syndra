@@ -298,6 +298,43 @@ func (s *Store) PutBinding(b Binding) error {
 	})
 }
 
+// ErrUsernameBound is BindIfFree's refusal: another subject already holds the name.
+type ErrUsernameBound struct{ Username, Owner string }
+
+func (e ErrUsernameBound) Error() string {
+	return fmt.Sprintf("%s is already bound to another subject (%s)", e.Username, e.Owner)
+}
+
+// BindIfFree creates a binding only when no other subject holds the username.
+// The check and the put share one transaction: a caller that read
+// BoundUsernames and then called PutBinding could race another into binding
+// one account to two subjects.
+func (s *Store) BindIfFree(b Binding) error {
+	if b.BoundAt.IsZero() {
+		b.BoundAt = s.now().UTC()
+	}
+	encoded, err := json.Marshal(b)
+	if err != nil {
+		return fmt.Errorf("encode binding: %w", err)
+	}
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(bucketBindings)
+		var taken error
+		_ = bucket.ForEach(func(k, v []byte) error {
+			var other Binding
+			if json.Unmarshal(v, &other) == nil && other.Username == b.Username && string(k) != b.SubjectID {
+				taken = ErrUsernameBound{Username: b.Username, Owner: string(k)}
+				return taken
+			}
+			return nil
+		})
+		if taken != nil {
+			return taken
+		}
+		return bucket.Put([]byte(b.SubjectID), encoded)
+	})
+}
+
 // DeleteBinding forgets which account belonged to a subject.
 //
 // Called when the account itself is gone. A binding that outlives its account

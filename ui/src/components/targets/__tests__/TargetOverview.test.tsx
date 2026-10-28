@@ -562,6 +562,16 @@ describe("the top band: Syndra's reach, what the system reports, and Maintenance
     expect(screen.queryByText("Last answered")).toBeNull();
   });
 
+  it("does not say it is accepting changes when the live read failed", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: false, lifecycle: "active" } as TargetHealth;
+    state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
+    renderTarget();
+
+    expect(screen.queryByText(/Accepting changes/)).toBeNull();
+    expect(screen.getByText(/can't be confirmed/)).toBeInTheDocument();
+  });
+
   it("shows the accounts Syndra manages, read from the same inventory the census uses", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };

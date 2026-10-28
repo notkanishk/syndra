@@ -45,6 +45,9 @@ type mutatingRPC struct {
 	// state the read-back adds and the one that must not be reported as either
 	// a clean success or a failure.
 	failReadAfterUpdate bool
+	// refuseGroupCreate answers group.create with the "already exists" refusal,
+	// and failReadAfterCreate makes the account unreadable once it is created.
+	refuseGroupCreate, failReadAfterCreate bool
 }
 
 // remember adds a created account to the fixture the next read serves.
@@ -91,7 +94,7 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 		m.fakeRPC.calls = append(m.fakeRPC.calls, method)
 		return nil, m.fakeRPC.err
 	}
-	if m.failReadAfterUpdate && len(m.updates) > 0 && method == "user.query" {
+	if method == "user.query" && ((m.failReadAfterUpdate && len(m.updates) > 0) || (m.failReadAfterCreate && len(m.creates) > 0)) {
 		m.fakeRPC.calls = append(m.fakeRPC.calls, method)
 		return nil, errReadAfterWrite
 	}
@@ -112,6 +115,9 @@ func (m *mutatingRPC) Call(method string, timeout int64, params any) (json.RawMe
 	case "group.create":
 		// A personal group, as the create path makes one before the account.
 		m.groupCreates++
+		if m.refuseGroupCreate {
+			return errorEnvelope("group_create.name: A group with this name already exists"), nil
+		}
 		if m.refuseUserCreate {
 			return envelope(`93`), nil
 		}
@@ -436,8 +442,8 @@ func TestAnEmailChangeDoesNotRenameAnExistingAccount(t *testing.T) {
 // missing account. Reporting it as missing would create a replacement while the
 // original kept the home data.
 func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
-	s, m := applyServer(t, `[{"username":"ada_renamed","id":11,"uid":3001,"locked":false,"smb":true,"groups":[42]}]`)
-	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 3001}); err != nil {
+	s, m := applyServer(t, `[{"username":"ada_renamed","id":11,"uid":300001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 300001}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -453,6 +459,61 @@ func TestAnOutOfBandRenameIsRecognisedRatherThanRecreated(t *testing.T) {
 	b, _, _ := s.store.GetBinding("sub-1")
 	if b.Username != "ada_renamed" {
 		t.Errorf("and the recorded name must be updated to match, got %q", b.Username)
+	}
+}
+
+// A legacy binding holds a record key or 0 where a uid belongs. The uid
+// fallback must not read that as an account: uid 0 is root.
+func TestALegacyBindingUIDNeverMatchesRootOrABuiltIn(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"root","id":1,"uid":0,"locked":false,"smb":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 0}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	if len(m.creates) != 1 || len(m.updates) != 0 {
+		t.Fatalf("the missing account is re-created and root untouched: %d creates %d updates", len(m.creates), len(m.updates))
+	}
+}
+
+// A name hit whose uid differs from the recorded one is a different account
+// that reused the name, not this subject's.
+func TestAReusedUsernameIsNotThisSubjectsAccount(t *testing.T) {
+	s, m := applyServer(t, `[{"username":"ada","id":19,"uid":300777,"locked":false,"smb":false,"groups":[]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 300001}); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true}}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d (%s)", rr.Code, rr.Body.String())
+	}
+	out := decodeOutcome(t, rr)
+	if out.Effect != EffectBlocked || out.Conflict == nil || out.Conflict.UID != 300777 || out.Conflict.Adoptable {
+		t.Fatalf("want a non-adoptable conflict naming the stranger's uid: %+v", out)
+	}
+	if len(m.creates) != 0 || len(m.updates) != 0 {
+		t.Fatal("nothing may be written to someone else's account")
+	}
+}
+
+// A legacy record key in the binding is replaced by the real uid on the first
+// name hit, so the guard above applies from the next pass.
+func TestALegacyBindingIsUpgradedToTheRealUIDOnANameHit(t *testing.T) {
+	s, _ := applyServer(t, `[{"username":"ada","id":11,"uid":300001,"locked":false,"smb":true,"groups":[42]}]`)
+	if err := s.store.PutBinding(Binding{SubjectID: "sub-1", Username: "ada", UID: 11}); err != nil {
+		t.Fatal(err)
+	}
+
+	postApply(t, s, `{"call_id":"c1","subject":"sub-1","email":"ada@example.edu",
+		"desired":{"group":["lab_makers"],"enabled":true,"smb_enabled":true}}`)
+	if b, _, _ := s.store.GetBinding("sub-1"); b.UID != 300001 {
+		t.Fatalf("the binding must carry the real uid, got %d", b.UID)
 	}
 }
 
@@ -876,27 +937,76 @@ func cappedUsers() string {
 	return b.String()
 }
 
-// §17 — the write path refuses what the plan already refuses.
+// §17 — an account past the list cap is found, not duplicated.
 //
-// `plan` blocks a create from a capped read: an absence read out of a truncated
-// list is not an absence, and the fingerprint cannot tell the two apart because
-// "not in the read" and "not on the target" hash identically. `apply` did not,
-// so a subject whose account sits past the cap got a SECOND one — while the
-// first kept the home directory every share points at.
-func TestAnApplyWillNotCreateFromATruncatedRead(t *testing.T) {
-	s, rpc := applyServer(t, cappedUsers())
+// `apply` used to read the whole account list and refuse a create when that
+// list was capped, because an absence read out of a truncated list is not an
+// absence: a subject whose account sat past the cap would otherwise get a
+// SECOND one, while the first kept the home directory every share points at.
+// The lookup is now one account by its exact key, filtered at the target, so
+// the account past the cap is simply found. Same guarantee, by a read that
+// cannot be cut short — and it costs one row instead of the whole list.
+func TestAnApplyFindsAnAccountPastTheListCap(t *testing.T) {
+	// "ada" is the row after a capped list: the old whole-list read never saw it.
+	users := strings.TrimSuffix(cappedUsers(), "]") +
+		`,{"username":"ada","uid":5500,"locked":false,"smb":true,"groups":[42]}]`
 
-	rr := postApply(t, s, `{"call_id":"c1","subject":"sub-past-the-cap","email":"ada@example.edu",
-		"desired":{"group":["lab_makers"],"enabled":true}}`)
+	t.Run("unbound: a conflict over the existing account, not a second one", func(t *testing.T) {
+		s, rpc := applyServer(t, users)
+		rr := postApply(t, s, `{"call_id":"c1","subject":"sub-past-the-cap","email":"ada@example.edu",
+			"desired":{"group":["lab_makers"],"enabled":true}}`)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("want the existing account reported as a conflict, got %d: %s", rr.Code, rr.Body.String())
+		}
+		if len(rpc.creates) != 0 {
+			t.Fatalf("a second account was created for one that exists past the cap: %v", rpc.creates)
+		}
+	})
 
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("want the create refused, got %d: %s", rr.Code, rr.Body.String())
+	t.Run("bound: found and converged, nothing created", func(t *testing.T) {
+		s, rpc := applyServer(t, users)
+		if err := s.store.PutBinding(Binding{SubjectID: "sub-ada", Username: "ada", UID: 5500}); err != nil {
+			t.Fatal(err)
+		}
+		rr := postApply(t, s, `{"call_id":"c2","subject":"sub-ada","email":"ada@example.edu",
+			"desired":{"group":["lab_makers"],"enabled":true}}`)
+		if rr.Code != http.StatusOK || len(rpc.creates) != 0 {
+			t.Fatalf("want a plain convergence, got %d with creates %v: %s", rr.Code, rpc.creates, rr.Body.String())
+		}
+	})
+}
+
+// A lookup asks the target for one account, not for all of them: the point of
+// reading back by username. The fake would answer a whole-list read just as
+// happily, so the recorded query is what proves it.
+func TestAReadBackAsksForOneAccount(t *testing.T) {
+	s, rpc := applyServer(t, `[{"username":"ada","uid":5500,"locked":false,"smb":true,"groups":[42]},
+		{"username":"bob","uid":5501,"locked":false,"smb":true,"groups":[42]}]`)
+
+	got, err := s.readBack("bob")
+	if err != nil || got == nil || got.Username != "bob" {
+		t.Fatalf("readBack(bob) = %+v, %v", got, err)
 	}
-	if len(rpc.creates) != 0 {
-		t.Fatalf("nothing may be created from a read that could not see the whole target: %v", rpc.creates)
+	var sawFilter bool
+	for i, m := range rpc.fakeRPC.calls {
+		if m != "user.query" {
+			continue
+		}
+		args, _ := rpc.fakeRPC.params[i].([]any)
+		if len(args) == 0 {
+			t.Fatalf("user.query sent no arguments: %v", rpc.fakeRPC.params[i])
+		}
+		if filters, _ := args[0].([]any); len(filters) == 1 {
+			sawFilter = true
+		} else {
+			t.Fatalf("a read-back sent the unfiltered user.query: %v", args)
+		}
 	}
-	if !strings.Contains(rr.Body.String(), "proves nothing") {
-		t.Errorf("the refusal must say why, not merely refuse: %s", rr.Body.String())
+	if !sawFilter {
+		t.Fatal("no user.query was recorded")
+	}
+	if _, err := s.readBack("nobody"); !errors.Is(err, ErrTargetRefused) {
+		t.Fatalf("an account that is not there must be refused, got %v", err)
 	}
 }
 

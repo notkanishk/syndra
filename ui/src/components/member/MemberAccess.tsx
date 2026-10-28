@@ -21,7 +21,7 @@ import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useMyChanges, type MyChange } from "@/lib/queries/useMyChanges";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
-import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 
 /**
  * Member · My access (route-me, 52b + 52c). The landing route for members, and
@@ -71,6 +71,9 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const roleCount = access.data?.observed_role_count;
   const rooms = projects.filter((project) => (project.observed_role_keys ?? []).length > 0).length;
 
+  // An unread grants list is not "nothing ends": the end dates wait for the
+  // read, and a role's seat says so rather than "Given to you" (A-08 §3.9).
+  const grantsRead = !grants.isLoading && !grants.error;
   const ending = (grants.data ?? [])
     .filter((grant) => grant.expires_at && (daysUntil(grant.expires_at) ?? -1) >= 0)
     .map((grant) => grant.expires_at!)
@@ -114,7 +117,13 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const heldByProject = new Map(
     projects.map((project) => [
       project.project_id,
-      new Set([...project.source_roles, ...project.derived_roles].map((role) => role.role_key)),
+      // What Zitadel shows too: holding is observed, so a role they hold with
+      // no record of why is still held.
+      new Set([
+        ...project.source_roles.map((role) => role.role_key),
+        ...project.derived_roles.map((role) => role.role_key),
+        ...(project.observed_role_keys ?? []),
+      ]),
     ]),
   );
 
@@ -122,7 +131,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   // something they need to read about on the page that answers "what can I
   // use right now". Same object PersonAccess shows an operator, member voice.
   const inForce = (access.data?.allowances ?? []).filter((allowance) => allowance.in_force);
-  const summary = summarySentence(roleCount, rooms, ending);
+  const summary = summarySentence(roleCount, rooms, grantsRead ? ending : undefined);
   // Zitadel never read (A-06 §2, N23): nothing has been observed, so the cards
   // keep their headers and show no rows. A row would say what Syndra decided
   // as though it were what the person can use.
@@ -216,6 +225,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                     roleKey={role.role_key}
                     reasons={role.reasons}
                     expiresAt={role.expiresAt}
+                    endKnown={grantsRead}
                     standing={standing(project, role.role_key)}
                     waiting={waiting.get(`${project.project_id}/${role.role_key}`)}
                   />
@@ -282,6 +292,7 @@ function RoleRow({
   roleKey,
   reasons,
   expiresAt,
+  endKnown,
   standing,
   waiting,
 }: {
@@ -290,6 +301,8 @@ function RoleRow({
   roleKey: string;
   reasons: RoleReason[];
   expiresAt: string | null;
+  /** Whether the grants list was read: without it a missing end date is unknown, not absent. */
+  endKnown: boolean;
   standing: Standing;
   waiting?: MyChange;
 }) {
@@ -308,7 +321,7 @@ function RoleRow({
             <OnItsWay at={givenAt(reasons) ?? waiting?.at} />
           ) : (
             <>
-              <Reason strongest={strongest} expiresAt={ends ? expiresAt : null} />
+              <Reason strongest={strongest} expiresAt={ends ? expiresAt : null} endKnown={endKnown} />
               <StandingMark standing={standing} />
             </>
           )}
@@ -355,19 +368,28 @@ function givenWhen(iso: string): string {
  *   direct  → "Given to you until 20 Oct · 10 days left"   (amber — it ends)
  *   mapping → "Comes with door access, automatically"
  */
-function Reason({ strongest, expiresAt }: { strongest?: RoleReason; expiresAt?: string | null }) {
+function Reason({
+  strongest,
+  expiresAt,
+  endKnown,
+}: {
+  strongest?: RoleReason;
+  expiresAt?: string | null;
+  endKnown: boolean;
+}) {
   if (!strongest) return <span className="text-[13.5px] text-muted">Part of your membership</span>;
 
   if (strongest.kind === "direct") {
     if (expiresAt) {
-      const left = daysUntil(expiresAt) ?? 0;
       return (
         <span className="text-[13.5px] font-semibold text-warn-text">
-          Given to you until {formatShortDate(expiresAt)} · {left} {left === 1 ? "day" : "days"} left
+          Given to you until {formatShortDate(expiresAt)} · {expiryLabel(expiresAt, "left")}
         </span>
       );
     }
-    return <span className="text-[13.5px] text-muted">Given to you</span>;
+    return (
+      <span className="text-[13.5px] text-muted">{endKnown ? "Given to you" : "End date unavailable"}</span>
+    );
   }
 
   if (strongest.kind === "bundle") {
@@ -407,13 +429,18 @@ function firstName(name: string): string {
  * Zitadel holds and names the date. `roles` is undefined while nothing has
  * been observed, and then no number is named.
  */
-export function summarySentence(roles: number | undefined, rooms: number, ending: string[]): string | null {
+export function summarySentence(
+  roles: number | undefined,
+  rooms: number,
+  /** Undefined until the grants are read: the sentence then names no end. */
+  ending: string[] | undefined,
+): string | null {
   if (roles === undefined) return "Checking what you can use.";
   if (roles === 0) return null;
   const base = `${capitalise(countWord(roles))} ${roles === 1 ? "role" : "roles"} across ${countWord(rooms)} ${
     rooms === 1 ? "room" : "rooms"
   }.`;
-  if (ending.length === 0) return base;
+  if (!ending?.length) return base;
   const first = formatShortDate(ending[0]);
   return ending.length === 1
     ? `${base} One ends on ${first}.`

@@ -124,7 +124,7 @@ export function useLiftHold() {
       request<{ status: string }>(`/allowances/${id}/lift`, { method: "POST", body: {} }),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["users"] });
-      client.invalidateQueries({ queryKey: ["governance", "holds", "review-due"] });
+      client.invalidateQueries({ queryKey: ["governance"] });
       client.invalidateQueries({ queryKey: ["me", "targets"] });
     },
   });

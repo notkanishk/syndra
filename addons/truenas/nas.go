@@ -130,6 +130,8 @@ type NAS struct {
 	probed bool
 	// lastProbe bounds how often a FAILED probe is retried on a live session.
 	lastProbe time.Time
+	// lastSelf bounds how often an unknown own identity is asked for again.
+	lastSelf time.Time
 
 	lastRead time.Time
 	now      func() time.Time
@@ -237,6 +239,15 @@ func (n *NAS) provenLocked(c rpc) bool {
 // reconnect that may never be needed.
 func (n *NAS) ensureProbed() {
 	n.mu.Lock()
+	if n.client != nil && n.probed && n.selfName == "" && n.now().Sub(n.lastSelf) >= probeCooldown {
+		// Probed, but `auth.me` failed then: asked again, so one transient
+		// failure does not leave the self-account guard blind until a reconnect.
+		// The timestamp is set first for the same reason the flag below is.
+		n.lastSelf = n.now()
+		n.mu.Unlock()
+		n.readSelf()
+		return
+	}
 	if n.probed || n.client == nil || n.now().Sub(n.lastProbe) < probeCooldown {
 		n.mu.Unlock()
 		return
@@ -246,7 +257,7 @@ func (n *NAS) ensureProbed() {
 	// the timestamp because a probe that FAILS clears the flag again, and
 	// without a time beside it every subsequent call would re-probe — doubling
 	// the traffic on the one session the rate limit is about.
-	n.probed, n.lastProbe = true, n.now()
+	n.probed, n.lastProbe, n.lastSelf = true, n.now(), n.now()
 	n.mu.Unlock()
 
 	if _, err := n.SystemVersion(); err != nil {

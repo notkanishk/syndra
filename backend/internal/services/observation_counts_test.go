@@ -52,10 +52,11 @@ func TestRoleHolderConfirmation_NeverObservedIsNilNotZero(t *testing.T) {
 		func(context.Context, string) ([]db.ObservedGrant, error) { return nil, nil },
 	)
 
-	counts, basis, err := RoleHolderConfirmation(context.Background())
+	facts, err := RoleHolderFacts(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	counts, basis := facts.Confirmed, facts.Basis
 	if counts != nil {
 		t.Fatalf("expected nil counts when the org has never been observed, got %v — nil is not the same fact as zero", counts)
 	}
@@ -98,10 +99,11 @@ func TestRoleHolderConfirmation_ConfirmsOnlyASubsetOfRecorded(t *testing.T) {
 		t.Fatalf("expected 2 recorded holders, got %d", recorded["p1:member"])
 	}
 
-	confirmed, basis, err := RoleHolderConfirmation(context.Background())
+	facts, err := RoleHolderFacts(context.Background())
 	if err != nil {
-		t.Fatalf("RoleHolderConfirmation: %v", err)
+		t.Fatalf("RoleHolderFacts: %v", err)
 	}
+	confirmed, basis := facts.Confirmed, facts.Basis
 	if basis.ReadAt == nil || !basis.Current || basis.Truncated {
 		t.Fatalf("expected a current, complete basis, got %+v", basis)
 	}
@@ -127,10 +129,11 @@ func TestObservationBasis_NamesFailureAndTruncationSeparately(t *testing.T) {
 		func(context.Context, string) ([]db.ObservedGrant, error) { return nil, nil },
 	)
 
-	_, basis, err := RoleHolderConfirmation(context.Background())
+	facts, err := RoleHolderFacts(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	basis := facts.Basis
 	if basis.ReadAt == nil {
 		t.Fatalf("a failed attempt is still a checked-at fact, not \"never observed\"")
 	}

@@ -117,10 +117,16 @@ func (s *server) handleCapabilities(w http.ResponseWriter, r *http.Request, _ []
 // The reasons read differently to an operator and are kept apart for that:
 // an untested major is "we will not", a missing method is "it cannot".
 func (s *server) availability(operationID string) (bool, string) {
+	methods := methodsFor(operationID)
+	if len(methods) == 0 {
+		// Local only (account.release): nothing on the target is involved, so
+		// nothing about the target's version or reachability can withdraw it.
+		return true, ""
+	}
 	if supported, why := s.nas.MajorSupported(); !supported {
 		return false, why
 	}
-	for _, method := range methodsFor(operationID) {
+	for _, method := range methods {
 		if !s.nas.MethodPresent(method) {
 			return false, fmt.Sprintf("this target does not expose %s", method)
 		}

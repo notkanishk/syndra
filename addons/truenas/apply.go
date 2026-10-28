@@ -405,8 +405,14 @@ func (s *server) handleApply(w http.ResponseWriter, r *http.Request, body []byte
 	// second mutation. It is best-effort against the response, though: the
 	// mutation already happened, and refusing to report it because the cache
 	// write failed would lose the only account of it the caller gets.
-	if err := s.store.Remember(req.CallID, kindApply, outcome); err != nil {
-		logStoreFailure("idempotency", req.CallID, err)
+	//
+	// Only a 2xx is remembered. A blocked or refused outcome changed nothing, so
+	// a replay re-runs it (the target may have moved on) instead of returning a
+	// stale refusal as a 200 the caller would read as applied.
+	if status/100 == 2 {
+		if err := s.store.Remember(req.CallID, kindApply, outcome); err != nil {
+			logStoreFailure("idempotency", req.CallID, err)
+		}
 	}
 	writeJSON(w, status, outcome)
 }
@@ -498,44 +504,63 @@ func (s *server) rememberWantedSMB(subject string, desired desiredState, applyEr
 // The binding is authoritative and the derivation is a recovery path. Asking
 // the other way round would rename an account every time somebody's email
 // changed, which is the one thing §11 forbids.
-// The fourth return value says the read hit the cap. Carried out rather than
-// acted on here, because it only matters where an ABSENCE is concluded: a
-// subject found by binding is found whether or not the list was capped.
+// The fourth return value says a lookup came back cut short. Each lookup here
+// is one account by an exact key, filtered at the target, so that only happens
+// when a target ignores the filter and sends its whole list: carried out rather
+// than acted on here, because it only matters where an ABSENCE is concluded.
 func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, bool, error) {
-	snap, err := s.readSubjects()
-	if err != nil {
-		return nil, Binding{}, nil, false, err
-	}
-	byName := make(map[string]*Subject, len(snap.Subjects))
-	byUID := make(map[int64]*Subject, len(snap.Subjects))
-	for i := range snap.Subjects {
-		byName[snap.Subjects[i].Username] = &snap.Subjects[i]
-		byUID[snap.Subjects[i].UID] = &snap.Subjects[i]
-	}
-
 	binding, bound, err := s.store.GetBinding(req.Subject)
 	if err != nil {
 		return nil, Binding{}, nil, false, err
 	}
 	if bound {
-		if found, ok := byName[binding.Username]; ok {
-			return found, binding, nil, snap.Truncated, nil
+		found, cut, err := s.subjectWhere("username", binding.Username)
+		if err != nil {
+			return nil, Binding{}, nil, false, err
+		}
+		floor, ceiling := s.idRange()
+		owned := binding.UID >= floor && binding.UID <= ceiling
+		if found != nil {
+			if owned && found.UID != binding.UID {
+				// A name some other account now holds (the original was deleted
+				// and the name reused). Converging it would hand this subject's
+				// entitlements to a stranger, so it halts like any foreign name.
+				return nil, binding, &BindingConflict{Username: found.Username, UID: found.UID}, false, nil
+			}
+			if !owned && found.UID >= floor && found.UID <= ceiling {
+				// A legacy binding holding a record key, not a uid: record the
+				// real one so the next pass is guarded by the check above.
+				binding.UID = found.UID
+				if err := s.store.PutBinding(binding); err != nil {
+					logStoreFailure("binding", req.Subject, err)
+				}
+			}
+			return found, binding, nil, false, nil
+		}
+		if !owned {
+			// A legacy uid of 0 or a record key must never match root or a
+			// built-in account: with no name hit the account is missing.
+			return nil, binding, nil, cut, nil
 		}
 		// The name moved. A stable uid whose username changed out of band is a
 		// RENAME, not a missing account — reporting it as missing would create
 		// a replacement while the original kept the home data.
-		if found, ok := byUID[binding.UID]; ok {
-			binding.Username = found.Username
+		byUID, cutUID, err := s.subjectWhere("uid", binding.UID)
+		if err != nil {
+			return nil, Binding{}, nil, false, err
+		}
+		if byUID != nil {
+			binding.Username = byUID.Username
 			if err := s.store.PutBinding(binding); err != nil {
 				logStoreFailure("binding", req.Subject, err)
 			}
-			return found, binding, nil, snap.Truncated, nil
+			return byUID, binding, nil, false, nil
 		}
 		// Bound, and neither the name nor the uid is there. The account was
 		// deleted out of band; convergence re-creates it under the recorded
 		// name rather than re-deriving, because the recorded name is what every
 		// ACL and share still refers to.
-		return nil, binding, nil, snap.Truncated, nil
+		return nil, binding, nil, cut || cutUID, nil
 	}
 
 	if strings.TrimSpace(req.Email) == "" {
@@ -563,14 +588,18 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 		return ok && owner != req.Subject
 	})
 
-	if existing, ok := byName[derived]; ok {
+	existing, cut, err := s.subjectWhere("username", derived)
+	if err != nil {
+		return nil, Binding{}, nil, false, err
+	}
+	if existing != nil {
 		owner := claimed[derived]
 		return nil, Binding{}, &BindingConflict{
 			Username: derived, UID: existing.UID,
 			Adoptable: owner == "", BoundTo: owner,
-		}, snap.Truncated, nil
+		}, false, nil
 	}
-	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, snap.Truncated, nil
+	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, cut, nil
 }
 
 // converge brings an existing account onto the desired state.
@@ -824,10 +853,19 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		return ApplyOutcome{}, statusFor(err), err
 	}
 	var groupID apiID
+	adopted := false
 	if err := s.nas.call("group.create", []any{map[string]any{
 		"name": binding.Username, "gid": id, "smb": false,
 	}}, &groupID); err != nil {
-		return ApplyOutcome{}, statusFor(err), fmt.Errorf("make %s's personal group: %w", binding.Username, err)
+		// An empty group of that name inside this add-on's own range is one an
+		// earlier attempt left, and ours to take; anything else is somebody's,
+		// and the refusal stands. Its number becomes the account's too, so the
+		// pair stays one number (identity.go).
+		orphan, gid, ok := s.emptyGroupNamed(binding.Username)
+		if !ok {
+			return ApplyOutcome{}, statusFor(err), fmt.Errorf("make %s's personal group: %w", binding.Username, err)
+		}
+		groupID, id, adopted = orphan, gid, true
 	}
 	create["uid"] = id
 	create["group"] = groupID
@@ -837,7 +875,9 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 	// the account exists, so a folder that is there at all is someone else's.
 	home, err := s.decideHome(desired, binding.Username, "", -1)
 	if err != nil {
-		s.undoGroup(groupID)
+		if !adopted {
+			s.undoGroup(groupID)
+		}
 		return ApplyOutcome{}, statusFor(err), err
 	}
 	if home.path != "" {
@@ -848,21 +888,28 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 
 	var recordID apiID
 	if err := s.nas.call("user.create", []any{create}, &recordID); err != nil {
-		s.undoGroup(groupID)
+		// An adopted group was there before this attempt: not ours to delete,
+		// however the account fares.
+		if !adopted {
+			s.undoGroup(groupID)
+		}
 		return ApplyOutcome{}, statusFor(err), err
 	}
 	// `user.create` answers with the RECORD key, not the unix uid, and the
 	// binding recognises an account by its uid across a rename. Read back
 	// rather than assumed: a fingerprint computed from a state this add-on
 	// invented is a fingerprint the next plan verifies against nothing.
-	created, err := s.readBack(binding.Username)
-	if err != nil {
-		return ApplyOutcome{}, statusFor(err),
-			fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, err)
+	created, readErr := s.readBack(binding.Username)
+	// The account exists whether or not it could be read back, so the binding
+	// is recorded either way: left out, the next apply finds the name unbound
+	// and halts as a conflict over an account this add-on made. The uid is the
+	// one it asked for, which is what the account was created with.
+	uid := id
+	if readErr == nil {
+		uid = created.UID
 	}
-
-	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, created.UID, "apply"
-	if err := s.store.PutBinding(binding); err != nil {
+	binding.SubjectID, binding.UID, binding.BoundBy = req.Subject, uid, "apply"
+	if err := s.store.BindIfFree(binding); err != nil {
 		// The account exists and the record of whose it is did not land. Not a
 		// silent success: the next apply would derive the same name, find it
 		// unbound, and halt as a binding conflict — which is recoverable but
@@ -870,6 +917,10 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		logStoreFailure("binding", req.Subject, err)
 		return ApplyOutcome{}, http.StatusInternalServerError,
 			fmt.Errorf("account %s was created and its binding could not be recorded: %w", binding.Username, err)
+	}
+	if readErr != nil {
+		return ApplyOutcome{}, statusFor(readErr),
+			fmt.Errorf("account %s was created and could not be read back: %w", binding.Username, readErr)
 	}
 
 	detail := fmt.Sprintf("Created %s.", binding.Username)
@@ -899,16 +950,61 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 
 // readBack reads one account as the target now holds it.
 func (s *server) readBack(username string) (*Subject, error) {
-	snap, err := s.readSubjects()
+	found, _, err := s.subjectWhere("username", username)
 	if err != nil {
 		return nil, err
 	}
+	if found == nil {
+		return nil, fmt.Errorf("%w: %s is not on the target after being created", ErrTargetRefused, username)
+	}
+	return found, nil
+}
+
+// subjectWhere reads the one account whose field equals value, or nil when the
+// target has none. Filtered at the target: the whole account list per lookup was
+// a 100-person cascade's worth of full reads. The key comparison is kept on this
+// side as well, so a target that ignored the filter cannot hand back the wrong
+// account; the second return is that read's truncation, which is only ever set
+// by such a target (an exact key matches one row) and stops an absence being
+// concluded from a list that was cut short.
+func (s *server) subjectWhere(field string, value any) (*Subject, bool, error) {
+	snap, err := s.readSubjectsWhere([]any{[]any{field, "=", value}})
+	if err != nil {
+		return nil, false, err
+	}
 	for i := range snap.Subjects {
-		if snap.Subjects[i].Username == username {
-			return &snap.Subjects[i], nil
+		got := snap.Subjects[i]
+		if (field == "username" && got.Username == value) || (field == "uid" && got.UID == value) {
+			return &snap.Subjects[i], snap.Truncated, nil
 		}
 	}
-	return nil, fmt.Errorf("%w: %s is not on the target after being created", ErrTargetRefused, username)
+	return nil, snap.Truncated, nil
+}
+
+// emptyGroupNamed finds a group by name that nobody belongs to, primary or
+// secondary, and is not one of the machine's own, and whose gid is inside this
+// add-on's id range: outside it the group was made by somebody else, and an
+// account created in it would own whatever files carry that gid. It returns the
+// gid, which the account takes as its uid.
+//
+// A named type rather than an inline one: `users` is not in the recorded read
+// (scripts/lib/record-truenas.py selects four fields), so the shape guard has
+// nothing to check it against.
+func (s *server) emptyGroupNamed(name string) (apiID, int64, bool) {
+	type groupMembers struct {
+		nasGroup
+		Users []apiID `json:"users"`
+	}
+	var groups []groupMembers
+	if err := s.nas.call("group.query", []any{
+		[]any{[]any{"group", "=", name}},
+		map[string]any{"select": []string{"id", "gid", "group", "builtin", "users"}, "limit": 1},
+	}, &groups); err != nil || len(groups) != 1 {
+		return apiID{}, 0, false
+	}
+	g := groups[0]
+	floor, ceiling := s.idRange()
+	return g.ID, g.GID, !g.Builtin && len(g.Users) == 0 && g.ID.known() && g.GID >= floor && g.GID <= ceiling
 }
 
 // record appends to the mutation log, best-effort AFTER the fact.

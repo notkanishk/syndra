@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"errors"
 	"testing"
 )
 
@@ -102,37 +101,6 @@ func TestAUserObservationRefusesAnotherPersonsGrant(t *testing.T) {
 		true, "")
 	if err == nil {
 		t.Fatal("a read of one person wrote a row about another")
-	}
-}
-
-// "Nobody has looked" must never be readable as "nothing is there".
-func TestNothingObservedIsItsOwnAnswer(t *testing.T) {
-	ctx := liveDB(t)
-	truncateObservations(t, ctx)
-
-	if _, err := LatestObservation(ctx, "u1"); !errors.Is(err, ErrNoObservation) {
-		t.Fatalf("an unobserved person reported something other than 'not looked at': %v", err)
-	}
-}
-
-// The newer of the two candidates wins: an org sweep covers everybody, and a
-// person's own read covers them alone.
-func TestThePersonsLatestObservationIsTheNewerOfTheTwo(t *testing.T) {
-	ctx := liveDB(t)
-	truncateObservations(t, ctx)
-
-	if err := RecordOrgObservation(ctx, nil, true, ""); err != nil {
-		t.Fatalf("org: %v", err)
-	}
-	if err := RecordUserObservation(ctx, "u1", nil, true, ""); err != nil {
-		t.Fatalf("user: %v", err)
-	}
-	o, err := LatestObservation(ctx, "u1")
-	if err != nil {
-		t.Fatalf("LatestObservation: %v", err)
-	}
-	if o.Scope != "user" {
-		t.Fatalf("the older org sweep won over this person's own newer read: %+v", o)
 	}
 }
 

@@ -378,6 +378,45 @@ func TestHoldingReadsWhatIsQueued(t *testing.T) {
 	}
 }
 
+// A direct grant is held until its removal is sent, but a queued revoke, or a
+// queued replace whose set omits the role, means it is on its way out: giving
+// it back must not be refused as "already has this".
+func TestHoldingTreatsAQueuedRevokeOrOmittingReplaceAsLeaving(t *testing.T) {
+	ctx := liveDB(t)
+	user := freshSubject(t, ctx)
+	dropOutboxAfter(t, ctx, user)
+	read := func(role string) models.RequestHolding {
+		t.Helper()
+		h, err := RequestHolding(ctx, user, "pLaser", role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	for _, role := range []string{"door", "saw"} {
+		if _, err := UpsertDirectGrant(ctx, user, "pLaser", role, "op", "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if h := read("door"); h.Kind != models.HoldingForGood {
+		t.Fatalf("a direct grant with nothing queued is held, got %+v", h)
+	}
+	seedOutbox(t, ctx, "revoke", "pending", user, "pLaser", "direct", "", []string{"door"})
+	if h := read("door"); h.Kind != models.HoldingNone {
+		t.Fatalf("a direct grant with a queued revoke is leaving, got %+v", h)
+	}
+	if h := read("saw"); h.Kind != models.HoldingForGood {
+		t.Fatalf("a revoke of another role leaves this one held, got %+v", h)
+	}
+	seedOutbox(t, ctx, "replace", "pending", user, "pLaser", "direct", "", []string{"keep"})
+	if h := read("saw"); h.Kind != models.HoldingNone {
+		t.Fatalf("a queued replace that omits the role removes it, got %+v", h)
+	}
+	if h := read("keep"); !h.Waiting {
+		t.Fatalf("a role the replace names is on its way in, got %+v", h)
+	}
+}
+
 // 000055 turns 000054's "declined, already held" closures into fulfilled ones.
 func TestTheMigrationCallsAlreadyHeldClosuresFulfilled(t *testing.T) {
 	ctx := liveDB(t)

@@ -241,10 +241,28 @@ func mappingRequestFingerprint(m db.RoleMapping, surface, newValue string) strin
 // gained the role in between is converged by the read here — which is right, the
 // mapping now means something different for them too — and a person who lost it
 // is not, which is also right.
-func applyMappingChange(ctx context.Context, m db.RoleMapping, surface, actor, planID, newValue string, holderCount int) (int, error) {
+//
+// The mapping and its holder count are read again under the lock, not taken
+// from the handler: that read happened before the lock, so a concurrent edit
+// could change the value being moved, or holders could appear on a mapping that
+// had none and so needed no citation, and the change would apply on a review of
+// something else. A moved value is refused as a changed request; holders with no
+// citation are refused as a missing one.
+func applyMappingChange(ctx context.Context, m db.RoleMapping, surface, actor, planID, newValue string) (int, error) {
 	converged := 0
 	err := svcInTxLockingAccess(ctx, func(ctx context.Context) error {
-		if holderCount > 0 {
+		cur, err := dbGetRoleMapping(ctx, m.ID)
+		if err != nil {
+			return err
+		}
+		if cur.Value != m.Value || cur.Field != m.Field {
+			return db.ErrPlanRequestMismatch
+		}
+		held, err := dbMappingHolders(ctx, m.ProjectID, m.RoleKey)
+		if err != nil {
+			return err
+		}
+		if len(held) > 0 {
 			if strings.TrimSpace(planID) == "" {
 				return errPlanCitationMissing
 			}

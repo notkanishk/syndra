@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -115,12 +114,6 @@ func (f HolderFacts) NobodyObserved(key string) bool {
 func RoleHolderCounts(ctx context.Context) (map[string]int, error) {
 	f, err := RoleHolderFacts(ctx)
 	return f.Given, err
-}
-
-// RoleHolderConfirmation is the confirmed reading of RoleHolderFacts.
-func RoleHolderConfirmation(ctx context.Context) (map[string]int, models.ObservationBasis, error) {
-	f, err := RoleHolderFacts(ctx)
-	return f.Confirmed, f.Basis, err
 }
 
 // RoleHolderFacts answers every holder question from ONE snapshot.
@@ -825,18 +818,11 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 		return models.ApplicationSimulation{}, fmt.Errorf("user %q not found", userID)
 	}
 
-	if err := cache.CompileUserCache(ctx, userID, app.ProjectID); err != nil {
-		return models.ApplicationSimulation{}, err
-	}
-
-	cacheKey := fmt.Sprintf("mapping:%s:%s", userID, app.ProjectID)
-	val, err := db.Redis.Get(ctx, cacheKey).Result()
+	// Computed, not stored: the token path serves what the write paths put in
+	// Redis, and a preview that wrote there would repair the one project being
+	// looked at while the cache everywhere else stayed stale.
+	facts, err := cache.CompileFacts(ctx, userID, app.ProjectID)
 	if err != nil {
-		return models.ApplicationSimulation{}, err
-	}
-
-	var facts claims.Facts
-	if err := json.Unmarshal([]byte(val), &facts); err != nil {
 		return models.ApplicationSimulation{}, err
 	}
 	if facts.ProjectID == "" {
@@ -1117,12 +1103,14 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
+	// One grouped count for every bundle: only "has any holder" is needed here,
+	// so resolving each user's bundles (bundles x users queries) was pure cost.
+	holders, err := svcGetBundleHolderCounts(snap.ctx)
+	if err != nil {
+		return models.GovernanceSummary{}, err
+	}
 	for _, bundle := range bundles {
-		impact, err := bundleImpactFromSnapshot(snap, bundle.ID)
-		if err != nil {
-			return models.GovernanceSummary{}, err
-		}
-		if len(impact.Users) == 0 {
+		if holders[bundle.ID] == 0 {
 			cleanupHints = append(cleanupHints, fmt.Sprintf("Bundle %q is unused and can be reviewed for cleanup.", bundle.Name))
 		}
 	}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PeoplePage from "@/app/users/page";
@@ -551,6 +551,70 @@ describe("People · the board", () => {
       expect(screen.getByText("Bo Chen").closest("[data-opens]")).not.toBeNull();
       expect(ada.closest("[data-opens]")).toBeNull();
       expect(ada.closest("[data-fresh]")).toBeNull();
+    });
+  });
+
+  const SEARCH = "Search people by name, email or role key";
+
+  // Back/Forward and a nav click change the URL under the box.
+  it("re-syncs the search box when the URL's search changes from outside, and keeps what is being typed through its own echo", () => {
+    vi.useFakeTimers();
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const page = () => (
+        <QueryClientProvider client={client}>
+          <PeoplePage />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(page());
+      const box = screen.getByLabelText(SEARCH) as HTMLInputElement;
+
+      fireEvent.change(box, { target: { value: "ab" } });
+      act(() => void vi.advanceTimersByTime(300));
+      expect(nav.replaced.at(-1)).toContain("q=ab");
+      // More typing lands before the page's own write comes back through the URL.
+      fireEvent.change(box, { target: { value: "abc" } });
+      rerender(page());
+      expect(box.value).toBe("abc");
+
+      // Back to somebody else's search.
+      nav.url = "/users?q=zed";
+      rerender(page());
+      expect(box.value).toBe("zed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe("Esc in bulk mode", () => {
+    it("leaves bulk mode when nothing else took the key", () => {
+      nav.url = "/users?bulk=1";
+      renderPeople();
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(nav.replaced.at(-1)).toBe("/users");
+    });
+
+    it("closes an open bulk dialog without also dropping the selection", () => {
+      nav.url = "/users?bulk=1";
+      renderPeople();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+      fireEvent.click(screen.getByRole("button", { name: "Give a bundle" }));
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      const before = nav.replaced.length;
+
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(nav.replaced.length).toBe(before);
+    });
+
+    it("ignores an Esc something already handled", () => {
+      nav.url = "/users?bulk=1";
+      renderPeople();
+      const swallow = (event: KeyboardEvent) => event.preventDefault();
+      document.addEventListener("keydown", swallow);
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      document.removeEventListener("keydown", swallow);
+      expect(nav.replaced).toEqual([]);
     });
   });
 });

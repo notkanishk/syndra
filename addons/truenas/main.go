@@ -42,7 +42,12 @@ import (
 // `TestTheDeploymentAllowsTheShutdownDrainToFinish` reads this value and the
 // Compose one and fails if the relationship inverts. Changing this number
 // without changing the deployment is the mistake it exists to catch.
-const shutdownTimeout = 20 * time.Second
+//
+// 100s: one apply makes several NAS calls of up to 30s each, and what bounds
+// the whole is its handler's WriteTimeout (90s); the extra 10s is the log write
+// and the response. A drain shorter than that cuts a user.create/update/delete
+// mid-call.
+const shutdownTimeout = 100 * time.Second
 
 type config struct {
 	listen string
@@ -314,9 +319,26 @@ func run() error {
 	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("[SHUTDOWN] %v", err)
 	}
+	// Shutdown returns early on its own deadline or for a handler it cannot see
+	// finish; the NAS session is dropped only once nothing is using it.
+	if !waitDrained(shutdownCtx, life) {
+		log.Printf("[SHUTDOWN] %d mutation(s) still in flight at the deadline", life.InFlight())
+	}
 	nas.drop()
 	log.Println("[SHUTDOWN] stopped")
 	return nil
+}
+
+// waitDrained polls until no mutation is in flight or ctx ends, and says which.
+func waitDrained(ctx context.Context, life *lifecycle) bool {
+	for !life.Drained() {
+		select {
+		case <-ctx.Done():
+			return life.Drained()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	return true
 }
 
 // sweepIdempotency applies the store's stated retention.

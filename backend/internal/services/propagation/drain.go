@@ -513,8 +513,8 @@ func applyRow(ctx context.Context, row models.PendingPropagation) error {
 				row.ID, err)
 		}
 	}
-	if err := invalidateClaims(ctx, row.UserID); err != nil {
-		log.Printf("[PROPAGATION] applied %s but could not clear %s's cached claims: %v "+
+	if err := refreshClaims(ctx, row.UserID, row.ProjectID); err != nil {
+		log.Printf("[PROPAGATION] applied %s but could not refresh %s's cached claims: %v "+
 			"— tokens issued before the cache expires may still carry the old roles",
 			row.ID, row.UserID, err)
 	}

@@ -96,6 +96,22 @@ describe("role members — holding is observed", () => {
     renderPage();
 
     expect(screen.getByText("Not in Zitadel yet")).toBeInTheDocument();
+    // A record explains; it does not hold. The sentence counts what Zitadel shows.
+    expect(screen.getByText("0 people hold this role")).toBeInTheDocument();
+  });
+
+  it("counts a record with no observation as held, and one Zitadel contradicts as not", () => {
+    const member = (id: string, extra: object) => ({
+      user: { id, name: `Person ${id}`, email: `${id}@example.edu`, title: "", team: "" },
+      reasons: [{ kind: "direct" }],
+      ...extra,
+    });
+    state.data = view({
+      members: [member("a", {}), member("b", { in_zitadel: true }), member("c", { in_zitadel: false })],
+    });
+    renderPage();
+
+    expect(screen.getByText("2 people hold this role")).toBeInTheDocument();
   });
 
   it("shows the email when there is no title or team to show instead", () => {

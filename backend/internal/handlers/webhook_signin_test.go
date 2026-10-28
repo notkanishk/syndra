@@ -134,7 +134,6 @@ func setupSignInDeps(t *testing.T) *[]usageCall {
 	webhookRevokeMappingRules = func(context.Context, string, string, string) error { trip("mapping rules"); return nil }
 	webhookTriggerOnboarding = func(context.Context, string, string, string) error { trip("onboarding"); return nil }
 	cacheRebuildUser = func(context.Context, string, []string) { trip("the cache") }
-	cacheInvalidateUser = func(context.Context, string) error { trip("the cache"); return nil }
 	observeUser = func(context.Context, string) (db.Observation, error) {
 		trip("observation")
 		return db.Observation{}, nil

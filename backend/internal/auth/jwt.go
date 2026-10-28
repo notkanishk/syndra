@@ -35,13 +35,33 @@ type keyStore struct {
 	keys      map[string]*rsa.PublicKey
 	fetchedAt time.Time
 	ttl       time.Duration
+
+	// fetchMu serialises fetches and guards nextTry, the earliest time the next
+	// fetch may happen. A token naming a kid we have never seen (a forged one,
+	// say) may refetch at most once per minRefetch, so it cannot make every
+	// request cost a round trip to Zitadel. A fetch that failed waits only
+	// failRetry: a blip must not leave real tokens unverifiable for a minute.
+	fetchMu sync.Mutex
+	nextTry time.Time
 }
 
+const (
+	minRefetch = time.Minute
+	failRetry  = 5 * time.Second
+)
+
 var store = &keyStore{ttl: time.Hour}
+
+// jwksClient bounds the key fetch; the default client waits forever and the
+// request context carries no deadline of its own.
+var jwksClient = &http.Client{Timeout: 5 * time.Second}
 
 // SetKeysForTesting injects RSA public keys directly into the key store cache.
 // Intended for use in tests only — bypasses the JWKS network fetch.
 func SetKeysForTesting(keys map[string]*rsa.PublicKey) {
+	store.fetchMu.Lock()
+	store.nextTry = time.Now().Add(minRefetch)
+	store.fetchMu.Unlock()
 	store.mu.Lock()
 	store.keys = keys
 	store.fetchedAt = time.Now()
@@ -70,7 +90,7 @@ func (s *keyStore) refresh(ctx context.Context, domain string) error {
 	if err != nil {
 		return fmt.Errorf("build jwks request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := jwksClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch jwks: %w", err)
 	}
@@ -126,10 +146,20 @@ func (s *keyStore) keyFunc(ctx context.Context, domain string) jwt.Keyfunc {
 			return k, nil
 		}
 
-		// Cache miss or stale — refresh then retry
-		if err := s.refresh(ctx, domain); err != nil {
-			return nil, err
+		// Cache miss or stale: refetch, unless one is not due yet. Concurrent
+		// misses queue on the lock and see that attempt. The fetch outlives the
+		// request that triggered it (a client hanging up must not fail the fetch
+		// for everyone queued behind); jwksClient bounds it.
+		s.fetchMu.Lock()
+		if !time.Now().Before(s.nextTry) {
+			if err := s.refresh(context.WithoutCancel(ctx), domain); err != nil {
+				s.nextTry = time.Now().Add(failRetry)
+				s.fetchMu.Unlock()
+				return nil, err
+			}
+			s.nextTry = time.Now().Add(minRefetch)
 		}
+		s.fetchMu.Unlock()
 
 		s.mu.RLock()
 		k = s.keys[kid]

@@ -13,6 +13,7 @@ import (
 var (
 	dbGetDirectGrantsForUser = db.GetDirectGrantsForUser
 	dbGetActiveMappingRules  = db.GetActiveMappingRules
+	dbGetAllKnownUserIDs     = db.GetAllKnownUserIDs
 	// Version-aware. The cache compiles the claims a token is issued from, so
 	// resolving bundles through the mutable working copy meant an unpublished
 	// edit reached real tokens on the next rebuild — before anybody published
@@ -24,6 +25,17 @@ var (
 	// tests don't need a live directory.
 	cacheFindUser = func(ctx context.Context, userID string) (models.UserProfile, bool, error) {
 		return directory.Default.FindUser(ctx, userID)
+	}
+
+	// directoryAnswers is whether the directory is answering now: one real
+	// read, then its own freshness (a read served from its last good copy
+	// leaves it not current).
+	directoryAnswers = func(ctx context.Context) bool {
+		if _, err := directory.Default.Users(ctx); err != nil {
+			return false
+		}
+		_, current := directory.FreshnessOf(directory.Default)
+		return current
 	}
 
 	redisSet = func(ctx context.Context, key string, value string, ttl time.Duration) error {

@@ -63,9 +63,12 @@ export function ClockTime({ at }: { at?: number | null }) {
   // after an hour on the page it still named the minute you arrived. `at` is
   // the query's own `dataUpdatedAt`, which is when the answer actually came
   // back.
+  //
+  // No `at` (0 or absent) is no read: nothing is named rather than the epoch's
+  // 01:00 or the render's own moment.
   useEffect(() => {
-    setTime(formatClock(new Date(at ?? Date.now()).toISOString()));
+    if (at) setTime(formatClock(new Date(at).toISOString()));
   }, [at]);
 
-  return <>{time ?? "just now"}</>;
+  return <>{at ? (time ?? "just now") : null}</>;
 }

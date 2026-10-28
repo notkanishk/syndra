@@ -297,15 +297,42 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         </Modal>
       )}
 
-      {assigning && <AssignDialog userId={userId} onClose={() => setAssigning(false)} />}
+      {/* A dialog that succeeds closes, so its outcome is said here, where the
+          revoke's already is; a failure stays in the dialog, beside the retry. */}
+      {assigning && (
+        <AssignDialog
+          userId={userId}
+          onClose={() => setAssigning(false)}
+          onApplied={(applied) => {
+            setOutcome(applied);
+            setAssigning(false);
+          }}
+        />
+      )}
       {editing && (
-        <EditRolesDialog userId={userId} grant={editing} onClose={() => setEditing(null)} />
+        <EditRolesDialog
+          userId={userId}
+          grant={editing}
+          onClose={() => setEditing(null)}
+          onApplied={(applied) => {
+            setOutcome(applied);
+            setEditing(null);
+          }}
+        />
       )}
     </Card>
   );
 }
 
-function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void }) {
+function AssignDialog({
+  userId,
+  onClose,
+  onApplied,
+}: {
+  userId: string;
+  onClose: () => void;
+  onApplied: (outcome: Outcome) => void;
+}) {
   const projects = useUpstreamProjects();
   const [projectId, setProjectId] = useState("");
   const roles = useUpstreamProjectRoles(projectId || null);
@@ -387,12 +414,11 @@ function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void
           onClick={async () => {
             try {
               await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
-              setOutcome({
+              onApplied({
                 kind: "applied",
                 message: "Roles given in Zitadel",
                 detail: AUDIT_ONLY,
               });
-              onClose();
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -410,10 +436,12 @@ function EditRolesDialog({
   userId,
   grant,
   onClose,
+  onApplied,
 }: {
   userId: string;
   grant: { grantId: string; roleKeys: string[]; projectId: string };
   onClose: () => void;
+  onApplied: (outcome: Outcome) => void;
 }) {
   const update = useUpstreamUpdateGrant();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -465,12 +493,11 @@ function EditRolesDialog({
           onClick={async () => {
             try {
               await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
-              setOutcome({
+              onApplied({
                 kind: "applied",
                 message: "Roles replaced in Zitadel",
                 detail: AUDIT_ONLY,
               });
-              onClose();
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }

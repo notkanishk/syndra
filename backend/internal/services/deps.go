@@ -64,6 +64,7 @@ var (
 	svcGetAccessRequests       = db.GetAccessRequests
 	svcGetExpiringDirectGrants = db.GetExpiringDirectGrants
 	svcGetAllBundles           = db.GetAllBundles
+	svcGetBundleHolderCounts   = db.GetBundleHolderCounts
 
 	// Pending-propagation summary. Reachability is intentionally the cheap
 	// "client configured" signal (MgmtClient != nil) rather than a live ping —

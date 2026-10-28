@@ -17,7 +17,7 @@ import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { daysUntil, expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
@@ -160,7 +160,7 @@ function GrantDirectAccessOpen({
                 <>
                   {formatShortDate(resolved.date)}
                   <span className="text-[14px] text-faint">
-                    — in {daysUntil(resolved.date)} days
+                    — {expiryLabel(resolved.date)}
                   </span>
                 </>
               ) : (

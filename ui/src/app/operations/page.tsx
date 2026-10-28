@@ -26,6 +26,7 @@ import { outcomeLabel, outcomeOf, type EventOutcome } from "@/lib/event-outcome"
 import { formatShortDate, formatWhen } from "@/lib/format";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
+  LOG_LIMIT,
   useOnboardingTriggers,
   useWebhookEvents,
   type OnboardingTriggerRow,
@@ -199,6 +200,9 @@ export default function EventActivityPage() {
           />
           <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
             <ReadFreshness state={{ readAt, current: !stale }} subject="The timeline" />
+            {((events.data?.length ?? 0) >= LOG_LIMIT || (triggers.data?.length ?? 0) >= LOG_LIMIT) && (
+              <span className="text-[13px] text-faint">The newest {LOG_LIMIT} of each log</span>
+            )}
             {source !== "all" && (
               <FilterChip onClear={() => setSource("all")} clearLabel="Show every source">
                 {SOURCE_WORD[source]}
@@ -346,7 +350,7 @@ function EventRow({
             type="button"
             onClick={onToggle}
             aria-expanded={open}
-            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-hover desktop:min-h-6"
+            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-tint desktop:min-h-6"
           >
             {open ? "Hide details" : "Show details"}
           </button>

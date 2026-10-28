@@ -85,6 +85,63 @@ func TestEveryRouteCarriesAGate(t *testing.T) {
 	}
 }
 
+// TestUserLevelRoutesAreClassified makes "any signed-in person may call this" a
+// decision somebody typed. A route is operator-only unless it is on this list, so
+// a new `withUserAuth` route fails here until its author says why a member may
+// reach it (and what the handler hides from them). The eight routes the 27 Oct
+// audit found open — roles, simulate, users, lookup, impact, onboarding, webhook
+// events — are deliberately absent: members never reach them through the proxy.
+func TestUserLevelRoutesAreClassified(t *testing.T) {
+	user := map[string]bool{
+		"GET /api/v1/system/mode":                          true,
+		"GET /api/v1/bundles":                              true,
+		"GET /api/v1/bundles/{id}":                         true,
+		"GET /api/v1/bundles/{id}/roles":                   true,
+		"GET /api/v1/bundles/{id}/versions":                true,
+		"GET /api/v1/catalog":                              true,
+		"GET /api/v1/applications":                         true,
+		"GET /api/v1/projects":                             true,
+		"GET /api/v1/topology":                             true,
+		"GET /api/v1/rules/mapping":                        true,
+		"GET /api/v1/rules/mapping/{id}":                   true,
+		"POST /api/v1/rules/mapping/validate":              true,
+		"GET /api/v1/config/confirmation-mode-default":     true,
+		"GET /api/v1/terms":                                true,
+		"GET /api/v1/requests":                             true, // own only: the handler filters
+		"POST /api/v1/requests":                            true, // own only: the handler binds the requester
+		"POST /api/v1/requests/{id}/withdraw":              true, // the requester's own act
+		"GET /api/v1/roles":                                true,
+		"DELETE /api/v1/users/{uid}/shadow-credential":     true,
+		"GET /api/v1/users/{uid}/shadow-credential/status": true,
+		"GET /api/v1/users/{uid}/shadow-credential/audit":  true,
+		"GET /api/v1/me/profile":                           true,
+		"GET /api/v1/me/targets":                           true,
+		"GET /api/v1/me/changes":                           true,
+		"POST /api/v1/me/targets/{target}/credential":      true,
+	}
+	var offenders []string
+	seen := map[string]bool{}
+	for _, m := range routeLine.FindAllStringSubmatch(handlerSources(t)["router.go"], -1) {
+		route := m[1] + " " + m[2]
+		if !strings.Contains(m[3], "withCORS(withUserAuth(") {
+			continue
+		}
+		seen[route] = true
+		if !user[route] {
+			offenders = append(offenders, route)
+		}
+	}
+	for route := range user {
+		if !seen[route] {
+			offenders = append(offenders, "stale allowlist entry: "+route)
+		}
+	}
+	if len(offenders) > 0 {
+		sort.Strings(offenders)
+		t.Errorf("user-level routes not classified here (use withOperatorAuth, or list them with a reason):\n  %s", strings.Join(offenders, "\n  "))
+	}
+}
+
 // TestEveryMutationDecodesStrictly holds the rule CLAUDE.md states and nothing
 // enforced: a mutation endpoint rejects unknown fields.
 //

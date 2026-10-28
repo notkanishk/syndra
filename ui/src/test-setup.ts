@@ -1,8 +1,27 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach, beforeEach } from "vitest";
+import { createElement, type ComponentType } from "react";
+import { afterEach, beforeEach, vi } from "vitest";
 
 import { installMatchMedia, resetMediaQueries } from "@/test-utils/media";
+
+// `next/dynamic` loads a component after first paint, which is right in a
+// browser and means a test would have to await every dialog it opens. Here the
+// load starts when the module does and `beforeEach` waits for it, so a lazily
+// loaded component is there the moment a test renders it.
+const dynamicLoads: Promise<unknown>[] = [];
+vi.mock("next/dynamic", () => ({
+  default: (load: () => Promise<ComponentType<never> | { default: ComponentType<never> }>) => {
+    let Loaded: ComponentType<never> | undefined;
+    dynamicLoads.push(
+      load().then((m) => {
+        Loaded = "default" in m ? m.default : m;
+      }),
+    );
+    return (props: object) => (Loaded ? createElement(Loaded as ComponentType<object>, props) : null);
+  },
+}));
+beforeEach(() => Promise.all(dynamicLoads));
 
 // jsdom implements no matchMedia. Installed once per file rather than per
 // test, because components capture it during render; reset between tests so a

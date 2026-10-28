@@ -91,9 +91,9 @@ var (
 	// already-exists check (latency optimization only — see alreadyExists):
 	// webhook index first; on miss, ONE live grant list per row (not per role).
 	grantIndexHasRole = db.GrantIndexHasRole
-	// The claim envelope Actions v2 serves. Cleared by the drain, because the
+	// The claim envelope Actions v2 serves. Recompiled by the drain, because the
 	// drain is what changed the access it was compiled from.
-	invalidateClaims = cache.InvalidateUser
+	refreshClaims = cache.RefreshUser
 	// liveUserGrant is the one read behind both the add and the revoke path:
 	// Zitadel keeps ONE grant per (user, project) carrying every role, so a
 	// write must know the grant id and the roles already on it. Empty id means

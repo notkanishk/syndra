@@ -18,11 +18,11 @@ func resetSweepDeps(t *testing.T) {
 	t.Helper()
 	origGet := svcGetExpiredDirectGrants
 	origExpire := svcExpireDirectGrant
-	origCache := cacheInvalidateUser
+	origCache := cacheRefreshUser
 	t.Cleanup(func() {
 		svcGetExpiredDirectGrants = origGet
 		svcExpireDirectGrant = origExpire
-		cacheInvalidateUser = origCache
+		cacheRefreshUser = origCache
 	})
 }
 
@@ -61,7 +61,7 @@ func (r *recorder) install() {
 			Revoked:   []string{projectID + "/" + role},
 		}, nil
 	}
-	cacheInvalidateUser = func(_ context.Context, uid string) error {
+	cacheRefreshUser = func(_ context.Context, uid string, _ ...string) error {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.invalidatedFor = append(r.invalidatedFor, uid)

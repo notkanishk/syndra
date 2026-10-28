@@ -21,6 +21,10 @@ const state = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("@/lib/queries/useServiceAccounts", () => ({
+  useServiceAccounts: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
+  serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,
+}));
 vi.mock("@/lib/queries/useGovernance", () => ({
   useGovernanceSummary: () => ({
     data: {

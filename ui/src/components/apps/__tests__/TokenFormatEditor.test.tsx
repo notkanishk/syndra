@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TokenFormatEditor } from "@/components/apps/TokenFormatEditor";
@@ -225,5 +225,42 @@ describe("token format editor", () => {
     expect(saveOverride).toHaveBeenCalledWith(
       expect.objectContaining({ applicationId: "app_bookings", claim_name: "bookings.roles" }),
     );
+  });
+
+  describe("deleting an app's own claim", () => {
+    const badge = {
+      overrides: [
+        {
+          project_id: "pLaser",
+          application_id: "app_badge",
+          application_name: "Badge Reader",
+          claim_name: "badge.roles",
+          format_type: "array" as const,
+        },
+      ],
+    };
+    const open = () => {
+      renderEditor("app_badge", badge);
+      fireEvent.click(screen.getByRole("radio", { name: "Badge Reader only" }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete this app’s claim" }));
+    };
+
+    it("asks first and deletes nothing until confirmed", async () => {
+      dropOverride.mockClear();
+      open();
+      expect(screen.getByRole("dialog", { name: /Delete this app/ })).toBeInTheDocument();
+      expect(dropOverride).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+      await waitFor(() => expect(dropOverride).toHaveBeenCalledWith("app_badge"));
+    });
+
+    it("leaves the claim alone when backed out of", () => {
+      dropOverride.mockClear();
+      open();
+      fireEvent.click(screen.getByRole("button", { name: "Keep the claim" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(dropOverride).not.toHaveBeenCalled();
+    });
   });
 });

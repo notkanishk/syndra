@@ -28,7 +28,7 @@ const (
 type HealthState struct {
 	Status HealthStatus `json:"status"`
 	// CheckedAt is the latest health read, zero when none has happened.
-	CheckedAt time.Time `json:"checked_at"`
+	CheckedAt time.Time `json:"checked_at,omitzero"`
 	// LastAnsweredAt is when the target last gave a SUCCESSFUL answer; a later
 	// miss does not move it. Null when it has never answered since Syndra
 	// started. Freshness on the Connected systems list rests on it.
@@ -47,7 +47,7 @@ type HealthState struct {
 	MissedSince *time.Time `json:"missed_since,omitempty"`
 	// StartedAt is when this Syndra process started, so "Checking" can say
 	// "Syndra restarted at 09:38 and hasn't heard from TrueNAS since".
-	StartedAt time.Time `json:"started_at"`
+	StartedAt time.Time `json:"started_at,omitzero"`
 }
 
 type healthRecord struct {

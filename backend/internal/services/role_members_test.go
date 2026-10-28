@@ -84,6 +84,38 @@ func TestRoleMembers_ReturnsEverySourceInFixedOrder(t *testing.T) {
 	}
 }
 
+// The pills count people. Two bundles (or two rules) giving one person the same
+// role is still one person on that pill, or the pill outgrows the list it filters.
+func TestRoleMembers_PillsCountEachKindOncePerMember(t *testing.T) {
+	setupSnapshotTestFixtures(t, 1, 0, 1)
+	stubRoleFixtures(t)
+
+	origCollect := collectUserRolesHook
+	t.Cleanup(func() { collectUserRolesHook = origCollect })
+	collectUserRolesHook = func(context.Context, string) (map[roleKey]*models.EffectiveRole, []models.Bundle, error) {
+		return map[roleKey]*models.EffectiveRole{
+			{projectID: "p0", roleKey: "trained"}: {ProjectID: "p0", RoleKey: "trained", IsSource: true, Reasons: []models.RoleReason{
+				{Kind: "bundle", BundleName: "Lab Tech"},
+				{Kind: "bundle", BundleName: "Woodshop"},
+				{Kind: "mapping", TriggerProject: "p1", TriggerRole: "operator"},
+				{Kind: "mapping", TriggerProject: "p2", TriggerRole: "operator"},
+			}},
+		}, nil, nil
+	}
+
+	view, err := RoleMembers(context.Background(), "p0", "trained")
+	if err != nil {
+		t.Fatalf("RoleMembers: %v", err)
+	}
+	if view.DirectCount != 0 || view.BundleCount != 1 || view.AutomaticCount != 1 {
+		t.Errorf("one person, so one on each pill: direct=%d bundle=%d automatic=%d",
+			view.DirectCount, view.BundleCount, view.AutomaticCount)
+	}
+	if got := len(view.Members[0].Reasons); got != 4 {
+		t.Errorf("the row still lists every reason, got %d", got)
+	}
+}
+
 // A direct source must carry its grant id: without it the row can only offer a
 // removal it cannot perform.
 func TestRoleMembers_DirectRowCarriesGrantIDAndExpiry(t *testing.T) {

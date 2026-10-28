@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { type Device } from "@/components/storage/device";
 import { Button } from "@/components/ui/Button";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel } from "@/components/ui/Input";
@@ -15,8 +16,6 @@ import { Segmented, Select } from "@/components/ui/Select";
  * says SMB to the member except the address itself.
  */
 
-export type Device = "mac" | "windows" | "linux" | "ios" | "android";
-
 const DEVICES: Array<{ value: Device; label: string }> = [
   { value: "mac", label: "Mac" },
   { value: "windows", label: "Windows" },
@@ -24,15 +23,6 @@ const DEVICES: Array<{ value: Device; label: string }> = [
   { value: "ios", label: "iPhone/iPad" },
   { value: "android", label: "Android" },
 ];
-
-/** The device a browser is on; Mac when it can't tell. */
-export function deviceFrom(userAgent: string): Device {
-  if (/iPhone|iPad/.test(userAgent)) return "ios";
-  if (/Android/.test(userAgent)) return "android";
-  if (/Windows/.test(userAgent)) return "windows";
-  if (/Linux/.test(userAgent)) return "linux";
-  return "mac";
-}
 
 /** One folder the guide can take a member to. */
 export interface GuideFolder {

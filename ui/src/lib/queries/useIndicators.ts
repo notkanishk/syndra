@@ -77,10 +77,11 @@ function indicatorsQuery(enabled: boolean) {
 /**
  * The same read, for a screen that reports a count and must not chime: the rail
  * owns the drift chime, and a second observer with its own memory would sound
- * it twice. `isPlaceholderData` tells a real zero from the fabricated one.
+ * it twice. The phone's tab bar is one such screen: it is mounted beside the
+ * rail, not instead of it. `isPlaceholderData` tells a real zero from the fabricated one.
  */
-export function useIndicatorsRead() {
-  return useQuery(indicatorsQuery(true));
+export function useIndicatorsRead(enabled = true) {
+  return useQuery(indicatorsQuery(enabled));
 }
 
 /**

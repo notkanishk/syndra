@@ -41,7 +41,18 @@ function row(id: string, spent: boolean, over: Record<string, unknown> = {}) {
   };
 }
 
-let payload: unknown = { revocations: [] };
+// The endpoint's own shape: a page of rows, and the totals it counted itself.
+type Row = ReturnType<typeof row>;
+function listing(revocations: Row[], total?: { spent: number; queued: number }) {
+  const spent = revocations.filter((r) => r.spent).length;
+  return {
+    revocations,
+    summary: { spent: total?.spent ?? spent, queued: total?.queued ?? revocations.length - spent, oldest_age_seconds: 0 },
+    escalated: false,
+  };
+}
+
+let payload: unknown = listing([]);
 
 vi.mock("@/lib/api-client", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api-client")>("@/lib/api-client");
@@ -62,7 +73,7 @@ const sectionTitles = () =>
   Array.from(document.querySelectorAll("section")).map((el) => el.querySelector('[id$="-title"]')!.textContent);
 
 beforeEach(() => {
-  payload = { revocations: [row("r1", false)] };
+  payload = listing([row("r1", false)]);
 });
 
 describe("what has not gone away yet", () => {
@@ -81,7 +92,7 @@ describe("what has not gone away yet", () => {
   });
 
   it("does not insert a card above the queue when one goes terminal", async () => {
-    payload = { revocations: [row("r1", false), row("r2", true, { user_id: "u2" })] };
+    payload = listing([row("r1", false), row("r2", true, { user_id: "u2" })]);
     await renderPage();
     expect(sectionTitles()).toEqual(["Given up", "Still on the way"]);
     expect(screen.queryByText(/Nothing has been given up on/)).toBeNull();
@@ -90,13 +101,11 @@ describe("what has not gone away yet", () => {
 
 describe("the board's anatomy", () => {
   beforeEach(() => {
-    payload = {
-      revocations: [
+    payload = listing([
         row("r1", true, { user_id: "u1", last_error: "Zitadel says this person no longer exists there.", cascade_id: "c-abc123" }),
         row("r2", false, { user_id: "u3", attempts: 2, age_seconds: 240, created_at: "2026-10-20T08:00:00Z" }),
         row("r3", false, { user_id: "u2", attempts: 0, target: "truenas", project_id: "", role_keys: [], reason: "Remove from the members share" }),
-      ],
-    };
+    ]);
   });
 
   it("opens with a meta line, search, a read line and one chip per section", async () => {
@@ -109,6 +118,21 @@ describe("the board's anatomy", () => {
     const chips = within(screen.getByRole("navigation", { name: "Sections of unfinished revocations" }));
     expect(chips.getByText("Given up")).toBeInTheDocument();
     expect(chips.getByText("Still on the way")).toBeInTheDocument();
+  });
+
+  it("counts what is outstanding from the endpoint's totals, not from the page it was sent", async () => {
+    // The page is capped at 200 rows; the header must not read the cap as the whole queue.
+    payload = listing([row("r1", true), row("r2", false)], { spent: 40, queued: 310 });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <WithdrawnAccess />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("40 given up")).toBeInTheDocument();
+    expect(screen.getByText("310 on the way")).toBeInTheDocument();
+    // A capped page cannot say how many people are behind the rest.
+    expect(screen.queryByText(/\d (person|people)$/)).toBeNull();
   });
 
   it("puts the first card 12px of padding below the intro, not against it", async () => {

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -99,31 +100,54 @@ func handleRevokeTargetAccess(w http.ResponseWriter, r *http.Request) {
 		Direction: db.AllowanceDeny, ActorID: actor, Reason: req.Reason,
 		ReviewDate: reviewDate,
 	})
-	if err != nil {
+	// The same hold already in force is how a RETRY arrives: the deny committed,
+	// then the resolve, the convergence record or the rotation failed. Refusing
+	// it would leave the lock unqueued and the credential unrotated for good, so
+	// carry on with the existing allowance (CreateAllowance returns it).
+	//
+	// Only a PERMANENT one, though. A hold that lapses is somebody's
+	// time-boxed pause, and "revoke" must not quietly ride on it and rotate the
+	// credential: it answers 409, and the operator decides.
+	retry := errors.Is(err, db.ErrAllowanceAlreadyInForce)
+	if err != nil && (!retry || allowance.ExpiresAt != nil) {
 		writeAllowanceError(w, err)
 		return
+	}
+
+	// A retry may find its convergence already waiting (the first attempt
+	// queued it and failed later, at the rotation). Queuing another would be a
+	// second row for an operator to look at, for the same lock.
+	queued := false
+	if retry {
+		queued, err = dbHasUnfinishedConvergence(r.Context(), subject, target)
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_CHECK_FAILED", err.Error())
+			return
+		}
 	}
 
 	// The convergence that carries the suspension to the target. Queued, like
 	// every other add-on row — the response says so rather than implying the
 	// account is already locked.
-	set, err := svcResolveEntitlementsFor(r.Context(), subject, target)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
-		return
-	}
-	if _, _, err := dbRecordSystemConvergence(r.Context(), db.SystemConvergence{
-		Target: target, SubjectID: subject, Actor: actor,
-		Reason: "Their access was revoked.", Desired: set,
-		// Declared here because here is where it is knowably true: the set was
-		// resolved with `enabled` denied, so this row can disable and cannot
-		// confer. It is what lets the background runner drain the lock — and
-		// without it the disclosure below is a promise nothing keeps.
-		WithdrawsOnly: true,
-	}); err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_NOT_QUEUED",
-			"The suspension was recorded and the change to the target was not queued: "+err.Error())
-		return
+	if !queued {
+		set, err := svcResolveEntitlementsFor(r.Context(), subject, target)
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "RESOLVE_FAILED", err.Error())
+			return
+		}
+		if _, _, err := dbRecordSystemConvergence(r.Context(), db.SystemConvergence{
+			Target: target, SubjectID: subject, Actor: actor,
+			Reason: "Their access was revoked.", Desired: set,
+			// Declared here because here is where it is knowably true: the set was
+			// resolved with `enabled` denied, so this row can disable and cannot
+			// confer. It is what lets the background runner drain the lock — and
+			// without it the disclosure below is a promise nothing keeps.
+			WithdrawsOnly: true,
+		}); err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "CONVERGENCE_NOT_QUEUED",
+				"The suspension was recorded and the change to the target was not queued: "+err.Error())
+			return
+		}
 	}
 
 	// The credential half. Its failure does not undo the suspension, and is

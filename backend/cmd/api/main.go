@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/handlers"
@@ -44,6 +45,30 @@ func requireProductionSigningKeys() {
 	}
 	if len(missing) > 0 {
 		log.Fatalf("[STARTUP] Production refusing to start: ZITADEL_DOMAIN is set but %s is empty. Configure signing keys before deploying.", strings.Join(missing, ", "))
+	}
+}
+
+// liveAuthConfigProblems names what makes a live deployment (ZITADEL_DOMAIN set)
+// unfit to start. An empty audience makes every token check answer 500 rather
+// than fail at boot, and the dev API key is a published literal; neither should
+// reach a running service.
+func liveAuthConfigProblems() []string {
+	if os.Getenv("ZITADEL_DOMAIN") == "" {
+		return nil // demo mode: the shared key is the whole auth story, by design
+	}
+	var problems []string
+	if os.Getenv("ZITADEL_AUDIENCE") == "" {
+		problems = append(problems, "ZITADEL_AUDIENCE is empty")
+	}
+	if os.Getenv("SYNDRA_API_KEY") == "dev_auth_token_secret" {
+		problems = append(problems, "SYNDRA_API_KEY is the development default")
+	}
+	return problems
+}
+
+func requireLiveAuthConfig() {
+	if p := liveAuthConfigProblems(); len(p) > 0 {
+		log.Fatalf("[STARTUP] Production refusing to start: ZITADEL_DOMAIN is set but %s.", strings.Join(p, " and "))
 	}
 }
 
@@ -154,6 +179,7 @@ func warnIfWelcomeBundleMissing(ctx context.Context) {
 
 func main() {
 	requireProductionSigningKeys()
+	requireLiveAuthConfig()
 	fmt.Println("Syndra Backend Starting...")
 
 	// Initialize connections safely (They read ENVs and connect)
@@ -205,12 +231,25 @@ func main() {
 	server := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
+		// Slow-header and idle-connection limits only. No WriteTimeout: drain and
+		// reconcile handlers legitimately run for minutes and would be cut off
+		// mid-mutation.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	// Root context cancelled on SIGINT/SIGTERM. Created before background
 	// workers so they participate in the same graceful-shutdown signal.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Claims warm-up: the token path serves only compiled claims, which change
+	// events write and a day's TTL removes. One pass now, then twice per TTL, so
+	// a restart or a quiet day never leaves someone's token degraded.
+	warmSched := periodic.New("CACHE", 12*time.Hour, 12*time.Hour, func(ctx context.Context) error {
+		return cache.Warm(ctx)
+	})
+	go warmSched.Start(ctx)
 
 	// Grant-expiry scheduler: periodic sweep of expired direct grants to
 	// emit LLDAP removal intents, hard-delete rows, invalidate cache, and
@@ -399,6 +438,17 @@ func main() {
 	usagePruneSched := periodic.New("FINDINGS", 24*time.Hour, 24*time.Hour, services.PruneUsageLastSeen)
 	go usagePruneSched.Start(ctx)
 
+	// Webhook log: the operations page lists the newest 200, so rows past the
+	// retention window are only table weight. Same cadence as the usage prune.
+	webhookPruneSched := periodic.New("WEBHOOK", 24*time.Hour, 24*time.Hour, func(ctx context.Context) error {
+		n, err := db.PruneWebhookEvents(ctx, db.WebhookEventRetentionDays)
+		if n > 0 {
+			log.Printf("[WEBHOOK] pruned %d events older than %d days", n, db.WebhookEventRetentionDays)
+		}
+		return err
+	})
+	go webhookPruneSched.Start(ctx)
+
 	// Start server in background
 	go func() {
 		fmt.Println("Control Plane Backend Listening on :8080")
@@ -438,6 +488,12 @@ func main() {
 		}
 	}
 
+	select {
+	case <-warmSched.Done():
+	case <-shutdownCtx.Done():
+		log.Println("[CACHE] Shutdown deadline exceeded waiting for the warm-up; closing anyway")
+	}
+
 	if revokeSched != nil {
 		select {
 		case <-revokeSched.Done():
@@ -472,6 +528,12 @@ func main() {
 	case <-usagePruneSched.Done():
 	case <-shutdownCtx.Done():
 		log.Println("[FINDINGS] Shutdown deadline exceeded waiting for the usage prune; closing anyway")
+	}
+
+	select {
+	case <-webhookPruneSched.Done():
+	case <-shutdownCtx.Done():
+		log.Println("[WEBHOOK] Shutdown deadline exceeded waiting for the webhook prune; closing anyway")
 	}
 
 	db.PG.Close()

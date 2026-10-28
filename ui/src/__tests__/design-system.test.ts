@@ -844,6 +844,27 @@ describe("design system", () => {
     expect(found, `A link's hover is link-hover:\n${describeOffenders(found)}`).toEqual([]);
   });
 
+  // A button is an action: it tints on hover (link-tint) and never underlines.
+  it("never gives a <button> `link-hover`: its tint is `link-tint`", () => {
+    const found: Array<{ file: string; matches: string[] }> = [];
+    for (const file of Array.from(walk(SRC_ROOT))) {
+      if (!file.endsWith(".tsx")) continue;
+      const source = readFileSync(file, "utf8");
+      const matches = openingTags(source, "button")
+        .filter((tag) => /link-hover/.test(tag.text))
+        .map((tag) => `button line ${source.slice(0, tag.at).split("\n").length}: link-hover, use link-tint`);
+      if (matches.length > 0) found.push({ file: file.replace(SRC_ROOT, "src"), matches });
+    }
+    expect(found, `A button's hover is link-tint:\n${describeOffenders(found)}`).toEqual([]);
+  });
+
+  it("tints link-tint on hover without drawing a line", () => {
+    const body = atRuleBody(readFileSync(GLOBALS_CSS, "utf8"), "@utility link-tint");
+    expect(body).toContain("var(--accent-text)");
+    expect(body).not.toContain("text-decoration");
+    expect(body).toContain("var(--duration-tint)");
+  });
+
   it("draws link-hover's underline from transparent and keeps a resting underline", () => {
     const css = readFileSync(GLOBALS_CSS, "utf8");
     const body = atRuleBody(css, "@utility link-hover");

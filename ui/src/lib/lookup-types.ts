@@ -4,18 +4,6 @@
  * in the response (empty object when no entry resolved).
  */
 
-export interface LookupRoleKey {
-  project_id: string;
-  role_key: string;
-}
-
-export interface LookupRequest {
-  user_ids?: string[];
-  project_ids?: string[];
-  role_keys?: LookupRoleKey[];
-  bundle_ids?: string[];
-}
-
 export interface ResolvedUser {
   display_name: string;
   email: string;

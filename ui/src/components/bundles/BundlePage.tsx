@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
 import { BundlePeople, BundleVersions, ThroughOtherBundles } from "@/components/bundles/BundleVersions";
-import { IncludeChangeLine, PublishVersionDialog } from "@/components/bundles/PublishVersionDialog";
+import { IncludeChangeLine } from "@/components/bundles/IncludeChangeLine";
 import { RetiredBundlePage } from "@/components/bundles/RetiredBundle";
 import { ProjectName, RoleRef } from "@/components/names";
 import { projectLabel } from "@/components/names/Unresolved";
@@ -31,7 +31,7 @@ import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatList, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";
 import {
   outcomeFromError,
-  statesNothingChanged,
+  succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import { useCrumb } from "@/lib/page-crumb";
@@ -64,6 +64,10 @@ import {
 } from "@/lib/queries/useBundles";
 import { useMappingRules } from "@/lib/queries/useMappingRules";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const PublishVersionDialog = dynamic(() => import("@/components/bundles/PublishVersionDialog").then((m) => m.PublishVersionDialog));
 
 type Tab = "grants" | "people" | "history";
 
@@ -902,15 +906,6 @@ function DeleteBundleDialog({
  * and the tone with it — amber, because this is consequential and has not
  * happened, rather than red, which is reserved for the click that does it.
  */
-/**
- * Whether the action ran. A FAILED attempt keeps its button — retiring the
- * control on any outcome at all would leave a refusal on screen with no way to
- * try again.
- */
-function succeeded(outcome: Outcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
-}
-
 function RemovalImpact({
   bundleId,
   bundleName,

@@ -721,17 +721,11 @@ func rebuildUserCacheOrSkip(ctx context.Context, userID string) {
 // cacheRebuildProjectIDs returns the set of project IDs the cache compiler
 // should rebuild for. Pulled from directory.Projects (live Zitadel or demo
 // fallback) — NOT directory.Applications, because Applications can return a
-// partial catalog when a per-project ListApplications call fails. A partial
-// project list would cause RebuildUserCache (which deletes every
-// mapping:<user>:* key before rebuilding) to silently erase compiled claims
-// for any project whose apps were transiently unreachable.
+// partial catalog when a per-project ListApplications call fails.
 //
-// Returns an error on directory failure so the caller can skip the rebuild
-// entirely. cache.RebuildUserCache starts by wiping every mapping:<user>:*
-// key; calling it with an empty slice would leave the Actions v2 path serving
-// degraded (fail_closed or minimal_safe) output for this user until the next
-// rebuild triggers. Preserving the last-known-good compiled claims is
-// strictly safer than nuking them on a transient Zitadel blip.
+// Returns an error on directory failure so the caller can skip the rebuild:
+// the user's compiled claims stay as they were, which is safer than
+// recompiling against a list that Zitadel only half answered.
 func cacheRebuildProjectIDs(ctx context.Context) ([]string, error) {
 	projects, err := directory.Default.Projects(ctx)
 	if err != nil {

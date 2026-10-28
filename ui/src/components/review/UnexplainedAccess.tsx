@@ -43,7 +43,6 @@ import {
   useRevokeDrift,
   type DriftTriageItem,
 } from "@/lib/queries/useDrift";
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import {
   RowCheckbox,
   SelectAllRow,
@@ -75,9 +74,13 @@ import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { targetLabel } from "@/lib/nav";
 import {
   outcomeFromError,
-  statesNothingChanged,
+  succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
 type Resolution = "attribute" | "revoke" | "external";
 
@@ -114,7 +117,7 @@ type SectionKind = (typeof SECTIONS)[number]["kind"];
 
 /** A quiet text control that sits among a row's buttons. */
 const QUIET_LINK =
-  "inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-hover desktop:min-h-6";
+  "inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-tint desktop:min-h-6";
 
 const isSafety = (item: DriftTriageItem) => (item.role_group ?? "").toLowerCase().includes("safety");
 
@@ -1124,15 +1127,6 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       </div>
     </div>
   );
-}
-
-/**
- * Whether the action ran. A FAILED attempt keeps its button — retiring the
- * control on any outcome at all would leave a refusal on screen with no way to
- * try again.
- */
-function succeeded(outcome: Outcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
 }
 
 /**

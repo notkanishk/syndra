@@ -58,4 +58,37 @@ describe("FilterPanel", () => {
     fireEvent.mouseDown(document.body);
     expect(screen.queryByLabelText("Filter by project")).toBeNull();
   });
+
+  // A keyboard user who opens the panel lands in it and, on leaving, is back on
+  // the button they pressed rather than at the top of the page.
+  it("is a labelled dialog that takes focus on open and returns it to the button on close", () => {
+    render(panel(1));
+    const button = screen.getByRole("button", { name: /Filters/ });
+    button.focus();
+    fireEvent.click(button);
+    const dialog = screen.getByRole("dialog", { name: "Filters" });
+    expect(dialog).toHaveFocus();
+    expect(dialog).toHaveAttribute("tabindex", "-1");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(button).toHaveFocus();
+
+    fireEvent.click(button);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(button).toHaveFocus();
+  });
+
+  it("does not pull focus back from where the person clicked next", () => {
+    render(
+      <>
+        {panel(1)}
+        <input aria-label="Elsewhere" />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
+    const other = screen.getByLabelText("Elsewhere");
+    other.focus();
+    fireEvent.mouseDown(other);
+    expect(other).toHaveFocus();
+  });
 });

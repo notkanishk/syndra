@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { Modal, ModalFooter } from "@/components/ui/Modal";
+import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 
 describe("Modal", () => {
   it("does not render when open=false", () => {
@@ -219,5 +219,65 @@ describe("sheets push, they do not stack", () => {
     );
     expect(complaint).not.toHaveBeenCalled();
     complaint.mockRestore();
+  });
+
+  it("is named by its header when the caller gives no labelledBy", () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <ModalHeader title="Remove access" />
+        <button type="button">Go</button>
+      </Modal>,
+    );
+    expect(screen.getByRole("dialog", { name: "Remove access" })).toBeTruthy();
+  });
+
+  it("keeps an explicit labelledBy over the header's", () => {
+    render(
+      <Modal open={true} onClose={() => {}} labelledBy="mine">
+        <ModalHeader title="Remove access" />
+        <h3 id="mine">Mine</h3>
+      </Modal>,
+    );
+    expect(screen.getByRole("dialog", { name: "Mine" })).toBeTruthy();
+  });
+
+  it("makes the app root inert while open, and gives it back, with focus, on close", () => {
+    const root = document.createElement("div");
+    root.id = "app-root";
+    const opener = document.createElement("button");
+    root.appendChild(opener);
+    document.body.appendChild(root);
+    opener.focus();
+
+    const { rerender } = render(
+      <Modal open={true} onClose={() => {}}>
+        <button type="button">Inside</button>
+      </Modal>,
+    );
+    expect(root).toHaveAttribute("inert");
+
+    rerender(
+      <Modal open={false} onClose={() => {}}>
+        <button type="button">Inside</button>
+      </Modal>,
+    );
+    expect(root).not.toHaveAttribute("inert");
+    expect(opener).toHaveFocus();
+    root.remove();
+  });
+
+  it("keeps Escape to itself: a page-level handler does not also see it", () => {
+    const page = vi.fn();
+    window.addEventListener("keydown", page);
+    const onClose = vi.fn();
+    render(
+      <Modal open={true} onClose={onClose}>
+        <button type="button">Inside</button>
+      </Modal>,
+    );
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(page).not.toHaveBeenCalled();
+    window.removeEventListener("keydown", page);
   });
 });

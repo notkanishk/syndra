@@ -1,8 +1,38 @@
+import { isForeignOrigin } from "@/lib/request-url";
 import { getSession } from "@/lib/session";
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://backend:8080";
 const API_KEY = process.env.SYNDRA_API_KEY || "";
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+const MAX_BODY_BYTES = 1024 * 1024;
+// Above the slowest call made through here (a propagation drain issues real Zitadel mutations),
+// so it only ever ends a hung upstream, never a working one.
+const UPSTREAM_TIMEOUT_MS = 120_000;
+// Per-member data, and a session-bound response: never kept by a shared cache.
+const NO_STORE = { "Cache-Control": "private, no-store" };
+
+function reply(body: unknown, status: number) {
+  return NextResponse.json(body, { status, headers: NO_STORE });
+}
+
+/**
+ * A segment that decodes to a separator or a dot-segment would let `..%2F` walk out of the
+ * subtree the allowlist checked: the list matches on the segments as given, the backend resolves
+ * the joined URL. A malformed escape is refused for the same reason.
+ */
+function hasUnsafeSegment(path: string[]) {
+  return path.some((segment) => {
+    try {
+      const s = decodeURIComponent(segment);
+      return s.includes("/") || s.includes("\\") || s === "." || s === "..";
+    } catch {
+      return true;
+    }
+  });
+}
 
 /**
  * `/users/{self}/…` subtrees a member may reach.
@@ -52,7 +82,7 @@ function isOwnShadowCredential(path: string[], userId: string) {
   return path.length === 3 && isSelfScoped(path, userId) && path[2] === "shadow-credential";
 }
 
-function isMemberAllowed(method: "GET" | "POST" | "PUT" | "DELETE", path: string[], userId: string) {
+function isMemberAllowed(method: Method, path: string[], userId: string) {
   if (method === "GET") {
     if (path.length === 1 && (path[0] === "catalog" || path[0] === "applications" || path[0] === "requests" || path[0] === "terms")) {
       return true;
@@ -69,9 +99,10 @@ function isMemberAllowed(method: "GET" | "POST" | "PUT" | "DELETE", path: string
     return path.length === 3 && path[0] === "requests" && path[2] === "withdraw";
   }
 
-  // PUT and DELETE are otherwise admin-only. The single exception is the shadow credential: it is
-  // the one object a member owns outright, and setting or clearing it changes nobody's access —
-  // routing it through an operator would be asking somebody else to type your password.
+  // PUT and DELETE are otherwise admin-only (PATCH wholly so). The single exception is the shadow
+  // credential: it is the one object a member owns outright, and setting or clearing it changes
+  // nobody's access — routing it through an operator would be asking somebody else to type your
+  // password.
   if (method === "PUT" || method === "DELETE") {
     return isOwnShadowCredential(path, userId);
   }
@@ -79,21 +110,36 @@ function isMemberAllowed(method: "GET" | "POST" | "PUT" | "DELETE", path: string
   return false;
 }
 
-async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DELETE", path: string[]) {
+async function proxy(request: NextRequest, method: Method, path: string[]) {
+  // The session cookie is SameSite=Lax, which a sibling subdomain still satisfies, so a write
+  // must come from this deployment's own origin. A request with no Origin (curl, server-side) is
+  // not a browser cross-site request and carries no ambient cookie to ride.
+  if (method !== "GET" && isForeignOrigin(request)) {
+    return reply({ error: "Forbidden" }, 403);
+  }
+
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return reply({ error: "Unauthorized" }, 401);
+  }
+
+  if (hasUnsafeSegment(path)) {
+    return reply({ error: "Bad request" }, 400);
   }
 
   if (session.role !== "admin" && !isMemberAllowed(method, path, session.id)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return reply({ error: "Forbidden" }, 403);
+  }
+
+  if (method !== "GET" && Number(request.headers.get("content-length")) > MAX_BODY_BYTES) {
+    return reply({ error: "Request too large" }, 413);
   }
 
   const target = new URL(`${BACKEND_URL}/api/v1/${path.join("/")}`);
   target.search = request.nextUrl.search;
 
   if (session.sessionType === "oidc" && !session.accessToken) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return reply({ error: "Unauthorized" }, 401);
   }
 
   const authToken = session.sessionType === "oidc" && session.accessToken
@@ -124,10 +170,11 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DEL
     cache: "no-store",
   };
 
-  if (method === "POST" || method === "PUT") {
-    // Bodyless PUT/POST is legal (e.g. PUT /bundles/{id}/welcome — an
-    // idempotent toggle with all state encoded in the path). Read the raw
-    // text and only parse if non-empty; treat empty/malformed as "no body".
+  if (method !== "GET") {
+    // Bodyless writes are legal (e.g. PUT /bundles/{id}/welcome — an
+    // idempotent toggle with all state encoded in the path), and a DELETE may
+    // carry one (the mapping delete's plan_id). Read the raw text and only
+    // parse if non-empty; treat empty/malformed as "no body".
     const raw = await request.text();
     let body: Record<string, unknown> | null = null;
     if (raw.length > 0) {
@@ -175,16 +222,37 @@ async function proxy(request: NextRequest, method: "GET" | "POST" | "PUT" | "DEL
     // payload === null → bodyless forward (no Content-Type, no body).
   }
 
+  let res: Response;
+  let text: string;
   try {
-    const res = await fetch(target, init);
-    const data = await res.json();
-    if (session.role !== "admin" && method === "GET" && path.length === 1 && path[0] === "requests" && Array.isArray(data)) {
-      return NextResponse.json(data.filter((entry) => entry?.requester_id === session.id), { status: res.status });
-    }
-    return NextResponse.json(data, { status: res.status });
+    res = await fetch(target, { ...init, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) });
+    text = await res.text();
   } catch {
-    return NextResponse.json({ error: "Backend unreachable" }, { status: 502 });
+    return reply({ error: "Backend unreachable" }, 502);
   }
+
+  // The backend's own status and Retry-After are the answer; the proxy only decides the shape.
+  const outHeaders: Record<string, string> = { ...NO_STORE };
+  const retryAfter = res.headers.get("retry-after");
+  if (retryAfter) outHeaders["Retry-After"] = retryAfter;
+
+  // 204 (and any empty body) has nothing to parse, and a 204 must not carry a body at all.
+  if (!text) return new Response(null, { status: res.status, headers: outHeaders });
+
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    // A gateway's HTML error page or a plain-text body: pass it on under its real status.
+    return new Response(text, {
+      status: res.status,
+      headers: { ...outHeaders, "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" },
+    });
+  }
+  if (session.role !== "admin" && method === "GET" && path.length === 1 && path[0] === "requests" && Array.isArray(data)) {
+    data = data.filter((entry) => entry?.requester_id === session.id);
+  }
+  return NextResponse.json(data, { status: res.status, headers: outHeaders });
 }
 
 export async function GET(
@@ -209,6 +277,14 @@ export async function PUT(
 ) {
   const { path } = await params;
   return proxy(request, "PUT", path);
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  return proxy(request, "PATCH", path);
 }
 
 export async function DELETE(

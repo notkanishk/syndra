@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -133,6 +134,13 @@ func OpenMutationLog(dir string, maxBytes int64, keep int) (*MutationLog, error)
 	l.file = f
 	l.sync = f.Sync
 
+	// Before anything is appended: a crash mid-line leaves bytes that the next
+	// Append would otherwise write straight after, merging two records into one
+	// line nothing can parse.
+	if err := truncateTornTail(f); err != nil {
+		f.Close()
+		return nil, err
+	}
 	info, err := f.Stat()
 	if err != nil {
 		f.Close()
@@ -176,6 +184,36 @@ func (l *MutationLog) recoverHead() error {
 		}
 	}
 	return nil
+}
+
+// truncateTornTail cuts the live file back to the end of its last complete
+// record: the last newline-terminated line that parses. Anything after it was
+// never fsynced as a whole, so nothing acknowledged is lost.
+func truncateTornTail(f *os.File) error {
+	data, err := os.ReadFile(f.Name())
+	if err != nil {
+		return fmt.Errorf("read mutation log: %w", err)
+	}
+	var keep, off int
+	for off < len(data) {
+		nl := bytes.IndexByte(data[off:], '\n')
+		if nl < 0 {
+			break
+		}
+		line := bytes.TrimSpace(data[off : off+nl])
+		off += nl + 1
+		var r Record
+		if len(line) == 0 || json.Unmarshal(line, &r) == nil {
+			keep = off
+		}
+	}
+	if keep == len(data) {
+		return nil
+	}
+	if err := f.Truncate(int64(keep)); err != nil {
+		return fmt.Errorf("truncate torn mutation log tail: %w", err)
+	}
+	return f.Sync()
 }
 
 // segmentsNewestFirst is the live file followed by the rotated ones, newest
@@ -254,6 +292,7 @@ func (l *MutationLog) Append(operation, subject, actor, callID, outcome string) 
 
 	n, err := l.file.Write(line)
 	if err != nil {
+		l.rollbackLocked()
 		return Record{}, fmt.Errorf("append mutation record: %w", err)
 	}
 	if err := l.sync(); err != nil {
@@ -264,12 +303,24 @@ func (l *MutationLog) Append(operation, subject, actor, callID, outcome string) 
 		// The head is deliberately NOT advanced. A record that may not have
 		// survived must not become the link the next one chains onto, or one
 		// failed fsync silently breaks every verification after it.
+		//
+		// And the bytes are cut back to the previous end. Left in place, the next
+		// record would reuse this one's seq on a second line, or follow a
+		// partial write onto the same line.
+		l.rollbackLocked()
 		return Record{}, fmt.Errorf("fsync mutation record: %w", err)
 	}
 
 	l.size += int64(n)
 	l.seq, l.head = r.Seq, r.Digest
 	return r, nil
+}
+
+// rollbackLocked drops whatever a failed append left past the last good end.
+// Best-effort: if this fails too the disk is failing, and truncateTornTail
+// repairs the tail on the next open.
+func (l *MutationLog) rollbackLocked() {
+	_ = l.file.Truncate(l.size)
 }
 
 // Head is what Syndra anchors: the current digest and the record count.

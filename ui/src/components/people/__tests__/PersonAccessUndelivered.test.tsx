@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
   zitadel: [] as Array<{ id: string; projectId: string; roleKeys: string[] }>,
   unreachable: false,
   loading: false,
+  grantsFailed: false,
   observedAt: undefined as string | undefined,
 }));
 
@@ -54,7 +55,7 @@ vi.mock("@/lib/queries/useUsers", async (importOriginal) => ({
     error: null,
     refetch: () => {},
   }),
-  useUserGrants: () => ({ data: [], isLoading: false, error: null }),
+  useUserGrants: () => ({ data: state.grantsFailed ? undefined : [], isLoading: false, error: state.grantsFailed ? new Error("down") : null }),
 }));
 
 vi.mock("@/lib/queries/useAudit", () => ({
@@ -93,6 +94,7 @@ beforeEach(() => {
   state.advanced = false;
   state.unreachable = false;
   state.loading = false;
+  state.grantsFailed = false;
   state.observedAt = undefined;
 });
 
@@ -135,6 +137,20 @@ describe("a role whose grant has not been sent", () => {
 
     expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).toBeNull();
     expect(screen.getByText("No end date")).toBeInTheDocument();
+  });
+
+  // The end date comes from the grants list, a second read. Without it the row
+  // cannot say there is none.
+  it("says the end date is unavailable when the grants were not read", () => {
+    state.grantsFailed = true;
+    state.zitadel = [{ id: "zg1", projectId: "p-audio", roleKeys: ["community"] }];
+    state.projects = project([
+      { kind: "bundle", bundle_id: "b1", bundle_name: "Ops Admin", description: "" },
+    ]);
+    renderPerson();
+
+    expect(screen.getByText("End date unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("No end date")).toBeNull();
   });
 
   // The half that would be wrong in the other direction.

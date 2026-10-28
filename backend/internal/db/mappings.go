@@ -241,12 +241,13 @@ func TargetsMappedToRole(ctx context.Context, projectID, roleKey string) ([]stri
 // Direct grants carry an expiry; a lapsed one is not held, and counting it
 // overstated the cohort in the other direction.
 //
-// Rules are followed ONE hop. A rule chain would need a recursive walk, and the
-// resolver does not follow one either — so a deeper count would report a
-// blast radius the product cannot actually produce.
+// Rules are followed as chains (A→B→C), to a fixpoint, exactly as the resolver
+// (collectUserRoles) does: a count that stopped at one hop would understate the
+// blast radius on a chained mapping. UNION, not UNION ALL, is what ends the walk
+// on a cycle, which insert refuses but a restored backup could still hold.
 func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, error) {
 	const q = `
-		WITH held AS (
+		WITH RECURSIVE held AS (
 			SELECT user_id, zitadel_project_id AS project_id, zitadel_role_key AS role_key
 			  FROM direct_role_grants
 			 WHERE expires_at IS NULL OR expires_at > NOW()
@@ -254,18 +255,17 @@ func MappingHolders(ctx context.Context, projectID, roleKey string) ([]string, e
 			SELECT ba.user_id, bvr.zitadel_project_id, bvr.zitadel_role_key
 			  FROM user_bundle_assignments ba
 			  JOIN bundle_version_effective_roles bvr ON bvr.version_id = ba.version_id
-		)
-		SELECT DISTINCT user_id FROM (
-			SELECT user_id FROM held WHERE project_id = $1 AND role_key = $2
+		), reach AS (
+			SELECT user_id, project_id, role_key FROM held
 			UNION
-			SELECT h.user_id
-			  FROM held h
+			SELECT re.user_id, r.target_zitadel_project_id, r.target_zitadel_role_key
+			  FROM reach re
 			  JOIN mapping_rules r
-			    ON r.source_zitadel_project_id = h.project_id
-			   AND r.source_zitadel_role_key = h.role_key
-			 WHERE r.target_zitadel_project_id = $1 AND r.target_zitadel_role_key = $2
-			   AND r.retired_at IS NULL
-		) holders
+			    ON r.source_zitadel_project_id = re.project_id
+			   AND r.source_zitadel_role_key = re.role_key
+			 WHERE r.retired_at IS NULL
+		)
+		SELECT user_id FROM reach WHERE project_id = $1 AND role_key = $2
 		ORDER BY user_id`
 	rows, err := querier(ctx).Query(ctx, q, projectID, roleKey)
 	if err != nil {
