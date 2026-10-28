@@ -56,7 +56,7 @@
   - The target roster refreshes every 30s.
   - A person's role names come from the catalog.
 - [x] 2.8 `PutSetting` writes an operation row and audit line before the call and settles it. A timeout is "may have applied".
-- [ ] 2.9 The operator view of unresolved add-on operations: waits on Design, `to-design/Q-10-unresolved-operations.md`.
+- [ ] 2.9 The operator view of unresolved add-on operations: waits on Design, `to-design/Q-09-contrast-and-unresolved-operations.md` part 2.
 
 ## 3. Batch 3: keyboard and contrast
 - [x] 3.1 Keyboard and small UX:
@@ -71,7 +71,7 @@
   - Zitadel grant dialogs keep their outcome.
   - Deleting an app's claim asks first, with one verb on the button and the confirm.
   - Audit export says it exports every match, and CSV cells can't run as formulas.
-- [ ] 3.2 Contrast: waits on A-09.
+- [ ] 3.2 Contrast: waits on A-09 part 1.
 
 ## 4. Batch 4: scale and less code
 - [x] 4.1 Scale:
