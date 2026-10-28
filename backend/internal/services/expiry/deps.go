@@ -26,7 +26,7 @@ var (
 	// outbox rows, in one transaction. The sweep decides WHICH grants and in
 	// what order; it does not decide what expiring one means.
 	svcExpireDirectGrant = services.ExpireDirectGrant
-	cacheInvalidateUser  = cache.InvalidateUser
+	cacheRefreshUser     = cache.RefreshUser
 
 	// Allowance expiry. Its own seams and its own pass: grant expiry removes
 	// access and this restores it, and a batch that aborted halfway through the

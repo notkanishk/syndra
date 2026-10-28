@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"syndra/internal/db"
 )
 
 // The read legs of the transport: `POST /plan` and `GET /subjects` (design §5).
@@ -646,7 +648,7 @@ type TargetSetting struct {
 // ReadSettings asks a target for its settings. ok is false when it couldn't
 // say, which is not "it has none".
 func ReadSettings(ctx context.Context, target string) (settings []TargetSetting, ok bool) {
-	resp, ok := settingsCall(ctx, target, http.MethodGet, "/settings", nil)
+	resp, ok := settingsCall(ctx, target, http.MethodGet, "/settings", nil, nil)
 	if !ok || resp.Outcome != OutcomeSucceeded {
 		return nil, false
 	}
@@ -661,20 +663,61 @@ func ReadSettings(ctx context.Context, target string) (settings []TargetSetting,
 
 // PutSetting asks a target to change one setting. The add-on is the judge of
 // what the value may be; its status and body come back for the handler to
-// relay. ok is false when nothing answered.
+// relay. ok is false when no answer came back, and then Outcome says whether
+// the request never left (unreached) or may have been applied (indeterminate).
+//
+// A write, so it leaves the same trace as every other add-on mutation: an
+// addon_operations row and its audit line committed before the call, claimed as
+// the request goes out, and settled with how it ended. The row's id is the call
+// id. The add-on's setting endpoint takes no call id yet, so it is not sent;
+// writing the same value twice is harmless, which is why this needs no
+// deduplication to be safe.
 func PutSetting(ctx context.Context, target, name, value, actor string) (CallResponse, bool) {
+	const operation = "setting.put"
+	id, err := dbBeginAddonOperation(ctx, db.AddonOperationParams{
+		Target: target, Operation: operation, ActorID: actor, SubjectID: name,
+	})
+	if err != nil {
+		// No record, no call: the record is the precondition, not a log of it.
+		return CallResponse{Outcome: OutcomeUnreached, Err: err}, false
+	}
 	body, _ := json.Marshal(map[string]string{"value": value, "actor": actor})
-	return settingsCall(ctx, target, http.MethodPut, "/settings/"+url.PathEscape(name), body)
+	claim := func(ctx context.Context) error {
+		return OperationRecord(id, target, operation, name).consume(ctx)
+	}
+	resp, ok := settingsCall(ctx, target, http.MethodPut, "/settings/"+url.PathEscape(name), body, claim)
+	status, known := map[Outcome]string{
+		OutcomeSucceeded: db.AddonOpSucceeded, OutcomeRejected: db.AddonOpRejected,
+		OutcomeUnreached: db.AddonOpUnreached, OutcomeIndeterminate: db.AddonOpIndeterminate,
+	}[resp.Outcome]
+	if !known {
+		status = db.AddonOpIndeterminate
+	}
+	if err := dbSettleAddonOperation(ctx, id, status); err != nil {
+		// The row stays `dispatching`, which is the honest state for "sent, and
+		// we cannot say what came back"; the unresolved surface shows it.
+		log.Printf("[ADDON] %s/%s call_id=%s dispatched but its outcome was not recorded: %v", target, operation, id, err)
+	}
+	return resp, ok
 }
 
-func settingsCall(ctx context.Context, target, method, path string, body []byte) (CallResponse, bool) {
+// settingsCall is one authenticated call to a target's settings or homes
+// endpoints. claim, when set, is taken immediately before the request leaves and
+// after every other refusal, so a call the breaker or a missing credential
+// stopped is not recorded as sent.
+func settingsCall(ctx context.Context, target, method, path string, body []byte, claim func(context.Context) error) (CallResponse, bool) {
 	a, err := Get(target)
 	if err != nil || !a.br.allow(timeNow()) {
-		return CallResponse{}, false
+		return CallResponse{Outcome: OutcomeUnreached}, false
 	}
 	cred, err := credentialFor(a.Registration)
 	if err != nil {
-		return CallResponse{}, false
+		return CallResponse{Outcome: OutcomeUnreached}, false
+	}
+	if claim != nil {
+		if err := claim(ctx); err != nil {
+			return CallResponse{Outcome: OutcomeUnreached, Err: err}, false
+		}
 	}
 	resp := doAuthenticated(ctx, cred, method, a.Registration.BaseURL+path, body, callTimeout)
 	a.br.record(timeNow(), resp)
@@ -699,7 +742,7 @@ type Homes struct {
 
 // ReadHomes asks a target for every home folder and its use.
 func ReadHomes(ctx context.Context, target string) Homes {
-	resp, ok := settingsCall(ctx, target, http.MethodGet, "/homes", nil)
+	resp, ok := settingsCall(ctx, target, http.MethodGet, "/homes", nil, nil)
 	if !ok || resp.Outcome != OutcomeSucceeded {
 		return Homes{}
 	}
@@ -868,6 +911,8 @@ type ActivityReport struct {
 	// an empty result reads as "no activity", which is a different and far more
 	// reassuring statement than "nobody was watching".
 	UncoveredShares []string `json:"uncovered_shares,omitempty"`
+	// Truncated says older events exist than the newest ones returned.
+	Truncated bool `json:"truncated,omitempty"`
 
 	Outcome Outcome `json:"-"`
 	// Status is the add-on's raw HTTP status, carried so a caller can tell a

@@ -6,7 +6,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { use, useMemo, useState } from "react";
 
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
-import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { EmptyState, ErrorState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Button } from "@/components/ui/Button";
@@ -73,6 +73,18 @@ export default function ProjectDetailPage({
     current: project?.observation ? project.observation.current : undefined,
     truncated: project?.observation?.truncated,
   };
+
+  // A failed list says nothing about whether the project exists: "isn't listed"
+  // is for a list that answered without it.
+  if (projects.error && !project) {
+    return (
+      <ErrorState
+        title="Couldn't load this project."
+        error={projects.error}
+        onRetry={() => projects.refetch()}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-[18px]">

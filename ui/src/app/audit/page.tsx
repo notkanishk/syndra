@@ -19,6 +19,7 @@ import { TraceCell } from "@/components/audit/TraceCell";
 import { describeAction, machineName, targetKind, shortId } from "@/lib/audit-vocabulary";
 import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { toCsv } from "@/lib/csv";
 import { useDebounce } from "@/lib/useDebounce";
 import { formatShortDate, formatWhen } from "@/lib/format";
 
@@ -129,7 +130,7 @@ export default function AuditPage() {
               className="w-[220px]"
             />
             <Button onClick={() => downloadCsv(rows, resolver)} disabled={rows.length === 0}>
-              Export what is shown (CSV)
+              Export every matching entry (CSV)
             </Button>
           </>
         }
@@ -226,7 +227,7 @@ export default function AuditPage() {
 }
 
 /**
- * Export what is on screen, with the names resolved — a CSV full of UUIDs is a
+ * Export every entry the filter matches (not just the page showing), with the names resolved — a CSV full of UUIDs is a
  * file somebody has to come back and ask about.
  */
 function downloadCsv(
@@ -251,9 +252,7 @@ function downloadCsv(
       entry.resource_id,
     ];
   });
-  const csv = [header, ...lines]
-    .map((cells) => cells.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
-    .join("\n");
+  const csv = toCsv([header, ...lines]);
 
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");

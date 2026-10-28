@@ -51,18 +51,31 @@ type ReconciliationDiff struct {
 	Truncated     bool                  `json:"truncated"`
 }
 
+// storeIsCurrent says the sweep has already recorded an observation recent
+// enough to diff against, and the caller did not ask for a fresh one. Any
+// doubt (never observed, unreadable, cut short or failed) answers false: a read
+// is the safe side, and a partial store would turn into manufactured absences.
+func storeIsCurrent(r *http.Request) bool {
+	if r.URL.Query().Get("fresh") == "1" {
+		return false
+	}
+	last, err := dbLatestOrgObservation(r.Context())
+	return err == nil && last.Complete && last.Error == "" && time.Since(last.ObservedAt) < observationMaxAge
+}
+
 // handleGetReconciliationDiff is read-only: it surfaces the symmetric
 // difference between Syndra-direct grants and Zitadel-side user grants so
 // operators can spot drift before it widens. No remediation is performed —
 // the surface is visibility-only per the obsidian-clarity-redesign spec.
 //
-// one-truth-many-checks, "The last two readers": the operator pressed a
-// button asking for now, so a FRESH observation is right — this calls
-// observe.Org, which does the paginated Zitadel read and records it, exactly
-// as the periodic sweep and discovery.go's grant-listing routes do. It then
-// diffs whatever the store holds afterwards, so the read this button pays for
-// is shared rather than discarded: the drift sweep's next pass, and anybody
-// else who reads the store meanwhile, see it too.
+// one-truth-many-checks, "The last two readers": when the store is older than
+// the sweep keeps it, or the operator pressed the button asking for now
+// (`?fresh=1`), a FRESH observation is right — this calls observe.Org, which
+// does the paginated Zitadel read and records it, exactly as the periodic sweep
+// and discovery.go's grant-listing routes do. It then diffs whatever the store
+// holds afterwards, so the read this pays for is shared rather than discarded:
+// the drift sweep's next pass, and anybody else who reads the store meanwhile,
+// see it too.
 //
 // Drift categories:
 //   - only_in_syndra: (user, project) pairs in the Syndra direct-grants table
@@ -82,32 +95,37 @@ func handleGetReconciliationDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Force a fresh, recorded read. Its own result answers exactly one
-	// question — was there anything to read at all — because the diff below
-	// must be footed on the observation that produced the rows it compares,
-	// and between these two calls the scheduled sweep may record another.
-	justRead, err := observeOrg(ctx)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	// Nothing came back at all, and the read that just ran is the reason —
-	// not a real, empty org. Rendering this as an ordinary diff would put
-	// every Syndra-side grant into only_in_syndra, which is the false
-	// "somebody lost their access" this whole change exists to prevent.
-	// Nothing was observed AT ALL this request — there is no client to ask.
-	// `observe.Org` answers a zero Observation in local-policy-only mode, and
-	// the store may still hold rows from when there was one. Diffing against
-	// those would present a remembered world as a comparison made just now,
-	// and stamp it `GeneratedAt` the Unix epoch.
-	//
-	// Checked before the emptiness test below, because it is a different fact
-	// with a different answer: there is nothing to compare against, rather
-	// than something that would not answer.
-	if justRead.ObservedAt.IsZero() {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_NOT_CONFIGURED",
-			"Syndra has no connection to Zitadel, so there is nothing to compare against.")
-		return
+	// A fresh, recorded read — unless the sweep has recorded one lately. This
+	// route refetches on every window focus, and a full org read each time buys
+	// nothing the store does not already hold; `?fresh=1` is the operator asking
+	// for now. The read's own result answers exactly one question — was there
+	// anything to read at all — because the diff below must be footed on the
+	// observation that produced the rows it compares, and between these two
+	// calls the scheduled sweep may record another.
+	if !storeIsCurrent(r) {
+		justRead, err := observeOrg(ctx)
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+			return
+		}
+		// Nothing came back at all, and the read that just ran is the reason —
+		// not a real, empty org. Rendering this as an ordinary diff would put
+		// every Syndra-side grant into only_in_syndra, which is the false
+		// "somebody lost their access" this whole change exists to prevent.
+		// Nothing was observed AT ALL this request — there is no client to ask.
+		// `observe.Org` answers a zero Observation in local-policy-only mode, and
+		// the store may still hold rows from when there was one. Diffing against
+		// those would present a remembered world as a comparison made just now,
+		// and stamp it `GeneratedAt` the Unix epoch.
+		//
+		// Checked before the emptiness test below, because it is a different fact
+		// with a different answer: there is nothing to compare against, rather
+		// than something that would not answer.
+		if justRead.ObservedAt.IsZero() {
+			jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_NOT_CONFIGURED",
+				"Syndra has no connection to Zitadel, so there is nothing to compare against.")
+			return
+		}
 	}
 
 	// The basis and the rows, from one snapshot: whichever observation is

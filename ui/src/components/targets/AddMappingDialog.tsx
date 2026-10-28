@@ -6,7 +6,6 @@ import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Relative } from "@/components/ui/Time";
 import { ApiError } from "@/lib/api-client";
@@ -37,6 +36,10 @@ import {
   type MappableValues,
   type ReachPlace,
 } from "@/lib/queries/useTargets";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
 /**
  * Adding a mapping (design M1, M5).

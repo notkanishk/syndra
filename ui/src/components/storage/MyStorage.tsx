@@ -15,7 +15,8 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Relative } from "@/components/ui/Time";
 import { Withheld } from "@/components/ui/Withheld";
-import { ConnectionGuide, deviceFrom, type Device, type GuideFolder } from "@/components/storage/ConnectionGuide";
+import type { GuideFolder } from "@/components/storage/ConnectionGuide";
+import { deviceFrom, type Device } from "@/components/storage/device";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { formatBytes, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
@@ -28,6 +29,10 @@ import {
   type StoragePlace,
 } from "@/lib/queries/useMyStorage";
 import { oneShot } from "@/lib/secret";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const ConnectionGuide = dynamic(() => import("@/components/storage/ConnectionGuide").then((m) => m.ConnectionGuide));
 
 /**
  * A member's own storage page (route-storage; A-01, A-02).
@@ -82,6 +87,7 @@ type State =
   | "reenrol"
   | "restored"
   | "ready"
+  | "unread"
   | "opens-nothing"
   | "nohost";
 
@@ -97,6 +103,9 @@ function stateOf(view: MyTargetView): State {
   if (view.credential.needs_re_enrolment) return "reenrol";
   if (storage?.needs_password || (!storage && !view.credential.set)) return "needs-password";
   if (storage?.places_readable && (storage.places ?? []).length === 0) return "opens-nothing";
+  // The target's own answer about this account is missing: a read that failed,
+  // not an account that is fine. Offline is its own sentence ("ready", below).
+  if (!storage && view.health !== "offline") return "unread";
   if (!view.connection) return "nohost";
   return "ready";
 }
@@ -297,7 +306,13 @@ function copyFor(state: State, label: string, view: MyTargetView): [string, stri
     case "nohost":
       return [
         "Your account is ready",
-        "Sign in with your account name and storage password. The address to connect to isn't set up in Syndra yet, so ask makerspace staff for it.",
+        "Sign in with your account name and storage password. Syndra doesn't have the address to connect to yet, so ask makerspace staff for it.",
+        "",
+      ];
+    case "unread":
+      return [
+        "Couldn't check your account just now",
+        `${label} didn't answer when this page asked, so it can't say whether your account works. Your access hasn't changed; this page reads it again on your next visit.`,
         "",
       ];
     case "ready":
@@ -364,7 +379,7 @@ function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
         <>Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
       ) : held ? (
         <>Online · your account is on hold</>
-      ) : state === "waiting" || PASSWORD_STEP.has(state) ? (
+      ) : state === "waiting" || state === "unread" || PASSWORD_STEP.has(state) ? (
         <>Online{checked}</>
       ) : (
         <>Online and accepting sign-ins{checked}</>
@@ -484,7 +499,7 @@ function Folders({
         )}
       </div>
 
-      {storage && !storage.places_readable ? (
+      {state === "unread" || (storage && !storage.places_readable) ? (
         <p className="text-[14px] text-muted">
           {label} couldn&apos;t say which folders are open to you just now. Your access hasn&apos;t changed; this
           page reads it again on your next visit.

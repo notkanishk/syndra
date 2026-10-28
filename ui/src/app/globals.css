@@ -1424,6 +1424,18 @@ html.theme-fading *::after {
   }
 }
 
+/* link-hover for a text-styled <button>: the same colour tint, no underline. A
+   button is an action, not a place, and an underline would call it a link. */
+@utility link-tint {
+  transition-property: color, outline-color;
+  transition-duration: var(--duration-tint), var(--ring-fade);
+  transition-timing-function: var(--ease-tint);
+
+  &:hover {
+    color: var(--accent-text);
+  }
+}
+
 /* ── Skeletons ────────────────────────────────────────────────────────────
  * Row-shaped, at the real row height, so nothing jumps when data lands.
  * ───────────────────────────────────────────────────────────────────────── */

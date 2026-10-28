@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { buildRedirectUrl, isSecureRequest } from "@/lib/request-url";
+import { buildRedirectUrl, isForeignOrigin, isSecureRequest } from "@/lib/request-url";
 import { safeReturnPath } from "@/lib/return-path";
 import { SESSION_COOKIE_NAME, createSessionValue } from "@/lib/session";
 
@@ -10,6 +10,10 @@ function redirectTo(request: Request, path: string) {
 }
 
 export async function POST(request: Request) {
+  // A cross-site form must not be able to sign the visitor in as somebody else.
+  if (isForeignOrigin(request)) {
+    return new NextResponse(null, { status: 403 });
+  }
   const formData = await request.formData();
   const userId = formData.get("userId");
   // Where they were before the session lapsed, validated: a `next` is

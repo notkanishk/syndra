@@ -45,7 +45,7 @@ func stubDrainDeps(t *testing.T) {
 		swap(&markApplied, func(context.Context, string) error { return nil }),
 		// The claim envelope the drain clears, the confirmation it records, and
 		// the read-back it records it from. Unstubbed each reaches a nil client.
-		swap(&invalidateClaims, func(context.Context, string) error { return nil }),
+		swap(&refreshClaims, func(context.Context, string, ...string) error { return nil }),
 		swap(&markConfirmed, func(context.Context, string) error { return nil }),
 		swap(&observeUser, func(context.Context, string) (observe.Result, error) {
 			// A WHOLE answer by default, so a test that is not about truncation
@@ -1133,7 +1133,7 @@ func TestAnAddThatCannotBeRememberedStillSettles(t *testing.T) {
 	}
 }
 
-// A grant change clears the token claims compiled from it.
+// A grant change recompiles the token claims built from it.
 //
 // Actions v2 serves tokens from a Redis envelope with a 24-hour TTL, and the
 // only things that cleared it were the three webhook paths and the expiry
@@ -1151,13 +1151,14 @@ func TestDrain_AppliedChangeClearsTheCachedClaims(t *testing.T) {
 	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
 	var cleared string
-	invalidateClaims = func(_ context.Context, userID string) error { cleared = userID; return nil }
+	var projects []string
+	refreshClaims = func(_ context.Context, userID string, p ...string) error { cleared, projects = userID, p; return nil }
 
 	if _, err := Drain(context.Background()); err != nil {
 		t.Fatalf("Drain: %v", err)
 	}
-	if cleared != "u" {
-		t.Fatalf("the applied change left the compiled claims in place; cleared=%q", cleared)
+	if cleared != "u" || len(projects) != 1 || projects[0] != "p" {
+		t.Fatalf("the applied change left the compiled claims stale; refreshed=%q projects=%v", cleared, projects)
 	}
 }
 
@@ -1170,7 +1171,7 @@ func TestDrain_AFailedCacheClearStillAppliesTheRow(t *testing.T) {
 		return "g1", map[string]bool{}, nil
 	}
 	zitadelAddUserGrant = func(context.Context, string, string, []string) error { return nil }
-	invalidateClaims = func(context.Context, string) error { return errors.New("redis is down") }
+	refreshClaims = func(context.Context, string, ...string) error { return errors.New("redis is down") }
 	var appliedID string
 	markApplied = func(_ context.Context, id string) error { appliedID = id; return nil }
 

@@ -22,6 +22,10 @@ const row = {
 // One stable array per read, as the query cache gives: a new one every render is a new read.
 const state = vi.hoisted(() => ({ decide: vi.fn(), requests: [] as unknown[] }));
 
+vi.mock("@/lib/queries/useServiceAccounts", () => ({
+  useServiceAccounts: () => ({ data: [], isLoading: false, error: null, refetch: vi.fn() }),
+  serviceAccountHref: (id: string) => `/system/service-accounts/${id}`,
+}));
 vi.mock("@/lib/queries/useGovernance", () => ({
   useGovernanceSummary: () => ({
     data: {

@@ -44,6 +44,8 @@ var (
 	manifestRetryCooldown = 30 * time.Second
 
 	dbClaimAddonOperation        = db.ClaimAddonOperation
+	dbBeginAddonOperation        = db.BeginAddonOperation
+	dbSettleAddonOperation       = db.SettleAddonOperation
 	dbUpsertTarget               = db.UpsertTarget
 	dbDisableUnconfiguredTargets = db.DisableUnconfiguredTargets
 )

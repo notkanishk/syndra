@@ -46,7 +46,6 @@ POSTGRES_PASSWORD=${PG_PASSWORD}
 REDIS_URL=redis:6379
 
 # --- Backend ---
-PORT=8080
 SYNDRA_API_KEY=$(secret)
 MIGRATION_PATH=file:///app/db/migrations
 CORS_ORIGIN=${EXTERNAL_URL}
@@ -58,7 +57,6 @@ SYNDRA_SEED_DEMO=false
 
 # --- Frontend ---
 BACKEND_URL=http://backend:8080
-NEXT_PUBLIC_API_URL=${EXTERNAL_URL}
 # Distinct from SYNDRA_API_KEY so rotating the API key does not invalidate
 # every live session cookie.
 SESSION_SECRET=$(secret)

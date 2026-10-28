@@ -118,7 +118,7 @@ function useBulkDriftMutation<B>(path: string, apply: boolean) {
     onSuccess: () => {
       if (!apply) return;
       qc.invalidateQueries({ queryKey: ["drift"] });
-      qc.invalidateQueries({ queryKey: governanceQueryKeys.summary });
+      qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
       // Drift status drives the People list's unexplained_count, so a bulk
       // triage pass leaves that count wrong until this lands too.
       qc.invalidateQueries({ queryKey: ["users"] });
@@ -166,7 +166,7 @@ function useDriftMutation<B>(path: (id: string) => string, extraKeys: readonly (
       request(path(id), { method: "POST", body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["drift"] });
-      qc.invalidateQueries({ queryKey: governanceQueryKeys.summary });
+      qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
       // Drift status drives the People list's unexplained_count, so any triage
       // action here leaves that count wrong until this lands too.
       qc.invalidateQueries({ queryKey: ["users"] });
@@ -193,7 +193,7 @@ export function useReconcileNow() {
     mutationFn: async () => request("/governance/drift/reconcile", { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["drift"] });
-      qc.invalidateQueries({ queryKey: governanceQueryKeys.summary });
+      qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
     },
   });
 }

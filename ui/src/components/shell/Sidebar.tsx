@@ -28,7 +28,10 @@ import { SyndraMark } from "./SyndraMark";
 export default function Sidebar() {
   const pathname = usePathname();
   const { audience, isOperator } = useUiView();
-  const { data: indicators, isPlaceholderData } = useIndicators(isOperator);
+  const { data, isPlaceholderData } = useIndicators(isOperator);
+  // The placeholder zeros are not a reading: until a real one lands, and for
+  // good if the read keeps failing, no badge says "nothing waiting".
+  const indicators = isPlaceholderData ? undefined : data;
 
   // The roster is deployment configuration, so a target row appears because the
   // deployment registered one — never because this operator can see something.
@@ -133,7 +136,7 @@ function NavRow({
   nested: boolean;
 }) {
   const active = leafMatches(item, pathname);
-  const count = item.indicator ? Number(indicators?.[item.indicator] ?? 0) : undefined;
+  const count = item.indicator && indicators ? Number(indicators[item.indicator] ?? 0) : undefined;
   // The rail is polled, so this is where a value most often changes while the
   // operator is reading something else. The ROW washes; the count itself only
   // lifts into place. Nothing counts up or ticks.

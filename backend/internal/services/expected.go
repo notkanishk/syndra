@@ -102,16 +102,28 @@ func ObservedToUserGrants(observed []db.ObservedGrant) []zitadel.UserGrant {
 }
 
 // ExpectedViaRule reports whether (userID, projectID, roleKey) is the target of
-// an active mapping rule the user qualifies for (holds the source). Single-hop:
-// this covers the mandated "rule-derived grant is expected_via_rule" scenario.
-// ponytail: single-hop only — a multi-hop rule chain (A→B→C) where the user
-// holds only A would not classify C. Rules in this codebase are single-hop
-// today; widen to a fixpoint (as collectUserRoles does) if chains appear.
+// an active mapping rule chain the user qualifies for: they hold the source of
+// some rule on a path that ends at the role. Chains are legal (cycles are
+// refused on insert) and the resolver, collectUserRoles, follows them to a
+// fixpoint, so this walks them too; a one-hop check showed a chained grant as
+// drift.
 func ExpectedViaRule(holder map[HolderKey]bool, rules []models.MappingRule, userID, projectID, roleKey string) bool {
-	for _, r := range rules {
-		if r.TargetProject == projectID && r.TargetRole == roleKey &&
-			holder[HolderKey{userID, r.SourceProject, r.SourceRole}] {
-			return true
+	type role struct{ project, key string }
+	seen := map[role]bool{{projectID, roleKey}: true}
+	for queue := []role{{projectID, roleKey}}; len(queue) > 0; queue = queue[1:] {
+		t := queue[0]
+		for _, r := range rules {
+			if r.TargetProject != t.project || r.TargetRole != t.key {
+				continue
+			}
+			if holder[HolderKey{userID, r.SourceProject, r.SourceRole}] {
+				return true
+			}
+			// seen also stops a cycle that slipped past the insert check.
+			if s := (role{r.SourceProject, r.SourceRole}); !seen[s] {
+				seen[s] = true
+				queue = append(queue, s)
+			}
 		}
 	}
 	return false

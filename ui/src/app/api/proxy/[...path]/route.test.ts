@@ -8,7 +8,8 @@ import { makeProxyFetch } from "@/test-utils/proxyFetch";
 
 vi.mock("@/lib/session", () => ({ getSession: vi.fn() }));
 import { getSession } from "@/lib/session";
-import { GET, POST, PUT, DELETE } from "@/app/api/proxy/[...path]/route";
+import * as proxyRoute from "@/app/api/proxy/[...path]/route";
+import { GET, POST, PUT, DELETE, PATCH } from "@/app/api/proxy/[...path]/route";
 
 const MEMBER = { id: "member-1", role: "user", sessionType: "demo" as const };
 const ADMIN = { id: "admin-1", role: "admin", sessionType: "demo" as const };
@@ -32,13 +33,14 @@ function call(
   handler: Handler,
   method: string,
   path: string[],
-  opts?: { body?: unknown },
+  opts?: { body?: unknown; headers?: Record<string, string> },
 ): Promise<Response> {
   const url = `http://localhost/api/proxy/${path.join("/")}`;
   const init: RequestInit = { method };
+  if (opts?.headers) init.headers = opts.headers;
   if (opts?.body !== undefined) {
     init.body = JSON.stringify(opts.body);
-    init.headers = { "content-type": "application/json" };
+    init.headers = { "content-type": "application/json", ...opts.headers };
   }
   const req = new NextRequest(url, init);
   return handler(req, { params: Promise.resolve({ path }) });
@@ -191,6 +193,127 @@ describe("proxy route admin/member boundary", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("down")) as unknown as typeof fetch;
     const res = await call(GET, "GET", ["catalog"]);
     expect(res.status).toBe(502);
+  });
+});
+
+/** Every upstream answer shape the proxy has to carry through under its real status. */
+function upstream(body: BodyInit | null, init?: ResponseInit) {
+  const fn = vi.fn(async () => new Response(body, init));
+  global.fetch = fn as unknown as typeof fetch;
+  return fn;
+}
+
+describe("proxy route contract", () => {
+  beforeEach(() => (getSession as Mock).mockResolvedValue(ADMIN));
+
+  it("forwards PATCH with its body", async () => {
+    const fn = upstream(JSON.stringify({ ok: true }));
+    const res = await call(PATCH, "PATCH", ["targets", "mappings", "m1"], { body: { role: "x" } });
+    expect(res.status).toBe(200);
+    const [, init] = fn.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(init.method).toBe("PATCH");
+    expect(init.body).toBe(JSON.stringify({ role: "x" }));
+  });
+
+  // The mapping delete carries its plan_id in the body; dropping it made the backend refuse it.
+  it("forwards a DELETE body", async () => {
+    const fn = upstream(JSON.stringify({ ok: true }));
+    await call(DELETE, "DELETE", ["targets", "mappings", "m1"], { body: { plan_id: "p1" } });
+    const [, init] = fn.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(init.body).toBe(JSON.stringify({ plan_id: "p1" }));
+  });
+
+  it("passes a 204 through as a 204 with no body", async () => {
+    upstream(null, { status: 204 });
+    const res = await call(DELETE, "DELETE", ["bundles", "b1"]);
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
+  });
+
+  it("passes a non-JSON error through under its real status, not as 'unreachable'", async () => {
+    upstream("<html>bad gateway</html>", { status: 503, headers: { "Retry-After": "7" } });
+    const res = await call(GET, "GET", ["catalog"]);
+    expect(res.status).toBe(503);
+    expect(await res.text()).toBe("<html>bad gateway</html>");
+    expect(res.headers.get("content-type")).toMatch(/^text\/plain/);
+    expect(res.headers.get("retry-after")).toBe("7");
+  });
+
+  it("marks answers private, no-store and bounds the upstream call", async () => {
+    const fn = upstream(JSON.stringify([]));
+    const res = await call(GET, "GET", ["catalog"]);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    const [, init] = fn.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("refuses a body over 1 MB before reading it", async () => {
+    const fn = upstream("{}");
+    const res = await call(POST, "POST", ["bundles"], {
+      body: {},
+      headers: { "content-length": String(1024 * 1024 + 1) },
+    });
+    expect(res.status).toBe(413);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  // The member allowlist matches on the segments as given; `..%2F` decodes to a step out of them.
+  it("refuses a segment that decodes to a separator or dot-segment, even for a member", async () => {
+    (getSession as Mock).mockResolvedValue(MEMBER);
+    const fn = upstream("{}");
+    for (const bad of ["..%2Fbundles", "a%5Cb", "%2e%2e", "..", "%E0%A4%A"]) {
+      const res = await call(GET, "GET", ["users", MEMBER.id, "grants", bad]);
+      expect(res.status, bad).toBe(400);
+    }
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("refuses a write from another origin, and allows one from this deployment's own", async () => {
+    const fn = upstream(JSON.stringify({ ok: true }));
+    const foreign = await call(POST, "POST", ["bundles"], {
+      body: {},
+      headers: { origin: "https://evil.example" },
+    });
+    expect(foreign.status).toBe(403);
+    expect(fn).not.toHaveBeenCalled();
+
+    const same = await call(POST, "POST", ["bundles"], {
+      body: {},
+      headers: { origin: "http://localhost" },
+    });
+    expect(same.status).toBe(200);
+    // Behind the reverse proxy the deployment's origin is the forwarded one.
+    const forwarded = await call(POST, "POST", ["bundles"], {
+      body: {},
+      headers: {
+        origin: "https://syndra.example.org",
+        "x-forwarded-host": "syndra.example.org",
+        "x-forwarded-proto": "https",
+      },
+    });
+    expect(forwarded.status).toBe(200);
+  });
+});
+
+// The proxy is a hand-listed set of exports; a method the router registers that it does not
+// export is a route the UI can never reach (PATCH shipped that way).
+describe("the proxy exports every method the backend router registers", () => {
+  const router = readFileSync(
+    resolve(__dirname, "../../../../../../backend/internal/handlers/router.go"),
+    "utf8",
+  );
+  const methods = Array.from(
+    new Set(
+      Array.from(router.matchAll(/"(GET|POST|PUT|PATCH|DELETE) \/api\/v1\//g), (m) => m[1]),
+    ),
+  );
+
+  it("finds the methods it is supposed to be checking", () => {
+    expect(methods.length).toBeGreaterThan(0);
+  });
+
+  it.each(methods)("exports %s", (method) => {
+    expect(typeof (proxyRoute as Record<string, unknown>)[method]).toBe("function");
   });
 });
 

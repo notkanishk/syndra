@@ -208,6 +208,8 @@ func TestTheMappingCohortCountsEverySourceOfTheRole(t *testing.T) {
 		// The rule arm, which the comment above the query promised and the
 		// query did not have: a role a rule derives is held just as much.
 		"mapping_rules",
+		// Chains, not one hop: the resolver follows them.
+		"WITH RECURSIVE",
 		// And a lapsed grant is not held, so counting it overstates the cohort
 		// in the other direction.
 		"expires_at IS NULL OR expires_at > NOW()"} {

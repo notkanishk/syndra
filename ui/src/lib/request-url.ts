@@ -46,15 +46,27 @@ export function resolveRequestOrigin(request: RequestLike): string {
 }
 
 /**
+ * A browser write that began on some other origin. `Origin` is sent on every cross-origin
+ * request and on same-origin POSTs; its absence means a non-browser caller, which carries no
+ * ambient session cookie to abuse.
+ */
+export function isForeignOrigin(request: RequestLike): boolean {
+  const origin = request.headers.get("origin");
+  return origin !== null && origin !== resolveRequestOrigin(request);
+}
+
+/**
  * Absolute URL for `path` on the browser-facing origin.
  *
- * `search` is dropped unless supplied — a redirect target inherits nothing from
- * the request that triggered it, so an `?error=` or `?code=` cannot leak into
- * the next page.
+ * `path` is the landing as given, pathname, query and hash (what
+ * `safeReturnPath` returns): a return to `/users?q=a` must come back to
+ * `/users?q=a`. What it never inherits is the request that triggered the
+ * redirect, so an `?error=` or `?code=` cannot leak into the next page. An
+ * explicit `search` replaces the landing's own.
  */
 export function buildRedirectUrl(request: RequestLike, path: string, search = ""): URL {
   const url = new URL(path, resolveRequestOrigin(request));
-  url.search = search;
+  if (search) url.search = search;
   return url;
 }
 

@@ -1,4 +1,4 @@
-import { QueryClient, defaultShouldDehydrateQuery, isServer } from "@tanstack/react-query";
+import { QueryClient, isServer } from "@tanstack/react-query";
 import { cache } from "react";
 
 /**
@@ -11,9 +11,6 @@ import { cache } from "react";
  * - retry: 1 — one retry on transient network blips, then surface the error.
  * - refetchOnWindowFocus: false — admin tools are workbench surfaces; tab
  *   focus shouldn't trigger background work.
- *
- * When server-rendering, shouldDehydrateQuery is broadened to include pending
- * queries so streamed data carries through to the client without a re-fetch.
  */
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -23,10 +20,6 @@ export function makeQueryClient(): QueryClient {
         gcTime: 5 * 60_000,
         retry: 1,
         refetchOnWindowFocus: false,
-      },
-      dehydrate: {
-        shouldDehydrateQuery: (query) =>
-          defaultShouldDehydrateQuery(query) || query.state.status === "pending",
       },
     },
   });

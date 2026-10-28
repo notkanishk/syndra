@@ -40,7 +40,6 @@ services:
       # only when pointing at a database outside this compose file.
       - DB_DSN=${DB_DSN:-postgres://syndra:${POSTGRES_PASSWORD}@postgres:5432/syndradb?sslmode=disable}
       - REDIS_URL=${REDIS_URL:-redis:6379}
-      - PORT=${PORT:-8080}
       - SYNDRA_API_KEY=${SYNDRA_API_KEY:-dev_auth_token_secret}
       # Deliberately has no compose-level default. Unset, the backend seeds
       # only when no live Zitadel client came up — demo data locally, nothing
@@ -164,7 +163,6 @@ services:
     ports:
       - "${UI_HOST_PORT:-3000}:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8080}
       - SYNDRA_API_KEY=${SYNDRA_API_KEY:-dev_auth_token_secret}
       # HMAC key for the session cookie. The UI falls back to SYNDRA_API_KEY
@@ -381,7 +379,7 @@ services:
     # `TestTheDeploymentAllowsTheShutdownDrainToFinish`; raising the constant
     # without raising this fails that test rather than silently restoring the
     # truncation.
-    stop_grace_period: 30s
+    stop_grace_period: 120s
     # The rest of what "least trusted component" has to mean in practice. Every
     # line below is a capability this container has no use for, and the argument
     # for isolating it at all is that a compromise here must stay here.

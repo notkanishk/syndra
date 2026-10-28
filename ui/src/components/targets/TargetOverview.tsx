@@ -718,7 +718,11 @@ function ReachCard({
                   : "Every change is refused at once. Reads keep working."
               }`
             : (reading.sentence ??
-              (health.in_flight ? `Accepting changes. ${health.in_flight} in flight.` : "Accepting changes. Nothing is in flight."))
+              // A failed live read is not "accepting changes": the copy below the card
+              // (LastKnown) is all there is, and it cannot say what is in flight now.
+              (!health.reachable
+                ? `${name} didn't answer Syndra's live check just now, so whether it is taking changes can't be confirmed.`
+                : health.in_flight ?`Accepting changes. ${health.in_flight} in flight.` : "Accepting changes. Nothing is in flight."))
         : reading.sentence;
   }
   const faint =

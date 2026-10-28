@@ -99,6 +99,9 @@ type ApplyResponse struct {
 // fingerprint the plan was computed against.
 const CodePlanStale = "PLAN_STALE"
 
+// effectBlocked is the add-on's effect for an apply it refused to make.
+const effectBlocked = "blocked"
+
 // applyEnvelope is the wire body. Everything binding the call to an approval
 // travels inside it rather than in headers, so in signed mode the signature
 // covers them — an intercepted call replayed against a different subject fails
@@ -172,6 +175,11 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 		// definition of indeterminate.
 		if err := json.Unmarshal(resp.Body, &out); err != nil {
 			out.Outcome, out.Err = OutcomeIndeterminate, fmt.Errorf("addon %s: decode apply outcome: %w", req.Target, err)
+		} else if out.Effect == effectBlocked {
+			// A refusal wearing a 2xx (an add-on image that replayed a
+			// remembered refusal as a 200): nothing changed, so it is rejected,
+			// never recorded as a convergence.
+			out.Outcome, out.Err = OutcomeRejected, fmt.Errorf("addon %s: apply was blocked: %s", req.Target, out.Detail)
 		}
 	}
 	if resp.Outcome == OutcomeRejected {

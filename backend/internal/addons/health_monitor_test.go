@@ -109,3 +109,16 @@ func TestLastAnsweredAtStaysPutAcrossAMiss(t *testing.T) {
 		t.Fatalf("null on the wire when never answered, got %s", b)
 	}
 }
+
+// A zero time on the wire is a real-looking year-1 moment to a screen. Absent
+// is how the page learns nothing was checked.
+func TestZeroTimesAreOmittedFromTheWire(t *testing.T) {
+	b, _ := json.Marshal(HealthState{Status: HealthUnknown})
+	if strings.Contains(string(b), "checked_at") || strings.Contains(string(b), "started_at") {
+		t.Fatalf("zero times must be omitted, got %s", b)
+	}
+	b, _ = json.Marshal(HealthState{Status: HealthOnline, CheckedAt: time.Now(), StartedAt: time.Now()})
+	if !strings.Contains(string(b), `"checked_at"`) || !strings.Contains(string(b), `"started_at"`) {
+		t.Fatalf("set times stay on the wire, got %s", b)
+	}
+}

@@ -43,7 +43,6 @@ func TestWebhookRoute_RejectsInvalidActionsV2Signature(t *testing.T) {
 func resetWebhookDeps(t *testing.T) {
 	t.Helper()
 	origRebuild := cacheRebuildUser
-	origInvalidate := cacheInvalidateUser
 	origEnforce := webhookEnforceMappingRules
 	origRevoke := webhookRevokeMappingRules
 	origOnboard := webhookTriggerOnboarding
@@ -59,7 +58,6 @@ func resetWebhookDeps(t *testing.T) {
 	origUpsertDriftItem := dbUpsertDriftItemWithEvidence
 	t.Cleanup(func() {
 		cacheRebuildUser = origRebuild
-		cacheInvalidateUser = origInvalidate
 		webhookEnforceMappingRules = origEnforce
 		webhookRevokeMappingRules = origRevoke
 		webhookTriggerOnboarding = origOnboard
@@ -88,7 +86,6 @@ func setupNoopWebhookDeps(t *testing.T) {
 	t.Helper()
 	resetWebhookDeps(t)
 	cacheRebuildUser = func(_ context.Context, _ string, _ []string) {}
-	cacheInvalidateUser = func(_ context.Context, _ string) error { return nil }
 	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error { return nil }
 	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error { return nil }
 	webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error { return nil }
@@ -187,9 +184,10 @@ func TestWebhook_GrantRemoved(t *testing.T) {
 		revokeCalled = true
 		return nil
 	}
-	cacheInvalidateUser = func(_ context.Context, _ string) error {
+	var refreshed []string
+	cacheRebuildUser = func(_ context.Context, _ string, projects []string) {
 		invalidateCalled = true
-		return nil
+		refreshed = projects
 	}
 
 	body := []byte(`{"event_type":"grant_removed","user_id":"u1","source_project":"p1","role_key":"editor"}`)
@@ -201,8 +199,8 @@ func TestWebhook_GrantRemoved(t *testing.T) {
 	if !revokeCalled {
 		t.Error("expected RevokeMappingRules to be called")
 	}
-	if !invalidateCalled {
-		t.Error("expected cache invalidation")
+	if !invalidateCalled || len(refreshed) != 1 || refreshed[0] != "p1" {
+		t.Errorf("expected the cache recompiled for the removed grant's project; refreshed=%v", refreshed)
 	}
 }
 
@@ -285,10 +283,7 @@ func TestWebhook_UserDeactivated(t *testing.T) {
 
 	var invalidateCalled bool
 	var enforceCalled, revokeCalled bool
-	cacheInvalidateUser = func(_ context.Context, _ string) error {
-		invalidateCalled = true
-		return nil
-	}
+	cacheRebuildUser = func(_ context.Context, _ string, _ []string) { invalidateCalled = true }
 	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
 		enforceCalled = true
 		return nil
@@ -726,7 +721,7 @@ func TestHandleZitadelWebhook_LifecycleEvents_DispatchWithoutSourceProject(t *te
 	cases := []struct {
 		name      string
 		event     string
-		expectInv bool // user_deactivated / user_locked → cacheInvalidateUser
+		expectInv bool // user_deactivated / user_locked → cacheRebuildUser
 		expectOnb bool // user_created → onboarding trigger
 	}{
 		{"user.human.added → user_created", "user.human.added", false, true},
@@ -740,10 +735,7 @@ func TestHandleZitadelWebhook_LifecycleEvents_DispatchWithoutSourceProject(t *te
 
 			var invalidated bool
 			var onboarded bool
-			cacheInvalidateUser = func(_ context.Context, _ string) error {
-				invalidated = true
-				return nil
-			}
+			cacheRebuildUser = func(_ context.Context, _ string, _ []string) { invalidated = true }
 			webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error {
 				onboarded = true
 				return nil

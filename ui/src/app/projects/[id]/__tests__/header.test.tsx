@@ -5,17 +5,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProjectDetailPage from "@/app/projects/[id]/page";
 
-const state = vi.hoisted(() => ({ loading: true, advanced: false }));
+const state = vi.hoisted(() => ({ loading: true, failed: false, advanced: false }));
 
 vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
 vi.mock("@/lib/page-crumb", () => ({ useCrumb: () => {} }));
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({
-    data: state.loading
+    data: state.loading || state.failed
       ? undefined
       : [{ project: { id: "p-9001", name: "Laser Lab" }, member_count: 3, confirmed_member_count: 3, observed_member_count: 3 }],
     isLoading: state.loading,
-    error: null,
+    error: state.failed ? new Error("down") : null,
+    refetch: () => {},
   }),
 }));
 vi.mock("@/lib/queries/useApplications", () => ({
@@ -40,6 +41,7 @@ async function renderPage() {
 
 beforeEach(() => {
   state.loading = true;
+  state.failed = false;
   state.advanced = false;
 });
 
@@ -59,6 +61,19 @@ describe("a project's header", () => {
     await renderPage();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Laser Lab");
     expect(screen.queryByText("p-9001")).not.toBeInTheDocument();
+  });
+
+  // A list that failed has said nothing about whether the project exists.
+  it("is an error, not 'isn't listed', when the list failed to load", async () => {
+    state.loading = false;
+    state.failed = true;
+    render(
+      <Suspense fallback={null}>
+        <ProjectDetailPage params={params} />
+      </Suspense>,
+    );
+    expect(await screen.findByText("Couldn't load this project.")).toBeInTheDocument();
+    expect(screen.queryByText(/isn't listed/)).not.toBeInTheDocument();
   });
 
   it("keeps the id in Advanced", async () => {

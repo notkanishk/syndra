@@ -85,9 +85,8 @@ function redirectTo(request: NextRequest, path: string, clearSession = false, se
   // browser used, so cloning it sent every unauthenticated request to the
   // container's own host:port — the redirect the user hits on literally every
   // click before signing in.
-  // `search` is passed explicitly rather than embedded in `path`:
-  // `buildRedirectUrl` clears the query on purpose, so a `?next=` written into
-  // the path would be dropped without a word.
+  // `search` is passed explicitly: it replaces any query in `path`, so the
+  // `?next=` built here is the one that reaches /login.
   const url = buildRedirectUrl(request, path, search);
   const response = NextResponse.redirect(url, { status: 307 });
   if (clearSession) {
