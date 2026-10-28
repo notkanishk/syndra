@@ -597,6 +597,30 @@ func TestAnAbsentAccountIsReportedAsDeletedUpstream(t *testing.T) {
 	}
 }
 
+// The same missing account on a TRUNCATED read: it may be past the cap, so no
+// absence finding is drawn and nothing is queued for it.
+func TestATruncatedReadDrawsNoAbsenceFindings(t *testing.T) {
+	read := currentRead(addons.TargetAccount{Username: "someone-else", UID: 4000})
+	read.Truncated = true
+	h := &addonReconcileHarness{
+		read:     read,
+		bindings: []db.TargetBinding{{Target: "truenas", SubjectID: "sub-1", Username: "ada", AccountUID: uid(3001)}},
+	}
+	stubAddonReconcile(t, h)
+
+	res, err := ReconcileAddon(context.Background(), "truenas")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Findings) != 0 || len(res.Stale) != 0 || len(h.findingsWritten) != 0 {
+		t.Fatalf("a binding missing from a capped read is not known to be absent: %+v %+v %+v",
+			res.Findings, res.Stale, h.findingsWritten)
+	}
+	if res.Queued != 0 {
+		t.Fatal("and nothing is queued for it")
+	}
+}
+
 // The rollout rule, at the sweep level: a binding made before any base existed
 // converges exactly as it did, and raises nothing.
 func TestABaselessSubjectConvergesAndRaisesNothing(t *testing.T) {

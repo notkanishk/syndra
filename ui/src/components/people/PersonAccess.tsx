@@ -38,14 +38,15 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Withheld } from "@/components/ui/Withheld";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { daysUntil, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
+import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { daysUntil, expiryLabel, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
 type Tab = "access" | "requests" | "activity";
@@ -64,6 +65,12 @@ const TAB_LABELS: Record<Tab, string> = {
  * which is operator-only, so rendering the tab for a member would put a control
  * on screen whose only possible outcome is an error.
  */
+/** A role as the catalog names it, the key made readable only when the catalog does not know it. */
+function useRoleName(): (projectId: string, roleKey: string) => string {
+  const resolver = useNameResolver();
+  return (projectId, roleKey) => resolver.resolveRole(projectId, roleKey).value?.display_name || humanizeKey(roleKey);
+}
+
 function tabsFor(isOperator: boolean): Tab[] {
   return isOperator ? ["access", "requests", "activity"] : ["access", "requests"];
 }
@@ -129,6 +136,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
   useCrumb(user?.name);
 
   const multiSource = useMemo(() => findMultiSource(access.data?.projects ?? []), [access.data]);
+  const roleName = useRoleName();
 
   // Zitadel's own grants, read through the observation store. Keyed by
   // project, because that is Zitadel's own shape: one grant per (user,
@@ -362,7 +370,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
             // An explanation, so a caption under the heading and not a box (A-04 §7.1a).
             <p className="text-[14px] leading-[1.55] text-muted">
               <strong className="font-semibold text-ink">
-                {multiSource.projectName} / {multiSource.roleKey} is held twice
+                {multiSource.projectName} / {roleName(multiSource.projectId, multiSource.roleKey)} is held twice
               </strong>{" "}
               — {multiSource.explanation}. Removing one would not remove this role.
             </p>
@@ -657,6 +665,7 @@ function UnexplainedRoles({
   userId: string;
   isOperator: boolean;
 }) {
+  const roleName = useRoleName();
   if (roleKeys.length === 0) return null;
   return (
     <div className="row-divider px-5 py-3.5">
@@ -676,7 +685,7 @@ function UnexplainedRoles({
             key={key}
             className="rounded-pill border border-line-strong px-2.5 py-1 text-[13.5px] font-semibold"
           >
-            {humanizeKey(key)}
+            {roleName(projectId, key)}
           </span>
         ))}
         {isOperator && (
@@ -771,8 +780,6 @@ function ZitadelWord({ isOperator }: { isOperator: boolean }) {
 
 /** The one window for ending access (A-04 §4): a row inside it offers Extend. */
 const EXTEND_WITHIN_DAYS = 14;
-/** How long an extension buys. Stated in the row's own result, never implied. */
-const EXTEND_DAYS = 90;
 
 /**
  * Extend, in the seat beside a row's end date (A-07 §19), the same write Expiring access
@@ -791,6 +798,7 @@ function ExtendSeat({
   roleKey: string;
 }) {
   const extend = useCreateGrant(userId);
+  const roleName = useRoleName();
   // No sheet of its own: a small one holds the step if extending would cancel a change still
   // waiting for you to send (A-04 §14).
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
@@ -807,7 +815,7 @@ function ExtendSeat({
         size="sm"
         variant="outline"
         isPending={extend.isPending}
-        aria-label={`Extend ${humanizeKey(roleKey)} in ${projectName}`}
+        aria-label={`Extend ${roleName(projectId, roleKey)} in ${projectName}`}
         onClick={async () => {
           try {
             const result = await step.run(() =>
@@ -871,6 +879,7 @@ function RoleGroup({
   onReveal: (panelId: string) => void;
 }) {
   const catalog = useGlobalRoleCatalog();
+  const roleName = useRoleName();
   if (roles.length === 0) return null;
   const waitsFor = (key: string) =>
     catalog.data?.some((r) => r.project_id === projectId && r.role_key === key && r.waits_for_send);
@@ -901,7 +910,7 @@ function RoleGroup({
           <div key={role.role_key} id={`role-${projectId}-${role.role_key}`}>
           <div className="flex flex-wrap items-center gap-[18px] px-5 py-3">
             <div className="w-[230px] shrink-0 text-[15px] font-semibold">
-              {humanizeKey(role.role_key)}
+              {roleName(projectId, role.role_key)}
               {waitsFor(role.role_key) && <WaitsMark className="ml-2" />}
               {/* The raw key is an operator's handle for this role — a member
                   reading their own access has no use for it, and MemberAccess's
@@ -961,7 +970,7 @@ function RoleGroup({
                   {expires ? (
                     <span className="font-semibold text-warn-text">
                       Ends {formatShortDate(expires)}
-                      {remaining !== null && remaining >= 0 ? ` · ${remaining} days` : ""}
+                      {remaining !== null && remaining > 0 ? ` · ${expiryLabel(expires, "short")}` : ""}
                     </span>
                   ) : sources.length > 1 ? (
                     <span className="text-faint">Held {sources.length} ways</span>
@@ -992,7 +1001,7 @@ function RoleGroup({
               <Button
                 size="sm"
                 variant={verb === "Revoke" ? "danger" : "outline"}
-                aria-label={`${verb} ${humanizeKey(role.role_key)} in ${projectName}`}
+                aria-label={`${verb} ${roleName(projectId, role.role_key)} in ${projectName}`}
                 onClick={() =>
                   onRemove({
                     projectId,
@@ -1080,7 +1089,7 @@ function RoleGroup({
  * the groups. Without it, removing a bundle looks like it will remove the role.
  */
 function findMultiSource(
-  projects: Array<{ project_name: string; source_roles: AccessRole[]; derived_roles: AccessRole[] }>,
+  projects: Array<{ project_id: string; project_name: string; source_roles: AccessRole[]; derived_roles: AccessRole[] }>,
 ) {
   for (const project of projects) {
     for (const role of [...project.source_roles, ...project.derived_roles]) {
@@ -1093,6 +1102,7 @@ function findMultiSource(
           return "direct access";
         });
         return {
+          projectId: project.project_id,
           projectName: project.project_name,
           roleKey: role.role_key,
           explanation: `through ${parts.join(" and ")}`,

@@ -143,6 +143,9 @@ export function outcomeFromError(error: unknown): ActionOutcome {
   };
 }
 
+/** How long an extension buys. Stated in the row's own result, never implied. */
+export const EXTEND_DAYS = 90;
+
 /**
  * The result of extending a grant, as an outcome. The grant endpoint enqueues to
  * the outbox in manual mode ("pending") rather than applying inline, so reporting
@@ -173,4 +176,13 @@ export const NOTHING_CHANGED = "Nothing was changed.";
 /** True when the outcome must carry {@link NOTHING_CHANGED}. */
 export function statesNothingChanged(kind: OutcomeKind): boolean {
   return kind === "refused" || kind === "failed";
+}
+
+/**
+ * Whether the action ran. A FAILED attempt keeps its button — retiring the
+ * control on any outcome at all would leave a refusal on screen with no way to
+ * try again.
+ */
+export function succeeded(outcome: ActionOutcome | null): boolean {
+  return outcome !== null && !statesNothingChanged(outcome.kind);
 }

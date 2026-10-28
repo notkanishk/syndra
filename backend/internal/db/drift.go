@@ -156,8 +156,10 @@ func UpsertDriftItemWithEvidence(ctx context.Context, target, userID, projectID 
 // escaping.
 //
 // "Missed" is bounded by the OLDEST event the log still holds
-// (`b.oldest_event`): claiming a miss for a grant first detected before the
-// log's own horizon would blame the pipeline for a period it never covered.
+// (`b.oldest_event`): claiming a miss for a grant created before the log's own
+// horizon (the grant's own time, not when the sweep first saw it; detection is
+// only the fallback when Zitadel gave no creation time) would blame the
+// pipeline for a period it never covered.
 // Only "no event, and the log reaches back far enough that it would have held
 // one" earns the stronger claim; short of that, attribution is merely
 // unavailable, which is always the true fallback.
@@ -173,7 +175,7 @@ const driftItemSelect = `
 	       COALESCE(upstream_actor,''), upstream_created_at, last_seen_at, zitadel_observed_at,
 	       (upstream_actor IS NULL AND att.no_event) AS attribution_unavailable,
 	       (upstream_actor IS NULL AND att.no_event
-	            AND b.oldest_event IS NOT NULL AND detected_at >= b.oldest_event) AS event_possibly_missed
+	            AND b.oldest_event IS NOT NULL AND COALESCE(upstream_created_at, detected_at) >= b.oldest_event) AS event_possibly_missed
 	  FROM drift_items d
 	  CROSS JOIN (SELECT MIN(created_at) AS oldest_event FROM webhook_events) b
 	  CROSS JOIN LATERAL (

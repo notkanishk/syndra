@@ -182,21 +182,3 @@ func abandonQueuedWorkTx(ctx context.Context, tx pgx.Tx, target string) ([]Aband
 	}
 	return work, nil
 }
-
-// ActiveTargets returns the targets the drain and sweep may dispatch work for.
-func ActiveTargets(ctx context.Context) ([]string, error) {
-	rows, err := querier(ctx).Query(ctx, `SELECT target FROM targets WHERE state = 'active' ORDER BY target`)
-	if err != nil {
-		return nil, fmt.Errorf("list active targets: %w", err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var t string
-		if err := rows.Scan(&t); err != nil {
-			return nil, fmt.Errorf("scan active target: %w", err)
-		}
-		out = append(out, t)
-	}
-	return out, rows.Err()
-}

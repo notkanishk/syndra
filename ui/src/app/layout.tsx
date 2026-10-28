@@ -4,6 +4,7 @@ import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from 'next/font/google';
 import { AppShell } from '@/components/shell/AppShell';
 import { Providers } from '@/components/providers';
 import { getSession } from '@/lib/session';
+import { THEME_SCRIPT } from '@/lib/theme-script';
 import { VIEW_COOKIE, parseUiView } from '@/lib/ui-view-cookie';
 import './globals.css';
 
@@ -78,14 +79,10 @@ export default async function RootLayout({
   const initialView = parseUiView((await cookies()).get(VIEW_COOKIE)?.value);
   const fontVars = `${bricolage.variable} ${figtree.variable} ${jetbrains.variable}`;
 
-  // Dark is the default; the stored preference is applied before paint so a
-  // light-theme operator never sees a frame of the dark room.
-  const themeScript = `try{var t=localStorage.getItem('syndra-theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}catch(e){document.documentElement.setAttribute('data-theme','dark')}`;
-
   return (
     <html lang="en" className={fontVars} data-theme="dark" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="bg-ground text-ink antialiased">
         <Providers hasSession={Boolean(session)} isOperator={session?.role === "admin"}>

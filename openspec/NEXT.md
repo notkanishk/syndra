@@ -139,7 +139,17 @@ Seven candidates where one question is answered by several copies, ranked, in [`
 
 ### Audit of 27 Oct — remediation in batches
 
-The outside audit (`docs/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 are open in `changes/audit-2026-10/tasks.md`. Q-09 (text contrast) is with Design.
+The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/from another side/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 fix partial reads passed off as whole, one answer per fact, keyboard, scale and dead code (`changes/audit-2026-10/tasks.md`). Left: 2.9 and 3.2 wait on Design's A-09 (Q-09: text contrast, and where an unconfirmed add-on change shows).
+
+### Actions v2 before any app moves off v1 — the 27 Oct review
+
+`docs/from another side/ACTIONS-V2-REVIEW-2026-10-27.md` (with `FEATURE-MAP-2026-10-27.md` beside it, a test map of every feature set). The shaper is sound; the gaps are in what feeds it and what the screen claims. Checked against the code:
+
+- **The multi-project key rule has three answers.** `mergeProjectClaims` namespaces a key only when two projects collide (decided in BIA-09), while `application-claims/spec.md` says every multi-project response is namespaced. Either way an app reading `roles` breaks the day its user gains a second project that also emits `roles`. Decide, pin with a test, and make the core spec agree. **Needs the owner.**
+- **Preview isn't the live path.** The simulator compiles facts fresh; the live token reads Redis and only emits projects Zitadel lists in `user_grants`. Batch 1's recompile and warm close the worst gap (an emptied cache); the `user_grants` gate and the fail mode still differ. Next: a parity test (simulator vs `HandleActionInject` on the same facts), and the preview saying when Zitadel doesn't list the project.
+- **The smoke test checks shape only** (`scripts/smoke-test-action-v2.sh`): swap for a fixture with exact `append_claims`.
+- **Smaller:** the Postgres fallback in the handler has no overall deadline under Zitadel's 3s; an absent `user_grants` is a silent empty 200.
+- **UX the review proposes:** preview a draft before saving, a whole-token view for one person, the effective claim (override or default) on the apps index, and a v1→v2 comparator. Worth doing in that order once the key rule is decided.
 
 ### Phase 5 — Automation & Governance
 

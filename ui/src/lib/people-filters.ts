@@ -36,7 +36,7 @@ export const ATTENTION_VALUES: readonly Attention[] = [
 ];
 
 export const ATTENTION_LABELS: Record<Attention, string> = {
-  expiring: "Expiring access",
+  expiring: "Access ending within 30 days",
   unexplained: "Drift",
   requests: "Open requests",
   "no-access": "No access yet",

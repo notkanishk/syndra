@@ -111,7 +111,7 @@ export function useDrainPropagations() {
       request<DrainResult>("/propagations/drain", { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.pending });
-      qc.invalidateQueries({ queryKey: governanceQueryKeys.summary });
+      qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
     },
   });
 }

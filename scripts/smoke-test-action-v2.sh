@@ -27,19 +27,8 @@ set -euo pipefail
 # re-implement shell expansion here.
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _ENV_FILE="$(cd "${_SCRIPT_DIR}/.." && pwd)/.env"
-if [[ -f "$_ENV_FILE" ]]; then
-  while IFS= read -r _raw || [[ -n "$_raw" ]]; do
-    [[ "$_raw" =~ ^[[:space:]]*($|#) ]] && continue
-    [[ "$_raw" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
-    _k="${BASH_REMATCH[1]}"
-    _v="${BASH_REMATCH[2]}"
-    if [[ "$_v" =~ ^\"(.*)\"$ ]] || [[ "$_v" =~ ^\'(.*)\'$ ]]; then
-      _v="${BASH_REMATCH[1]}"
-    fi
-    [[ -z "${!_k+x}" ]] && export "$_k=$_v"
-  done < "$_ENV_FILE"
-  unset _raw _k _v
-fi
+# shellcheck source=lib/load-env.sh
+source "${_SCRIPT_DIR}/lib/load-env.sh"
 unset _SCRIPT_DIR _ENV_FILE
 
 HOST="${1:-http://localhost:8080}"

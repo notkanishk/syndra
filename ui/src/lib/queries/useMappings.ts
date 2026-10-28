@@ -255,6 +255,7 @@ export function useCreateMapping() {
       // The convergences it queued show up as pending changes, the same as
       // every other mapping change.
       client.invalidateQueries({ queryKey: ["propagations"] });
+      client.invalidateQueries({ queryKey: ["governance"] });
     },
   });
 }
@@ -273,6 +274,7 @@ export function usePublishMappingVersion(target: string) {
       // convergences, so the mapping list and the pending count both go stale.
       client.invalidateQueries({ queryKey: ["targets", "mappings"] });
       client.invalidateQueries({ queryKey: ["propagations"] });
+      client.invalidateQueries({ queryKey: ["governance"] });
     },
   });
 }
@@ -318,6 +320,7 @@ export function useRollbackMappingVersion(target: string) {
       // The rollback queues a convergence per affected holder, so what changed
       // for an operator watching is the pending count.
       client.invalidateQueries({ queryKey: ["propagations"] });
+      client.invalidateQueries({ queryKey: ["governance"] });
     },
   });
 }

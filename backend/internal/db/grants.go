@@ -60,6 +60,9 @@ func GetDirectGrantsForUser(ctx context.Context, userID string, includeExpired b
 		}
 		grants = append(grants, grant)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return grants, nil
 }
 
@@ -120,6 +123,9 @@ func GetExpiringDirectGrants(ctx context.Context, within time.Duration) ([]model
 			return nil, err
 		}
 		grants = append(grants, grant)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return grants, nil
 }
@@ -288,6 +294,9 @@ func GetExpiredDirectGrants(ctx context.Context, limit int) ([]models.DirectGran
 			return nil, err
 		}
 		grants = append(grants, grant)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return grants, nil
 }

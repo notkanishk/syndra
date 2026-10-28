@@ -41,17 +41,16 @@ import {
   type ExpiringGrantRow,
 } from "@/lib/queries/useExpiringAccess";
 import { useCreateGrant } from "@/lib/queries/useUsers";
-import { daysUntil, formatShortDate, humanizeKey } from "@/lib/format";
+import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import {
+  EXTEND_DAYS,
   outcomeFromError,
   outcomeFromExtend,
   statesNothingChanged,
+  succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-
-/** How long an extension buys. Stated in the row's own result, never implied. */
-const EXTEND_DAYS = 90;
 
 /**
  * S7 · Review › Expiring access.
@@ -579,7 +578,6 @@ function ExpiringRow({
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
   const clearAck = useClearExpiryAcknowledgement();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const remaining = daysUntil(grant.expires_at);
   // The result takes the seat the buttons held, until the next read. A refusal does not: the
   // buttons stay beside it, so the attempt can be made again.
   const reported = outcome !== null && !statesNothingChanged(outcome.kind);
@@ -655,11 +653,7 @@ function ExpiringRow({
 
       <div className="flex flex-col gap-0.5 tablet:w-[110px] tablet:shrink-0">
         <span className={`text-[13.5px] font-semibold ${soonest ? "text-warn-text" : "text-muted"}`}>
-          {remaining === null
-            ? "—"
-            : remaining <= 0
-              ? "Ends today"
-              : `${remaining} ${remaining === 1 ? "day" : "days"} left`}
+          {expiryLabel(grant.expires_at, "left") ?? "—"}
         </span>
         <span className="text-[12.5px] text-faint">{formatShortDate(grant.expires_at)}</span>
       </div>
@@ -736,15 +730,6 @@ function ExpiringRow({
  * that makes the record useful to somebody else, and this is the one place to state plainly that
  * recording a decision is not the same as changing anything.
  */
-/**
- * Whether the action ran. A FAILED attempt keeps its button — retiring the
- * control on any outcome at all would leave a refusal on screen with no way to
- * try again.
- */
-function succeeded(outcome: Outcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
-}
-
 function LetItLapseDialog({
   grant,
   onClose,

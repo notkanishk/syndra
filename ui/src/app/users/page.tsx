@@ -4,7 +4,7 @@ import { useBundles } from "@/lib/queries/useBundles";
 import { useUiView } from "@/lib/ui-view";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { RoleRef } from "@/components/names";
@@ -119,12 +119,26 @@ export default function PeoplePage() {
     [filters, bulkMode, router, give.projectId, give.roleKey, give.bundleId],
   );
 
+  // The last search this page wrote to the URL, so that what comes back can be
+  // told from a change made elsewhere (Back/Forward, a nav click).
+  const wroteQ = useRef(filters.q);
   useEffect(() => {
-    if (debounced !== filters.q) setParams({ q: debounced });
+    if (debounced !== filters.q) {
+      wroteQ.current = debounced;
+      setParams({ q: debounced });
+    }
     // Only the debounced draft should drive this; re-running on every filter
     // change would fight the URL it just wrote.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced]);
+
+  // The URL is the truth: a search changed from outside replaces the draft, or
+  // the box would keep showing, and soon re-write, the old one.
+  useEffect(() => {
+    if (filters.q === wroteQ.current) return;
+    wroteQ.current = filters.q;
+    setQueryDraft(filters.q);
+  }, [filters.q]);
 
   const filterKey = `${filters.q}|${filters.project}|${filters.role}|${filters.bundle}|${filters.version}|${filters.attention}`;
 
@@ -205,6 +219,7 @@ export default function PeoplePage() {
     filters.attention,
   ].filter(Boolean).length;
 
+  const bulkOpen = bulkOp !== null;
   const exitBulk = useCallback(() => {
     router.replace(`/users${serializeFilters(filters)}`, { scroll: false });
   }, [filters, router]);
@@ -212,11 +227,13 @@ export default function PeoplePage() {
   useEffect(() => {
     if (!bulkMode) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") exitBulk();
+      // An Esc a dialog (or anything else) already took is not ours: it closes
+      // the dialog and must not also drop the selection behind it.
+      if (event.key === "Escape" && !event.defaultPrevented && !bulkOpen) exitBulk();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [bulkMode, exitBulk]);
+  }, [bulkMode, bulkOpen, exitBulk]);
 
   // Select-all covers every row matching the filter rather than the rendered
   // page — otherwise selecting 214 people means paging four times first, which

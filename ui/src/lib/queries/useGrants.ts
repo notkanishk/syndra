@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 
@@ -58,10 +58,16 @@ const KEYS = {
  * cadence. The page exposes a "Refresh" affordance that triggers refetch().
  */
 export function useReconciliationDiff() {
+  const client = useQueryClient();
   return useQuery({
     queryKey: KEYS.reconciliation,
     queryFn: async (): Promise<ReconciliationDiff> => {
-      const data = await request<ReconciliationDiff>("/reconciliation/grants");
+      // Opening the page accepts the sweep's last reading (at most 5 minutes old);
+      // a refresh after that asks Zitadel again.
+      const again = (client.getQueryState(KEYS.reconciliation)?.dataUpdatedAt ?? 0) > 0;
+      const data = await request<ReconciliationDiff>(
+        again ? "/reconciliation/grants?fresh=1" : "/reconciliation/grants",
+      );
       return {
         only_in_syndra: Array.isArray(data?.only_in_syndra) ? data.only_in_syndra : [],
         only_in_zitadel: Array.isArray(data?.only_in_zitadel) ? data.only_in_zitadel : [],

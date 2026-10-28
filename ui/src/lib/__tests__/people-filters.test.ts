@@ -205,7 +205,7 @@ describe("describeFilters", () => {
     expect(describeFilters({ ...EMPTY_FILTERS, project: "pLaser" }, "Laser Lab")).toBe("in Laser Lab");
     expect(
       describeFilters({ ...EMPTY_FILTERS, q: "ada", attention: "expiring" }),
-    ).toBe("matching “ada” and with expiring access");
+    ).toBe("matching “ada” and with access ending within 30 days");
   });
 
   it("says nothing when nothing is filtered", () => {

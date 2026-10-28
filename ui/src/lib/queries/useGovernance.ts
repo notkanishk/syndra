@@ -82,6 +82,9 @@ export interface GovernanceSummary {
 }
 
 const KEYS = {
+  // The prefix: the summary, the rail's indicators and the holds lists all go
+  // stale together when drift, a convergence or a hold changes.
+  all: ["governance"] as const,
   summary: ["governance", "summary"] as const,
 };
 
