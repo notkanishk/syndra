@@ -145,7 +145,7 @@ The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checke
 
 `docs/from another side/ACTIONS-V2-REVIEW-2026-10-27.md` (with `FEATURE-MAP-2026-10-27.md` beside it, a test map of every feature set). The shaper is sound; the gaps are in what feeds it and what the screen claims. Checked against the code:
 
-- **The multi-project key rule has three answers.** `mergeProjectClaims` namespaces a key only when two projects collide (decided in BIA-09), while `application-claims/spec.md` says every multi-project response is namespaced. Either way an app reading `roles` breaks the day its user gains a second project that also emits `roles`. Decide, pin with a test, and make the core spec agree. **Needs the owner.**
+- **Decided 28 Oct: one project per token** (ADR-002). Zitadel lists only the token's role audience in `user_grants`; a token spanning two projects (an app asking for another project's `:aud`) carries no Syndra claims, and keys are unique within a project only. Dependent roles come through rules in the app's own project.
 - **Preview isn't the live path.** The simulator compiles facts fresh; the live token reads Redis and only emits projects Zitadel lists in `user_grants`. Batch 1's recompile and warm close the worst gap (an emptied cache); the `user_grants` gate and the fail mode still differ. Next: a parity test (simulator vs `HandleActionInject` on the same facts), and the preview saying when Zitadel doesn't list the project.
 - **The smoke test checks shape only** (`scripts/smoke-test-action-v2.sh`): swap for a fixture with exact `append_claims`.
 - **Smaller:** the Postgres fallback in the handler has no overall deadline under Zitadel's 3s; an absent `user_grants` is a silent empty 200.
