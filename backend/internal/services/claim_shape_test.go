@@ -14,10 +14,10 @@ import (
 // pointer to the last profile written, so tests can assert what was persisted.
 func stubClaimShapeDeps(t *testing.T) (*db.ClaimProfileRow, *db.AppClaimOverrideRow) {
 	t.Helper()
-	origGet, origList, origUpsert := svcGetClaimProfile, svcListClaimProfiles, svcUpsertClaimProfile
+	origGet, origUpsert := svcGetClaimProfile, svcUpsertClaimProfile
 	origListOv, origUpsertOv, origDelOv := svcListAppClaimOverrides, svcUpsertAppClaimOverride, svcDeleteAppClaimOverride
 	t.Cleanup(func() {
-		svcGetClaimProfile, svcListClaimProfiles, svcUpsertClaimProfile = origGet, origList, origUpsert
+		svcGetClaimProfile, svcUpsertClaimProfile = origGet, origUpsert
 		svcListAppClaimOverrides, svcUpsertAppClaimOverride, svcDeleteAppClaimOverride = origListOv, origUpsertOv, origDelOv
 	})
 
@@ -27,7 +27,6 @@ func stubClaimShapeDeps(t *testing.T) (*db.ClaimProfileRow, *db.AppClaimOverride
 	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) {
 		return db.ClaimProfileRow{}, false, nil
 	}
-	svcListClaimProfiles = func(context.Context) ([]db.ClaimProfileRow, error) { return nil, nil }
 	svcListAppClaimOverrides = func(context.Context) ([]db.AppClaimOverrideRow, error) { return nil, nil }
 	svcUpsertClaimProfile = func(_ context.Context, r db.ClaimProfileRow) error {
 		*savedProfile = r
@@ -87,25 +86,43 @@ func TestResolveClaimProfiles_DefaultThenOverridesForThisProjectOnly(t *testing.
 	}
 }
 
-// A flat JWT holds one value per name, so a key another project already emits
-// must be rejected at save time — otherwise one application silently reads
-// another's roles.
-func TestSaveProjectClaimProfile_RejectsKeyOwnedByAnotherProject(t *testing.T) {
-	stubClaimShapeDeps(t)
+// A token carries one project, so another project's key is no collision: two
+// projects may both name their claim "shared.roles".
+func TestSaveProjectClaimProfile_AllowsAKeyAnotherProjectUses(t *testing.T) {
+	saved, _ := stubClaimShapeDeps(t)
 
-	svcListClaimProfiles = func(context.Context) ([]db.ClaimProfileRow, error) {
-		return []db.ClaimProfileRow{
-			{ProjectID: "pStudio", ClaimName: "shared.roles", FormatType: claims.FormatArray},
-		}, nil
+	svcGetClaimProfile = func(_ context.Context, projectID string) (db.ClaimProfileRow, bool, error) {
+		if projectID == "pStudio" {
+			return db.ClaimProfileRow{ProjectID: "pStudio", ClaimName: "shared.roles", FormatType: claims.FormatArray}, true, nil
+		}
+		return db.ClaimProfileRow{}, false, nil
 	}
 
 	err := SaveProjectClaimProfile(context.Background(), "pLaser", claims.Profile{
 		ClaimName: "shared.roles", FormatType: claims.FormatArray,
 	})
-	if err == nil {
-		t.Fatal("expected a cross-project claim key collision to be rejected")
+	if err != nil {
+		t.Fatalf("another project's key must not block this one, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "shared.roles") {
+	if saved.ClaimName != "shared.roles" {
+		t.Errorf("expected the key to be persisted, got %q", saved.ClaimName)
+	}
+}
+
+// Within one project the default and every override share a token, so an
+// override may not take a key the project already emits, even the built-in
+// "roles" of a project nobody has configured.
+func TestSaveAppClaimOverride_RejectsTheProjectsBuiltInDefaultKey(t *testing.T) {
+	stubClaimShapeDeps(t)
+	setupSnapshotTestFixtures(t, 1, 1, 1) // app a0 lives on project p0
+
+	err := SaveAppClaimOverride(context.Background(), "a0", claims.Profile{
+		ClaimName: claims.DefaultClaimName, FormatType: claims.FormatCSV,
+	})
+	if err == nil {
+		t.Fatal("expected an override reusing the project's default key to be rejected")
+	}
+	if !strings.Contains(err.Error(), claims.DefaultClaimName) {
 		t.Errorf("the error must name the colliding key, got %q", err)
 	}
 }
@@ -114,10 +131,8 @@ func TestSaveProjectClaimProfile_RejectsKeyOwnedByAnotherProject(t *testing.T) {
 func TestSaveProjectClaimProfile_AllowsReSaveOfOwnKey(t *testing.T) {
 	saved, _ := stubClaimShapeDeps(t)
 
-	svcListClaimProfiles = func(context.Context) ([]db.ClaimProfileRow, error) {
-		return []db.ClaimProfileRow{
-			{ProjectID: "pLaser", ClaimName: "syndra.laser.roles", FormatType: claims.FormatArray},
-		}, nil
+	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) {
+		return db.ClaimProfileRow{ProjectID: "pLaser", ClaimName: "syndra.laser.roles", FormatType: claims.FormatArray}, true, nil
 	}
 
 	err := SaveProjectClaimProfile(context.Background(), "pLaser", claims.Profile{

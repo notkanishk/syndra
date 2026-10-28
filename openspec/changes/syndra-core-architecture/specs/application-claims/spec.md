@@ -33,8 +33,8 @@ The data plane MUST be implemented as a **Zitadel Actions v2** target, invoked d
 
 - **append_claims envelope**: the target MUST emit each claim as `{key, value}` inside the `append_claims` array. The optional `append_log_claims` list carries diagnostic keys. `set_user_metadata` is reserved for future use.
 - **Cache-backed source**: claim values are looked up in Redis using `mapping:<userID>:<projectID>` keys populated by the cache compiler.
-- **Multi-project resolution**: when `user_grants` names more than one project, the response MUST emit namespaced claim keys `syndra.<projectID>.<claim>` so claims across projects cannot collide in the issued token. Single-project responses use flat keys so legacy single-audience applications receive the unprefixed payload.
-- **Per-project degraded posture**: degraded responses are decided per project. A cache miss on project A MUST NOT suppress claims from project B in the same response.
+- **One project per token**: Zitadel lists only the token's role audience in `user_grants`. When it names exactly one project, the response uses that project's flat, configured keys. When it names more than one, the response MUST carry no Syndra claims and log the request; cross-project delivery is refused, never namespaced. (Owner, 28 Oct 2026; ADR-002. Detail in `basic-advanced-ia/specs/application-claims`.)
+- **Degraded posture**: decided by the token's project.
 - **Availability Rule**: the integration MUST define explicit behavior for cache miss, backend timeout, malformed cache data, and unavailable downstream dependencies.
 - **Safe Failure Rule**: failure behavior MUST be either `fail_closed` (empty `append_claims` for that project) or `minimal_safe` (configured minimal claim set), depending on the application's documented security posture.
 - **Performance Goal**: the path SHOULD be low-latency; reliability and deterministic failure behavior take precedence over a fixed micro-latency target.

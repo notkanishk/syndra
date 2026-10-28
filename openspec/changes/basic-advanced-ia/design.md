@@ -52,11 +52,11 @@ Every failure path in `claimProfilesRead` returns the built-in default profile r
 
 Verified against the documented `preaccesstoken` payload (`function`, `userinfo`, `user`, `user_metadata`, `org`, `user_grants`): **there is no client or application identifier.** An override therefore cannot be resolved by "which app asked".
 
-The model that is actually true: a token issued for a project carries the project default **and** every override key on that project; each application reads its own key. Claim keys are validated unique across every project (a user with grants in several projects receives one flat token), and the UI states the arrangement rather than letting an operator discover a sibling's key by decoding a production token — `emitted_keys` names the owner of every key, and the preview dims the ones this app does not read.
+The model that is actually true: a token issued for a project carries the project default **and** every override key on that project; each application reads its own key. Claim keys are validated unique within a project (a token carries one project; see ADR-002), and the UI states the arrangement rather than letting an operator discover a sibling's key by decoding a production token — `emitted_keys` names the owner of every key, and the preview dims the ones this app does not read.
 
 ### The collision the old namespacing hid
 
-Two projects nobody has configured both default to `roles`. The old code prefixed every multi-project key with `syndra.<projectID>.`, which prevented the collision and simultaneously guaranteed no application ever received the key it asked for. Now: keys are explicit and validated, and `mergeProjectClaims` namespaces only keys that two projects both emit — logging loudly and telling the operator to name the claims. Configured keys are never rewritten.
+Two projects nobody has configured both default to `roles`. The old code prefixed every multi-project key with `syndra.<projectID>.`, which prevented the collision and simultaneously guaranteed no application ever received the key it asked for. Now: keys are explicit and validated, and keys are never rewritten. *(28 Oct 2026: the collision guard is gone too. A token carries one project, and a token spanning two carries no Syndra claims. ADR-002.)*
 
 ## 3. Removal is source-specific
 
