@@ -47,6 +47,7 @@ const canonicalV2Payload = `{
     "name": "Ashoka Makerspace",
     "primary_domain": "makerspace.example.org"
   },
+  "application": {"client_id": "printing-portal@example"},
   "user_grants": [
     {
       "id": "grant-1",
@@ -57,10 +58,10 @@ const canonicalV2Payload = `{
     },
     {
       "id": "grant-2",
-      "projectId": "pDoors",
-      "projectName": "Door Access",
+      "projectId": "pPrinting",
+      "projectName": "Printing Portal",
       "grantId": "",
-      "roles": ["3d_lab_pin"]
+      "roles": ["viewer"]
     }
   ]
 }`
@@ -74,11 +75,8 @@ func TestHandleActionInject_CanonicalV2Payload_Accepted(t *testing.T) {
 	resetActionDeps(t, origRedis, origMode)
 
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		switch key {
-		case "mapping:250124622953808001:pPrinting":
+		if key == "mapping:250124622953808001:pPrinting" {
 			return factsJSON("250124622953808001", "pPrinting", "operator"), nil
-		case "mapping:250124622953808001:pDoors":
-			return factsJSON("250124622953808001", "pDoors", "3d_lab_pin"), nil
 		}
 		return "", fmt.Errorf("unexpected key: %s", key)
 	}
@@ -96,23 +94,15 @@ func TestHandleActionInject_CanonicalV2Payload_Accepted(t *testing.T) {
 	}
 
 	got := decodeActionResponse(t, rr)
-	// Neither project has a configured claim profile, so both fall back to the
-	// built-in "roles" key. The merge step must keep BOTH sets by namespacing
-	// the collision rather than letting one project's roles land under a key
-	// the other project's application also reads.
-	if len(got.AppendClaims) != 2 {
-		t.Fatalf("expected 2 append_claims (one per project), got %v", got.AppendClaims)
+	// Zitadel lists only the token's own project; its two rows (one per role)
+	// are one project, and with no configured profile it emits the built-in key.
+	// Roles come from Syndra's compiled facts, not the payload's role list.
+	if len(got.AppendClaims) != 1 {
+		t.Fatalf("expected 1 append_claim, got %v", got.AppendClaims)
 	}
-	printing, okP := claimByKey(got.AppendClaims, "syndra.pPrinting.roles")
-	doors, okD := claimByKey(got.AppendClaims, "syndra.pDoors.roles")
-	if !okP || !okD {
-		t.Fatalf("expected the colliding default key to be namespaced per project, got %v", got.AppendClaims)
-	}
-	if !rolesEqual(printing.Value, "operator") {
-		t.Errorf("expected printing roles=[operator], got %v", printing.Value)
-	}
-	if !rolesEqual(doors.Value, "3d_lab_pin") {
-		t.Errorf("expected doors roles=[3d_lab_pin], got %v", doors.Value)
+	printing, ok := claimByKey(got.AppendClaims, "roles")
+	if !ok || !rolesEqual(printing.Value, "operator") {
+		t.Fatalf("expected roles=[operator], got %v", got.AppendClaims)
 	}
 }
 
