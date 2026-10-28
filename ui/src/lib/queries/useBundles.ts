@@ -250,6 +250,8 @@ export function useUpdateBundle() {
       request<{ message: string }>(`/bundles/${id}`, { method: "PUT", body: input }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.list });
+      // The name resolver keeps its own copy; without this a screen keeps the old name.
+      qc.invalidateQueries({ queryKey: ["name-bundles"] });
     },
   });
 }

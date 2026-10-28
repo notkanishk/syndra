@@ -27,6 +27,7 @@ const state = vi.hoisted(() => ({
 
 // A failed read keeps whatever the last good read left, as react-query does.
 vi.mock("@/lib/queries/useOperations", () => ({
+  LOG_LIMIT: 200,
   useWebhookEvents: () => ({
     data: state.eventsError && !state.events.length ? undefined : state.events,
     isLoading: false,

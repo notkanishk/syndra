@@ -47,9 +47,6 @@ func TestNobodyMovedIsUnchanged(t *testing.T) {
 	if got := outcomeOf(t, s, "enabled"); got != Unchanged {
 		t.Fatalf("want unchanged, got %s", got)
 	}
-	if s.NeedsWrite() {
-		t.Error("nothing moved, so nothing needs writing")
-	}
 }
 
 func TestOnlySyndraMovedIsAFastForward(t *testing.T) {
@@ -60,7 +57,7 @@ func TestOnlySyndraMovedIsAFastForward(t *testing.T) {
 	if got := outcomeOf(t, s, "group"); got != FastForward {
 		t.Fatalf("want fast_forward, got %s", got)
 	}
-	if !s.Convergeable() || !s.NeedsWrite() {
+	if !s.Convergeable() {
 		t.Error("a fast-forward is exactly what an unattended pass may apply")
 	}
 }
@@ -78,9 +75,6 @@ func TestBothMovedToTheSameValueIsAlreadyMerged(t *testing.T) {
 	}
 	if !s.Convergeable() {
 		t.Error("an agreement is not a finding")
-	}
-	if s.NeedsWrite() {
-		t.Error("already merged must issue no write — the target is already there")
 	}
 	if len(s.Findings()) != 0 {
 		t.Error("agreeing with Syndra is not drift")
@@ -155,9 +149,6 @@ func TestAnAbsentAccountIsItsOwnStateAndNeverConverged(t *testing.T) {
 	if s.Convergeable() {
 		t.Fatal("re-provisioning an account somebody deleted is not a sweep's decision")
 	}
-	if s.NeedsWrite() {
-		t.Fatal("an absent account must not be queued for a write")
-	}
 }
 
 // The rollout rule. A subject with no base converges as it did before this
@@ -168,7 +159,7 @@ func TestASubjectWithNoBaseConvergesAsItDidBefore(t *testing.T) {
 		fields(map[string]any{"group": []string{"fabrication"}, "enabled": true}),
 		fields(map[string]any{"group": []string{"lab_makers"}, "enabled": true}),
 		nil)
-	if !s.Convergeable() || !s.NeedsWrite() {
+	if !s.Convergeable() {
 		t.Fatal("a baseless subject must converge exactly as it did before")
 	}
 	if len(s.Findings()) != 0 {

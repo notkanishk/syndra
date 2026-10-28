@@ -171,6 +171,8 @@ function useUpstreamMutation<V>(fn: (value: V) => Promise<unknown>) {
       // sweep; invalidating here means the operator sees that immediately
       // rather than wondering why the number moved tomorrow.
       qc.invalidateQueries({ queryKey: ["drift"] });
+      // A role created or renamed here changes the names every screen resolves.
+      qc.invalidateQueries({ queryKey: ["name-catalog"] });
     },
   });
 }

@@ -10,7 +10,6 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
-import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate } from "@/lib/format";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -24,6 +23,10 @@ import {
   useRehearseMoveHolders,
   type BundleVersion,
 } from "@/lib/queries/useBundleVersions";
+import dynamic from "next/dynamic";
+
+// Opened on demand, so it stays out of the page's first load.
+const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
 /**
  * A bundle's history, and who is standing on each part of it.

@@ -75,9 +75,11 @@ export function useTargets(enabled = true) {
     queryKey: ["targets"],
     queryFn: () => request<{ targets: TargetSummary[] }>("/targets"),
     enabled,
-    // Deployment configuration: stale only when the deployment changes, which
-    // is a restart.
-    staleTime: 10 * 60_000,
+    // The roster used to be configuration, stale only at a restart. Each row
+    // now carries live state (`status`, `health`, `circuit_open`), so it is read
+    // as often as the rail's indicators are, and never cached longer than that.
+    staleTime: 30_000,
+    refetchInterval: 30_000,
     select: (data) => data.targets ?? [],
   });
 }

@@ -168,8 +168,8 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	// The inventory concludes from accounts actually SEEN, which is why a
 	// truncated read does not invalidate it: everything reported here is on the
 	// target. What a truncated read cannot support is the opposite conclusion —
-	// that a bound subject has no account — and nothing here draws it. The
-	// add-on refuses that one itself, at the point the cap is known.
+	// that a bound subject has no account — and the partition below draws it
+	// only from a whole read: a truncated one yields no absence findings.
 	res.Unmanaged = unmanaged(read.Accounts, bindings)
 	res.Truncated = read.Truncated
 
@@ -194,6 +194,12 @@ func ReconcileAddon(ctx context.Context, target string) (AddonReconcileResult, e
 	// nothing" is an operator's decision — re-provision, or unbind — and not one
 	// a sweep may take by writing.
 	live, stale := partitionByPresence(bindings, read.Accounts)
+	if read.Truncated {
+		// The cap cut the list, so a binding missing from it may simply be past
+		// the cut. Absence is only ever concluded from a whole read; those
+		// bindings are neither converged nor reported this pass.
+		stale = nil
+	}
 	res.Stale = stale
 
 	unrecorded := 0

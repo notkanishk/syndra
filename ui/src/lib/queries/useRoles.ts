@@ -117,6 +117,9 @@ export function useCreateRole() {
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: KEYS.catalog });
       qc.invalidateQueries({ queryKey: KEYS.catalogByProject(input.project_id) });
+      // The project cards carry a role count, and the name resolver a role name.
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["name-catalog"] });
     },
   });
 }

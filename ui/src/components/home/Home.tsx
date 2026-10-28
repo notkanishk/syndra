@@ -31,7 +31,7 @@ import { useTargets } from "@/lib/queries/useTargets";
 import { serviceAccountHref, useServiceAccounts } from "@/lib/queries/useServiceAccounts";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
-import { outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import type { ServiceAccount } from "@/lib/types";
@@ -45,7 +45,7 @@ import { Unfold } from "@/components/ui/Unfold";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
-import { formatShortDate, formatWeekday, daysUntil, whyNotChecked } from "@/lib/format";
+import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
 
 /**
  * Home — the operator landing. Two zones, in a fixed order.
@@ -570,7 +570,6 @@ function ExpiringRow({
   // A row has no sheet of its own: if extending would cancel a change still
   // waiting for you to send, a small sheet holds the step (A-04 §14).
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
-  const remaining = daysUntil(grant.expires_at);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   // Extending again would add another 90 days to the same grant.
   const [extended, setExtended] = useState(false);
@@ -591,7 +590,7 @@ function ExpiringRow({
         </span>
       </div>
       <div className="w-[66px] shrink-0 text-[13.5px] font-semibold text-warn-text">
-        {remaining === null ? "—" : `${remaining} days`}
+        {expiryLabel(grant.expires_at, "short") ?? "—"}
       </div>
       <Button
         size="sm"
@@ -604,13 +603,13 @@ function ExpiringRow({
                 project_id: grant.project_id,
                 role_key: grant.role_key,
                 reason: "Extended from Home",
-                duration_days: 90,
+                duration_days: EXTEND_DAYS,
                 extend: true,
               }),
             );
             if (made === KEPT) return;
             setExtended(true);
-            setOutcome(outcomeFromExtend(made, 90, "The row leaves this block on the next read."));
+            setOutcome(outcomeFromExtend(made, EXTEND_DAYS,"The row leaves this block on the next read."));
           } catch (error) {
             setOutcome(outcomeFromError(error));
           }

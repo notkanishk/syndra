@@ -167,16 +167,11 @@ func handleDeleteRoleMapping(w http.ResponseWriter, r *http.Request) {
 	applyMappingRequest(w, r, existing, planSurfaceMappingDelete, req.PlanID, "", "deleted")
 }
 
-// applyMappingRequest is the shared half: count the cohort, spend the approval
-// if there is one to spend, make the change, and queue the convergences.
+// applyMappingRequest is the shared half: spend the approval if the cohort
+// needs one, make the change, and queue the convergences. The cohort is counted
+// inside the lock by applyMappingChange.
 func applyMappingRequest(w http.ResponseWriter, r *http.Request, m db.RoleMapping, surface, planID, newValue, verb string) {
-	holders, err := dbMappingHolders(r.Context(), m.ProjectID, m.RoleKey)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-
-	converged, err := applyMappingChange(r.Context(), m, surface, resolveActor(r, ""), planID, newValue, len(holders))
+	converged, err := applyMappingChange(r.Context(), m, surface, resolveActor(r, ""), planID, newValue)
 	if err != nil {
 		writeMappingPlanError(w, err)
 		return

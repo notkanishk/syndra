@@ -139,17 +139,6 @@ func (s Subject) Convergeable() bool {
 	return true
 }
 
-// NeedsWrite reports whether converging this subject would actually change
-// anything, so a pass does not queue work for a subject already in step.
-func (s Subject) NeedsWrite() bool {
-	for _, f := range s.Fields {
-		if f.Outcome == FastForward || f.Outcome == NoBase {
-			return true
-		}
-	}
-	return false
-}
-
 // Findings are the differences an unattended pass may not resolve.
 //
 // Three kinds, and all three are findings rather than sweep output: a value the

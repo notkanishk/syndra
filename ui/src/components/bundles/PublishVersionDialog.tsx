@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { IncludeChangeLine } from "@/components/bundles/IncludeChangeLine";
 import { RoleRef } from "@/components/names";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -12,7 +13,6 @@ import {
   useRehearsePublish,
   type BundleDraft,
   type BundleIncluder,
-  type IncludeChange,
   type IncluderAction,
 } from "@/lib/queries/useBundleVersions";
 
@@ -284,39 +284,5 @@ function Choice({
       <span className="block text-[14.5px] font-semibold">{title}</span>
       <span className="mt-0.5 block text-[13px] leading-[1.5] text-muted">{detail}</span>
     </button>
-  );
-}
-
-/** "+ Safety basics v3", "Safety basics v3 → v4", "− Safety basics". */
-export function IncludeChangeLine({ change }: { change: IncludeChange }) {
-  if (change.from_version === 0) {
-    return (
-      <>
-        <span aria-label="Adds" className="w-3 font-semibold text-accent-text">
-          +
-        </span>
-        <span>
-          {change.child_name} v{change.to_version}
-        </span>
-      </>
-    );
-  }
-  if (change.to_version === 0) {
-    return (
-      <>
-        <span aria-label="Drops" className="w-3 font-semibold text-warn-text">
-          &minus;
-        </span>
-        <span>{change.child_name}</span>
-      </>
-    );
-  }
-  return (
-    <>
-      <span aria-hidden className="w-3" />
-      <span>
-        {change.child_name} v{change.from_version} → v{change.to_version}
-      </span>
-    </>
   );
 }

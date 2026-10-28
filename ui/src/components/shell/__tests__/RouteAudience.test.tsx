@@ -20,6 +20,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
 vi.mock("@/lib/queries/useTargets", () => ({ useTargets: () => ({ data: [] }) }));
 vi.mock("@/lib/queries/useIndicators", () => ({
   useIndicators: () => ({ data: undefined, isPlaceholderData: true }),
+  useIndicatorsRead: () => ({ data: undefined, isPlaceholderData: true }),
 }));
 
 function renderRail(isOperator: boolean) {

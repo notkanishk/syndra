@@ -62,5 +62,8 @@ func listMappingRules(ctx context.Context, query string, retired bool) ([]models
 		}
 		rules = append(rules, r)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return rules, nil
 }

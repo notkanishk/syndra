@@ -24,6 +24,26 @@ func TestExpectedViaRule_UserHoldingSourceMakesTargetExpected(t *testing.T) {
 	}
 }
 
+// A→B→C: the user holds only A, so C is expected through B. A user holding
+// nothing on the chain, and a role no rule reaches, are still not explained.
+func TestExpectedViaRule_FollowsChains(t *testing.T) {
+	rules := []models.MappingRule{
+		{SourceProject: "p1", SourceRole: "a", TargetProject: "p1", TargetRole: "b"},
+		{SourceProject: "p1", SourceRole: "b", TargetProject: "p2", TargetRole: "c"},
+		{SourceProject: "p2", SourceRole: "c", TargetProject: "p1", TargetRole: "a"}, // cycle must terminate
+	}
+	holder := BuildHolderSet(nil, []zitadel.UserGrant{{UserID: "u1", ProjectID: "p1", RoleKeys: []string{"a"}}})
+	if !ExpectedViaRule(holder, rules, "u1", "p2", "c") {
+		t.Fatal("a chained grant (A→B→C, user holds A) must be expected, not drift")
+	}
+	if ExpectedViaRule(holder, rules, "u2", "p2", "c") {
+		t.Fatal("a user holding nothing on the chain must not be explained")
+	}
+	if ExpectedViaRule(holder, rules, "u1", "p3", "x") {
+		t.Fatal("a role no rule reaches must not be explained")
+	}
+}
+
 func TestIsExcluded_MatchesTriple(t *testing.T) {
 	ex := []models.ExternalGrantExclusion{{Target: "zitadel", UserID: "u1", ProjectID: "p1", RoleKey: "viewer"}}
 	if !IsExcluded(ex, "zitadel", "u1", "p1", "viewer") {

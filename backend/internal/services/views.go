@@ -116,12 +116,6 @@ func RoleHolderCounts(ctx context.Context) (map[string]int, error) {
 	return f.Given, err
 }
 
-// RoleHolderConfirmation is the confirmed reading of RoleHolderFacts.
-func RoleHolderConfirmation(ctx context.Context) (map[string]int, models.ObservationBasis, error) {
-	f, err := RoleHolderFacts(ctx)
-	return f.Confirmed, f.Basis, err
-}
-
 // RoleHolderFacts answers every holder question from ONE snapshot.
 //
 // There used to be two counting mechanisms and they disagreed on screen; then
@@ -1109,12 +1103,14 @@ func governanceFromSnapshot(snap *accessSnapshot) (models.GovernanceSummary, err
 	if err != nil {
 		return models.GovernanceSummary{}, err
 	}
+	// One grouped count for every bundle: only "has any holder" is needed here,
+	// so resolving each user's bundles (bundles x users queries) was pure cost.
+	holders, err := svcGetBundleHolderCounts(snap.ctx)
+	if err != nil {
+		return models.GovernanceSummary{}, err
+	}
 	for _, bundle := range bundles {
-		impact, err := bundleImpactFromSnapshot(snap, bundle.ID)
-		if err != nil {
-			return models.GovernanceSummary{}, err
-		}
-		if len(impact.Users) == 0 {
+		if holders[bundle.ID] == 0 {
 			cleanupHints = append(cleanupHints, fmt.Sprintf("Bundle %q is unused and can be reviewed for cleanup.", bundle.Name))
 		}
 	}

@@ -38,15 +38,17 @@ func GrantsWithExpiry(ctx context.Context, after time.Time) ([]ExpiringGrant, er
 }
 
 // UsersFirstSeen is, per person, the earliest moment Syndra has any record of
-// them: their first direct grant, bundle assignment or Zitadel grant. The
-// directory carries no creation date, so this is "first seen", not "created";
-// a person nothing has ever been recorded for is absent.
+// them: their first direct grant or bundle assignment. The directory carries no
+// creation date, so this is "first seen", not "created"; a person nothing has
+// ever been recorded for is absent.
+//
+// The grants index is not a source: it is rebuilt every sweep, so its created_at
+// is the last sweep and would date everybody to this morning.
 func UsersFirstSeen(ctx context.Context) (map[string]time.Time, error) {
 	rows, err := querier(ctx).Query(ctx, `
 		SELECT user_id, MIN(at) FROM (
 			SELECT user_id, created_at AS at FROM direct_role_grants
 			UNION ALL SELECT user_id, assigned_at FROM user_bundle_assignments
-			UNION ALL SELECT user_id, created_at FROM zitadel_grants_index
 		) s WHERE at IS NOT NULL GROUP BY user_id`)
 	if err != nil {
 		return nil, fmt.Errorf("users first seen: %w", err)

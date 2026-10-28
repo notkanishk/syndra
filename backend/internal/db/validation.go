@@ -128,11 +128,6 @@ type AuditCursor struct {
 	ID        string
 }
 
-// GetAuditLogs retrieves the most recent audit log entries.
-func GetAuditLogs(ctx context.Context, limit int) ([]models.AuditLog, error) {
-	return GetAuditLogsForUser(ctx, "", limit, nil)
-}
-
 // GetAuditLogsForUser returns one page of the audit tail, optionally narrowed
 // to one person and optionally starting after a cursor.
 //
@@ -166,6 +161,9 @@ func GetAuditLogsForUser(
 		}
 		l.Details = details
 		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return logs, nil
 }

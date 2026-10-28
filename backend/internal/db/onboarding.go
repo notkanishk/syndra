@@ -91,16 +91,18 @@ func MarkOnboardingTriggerUnconfigured(ctx context.Context, triggerID, errMsg st
 	return nil
 }
 
-// GetOnboardingTriggers returns all onboarding triggers ordered by creation time.
+// GetOnboardingTriggers returns the newest logListLimit onboarding triggers,
+// newest first.
 func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
 	query := `
 		SELECT id, user_id, source, idempotency_key, status,
 		       COALESCE(bundle_id::text, ''), COALESCE(error_message, ''),
 		       created_at, completed_at
 		FROM onboarding_triggers
-		ORDER BY created_at DESC`
+		ORDER BY created_at DESC
+		LIMIT $1`
 
-	rows, err := querier(ctx).Query(ctx, query)
+	rows, err := querier(ctx).Query(ctx, query, logListLimit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query onboarding triggers: %w", err)
 	}
@@ -114,6 +116,9 @@ func GetOnboardingTriggers(ctx context.Context) ([]OnboardingTrigger, error) {
 			return nil, err
 		}
 		triggers = append(triggers, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return triggers, nil
 }

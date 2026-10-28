@@ -38,6 +38,12 @@ func withReconciliationDeps(
 
 	origAll := svcAllDirectGrants
 	origObserveOrg := observeOrg
+	origLatest := dbLatestOrgObservation
+	// Default: nothing recorded lately, so the handler observes, as these tests
+	// were written to expect. A test of the shortcut overrides it.
+	dbLatestOrgObservation = func(context.Context) (db.Observation, error) {
+		return db.Observation{}, db.ErrNoObservation
+	}
 	origAllObserved := dbObservationSnapshot
 	origRules := svcGetActiveMappingRulesRecon
 	origExclusions := svcGetExclusions
@@ -73,6 +79,7 @@ func withReconciliationDeps(
 	t.Cleanup(func() {
 		svcAllDirectGrants = origAll
 		observeOrg = origObserveOrg
+		dbLatestOrgObservation = origLatest
 		dbObservationSnapshot = origAllObserved
 		svcGetActiveMappingRulesRecon = origRules
 		svcGetExclusions = origExclusions
