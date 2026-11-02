@@ -1,0 +1,21 @@
+import { Card, CardRow, Unresolved } from "ui";
+
+const who = { width: 220, fontSize: 15, fontWeight: 600 } as const;
+const muted = { flex: 1, fontSize: 14.5, color: "var(--muted)" } as const;
+
+/** A name nothing could place: the shared faint phrase, then the id, copyable. */
+export const InRows = () => (
+  <Card>
+    <CardRow first>
+      <div style={who}><Unresolved label="Unknown account" id="284019337710559902" idLabel="account id" /></div>
+      <span style={muted}>Laser Cutter · Operator</span>
+    </CardRow>
+    <CardRow>
+      <div style={who}>Aanya Rao</div>
+      <span style={muted}><Unresolved label="Unknown project" id="382075332397639918" idLabel="project id" /> · Member</span>
+    </CardRow>
+  </Card>
+);
+
+/** No id to show: the phrase alone. */
+export const NoId = () => <Unresolved label="Unknown account" />;
