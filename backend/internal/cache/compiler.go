@@ -380,6 +380,9 @@ var globEscape = strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`,
 // change-driven refresh drops them instead, where stale facts could carry a
 // revoked role.
 func refreshUser(ctx context.Context, userID string, warm bool, projectIDs []string, ps *pass) error {
+	if userID == claimserve.CanaryUserID {
+		return WriteCanary(ctx)
+	}
 	mu, _ := userLocks.LoadOrStore(userID, &sync.Mutex{})
 	mu.(*sync.Mutex).Lock()
 	defer mu.(*sync.Mutex).Unlock()
@@ -460,6 +463,23 @@ func refreshUser(ctx context.Context, userID string, warm bool, projectIDs []str
 			_ = redisDel(ctx, append(legacy, key)...)
 		}
 		return fmt.Errorf("cache compile: redis write failed: %w", err)
+	}
+	return nil
+}
+
+// WriteCanary writes the L1 canary's facts (claims-delivery-integrity S6)
+// through the same write every person's facts take, so the probe exercises
+// compile → Redis → snapshot. The canary is in no directory: its facts are
+// fixed (claimserve.CanaryFacts). Each warm writes it first, and a repair
+// after a canary miss (Redis lost) writes it again.
+func WriteCanary(ctx context.Context) error {
+	data, err := json.Marshal(claimserve.CanaryFacts())
+	if err != nil {
+		return err
+	}
+	set := map[string]string{claimserve.MetaField: time.Now().UTC().Format(time.RFC3339), claimserve.CanaryProjectID: string(data)}
+	if err := redisWriteFacts(ctx, claimserve.FactsKey(claimserve.CanaryUserID), set, nil, nil, cacheTTL); err != nil {
+		return fmt.Errorf("cache: write the canary's facts: %w", err)
 	}
 	return nil
 }
@@ -549,6 +569,9 @@ func LastWarm() (WarmReport, bool) {
 // A pass that skips or fails anyone says so as an ERROR with its counts: a warm
 // that quietly stops keeping facts fresh is how expiry became the outage.
 func Warm(ctx context.Context) error {
+	if err := WriteCanary(ctx); err != nil {
+		log.Printf("[CACHE] ERROR %v: the L1 probe will fail until it is written", err)
+	}
 	ids, err := dbGetAllKnownUserIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("cache warm: %w", err)

@@ -22,6 +22,7 @@ type tokenManager struct {
 	domain      string
 	saKey       *ServiceAccountKey
 	privKey     *rsa.PrivateKey
+	scope       string
 	accessToken string
 	expiresAt   time.Time
 }
@@ -40,6 +41,7 @@ func newTokenManager(domain string, saKey *ServiceAccountKey, privKey *rsa.Priva
 		domain:  domain,
 		saKey:   saKey,
 		privKey: privKey,
+		scope:   "openid urn:zitadel:iam:org:project:id:zitadel:aud",
 	}
 }
 
@@ -87,7 +89,7 @@ func (tm *tokenManager) refresh(ctx context.Context) error {
 	form := url.Values{
 		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
 		"assertion":  {assertion},
-		"scope":      {"openid urn:zitadel:iam:org:project:id:zitadel:aud"},
+		"scope":      {tm.scope},
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
@@ -180,6 +182,23 @@ func MintM2MToken(ctx context.Context, domain, keyPath string) (string, error) {
 		return "", fmt.Errorf("load service account key: %w", err)
 	}
 	tm := newTokenManager(domain, saKey, privKey)
+	return tm.Token(ctx)
+}
+
+// MintToken mints a one-shot access token for the machine user whose key is
+// at keyPath, asking for scope: the L2 canary's token (claims-delivery-
+// integrity S6), which must name its project's audience or Zitadel lists no
+// grants. No caching.
+func MintToken(ctx context.Context, domain, keyPath, scope string) (string, error) {
+	if domain == "" || keyPath == "" {
+		return "", fmt.Errorf("domain and keyPath are required")
+	}
+	saKey, privKey, err := LoadServiceAccountKey(keyPath)
+	if err != nil {
+		return "", fmt.Errorf("load canary key: %w", err)
+	}
+	tm := newTokenManager(domain, saKey, privKey)
+	tm.scope = scope
 	return tm.Token(ctx)
 }
 

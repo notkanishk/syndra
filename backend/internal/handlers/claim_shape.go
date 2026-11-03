@@ -309,6 +309,7 @@ func handlePutAppDebug(w http.ResponseWriter, r *http.Request) {
 		actor = "system"
 	}
 	s, switched := claimDebug.Start(appID, app.ClientID, userID, actor)
+	publishDebugWatch(r.Context())
 	auditAction := "claim_debug.started"
 	if switched {
 		auditAction = "claim_debug.switched"
@@ -321,6 +322,7 @@ func handleDeleteAppDebug(w http.ResponseWriter, r *http.Request) {
 	appID := r.PathValue("id")
 	actor := resolveActor(r, "")
 	if s, stopped := claimDebug.Stop(appID, actor); stopped {
+		publishDebugWatch(r.Context())
 		auditAs(r.Context(), actor, s.UserID, "claim_debug.ended", appID)
 	}
 	jsonResponse(w, http.StatusOK, debugState(appID))
