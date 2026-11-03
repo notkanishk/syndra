@@ -333,8 +333,7 @@ func sawCanaryCall(ctx context.Context, userID, clientID string, since time.Time
 		// the token, but Zitadel sends Syndra no application.client_id for it
 		// (seen on prod 3 Nov 2026), so its call is recorded with none.
 		for _, c := range []string{clientID, ""} {
-			worst, _ := claimCalls{}.Window(userID, c, since, time.Now().Add(time.Second))
-			if o, ok := worst[claimtel.FnPreAccessToken]; ok && (o == claimtel.Served || o == claimtel.ServedLKG) {
+			if canaryCallServed(ctx, userID, c, since, time.Now().Add(time.Second)) {
 				return true
 			}
 		}
@@ -347,6 +346,23 @@ func sawCanaryCall(ctx context.Context, userID, clientID string, since time.Time
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
+}
+
+// canaryCallServed looks for this run's own served preaccesstoken call, at
+// either door. The claims container's raw records are read directly; the
+// backend's own door (still :8080's route) falls back to the merged window.
+func canaryCallServed(ctx context.Context, userID, clientID string, from, to time.Time) bool {
+	if rr := claimRelayRedis(); rr != nil {
+		rctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		ok := claimserve.RemoteServed(rctx, rr, userID, clientID, claimtel.FnPreAccessToken, from, to)
+		cancel()
+		if ok {
+			return true
+		}
+	}
+	worst, _ := claimDelivery.Window(userID, clientID, from, to)
+	o, ok := worst[claimtel.FnPreAccessToken]
+	return ok && (o == claimtel.Served || o == claimtel.ServedLKG)
 }
 
 var canaryCallWait = 10 * time.Second

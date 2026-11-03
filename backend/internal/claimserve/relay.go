@@ -460,6 +460,36 @@ func RemoteLast(ctx context.Context, rdb RelayRedis) (served, called time.Time, 
 // RemoteWindow is claimtel.Recorder.Window over the calls the claims process
 // relayed. A read that fails says overflowed, so the correlator leaves the
 // sign-in unchecked rather than calling it not called.
+// RemoteServed says whether the claims container recorded a served call for
+// (person, client) through fn between from and to. It reads the raw records,
+// not merged spans: a nearby call with a worse outcome (Syndra's own Zitadel
+// login under the same account, seconds earlier) must not hide it.
+func RemoteServed(ctx context.Context, rdb RelayRedis, userID, clientID, fn string, from, to time.Time) bool {
+	if clientID == "" {
+		clientID = claimtel.None
+	}
+	vals, err := rdb.LRange(ctx, callsKey(userID, clientID), 0, -1).Result()
+	if err != nil {
+		return false
+	}
+	for _, v := range vals {
+		p := strings.Split(v, sep)
+		if len(p) != 3 || p[1] != fn {
+			continue
+		}
+		ms, err := strconv.ParseInt(p[0], 10, 64)
+		if err != nil {
+			continue
+		}
+		at := time.UnixMilli(ms)
+		o := claimtel.Outcome(p[2])
+		if !at.Before(from) && !at.After(to) && (o == claimtel.Served || o == claimtel.ServedLKG) {
+			return true
+		}
+	}
+	return false
+}
+
 func RemoteWindow(ctx context.Context, rdb RelayRedis, userID, clientID string, from, to time.Time) (map[string]claimtel.Outcome, bool) {
 	if clientID == "" {
 		clientID = claimtel.None
