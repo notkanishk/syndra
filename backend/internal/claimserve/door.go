@@ -231,6 +231,12 @@ func (d *Door) Answer(ctx context.Context, req Request) Answer {
 	projects := req.Projects()
 	switch {
 	case len(projects) == 0:
+		// A first sign-in races onboarding (SC4): the token names no project
+		// yet. With the welcome switch on, a brand-new member gets the welcome
+		// roles for the app's own project.
+		if res, pid, ok := d.Plane().Welcome(ctx, req.User, req.Application.ClientID, req.Function); ok {
+			return Answer{Claims: res.Claims, ProjectID: pid, Outcome: res.Outcome, ClientKnown: res.ClientKnown, Gen: res.Gen}
+		}
 		return Answer{Claims: []Claim{}, Outcome: claimtel.NoGrants}
 	case len(projects) > 1:
 		log.Printf("[DATA PLANE] Refusing cross-project claims for user=%s client=%q function=%s: the token spans projects %v. "+

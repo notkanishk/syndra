@@ -7,13 +7,22 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"syndra/internal/claimtel"
 )
 
 // UserRef is the subset of the Zitadel Actions v2 user block Syndra reads.
+//
+// The block is Zitadel's query.User (internal/query/user.go): "creation_date"
+// is when the account was made; a person carries "human", a machine user
+// "machine".
 type UserRef struct {
 	ID string `json:"id"`
+	// CreatedAt is zero when absent or unreadable.
+	CreatedAt time.Time `json:"-"`
+	// Human: the block carries "human" and no "machine".
+	Human bool `json:"-"`
 }
 
 // GrantRef is the subset of a Zitadel Actions v2 user grant row Syndra reads.
@@ -122,10 +131,16 @@ func Decode(body []byte) (Request, claimtel.Outcome) {
 	_ = json.Unmarshal(top["function"], &req.Function)
 	_ = json.Unmarshal(top["application"], &req.Application)
 	var user struct {
-		ID json.RawMessage `json:"id"`
+		ID      json.RawMessage `json:"id"`
+		Created json.RawMessage `json:"creation_date"`
+		Human   json.RawMessage `json:"human"`
+		Machine json.RawMessage `json:"machine"`
 	}
 	_ = json.Unmarshal(top["user"], &user)
 	_ = json.Unmarshal(user.ID, &req.User.ID)
+	_ = json.Unmarshal(user.Created, &req.User.CreatedAt)
+	req.User.Human = bytes.HasPrefix(bytes.TrimSpace(user.Human), []byte("{")) &&
+		(len(user.Machine) == 0 || string(bytes.TrimSpace(user.Machine)) == "null")
 	if strings.TrimSpace(req.User.ID) == "" {
 		return req, claimtel.ContractFault
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"syndra/internal/claimserve"
 	"syndra/internal/db"
 	"syndra/internal/models"
 	"syndra/internal/services"
@@ -25,6 +26,8 @@ func TestMain(m *testing.M) {
 	dbBundleIncludesAnything = func(context.Context, string) (bool, error) { return false, nil }
 	dbRetireBlockers = func(context.Context, string) ([]string, error) { return nil, nil }
 	dbInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+	// The welcome switch is off unless a test says so (it reads Postgres).
+	svcWelcomeClaims = func(context.Context) (claimserve.Welcome, error) { return claimserve.Welcome{}, nil }
 	// No role waits and nobody has switched over: a change held by its own
 	// mode waits, anything else is sent row by row through the stubbable
 	// DrainOne, as before roles that wait. delivery tests stub their own.
