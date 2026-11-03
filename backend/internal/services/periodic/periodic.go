@@ -14,8 +14,28 @@ package periodic
 import (
 	"context"
 	"log"
+	"runtime/debug"
+	"sync/atomic"
 	"time"
 )
+
+// panics counts every panic recovered in background work since start.
+var panics atomic.Int64
+
+// Panics is how many panics background work has recovered since start. Each
+// one is a bug that, unrecovered, would have killed the process, and with it
+// the claims data plane serving every sign-in (assessment S13, S14).
+func Panics() int64 { return panics.Load() }
+
+// Recover is the guard for a background goroutine: `defer periodic.Recover("TAG")`
+// as its first line. A panic is logged with its stack and counted, and the
+// goroutine ends instead of the process.
+func Recover(name string) {
+	if rec := recover(); rec != nil {
+		panics.Add(1)
+		log.Printf("[%s] Panic recovered: %v\n%s", name, rec, debug.Stack())
+	}
+}
 
 // Runner drives a run function on a fixed interval.
 type Runner struct {
@@ -65,11 +85,7 @@ func (r *Runner) Start(ctx context.Context) {
 // the goroutine: the runner is long-running and an isolated bug should
 // surface in logs, not silently stall the whole enforcement surface.
 func (r *Runner) runOnce(ctx context.Context) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			log.Printf("[%s] Panic recovered during run: %v", r.name, rec)
-		}
-	}()
+	defer Recover(r.name)
 
 	start := time.Now()
 	if err := r.run(ctx); err != nil {

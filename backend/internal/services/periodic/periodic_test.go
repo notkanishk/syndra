@@ -115,3 +115,24 @@ func TestNew_FallsBackOnNonPositiveInterval(t *testing.T) {
 		t.Errorf("negative interval should fall back to 6h, got %s", r.interval)
 	}
 }
+
+// A panic in background work is recovered and counted, never the process's
+// end: the claims data plane shares this process.
+func TestRecover_CountsAndContains(t *testing.T) {
+	before := Panics()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer Recover("TEST")
+		panic("background bug")
+	}()
+	<-done
+	if Panics() != before+1 {
+		t.Fatalf("panics = %d, want %d", Panics(), before+1)
+	}
+	r := New("TEST", time.Hour, time.Hour, func(context.Context) error { panic("run bug") })
+	r.runOnce(context.Background())
+	if Panics() != before+2 {
+		t.Fatalf("a runner's panic was not counted: %d", Panics())
+	}
+}

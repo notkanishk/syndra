@@ -22,6 +22,10 @@ func NewRouter() http.Handler {
 
 	// Health check — no auth, no CORS
 	mux.HandleFunc("GET /healthz", handleHealthCheck)
+	// Claim delivery's own health, for an external monitor: unauthenticated,
+	// no ids, no person's data (claims-delivery-integrity S1).
+	mux.HandleFunc("GET /healthz/claims", handleClaimsHealth)
+	mux.HandleFunc("GET /api/v1/claims/delivery", withCORS(withOperatorAuth(handleClaimDelivery)))
 
 	// System mode diagnostic — auth-gated to avoid leaking deployment posture.
 	// UI consumes this to render a "Live"/"Demo"/"Degraded" indicator.
@@ -417,8 +421,10 @@ func NewRouter() http.Handler {
 	// Data Plane routes — verified by their own mechanisms (HMAC / Redis)
 	mux.HandleFunc("POST /api/webhooks/zitadel",
 		withCORS(withZitadelActionSignature("ZITADEL_EVENT_SIGNING_KEY", HandleZitadelWebhook)))
+	// withClaimDelivery is outermost so the signature check is counted too:
+	// every call to the claims target lands in exactly one outcome class.
 	mux.HandleFunc("POST /api/action/inject",
-		withCORS(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject)))
+		withClaimDelivery(withCORS(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject))))
 
 	return withPanicGuard(withMaxBody(withSecurityHeaders(mux)))
 }
