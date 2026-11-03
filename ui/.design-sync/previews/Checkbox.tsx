@@ -1,0 +1,12 @@
+import { Checkbox } from "ui";
+
+const label = { display: "flex", alignItems: "center", gap: 10, fontSize: 14.5 } as const;
+
+/** The one checkbox: inside a label the whole label is the target. */
+export const States = () => (
+  <div style={{ display: "grid", gap: 12 }}>
+    <label style={label}><Checkbox defaultChecked /> Send a copy to my email</label>
+    <label style={label}><Checkbox /> Only show people with access expiring</label>
+    <label style={label}><Checkbox disabled /> Include accounts that have left</label>
+  </div>
+);

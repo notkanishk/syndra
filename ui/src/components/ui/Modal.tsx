@@ -185,9 +185,18 @@ export function useDialogFocusTrap(
  * commit. Overlays open on a person's action, so none renders on the server.
  */
 export function ToBody({ children }: { children: ReactNode }) {
+  const target = useContext(PortalTarget);
   if (typeof document === "undefined") return null;
-  return createPortal(children, document.body);
+  return createPortal(children, target ?? document.body);
 }
+
+/**
+ * Where ToBody puts overlays when not under <body>. The app never sets it. The
+ * design canvas renders many app pages inside one document, each in a frame
+ * that contains its own fixed overlays; its SyndraRoot provides the frame, so a
+ * dialog drawn open covers its frame rather than the whole board.
+ */
+export const PortalTarget = createContext<HTMLElement | null>(null);
 
 /**
  * A dialog whose state lives only while it is open.

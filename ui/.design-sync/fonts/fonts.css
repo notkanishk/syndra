@@ -1,7 +1,8 @@
 /* Self-hosted copies of the three Google Fonts the app loads through next/font
    in src/app/layout.tsx (latin subset, OFL). The --font-* variables
    next/font sets on <html> live in ../host.css (appended by
-   build-css.mjs, since only @font-face rules are harvested from here). */
-@font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 200 800; font-stretch: 100%; font-display: swap; src: url(./BricolageGrotesque-var.woff2) format('woff2'); }
-@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(./Figtree-400_700.woff2) format('woff2'); }
-@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400 500; font-display: swap; src: url(./JetBrainsMono-400.woff2) format('woff2'); }
+   build-css.mjs, since only @font-face rules are harvested from here).
+   Each src lists the design canvas's uploaded copy first (/_blob/<id>, see NOTES.md), then the local file. */
+@font-face{ font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 200 800; font-stretch: 100%; font-display: swap; src: url(/_blob/d4a1f90aac37ca1a1de8be08e723ec0e) format('woff2'), url(./BricolageGrotesque-var.woff2) format('woff2'); }
+@font-face{ font-family: 'Figtree'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(/_blob/941e1dfb60740e99f8b98f34aef20363) format('woff2'), url(./Figtree-400_700.woff2) format('woff2'); }
+@font-face{ font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400 500; font-display: swap; src: url(/_blob/81f3092162b5fb7c7bfab0f082ab9a87) format('woff2'), url(./JetBrainsMono-400.woff2) format('woff2'); }
