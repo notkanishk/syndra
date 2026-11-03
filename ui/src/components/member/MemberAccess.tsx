@@ -22,6 +22,7 @@ import { useMyChanges, type MyChange } from "@/lib/queries/useMyChanges";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { daysUntil, expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Member · My access (route-me, 52b + 52c). The landing route for members, and
@@ -233,9 +234,11 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                 {/* Something they hold that Syndra has no reason for. The
                     operator's People page calls this "unexplained"; the person
                     holding it should not be the only one who cannot see it. */}
-                {(project.observed_role_keys ?? [])
-                  .filter((roleKey) => !project.effective_role_keys.includes(roleKey))
-                  .map((roleKey) => (
+                {sortByName(
+                  (project.observed_role_keys ?? []).filter((roleKey) => !project.effective_role_keys.includes(roleKey)),
+                  (roleKey) => roleName(project.project_id, roleKey),
+                  (roleKey) => roleKey,
+                ).map((roleKey) => (
                     <div key={`held-${roleKey}`} className="row-divider flex flex-col gap-0.5 px-5 py-3">
                       <span className="text-[15px] font-semibold">{roleName(project.project_id, roleKey)}</span>
                       <span className="text-[13.5px] text-muted">

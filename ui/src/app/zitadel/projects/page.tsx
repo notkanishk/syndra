@@ -19,6 +19,7 @@ import {
   useUpstreamUpdateRole,
   type UpstreamProjectRole,
 } from "@/lib/queries/useUpstream";
+import { sortByName } from "@/lib/sort";
 
 /** What is recorded when a change goes straight to Zitadel: one line, and no explanation. */
 const AUDIT_ONLY =
@@ -36,7 +37,7 @@ export default function UpstreamProjectsPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<UpstreamProjectRole | "new" | null>(null);
 
-  const rows = projects.data?.items ?? [];
+  const rows = sortByName(projects.data?.items ?? [], (p) => p.name);
   const activeId = selected ?? rows[0]?.id ?? null;
   const roles = useUpstreamProjectRoles(activeId);
 
@@ -119,7 +120,7 @@ export default function UpstreamProjectsPage() {
               />
             }
           >
-            {(roles.data?.items ?? []).map((role) => (
+            {sortByName(roles.data?.items ?? [], (r) => r.displayName || r.key, (r) => r.key).map((role) => (
               <RoleRow
                 key={role.key}
                 projectId={activeId!}

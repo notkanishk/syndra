@@ -54,6 +54,7 @@ import {
 } from "@/lib/queries/useTargets";
 import { useUsers } from "@/lib/queries/useUsers";
 import { Avatar } from "@/components/ui/Avatar";
+import { sortByName, sortNames } from "@/lib/sort";
 
 /**
  * One add-on target's operator page (9.20, 1.18/1.19, 15.6; design §21).
@@ -394,7 +395,7 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
         </Reading>
       ))}
 
-      {pools.map((pool) => (
+      {sortByName(pools, (pool) => pool.name, (pool) => pool.name).map((pool) => (
         <Reading
           key={pool.name}
           tone={!pool.healthy ? "danger" : pool.warning ? "warn" : "healthy"}
@@ -560,7 +561,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
               recorded as owning an account that is no longer on {name}
             </span>
           </CardRow>
-          {result!.stale!.map((b) => (
+          {sortByName(result!.stale!, (b) => b.username, (b) => b.subject_id).map((b) => (
             <CardRow key={b.subject_id} className="flex-wrap">
               <Mono className="min-w-0 [overflow-wrap:anywhere]">{b.username}</Mono>
               <span className="flex-1" />
@@ -851,7 +852,7 @@ function ConnectionNotices({
     notices.push(
       <Reading key="unaudited" tone="warn" label="SMB auditing is off">
         {health.unaudited_shares!.length === 1 ? "Share" : "Shares"}{" "}
-        {health.unaudited_shares!.map((s, i, all) => (
+        {sortNames(health.unaudited_shares!).map((s, i, all) => (
           <Fragment key={s}>
             {i > 0 && (i === all.length - 1 ? " and " : ", ")}
             <Mono>{s}</Mono>
@@ -1523,7 +1524,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         }
       >
         <>
-          {unmanaged.map((account, i) => (
+          {sortByName(unmanaged, (a) => a.username, (a) => a.username).map((account, i) => (
             <CardRow
               key={account.username}
               first={i === 0}

@@ -917,7 +917,8 @@ describe("adopting an account", () => {
     state.health = { reachable: true, lifecycle: "active" };
     state.inventory = twoAccounts;
     renderTarget();
-    fireEvent.click(screen.getAllByRole("button", { name: "Assign to a person" })[0]);
+    // A to Z: kabir, then sai.
+    fireEvent.click(screen.getAllByRole("button", { name: "Assign to a person" })[1]);
   }
 
   function chooseSai() {

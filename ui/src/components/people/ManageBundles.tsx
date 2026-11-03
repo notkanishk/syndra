@@ -13,6 +13,8 @@ import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/
 import { useBundleRolesByBundle, useBundles, useRemoveBundle } from "@/lib/queries/useBundles";
 import { useMappingRules } from "@/lib/queries/useMappingRules";
 import { useAssignBundle, useUserAccess } from "@/lib/queries/useUsers";
+import { sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * E4 · Assign / unassign a bundle.
@@ -88,7 +90,8 @@ function ManageBundlesOpen({
 
   const previewBundle = (bundles.data ?? []).find((bundle) => bundle.id === previewFor);
   const previewAdding = previewFor ? !assignedIds.has(previewFor) : false;
-  const previewRoles = previewFor ? (bundleRoles[previewFor] ?? []) : [];
+  const names = useShownNames();
+  const previewRoles = sortByName(previewFor ? (bundleRoles[previewFor] ?? []) : [], (r) => names.roleRef(r.zitadel_project_id, r.zitadel_role_key), (r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`);
 
   async function apply() {
     try {

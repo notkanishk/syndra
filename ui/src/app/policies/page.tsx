@@ -30,6 +30,8 @@ import { useRolesThatWait } from "@/lib/queries/useRolesThatWait";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { humanizeKey } from "@/lib/format";
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
+import { sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * S2 · Automation › Automatic rules.
@@ -43,7 +45,16 @@ export default function AutomaticRulesPage() {
   const rules = useMappingRules();
   const [editing, setEditing] = useState<MappingRuleRow | "new" | null>(null);
 
-  const rows = useMemo(() => rules.data ?? [], [rules.data]);
+  const names = useShownNames();
+  // A to Z by the rule as it reads: "Project / role ⇒ Project / role".
+  const rows = useMemo(
+    () =>
+      sortByName(
+        rules.data ?? [],
+        (r) => `${names.roleRef(r.source_project, r.source_role)} ⇒ ${names.roleRef(r.target_project, r.target_role)}`,
+      ),
+    [rules.data, names],
+  );
 
   const catalog = useGlobalRoleCatalog();
   const waits = (projectId: string, roleKey: string) =>

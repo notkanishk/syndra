@@ -19,6 +19,7 @@ import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useCrumb } from "@/lib/page-crumb";
 import { kindLabel, useServiceAccount } from "@/lib/queries/useServiceAccounts";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
+import { sortByName } from "@/lib/sort";
 
 /**
  * One service account (A-07 §27, route-service-accounts, 23 Oct 2026): a card of
@@ -191,7 +192,7 @@ function Holds({ userId, name }: { userId: string; name: string }) {
   const grantsResolved = !grants.isLoading && !grants.error;
 
   const rows = (access.data?.projects ?? []).flatMap((project) =>
-    project.effective_role_keys.map((roleKey) => {
+    sortByName(project.effective_role_keys, humanizeKey, (k) => k).map((roleKey) => {
       const reasons: RoleReason[] = [...project.source_roles, ...project.derived_roles]
         .filter((role) => role.role_key === roleKey)
         .flatMap((role) => role.reasons);
