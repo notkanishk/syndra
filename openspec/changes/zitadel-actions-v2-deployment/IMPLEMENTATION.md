@@ -9,7 +9,7 @@
 * `backend/internal/handlers/contracts.go` — new `decodeJSONLenient` helper that permits unknown fields while keeping the trailing-token guard.
 * `backend/internal/handlers/action.go` — fully reshaped to the Zitadel Actions v2 contract:
   * Types: `ActionV2Request`, `ActionV2UserRef`, `ActionV2UserGrantRef`, `ActionV2Response`, `ActionV2Claim`.
-  * `HandleActionInject` now reads `{function, user.id, user_grants[{projectId, roles}]}` via the lenient decoder and responds with `{append_claims:[{key,value}], append_log_claims?}`.
+  * `HandleActionInject` now reads `{function, user.id, user_grants[{project_id, roles}]}` via the lenient decoder (Zitadel sends snake_case `project_id`; `projectId` from its docs is also read, fixed 3 Nov 2026) and responds with `{append_claims:[{key,value}], append_log_claims?}`.
   * Helpers: `dedupProjectIDs`, `claimsForProject`, `claimsToEnvelope`.
   * Project selection: 0 → empty claims; 1 → flat keys; 2+ → `syndra.<projectID>.<key>` namespaced keys.
   * `degradedResponse` preserves per-project `fail_closed` / `minimal_safe` semantics; returns empty envelope on DB outage.
