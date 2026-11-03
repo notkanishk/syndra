@@ -210,3 +210,7 @@ part of the delete.
 | Token carries no Syndra claims, log says `No project grants` | The app neither asserts roles nor requests role scopes, so Zitadel lists no grants | Turn on "Assert roles on authentication" for the project or app, or request `urn:zitadel:iam:org:project:roles`. |
 | `/zitadel` Rotation Status panel shows `unknown` | `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT` not set on backend, malformed, or in the future | Seed it with `date -u +%Y-%m-%dT%H:%M:%SZ` now, or run `make zitadel-actions-rotate-key` and apply the emitted fragment: `cat zitadel/actions/.action-env.fragment >> .env`. |
 | `/zitadel` Rotation Status panel shows `warn` or `stale` | Signing key is older than the configured threshold | Run `make zitadel-actions-rotate-key`; apply the emitted fragment (`cat zitadel/actions/.action-env.fragment >> .env`, or `sudo install -m 0600 …` for systemd); restart the backend; delete the fragment. |
+
+## 3 Nov 2026: the grant field name
+
+Zitadel sends each grant's project as `project_id` (its `query.UserGrant` JSON tags). Its docs show `projectId`. Syndra read only `projectId`, so every call logged `No project grants in request` and answered with no claims. Actions v1 kept filling the tokens, so nothing failed loudly. Syndra now reads both. After deploy, a healthy sign-in logs `Cache hit for key=mapping:…`; a `No project grants` line now really means the token listed no project.

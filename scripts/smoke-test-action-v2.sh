@@ -37,7 +37,7 @@ for bin in curl jq; do
   command -v "$bin" >/dev/null 2>&1 || { echo "error: $bin not installed" >&2; exit 1; }
 done
 
-PAYLOAD='{"function":"function/preaccesstoken","user":{"id":"smoke-test-user"},"user_grants":[{"projectId":"smoke-test-project","roles":["viewer"]}]}'
+PAYLOAD='{"function":"function/preaccesstoken","user":{"id":"smoke-test-user"},"user_grants":[{"project_id":"smoke-test-project","roles":["viewer"]}]}'
 
 HEADERS=(-H 'Content-Type: application/json')
 if [[ -n "${ZITADEL_ACTION_SIGNING_KEY:-}" ]]; then

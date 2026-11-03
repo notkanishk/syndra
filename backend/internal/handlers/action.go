@@ -27,9 +27,33 @@ type ActionV2UserRef struct {
 // ActionV2UserGrantRef is the subset of a Zitadel Actions v2 user grant row
 // Syndra reads. Zitadel may emit one entry per role, so callers MUST
 // deduplicate by ProjectID before acting.
+//
+// Zitadel serialises query.UserGrant with snake_case tags: the project is
+// "project_id" (internal/query/user_grant.go, v3.4 and v4). Its docs show
+// "projectId", and Syndra read only that until 3 Nov 2026, so every token
+// carried no Syndra claims while Actions v1 hid it. Both spellings are read;
+// snake_case wins when both are present.
 type ActionV2UserGrantRef struct {
-	ProjectID string   `json:"projectId"`
+	ProjectID string   `json:"project_id"`
 	Roles     []string `json:"roles"`
+}
+
+// UnmarshalJSON accepts "project_id" (what Zitadel sends) and "projectId"
+// (what its docs show).
+func (g *ActionV2UserGrantRef) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Snake string   `json:"project_id"`
+		Camel string   `json:"projectId"`
+		Roles []string `json:"roles"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	g.ProjectID, g.Roles = raw.Snake, raw.Roles
+	if g.ProjectID == "" {
+		g.ProjectID = raw.Camel
+	}
+	return nil
 }
 
 // ActionV2ApplicationRef names the client the token is for (Zitadel v4+).
