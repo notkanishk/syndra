@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -50,6 +51,13 @@ type AddonOperationParams struct {
 	Operation string
 	ActorID   string
 	SubjectID string
+	// About is the non-secret thing the change was about (an account name, a
+	// setting's value). The caller decides which operations may carry one;
+	// password operations never do.
+	About string
+	// RetryOf names the first send when this is the page's one automatic
+	// resend of the same value. The insert checks it describes the same call.
+	RetryOf string
 }
 
 // AddonOperation is one record as an operator surface reads it.
@@ -63,6 +71,15 @@ type AddonOperation struct {
 	CreatedAt time.Time  `json:"created_at"`
 	ClaimedAt *time.Time `json:"claimed_at,omitempty"`
 	SettledAt *time.Time `json:"settled_at,omitempty"`
+	About     string     `json:"about,omitempty"`
+}
+
+// SentAt is when the call left: the claim, or the record when it never was.
+func (o AddonOperation) SentAt() time.Time {
+	if o.ClaimedAt != nil {
+		return *o.ClaimedAt
+	}
+	return o.CreatedAt
 }
 
 // Dispatched reports whether this record was ever claimed for a call.
@@ -107,23 +124,49 @@ func BeginAddonOperation(ctx context.Context, p AddonOperationParams) (string, e
 // transaction. Both or neither: a record with no audit row is a mutation with
 // no trace, and an audit row with no record is a trace pointing at nothing.
 func insertAddonOperation(ctx context.Context, tx pgx.Tx, p AddonOperationParams) (string, error) {
-	const insertOp = `
-		INSERT INTO addon_operations (target, operation, actor_id, subject_id, status)
-		VALUES ($1, $2, $3, $4, 'dispatching')
-		RETURNING id`
 	var id string
-	if err := tx.QueryRow(ctx, insertOp, p.Target, p.Operation, p.ActorID, p.SubjectID).Scan(&id); err != nil {
-		return "", fmt.Errorf("insert addon operation: %w", err)
+	var details []byte
+	if p.RetryOf == "" {
+		const insertOp = `
+			INSERT INTO addon_operations (target, operation, actor_id, subject_id, status, about)
+			VALUES ($1, $2, $3, $4, 'dispatching', NULLIF($5, ''))
+			RETURNING id`
+		if err := tx.QueryRow(ctx, insertOp, p.Target, p.Operation, p.ActorID, p.SubjectID, p.About).Scan(&id); err != nil {
+			return "", fmt.Errorf("insert addon operation: %w", err)
+		}
+	} else {
+		// The resend inherits nothing from the request but the link, and the
+		// link is checked here: it must name a FIRST send of this same call.
+		// The unique index on retry_of is what makes it once.
+		const insertRetry = `
+			INSERT INTO addon_operations (target, operation, actor_id, subject_id, status, attempt, retry_of)
+			SELECT $1, $2, $3, $4, 'dispatching', 2, first.id
+			  FROM addon_operations first
+			 WHERE first.id = $5::uuid AND first.attempt = 1
+			   AND first.target = $1 AND first.operation = $2 AND first.subject_id = $4
+			RETURNING id`
+		err := tx.QueryRow(ctx, insertRetry, p.Target, p.Operation, p.ActorID, p.SubjectID, p.RetryOf).Scan(&id)
+		if errors.Is(err, pgx.ErrNoRows) || IsUniqueViolation(err) {
+			return "", fmt.Errorf("%w: %s", ErrNotResendable, p.RetryOf)
+		}
+		if err != nil {
+			return "", fmt.Errorf("insert addon operation resend: %w", err)
+		}
+		details, _ = json.Marshal(map[string]any{"attempt": 2, "retry_of": p.RetryOf, "retried_by": "automatic"})
 	}
 
 	const insertAudit = `INSERT INTO audit_logs
-		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id) VALUES ($1,$2,$3,$4)`
+		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, details) VALUES ($1,$2,$3,$4,$5)`
 	action := "addon." + p.Target + "." + p.Operation + ".dispatched"
-	if _, err := tx.Exec(ctx, insertAudit, p.ActorID, p.SubjectID, action, id); err != nil {
+	if _, err := tx.Exec(ctx, insertAudit, p.ActorID, p.SubjectID, action, id, details); err != nil {
 		return "", fmt.Errorf("insert addon operation audit: %w", err)
 	}
 	return id, nil
 }
+
+// ErrNotResendable means a resend named a send that is not a first send of the
+// same call, or that has already been resent once.
+var ErrNotResendable = errors.New("db: that send cannot be resent")
 
 // ErrAddonOperationNotOpen means no unclaimed record matching this call is
 // awaiting an outcome: it does not exist, it describes a different call, it has
@@ -206,23 +249,39 @@ func SettleAddonOperation(ctx context.Context, id, status string) error {
 	return nil
 }
 
-// ListUnresolvedAddonOperations returns operations nobody has an answer for,
-// oldest first, excluding `dispatching` rows young enough to still be in flight.
+// AddonUnresolvedGrace is how long a claimed call may go unanswered before it
+// is a question rather than a call in flight. Comfortably past the add-on
+// call's 30-second timeout.
+const AddonUnresolvedGrace = 2 * time.Minute
+
+// SelfSettledOperations are the kinds nobody is asked about. A member settles
+// their own password by setting it again (A-13 §4), and a rotate belongs to a
+// revoke, which already waits in Unfinished revocations (§5). An operator never
+// sees either on Waiting on you, its counts, or Home.
+var SelfSettledOperations = []string{"password.set", "password.rotate"}
+
+// ListUnresolvedAddonOperations returns one target's operations nobody has an
+// answer for, newest first (A-09 §3), excluding the kinds that settle
+// themselves and `dispatching` rows young enough to still be in flight.
+//
+// Claimed rows only. A record never claimed was never sent, so it is not a
+// question: SettleUnclaimedAddonOperations closes those as `unreached`.
 //
 // The grace period is what stops the surface flickering: a call in progress is
 // indistinguishable by status alone from one whose backend died, and only time
 // separates them. Callers pass something comfortably longer than the dispatch
-// timeout. Age runs from the claim where there is one, since that is when the
-// call actually started.
-func ListUnresolvedAddonOperations(ctx context.Context, grace time.Duration, limit int) ([]AddonOperation, error) {
+// timeout. Age runs from the claim, since that is when the call actually started.
+func ListUnresolvedAddonOperations(ctx context.Context, target string, grace time.Duration, limit int) ([]AddonOperation, error) {
 	const q = `
-		SELECT id, target, operation, actor_id, subject_id, status, created_at, claimed_at, settled_at
+		SELECT id, target, operation, actor_id, subject_id, status, created_at, claimed_at, settled_at, COALESCE(about, '')
 		  FROM addon_operations
-		 WHERE status = 'indeterminate'
-		    OR (status = 'dispatching' AND COALESCE(claimed_at, created_at) < NOW() - $1::interval)
-		 ORDER BY created_at ASC
-		 LIMIT $2`
-	rows, err := querier(ctx).Query(ctx, q, grace.String(), limit)
+		 WHERE target = $1 AND resolution IS NULL AND claimed_at IS NOT NULL
+		   AND operation <> ALL($4::text[])
+		   AND (status = 'indeterminate'
+		        OR (status = 'dispatching' AND claimed_at < NOW() - $2::interval))
+		 ORDER BY created_at DESC
+		 LIMIT $3`
+	rows, err := querier(ctx).Query(ctx, q, target, grace.String(), limit, SelfSettledOperations)
 	if err != nil {
 		return nil, fmt.Errorf("list unresolved addon operations: %w", err)
 	}
@@ -232,12 +291,208 @@ func ListUnresolvedAddonOperations(ctx context.Context, grace time.Duration, lim
 	for rows.Next() {
 		var o AddonOperation
 		if err := rows.Scan(&o.ID, &o.Target, &o.Operation, &o.ActorID, &o.SubjectID,
-			&o.Status, &o.CreatedAt, &o.ClaimedAt, &o.SettledAt); err != nil {
+			&o.Status, &o.CreatedAt, &o.ClaimedAt, &o.SettledAt, &o.About); err != nil {
 			return nil, fmt.Errorf("scan unresolved addon operation: %w", err)
 		}
 		out = append(out, o)
 	}
 	return out, rows.Err()
+}
+
+// CountUnresolvedAddonOperations is ListUnresolvedAddonOperations' predicate as
+// one number per target, for the governance indicators. Targets with none are
+// absent.
+func CountUnresolvedAddonOperations(ctx context.Context, grace time.Duration) (map[string]int, error) {
+	const q = `
+		SELECT target, COUNT(*)
+		  FROM addon_operations
+		 WHERE resolution IS NULL AND claimed_at IS NOT NULL
+		   AND operation <> ALL($2::text[])
+		   AND (status = 'indeterminate'
+		        OR (status = 'dispatching' AND claimed_at < NOW() - $1::interval))
+		 GROUP BY target`
+	rows, err := querier(ctx).Query(ctx, q, grace.String(), SelfSettledOperations)
+	if err != nil {
+		return nil, fmt.Errorf("count unresolved addon operations: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var target string
+		var n int
+		if err := rows.Scan(&target, &n); err != nil {
+			return nil, fmt.Errorf("scan unresolved addon operation count: %w", err)
+		}
+		out[target] = n
+	}
+	return out, rows.Err()
+}
+
+// SettleUnclaimedAddonOperations closes, as `unreached`, every record on a
+// target that was written and never claimed, past the grace period. Nothing was
+// sent, so this is certain, and it is the one settle the claim CHECK allows an
+// unclaimed row. Returns how many it closed.
+func SettleUnclaimedAddonOperations(ctx context.Context, target string, grace time.Duration) (int64, error) {
+	const q = `
+		UPDATE addon_operations
+		   SET status = 'unreached', settled_at = NOW()
+		 WHERE target = $1 AND status = 'dispatching' AND claimed_at IS NULL
+		   AND created_at < NOW() - $2::interval`
+	tag, err := querier(ctx).Exec(ctx, q, target, grace.String())
+	if err != nil {
+		return 0, fmt.Errorf("settle unclaimed addon operations: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// Resolutions an open operation may be closed with.
+const (
+	AddonResolutionHappened    = "happened"
+	AddonResolutionNotHappened = "not_happened"
+	AddonResolutionSuperseded  = "superseded"
+)
+
+// SyndraReader is the actor recorded when Syndra settles an operation from a
+// read of the target rather than from a person's answer.
+const SyndraReader = "system:syndra"
+
+// ErrAddonOperationNotUnresolved means the record is not one a person may
+// answer: not on this target, never sent, already answered, still in flight,
+// or a kind that settles itself.
+var ErrAddonOperationNotUnresolved = errors.New("db: that change is not waiting for an answer")
+
+// ResolveAddonOperation records what happened to an unconfirmed operation,
+// with who said so, and its audit row, in one transaction.
+//
+// Its own path, apart from SettleAddonOperation, on purpose. The dispatch path
+// may never move `indeterminate` anywhere, because a late answer there would
+// be evidence of nothing. This path moves `status` one step at most: a claimed
+// `dispatching` row past its grace becomes `indeterminate` (the honest reading
+// of a call whose answer never came), so a very late dispatch settle is then
+// refused rather than writing over the answer. The answer itself goes in
+// `resolution`; nothing here can write `succeeded`.
+//
+// by is the operator's id, or SyndraReader for a read of the target; the audit
+// action says which (`.answered` or `.read`), with the answer in its details.
+func ResolveAddonOperation(ctx context.Context, target, id string, happened bool, by string, grace time.Duration) (AddonOperation, error) {
+	resolution := AddonResolutionNotHappened
+	if happened {
+		resolution = AddonResolutionHappened
+	}
+	tx, err := PG.Begin(ctx)
+	if err != nil {
+		return AddonOperation{}, fmt.Errorf("begin resolve addon operation tx: %w", err)
+	}
+	defer tx.Rollback(ctx) // no-op after a successful Commit
+
+	const q = `
+		UPDATE addon_operations
+		   SET status = 'indeterminate', settled_at = COALESCE(settled_at, NOW()),
+		       resolution = $3, resolved_by = $4, resolved_at = NOW()
+		 WHERE id = $1::uuid AND target = $2 AND resolution IS NULL AND claimed_at IS NOT NULL
+		   AND operation <> ALL($6::text[])
+		   AND (status = 'indeterminate'
+		        OR (status = 'dispatching' AND claimed_at < NOW() - $5::interval))
+		RETURNING id, target, operation, actor_id, subject_id, status, created_at, claimed_at, settled_at, COALESCE(about, '')`
+	var o AddonOperation
+	err = tx.QueryRow(ctx, q, id, target, resolution, by, grace.String(), SelfSettledOperations).Scan(
+		&o.ID, &o.Target, &o.Operation, &o.ActorID, &o.SubjectID, &o.Status, &o.CreatedAt, &o.ClaimedAt, &o.SettledAt, &o.About)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AddonOperation{}, ErrAddonOperationNotUnresolved
+	}
+	if err != nil {
+		return AddonOperation{}, fmt.Errorf("resolve addon operation: %w", err)
+	}
+
+	how := ".answered"
+	if by == SyndraReader {
+		how = ".read"
+	}
+	details, _ := json.Marshal(map[string]any{"happened": happened})
+	const insertAudit = `INSERT INTO audit_logs
+		(actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, details) VALUES ($1,$2,$3,$4,$5)`
+	if _, err := tx.Exec(ctx, insertAudit, by, o.SubjectID, "addon."+o.Target+"."+o.Operation+how, o.ID, details); err != nil {
+		return AddonOperation{}, fmt.Errorf("insert addon operation answer audit: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return AddonOperation{}, fmt.Errorf("commit resolve addon operation tx: %w", err)
+	}
+	return o, nil
+}
+
+// SupersedeAddonOperations closes every earlier open operation of the same
+// kind, for the same person and system, as made moot by `by`, which the target
+// confirmed (A-13 §4: a confirmed password.set settles every earlier
+// unconfirmed one). Their own status is untouched: each still says its answer
+// was lost.
+func SupersedeAddonOperations(ctx context.Context, by string) (int64, error) {
+	const q = `
+		UPDATE addon_operations o
+		   SET resolution = 'superseded', superseded_by = b.id,
+		       resolved_by = b.subject_id, resolved_at = NOW()
+		  FROM addon_operations b
+		 WHERE b.id = $1::uuid AND b.status = 'succeeded'
+		   AND o.target = b.target AND o.subject_id = b.subject_id AND o.operation = b.operation
+		   AND o.id <> b.id AND o.created_at <= b.created_at
+		   AND o.resolution IS NULL AND o.claimed_at IS NOT NULL
+		   AND o.status IN ('dispatching', 'indeterminate')`
+	tag, err := querier(ctx).Exec(ctx, q, by)
+	if err != nil {
+		return 0, fmt.Errorf("supersede addon operations: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// ResendableAddonOperation finds the first send the page may resend once: this
+// subject's latest attempt-1 record of this operation on this target, inside
+// the window, not settled as refused or unreached (the page had a clear answer
+// for those and does not resend), and not resent already. found is false when
+// there is none, and the caller then treats the send as a fresh change.
+func ResendableAddonOperation(ctx context.Context, target, subject, operation string, window time.Duration) (id string, found bool, err error) {
+	const q = `
+		SELECT o.id FROM addon_operations o
+		 WHERE o.target = $1 AND o.subject_id = $2 AND o.operation = $3 AND o.attempt = 1
+		   AND o.created_at > NOW() - $4::interval
+		   AND o.status NOT IN ('rejected', 'unreached')
+		   AND NOT EXISTS (SELECT 1 FROM addon_operations r WHERE r.retry_of = o.id)
+		 ORDER BY o.created_at DESC
+		 LIMIT 1`
+	err = querier(ctx).QueryRow(ctx, q, target, subject, operation, window.String()).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("find resendable addon operation: %w", err)
+	}
+	return id, true, nil
+}
+
+// UnconfirmedChangeAt is when a subject's latest change of this operation on
+// this target was sent, while that change is still unconfirmed: no answer on
+// either of its sends, and nothing later has settled it. found is false
+// otherwise (A-13 For code: `password_change`).
+//
+// The latest FIRST send stands for the change, with its resend folded in. A
+// resend TrueNAS confirmed supersedes the first, so the change reads as settled.
+func UnconfirmedChangeAt(ctx context.Context, target, subject, operation string, grace time.Duration) (at time.Time, found bool, err error) {
+	const q = `
+		SELECT COALESCE(o.claimed_at, o.created_at),
+		       o.resolution IS NULL AND o.claimed_at IS NOT NULL
+		       AND (o.status = 'indeterminate'
+		            OR (o.status = 'dispatching' AND o.claimed_at < NOW() - $4::interval))
+		  FROM addon_operations o
+		 WHERE o.target = $1 AND o.subject_id = $2 AND o.operation = $3 AND o.attempt = 1
+		 ORDER BY o.created_at DESC
+		 LIMIT 1`
+	var open bool
+	err = querier(ctx).QueryRow(ctx, q, target, subject, operation, grace.String()).Scan(&at, &open)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("read unconfirmed change: %w", err)
+	}
+	return at, open, nil
 }
 
 // LastSucceededAddonOperation is the newest succeeded `operation` about one
@@ -309,6 +564,9 @@ func CountRecentAddonOperations(ctx context.Context, target, subjectID, operatio
 	const q = `
 		SELECT COUNT(*) FROM addon_operations
 		 WHERE target = $1 AND subject_id = $2 AND operation = $3
+		   -- The page's one automatic resend is not a second change, and
+		   -- counting it would let the limiter answer the resend (A-13).
+		   AND retry_of IS NULL
 		   -- make_interval, not a parameter concatenated with a unit word and
 		   -- cast to interval. That concatenation
 		   -- makes $4 TEXT and pgx cannot encode a Go integer for it, so this

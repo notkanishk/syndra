@@ -39,6 +39,12 @@ export interface Indicators {
    * "access about to end" together with "access still being withheld".
    */
   holds_due: number;
+  /**
+   * Per connected system, the changes it never answered that wait for a person
+   * to say what happened (A-09 §3). Never passwords (A-13 §5). A system with
+   * none is absent.
+   */
+  unconfirmed_operations?: Record<string, number>;
   zitadel_reachable: boolean;
 }
 

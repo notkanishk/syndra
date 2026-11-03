@@ -45,6 +45,7 @@ vi.mock("@/lib/queries/useTargets", () => {
   });
   return {
     useTargets: () => ({ ...idle(), data: [] }),
+    useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
     useMergeFindings: () => ({ ...idle(), data: [] }),
     useTargetHealth: idle,
     useTargetInventory: idle,

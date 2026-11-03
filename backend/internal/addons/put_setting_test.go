@@ -57,7 +57,7 @@ func TestPutSettingLeavesTheSameTraceAsOtherMutations(t *testing.T) {
 		if !ok || resp.Outcome != OutcomeSucceeded {
 			t.Fatalf("resp %+v ok %v", resp, ok)
 		}
-		want := db.AddonOperationParams{Target: "truenas", Operation: "setting.put", ActorID: "op-1", SubjectID: "home_root"}
+		want := db.AddonOperationParams{Target: "truenas", Operation: "setting.put", ActorID: "op-1", SubjectID: "home_root", About: "/mnt/p/home"}
 		if len(*began) != 1 || (*began)[0] != want {
 			t.Fatalf("record begun = %+v, want %+v", *began, want)
 		}
