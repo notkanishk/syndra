@@ -207,7 +207,7 @@ func TestPersonTargets_NoAccountYetPreviewsWhatTheirGroupsOpen(t *testing.T) {
 	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, recordedAt: time.Now().Add(-time.Hour)}}
 	stubPersonStorage(t, h)
 	view := getPersonTargets(t)
-	if view.Account != nil || view.RecordedAt == nil || view.Home != nil {
+	if view.Account != nil || view.RecordedAt == nil || view.Home == nil || view.Home.RolesLimit == nil || view.Home.UsedBytes != nil {
 		t.Fatalf("view %+v", view)
 	}
 	if len(view.Preview) != 1 {

@@ -19,6 +19,7 @@ import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
 import { PersonRequests } from "@/components/people/PersonRequests";
+import { PersonStorage } from "@/components/people/PersonStorage";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
@@ -48,6 +49,11 @@ import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useU
 import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, expiryLabel, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
+import { targetLabel } from "@/lib/nav";
+import { useApplications } from "@/lib/queries/useApplications";
+import { usePersonSignIns } from "@/lib/queries/useSignIns";
+import { useTargets } from "@/lib/queries/useTargets";
+import { projectSignInLine } from "@/lib/sign-in-line";
 
 type Tab = "access" | "requests" | "activity";
 
@@ -134,6 +140,10 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
 
   const user = access.data?.user;
   useCrumb(user?.name);
+  // Operators only, like the reads behind them (A-10 §1, §6).
+  const signIns = usePersonSignIns(userId, isOperator);
+  const apps = useApplications();
+  const systems = useTargets(isOperator);
 
   const multiSource = useMemo(() => findMultiSource(access.data?.projects ?? []), [access.data]);
   const roleName = useRoleName();
@@ -226,6 +236,19 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
     count: project.effective_role_keys.length || unexplainedIn(project).length,
     tone: unexplainedIn(project).length > 0 ? ("warn" as const) : undefined,
   }));
+  // Then one per connected system, named and with no count: a system is one
+  // card, not a list (A-10 §1).
+  const sections = [
+    ...projectSections,
+    ...(isOperator ? (systems.data ?? []) : []).map((t) => ({
+      id: `sys-${t.target}`,
+      projectId: "",
+      label: targetLabel(t.target),
+      count: undefined,
+      tone: undefined,
+    })),
+  ];
+  const appList = (apps.data ?? []).map((a) => a.application);
   // A folded project opens on the way to it.
   const openProject = ({ projectId }: { projectId: string }) =>
     setFolded((prev) => {
@@ -425,7 +448,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
           {access.data.projects.length > 0 && !upstreamGrants.isLoading && (
             <>
               <ReadLine
-                sections={projectSections}
+                sections={sections}
                 label="Projects on this page"
                 onOpen={openProject}
                 className="-mb-1 gap-x-4 px-5"
@@ -436,7 +459,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
               </ReadLine>
               {/* Once the read line has scrolled away, the same projects float at the top. */}
               <SectionPill
-                sections={projectSections}
+                sections={sections}
                 label="Projects on this page"
                 onOpen={openProject}
                 gap={18}
@@ -446,6 +469,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
 
           {access.data.projects.map((project) => {
             const open = !folded.has(project.project_id);
+            const signInLine = isOperator ? projectSignInLine(project.project_id, appList, signIns.data) : null;
             return (
               <Card key={project.project_id}>
                 <div
@@ -484,6 +508,10 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                     recorded={project.effective_role_keys.length}
                     unexplained={unexplainedIn(project).length}
                   />
+                  {/* Use beside the access it uses, where Revoke is decided (A-10 §6). */}
+                  {signInLine && (
+                    <span className="tint-in text-[13.5px] text-faint [text-wrap:pretty]">· {signInLine}</span>
+                  )}
                   {/* When Zitadel was read is the read line's job now; what stays
                       here is what is specific to THIS project's grant. */}
                   <ZitadelGrantId
@@ -545,6 +573,10 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
               </Card>
             );
           })}
+
+          {/* Something they use, under the projects whose roles reach it (A-10 §1).
+              Operators only: a member's own storage is on Network storage. */}
+          {isOperator && <PersonStorage userId={userId} name={user.name} />}
 
           {/* Advisory notes. Never an error — cleanup_hints are opinions. */}
           {access.data.cleanup_hints.map((hint) => (

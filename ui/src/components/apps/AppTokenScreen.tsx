@@ -11,6 +11,11 @@ import { ProjectName } from "@/components/names";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { SignInLookup } from "@/components/people/SignInLookup";
+import { AppSignInStrip } from "@/components/apps/AppSignInStrip";
+import { useAppSignIns } from "@/lib/queries/useSignIns";
+import { appSignInMeta } from "@/lib/sign-in-line";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useClaimShape } from "@/lib/queries/useClaimShape";
 import { useCrumb } from "@/lib/page-crumb";
@@ -56,6 +61,9 @@ function ReadAppTokenScreen({ applicationId }: { applicationId: string }) {
   // are siblings, and the preview's whole claim is that it shows what this app
   // would receive right now.
   const [editing, setEditing] = useState(false);
+  const signIns = useAppSignIns(applicationId);
+  const signInMeta = appSignInMeta(signIns.data);
+  const [lookingUp, setLookingUp] = useState(false);
 
   useCrumb(app?.application.name);
 
@@ -109,13 +117,28 @@ function ReadAppTokenScreen({ applicationId }: { applicationId: string }) {
               <ProjectName id={app.application.project_id} />
             </ArrowLink>
             {/* An inline bit, not a region: it tints with the view (A-08 §3). */}
+            {/* Syndra's own record, a fact about the app (A-10 §7). "9 people"
+                doesn't link: People can't filter by sign-in. */}
+            {signInMeta && (
+              <span className="tint-in">
+                <span aria-hidden>·</span> {signInMeta}
+              </span>
+            )}
             <Tinted show={advanced}>
               {" "}
               · id <Mono>{app.application.id}</Mono>
             </Tinted>
           </span>
         }
+        actions={
+          <Button variant="outline" onClick={() => setLookingUp(true)}>
+            Look up sign-ins
+          </Button>
+        }
       />
+      {lookingUp && (
+        <SignInLookup appId={applicationId} name={app.application.name} onClose={() => setLookingUp(false)} />
+      )}
 
       <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap">
         <div className="w-full tablet:min-w-[420px] tablet:flex-1">
@@ -143,6 +166,9 @@ function ReadAppTokenScreen({ applicationId }: { applicationId: string }) {
           />
         </div>
       </div>
+      {signIns.data?.receiving && signIns.data.last_at && (
+        <AppSignInStrip name={app.application.name} usage={signIns.data} />
+      )}
     </div>
   );
 }

@@ -157,6 +157,11 @@ func describePersonTarget(r *http.Request, target, subject string, hasProject bo
 		view.Home = &home
 		view.Adopted = adoptionOf(r, target, subject, view.Account.BoundAt)
 	} else if view.Entitled {
+		// What they'll get, for the preview: the limit their roles give and
+		// the folders their groups open. No use: there is no folder yet.
+		home := accountHome{SubjectID: subject}
+		roleLimits(&home, set)
+		view.Home = &home
 		view.Preview = previewPlaces(r, target, set)
 	}
 	return view, nil
