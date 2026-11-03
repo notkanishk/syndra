@@ -11,7 +11,7 @@ export const DirectoryDown = () => (
 
 /** Same, with the backend's reason for the server operator. */
 export const DirectoryDownWithReason = () => (
-  <SyndraRoot data={mode({ directory: "demo", zitadel_configured: true, degraded: true, reason: "Zitadel at auth.makerspace.tools did not answer within 5 seconds." })}>
+  <SyndraRoot data={mode({ directory: "demo", zitadel_configured: true, degraded: true, reason: "Zitadel at auth.example.edu did not answer within 5 seconds." })}>
     <DegradedBanner />
   </SyndraRoot>
 );

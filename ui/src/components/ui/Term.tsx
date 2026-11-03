@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import { anchoredStyle, useAnchoredBox } from "@/components/ui/Anchored";
+import { ToBody } from "@/components/ui/Modal";
 import { GLOSSARY, type TermName } from "@/lib/glossary";
 import { TINT_MS, useExitPhase } from "@/lib/motion";
 
@@ -136,7 +136,7 @@ export function Term({ name, children }: { name: TermName; children?: React.Reac
           </span>
         </span>
       )}
-      {rendered && mounted ? createPortal(panel, document.body) : null}
+      {rendered && mounted ? <ToBody>{panel}</ToBody> : null}
     </span>
   );
 }
