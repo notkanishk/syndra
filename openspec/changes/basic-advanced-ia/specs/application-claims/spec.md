@@ -81,18 +81,23 @@ This is forced by the wire contract: the Zitadel Actions v2 function payload car
 - **THEN** `owned_claims` MUST list only `badge.roles`
 - **AND** `claim_owners` MUST attribute `syndra.laser.roles` to the project default
 
-### Requirement: Claim keys MUST be unique across every project
+### Requirement: Claim keys MUST be unique within a project
 
-Saving a profile MUST be rejected when any key it emits — roles, attribute or static — is already emitted by another profile on any project, and the error MUST name the colliding key and its current owner.
+Saving a profile MUST be rejected when any key it emits — roles, attribute or static — is already emitted by another profile on the same project, the built-in default included, and the error MUST name the colliding key.
 
-A JWT is flat and holds one value per name, and a user with grants in several projects receives one token: a duplicate key means one application silently reads another's roles.
+A token carries its project's default and every override on that project, so siblings share one flat namespace. A token never carries two projects (see "One project per token"), so another project's key is no collision. *(Revised 28 Oct 2026: was "unique across every project".)*
 
-#### Scenario: A key owned by another project is refused
+#### Scenario: Another project's key is allowed
 
 - **GIVEN** project `pStudio` emits `shared.roles`
 - **WHEN** an operator saves `shared.roles` as the claim name for `pLaser`
-- **THEN** the request MUST be rejected with a message naming `shared.roles`
-- **AND** the existing profile MUST be unchanged
+- **THEN** the save MUST succeed
+
+#### Scenario: An override may not take the project's default key
+
+- **GIVEN** project `p0` has no claim profile, so it emits the built-in `roles`
+- **WHEN** an operator saves an override named `roles` for an application on `p0`
+- **THEN** the request MUST be rejected with a message naming `roles`
 
 #### Scenario: Re-saving a project's own key is not a collision
 
@@ -100,21 +105,18 @@ A JWT is flat and holds one value per name, and a user with grants in several pr
 - **WHEN** an operator saves `pLaser` again with the same claim name and a different format
 - **THEN** the save MUST succeed
 
-### Requirement: Multi-project tokens MUST NOT namespace configured keys
+### Requirement: One project per token
 
-Keys are operator-authored and validated unique, so the previous unconditional `syndra.<projectID>.<claim>` prefixing on multi-project tokens MUST NOT be applied to configured keys — it guaranteed no application ever received the key it asked for.
+Zitadel lists in `user_grants` only the token's role audience: the client's own project, plus any project the app requested with an `urn:zitadel:iam:org:project:id:{id}:aud` scope. Syndra MUST deliver claims for exactly one project. When `user_grants` names more than one distinct project, the response MUST carry no Syndra claims (`append_claims: []`, HTTP 200 so the token is still issued), MUST NOT read the cache or the failure mode, and MUST log the user, the client id and the projects. Keys are never namespaced. An app that needs a role from another project gets it in its own project through a rule. *(Decided by the owner 28 Oct 2026; replaces collision namespacing. ADR-002.)*
 
-Where two projects nonetheless emit the same key — which in practice means two projects nobody has configured, both falling back to the built-in default — the merge step MUST namespace the colliding keys per project and log the collision, so both role sets survive rather than one silently overwriting the other.
+#### Scenario: A single-project token keeps its configured keys
 
-#### Scenario: Two configured projects keep their own keys
+- **GIVEN** `pPrint` emits `pPrint.roles`
+- **WHEN** a token is issued whose `user_grants` names only `pPrint` (one row per role)
+- **THEN** the envelope MUST contain exactly `pPrint.roles`, unprefixed
 
-- **GIVEN** `pPrint` emits `pPrint.roles` and `pDoor` emits `pDoor.roles`
-- **WHEN** a token is issued for a user holding roles in both
-- **THEN** the envelope MUST contain exactly `pPrint.roles` and `pDoor.roles`, unprefixed
+#### Scenario: A cross-project token carries nothing
 
-#### Scenario: Two unconfigured projects do not overwrite each other
-
-- **GIVEN** neither `pPrinting` nor `pDoors` has a claim profile, so both default to `roles`
-- **WHEN** a token is issued for a user holding roles in both
-- **THEN** the envelope MUST contain `syndra.pPrinting.roles` and `syndra.pDoors.roles`
-- **AND** both role sets MUST be present
+- **GIVEN** a token whose `user_grants` names `pPrint` and `pDoor`
+- **WHEN** the target is called
+- **THEN** `append_claims` MUST be empty and the log MUST name both projects

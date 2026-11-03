@@ -233,7 +233,6 @@ var (
 
 	// Claim shaping (token format + per-application overrides).
 	svcGetClaimProfile        = db.GetClaimProfile
-	svcListClaimProfiles      = db.ListClaimProfiles
 	svcUpsertClaimProfile     = db.UpsertClaimProfile
 	svcListAppClaimOverrides  = db.ListAppClaimOverrides
 	svcUpsertAppClaimOverride = db.UpsertAppClaimOverride
