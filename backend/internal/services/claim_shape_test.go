@@ -34,6 +34,12 @@ var shapeProjects = map[string][]models.ProjectRole{
 	"pCode": {{Key: "users", Label: "Users"}},
 }
 
+// FindUser knows nobody: the facts' identity stands (the equivalence test
+// draws Zitadel's apart).
+func (shapeDir) FindUser(context.Context, string) (models.UserProfile, bool, error) {
+	return models.UserProfile{}, false, nil
+}
+
 func (shapeDir) Applications(context.Context) ([]models.ApplicationCatalog, error) {
 	return shapeApps, nil
 }
@@ -390,6 +396,8 @@ func TestPreview_Checks(t *testing.T) {
 
 	renamed := netbirdShape()
 	renamed.Roles[0].As = "network-staff"
+	// And a row only facts fill, so a person not built is short of it.
+	renamed.Claims = append(renamed.Claims, claims.Claim{Path: []string{"team"}, Kind: claims.KindAttribute, Source: claims.AttrTeam})
 	pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada", "rohan"}, Draft: &renamed})
 	if err != nil {
 		t.Fatal(err)
@@ -412,12 +420,17 @@ func TestPreview_Checks(t *testing.T) {
 	}
 
 	// Rohan's claims were never built: check 3 is amber, and the token is what
-	// the token path really sends (the shape over Zitadel's roles alone),
-	// with what he would get.
+	// the token path really sends (the shape over Zitadel's roles and identity
+	// alone). The live shape needs no facts, so it is whole: check 5 passes, as
+	// live counts it served. The draft asks for his team: amber, with what he
+	// would get.
 	rohan := pv.People[1]
-	if rohan.Now.Checks[2].State != CheckWarn || rohan.Now.Checks[4].State != CheckWarn || tok(rohan.Now.Token) != `{"groups":["netbird-staff"]}` ||
-		tok(rohan.Now.WouldReceive) != `{"groups":["netbird-staff"]}` {
+	if rohan.Now.Checks[2].State != CheckWarn || rohan.Now.Checks[4].State != CheckPass || tok(rohan.Now.Token) != `{"groups":["netbird-staff"]}` ||
+		rohan.Now.WouldReceive != nil {
 		t.Fatalf("not built: %+v token=%s", rohan.Now.Checks, tok(rohan.Now.Token))
+	}
+	if rohan.Draft.Checks[4].State != CheckWarn || tok(rohan.Draft.Token) != `{"groups":["network-staff"]}` || rohan.Draft.WouldReceive == nil {
+		t.Fatalf("not built, a fact asked for: %+v token=%s", rohan.Draft.Checks[4], tok(rohan.Draft.Token))
 	}
 
 	// The roles are Zitadel's, never Syndra's records: admin, still queued

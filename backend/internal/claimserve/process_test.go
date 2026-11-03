@@ -115,7 +115,7 @@ func TestRelay_TelemetryFoldsOnce(t *testing.T) {
 	}
 
 	recent, err := RemoteRecent(ctx, r, now, 10)
-	if err != nil || recent[claimtel.Served] != 5 || recent[claimtel.ServedRolesOnly] != 1 {
+	if err != nil || recent[claimtel.Served] != 6 {
 		t.Fatalf("recent %v %v", recent, err)
 	}
 	served, called, err := RemoteLast(ctx, r)
@@ -153,8 +153,8 @@ func TestRelay_TelemetryFoldsOnce(t *testing.T) {
 			}
 		}
 	}
-	if servedN != 5 || histN != 5 {
-		t.Fatalf("served %d, histogram %d, want 5 and 5", servedN, histN)
+	if servedN != 6 || histN != 6 { // u2 has no facts, and the built-in shape needs none
+		t.Fatalf("served %d, histogram %d, want 6 and 6", servedN, histN)
 	}
 	cl := b.Clients[claimtel.ClientKey{ClientID: "c1", Function: claims.FunctionPreAccessToken}]
 	if cl.At.IsZero() || cl.ServedAt.IsZero() || !cl.ClientKnown {

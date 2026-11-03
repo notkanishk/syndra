@@ -134,7 +134,7 @@ function check3(e: Explanation, ctx: CheckContext): TrailCheck {
       return {
         tone: "warn",
         sentence: "Their claims aren't built yet.",
-        faint: ["Syndra builds them at their next change. Until then Zitadel gets their roles from Syndra, and nothing else."],
+        faint: ["Syndra builds them at their next change. Until then it sends only what Zitadel already knows about them."],
       };
     case "fail":
       return { tone: "danger", sentence: "Syndra couldn't read their claims.", faint: [String(fact<string>(e, 2, "error") ?? "")] };
@@ -243,10 +243,10 @@ export function check5(e: Explanation, ctx: CheckContext, asDraft: boolean): Tra
     };
   }
   if (c.state === "warn") {
-    // Not built yet: the token path sends the shape over Zitadel's roles alone.
+    // Not built yet, and the shape asks for a fact: the token path sends it over Zitadel's roles and identity alone.
     return {
       tone,
-      sentence: `${answers} ${keys || "nothing"}, their roles alone for now.`,
+      sentence: `${answers} ${keys || "nothing"} for now.`,
       faint: ["Once their claims are built, it would receive what's below."],
       foot: ZITADEL_ADDS,
     };
