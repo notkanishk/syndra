@@ -25,6 +25,7 @@ import {
   KIND_LABEL,
   LANDS_LABEL,
   landsIn,
+  namesRoles,
   READS_LABEL,
   roleWords,
   rowProblems,
@@ -321,7 +322,9 @@ function ShapeForm({
     }
     const owner = sharedWordOwner(words, i);
     if (owner) notes.push(`Also ${owner.role.label}'s word.`);
-    if (w.added) {
+    // "New" only means something once the shape has named roles: a shape that
+    // never chose any (the seeded v1 shape) would call every role new.
+    if (w.added && namesRoles(saved)) {
       notes.push(
         w.included
           ? draft?.origin === "copy" && draft.copiedName
