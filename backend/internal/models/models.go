@@ -206,13 +206,18 @@ const (
 )
 
 type UserProfile struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Email  string `json:"email"`
-	Title  string `json:"title"`
-	Team   string `json:"team"`
-	Status string `json:"status"`
-	Avatar string `json:"avatar"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// GivenName, FamilyName and Username are Zitadel's profile fields, kept so a
+	// claim may carry them (internal/claims).
+	GivenName  string `json:"given_name,omitempty"`
+	FamilyName string `json:"family_name,omitempty"`
+	Username   string `json:"username,omitempty"`
+	Email      string `json:"email"`
+	Title      string `json:"title"`
+	Team       string `json:"team"`
+	Status     string `json:"status"`
+	Avatar     string `json:"avatar"`
 	// Kind is what Zitadel says the account is: UserKindHuman or UserKindMachine
 	// (keys, no sign-in). Machine accounts leave the people flows (onboarding,
 	// People counts) and stay wherever access is audited. Empty reads as human.
@@ -260,6 +265,9 @@ type ApplicationCatalog struct {
 	// (the application id is a different string). Not part of any response; it is
 	// here so a sign-in can be traced to the project its application belongs to.
 	ClientID string `json:"-"`
+	// Created is when Zitadel created the app; zero when unknown. The claims
+	// seed uses it to tell apps that existed under Actions v1 from new ones.
+	Created time.Time `json:"-"`
 }
 
 type RoleGrant struct {
@@ -431,6 +439,24 @@ type ApplicationView struct {
 	ConfirmedUserCount *int             `json:"confirmed_user_count,omitempty"`
 	ObservedUserCount  *int             `json:"observed_user_count,omitempty"`
 	Observation        ObservationBasis `json:"observation"`
+	// Claims is the apps index's Claims column (A-14 §7): the app's own
+	// shape, not its project's. Absent when the shapes couldn't be read.
+	Claims *AppClaimsLine `json:"claims,omitempty"`
+}
+
+// AppClaimsLine is what one app is told, in a line: its top-level keys, where
+// they land, where the shape comes from, and whether its claims reach where
+// its template says the app reads them.
+type AppClaimsLine struct {
+	Source          string   `json:"source"` // app | project_default | builtin
+	Keys            []string `json:"keys"`
+	Lands           string   `json:"lands"`
+	TemplateID      string   `json:"template_id,omitempty"`
+	TemplateChanged bool     `json:"template_changed,omitempty"`
+	CopiedFrom      string   `json:"copied_from_application_id,omitempty"`
+	// Reaches is check 1's verdict from Zitadel's last answer this process
+	// saw; absent when it was never read, or the template names no read.
+	Reaches *bool `json:"reaches,omitempty"`
 }
 
 // ApplicationSimulation is the dry run of a real token. CustomClaims is the
@@ -442,12 +468,12 @@ type ApplicationView struct {
 // OwnedClaims narrows that to the keys THIS application reads; ClaimOwners
 // attributes the rest, so a sibling app's key is never mistaken for a bug.
 type ApplicationSimulation struct {
-	Application  ApplicationCatalog     `json:"application"`
-	User         UserProfile            `json:"user"`
-	RawRoles     []string               `json:"raw_roles"`
-	CustomClaims map[string]interface{} `json:"custom_claims"`
-	OwnedClaims  []string               `json:"owned_claims"`
-	ClaimOwners  []ClaimKeyOwner        `json:"claim_owners"`
+	Application  ApplicationCatalog `json:"application"`
+	User         UserProfile        `json:"user"`
+	RawRoles     []string           `json:"raw_roles"`
+	CustomClaims any                `json:"custom_claims"`
+	OwnedClaims  []string           `json:"owned_claims"`
+	ClaimOwners  []ClaimKeyOwner    `json:"claim_owners"`
 }
 
 // ClaimKeyOwner is one key present in an issued token and the profile that put

@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"syndra/internal/addons"
+	"syndra/internal/cache"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
 // unconfirmedWriteThreshold is how long an accepted write may go unobserved
@@ -231,12 +233,30 @@ var (
 	}
 	svcDbGetAllReferencedRoleKeys = db.GetAllReferencedRoleKeys
 
-	// Claim shaping (token format + per-application overrides).
-	svcGetClaimProfile        = db.GetClaimProfile
-	svcUpsertClaimProfile     = db.UpsertClaimProfile
-	svcListAppClaimOverrides  = db.ListAppClaimOverrides
-	svcUpsertAppClaimOverride = db.UpsertAppClaimOverride
-	svcDeleteAppClaimOverride = db.DeleteAppClaimOverride
+	// Claim shaping: the project default (flat, claim_profiles), per-app shape
+	// versions, and the old per-project overrides, read only by the v1 seed.
+	svcGetClaimProfile       = db.GetClaimProfile
+	svcUpsertClaimProfile    = db.UpsertClaimProfile
+	svcListAppClaimOverrides = db.ListAppClaimOverrides
+	svcLatestClaimShapes     = db.LatestClaimShapes
+	svcClaimShapeAt          = db.ClaimShapeAt
+	svcClaimShapeHistory     = db.ClaimShapeHistory
+	svcInsertClaimShape      = db.InsertClaimShapeVersion
+	svcClaimShapeSeedCutoff  = db.ClaimShapeSeedCutoff
+	svcGetClaimFailureMode   = db.GetClaimFailureMode
+	// The explain step's reads: what the token path stores, a fresh compile
+	// when it stores nothing, and Zitadel's settings for check 1 (read-only).
+	svcStoredFacts   = cache.StoredFacts
+	svcCompileFacts  = cache.CompileFacts
+	svcTokenSettings = func(ctx context.Context, projectID, appID string) (*zitadel.TokenSettings, error) {
+		if zitadel.MgmtClient == nil {
+			return nil, directory.ErrUnreachable
+		}
+		return zitadel.MgmtClient.TokenSettings(ctx, projectID, appID)
+	}
+	svcApplications = func(ctx context.Context) ([]models.ApplicationCatalog, error) {
+		return directory.Default.Applications(ctx)
+	}
 
 	// Directory lookup used by drift triage to tell a departed alumnus from an
 	// active member and a person from a service account.

@@ -102,6 +102,12 @@ const ARGUED: Record<string, Array<[RegExp, string]>> = {
   // The guide quotes each device's own dialog, word for word, because the
   // member has to find that word on their screen: macOS and iOS say
   // "Registered User", Windows asks for a "user name".
+  // A-14: the claims part quotes Zitadel's own setting ("User Info inside ID
+  // Token") and the apps' own role words (`users`, a Home Assistant user),
+  // which the operator has to find and match exactly in those products.
+  "lib/claims.ts": [[/\busers?\b/i, "Quotes Zitadel's User Info setting and the apps' own role words and settings."]],
+  "components/apps/claim-words.ts": [[/\busers?\b/i, "Names Zitadel's User Info inside ID Token setting, exactly as Zitadel's console labels it."]],
+  "components/apps/ShapeCard.tsx": [[/\busers?\b/i, "Names Zitadel's User Info inside ID Token setting, exactly as Zitadel's console labels it."]],
   "components/storage/ConnectionGuide.tsx": [
     [/\busers?\b/i, "Quotes the operating system's own sign-in dialog, which the member must match on screen."],
   ],

@@ -245,6 +245,8 @@ func (c *managementClient) GetUser(ctx context.Context, userID string) (*Zitadel
 			Human struct {
 				Profile struct {
 					DisplayName string `json:"displayName"`
+					FirstName   string `json:"firstName"`
+					LastName    string `json:"lastName"`
 				} `json:"profile"`
 				Email struct {
 					Email string `json:"email"`
@@ -261,6 +263,8 @@ func (c *managementClient) GetUser(ctx context.Context, userID string) (*Zitadel
 		ID:          raw.User.ID,
 		Username:    raw.User.UserName,
 		DisplayName: raw.User.Human.Profile.DisplayName,
+		GivenName:   raw.User.Human.Profile.FirstName,
+		FamilyName:  raw.User.Human.Profile.LastName,
 		Email:       raw.User.Human.Email.Email,
 		State:       raw.User.State,
 		Machine:     raw.User.Machine != nil,
@@ -309,6 +313,8 @@ func (c *managementClient) ListUsers(ctx context.Context, p SearchParams) (*Sear
 			Human struct {
 				Profile struct {
 					DisplayName string `json:"displayName"`
+					FirstName   string `json:"firstName"`
+					LastName    string `json:"lastName"`
 				} `json:"profile"`
 				Email struct {
 					Email string `json:"email"`
@@ -329,6 +335,8 @@ func (c *managementClient) ListUsers(ctx context.Context, p SearchParams) (*Sear
 			ID:          r.ID,
 			Username:    r.UserName,
 			DisplayName: r.Human.Profile.DisplayName,
+			GivenName:   r.Human.Profile.FirstName,
+			FamilyName:  r.Human.Profile.LastName,
 			Email:       r.Human.Email.Email,
 			State:       r.State,
 			Machine:     r.Machine != nil,

@@ -122,8 +122,15 @@ export const AUDIT_ACTIONS: Record<
   "grant_expiry.acknowledged": { verb: "Recorded that access that ends should be left to end" },
   "grant_expiry.acknowledgement_cleared": { verb: "Put access that ends back in the undecided list" },
   "claim_profile.updated": { verb: "Changed a project's token format" },
+  // `app_claim_override.*` are from before each app had its own shape (A-14, 3 Nov 2026): those
+  // rows stay in the log.
   "app_claim_override.updated": { verb: "Changed an app's token format" },
   "app_claim_override.deleted": { verb: "Removed an app's token override" },
+  "claim_shape.saved": { verb: "Changed what an app is told" },
+  "claim_shape.restored": { verb: "Went back to an earlier version of what an app is told" },
+  "claim_debug.started": { verb: "Turned on debug mode for an app" },
+  "claim_debug.switched": { verb: "Moved debug mode to another person's sign-ins" },
+  "claim_debug.ended": { verb: "Turned off debug mode for an app" },
 };
 
 /**

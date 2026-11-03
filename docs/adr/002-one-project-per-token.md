@@ -18,7 +18,7 @@ Until now Syndra merged every listed project into one flat token, namespacing a 
 - A token carries claims for exactly one project.
 - When `user_grants` names more than one distinct project, the target returns `append_claims: []` with HTTP 200, so the token is still issued without Syndra claims. It logs the user, the client id and the projects, and reads nothing.
 - Keys are never namespaced.
-- Claim keys must be unique within a project (the default, built-in or configured, and every override), not across projects. Two projects may both use `roles`.
+- Claim keys must be unique within a project (the default, built-in or configured, and every override), not across projects. Two projects may both use `roles`. *Superseded by ADR-003 (3 Nov): a token now carries one app's shape, so keys are unique within that shape only.*
 - An app that needs a role from another project gets it in its own project through a rule ("if someone holds A, they also get B").
 
 ### Consequences

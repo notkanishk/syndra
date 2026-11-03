@@ -17,15 +17,74 @@ func resetCacheDeps(t *testing.T) {
 	origRules := dbGetActiveMappingRules
 	origBundleRoles := dbGetUserBundleRoles
 	origSet := redisSet
+	origBundles, origService := dbGetAllBundles, cacheIsServiceAccount
 	t.Cleanup(func() {
 		dbGetDirectGrantsForUser = origGrants
 		dbGetActiveMappingRules = origRules
 		dbGetUserBundleRoles = origBundleRoles
 		redisSet = origSet
+		dbGetAllBundles, cacheIsServiceAccount = origBundles, origService
 	})
 
 	dbGetUserBundleRoles = func(context.Context, string) (map[string][]models.BundleRole, error) {
 		return nil, nil
+	}
+	dbGetAllBundles = func(context.Context) ([]models.Bundle, error) { return nil, nil }
+	cacheIsServiceAccount = func(_ context.Context, u models.UserProfile) (bool, error) { return u.IsMachine(), nil }
+}
+
+// Facts carry what a claim row may project: the person's names, the bundles
+// giving them a role in this project (by name), each role's end only when
+// every source of it ends, and whether they are a service account.
+func TestCompileFacts_NamesBundlesEndsAndServiceAccount(t *testing.T) {
+	resetCacheDeps(t)
+	origFind := cacheFindUser
+	t.Cleanup(func() { cacheFindUser = origFind })
+
+	end := time.Date(2027, 5, 31, 12, 0, 0, 0, time.UTC)
+	dbGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
+		return []models.DirectGrant{
+			{ProjectID: "net", RoleKey: "staff", ExpiresAt: &end},
+			{ProjectID: "net", RoleKey: "trained", ExpiresAt: &end},
+			{ProjectID: "net", RoleKey: "admin"},
+			{ProjectID: "other", RoleKey: "x"},
+		}, nil
+	}
+	dbGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return nil, nil }
+	dbGetUserBundleRoles = func(context.Context, string) (map[string][]models.BundleRole, error) {
+		return map[string][]models.BundleRole{
+			"b1": {{BundleID: "b1", ProjectID: "net", RoleKey: "trained"}},
+			"b2": {{BundleID: "b2", ProjectID: "other", RoleKey: "y"}},
+		}, nil
+	}
+	dbGetAllBundles = func(context.Context) ([]models.Bundle, error) {
+		return []models.Bundle{{ID: "b1", Name: "Makers"}, {ID: "b2", Name: "Elsewhere"}}, nil
+	}
+	cacheFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
+		return models.UserProfile{ID: "u1", Name: "Ada Lovelace", GivenName: "Ada", FamilyName: "Lovelace", Username: "ada", Kind: models.UserKindMachine}, true, nil
+	}
+
+	f, err := CompileFacts(context.Background(), "u1", "net")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.GivenName != "Ada" || f.FamilyName != "Lovelace" || f.Username != "ada" || !f.IsServiceAccount {
+		t.Fatalf("profile facts: %+v", f)
+	}
+	if len(f.Bundles) != 1 || f.Bundles[0] != "Makers" {
+		t.Fatalf("bundles are this project's, by name: %v", f.Bundles)
+	}
+	// trained also comes from a bundle, which never ends; admin has no end.
+	if len(f.RoleEnds) != 1 || f.RoleEnds["staff"] != "2027-05-31" {
+		t.Fatalf("role ends: %v", f.RoleEnds)
+	}
+
+	// A failed read of the service-account marks fails the profile part, so a
+	// warm keeps the old entry instead of storing "not a service account".
+	cacheIsServiceAccount = func(context.Context, models.UserProfile) (bool, error) { return false, errors.New("db down") }
+	u, err := compileUser(context.Background(), "u1")
+	if err != nil || u.profileErr == nil {
+		t.Fatalf("want a profile error, got err=%v profileErr=%v", err, u.profileErr)
 	}
 }
 

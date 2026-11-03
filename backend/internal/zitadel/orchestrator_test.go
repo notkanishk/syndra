@@ -348,6 +348,10 @@ func TestRevokeMappingRules_ErrorContinues(t *testing.T) {
 
 // Zitadel's event log is not what this fake is about. Present so the type still
 // satisfies the client interface; a test that cares stubs it explicitly.
+func (fake *mockClient) TokenSettings(context.Context, string, string) (*TokenSettings, error) {
+	return &TokenSettings{}, nil
+}
+
 func (fake *mockClient) SearchEvents(context.Context, EventSearch) ([]LoggedEvent, bool, error) {
 	return nil, false, nil
 }
