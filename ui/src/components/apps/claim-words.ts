@@ -1,6 +1,6 @@
 import type { StatusTone } from "@/components/ui/Badge";
 import type { TrailCheck } from "@/components/ui/CheckTrail";
-import { clockOf, LANDS_SENTENCE, READS_LABEL } from "@/lib/claims";
+import { clockOf, READS_LABEL } from "@/lib/claims";
 import type { CheckState, ClaimTemplate, Explanation, Lands, Profile, ProjectRole } from "@/lib/queries/useClaimShape";
 
 /**
@@ -205,49 +205,74 @@ function check4(e: Explanation, ctx: CheckContext): TrailCheck {
   };
 }
 
-/** Check 5's sentence and the note under its token. */
-export function check5(e: Explanation, ctx: CheckContext, asDraft: boolean): TrailCheck {
+const ZITADEL_ADDS = "Zitadel adds `sub`, `email`, `name` and `preferred_username` itself.";
+
+/**
+ * Check 5's sentence (A-15 §5), and `foot`, the one faint line under the token
+ * that sits below the trail. Whatever the foot doesn't say, the check does.
+ */
+export function check5(e: Explanation, ctx: CheckContext, asDraft: boolean): TrailCheck & { foot: string } {
   const c = e.checks[4];
-  const lands = (fact<string>(e, 4, "lands") ?? ctx.profile.lands) as Lands;
   const tone = STATE_TONE[c.state];
+  const keys = list(Object.keys(e.token ?? {}).map((k) => `\`${k}\``));
+  const answers = asDraft ? "Syndra would answer with" : "Syndra answers with";
   if (c.state === "none") {
     return {
       tone,
       sentence: asDraft
-        ? "Zitadel would receive no Syndra claims for them once you save, on purpose:"
+        ? "Zitadel would receive no Syndra claims for them once you save, on purpose."
         : "Zitadel receives no Syndra claims for them, on purpose.",
       faint: [`${ctx.app} reads Zitadel's own \`email\`, \`email_verified\` and \`preferred_username\`. That is all it needs.`],
+      foot: ZITADEL_ADDS,
     };
   }
   if (c.state === "fail" && e.checks[0]?.state === "fail") {
     const reached = (e.checks[0].facts.reached ?? {}) as Record<string, boolean>;
     const where = ["access_token", "id_token", "userinfo"].filter((k) => reached[k]).map((k) => READS_LABEL[k]);
     const reads = String(e.checks[0].facts.reads ?? "");
+    const its = (READS_LABEL[reads] ?? "its token").replace(/^the /, "its ");
     return {
       tone,
-      sentence: where.length ? `Zitadel receives this, but only for ${list(where)}:` : "Zitadel receives this, but it doesn't reach the app:",
-      faint: [
-        `${ctx.app} reads ${READS_LABEL[reads] ?? "its token"}, so it sees none of it.${/netbird/i.test(ctx.app) ? " It empties every group it made from a token." : ""}`,
-      ],
+      sentence: where.length ? `${answers} ${keys}, but only for ${list(where)}.` : `${answers} ${keys}, but it doesn't reach the app.`,
+      faint: [ZITADEL_ADDS],
+      foot: `${ctx.app} reads ${its}, so it sees none of this${/netbird/i.test(ctx.app) ? ", and empties every group it made from a token" : ""}.`,
     };
   }
   if (c.state === "fail") {
     return {
       tone,
-      sentence: "Zitadel receives nothing from Syndra for them yet:",
-      faint: ["Once their claims are built, it would receive what follows."],
+      sentence: "Zitadel receives nothing from Syndra for them yet.",
+      faint: ["Once their claims are built, it would receive what's below."],
+      foot: ZITADEL_ADDS,
     };
   }
-  return {
-    tone,
-    sentence: asDraft ? "Zitadel would receive this once you save:" : "Zitadel receives this:",
-    faint: [`Sent in ${ctx.app}'s ${LANDS_SENTENCE[lands]}. Zitadel adds \`sub\`, \`email\`, \`name\` and \`preferred_username\` itself.`],
-  };
+  return { tone, sentence: `${answers} ${keys || "nothing"}, below.`, foot: ZITADEL_ADDS };
 }
 
 /** Checks 1 to 4, in words; check 5 is drawn with its token by the caller. */
 export function checkWords(e: Explanation, ctx: CheckContext): TrailCheck[] {
   return [check1(e, ctx), check2(e, ctx), check3(e, ctx), check4(e, ctx)];
+}
+
+/**
+ * The preview's verdict line (A-15 §5), read off the trail's own tones so the
+ * line and the trail can't disagree: "All five checks pass", "Check 1 fails",
+ * "Checks 1 and 5 fail", "Check 4 needs a look", each " on this draft" with one.
+ */
+export function verdictOf(checks: { tone: StatusTone }[], draft: boolean): { tone: StatusTone; text: string } {
+  const at = (tone: StatusTone) => checks.flatMap((c, i) => (c.tone === tone ? [String(i + 1)] : []));
+  const failed = at("danger");
+  const warned = at("warn");
+  const text = failed.length
+    ? failed.length === 1
+      ? `Check ${failed[0]} fails`
+      : `Checks ${list(failed)} fail`
+    : warned.length
+      ? warned.length === 1
+        ? `Check ${warned[0]} needs a look`
+        : `Checks ${list(warned)} need a look`
+      : "All five checks pass";
+  return { tone: failed.length ? "danger" : warned.length ? "warn" : "healthy", text: `${text}${draft ? " on this draft" : ""}` };
 }
 
 /** "All pass" / "No roles" / "Fails check 1" for one sign-in or test person. */

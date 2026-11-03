@@ -7,7 +7,7 @@ import { UserAvatar, UserName } from "@/components/names";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { CardColumns } from "@/components/ui/Card";
 import { CheckTrail } from "@/components/ui/CheckTrail";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
@@ -51,7 +51,8 @@ function useMinute() {
  * Debug mode (A-14 §6): one chosen account's real sign-ins to this app, live,
  * for 15 minutes the server enforces. Off by default; only here, beside the
  * preview. What it sees stays in Syndra's memory for an hour, never its
- * database; signatures are dropped before capture.
+ * database; signatures are dropped before capture. A settings row of the app
+ * page's tools card (A-15 §6); its live list unfolds under it, in the card.
  */
 export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContext, "person"> }) {
   const { selfId } = useUiView();
@@ -77,12 +78,12 @@ export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContex
 
   const ended = session && !isOn;
   return (
-    <Card>
-      <div className="flex flex-wrap items-start gap-x-[18px] gap-y-3 px-[22px] py-[18px]">
-        <h2 className="type-card-title w-[170px] flex-none">Debug mode</h2>
+    <>
+      <div className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-[22px] py-3.5">
+        <span className="w-[170px] flex-none text-[14px] font-semibold">Debug mode</span>
         <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-1">
           {!session ? (
-            <span className="text-[14.5px] leading-[1.5]">Off. See each real sign-in to {ctx.app} as it happens, for 15 minutes.</span>
+            <StatusSeat tone="neutral" word="Off" note="See one account's sign-ins as they happen, for 15 minutes." />
           ) : isOn ? (
             <StatusSeat tone="healthy" word="On" note={`${whose} sign-ins · ends ${clockOf(session.ends_at)}, ${minutesLeft(session.ends_at, now)} min left`} />
           ) : (
@@ -98,7 +99,7 @@ export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContex
           )}
           {stopOutcome && <ActionOutcome outcome={stopOutcome} placement="inline" />}
         </div>
-        <span className="ml-auto flex flex-wrap justify-end gap-2">
+        <span className="ml-auto flex flex-wrap justify-end gap-2 whitespace-nowrap">
           {isOn ? (
             <>
               <Button size="sm" onClick={() => setSheet("switch")}>
@@ -150,7 +151,7 @@ export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContex
           onClose={() => setSheet(null)}
         />
       )}
-    </Card>
+    </>
   );
 }
 
@@ -325,9 +326,8 @@ function OpenedSignIn({ s, ctx }: { s: SignIn; ctx: CheckContext }) {
     .filter(([, v]) => v !== undefined)
     .map(([k, v]) => ({ key: String(k), text: `"${k}": ${literal(v)}`, theirs: true }));
   const ours: TokenBlockLine[] = claims.map((c) => ({ key: c.key, text: `"${c.key}": ${literal(c.value)}` }));
-  const trail = checks
-    ? [...checkWords({ user_id: s.user_id, checks, token: null, read_at: s.at }, ctx), check5({ user_id: s.user_id, checks, token: null, read_at: s.at }, ctx, false)]
-    : null;
+  const answered = { user_id: s.user_id, checks: checks ?? [], token: Object.fromEntries(claims.map((c) => [c.key, c.value])), read_at: s.at };
+  const trail = checks ? [...checkWords(answered, ctx), check5(answered, ctx, false)] : null;
 
   return (
     <>

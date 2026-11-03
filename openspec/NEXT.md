@@ -177,6 +177,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
   - an app with no shape gets the basic default (the project's shape, else the built-in `roles` list);
   - new: "Copy another app's shape" (from any project) as a draft beside the templates. Role renames copy only for keys that exist in this project.
   - Design's call in A-14, flagged for the owner: the project default is set on the project's page only (one write place). Copies aren't linked; NetBird and its clients stay in step by copying again.
+- **A-15 (claims page, calm by default; Q-15 after the owner saw A-14 live): built** on `feat/claims-page-calm` (`changes/claims-shaping` §9). Layout only, no API change: the page opens on a summary of what the app gets beside one verdict line; the roles table is the work, its fields quiet until touched; claim rows, Add a claim and Lands in fold into "Claim rows" in Advanced and leave Basic entirely; the checks wait one step away until one fails; Save unfolds with the first edit; Sign-ins, Debug mode and History are rows of one tools card. Open: the owner's call on the fold's name (4a "Claim rows" built, 4b "Custom claims" is one constant), and the summary's own loading skeleton (9.9).
 
 ### Audit of 27 Oct — remediation in batches
 
