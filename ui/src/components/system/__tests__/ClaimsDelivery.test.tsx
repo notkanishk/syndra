@@ -107,10 +107,18 @@ describe("Claims delivery, calm", () => {
   });
 
   it("says sign-ins before a restart aren't checked, never failed", () => {
-    set(delivery({ sign_ins: { ...delivery().sign_ins, checking_since: new Date(Date.now() - 3600_000).toISOString() } }));
-    renderIt();
-    expect(screen.getByText(/^Every sign-in since \d\d:\d\d got its claims\.$/)).toBeInTheDocument();
-    expect(screen.getByText(/Sign-ins before that aren.t checked, and none is counted as failed/)).toBeInTheDocument();
+    // Midday, so "an hour ago" is today and reads as a time, not a date
+    // (it failed just after midnight, 4 Nov 2026).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 4, 12, 0, 0));
+    try {
+      set(delivery({ sign_ins: { ...delivery().sign_ins, checking_since: new Date(Date.now() - 3600_000).toISOString() } }));
+      renderIt();
+      expect(screen.getByText(/^Every sign-in since \d\d:\d\d got its claims\.$/)).toBeInTheDocument();
+      expect(screen.getByText(/Sign-ins before that aren.t checked, and none is counted as failed/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says plainly when the setup hasn't been checked", () => {
