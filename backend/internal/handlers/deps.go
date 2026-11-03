@@ -18,6 +18,10 @@ import (
 	"syndra/internal/services/planapply"
 	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
+
+	"syndra/internal/claims"
+
+	"syndra/internal/services/periodic"
 )
 
 var (
@@ -335,6 +339,26 @@ var (
 	}
 	redisDelKeys = func(ctx context.Context, keys ...string) error {
 		return db.Redis.Del(ctx, keys...).Err()
+	}
+
+	// shapeClaims is internal/claims.Shape, the only shaper; a var so a test
+	// can make it panic and prove the data plane survives that.
+	shapeClaims = claims.Shape
+	// cacheRefreshUser recompiles a person after a facts miss (repair on miss).
+	cacheRefreshUser = cache.RefreshUser
+
+	// Claim delivery telemetry (claims-delivery-integrity S1).
+	dbWriteClaimDelivery       = db.WriteClaimDelivery
+	dbClaimDeliveryWindow      = db.ClaimDeliveryWindow
+	dbClaimDeliveryLast        = db.ClaimDeliveryLast
+	dbClaimPayloadFingerprints = db.ClaimPayloadFingerprints
+	cacheLastWarm              = cache.LastWarm
+	backgroundPanics           = periodic.Panics
+	redisPing                  = func(ctx context.Context) error {
+		if db.Redis == nil {
+			return fmt.Errorf("redis is not connected")
+		}
+		return db.Redis.Ping(ctx).Err()
 	}
 
 	// Drift triage injectable vars (B2). The three action helpers are atomic

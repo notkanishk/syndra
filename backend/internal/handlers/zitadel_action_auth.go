@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"syndra/internal/claimtel"
 )
 
 // ZITADEL Actions v2 signs every target request with HMAC-SHA256 over
@@ -61,7 +64,9 @@ func withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http
 				return
 			}
 			// Production with empty signing key: startup gate should have caught
-			// this. Refuse the request rather than fall through silently.
+			// this. Refuse the request rather than fall through silently. No key
+			// can match, so it counts as a mismatch.
+			claimtel.From(r.Context()).Set(claimtel.SigMismatch)
 			log.Printf("[ACTION] %s unset while ZITADEL_DOMAIN set — refusing request (misconfiguration)", secretEnvVar)
 			jsonErrorResponse(w, http.StatusServiceUnavailable, "MISCONFIGURED", "Signing key not configured for this endpoint")
 			return
@@ -69,6 +74,7 @@ func withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			claimtel.From(r.Context()).Set(claimtel.BadRequest)
 			jsonErrorResponse(w, http.StatusBadRequest, "BAD_REQUEST", "Failed to read request body")
 			return
 		}
@@ -76,13 +82,36 @@ func withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http
 
 		sigHeader := r.Header.Get(zitadelSignatureHeader)
 		if err := verifyZitadelActionSignature(body, sigHeader, secret, zitadelSignatureTolerance, time.Now()); err != nil {
+			claimtel.From(r.Context()).Set(signatureOutcome(err))
 			log.Printf("[ACTION] Signature verification failed: %v", err)
 			jsonErrorResponse(w, http.StatusUnauthorized, "INVALID_SIGNATURE", "Invalid or missing Zitadel signature")
 			return
 		}
+		if call := claimtel.From(r.Context()); call != nil {
+			call.KeySlot = claimtel.KeySlotCurrent
+		}
 
 		next(w, r)
 	}
+}
+
+// The three ways a signature fails, as telemetry tells them apart: no header
+// (not Zitadel), a timestamp outside tolerance (clock skew, or a replay), and
+// everything else (a wrong key: every token loses its claims).
+var (
+	errSignatureMissing  = errors.New("signature missing")
+	errSignatureStale    = errors.New("signature stale")
+	errSignatureMismatch = errors.New("signature mismatch")
+)
+
+func signatureOutcome(err error) claimtel.Outcome {
+	switch {
+	case errors.Is(err, errSignatureMissing):
+		return claimtel.SigMissing
+	case errors.Is(err, errSignatureStale):
+		return claimtel.SigStale
+	}
+	return claimtel.SigMismatch
 }
 
 // verifyZitadelActionSignature parses the ZITADEL-Signature header value,
@@ -92,7 +121,7 @@ func withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http
 // MUST NOT propagate the detail to the response (to avoid oracle leaks).
 func verifyZitadelActionSignature(body []byte, header, secret string, tolerance time.Duration, now time.Time) error {
 	if header == "" {
-		return fmt.Errorf("missing %s header", zitadelSignatureHeader)
+		return fmt.Errorf("%w: missing %s header", errSignatureMissing, zitadelSignatureHeader)
 	}
 
 	var (
@@ -103,13 +132,13 @@ func verifyZitadelActionSignature(body []byte, header, secret string, tolerance 
 	for _, pair := range strings.Split(header, zitadelSignatureSeparator) {
 		key, value, ok := strings.Cut(pair, "=")
 		if !ok {
-			return fmt.Errorf("malformed signature pair: %q", pair)
+			return fmt.Errorf("%w: malformed signature pair: %q", errSignatureMismatch, pair)
 		}
 		switch strings.TrimSpace(key) {
 		case zitadelSignatureTimestamp:
 			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 			if err != nil {
-				return fmt.Errorf("malformed timestamp: %w", err)
+				return fmt.Errorf("%w: malformed timestamp: %v", errSignatureMismatch, err)
 			}
 			ts = time.Unix(n, 0)
 			haveTS = true
@@ -124,13 +153,13 @@ func verifyZitadelActionSignature(body []byte, header, secret string, tolerance 
 	}
 
 	if !haveTS {
-		return fmt.Errorf("signature header missing timestamp")
+		return fmt.Errorf("%w: signature header missing timestamp", errSignatureMismatch)
 	}
 	if len(signatures) == 0 {
-		return fmt.Errorf("signature header missing v1 value")
+		return fmt.Errorf("%w: signature header missing v1 value", errSignatureMismatch)
 	}
 	if now.Sub(ts) > tolerance || ts.Sub(now) > tolerance {
-		return fmt.Errorf("signature timestamp outside tolerance")
+		return fmt.Errorf("%w: signature timestamp outside tolerance (skew %s)", errSignatureStale, now.Sub(ts).Round(time.Second))
 	}
 
 	expected := computeZitadelActionSignature(ts, body, secret)
@@ -139,7 +168,7 @@ func verifyZitadelActionSignature(body []byte, header, secret string, tolerance 
 			return nil
 		}
 	}
-	return fmt.Errorf("no matching signature")
+	return fmt.Errorf("%w: no matching signature", errSignatureMismatch)
 }
 
 // computeZitadelActionSignature returns the HMAC-SHA256 of

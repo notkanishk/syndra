@@ -1,5 +1,15 @@
+# Every service's logs rotate: the json-file driver keeps them forever by
+# default, and a full disk fails Redis's AOF and Postgres together, which is
+# every token losing its claims at once (claims-delivery-integrity S17).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
+    logging: *default-logging
     image: postgres:15-alpine
     container_name: syndra_postgres
     environment:
@@ -21,6 +31,7 @@ services:
       retries: 5
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     container_name: syndra_redis
     volumes:
@@ -30,6 +41,7 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
 
   backend:
+    logging: *default-logging
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -156,6 +168,7 @@ services:
     restart: unless-stopped
 
   ui:
+    logging: *default-logging
     build:
       context: ./ui
       dockerfile: Dockerfile
@@ -198,6 +211,7 @@ services:
   # is a start-up order that changes with configuration — so it runs always and
   # decides for itself whether there is anything to do.
   truenas-addon-secret:
+    logging: *default-logging
     image: alpine:3.22
     container_name: syndra_truenas_addon_secret
     user: "0:0"
@@ -248,6 +262,7 @@ services:
         fi
 
   truenas-addon:
+    logging: *default-logging
     build:
       context: ./addons/truenas
       dockerfile: Dockerfile

@@ -42,7 +42,7 @@ func TestActionV2_PerAppShapeByClientID(t *testing.T) {
 			"function":    function,
 			"application": map[string]string{"client_id": client},
 			"user":        map[string]string{"id": "ada"},
-			"user_grants": []ActionV2UserGrantRef{{ProjectID: "pNet", Roles: []string{"staff"}}},
+			"user_grants": []ActionV2UserGrantRef{{ProjectID: "pNet", Roles: rolesJSON("staff")}},
 		})
 		rr := httptest.NewRecorder()
 		HandleActionInject(rr, httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(string(body))))
@@ -266,7 +266,7 @@ func TestActionV2UserGrantRef_ReadsBothProjectSpellings(t *testing.T) {
 		if err := json.Unmarshal([]byte(body), &g); err != nil {
 			t.Fatalf("%s: %v", body, err)
 		}
-		if g.ProjectID != "pNet" || len(g.Roles) != 1 || g.Roles[0] != "staff" {
+		if g.ProjectID != "pNet" || string(g.Roles) != `["staff"]` {
 			t.Fatalf("%s: got %+v", body, g)
 		}
 	}
