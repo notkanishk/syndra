@@ -27,7 +27,6 @@ import {
   RowCheckbox,
   SelectAllRow,
   SelectModeToggle,
-  SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
@@ -42,6 +41,7 @@ import {
   NO_BUNDLE,
   EMPTY_FILTERS,
   parseFilters,
+  primaryBulkVerb,
   serializeFilters,
   type PeopleFilters,
   observedHolding,
@@ -53,6 +53,19 @@ import { useUsers, type UserListEntry } from "@/lib/queries/useUsers";
 import { useDebounce } from "@/lib/useDebounce";
 import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
+
+/**
+ * People's bulk verbs, in the desktop order. Every one opens a rehearsal, so
+ * none is "Remove role": the plan comes first, and a label that hides that is
+ * the one an operator taps expecting to be asked.
+ */
+const BULK_VERBS: [BulkOp, string, "neutral" | "danger"][] = [
+  ["assign_role", "Give a role", "neutral"],
+  ["assign_bundle", "Give a bundle", "neutral"],
+  ["extend", "Extend what ends", "neutral"],
+  ["remove_bundle", "Remove from a bundle", "danger"],
+  ["remove_role", "Revoke a role", "danger"],
+];
 
 /** Explicit pagination, never infinite scroll: a queue you can reach the end of. */
 
@@ -383,7 +396,7 @@ export default function PeoplePage() {
         </div>
       )}
 
-      <Card>
+      <Card stale={readState.current === false}>
         <CardColumns>
           {bulkMode && <span className="w-11 shrink-0 desktop:w-[26px]" />}
           <span className="w-[250px] min-w-[180px]">
@@ -492,28 +505,11 @@ export default function PeoplePage() {
             selection.clear();
             setWholeFilter(false);
           }}
-        >
-          {/* Every one of these opens a rehearsal, so every one of them says
-              so. "Remove role" on a bar above nine selected people names an
-              outcome that tapping it does not produce — the plan comes first,
-              and the label that hides that is the label an operator taps
-              expecting to be asked. */}
-          <SelectionAction onClick={() => setBulkOp("assign_role")}>
-            Give a role
-          </SelectionAction>
-          <SelectionAction onClick={() => setBulkOp("assign_bundle")}>
-            Give a bundle
-          </SelectionAction>
-          <SelectionAction onClick={() => setBulkOp("extend")}>
-            Extend what ends
-          </SelectionAction>
-          <SelectionAction tone="danger" onClick={() => setBulkOp("remove_bundle")}>
-            Remove from a bundle
-          </SelectionAction>
-          <SelectionAction tone="danger" onClick={() => setBulkOp("remove_role")}>
-            Revoke a role
-          </SelectionAction>
-        </SelectionBar>
+          // Every one of these opens a rehearsal first. On a phone the one the
+          // filter was for leads, and the rest wait in More changes (A-12 §2).
+          verbs={BULK_VERBS.map(([key, label, tone]) => ({ key, label, tone, onClick: () => setBulkOp(key) }))}
+          primary={primaryBulkVerb(filters)}
+        />
       )}
 
       {bulkOp && (
@@ -543,8 +539,9 @@ function PersonRow({
   const selected = selection.isSelected(entry.user.id);
   const touch = useIsTouch();
   // A departed account still belongs in the list — it is often exactly who you
-  // came looking for — but it reads at reduced contrast so a live person is
-  // never mistaken for one who left.
+  // came looking for — and its name steps down to muted so a live person is
+  // never mistaken for one who left. A shade, never an opacity: a dimmed row
+  // takes its quiet lines under 4.5:1 (A-09 §2).
   const departed = isDeparted(entry.user.status);
   // Who they are, in the words they hold: title, then team. The email is only
   // the fallback for someone with no title, never a second line of its own.
@@ -573,12 +570,14 @@ function PersonRow({
             <Link
               href={`/users/${entry.user.id}`}
               onClick={(event) => event.stopPropagation()}
-              className="block truncate text-[15px] font-semibold link-hover"
+              className={`block truncate text-[15px] font-semibold link-hover ${departed ? "text-muted" : ""}`}
             >
               {entry.user.name}
             </Link>
           ) : (
-            <span className="block truncate text-[15px] font-semibold">{entry.user.name}</span>
+            <span className={`block truncate text-[15px] font-semibold ${departed ? "text-muted" : ""}`}>
+              {entry.user.name}
+            </span>
           )}
           <span className="block truncate text-[12.5px] text-faint" title={subtitle}>
             {subtitle}
@@ -626,9 +625,7 @@ function PersonRow({
   // anything about them needs doing — plus the sentence explaining why they
   // are in the list. Team and bundles fold away: both are one tap deeper, on
   // the person's own page, and neither is what this screen is scanned for.
-  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px] ${
-    departed ? "opacity-60" : ""
-  }`;
+  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]`;
 
   if (!bulkMode) {
     return (

@@ -211,6 +211,7 @@ export function LaneMap({
                     aria-label={people != null ? `${name}, ${people} ${people === 1 ? "person" : "people"} ${unit}`.trim() : name}
                     onClick={() => onPick(node.id === focusId ? null : node.id)}
                     className={`motion-tint flex min-h-[44px] desktop:min-h-[38px] w-full items-center gap-2 rounded-nav border px-3 py-1.5 text-left ${node.id === breathing ? "breathe" : ""}`}
+                    data-dim={(Boolean(highlight) && !tone) || undefined}
                     style={nodeSurface(tone, node.id === focusId, unused.has(node.id), Boolean(highlight) && !tone)}
                   >
                     <NodeGlyph kind={node.kind} />

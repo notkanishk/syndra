@@ -18,7 +18,11 @@ const SOFT: Partial<Record<Tone, string>> = {
   danger: "var(--danger-soft)",
 };
 
-/** A node's box: border and fill say its part in the answer; opacity says it has none. */
+/**
+ * A node's box: border and fill say its part in the answer. One with no part
+ * recedes to the page (no fill, a hairline edge) and keeps its words at full
+ * strength: an opacity took its count line under 4.5:1 (A-09 §2).
+ */
 export function nodeSurface(tone: Tone | undefined, focused: boolean, unused: boolean, dim: boolean): CSSProperties {
   const border = focused
     ? "var(--accent)"
@@ -32,10 +36,9 @@ export function nodeSurface(tone: Tone | undefined, focused: boolean, unused: bo
             ? "var(--line-strong)"
             : "var(--line)";
   return {
-    borderColor: border,
+    borderColor: dim ? "var(--line)" : border,
     borderStyle: unused && !tone ? "dashed" : "solid",
-    background: (tone && SOFT[tone]) || (unused && !tone ? "transparent" : "var(--surface-1)"),
-    opacity: dim ? 0.35 : 1,
+    background: (tone && SOFT[tone]) || (dim || (unused && !tone) ? "transparent" : "var(--surface-1)"),
   };
 }
 

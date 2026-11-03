@@ -116,7 +116,11 @@ describe("a line in the answer lights its thread (A-06 section 7)", () => {
 function Mount() {
   return <MapTab url={useInsightsUrl()} />;
 }
-const opacity = (node: string) => (document.querySelector(`[data-node="${node}"]`) as HTMLElement).style.opacity;
+// Lit or receded; the words never take an opacity (A-09 §2).
+const standing = (node: string) => {
+  const el = document.querySelector(`[data-node="${node}"]`) as HTMLElement;
+  return el.style.opacity || (el.hasAttribute("data-dim") ? "receded" : "lit");
+};
 
 describe("on the map", () => {
   beforeEach(() => {
@@ -126,21 +130,21 @@ describe("on the map", () => {
 
   it("hovering one pinned line leaves only its own thread lit, and leaving restores both", () => {
     render(<Mount />);
-    expect(opacity("role:p1:op")).toBe("1");
-    expect(opacity("role:p2:sa")).toBe("1");
+    expect(standing("role:p1:op")).toBe("lit");
+    expect(standing("role:p2:sa")).toBe("lit");
 
     const section = screen.getByRole("region", { name: /./ });
     const line = within(section).getByText(/Operator: /).closest("p")!;
     act(() => {
       fireEvent.mouseEnter(line);
     });
-    expect(opacity("role:p1:op")).toBe("1");
-    expect(opacity("role:p2:sa")).toBe("0.35");
-    expect(opacity("project:p2")).toBe("0.35");
+    expect(standing("role:p1:op")).toBe("lit");
+    expect(standing("role:p2:sa")).toBe("receded");
+    expect(standing("project:p2")).toBe("receded");
 
     act(() => {
       fireEvent.mouseLeave(line);
     });
-    expect(opacity("role:p2:sa")).toBe("1");
+    expect(standing("role:p2:sa")).toBe("lit");
   });
 });

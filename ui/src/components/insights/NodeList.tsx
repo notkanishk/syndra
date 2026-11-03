@@ -59,6 +59,7 @@ export function NodeList({
                     aria-pressed={node.id === focusId}
                     onClick={() => onPick(node.id === focusId ? null : node.id)}
                     className="motion-tint flex min-h-[44px] w-full items-center gap-3 rounded-block border px-4 py-3 text-left"
+                    data-dim={(Boolean(highlight) && !tone) || undefined}
                     style={nodeSurface(tone, node.id === focusId, unused.has(node.id), Boolean(highlight) && !tone)}
                   >
                     <NodeGlyph kind={node.kind} />
