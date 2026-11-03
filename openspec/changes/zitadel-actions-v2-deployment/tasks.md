@@ -7,7 +7,7 @@
 ### Backend — reshape `HandleActionInject` to v2
 
 - [x] Replace `ActionRequest` / `ActionResponse` with `ActionV2Request` / `ActionV2Response` in `backend/internal/handlers/action.go`.
-- [x] `ActionV2Request` accepts Zitadel's function payload: `{function, user{id}, user_grants[{projectId, roles}]}` via `decodeJSONLenient`.
+- [x] `ActionV2Request` accepts Zitadel's function payload: `{function, user{id}, user_grants[{project_id, roles}]}` via `decodeJSONLenient`. Fixed 3 Nov 2026: Zitadel sends `project_id`; until then Syndra read only `projectId` and every v2 token carried no Syndra claims.
 - [x] Multi-grant dedup by `projectId` preserving first-seen order.
 - [x] Project-selection logic: 0 projects → empty `append_claims`; 1 project → flat claim keys; 2+ projects → namespaced `syndra.<projectID>.<key>`.
 - [x] `degradedResponse(ctx, projectID, namespace)` wraps `fail_closed` / `minimal_safe` output in `append_claims` envelope; DB outage defaults to fail_closed.

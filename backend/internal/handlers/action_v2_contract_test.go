@@ -178,17 +178,22 @@ const canonicalV2Payload = `{
   "user_grants": [
     {
       "id": "grant-1",
-      "projectId": "pPrinting",
-      "projectName": "Printing Portal",
-      "grantId": "",
-      "roles": ["operator"]
+      "creation_date": "2026-09-01T10:00:00Z",
+      "sequence": 4,
+      "roles": ["operator"],
+      "grant_id": "",
+      "state": 1,
+      "user_id": "250124622953808001",
+      "project_id": "pPrinting",
+      "project_name": "Printing Portal",
+      "project_resource_owner": "250124592953808001"
     },
     {
       "id": "grant-2",
-      "projectId": "pPrinting",
-      "projectName": "Printing Portal",
-      "grantId": "",
-      "roles": ["viewer"]
+      "roles": ["viewer"],
+      "user_id": "250124622953808001",
+      "project_id": "pPrinting",
+      "project_name": "Printing Portal"
     }
   ]
 }`
@@ -245,4 +250,24 @@ func rolesEqual(value interface{}, want ...string) bool {
 		}
 	}
 	return true
+}
+
+// The grant rows are Zitadel's query.UserGrant, serialised with snake_case
+// tags ("project_id", internal/query/user_grant.go in v3.4 and v4). Zitadel's
+// docs show "projectId", and reading only that is the defect that left every
+// v2 token without Syndra's claims. Both spellings must resolve the project.
+func TestActionV2UserGrantRef_ReadsBothProjectSpellings(t *testing.T) {
+	for _, body := range []string{
+		`{"project_id":"pNet","roles":["staff"]}`,
+		`{"projectId":"pNet","roles":["staff"]}`,
+		`{"project_id":"pNet","projectId":"pOther","roles":["staff"]}`,
+	} {
+		var g ActionV2UserGrantRef
+		if err := json.Unmarshal([]byte(body), &g); err != nil {
+			t.Fatalf("%s: %v", body, err)
+		}
+		if g.ProjectID != "pNet" || len(g.Roles) != 1 || g.Roles[0] != "staff" {
+			t.Fatalf("%s: got %+v", body, g)
+		}
+	}
 }
