@@ -326,9 +326,14 @@ func jwtPayload(tok string) (map[string]any, bool) {
 func sawCanaryCall(ctx context.Context, userID, clientID string, since time.Time) bool {
 	deadline := time.Now().Add(canaryCallWait)
 	for {
-		worst, _ := claimCalls{}.Window(userID, clientID, since, time.Now().Add(time.Second))
-		if o, ok := worst[claimtel.FnPreAccessToken]; ok && (o == claimtel.Served || o == claimtel.ServedLKG) {
-			return true
+		// A JWT-profile token (Syndra's own service account) names a client in
+		// the token, but Zitadel sends Syndra no application.client_id for it
+		// (seen on prod 3 Nov 2026), so its call is recorded with none.
+		for _, c := range []string{clientID, ""} {
+			worst, _ := claimCalls{}.Window(userID, c, since, time.Now().Add(time.Second))
+			if o, ok := worst[claimtel.FnPreAccessToken]; ok && (o == claimtel.Served || o == claimtel.ServedLKG) {
+				return true
+			}
 		}
 		if time.Now().After(deadline) {
 			return false
