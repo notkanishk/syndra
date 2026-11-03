@@ -20,5 +20,7 @@ A-14 redraws the page around one shape per app, with templates, copying, history
 
 The API contract is in `design.md`.
 
+- **The UI** (§8 of `tasks.md`), on this API: the app's claims part per A-14 §1–§8, the apps index's Claims column, and the project default on the project's page (its one write place).
+
 ## Not in this change
-The UI. That's a later slice built on this API. Also out: test people, "what the app reads", and the cross-app comparison (see `design.md`, "Not built here").
+Test people, "what the app reads", and the cross-app comparison (see `design.md`, "Not built here").

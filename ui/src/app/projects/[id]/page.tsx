@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { use, useMemo, useState } from "react";
 
+import { ProjectClaimDefault } from "@/components/projects/ProjectClaimDefault";
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ErrorState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
@@ -265,6 +266,9 @@ export default function ProjectDetailPage({
           </ArrowLink>
         </p>
       )}
+
+      {/* The project default's one write place (A-14 §7); each app page reads it. */}
+      {project && <ProjectClaimDefault projectId={id} />}
 
       {creating && (
         <CreateRoleDialog

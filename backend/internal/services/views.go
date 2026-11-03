@@ -734,7 +734,12 @@ func ListApplications(ctx context.Context) ([]models.ApplicationView, error) {
 	if err != nil {
 		return nil, err
 	}
-	return listApplicationsFromSnapshot(snap)
+	views, err := listApplicationsFromSnapshot(snap)
+	if err != nil {
+		return nil, err
+	}
+	attachClaimLines(ctx, views)
+	return views, nil
 }
 
 func listApplicationsFromSnapshot(snap *accessSnapshot) ([]models.ApplicationView, error) {

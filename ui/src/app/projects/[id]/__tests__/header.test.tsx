@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({ loading: true, failed: false, advanced: false 
 
 vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
 vi.mock("@/lib/page-crumb", () => ({ useCrumb: () => {} }));
+vi.mock("@/components/projects/ProjectClaimDefault", () => ({ ProjectClaimDefault: () => null }));
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({
     data: state.loading || state.failed

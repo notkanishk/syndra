@@ -55,6 +55,8 @@ interface PickerProps {
   legend?: boolean;
   /** Offer bundles too. Off by default. */
   bundles?: BundleChoices;
+  /** Single-project mode: only this project's roles (a claim that reads one project's roles). */
+  onlyProject?: string;
 }
 
 const NO_BUNDLES: BundleOption[] = [];
@@ -129,13 +131,17 @@ function Picker({
   legend = true,
   bundles,
   bundleOptions = NO_BUNDLES,
+  onlyProject,
 }: PickerProps & { bundleOptions?: BundleOption[] }) {
   const catalog = useGlobalRoleCatalog();
   const [query, setQuery] = useState("");
   // A project the operator opened or closed by hand keeps that, whatever the search does.
   const [folded, setFolded] = useState<Record<string, boolean>>({});
 
-  const all = useMemo(() => catalog.data ?? [], [catalog.data]);
+  const all = useMemo(
+    () => (catalog.data ?? []).filter((r) => !onlyProject || r.project_id === onlyProject),
+    [catalog.data, onlyProject],
+  );
   const byId = useMemo(() => new Map(all.map((r) => [`${r.project_id}:${r.role_key}`, r])), [all]);
   const needle = query.trim().toLowerCase();
 

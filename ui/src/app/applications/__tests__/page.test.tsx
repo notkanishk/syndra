@@ -14,21 +14,24 @@ vi.mock("@/lib/queries/useApplications", () => ({
     refetch: () => {},
   }),
 }));
+vi.mock("@/lib/queries/useClaimShape", () => ({
+  useClaimTemplates: () => ({
+    data: [
+      { id: "netbird", name: "NetBird" },
+      { id: "custom", name: "Custom" },
+    ],
+  }),
+}));
 vi.mock("@/components/names", () => ({
   ProjectName: ({ id }: { id: string }) => <span>{id === "p1" ? "Laser Lab" : "Studio"}</span>,
 }));
 
-function app(id: string, name: string, project: string, format: string, people: number, claim = `${id}.roles`) {
+type Line = { source: string; keys: string[]; lands: string; template_id?: string; template_changed?: boolean; copied_from_application_id?: string; reaches?: boolean };
+
+function app(id: string, name: string, project: string, claims: Line | undefined, people: number) {
   return {
-    application: {
-      id,
-      name,
-      project_id: project,
-      description: "",
-      consumer: "oidc",
-      claim_name: claim,
-      format_type: format,
-    },
+    application: { id, name, project_id: project, description: "", consumer: "oidc", claim_name: "", format_type: "" },
+    claims,
     consumed_roles: [],
     assigned_user_count: people,
     observed_user_count: people,
@@ -48,45 +51,43 @@ const order = () =>
 beforeEach(() => {
   state.loading = false;
   state.apps = [
-    app("kiosk", "Kiosk", "p2", "csv", 9),
-    app("bookings", "Bookings", "p1", "array", 41),
-    app("badge", "Badge reader", "p1", "csv", 22),
+    app("kiosk", "Kiosk", "p2", { source: "builtin", keys: ["roles"], lands: "both" }, 9),
+    app("bookings", "Bookings", "p1", { source: "app", keys: ["roles", "is_admin", "bundles"], lands: "both", template_id: "custom", template_changed: true }, 41),
+    app("badge", "Badge reader", "p1", { source: "app", keys: ["groups"], lands: "access_token", template_id: "netbird", reaches: false }, 22),
   ];
 });
 
-// The board (route-applications): App with "OIDC · claim key" under the name,
-// Reads roles from, Format, People. Kind is the sub-line, not a column.
+// A-14 §7: the Format column becomes Claims, the app's real key and where it
+// lands; the sub-line names where the shape comes from.
 describe("the apps index, as drawn", () => {
-  it("reads App, Reads roles from, Format, People, with no Kind column", () => {
+  it("reads App, Reads roles from, Claims, People, with no Kind column", () => {
     render(<AppsPage />);
-    expect(headings()).toEqual(["App", "Reads roles from", "Format", "People"]);
+    expect(headings()).toEqual(["App", "Reads roles from", "Claims", "People"]);
   });
 
-  it("puts the protocol and the claim key under the app's name", () => {
+  it("names where each app's shape comes from under its name", () => {
     render(<AppsPage />);
-    const row = screen.getByRole("link", { name: /Kiosk/ });
-    expect(row.children[0].textContent).toBe("KioskOIDC · kiosk.roles");
+    expect(screen.getByRole("link", { name: /Kiosk/ }).children[0].textContent).toBe("KioskOIDC · Studio’s default");
+    expect(screen.getByRole("link", { name: /Bookings/ }).children[0].textContent).toBe("BookingsOIDC · Custom, changed");
+    expect(screen.getByRole("link", { name: /Badge reader/ }).children[0].textContent).toBe("Badge readerOIDC · NetBird template");
   });
 
-  it("keeps the cells in the board's order: app, project, format, people", () => {
+  it("shows the real key and where it lands, in the board's order: app, project, claims, people", () => {
     render(<AppsPage />);
-    const cells = Array.from(screen.getByRole("link", { name: /Kiosk/ }).children).map((c) => c.textContent ?? "");
-    expect(cells[1]).toBe("Studio");
-    expect(cells[2]).toBe("csv");
-    expect(cells[3]).toMatch(/^9/);
+    const cells = Array.from(screen.getByRole("link", { name: /Bookings/ }).children).map((c) => c.textContent ?? "");
+    expect(cells[1]).toBe("Laser Lab");
+    expect(cells[2]).toBe("rolesand 2 more · access token, userinfo");
+    expect(cells[3]).toMatch(/^41/);
   });
 
-  it("flags a project read in two formats where it applies, in amber", () => {
+  it("marks an app whose claims don't reach where it reads, in amber, and says so once above", () => {
     render(<AppsPage />);
-    // Bookings (array) and Badge reader (csv) both read Laser Lab; Kiosk reads Studio alone.
-    for (const name of [/Bookings/, /Badge reader/]) {
-      const cell = screen.getByRole("link", { name }).children[2];
-      expect(cell.textContent).toMatch(/mixed in Laser Lab$/);
-      expect(cell.className).toMatch(/text-warn-text/);
-    }
-    const kiosk = screen.getByRole("link", { name: /Kiosk/ }).children[2];
-    expect(kiosk.textContent).toBe("csv");
-    expect(kiosk.className).not.toMatch(/text-warn-text/);
+    const cell = screen.getByRole("link", { name: /Badge reader/ }).children[2];
+    expect(cell.textContent).toBe("groupsDoesn’t reach it");
+    expect(cell.querySelector(".text-warn-text")).not.toBeNull();
+    expect(screen.getByText("Badge reader doesn't get its claims.")).toBeInTheDocument();
+    // An app never read says nothing rather than guess.
+    expect(screen.getByRole("link", { name: /Kiosk/ }).children[2].textContent).toBe("rolesaccess token, userinfo");
   });
 
   it("sorts on App A to Z at first, and on People when asked", () => {

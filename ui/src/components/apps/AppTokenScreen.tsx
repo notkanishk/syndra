@@ -1,174 +1,297 @@
 "use client";
 
-import { Term } from "@/components/ui/Term";
-import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
-import { TokenPreview } from "@/components/apps/TokenPreview";
+import { AppSignInStrip } from "@/components/apps/AppSignInStrip";
+import { ProjectName } from "@/components/names";
+import { SignInLookup } from "@/components/people/SignInLookup";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
-import { Mono } from "@/components/ui/Badge";
-import { ProjectName } from "@/components/names";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { Mono } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
-import { SignInLookup } from "@/components/people/SignInLookup";
-import { AppSignInStrip } from "@/components/apps/AppSignInStrip";
+import { Tinted } from "@/components/ui/Unfold";
+import { ApiError, request } from "@/lib/api-client";
+import { rowProblems, type SayContext } from "@/lib/claims";
+import { describeFailure } from "@/lib/outcome";
+import { useCrumb } from "@/lib/page-crumb";
+import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
+import {
+  useAppClaimShape,
+  useClaimPreview,
+  useClaimTemplates,
+  useDraftFrom,
+  useSaveAppClaimShape,
+  type Profile,
+} from "@/lib/queries/useClaimShape";
+import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useAppSignIns } from "@/lib/queries/useSignIns";
 import { appSignInMeta } from "@/lib/sign-in-line";
-import { useApplications } from "@/lib/queries/useApplications";
-import { useClaimShape } from "@/lib/queries/useClaimShape";
-import { useCrumb } from "@/lib/page-crumb";
-import { Tinted } from "@/components/ui/Unfold";
-import { useIsAdvanced } from "@/lib/ui-view";
-import dynamic from "next/dynamic";
+import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 
-// Opened on demand, so it stays out of the page's first load.
-const TokenFormatEditor = dynamic(() => import("@/components/apps/TokenFormatEditor").then((m) => m.TokenFormatEditor));
+import type { CheckContext } from "./claim-words";
+import { ClaimHistory } from "./ClaimHistory";
+import { ClaimPreview } from "./ClaimPreview";
+import { DebugMode } from "./DebugMode";
+import { appTemplateId, ShapeCard } from "./ShapeCard";
+import { draftFrom, type ShapeDraft } from "./shape-draft";
+import { CopySheet, SaveSummary, TemplateSheet } from "./ShapeSheets";
 
 /**
- * E6 · One screen, two equal halves: what the token is shaped like on the
- * left, what it actually contains on the right.
- *
- * Both halves read from the same claim profiles the data plane applies, so the
- * preview is the token. Before this, the simulator invented an envelope the
- * Actions v2 path never emitted — a debugging screen that showed a token which
- * did not exist.
+ * An app, and what it's told (A-14). One job: make sure this app is told the
+ * right thing about people. The shape and its preview sit side by side; every
+ * edit is a draft the preview runs at once, through the same shaper the token
+ * path uses, and nothing changes until Save.
  */
 export function AppTokenScreen({ applicationId }: { applicationId: string }) {
-  const apps = useApplications();
-  // One hand-over (S7): a skeleton only if the read is slow, then the screen arrives.
+  const shape = useAppClaimShape(applicationId);
   return (
     <ReadGate
-      loading={apps.isLoading}
+      loading={shape.isLoading}
       skeleton={
         <Card>
           <RowSkeleton rows={4} avatar={false} label="Loading app" />
         </Card>
       }
     >
-      <ReadAppTokenScreen applicationId={applicationId} />
+      {shape.error ? (
+        <ErrorState
+          title={shape.error instanceof ApiError && shape.error.status === 404 ? "That app doesn't exist." : "Couldn't load this app."}
+          error={shape.error instanceof ApiError && shape.error.status === 404 ? new Error("It may have been removed in Zitadel.") : shape.error}
+          onRetry={() => shape.refetch()}
+        />
+      ) : shape.data ? (
+        <AppClaims key={applicationId} applicationId={applicationId} />
+      ) : null}
     </ReadGate>
   );
 }
 
-function ReadAppTokenScreen({ applicationId }: { applicationId: string }) {
-  const apps = useApplications();
+function useZitadelDomain(): string | undefined {
+  const health = useQuery({
+    queryKey: ["zitadel", "health"],
+    queryFn: () => request<{ domain?: string }>("/zitadel/health", { preserveErrorBody: true }),
+    staleTime: Infinity,
+  });
+  return health.data?.domain;
+}
+
+function AppClaims({ applicationId }: { applicationId: string }) {
+  const shape = useAppClaimShape(applicationId).data!;
+  const templates = useClaimTemplates().data ?? [];
+  const users = useCatalogUsers();
+  const { selfId } = useUiView();
   const advanced = useIsAdvanced();
-  const app = (apps.data ?? []).find((entry) => entry.application.id === applicationId);
-  const shape = useClaimShape(app?.application.project_id);
-  // The editor holds edits the preview has not seen. Lifted here because they
-  // are siblings, and the preview's whole claim is that it shows what this app
-  // would receive right now.
-  const [editing, setEditing] = useState(false);
+  const resolver = useNameResolver();
+  const domain = useZitadelDomain();
+  const save = useSaveAppClaimShape(applicationId);
+  const make = useDraftFrom(applicationId);
   const signIns = useAppSignIns(applicationId);
   const signInMeta = appSignInMeta(signIns.data);
+  const app = shape.application.name;
+  const projectId = shape.application.project_id;
+  const project = resolver.resolveProject(projectId).value?.name ?? "this project";
+  useCrumb(app);
+
+  const [personId, setPersonId] = useState("");
+  useEffect(() => {
+    if (personId || users.data.length === 0) return;
+    setPersonId(users.data.some((u) => u.id === selfId) ? selfId! : users.data[0].id);
+  }, [users.data, selfId, personId]);
+  const person = users.data.find((u) => u.id === personId)?.name ?? "this person";
+
+  const [draft, setDraft] = useState<ShapeDraft | null>(null);
+  const [sheet, setSheet] = useState<{ kind: "template"; id: string } | { kind: "copy" } | { kind: "save" } | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
+  const beforeCopy = useRef<ShapeDraft | null>(null);
 
-  useCrumb(app?.application.name);
+  // A draft with a row that can't be shaped (unnamed, repeated) keeps the
+  // last draft that could on the preview, rather than flashing an error.
+  const problems = draft ? rowProblems(draft.profile, { project, missing: draft.missing }) : [];
+  const lastGood = useRef<Profile | null>(null);
+  const shapeable = draft && !problems.some((p) => p?.blocksPreview);
+  if (shapeable) lastGood.current = draft.profile;
+  const previewed = draft ? (shapeable ? draft.profile : lastGood.current) : null;
+  const preview = useClaimPreview(applicationId, personId ? [personId] : [], previewed, draft?.templateId);
 
-  const siblings = useMemo(
-    () =>
-      (apps.data ?? []).filter(
-        (entry) =>
-          entry.application.project_id === app?.application.project_id &&
-          entry.application.id !== applicationId,
-      ),
-    [apps.data, app?.application.project_id, applicationId],
-  );
+  const one = preview.data?.people[0];
+  const shown = one?.draft ?? one?.now;
+  const token = (shown?.would_receive ?? shown?.token) ?? null;
+  const c1 = shown?.checks[0];
+  const reads = String(c1?.facts?.reads ?? "");
+  const checkOneFailsReads = c1?.state === "fail" && Boolean(reads) && !(c1.facts.reached as Record<string, boolean> | undefined)?.[reads];
+  const rowError =
+    preview.error instanceof ApiError && preview.error.code === "VALIDATION_FAILED" && preview.error.details?.row
+      ? { row: Number(preview.error.details.row), message: describeFailure(preview.error) }
+      : undefined;
 
-  if (apps.error) {
-    return (
-      <ErrorState
-        title="Couldn't load this app."
-        error={apps.error}
-        onRetry={() => apps.refetch()}
-      />
-    );
-  }
-  if (!app) {
-    return (
-      <ErrorState
-        title="That app doesn't exist."
-        error={new Error("It may have been removed in Zitadel.")}
-      />
-    );
-  }
+  const consoleBase = domain ? `https://${domain}/ui/console/projects/${projectId}` : undefined;
+  const ctx: CheckContext = {
+    app,
+    project,
+    person,
+    roles: shape.project_roles,
+    profile: previewed ?? shape.profile,
+    templates,
+    links: consoleBase ? { project: consoleBase, app: `${consoleBase}/apps/${applicationId}` } : undefined,
+    draft:
+      draft && previewed
+        ? {
+            origin: draft.committed || draft.origin !== "edit" ? draft.origin : "edit",
+            name: draft.origin === "copy" ? draft.copiedName : templates.find((t) => t.id === draft.templateId)?.name,
+            leftOut: (preview.data?.left_out ?? []).map((i) => previewed.claims[i]?.path.join(" › ")).filter(Boolean),
+          }
+        : undefined,
+  };
+  const say: SayContext = { app, roles: shape.project_roles, reach: preview.data?.reach, templateId: appTemplateId(shape, draft) };
+
+  const roleWord = shape.profile.claims.some((c) => c.path[c.path.length - 1] === "groups") ? "groups" : "roles";
+  const signInOnly = shape.source === "app" && shape.profile.claims.length === 0;
+  const lede = !draft
+    ? `Exactly what ${app} receives when this person signs in, and each check on the way.`
+    : shape.source !== "app" && draft.origin === "template"
+      ? `What ${app} receives now, on ${project}'s default, and from the ${ctx.draft?.name ?? "chosen"} template as a draft. Nothing changes until you save.`
+      : draft.origin === "copy"
+        ? `What ${app} receives now${shape.source === "app" ? "" : `, on ${project}'s default`}, and with ${draft.copiedName}'s shape as a draft. Nothing changes until you save.`
+        : `What ${app} receives now, and once you save this draft. Nothing changes until you save.`;
+
+  const tpl = sheet?.kind === "template" ? templates.find((t) => t.id === sheet.id) : undefined;
 
   return (
-    <div className="flex flex-col gap-[22px]">
-      <PageHeader
-        eyebrow="Apps"
-        title={app.application.name}
-        lede={
-          <>
-            When someone signs in to {app.application.name}, Zitadel hands it a{" "}
-            <Term name="token">token</Term> — a short list of facts about that person, including
-            their roles. Token format sets what goes in it; Preview token shows exactly what{" "}
-            {app.application.name} would receive for a given person.
-          </>
-        }
-        meta={
-          <span className="flex flex-wrap items-center gap-2 text-[14px] text-faint">
-            uses roles from{" "}
-            {/* The project is a place of its own: a link, ending in the arrow
-                every way-on ends in. */}
-            <ArrowLink href={`/projects/${app.application.project_id}`}>
-              <ProjectName id={app.application.project_id} />
-            </ArrowLink>
-            {/* An inline bit, not a region: it tints with the view (A-08 §3). */}
-            {/* Syndra's own record, a fact about the app (A-10 §7). "9 people"
-                doesn't link: People can't filter by sign-in. */}
-            {signInMeta && (
-              <span className="tint-in">
-                <span aria-hidden>·</span> {signInMeta}
-              </span>
-            )}
-            <Tinted show={advanced}>
-              {" "}
-              · id <Mono>{app.application.id}</Mono>
-            </Tinted>
-          </span>
-        }
-        actions={
-          <Button variant="outline" onClick={() => setLookingUp(true)}>
-            Look up sign-ins
-          </Button>
-        }
-      />
-      {lookingUp && (
-        <SignInLookup appId={applicationId} name={app.application.name} onClose={() => setLookingUp(false)} />
-      )}
+    <div className="flex flex-col gap-5">
+      <div className="pb-2">
+        <PageHeader
+          eyebrow="Apps"
+          title={app}
+          lede={
+            signInOnly
+              ? `What ${app} is told about a person when they sign in. It needs only Zitadel's own claims; who may sign in is Zitadel's role check.`
+              : `What ${app} is told about a person when they sign in. Come here when it isn't seeing the ${roleWord} it should, or before you change what it's told.`
+          }
+          meta={
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
+              {kindOf(shape.application.consumer)} · roles from{" "}
+              <ArrowLink href={`/projects/${projectId}`} className="text-[14px]">
+                <ProjectName id={projectId} />
+              </ArrowLink>
+              {signInMeta && (
+                <span className="tint-in">
+                  <span aria-hidden>·</span> {signInMeta}
+                </span>
+              )}
+              <Tinted show={advanced && Boolean(shape.client_id)}>
+                <span aria-hidden>·</span> client <Mono>{shape.client_id}</Mono>
+              </Tinted>
+            </span>
+          }
+          actions={
+            <Button variant="outline" onClick={() => setLookingUp(true)}>
+              Look up sign-ins
+            </Button>
+          }
+        />
+      </div>
+      {lookingUp && <SignInLookup appId={applicationId} name={app} onClose={() => setLookingUp(false)} />}
 
-      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap">
-        <div className="w-full tablet:min-w-[420px] tablet:flex-1">
-          <TokenFormatEditor
-            projectId={app.application.project_id}
-            applicationId={applicationId}
-            applicationName={app.application.name}
+      {/* What the app is told | Preview: two halves; on a phone the shape comes first (#90). */}
+      <div className="flex flex-wrap items-start gap-5">
+        <div className="flex min-w-0 flex-[1_1_460px]">
+          <ShapeCard
             shape={shape}
-            siblingCount={siblings.length}
-            onDirtyChange={setEditing}
+            draft={draft}
+            setDraft={setDraft}
+            token={token}
+            person={person}
+            preview={preview.data}
+            previewRowError={rowError}
+            checkOneFailsReads={checkOneFailsReads}
+            templates={templates}
+            advanced={advanced}
+            projectName={project}
+            onSave={() => setSheet({ kind: "save" })}
+            onOpenTemplate={(id) => setSheet({ kind: "template", id })}
+            onOpenCopy={() => {
+              beforeCopy.current = draft;
+              setSheet({ kind: "copy" });
+            }}
           />
         </div>
-        <div className="w-full tablet:min-w-[420px] tablet:flex-1">
-          {/* The preview reads the SAVED shape. While the editor holds
-              unsaved edits it is a preview of a shape nobody is looking at,
-              and side by side on a desktop that is misleading; stacked on a
-              phone, where the editor is a scroll away, it is worse. It says so
-              rather than being quietly wrong. */}
-          <TokenPreview
-            applicationId={applicationId}
-            applicationName={app.application.name}
-            projectId={app.application.project_id}
-            projectName={shape.data?.project_name}
-            behindEdits={editing}
+        {/* The preview stays in view while the shape scrolls, so every edit is seen beside its effect. */}
+        <div className="flex min-w-0 flex-[1_1_440px] tablet:sticky tablet:top-5">
+          <ClaimPreview
+            preview={preview.data}
+            isLoading={preview.isLoading}
+            error={preview.error}
+            onRetry={() => preview.refetch()}
+            people={users.data}
+            personId={personId}
+            onPerson={setPersonId}
+            ctx={ctx}
+            lede={lede}
           />
         </div>
       </div>
-      {signIns.data?.receiving && signIns.data.last_at && (
-        <AppSignInStrip name={app.application.name} usage={signIns.data} />
+
+      <DebugMode appId={applicationId} ctx={{ ...ctx, profile: shape.profile, draft: undefined }} />
+      <ClaimHistory appId={applicationId} ctx={say} project={project} templates={templates} />
+      {signIns.data?.receiving && signIns.data.last_at && <AppSignInStrip name={app} usage={signIns.data} />}
+
+      {tpl && (
+        <TemplateSheet
+          template={tpl}
+          shape={shape}
+          project={project}
+          onClose={() => setSheet(null)}
+          onStart={async () => {
+            setSheet(null);
+            try {
+              const d = await make.mutateAsync({ template_id: tpl.id });
+              setDraft({ ...draftFrom(d, "template"), committed: true });
+            } catch {
+              // The chooser says why when it can't make one; here the sheet just closes.
+            }
+          }}
+        />
+      )}
+      {sheet?.kind === "copy" && (
+        <CopySheet
+          shape={shape}
+          templates={templates}
+          draft={draft}
+          setDraft={setDraft}
+          project={project}
+          onClose={(copied) => {
+            // Cancelled: the chooser's draft goes with the sheet, and any draft from before comes back.
+            if (!copied) setDraft(beforeCopy.current);
+            setSheet(null);
+          }}
+        />
+      )}
+      {sheet?.kind === "save" && draft && (
+        <SaveSummary
+          shape={shape}
+          draft={draft}
+          preview={preview.data}
+          ctx={say}
+          save={(body) => save.mutateAsync(body)}
+          onClose={(saved) => {
+            setSheet(null);
+            if (saved) setDraft(null);
+          }}
+        />
       )}
     </div>
   );
+}
+
+/** The protocol, the word an operator debugging a token already has in mind. */
+function kindOf(consumer: string): string {
+  const raw = (consumer || "").toLowerCase();
+  if (raw.includes("saml")) return "SAML";
+  if (raw.includes("oidc") || raw.includes("oauth")) return "OIDC";
+  if (raw.includes("api")) return "API";
+  return consumer || "App";
 }

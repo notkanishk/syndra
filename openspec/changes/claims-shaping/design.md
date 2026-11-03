@@ -131,9 +131,11 @@ Nothing is written.
 
 ### The project default
 - `GET /api/v1/projects/{id}/claim-shape` returns `{project_id, project_name, configured, default: {claim_name, format_type, attribute_claims, static_claims}, profile, applications: [{application_id, name, source, version?, template_id?}]}`.
-- `overrides: []`, `emitted_keys` and `conflicts: []` stay only so the current app screen doesn't crash before the UI slice replaces it. Drop them with it.
 - `PUT /api/v1/projects/{id}/claim-profile` takes the flat `default` and is its one write place.
 - The per-app override endpoints (`PUT|DELETE /applications/{id}/claim-profile`) are gone.
+
+### The apps index
+`GET /api/v1/applications` gives each app `claims: {source, keys, lands, template_id?, template_changed?, copied_from_application_id?, reaches?}`: its own shape's top-level keys, read once per project. `reaches` is whether the claims reach where the template says the app reads, from check 1's last answer in memory; absent when Zitadel's settings for that app were never read here. Shapes that can't be read leave `claims` out.
 
 ### Debug mode
 - `PUT /api/v1/applications/{id}/debug` takes `{user_id?}` (the caller's own by default, never everyone). It returns `{ends_at, switched, session}`.
@@ -160,5 +162,5 @@ Nothing is written.
 - Test people (`GET/PUT /applications/{id}/test-people`) and "What the app reads" (A-11 §3, §6). Both are A-11 carry-overs, outside this slice's list.
 - The last refused sign-in per client (A-11 check 1's "Last refused at 10:12"). The answer says to drop that line rather than invent it.
 - "NetBird clients is told something different" (A-14 §8), the cross-app comparison in check 4.
-- Console deep links (the UI builds them from `client_id` and the project id).
+- Console deep links: the UI builds them from `/zitadel/health`'s domain and the project and app ids.
 - Which Supabase provider the deployment uses. An operator has to confirm it.
