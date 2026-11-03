@@ -49,6 +49,10 @@ const (
 	NotCalled   Verdict = "not_called"
 	NotServed   Verdict = "not_served"
 	FirstSignIn Verdict = "first_sign_in_before_access"
+	// NothingToDeliver: Zitadel listed no grants and Syndra's own facts say
+	// the person holds no role in the app's project. The two agree; there was
+	// nothing to send. Counted, never alarmed.
+	NothingToDeliver Verdict = "nothing_to_deliver"
 	// Unchecked: from before this process was watching, waited past
 	// SignInKeep, or its calls may have been pushed out of the recorder's
 	// ring. Never counted as a failure.
@@ -56,7 +60,7 @@ const (
 )
 
 // Verdicts lists every verdict once, in a fixed order.
-var Verdicts = [...]Verdict{Delivered, NotCalled, NotServed, FirstSignIn, Unchecked}
+var Verdicts = [...]Verdict{Delivered, NotCalled, NotServed, FirstSignIn, NothingToDeliver, Unchecked}
 
 // Checked is one sign-in's verdict and the evidence for it.
 type Checked struct {
@@ -100,6 +104,12 @@ type Correlator struct {
 	lastSignIn time.Time
 	hours      [24]hourTally
 	dropped    int64
+
+	// Holds says whether the person holds any role in the client's app's
+	// project, by Syndra's own facts (known false when there is no app or no
+	// facts read). Nil: never consulted, so no_grants stays a failure. Set
+	// once before Check runs.
+	Holds func(userID, clientID string) (holds, known bool)
 }
 
 // NewCorrelator starts watching now.
@@ -182,7 +192,12 @@ func (c *Correlator) Check(calls CallWindow, apps AppSettings) []Checked {
 			jwt, known := apps(s.ClientID)
 			at, ok := created[s.UserID]
 			newPerson := ok && s.At.Sub(at) >= -time.Minute && s.At.Sub(at) <= NewPersonWithin
-			ch = Classify(s, worst, overflowed, jwt, known, newPerson)
+			holdsNone := false
+			if c.Holds != nil {
+				holds, holdsKnown := c.Holds(s.UserID, s.ClientID)
+				holdsNone = holdsKnown && !holds
+			}
+			ch = Classify(s, worst, overflowed, jwt, known, newPerson, holdsNone)
 		}
 		out = append(out, ch)
 	}
@@ -195,7 +210,10 @@ func (c *Correlator) Check(calls CallWindow, apps AppSettings) []Checked {
 const anyFunction = "*"
 
 // Classify is one sign-in's verdict from the calls in its window. Pure.
-func Classify(s SignIn, worst map[string]Outcome, overflowed, jwt, known, newPerson bool) Checked {
+//
+// holdsNone is true when Syndra's facts say the person holds no role in the
+// app's project: a no_grants call is then the right answer, not a failure.
+func Classify(s SignIn, worst map[string]Outcome, overflowed, jwt, known, newPerson, holdsNone bool) Checked {
 	ch := Checked{SignIn: s}
 	// The functions are exact (assessment Z-e): a JWT access token calls
 	// preaccesstoken; an openid scope makes an ID token, which calls
@@ -254,6 +272,8 @@ func Classify(s SignIn, worst map[string]Outcome, overflowed, jwt, known, newPer
 		ch.Verdict = Delivered
 	case ch.Outcome == NoGrants && newPerson:
 		ch.Verdict = FirstSignIn
+	case ch.Outcome == NoGrants && holdsNone:
+		ch.Verdict = NothingToDeliver
 	default:
 		ch.Verdict = NotServed
 	}

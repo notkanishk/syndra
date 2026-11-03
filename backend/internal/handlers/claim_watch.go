@@ -28,7 +28,15 @@ import (
 
 // claimCorrelator matches sign-ins against calls. Built at process start:
 // sign-ins from before then are unchecked ("checking since …").
-var claimCorrelator = claimtel.NewCorrelator(time.Now)
+var claimCorrelator = func() *claimtel.Correlator {
+	c := claimtel.NewCorrelator(time.Now)
+	// A no_grants call is only a failure if Syndra knows the person holds a
+	// role in that app's project; otherwise there was nothing to deliver.
+	c.Holds = func(userID, clientID string) (bool, bool) {
+		return claimPlane.HoldsRoles(context.Background(), userID, clientID)
+	}
+	return c
+}()
 
 // ---------------------------------------------------------------------------
 // Findings: applied by each detector, cached in memory for /healthz/claims

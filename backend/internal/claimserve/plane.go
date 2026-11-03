@@ -125,6 +125,37 @@ func (p *Plane) Answer(ctx context.Context, userID, projectID, clientID, functio
 
 // facts reads (user, project): served from Redis, else the last-known-good
 // copy within maxAge when Redis is erroring, else a degraded outcome.
+// HoldsRoles says whether Syndra's own facts give the person any role in the
+// project of the client's app. known is false when the client maps to no app
+// or Redis could not answer; the correlator then keeps the stricter verdict.
+func (p *Plane) HoldsRoles(ctx context.Context, userID, clientID string) (holds, known bool) {
+	cfg := p.Config()
+	if cfg == nil || p.rdb == nil {
+		return false, false
+	}
+	projectID, ok := cfg.ClientProject[clientID]
+	if !ok || projectID == "" {
+		return false, false
+	}
+	rctx, cancel := context.WithTimeout(ctx, FactsTimeout)
+	defer cancel()
+	raw, err := p.rdb.HGet(rctx, FactsKey(userID), projectID).Result()
+	if errors.Is(err, redis.Nil) {
+		raw, err = p.rdb.Get(rctx, LegacyFactsKey(userID, projectID)).Result()
+	}
+	switch {
+	case errors.Is(err, redis.Nil):
+		return false, true
+	case err != nil:
+		return false, false
+	}
+	var f claims.Facts
+	if json.Unmarshal([]byte(raw), &f) != nil {
+		return false, false
+	}
+	return len(f.Roles) > 0, true
+}
+
 func (p *Plane) facts(ctx context.Context, userID, projectID string, maxAge time.Duration) (claims.Facts, claimtel.Outcome, bool) {
 	rctx, cancel := context.WithTimeout(ctx, FactsTimeout)
 	defer cancel()
