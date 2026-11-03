@@ -18,7 +18,7 @@ import { Withheld } from "@/components/ui/Withheld";
 import type { GuideFolder } from "@/components/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/storage/device";
 import { describeFailure, sentence } from "@/lib/outcome";
-import { formatBytes, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
+import { formatAt, formatBytes, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import {
@@ -184,7 +184,7 @@ function TargetCard({ view }: { view: MyTargetView }) {
       {passwordStep && (
         <div className="mx-5 mb-[22px] flex flex-col gap-3 rounded-panel border border-accent-line bg-accent-soft px-[22px] pb-[22px] pt-5">
           {passwordBlocked ? (
-            <span className="max-w-[66ch] text-[14.5px] leading-[1.55] text-ink">{blockedSentence(view, label)}</span>
+            <Blocked view={view} label={label} />
           ) : (
             <PasswordForm view={view} label={label} accent submitLabel={state === "restored" ? "Set new password" : "Set password"} />
           )}
@@ -231,7 +231,7 @@ function TargetCard({ view }: { view: MyTargetView }) {
             <div className="row-divider flex flex-col gap-2 px-5 pb-[22px] pt-[18px]">
               <span className="type-label text-label">Storage password</span>
               {passwordBlocked ? (
-                <span className="max-w-[66ch] text-[14.5px] leading-[1.55] text-ink">{blockedSentence(view, label)}</span>
+                <Blocked view={view} label={label} />
               ) : (
                 <PasswordForm view={view} label={label} submitLabel="Change password" />
               )}
@@ -359,6 +359,12 @@ function blockedSentence(view: MyTargetView, label: string) {
     return `You can't change your password while ${label} is offline. Your current one works again as soon as it's back.`;
   }
   return "You can't change your password while account changes are paused. Your current one keeps working, and you can change it once the pause lifts.";
+}
+
+/** The form's place while it can't be used: one sentence, or, with a change in doubt, the two as one line (A-13 §4). */
+function Blocked({ view, label }: { view: MyTargetView; label: string }) {
+  if (view.password_change) return <UnconfirmedChange view={view} label={label} offline />;
+  return <span className="max-w-[66ch] text-[14.5px] leading-[1.55] text-ink">{blockedSentence(view, label)}</span>;
 }
 
 /** The status beside the system's name: what the monitor can stand behind, and nothing when it can't tell. */
@@ -659,11 +665,39 @@ function PlaceBlock({
 /**
  * Setting the storage password. The value goes to the target and is kept
  * nowhere: not in the response, not in the query cache, not in Syndra's
- * database.
+ * database. The field keeps what was typed, masked and in this page's memory
+ * only, until the add-on confirms it, so a lost reply can be sent again at
+ * once and, if that is lost too, by one more press (A-13 §4).
  */
 /** One per system: two cards' fields shared an id, so "Set it above" jumped to the first. */
 function passwordFieldId(view: MyTargetView): string {
   return `storage-password-${view.target}`;
+}
+
+/** When no confirmed answer has come this long after the press, one line says to keep the page open. */
+export const SLOW_ANSWER_MS = 4000;
+
+/**
+ * Step 3: back later, the change still unconfirmed. One line above the form,
+ * amber dot, no box, true either way; it clears itself on the next confirmed
+ * change. While the system is offline it is also the blocked sentence.
+ */
+function UnconfirmedChange({ view, label, offline }: { view: MyTargetView; label: string; offline?: boolean }) {
+  return (
+    <div role="status" className="flex max-w-[68ch] items-start gap-2.5">
+      <StatusDot tone="warn" className="mt-2" />
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="text-[14.5px] font-semibold leading-[1.55] text-ink [text-wrap:pretty]">
+          Your password change {formatAt(view.password_change?.at)} may not have reached {label}.
+        </span>
+        <span className="text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
+          {offline
+            ? `You can set it again here once ${label} is back. If your new password doesn't work then, your old one still does.`
+            : "If your new password doesn't work, your old one still does. Set it again below to be sure."}
+        </span>
+      </span>
+    </div>
+  );
 }
 
 function PasswordForm({
@@ -679,7 +713,13 @@ function PasswordForm({
 }) {
   const [password, setPassword] = useState("");
   const set = useSetStorageCredential(view.target);
-  const unconfirmed = Boolean(set.data?.status && set.data.status !== "set");
+  const status = set.data?.status;
+  const changed = status === "set";
+  const noAnswer = status === "indeterminate";
+  const refused = status === "rejected" || status === "unreached";
+  // Step 3's line, until this visit's own answer speaks for the change.
+  const returned = Boolean(view.password_change) && !set.data && !set.isPending;
+  const slow = useSlow(set.isPending);
   const scope = `Only for ${label}: not your Syndra sign-in or your Google account.`;
 
   return (
@@ -687,9 +727,20 @@ function PasswordForm({
       className="flex flex-col gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        set.mutate(oneShot(password), { onSuccess: () => setPassword("") });
+        // The field clears only on a confirmed done: otherwise it still holds
+        // what was typed, so one press sends it again.
+        set.mutate(oneShot(password), {
+          onSuccess: (answer) => {
+            if (answer.status === "set") setPassword("");
+          },
+        });
       }}
     >
+      <Unfold open={returned}>
+        <div className="pb-1">
+          <UnconfirmedChange view={view} label={label} />
+        </div>
+      </Unfold>
       <div className="flex max-w-[460px] flex-col gap-1.5">
         {accent && <FieldLabel htmlFor={passwordFieldId(view)}>Storage password</FieldLabel>}
         <div className="flex flex-wrap items-center gap-2.5">
@@ -704,16 +755,55 @@ function PasswordForm({
             />
           </div>
           <span className="flex-none whitespace-nowrap">
+            {/* In progress across both sends: the dot breathes in the padding, the label and width hold (A-08). */}
             <Button type="submit" variant={accent ? "accent" : "outline"} disabled={!password} isPending={set.isPending}>
               {submitLabel}
             </Button>
           </span>
         </div>
       </div>
+      <Unfold open={slow}>
+        <p role="status" className="max-w-[62ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+          Still waiting for {label}. Keep this page open until it answers.
+        </p>
+      </Unfold>
+      {noAnswer && !set.isPending && (
+        // Step 2: a failure appears still; it never lifts.
+        <div role="status" className="flex max-w-[66ch] items-start gap-2.5">
+          <StatusDot tone="warn" className="mt-2" />
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="text-[14.5px] font-semibold leading-[1.55] text-ink [text-wrap:pretty]">
+              {label} didn&apos;t answer, so your password may not have changed.
+            </span>
+            <span className="text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
+              Try again in a minute: press {submitLabel}. Sending the same password twice is safe, and {label} then
+              has the one you set.
+            </span>
+          </span>
+        </div>
+      )}
+      {changed && !set.isPending && (
+        // Only a confirmed done says this, on either send (owner, 3 Nov).
+        <p role="status" className="lift-in inline-flex items-center gap-2 text-[14px] leading-[1.5]">
+          <StatusDot tone="healthy" bloom />
+          <span className="font-semibold text-ink">Changed</span>
+          <span className="text-muted">{label} has your new password.</span>
+        </p>
+      )}
+      {refused && !set.isPending && (
+        <p role="alert" className="text-[13.5px] text-danger-text">
+          {status === "rejected"
+            ? `${label} refused the change. Nothing was changed.`
+            : `The change didn't reach ${label}. Nothing was changed. Try again in a minute.`}
+        </p>
+      )}
       <p className={`max-w-[62ch] leading-[1.55] [text-wrap:pretty] ${accent ? "text-[14px] text-ink" : "text-[13.5px] text-muted"}`}>
         {accent ? (
           <>{scope} Syndra passes it to {label} and doesn&apos;t keep a copy.</>
-        ) : view.credential.last_changed_at ? (
+        ) : changed ? (
+          <>Last changed just now. {scope}</>
+        ) : !noAnswer && !returned && view.credential.last_changed_at ? (
+          // Gone while the change is in doubt: it may no longer be true.
           <>
             Last changed <Relative iso={view.credential.last_changed_at} />. {scope}
           </>
@@ -721,18 +811,21 @@ function PasswordForm({
           scope
         )}
       </p>
-      {set.data && (
-        // An outcome the target didn't confirm is not success, and doesn't get the calm voice.
-        <p
-          role="status"
-          // Done lifts and blooms once; not confirmed appears still, on tint (S6).
-          className={`${unconfirmed ? "tint-in text-warn-text" : "lift-in flex items-center gap-2 text-muted"} text-[13.5px]`}
-        >
-          {!unconfirmed && <StatusDot tone="healthy" bloom />}
-          {set.data.detail}
-        </p>
-      )}
       {set.error && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error))}</p>}
     </form>
   );
+}
+
+/** True once a pending send has gone SLOW_ANSWER_MS without an answer; false again when it settles. */
+function useSlow(pending: boolean): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!pending) {
+      setSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlow(true), SLOW_ANSWER_MS);
+    return () => clearTimeout(timer);
+  }, [pending]);
+  return slow;
 }

@@ -142,7 +142,7 @@ Seven candidates where one question is answered by several copies, ranked, in [`
 Claude Design is retired. Design now lives on the Syndra Project canvas, and the process is `design_handoff_syndra/BRIDGE.md`. Every open design question got an answer and a board (`reconcile-2026-10/from-design/A-09…A-12`, boards in `reconcile-2026-10/design/a09…a12-*.dc.html`). Each answer ends in "For code".
 - **A-09:**
   - Contrast tokens: audit 3.2. **Built** (`feat/contrast-and-stale`).
-  - Unconfirmed add-on changes in the system page's Waiting on you, settled by "Say what happened": audit 2.9. This needs a per-target read, a settle endpoint and an `about` column.
+  - Unconfirmed add-on changes in the system page's Waiting on you, settled by "Say what happened": audit 2.9. **Built** with A-13's self-settling passwords on `feat/unconfirmed-and-self-settling` (`changes/unconfirmed-and-self-settling`, migration 000070). Open there: adopt/release can't be settled from a read Syndra makes (2.5), and the rotate resend schedule (2.6). The SQL waits on a live-DB run.
 - **A-10: built** on `feat/person-storage-and-sign-ins` ([`changes/person-storage-and-sign-ins`](changes/person-storage-and-sign-ins/tasks.md), migration 000069):
   - the read-only Network storage card per system on the person's Access tab, from `GET /users/{id}/targets`;
   - last sign-in per app on the person page, the app page's meta and 30-day strip, and the audited Look up sign-ins (the owner's 1a).
@@ -161,7 +161,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
   - Copy for 6.34 f and g.
 - **Owner, 3 Nov:**
   - **Sign-ins: 1a.** Keep each person's last sign-in per app and daily totals per app with no names; any operator sees these, with no lookup log. "Who signed in, and when" comes from Zitadel's own log only through a deliberate, reasoned and audited "Look up sign-ins".
-  - **Passwords: self-settling (A-13).** A lost reply is resent once at once with the same password. The member sees "Changed" only on a confirmed done. History and Audit mark "Sent again automatically", with both times. Passwords never reach an operator.
+  - **Passwords: self-settling (A-13).** A lost reply is resent once at once with the same password. The member sees "Changed" only on a confirmed done. History and Audit mark "Sent again automatically", with both times. Passwords never reach an operator. Built (`changes/unconfirmed-and-self-settling` §3–4).
   - **Stale data: A-13 (d).** A stale card recedes to the ground with a line-strong edge, and its text stays full strength. No dim on text, no amber outline. **Built** with audit 3.2: `Card stale`, `StatusDot ring`.
   - **Claims:** no v1 gate or readiness checklist. The owner removes Actions v1 himself. A-11 is redone around rich per-app shaping: rename roles, choose roles, nested claims, role-conditional claims, more attributes, app templates. "Start from a token" is dropped.
   - **Yes:** Revoke is the primary phone verb for "Departed, still has access"; single-folder holds are left out until needed.
@@ -180,7 +180,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 
 ### Audit of 27 Oct — remediation in batches
 
-The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/from another side/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 fix partial reads passed off as whole, one answer per fact, keyboard, scale and dead code (`changes/audit-2026-10/tasks.md`). 3.2 is built (A-09 §1–2 tokens and text floors; stale data recedes instead of dimming, A-13 (d)). Left: 2.9 (unconfirmed add-on changes, A-09 §3–5 as revised by A-13 §5).
+The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/from another side/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 fix partial reads passed off as whole, one answer per fact, keyboard, scale and dead code (`changes/audit-2026-10/tasks.md`). 3.2 is built (A-09 §1–2 tokens and text floors; stale data recedes instead of dimming, A-13 (d)). 2.9 is built in `changes/unconfirmed-and-self-settling` (A-09 §3–5 as revised by A-13 §5).
 
 ### Actions v2 before any app moves off v1 — the 27 Oct review
 

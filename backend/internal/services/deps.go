@@ -298,6 +298,10 @@ var svcCountUnconfirmedRevocations = db.CountUnconfirmedRevocations
 // and deliberately not merged with it — see Indicators.HoldsDue.
 var svcAllowancesDueForReview = db.AllowancesDueForReview
 
+// Changes a connected system never answered, per target (A-09 §3): the
+// system page's Waiting on you chip and lede, and Home's Not confirmed block.
+var svcCountUnresolvedAddonOperations = db.CountUnresolvedAddonOperations
+
 // The dormant listing's four reads (change `addon-platform` 9.11; design §29).
 //
 // Separate seams rather than one, because each answers a different question and

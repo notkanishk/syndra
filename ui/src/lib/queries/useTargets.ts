@@ -426,6 +426,46 @@ export function useMergeFindings(target: string | undefined) {
   });
 }
 
+/**
+ * A change a connected system never answered (A-09 §3–4): it may or may not
+ * have happened, and only a person can say. Passwords never appear here; they
+ * settle themselves (A-13 §5). No id is shown on the row; it belongs to Audit.
+ */
+export interface UnconfirmedOperation {
+  id: string;
+  operation: string;
+  subject_id: string;
+  /** Who asked: a person, or a `system:` actor when Syndra asked by itself. */
+  actor_id: string;
+  /** The account name (adopt, release, purge) or the setting's value. */
+  about?: string;
+  sent_at: string;
+}
+
+export function useUnconfirmedOperations(target: string | undefined) {
+  return useQuery({
+    queryKey: ["targets", target, "unconfirmed"],
+    queryFn: async () =>
+      (await request<{ operations: UnconfirmedOperation[] }>(`/targets/${target}/unconfirmed`)).operations ?? [],
+    enabled: Boolean(target),
+  });
+}
+
+/**
+ * Records what the operator found. Nothing is sent to the target. The list is
+ * not refreshed here: the dialog shows its result first, and the row leaves on
+ * the read its Close asks for.
+ */
+export function useAnswerUnconfirmed(target: string) {
+  return useMutation({
+    mutationFn: (input: { id: string; happened: boolean }) =>
+      request<{ id: string; happened: boolean }>(`/targets/${target}/unconfirmed/${input.id}/answer`, {
+        method: "POST",
+        body: { happened: input.happened },
+      }),
+  });
+}
+
 export interface ResolveFindingInput {
   id: string;
   resolution: "keep_ours" | "take_theirs" | "reprovisioned" | "unbound";

@@ -9,6 +9,7 @@ import { Fragment, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { DormantAccounts } from "@/components/targets/DormantAccounts";
+import { UnconfirmedChanges } from "@/components/targets/UnconfirmedChanges";
 import { MergeFindings } from "@/components/targets/MergeFindings";
 import { Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
@@ -43,6 +44,7 @@ import {
   useResolveLogFinding,
   useTargetInventory,
   useTargets,
+  useUnconfirmedOperations,
   type AdoptionResult,
   type BindingConflict,
   type LogAnchor,
@@ -73,9 +75,13 @@ export function TargetOverview({ target }: { target: string }) {
   // change record edited after it was queued, and two records disagreeing about
   // an account. None of them is a status; each is a piece of work waiting on a
   // human, which is why they are one region and not three places.
+  // And changes the system never answered, which a person must settle (A-09 §3).
+  const unconfirmed = useUnconfirmedOperations(target);
   const waiting =
-    (findings.data?.length ?? 0) + anchorFinding + conflicts.length;
-  const waitingKnown = !findings.isLoading && !findings.error && !health.isLoading && !health.error;
+    (findings.data?.length ?? 0) + anchorFinding + conflicts.length + (unconfirmed.data?.length ?? 0);
+  const waitingKnown =
+    !findings.isLoading && !findings.error && !health.isLoading && !health.error &&
+    !unconfirmed.isLoading && !unconfirmed.error;
   const name = targetLabel(target);
   // It isn't answering, so its own cards show the last read (A-13): they
   // recede, and the controls that need it live are off. Syndra's own cards
@@ -231,8 +237,15 @@ export function TargetOverview({ target }: { target: string }) {
           id="waiting"
           title="Waiting on you"
           count={waitingKnown ? waiting : null}
-          lede={`Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on ${name} that was altered, or two records disagreeing about whose account it is. Each needs a decision from you.`}
+          lede={`Things Syndra found and will not settle by itself: an account that differs from what Syndra expects, a change log on ${name} that was altered, two records disagreeing about whose account it is, or a change ${name} never answered. Each needs a decision from you.`}
         >
+          {/* First, because a person may be waiting on one. A loading or failed
+              read shows no rows and no count (A-09 §4 States). */}
+          <UnconfirmedChanges
+            target={target}
+            operations={unconfirmed.data ?? []}
+            ready={!unconfirmed.isLoading && !unconfirmed.error}
+          />
           {health.data?.log_anchor?.violation_reason && (
             <LogFinding anchor={health.data.log_anchor} />
           )}

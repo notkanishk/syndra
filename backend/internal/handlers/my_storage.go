@@ -121,6 +121,16 @@ type myTargetView struct {
 	// Roles are the member's own roles that reach this target, for "Your
 	// Laser operator role reaches TrueNAS, but no folder there is open to it".
 	Roles []services.RoleSource `json:"roles,omitempty"`
+	// PasswordChange is present only while their latest password change here
+	// is unconfirmed: sent, its answer lost (and its one resend's too), and no
+	// later confirmed change has settled it (A-13 §4 step 3). The page keeps
+	// one line up until their next confirmed change clears it.
+	PasswordChange *myPasswordChange `json:"password_change,omitempty"`
+}
+
+type myPasswordChange struct {
+	State string    `json:"state"` // "unconfirmed"
+	At    time.Time `json:"at"`
 }
 
 type myTargetAccount struct {
@@ -212,6 +222,13 @@ func describeTargetFor(r *http.Request, target, subject string) (myTargetView, s
 		} else if found {
 			view.RecordedAt = &at
 		}
+	}
+
+	// Non-fatal: the line is a courtesy over a form that works either way.
+	if at, open, err := dbUnconfirmedChangeAt(r.Context(), target, subject, "password.set", unresolvedGrace); err != nil {
+		log.Printf("[MY-STORAGE] could not read %s's last password change on %s: %v (non-fatal)", subject, target, err)
+	} else if open {
+		view.PasswordChange = &myPasswordChange{State: "unconfirmed", At: at}
 	}
 
 	status, err := dbHasShadowCredential(r.Context(), subject, view.Target)
@@ -393,7 +410,17 @@ func restoredAt(ctx context.Context, subject, target string) *time.Time {
 
 type setCredentialRequest struct {
 	Password string `json:"password"`
+	// Resend is the page sending the same password once more, at once, after
+	// the first send's reply was lost (A-13 §4 step 1). Only the page can: it
+	// is the only place the value still is. The server keeps no copy and never
+	// retries a member's password by itself.
+	Resend bool `json:"resend,omitempty"`
 }
+
+// resendWindow is how far back a resend may reach for the send it repeats:
+// past the first send's own worst case (the add-on call's 30-second timeout,
+// plus whatever a proxy in front adds before it gives up on the reply).
+const resendWindow = 5 * time.Minute
 
 // handleSetMyCredential forwards a member's chosen credential to the target and
 // keeps nothing.
@@ -460,26 +487,56 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A resend names the send it repeats, found here rather than taken from
+	// the page: the page may never have learnt the first send's id (its reply
+	// was the thing lost). None found (the first never got as far as a
+	// record, or was answered clearly) makes this an ordinary first send.
+	var retryOf string
+	if req.Resend {
+		id, found, err := dbResendableAddonOperation(r.Context(), target, subject, "password.set", resendWindow)
+		if err != nil {
+			jsonErrorResponse(w, http.StatusInternalServerError, "RESEND_CHECK_FAILED", err.Error())
+			return
+		}
+		if found {
+			retryOf = id
+		}
+	}
+
 	res, err := svcDispatchOperation(r.Context(), addonop.Request{
 		Target: target, Operation: "password.set",
 		ActorID: subject, SubjectID: subject,
-		Params: map[string]any{"password": req.Password},
+		Params:  map[string]any{"password": req.Password},
+		RetryOf: retryOf,
 	})
-	if err != nil {
+	if err != nil && res.OperationID != "" {
+		// Sent, and its outcome could not be written: as unknown to the member
+		// as a lost reply, and answered as one. "Nothing was changed" here
+		// would be the one lie this path must not tell.
+		log.Printf("[MY-STORAGE] %v", err)
+		res.Outcome = addons.OutcomeIndeterminate
+	} else if err != nil {
 		writeCredentialError(w, err)
 		return
 	}
 	if res.Outcome != addons.OutcomeSucceeded {
-		// Indeterminate included, deliberately. The member is told to check
-		// rather than told it worked: an operation carrying a secret is never
-		// auto-retried, and reporting an unknown outcome as success is the one
-		// lie this path must not tell.
+		// Never success, early or otherwise (owner, 3 Nov). The page tells the
+		// three apart: indeterminate is a lost reply, which it sends again once
+		// with the value it still holds; rejected and unreached are clear
+		// answers that nothing changed, and are not resent.
 		jsonResponse(w, http.StatusAccepted, map[string]any{
 			"status":    string(res.Outcome),
 			"operation": res.OperationID,
-			"detail":    "The system did not confirm the change. Try connecting with the new password; if it does not work, set it again.",
+			"detail":    unconfirmedCredentialCopy[res.Outcome],
 		})
 		return
+	}
+
+	// Confirmed, so every earlier change of theirs here that nobody could
+	// confirm is settled by this one (A-13 §4: it clears itself). Non-fatal:
+	// the password is set either way, and the line stays until the next.
+	if _, err := dbSupersedeAddonOperations(r.Context(), res.OperationID); err != nil {
+		log.Printf("[MY-STORAGE] %s's confirmed change on %s did not settle the earlier ones: %v", subject, target, err)
 	}
 
 	// Recorded only after the target confirmed it. Metadata, never a value —
@@ -496,6 +553,14 @@ func handleSetMyCredential(w http.ResponseWriter, r *http.Request) {
 		// is not their Syndra password and not their Google password.
 		"detail": "Your storage password is set. It is used only for this system.",
 	})
+}
+
+// unconfirmedCredentialCopy is the backend's sentence for each answer that is
+// not "set". The page words its own lines; this is for any other reader.
+var unconfirmedCredentialCopy = map[addons.Outcome]string{
+	addons.OutcomeIndeterminate: "The system didn't answer, so your password may not have changed.",
+	addons.OutcomeRejected:      "The system refused the change. Nothing was changed.",
+	addons.OutcomeUnreached:     "The change didn't reach the system. Nothing was changed.",
 }
 
 func writeCredentialError(w http.ResponseWriter, err error) {
