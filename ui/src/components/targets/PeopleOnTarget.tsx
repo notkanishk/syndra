@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { HoldDialog } from "@/components/review/HoldDialog";
@@ -14,6 +14,7 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { UserAvatar, UserName } from "@/components/names";
 import { formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
+import { glideTo } from "@/lib/motion";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetHomes, useTargetInventory, type AccountHome, type BoundAccount } from "@/lib/queries/useTargets";
 import { HomeLine, LimitDialog, limitVerb } from "@/components/targets/HomeLimit";
@@ -46,6 +47,25 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
   const drawn = leaving.window(paging.limit);
   // A limit verb widens the actions seat (A-03 §3); the heads follow the rows.
   const seat = accounts.some((a) => limitVerb(homeOf.get(a.subject_id))) ? "tablet:w-[380px]" : "tablet:w-[260px]";
+
+  // `?person=<id>#accounts` from a person's page (A-10 §3): the list opens far
+  // enough to hold their row, the page glides there and the row flashes once
+  // (Motion 8d). Once per visit.
+  const landed = useRef(false);
+  const { all: showAll } = paging;
+  useEffect(() => {
+    const list = inventory.data?.accounts ?? [];
+    if (landed.current || inventory.isLoading || list.length === 0) return;
+    const person = new URLSearchParams(window.location.search).get("person");
+    landed.current = true;
+    const index = person ? list.findIndex((a) => a.subject_id === person) : -1;
+    if (index < 0) return;
+    if (index >= paging.limit) showAll(list.length);
+    requestAnimationFrame(() => {
+      const row = document.getElementById(`person-${person}`);
+      if (row) void glideTo(row);
+    });
+  }, [inventory.isLoading, inventory.data, paging.limit, showAll]);
 
   return (
     <Card stale={stale || inventory.data?.current === false} {...leaving.listProps}>
@@ -124,7 +144,7 @@ function PersonRow({
 
   return (
     <>
-      <CardRow data-account={account.subject_id} className="flex-wrap gap-y-1.5">
+      <CardRow id={`person-${account.subject_id}`} data-account={account.subject_id} className="scroll-mt-4 flex-wrap gap-y-1.5">
         <span className="flex w-[220px] flex-none items-center gap-2.5">
           <UserAvatar id={account.subject_id} size="row" />
           <span className="min-w-0">
@@ -168,8 +188,10 @@ function PersonRow({
           subjectName={name}
           target={target}
           // The lifecycle field, which is what a hold on a whole target holds.
-          // A hold on one share is authored from the share's own row on the
-          // person's page; this row is about the account.
+          // No hold on one folder is authored anywhere today: the person's page
+          // only reads holds (A-10 §5), and single-folder holds are left out
+          // until needed (owner, 3 Nov). If they come, they come here, as a
+          // choice in this dialog.
           //
           // `value` is what the resolver reads — a lifecycle denial is always
           // `enabled = true`, the state being refused — and `label` is what the

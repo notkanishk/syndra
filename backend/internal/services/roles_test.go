@@ -239,6 +239,10 @@ func (f *failingRoleClient) ListUserMetadata(_ context.Context, _ string, _ zita
 
 // Zitadel's event log is not what this fake is about. Present so the type still
 // satisfies the client interface; a test that cares stubs it explicitly.
+func (fake *failingRoleClient) SearchEvents(context.Context, zitadel.EventSearch) ([]zitadel.LoggedEvent, bool, error) {
+	return nil, false, nil
+}
+
 func (fake *failingRoleClient) GrantOriginByID(context.Context, string) (*zitadel.GrantOrigin, error) {
 	return nil, nil
 }

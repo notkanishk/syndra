@@ -78,6 +78,13 @@ export const AUDIT_ACTIONS: Record<
   "role.waits_unmarked": { verb: "Stopped a role waiting for you" },
   // Term dates (A-06 §7): one makerspace-wide setting.
   "terms.updated": { verb: "Changed the term dates" },
+  // Look up sign-ins (owner, 3 Nov): recorded before Zitadel's log is read, with the
+  // reason and the range in its details. The person is the target; an app lookup has none.
+  "sign_ins.looked_up": {
+    verb: "Looked up sign-ins in Zitadel's log",
+    template: "Looked up {}'s sign-ins in Zitadel's log",
+    passive: "Their sign-ins were looked up in Zitadel's log",
+  },
   "confirmation.switched_to_roles": { verb: "Switched to roles that wait" },
   "access_request.approved": { verb: "Approved a request", template: "Approved {}'s request", passive: "Their request was approved" },
   // Allowed and said (owner, 15 Oct): an operator approving their own request.

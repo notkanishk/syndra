@@ -26,7 +26,8 @@ export type NavSection = {
   id: string;
   /** The short name on the chip. */
   label: string;
-  count: number;
+  /** Absent for a section that is one thing, not a list (a connected system). */
+  count?: number;
   /** A dot before the name; none when omitted. */
   tone?: StatusTone;
 };
@@ -82,7 +83,7 @@ export function ReadLine<T extends NavSection>({
               <Chip className="gap-2 motion-tint group-hover:bg-tint-3">
                 {section.tone && <StatusDot tone={section.tone} />}
                 {section.label}
-                <span className="text-faint">{section.count}</span>
+                {section.count !== undefined && <span className="text-faint">{section.count}</span>}
                 <span aria-hidden className="text-[12px] text-faint">
                   ↓
                 </span>
@@ -165,7 +166,7 @@ export function SectionPill<T extends NavSection>({
             >
               {section.tone && <StatusDot tone={section.tone} />}
               {section.label}
-              <span className="font-medium text-faint">{section.count}</span>
+              {section.count !== undefined && <span className="font-medium text-faint">{section.count}</span>}
               {!here && (
                 <span aria-hidden className="text-[12px] text-faint">
                   {index < at ? "↑" : "↓"}

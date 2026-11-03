@@ -113,7 +113,7 @@ findings are about classes of defect rather than about bundles.
 
 The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built under `changes/truenas-reconcile`; its decisions are in `design_handoff_syndra/reconcile-2026-10/BUILD-NOTES.md`.
 
-- **Network storage on a person's page** (owner, 2026-10-15; designed 3 Nov in A-10). A read-only section for operators: the person's account on TrueNAS, their home folder use against its limit, the folders they can open, and any limit or hold of their own, each with "Set on TrueNAS's page →". Every write stays on the system's page (one write place, many read places). The reads exist: `GET /targets/{t}/homes`, the member's own places, allowances.
+- **Network storage on a person's page** (owner, 2026-10-15; designed 3 Nov in A-10; **built**, see A-10 below). A read-only section for operators: the person's account on TrueNAS, their home folder use against its limit, the folders they can open, and any limit or hold of their own, each with "Set on TrueNAS's page →". Every write stays on the system's page (one write place, many read places). The reads exist: `GET /targets/{t}/homes`, the member's own places, allowances.
 - **Composed roles, created by administrators** (owner, 2026-10-14; details to be settled with the owner before building). Today TrueNAS maps one role to the wide base groups. The goal is an operator flow that composes a role from others: a tier role carries resource roles, and those resource roles map to resource groups (`mk-<resource>-<ro|rw>`, AGDLP). The model already exists as `mapping_rules`, kept depth-1 so `effectiveClosure` (`services/cascade.go:108`) and `EnforceMappingRules` agree.
   - **Blocked on the untraced rule propagation below.** Production has zero mapping rules. The first composed role an operator creates is the rule that springs that trap, so the enqueue fix lands first.
 - **What happens to a home folder after someone leaves** (owner, 2026-10-14). Today it is kept, always: Syndra never moves or deletes a home (truenas-reconcile D10). The choice to build: keep it (today), archive it (owner becomes root, private, the shape the 14 Oct cleanup of old folders used), or delete it after N days. It should be settable per system, with the date the person left shown beside each kept folder.
@@ -143,9 +143,10 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 - **A-09:**
   - Contrast tokens: audit 3.2. **Built** (`feat/contrast-and-stale`).
   - Unconfirmed add-on changes in the system page's Waiting on you, settled by "Say what happened": audit 2.9. This needs a per-target read, a settle endpoint and an `about` column.
-- **A-10:**
-  - A read-only Network storage card per system on the person's Access tab, which needs `GET /users/{id}/targets`.
-  - Last sign-in per app on the person page and the app page.
+- **A-10: built** on `feat/person-storage-and-sign-ins` ([`changes/person-storage-and-sign-ins`](changes/person-storage-and-sign-ins/tasks.md), migration 000069):
+  - the read-only Network storage card per system on the person's Access tab, from `GET /users/{id}/targets`;
+  - last sign-in per app on the person page, the app page's meta and 30-day strip, and the audited Look up sign-ins (the owner's 1a).
+  - Open: confirm Zitadel's `events/_search` shape on first contact, and the live-DB run of migration 69.
 - **A-11:** the claims-shaping flow, built on one explain step that live and every preview call:
   - a trail of five checks;
   - draft preview;
