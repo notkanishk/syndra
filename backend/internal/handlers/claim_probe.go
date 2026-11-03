@@ -257,7 +257,8 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 		}
 	}
 
-	want := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreAccessToken)
+	roles := tokenRoles(payload, projectID)
+	want := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreAccessToken, roles)
 	if want.Outcome != claimtel.Served && want.Outcome != claimtel.ServedLKG {
 		return done("no_facts", "Syndra's snapshot answers the canary "+string(want.Outcome))
 	}
@@ -281,12 +282,27 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 	if err != nil {
 		return done("userinfo", "userinfo: "+truncate(err.Error(), 200))
 	}
-	if ui := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreUserinfo); ui.Outcome != claimtel.NotLanding {
+	if ui := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreUserinfo, roles); ui.Outcome != claimtel.NotLanding {
 		if key, ok := missingClaim(info, ui.Claims); !ok {
 			return done("userinfo", "userinfo lacks Syndra's "+key)
 		}
 	}
 	return done("", "")
+}
+
+// tokenRoles is the roles Zitadel put in the canary's token for projectID: the
+// list its Actions v2 payload gave Syndra, so the answer computed here is the
+// one the door gave.
+func tokenRoles(payload map[string]any, projectID string) []string {
+	m, ok := payload["urn:zitadel:iam:org:project:"+projectID+":roles"].(map[string]any)
+	if !ok {
+		m, _ = payload["urn:zitadel:iam:org:project:roles"].(map[string]any)
+	}
+	roles := make([]string, 0, len(m))
+	for r := range m {
+		roles = append(roles, r)
+	}
+	return claims.RoleSet(roles)
 }
 
 // missingClaim is the first claim of want that got lacks or holds differently.

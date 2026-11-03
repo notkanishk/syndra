@@ -26,10 +26,10 @@ const DAY = 24 * 60 * 60 * 1000;
 
 /** The kinds of finding that are about delivery itself, per app. */
 const LIVE_KINDS = new Set(["CLAIMS_NOT_CALLED", "CLAIMS_NOT_SERVED", "SIGNIN_EVENTS_MISSING"]);
-/** Answers that carried the person's claims, a new member's welcome roles included. */
-const SERVED = ["served", "served_lkg", "served_welcome"];
+/** Answers that carried the person's claims: a new member's welcome roles, and Zitadel's roles alone, included. */
+const SERVED = ["served", "served_lkg", "served_welcome", "served_roles_only"];
 /** Answers that carry no fault: the app's own settings, or not Zitadel at all. */
-const QUIET_OUTCOMES = new Set(["served", "served_lkg", "served_welcome", "no_grants", "not_landing", "sig_missing"]);
+const QUIET_OUTCOMES = new Set(["served", "served_lkg", "served_welcome", "served_roles_only", "no_grants", "not_landing", "sig_missing"]);
 
 /**
  * System › Zitadel › Claims delivery (claims-delivery-integrity S3–S5, §4g).

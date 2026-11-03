@@ -62,7 +62,7 @@ const u1Call = `{"function":"function/preaccesstoken","user":{"id":"u1"},"user_g
 // A shaper change that alters the canary's answer fails here, not silently
 // in the probe.
 func TestCanaryExpected(t *testing.T) {
-	got, _ := json.Marshal(Envelope(claims.ShapeAt(CanaryProject().Shapes.ByClient[CanaryClientID].Profile, CanaryFacts(), time.Now())))
+	got, _ := json.Marshal(Envelope(claims.Shape(CanaryProject().Shapes.ByClient[CanaryClientID].Profile, CanaryFacts())))
 	if string(got) != CanaryExpected {
 		t.Fatalf("the canary shapes to %s, CanaryExpected is %s", got, CanaryExpected)
 	}
@@ -115,7 +115,7 @@ func TestRelay_TelemetryFoldsOnce(t *testing.T) {
 	}
 
 	recent, err := RemoteRecent(ctx, r, now, 10)
-	if err != nil || recent[claimtel.Served] != 5 || recent[claimtel.DegradedNoFacts] != 1 {
+	if err != nil || recent[claimtel.Served] != 5 || recent[claimtel.ServedRolesOnly] != 1 {
 		t.Fatalf("recent %v %v", recent, err)
 	}
 	served, called, err := RemoteLast(ctx, r)
@@ -293,6 +293,22 @@ func TestKeyProblem(t *testing.T) {
 	} {
 		if got := KeyProblem(key) != ""; got != bad {
 			t.Errorf("KeyProblem(%q) bad=%v, want %v", key, got, bad)
+		}
+	}
+}
+
+// A roles-only answer is a delivered token: health reads it as soft only when
+// it is persistent, a handful of them outnumbering the full answers.
+func TestAssess_RolesOnlyIsSoftOnlyWhenPersistent(t *testing.T) {
+	snap := Status{Loaded: true, Projects: 1, CheckedAgo: new(int64)}
+	for _, c := range []struct {
+		rolesOnly, served int64
+		soft              bool
+	}{{4, 0, false}, {5, 10, false}, {5, 4, true}} {
+		h, hard, soft := Assess(time.Now(), map[claimtel.Outcome]int64{claimtel.ServedRolesOnly: c.rolesOnly, claimtel.Served: c.served}, time.Time{}, nil, snap)
+		if code := h.Verdict(hard, soft); code != http.StatusOK || (h.Status == "degraded") != c.soft ||
+			(c.soft && strings.Join(h.Reasons, ",") != "OUTCOME:served_roles_only") {
+			t.Errorf("%d roles-only, %d served: %s %v", c.rolesOnly, c.served, h.Status, h.Reasons)
 		}
 	}
 }

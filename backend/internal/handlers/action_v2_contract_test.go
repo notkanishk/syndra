@@ -30,16 +30,18 @@ func TestActionV2_PerAppShapeByClientID(t *testing.T) {
 			"cInv": {ApplicationID: "aInv", Version: 1, Profile: claims.ActionsV1()},
 		},
 	}, failClosed)})
-	b, _ := json.Marshal(claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"admin", "guest", "staff"}, GivenName: "Ada"})
+	b, _ := json.Marshal(claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"staff"}, GivenName: "Ada"})
 	setFacts(r, "ada", "pNet", string(b))
 
 	ask := func(client, function string) string {
 		t.Helper()
+		// The roles are Zitadel's, across its rows; Syndra's facts give only
+		// the name here.
 		body, _ := json.Marshal(map[string]any{
 			"function":    function,
 			"application": map[string]string{"client_id": client},
 			"user":        map[string]string{"id": "ada"},
-			"user_grants": []ActionV2UserGrantRef{{ProjectID: "pNet", Roles: rolesJSON("staff")}},
+			"user_grants": []ActionV2UserGrantRef{{ProjectID: "pNet", Roles: rolesJSON("staff", "guest")}, {ProjectID: "pNet", Roles: rolesJSON("admin")}},
 		})
 		rr := httptest.NewRecorder()
 		HandleActionInject(rr, httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(string(body))))
@@ -206,15 +208,81 @@ func TestHandleActionInject_CanonicalV2Payload_Accepted(t *testing.T) {
 	}
 
 	got := decodeActionResponse(t, rr)
-	// Zitadel lists only the token's own project; its two rows (one per role)
-	// are one project, and with no configured profile it emits the built-in key.
-	// Roles come from Syndra's compiled facts, not the payload's role list.
+	// Zitadel lists only the token's own project; its two rows are one
+	// project, and with no configured profile it emits the built-in key. The
+	// roles are the payload's, both rows' (ADR-004): Syndra's facts give
+	// operator alone, and viewer, given in Zitadel directly, is sent too.
 	if len(got.AppendClaims) != 1 {
 		t.Fatalf("expected 1 append_claim, got %v", got.AppendClaims)
 	}
 	printing, ok := claimByKey(got.AppendClaims, "roles")
-	if !ok || !rolesEqual(printing.Value, "operator") {
-		t.Fatalf("expected roles=[operator], got %v", got.AppendClaims)
+	if !ok || !rolesEqual(printing.Value, "operator", "viewer") {
+		t.Fatalf("expected roles=[operator viewer], got %v", got.AppendClaims)
+	}
+}
+
+// The prod defect of 4 Nov 2026: the operator's admin role, given in Zitadel's
+// console, was in the payload, but Syndra held no facts for him in the
+// project, so his sign-in was answered degraded_no_facts and carried no
+// roles. Zitadel's list is the token's roles: he gets them, counted
+// served_roles_only, and the miss still asks for his facts to be built. A
+// role of Syndra's that Zitadel did not list (queued, not yet sent) is never
+// sent.
+func TestActionV2_RolesComeFromZitadelsPayload(t *testing.T) {
+	r := builtinPlane(t, "pPrinting")
+	var repaired []string
+	origMiss := claimDoor.OnMiss
+	t.Cleanup(func() { claimDoor.OnMiss = origMiss })
+	claimDoor.OnMiss = func(u string) { repaired = append(repaired, u) }
+
+	rr := inject(t, canonicalV2Payload)
+	got := decodeActionResponse(t, rr)
+	if roles, ok := claimByKey(got.AppendClaims, "roles"); rr.Code != 200 || !ok || !rolesEqual(roles.Value, "operator", "viewer") {
+		t.Fatalf("Zitadel-only roles, no facts: HTTP %d %v", rr.Code, got.AppendClaims)
+	}
+	if len(repaired) != 1 || repaired[0] != "250124622953808001" {
+		t.Fatalf("a miss asks for a repair: %v", repaired)
+	}
+
+	setFacts(r, "250124622953808001", "pPrinting", factsJSON("250124622953808001", "pPrinting", "operator", "queued"))
+	got = decodeActionResponse(t, inject(t, canonicalV2Payload))
+	if roles, _ := claimByKey(got.AppendClaims, "roles"); !rolesEqual(roles.Value, "operator", "viewer") {
+		t.Fatalf("a ledger role Zitadel did not list was sent: %v", got.AppendClaims)
+	}
+}
+
+// The correlator's "does this person hold a role here?" is Zitadel's answer as
+// Syndra last observed it, not Syndra's facts (which lack roles given in
+// Zitadel directly). None is known only from a complete current sweep; an
+// unknown client or a failed read is unknown, so no_grants keeps its stricter
+// verdict.
+func TestObservedHolds(t *testing.T) {
+	testPlane(t, map[string]claimserve.Project{"pNet": project(services.ProjectShapes{
+		ByClient: map[string]services.AppShape{"cNB": {ApplicationID: "aNB", Profile: claims.Builtin()}}}, failClosed)})
+	orig := svcObservedRoles
+	t.Cleanup(func() { svcObservedRoles = orig })
+	for _, c := range []struct {
+		name, client string
+		roles        []string
+		absent       bool
+		err          error
+		holds, known bool
+	}{
+		{"a role in Zitadel", "cNB", []string{"admin"}, false, nil, true, true},
+		{"none, by a complete sweep", "cNB", nil, true, nil, false, true},
+		{"none, but the sweep can't vouch", "cNB", nil, false, nil, false, false},
+		{"the read failed", "cNB", nil, false, fmt.Errorf("down"), false, false},
+		{"a client that is no app", "cElse", []string{"admin"}, false, nil, false, false},
+	} {
+		svcObservedRoles = func(_ context.Context, _, projectID string) ([]string, bool, error) {
+			if projectID != "pNet" {
+				t.Fatalf("asked about %q", projectID)
+			}
+			return c.roles, c.absent, c.err
+		}
+		if holds, known := observedHolds(context.Background(), "ada", c.client); holds != c.holds || known != c.known {
+			t.Errorf("%s: holds=%v known=%v", c.name, holds, known)
+		}
 	}
 }
 
@@ -246,8 +314,19 @@ func TestActionV2UserGrantRef_ReadsBothProjectSpellings(t *testing.T) {
 		if err := json.Unmarshal([]byte(body), &g); err != nil {
 			t.Fatalf("%s: %v", body, err)
 		}
-		if g.ProjectID != "pNet" || string(g.Roles) != `["staff"]` {
+		if g.ProjectID != "pNet" || fmt.Sprint(g.Roles) != "[staff]" {
 			t.Fatalf("%s: got %+v", body, g)
+		}
+	}
+	// Roles are now what the token carries: absent or null is none, anything
+	// but a list of strings breaks the contract loudly.
+	for body, ok := range map[string]bool{
+		`{"project_id":"pNet"}`: true, `{"project_id":"pNet","roles":null}`: true,
+		`{"project_id":"pNet","roles":"staff"}`: false, `{"project_id":"pNet","roles":[{"key":"staff"}]}`: false,
+	} {
+		var g ActionV2UserGrantRef
+		if err := json.Unmarshal([]byte(body), &g); (err == nil) != ok || len(g.Roles) != 0 {
+			t.Fatalf("%s: err %v, roles %v", body, err, g.Roles)
 		}
 	}
 }

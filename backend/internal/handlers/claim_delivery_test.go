@@ -109,7 +109,7 @@ func TestClaimDelivery_EveryPathHasItsOutcome(t *testing.T) {
 		{name: "grants not a list", body: body(pre, `{"project_id":"p1"}`, ""), want: claimtel.ContractFault, status: 200},
 		{name: "user.id missing", body: `{"function":"function/preaccesstoken","user":{}}`, want: claimtel.ContractFault, status: 400},
 		{name: "cross project", body: body(pre, `[{"project_id":"p1"},{"project_id":"p2"}]`, ""), want: claimtel.RefusedCrossProject, status: 200},
-		{name: "no facts", body: body(pre, `[{"project_id":"p1"}]`, ""), facts: ptr(""), want: claimtel.DegradedNoFacts, status: 200},
+		{name: "no facts", body: body(pre, `[{"project_id":"p1","roles":["admin"]}]`, ""), facts: ptr(""), want: claimtel.ServedRolesOnly, status: 200},
 		{name: "malformed facts", body: body(pre, `[{"project_id":"p1"}]`, ""), facts: ptr("{{"), want: claimtel.DegradedMalformed, status: 200},
 		{name: "project never published", body: body(pre, `[{"project_id":"pNew"}]`, ""), want: claimtel.DegradedShapeUnreadable, status: 200},
 		{name: "not JSON", body: `not-json`, want: claimtel.BadRequest, status: 400},
@@ -251,7 +251,7 @@ func realFacts(t *testing.T, addr string, mode claimserve.Mode) {
 	orig := claimPlane
 	claimPlane = p
 	t.Cleanup(func() { claimPlane = orig })
-	if res := p.Answer(context.Background(), "u1", "p1", "c1", pre); res.Outcome != claimtel.Served {
+	if res := p.Answer(context.Background(), "u1", "p1", "c1", pre, []string{"admin"}); res.Outcome != claimtel.Served {
 		t.Fatalf("warm-up: %+v", res)
 	}
 	client := db.NewRedisClient(addr)
@@ -340,14 +340,13 @@ func TestClaimDelivery_FaultInjection(t *testing.T) {
 		want      claimtel.Outcome
 		status    int
 		wantRoles bool // the person's roles still reached the token
-		wantGuest bool // the project's minimal_safe answer reached it instead
 	}{
 		{name: "redis hung, person served before", setup: func(t *testing.T) { realFacts(t, hungRedis(t), guest) },
 			user: "u1", want: claimtel.ServedLKG, status: 200, wantRoles: true},
 		{name: "redis refused, person served before", setup: func(t *testing.T) { realFacts(t, refusedRedis(t), guest) },
 			user: "u1", want: claimtel.ServedLKG, status: 200, wantRoles: true},
 		{name: "redis hung, person never served", setup: func(t *testing.T) { realFacts(t, hungRedis(t), guest) },
-			user: "u2", want: claimtel.DegradedNoFacts, status: 200, wantGuest: true},
+			user: "u2", want: claimtel.ServedRolesOnly, status: 200, wantRoles: true},
 		{name: "postgres down and slow", setup: func(t *testing.T) {
 			r := testPlane(t, map[string]claimserve.Project{"p1": project(services.ProjectShapes{}, guest)})
 			setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
@@ -361,7 +360,7 @@ func TestClaimDelivery_FaultInjection(t *testing.T) {
 		{name: "panic in the shaper", setup: func(t *testing.T) {
 			r := builtinPlane(t)
 			setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
-			claimPlane.Shaper = func(claims.Profile, claims.Facts, time.Time) *claims.Object { panic("shaper bug") }
+			claimPlane.Shaper = func(claims.Profile, claims.Facts) *claims.Object { panic("shaper bug") }
 		}, user: "u1", want: claimtel.Panic, status: 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -389,9 +388,6 @@ func TestClaimDelivery_FaultInjection(t *testing.T) {
 				_ = json.Unmarshal(rr.Body.Bytes(), &resp)
 				if _, ok := claimByKey(resp.AppendClaims, "roles"); tc.wantRoles && !ok {
 					t.Errorf("the roles did not reach the token: %s", rr.Body.String())
-				}
-				if c, ok := claimByKey(resp.AppendClaims, "role"); tc.wantGuest && (!ok || c.Value != "guest") {
-					t.Errorf("the failure mode did not answer: %s", rr.Body.String())
 				}
 			}
 		})

@@ -30,6 +30,9 @@ const (
 	// SnapshotStaleAfter is ten missed polls: the snapshot still answers, but
 	// an edit made since may not have reached it.
 	SnapshotStaleAfter = 10 * time.Second
+	// RolesOnlyPersistentAt is how many roles-only answers in the window it
+	// takes before they can read as persistent.
+	RolesOnlyPersistentAt = 5
 )
 
 // AgeS is seconds since t, nil for the zero time.
@@ -58,6 +61,13 @@ func Assess(now time.Time, recent map[claimtel.Outcome]int64, lastServed time.Ti
 		case claimtel.Soft:
 			soft = append(soft, "OUTCOME:"+string(o))
 		}
+	}
+	// A roles-only answer is a delivered token. It is soft only when such
+	// answers are more than a handful and outnumber the full ones: Syndra's
+	// facts are missing broadly (Redis lost, no warm since), not for the odd
+	// person Syndra has no records for.
+	if n := recent[claimtel.ServedRolesOnly]; n >= RolesOnlyPersistentAt && n > recent[claimtel.Served]+recent[claimtel.ServedLKG] {
+		soft = append(soft, "OUTCOME:"+string(claimtel.ServedRolesOnly))
 	}
 	if redisErr != nil {
 		h.Redis = "down"
