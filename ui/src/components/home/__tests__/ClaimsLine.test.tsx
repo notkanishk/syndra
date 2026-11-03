@@ -45,10 +45,18 @@ describe("Home's claims line", () => {
   });
 
   it("says since when it has been checking after a restart under a day ago", () => {
-    const since = new Date(Date.now() - 2 * 3600_000);
-    q.value = { ...q.value, data: status({ checking_since: since.toISOString() }) };
-    render(<ClaimsLine />);
-    expect(line()).toHaveTextContent(/^Claims: delivered to every sign-in since \d\d:\d\d$/);
+    // Midday, so "two hours ago" is today and reads as a time, not a date
+    // (it failed just after midnight, 4 Nov 2026).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 4, 12, 0, 0));
+    try {
+      const since = new Date(Date.now() - 2 * 3600_000);
+      q.value = { ...q.value, data: status({ checking_since: since.toISOString() }) };
+      render(<ClaimsLine />);
+      expect(line()).toHaveTextContent(/^Claims: delivered to every sign-in since \d\d:\d\d$/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says there was nothing to check when nobody signed in", () => {
