@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.container.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/react-cache-shim.js"></script>
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Phone bulk bar board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /users · Final, 3 Nov 2026</span>
+    <h1 class="type-page-title" style="margin:0">The bulk bar at 390</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);text-wrap:pretty">People with three selected, on a phone. Five verbs stacked made the bar 312px tall, 43% of the scrollport. Three ways to fit them, side by side; 2a is chosen. Then 2a's More changes sheet, and 2a on a list filtered for a job. Each frame is the real shell at true width; open one alone with <span class="type-mono">?frame=</span> and its name. Answer: <span class="type-mono">A-12-three-loose-ends.md</span> §2.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1260px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The count is said once, in the bar · verbs name themselves (3b) · a verb that takes access away is the danger outline · every verb opens a preview first, so none is accent · sheets don't stack · every target is 44px on touch · desktop and tablet keep all five verbs in one row · bars with one or two verbs are unchanged.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Which verb is primary</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">The verb that does the job the list was filtered for, otherwise the first verb. Read from the filter, never the selection, so ticking a row never changes it. <strong style="color:var(--ink)">No bundle</strong> or <strong style="color:var(--ink)">No access yet</strong>: Give a bundle · <strong style="color:var(--ink)">Access ending</strong>: Extend what ends · <strong style="color:var(--ink)">Departed, still has access</strong>: Revoke a role (Owner's call, recommended) · anything else: Give a role.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Three ways to fit five verbs · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ optionFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:2px solid var(--accent-line);background:var(--canvas)"><div style="width:390px;height:844px"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div></sc-if>
+          <sc-if value="{{ f.notRec }}" hint-placeholder-val="{{ true }}"><div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:390px;height:844px"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div></sc-if>
+          <figcaption style="display:flex;flex-direction:column;gap:5px;max-width:390px">
+            <span style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px">
+              <sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent-text);font-size:12.5px">{{ f.chip }}</span></sc-if>
+              <sc-if value="{{ f.notRec }}" hint-placeholder-val="{{ true }}"><span class="type-mono" style="padding:2px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink);font-size:12.5px">{{ f.chip }}</span></sc-if>
+              <span style="font-size:15px;font-weight:600">{{ f.label }}</span>
+              <sc-if value="{{ f.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Chosen · recommended</span></sc-if>
+            </span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span>
+          </figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">2a in use · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ detailFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:390px;height:844px"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="People" meta="{{ meta }}" lede="Everyone Syndra knows, and what each can use. Open a person to see and change their access; select several to change them together." hint-size="100%,140px"></x-import></div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;flex-direction:column;gap:10px">
+  <x-import component-from-global-scope="Syndra.FilterBar" search="{{ searchEl }}" filters="{{ filtersEl }}" trailing="{{ selectEl }}" hint-size="100%,96px"></x-import>
+  <x-import component-from-global-scope="Syndra.ReadFreshness" state="{{ freshRead }}" subject="The people list" hint-size="100%,24px"></x-import>
+  </div>
+
+  <x-import component-from-global-scope="Syndra.Card" hint-size="100%,720px">
+    <div class="row-divider" style="display:flex;align-items:center;gap:6px;min-height:44px;padding:6px 16px 6px 8px">
+      <span style="width:44px;height:44px;flex:none;display:inline-flex;align-items:center;justify-content:center"><span aria-hidden="true" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">–</span></span>
+      <span style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:600">{{ selectAllLabel }}</span><span style="font-size:12.5px;color:var(--faint)">{{ selectAllWider }}</span></span>
+    </div>
+    <sc-for list="{{ people }}" as="p" hint-placeholder-count="8">
+      <div class="row-divider" style="display:flex;align-items:flex-start;gap:6px;padding:8px 16px 12px 8px;background:{{ p.bg }}">
+        <span style="width:44px;height:44px;flex:none;display:inline-flex;align-items:center;justify-content:center">
+          <sc-if value="{{ p.on }}" hint-placeholder-val="{{ false }}"><span role="checkbox" aria-checked="true" aria-label="{{ p.seatLabel }}" style="width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:700;line-height:1">✓</span></sc-if>
+          <sc-if value="{{ p.off }}" hint-placeholder-val="{{ true }}"><span role="checkbox" aria-checked="false" aria-label="{{ p.seatLabel }}" style="width:24px;height:24px;display:inline-flex;border-radius:var(--radius-pill);border:1.5px solid var(--line-strong);background:transparent"></span></sc-if>
+        </span>
+        <span style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1;padding-top:5px">
+          <x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="34px,34px"></x-import>
+          <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+            <span style="font-size:15px;font-weight:600;color:var(--ink)">{{ p.name }}</span>
+            <span style="font-size:12.5px;color:var(--faint)">{{ p.sub }}</span>
+            <span style="font-size:13px;color:var(--muted)">{{ p.access }}</span>
+            <span style="font-size:13.5px;font-weight:600;color:{{ p.attnColor }}">{{ p.attn }}</span>
+          </span>
+        </span>
+      </div>
+    </sc-for>
+  </x-import>
+  </div>
+
+  <!-- stands in for Syndra.SelectionBar's phone layout (A-12 §2) until it is in the design system -->
+  <sc-if value="{{ barA }}" hint-placeholder-val="{{ false }}">
+    <div role="region" aria-label="Selection" style="position:sticky;bottom:16px;z-index:20;margin-top:8px;display:flex;flex-direction:column;gap:8px;padding:14px 20px;border-radius:18px;border:1px solid var(--line-strong);background:var(--surface-2);box-shadow:var(--shadow-dialog)">
+      <div style="display:flex;align-items:flex-start;gap:12px;min-height:28px">
+        <span style="flex:1;min-width:0;font-size:14.5px;line-height:1.45;padding-top:3px"><strong style="font-weight:600">3 people selected</strong><span style="color:var(--muted)">{{ scopeText }}</span></span>
+        <button type="button" style="flex:none;min-height:44px;margin:-8px -8px -8px 0;padding:0 8px;border:0;background:none;border-radius:var(--radius-pill);font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">Clear the selection</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <sc-if value="{{ primaryNeutral }}" hint-placeholder-val="{{ true }}"><button type="button" style="flex:1;min-width:0;min-height:44px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:transparent;color:var(--ink);font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ primaryLabel }}</button></sc-if>
+        <sc-if value="{{ primaryDanger }}" hint-placeholder-val="{{ false }}"><button type="button" style="flex:1;min-width:0;min-height:44px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--danger-line);background:transparent;color:var(--danger-text);font:inherit;font-size:14px;font-weight:600;cursor:pointer">{{ primaryLabel }}</button></sc-if>
+        <button type="button" aria-haspopup="dialog" style="flex:none;min-height:44px;padding:0 16px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:transparent;color:var(--ink);font:inherit;font-size:14px;font-weight:600;cursor:pointer">More changes</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- stands in for Syndra.SelectionBar, option 2b (not chosen) -->
+  <sc-if value="{{ barB }}" hint-placeholder-val="{{ false }}">
+    <div role="region" aria-label="Selection" style="position:sticky;bottom:16px;z-index:20;margin-top:8px;display:flex;flex-direction:column;gap:8px;padding:14px 20px;border-radius:18px;border:1px solid var(--line-strong);background:var(--surface-2);box-shadow:var(--shadow-dialog)">
+      <div style="display:flex;align-items:flex-start;gap:12px;min-height:28px">
+        <span style="flex:1;min-width:0;font-size:14.5px;line-height:1.45;padding-top:3px"><strong style="font-weight:600">3 people selected</strong></span>
+        <button type="button" style="flex:none;min-height:44px;margin:-8px -8px -8px 0;padding:0 8px;border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">Clear the selection</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+        <button type="button" style="min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;line-height:1.25;text-align:center;cursor:pointer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle><path d="M10 6.5v7M6.5 10h7"></path></svg><span>Give a role</span></button>
+        <button type="button" style="min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;line-height:1.25;text-align:center;cursor:pointer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="11" height="11" rx="2"></rect><path d="M6 3h9a2 2 0 0 1 2 2v9"></path><path d="M8.5 9v5M6 11.5h5"></path></svg><span>Give a bundle</span></button>
+        <button type="button" style="min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:600;line-height:1.25;text-align:center;cursor:pointer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle><path d="M10 6v4l3 2"></path></svg><span>Extend what ends</span></button>
+        <button type="button" style="min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;border-radius:var(--radius-inner);border:1px solid var(--danger-line);background:transparent;color:var(--danger-text);font:inherit;font-size:12.5px;font-weight:600;line-height:1.25;text-align:center;cursor:pointer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="6" width="11" height="11" rx="2"></rect><path d="M6 3h9a2 2 0 0 1 2 2v9"></path><path d="M6 11.5h5"></path></svg><span>Remove from a bundle</span></button>
+        <button type="button" style="min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px;border-radius:var(--radius-inner);border:1px solid var(--danger-line);background:transparent;color:var(--danger-text);font:inherit;font-size:12.5px;font-weight:600;line-height:1.25;text-align:center;cursor:pointer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle><path d="M6.5 10h7"></path></svg><span>Revoke a role</span></button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- stands in for Syndra.SelectionBar, option 2c (not chosen) -->
+  <sc-if value="{{ barC }}" hint-placeholder-val="{{ false }}">
+    <div role="region" aria-label="Selection" style="position:sticky;bottom:16px;z-index:20;margin-top:8px;display:flex;flex-direction:column;gap:8px;padding:14px 20px;border-radius:18px;border:1px solid var(--line-strong);background:var(--surface-2);box-shadow:var(--shadow-dialog);overflow:hidden">
+      <div style="display:flex;align-items:flex-start;gap:12px;min-height:28px">
+        <span style="flex:1;min-width:0;font-size:14.5px;line-height:1.45;padding-top:3px"><strong style="font-weight:600">3 people selected</strong></span>
+        <button type="button" style="flex:none;min-height:44px;margin:-8px -8px -8px 0;padding:0 8px;border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">Clear the selection</button>
+      </div>
+      <div style="display:flex;gap:8px;margin:0 -20px;padding:0 20px;overflow-x:auto;scrollbar-width:none">
+        <button type="button" style="flex:none;white-space:nowrap;min-height:44px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:transparent;color:var(--ink);font:inherit;font-size:14px;font-weight:600">Give a role</button>
+        <button type="button" style="flex:none;white-space:nowrap;min-height:44px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:transparent;color:var(--ink);font:inherit;font-size:14px;font-weight:600">Give a bundle</button>
+        <button type="button" style="flex:none;white-space:nowrap;min-height:44px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--line-strong);background:transparent;color:var(--ink);font:inherit;font-size:14px;font-weight:600">Extend what ends</button>
+        <button type="button" style="flex:none;white-space:nowrap;min-height:44px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--danger-line);background:transparent;color:var(--danger-text);font:inherit;font-size:14px;font-weight:600">Remove from a bundle</button>
+        <button type="button" style="flex:none;white-space:nowrap;min-height:44px;padding:0 14px;border-radius:var(--radius-pill);border:1px solid var(--danger-line);background:transparent;color:var(--danger-text);font:inherit;font-size:14px;font-weight:600">Revoke a role</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ fMore }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="more" hint-size="100%,420px">
+      <x-import component-from-global-scope="Syndra.ModalHeader" title="More changes" title-id="more" hint-size="100%,60px"></x-import>
+      <div style="padding:0 24px 8px;display:flex;flex-direction:column;gap:8px">
+        <x-import component-from-global-scope="Syndra.Button" variant="outline" class-name="w-full" hint-size="100%,44px">Give a bundle</x-import>
+        <x-import component-from-global-scope="Syndra.Button" variant="outline" class-name="w-full" hint-size="100%,44px">Extend what ends</x-import>
+        <span aria-hidden="true" style="height:8px"></span>
+        <x-import component-from-global-scope="Syndra.Button" variant="danger" class-name="w-full" hint-size="100%,44px">Remove from a bundle</x-import>
+        <x-import component-from-global-scope="Syndra.Button" variant="danger" class-name="w-full" hint-size="100%,44px">Revoke a role</x-import>
+      </div>
+      <x-import component-from-global-scope="Syndra.ModalFooter" note="Each one shows who would change, person by person, before anything happens." hint-size="100%,100px">
+        <x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="100px,44px">Cancel</x-import>
+      </x-import>
+    </x-import>
+  </sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":2900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "a";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+    const P = (name, sub, access, attn, tone, on) => ({ name, sub, access, attn, attnColor: tone ? "var(--" + tone + "-text)" : "var(--ink)", on: !!on, off: !on, bg: on ? "var(--accent-soft)" : "transparent", seatLabel: "Select " + name });
+    this.everyone = [
+      P("Aanya Rao", "Research assistant · Mechanical Engineering", "3 roles across 2 projects", "Ends in 2 days", "warn", true),
+      P("Priya Nair", "Research assistant · Design", "5 roles across 3 projects", "Unexplained role", "danger", true),
+      P("Ada Lovelace", "Visiting fellow · Computer Science", "2 roles across 1 project", "", ""),
+      P("Lena Brandt", "lena@example.edu", "Nothing yet", "Open request", "accent", true),
+      P("Rohan Mehta", "Student · Physics", "1 role", "", ""),
+      P("Sofia Rossi", "Student · Architecture", "4 roles across 2 projects", "", ""),
+      P("Mei Tanaka", "Research assistant · Biology", "2 roles across 2 projects", "Ends in 9 days", "warn"),
+      P("Daniel Okafor", "Student · Mechanical Engineering", "1 role", "", ""),
+    ];
+    this.departed = [
+      P("Omar Haddad", "Left 12 Sept · Architecture", "1 role", "Departed", "danger", true),
+      P("Ines Duarte", "Left 30 Aug · Design", "3 roles across 2 projects", "Departed", "danger", true),
+      P("Tomas Novak", "Left 22 Aug · Physics", "2 roles across 1 project", "Departed", "danger", true),
+      P("Hana Kim", "Left 5 Sept · Biology", "1 role", "Departed", "danger"),
+      P("Arjun Iyer", "Left 1 Sept · Computer Science", "2 roles across 2 projects", "Departed", "danger"),
+      P("Clara Weiss", "Left 30 Aug · Mechanical Engineering", "1 role", "Departed", "danger"),
+      P("Yusuf Demir", "Left 18 Aug · Design", "4 roles across 3 projects", "Departed", "danger"),
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const departed = st === "a-departed";
+    const f = (frame, label, note, chip, rec) => ({ src: "a12-phone-bulk-bar.dc.html?frame=" + frame, label, note, chip, rec: !!rec, notRec: !rec });
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      barA: st === "a" || st === "a-more" || departed, barB: st === "b", barC: st === "c", fMore: st === "a-more",
+      primaryLabel: departed ? "Revoke a role" : "Give a role", primaryNeutral: !departed, primaryDanger: departed,
+      scopeText: departed ? " with departed, still has access" : "",
+      meta: departed ? "7 people · departed, still has access" : "248 people · 12 with access ending inside 30 days",
+      people: departed ? this.departed : this.everyone,
+      selectAllLabel: departed ? "Select these 7 people" : "Select these 248 people",
+      selectAllWider: departed ? "248 people in all." : "",
+      freshRead: { readAt: new Date(Date.now() - 20000).toISOString(), current: true },
+      searchEl: S ? h(S.Input, { placeholder: "Search name, email or role key…", "aria-label": "Search people by name, email or role key" }) : null,
+      filtersEl: S ? h(S.FilterPanel, { activeCount: departed ? 1 : 0, onClear: () => {} }, h(S.FilterField, { label: "Needs attention" }, h(S.Select, { defaultValue: departed ? "departed" : "", "aria-label": "Filter by what needs attention" }, h("option", { value: "" }, "Anything"), h("option", { value: "departed" }, "Departed, still has access")))) : null,
+      selectEl: S ? h(S.SelectModeToggle, { active: true, onToggle: () => {} }) : null,
+      optionFrames: [
+        f("a", "One verb, then More changes", "About 110px, 15% of the scrollport. Row 1: the count and Clear the selection (28px drawn, 44 to the touch). Row 2: the primary verb in its own tone, and More changes. Both outline, 44px; neither is accent, because each opens a preview first.", "2a", true),
+        f("b", "Two rows of icon and word", "About 200px, 28%. At a third of the bar the long verbs wrap, and each needs a new icon; none tells giving a role from giving a bundle, so the icons say less than the words.", "2b", false),
+        f("c", "One row that scrolls", "As short as 2a, but two and a half verbs show. The two danger verbs are always the ones off the edge, found by a sideways swipe nothing points to, at the edge where the browser's back gesture lives.", "2c", false),
+      ],
+      detailFrames: [
+        f("a-more", "2a · More changes, open", "Modal sm, a sheet from the bottom edge. Title only: the count stays said once, in the bar under the scrim. The other verbs in the desktop order, neutral, then 16px, then the danger outlines. Choosing one closes this sheet before its dialog opens: sheets don't stack.", "", false),
+        f("a-departed", "2a · Filtered to Departed, still has access", "The filter names the job, so Revoke a role is primary, in the danger outline (Owner's call, recommended). More changes holds the other four. The scope wraps under the count; the bar grows by that line only.", "", false),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
