@@ -61,6 +61,15 @@ jobs:
           curl -fsS --retry 20 --retry-delay 3 --retry-all-errors \
             http://localhost:3000 >/dev/null
           echo "backend and ui responding locally"
+          # Claim delivery's health answers. Reachability only: right after a
+          # restart it can honestly read degraded (the first warm is running),
+          # and the deploy must not fail on that. 503 means "failing" and is
+          # still an answer; anything else is a route that is gone.
+          code="$(curl -sS -o /tmp/healthz-claims.json -w '%{http_code}' -m 10 http://localhost:8080/healthz/claims)"
+          case "$code" in
+            200|503) grep -q '"status"' /tmp/healthz-claims.json && echo "/healthz/claims: $(cat /tmp/healthz-claims.json)" ;;
+            *) echo "/healthz/claims answered HTTP ${code}"; exit 1 ;;
+          esac
 
       # Zitadel POSTs to SYNDRA_EXTERNAL_URL, not to localhost. On the dev box
       # that URL drifted to a decommissioned IP and every Action silently
