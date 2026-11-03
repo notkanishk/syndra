@@ -232,9 +232,11 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 	}
 	pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	// Client-credentials and JWT-profile grants pass no project: without the
-	// audience scope Zitadel lists no grants (assessment Z-d, Z-e).
-	tok, err := canaryToken(pctx, "openid urn:zitadel:iam:org:project:id:"+projectID+":aud")
+	// Client-credentials and JWT-profile grants have no app, so no project of
+	// their own: Zitadel lists the project's grants only when the request
+	// names its audience AND asks for roles (seen on prod 3 Nov 2026: the
+	// audience alone gave user_grants empty, so Syndra rightly answered none).
+	tok, err := canaryToken(pctx, "openid urn:zitadel:iam:org:project:id:"+projectID+":aud urn:zitadel:iam:org:projects:roles")
 	if err != nil {
 		return done("token", "no token for the canary: "+truncate(err.Error(), 200))
 	}
@@ -265,7 +267,10 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 	if _, ok := payload[logClaimL2]; ok {
 		return done("log_claim", "Zitadel logged a dropped claim on the canary's token: a key Syndra sent collides")
 	}
-	if !sawCanaryCall(pctx, userID, clientID, start.Add(-5*time.Second)) {
+	// Only this run's own calls: the window keeps the worst outcome, so a
+	// neighbour (the previous run, or the old process during a deploy) must
+	// not fall inside it. Both doors run on this LXC's clock.
+	if !sawCanaryCall(pctx, userID, clientID, start.Add(-time.Second)) {
 		// The token's own client_id is what SYNDRA_CANARY_CLIENT_ID must be
 		// when the two differ; it is no secret.
 		tc, _ := payload["client_id"].(string)
@@ -324,9 +329,13 @@ func jwtPayload(tok string) (map[string]any, bool) {
 func sawCanaryCall(ctx context.Context, userID, clientID string, since time.Time) bool {
 	deadline := time.Now().Add(canaryCallWait)
 	for {
-		worst, _ := claimCalls{}.Window(userID, clientID, since, time.Now().Add(time.Second))
-		if o, ok := worst[claimtel.FnPreAccessToken]; ok && (o == claimtel.Served || o == claimtel.ServedLKG) {
-			return true
+		// A JWT-profile token (Syndra's own service account) names a client in
+		// the token, but Zitadel sends Syndra no application.client_id for it
+		// (seen on prod 3 Nov 2026), so its call is recorded with none.
+		for _, c := range []string{clientID, ""} {
+			if canaryCallServed(ctx, userID, c, since, time.Now().Add(time.Second)) {
+				return true
+			}
 		}
 		if time.Now().After(deadline) {
 			return false
@@ -337,6 +346,23 @@ func sawCanaryCall(ctx context.Context, userID, clientID string, since time.Time
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
+}
+
+// canaryCallServed looks for this run's own served preaccesstoken call, at
+// either door. The claims container's raw records are read directly; the
+// backend's own door (still :8080's route) falls back to the merged window.
+func canaryCallServed(ctx context.Context, userID, clientID string, from, to time.Time) bool {
+	if rr := claimRelayRedis(); rr != nil {
+		rctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		ok := claimserve.RemoteServed(rctx, rr, userID, clientID, claimtel.FnPreAccessToken, from, to)
+		cancel()
+		if ok {
+			return true
+		}
+	}
+	worst, _ := claimDelivery.Window(userID, clientID, from, to)
+	o, ok := worst[claimtel.FnPreAccessToken]
+	return ok && (o == claimtel.Served || o == claimtel.ServedLKG)
 }
 
 var canaryCallWait = 10 * time.Second

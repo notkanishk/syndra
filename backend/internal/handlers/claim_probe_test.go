@@ -245,8 +245,8 @@ func TestProbeL2(t *testing.T) {
 		canaryCallWait = 50 * time.Millisecond
 		tok := map[string]any{"sub": "uC", "roles": []string{"canary"}}
 		canaryToken = func(_ context.Context, scope string) (string, error) {
-			if !strings.Contains(scope, "urn:zitadel:iam:org:project:id:pC:aud") {
-				return "", errors.New("no audience scope")
+			if !strings.Contains(scope, "urn:zitadel:iam:org:project:id:pC:aud") || !strings.Contains(scope, "urn:zitadel:iam:org:projects:roles") {
+				return "", errors.New("no audience or roles scope: Zitadel would list no grants")
 			}
 			return jwtFor(tok), nil
 		}
@@ -272,6 +272,20 @@ func TestProbeL2(t *testing.T) {
 			t.Fatalf("enabled=%v key=%q", ProbeL2Enabled(), canaryKeyPath())
 		}
 		served()
+		if err := RunProbeL2(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if res := lastProbeL2.Load(); res == nil || !res.Pass {
+			t.Fatalf("L2: %+v", res)
+		}
+	})
+	// Zitadel names no application.client_id for a JWT-profile grant, so the
+	// call is recorded with no client while the token says "syndra-service".
+	t.Run("a call recorded with no client still counts", func(t *testing.T) {
+		_, tok := setup(t)
+		t.Setenv(canaryClientIDEnv, "")
+		(*tok)["client_id"] = "syndra-service"
+		claimDelivery.Record(claimtel.Call{UserID: "uC", ClientID: "", Function: claims.FunctionPreAccessToken, Outcome: claimtel.Served, At: time.Now()})
 		if err := RunProbeL2(context.Background()); err != nil {
 			t.Fatal(err)
 		}
