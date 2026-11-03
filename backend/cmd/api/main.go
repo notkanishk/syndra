@@ -442,7 +442,16 @@ func main() {
 
 	// Insights usage: drop "last seen" rows nobody has refreshed in 400 days. Once
 	// a day, at once on boot; a failure is logged and retried on the next tick.
-	usagePruneSched := periodic.New("FINDINGS", 24*time.Hour, 24*time.Hour, services.PruneUsageLastSeen)
+	// The same nightly pass rolls claim-delivery telemetry older than 48h into
+	// hourly rows and drops hourly rows past 90 days.
+	usagePruneSched := periodic.New("FINDINGS", 24*time.Hour, 24*time.Hour, func(ctx context.Context) error {
+		uerr := services.PruneUsageLastSeen(ctx)
+		n, cerr := db.RollClaimDelivery(ctx, time.Now())
+		if n > 0 {
+			log.Printf("[DATA PLANE] telemetry: rolled %d five-minute rows into hours", n)
+		}
+		return errors.Join(uerr, cerr)
+	})
 	go usagePruneSched.Start(ctx)
 
 	// Webhook log: the operations page lists the newest 200, so rows past the
@@ -455,6 +464,13 @@ func main() {
 		return err
 	})
 	go webhookPruneSched.Start(ctx)
+
+	// Claim delivery telemetry: counters fold into Postgres once a minute; a
+	// failed flush keeps them for the next. Repair-on-miss recompiles people
+	// whose facts a token found missing, at most 20 a second.
+	claimTelSched := periodic.New("CLAIM-TEL", time.Minute, time.Minute, handlers.FlushClaimDelivery)
+	go claimTelSched.Start(ctx)
+	go handlers.RunClaimRepair(ctx)
 
 	// Start server in background
 	go func() {
@@ -546,6 +562,15 @@ func main() {
 	case <-webhookPruneSched.Done():
 	case <-shutdownCtx.Done():
 		log.Println("[WEBHOOK] Shutdown deadline exceeded waiting for the webhook prune; closing anyway")
+	}
+
+	select {
+	case <-claimTelSched.Done():
+	case <-shutdownCtx.Done():
+	}
+	// The last minute's counters: the server has stopped, so nothing adds to them.
+	if err := handlers.FlushClaimDelivery(shutdownCtx); err != nil {
+		log.Printf("[DATA PLANE] telemetry: final flush failed; the last minute of counts is lost: %v", err)
 	}
 
 	db.PG.Close()

@@ -16,6 +16,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"syndra/internal/services/periodic"
 )
 
 // Registration is what a deployment says about an add-on: where it lives and
@@ -441,6 +443,7 @@ func RefreshAll(ctx context.Context) error {
 		wg.Add(1)
 		go func(target string) {
 			defer wg.Done()
+			defer periodic.Recover("ADDON")
 			c, cancel := context.WithTimeout(ctx, refreshTimeout)
 			defer cancel()
 			if err := Refresh(c, target); err != nil && !quietStartup.Load() {

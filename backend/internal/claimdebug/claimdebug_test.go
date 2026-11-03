@@ -3,6 +3,7 @@ package claimdebug
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -128,5 +129,28 @@ func TestRecord_NeverBlocks(t *testing.T) {
 	var nilRec *Recorder
 	if nilRec.Wants("c", "u") {
 		t.Fatal("a nil recorder wants nothing")
+	}
+}
+
+// explain reads Zitadel and Postgres off the latency path; a panic there loses
+// that capture, never the worker or the process (assessment S13).
+func TestRecorder_PanicInExplainIsSurvived(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 3, 10, 6, 0, 0, time.UTC)}
+	var calls atomic.Int32
+	r := New(c.now, func(context.Context, Capture) any {
+		if calls.Add(1) == 1 {
+			panic("explain bug")
+		}
+		return "checks"
+	}, nil)
+	r.Start("aNB", "cNB", "ada", "kanishk")
+	r.Record(Capture{At: c.now(), ClientID: "cNB", UserID: "ada"})
+	r.Record(Capture{At: c.now(), ClientID: "cNB", UserID: "ada"})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && len(r.SignIns("aNB", 0)) == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := r.SignIns("aNB", 0); len(got) != 1 {
+		t.Fatalf("after a panicking capture the worker filed %d, want the second one", len(got))
 	}
 }

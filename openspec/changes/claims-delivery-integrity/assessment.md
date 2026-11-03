@@ -325,6 +325,8 @@ The event payloads Syndra decodes **are** camelCase (`userId`, `projectId`, `rol
 
 *Fix:* use `*[]…` or `json.RawMessage`. Absent means outcome `contract_fault`. Empty means `no_grants`. Both are counted per `client_id`.
 
+*Built (S0, 3 Nov 2026), with one correction:* Zitadel's `ContextInfo.UserGrants` is itself `json:"user_grants,omitempty"` (v4.20.1), so "no role audience" (A3) arrives *absent*, never as `[]`. Absent is therefore `no_grants`. `contract_fault` is what a key mismatch actually looks like on the wire: `user_grants` absent beside an unknown top-level array of objects (a renamed list), rows that name no project in either spelling (F-0 itself), a non-list, or no `user.id`.
+
 **F-4. Decoded but unused fields can fail every token.**
 
 `ActionV2UserGrantRef.Roles []string` (`action.go:32`) is only used by debug capture (via `Grants`) and by the proposed I3. If Zitadel changes its type, the whole decode returns 400 (`action.go:110-112`).

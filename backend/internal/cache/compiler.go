@@ -9,15 +9,24 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 
 	"syndra/internal/claims"
 	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
-const cacheTTL = 24 * time.Hour
+// cacheTTL is a backstop, not the freshness mechanism. Events, the expiry
+// sweep and the 12h warm keep facts current; expiry is what happens when all of
+// them stop, and an expired entry is a token without claims. At 24h, twice the
+// warm interval, two skipped warms in a row (a directory outage) expired
+// everyone's facts at once (claims-delivery-integrity F-6). A week leaves
+// fourteen warms of room; staleness becomes something to measure (compiled_at
+// is in every entry), not an outage.
+const cacheTTL = 7 * 24 * time.Hour
 
 // UserGrant represents a simple role held by a user in Zitadel
 type UserGrant struct {
@@ -317,6 +326,9 @@ func refreshUser(ctx context.Context, userID string, warm bool, projectIDs []str
 		return err
 	}
 	if warm && u.profileErr != nil {
+		if isGone(u.profileErr) {
+			return errGone
+		}
 		return fmt.Errorf("cache warm: profile unavailable, keeping entries: %w", u.profileErr)
 	}
 
@@ -360,33 +372,89 @@ func RebuildUserCache(ctx context.Context, userID string, projectIDs []string) {
 	}
 }
 
+// errGone is a person Zitadel answers 404 for: deleted there, still holding
+// records here. Not a failure to retry on every pass (assessment D1).
+var errGone = errors.New("gone from Zitadel")
+
+func isGone(err error) bool {
+	var se *zitadel.StatusError
+	return errors.As(err, &se) && se.Code == 404
+}
+
+// goneUsers are the people this process has seen Zitadel 404. Later warms
+// skip them; a change event for one still refreshes them as usual. In-process
+// only: a restart asks once more, which costs one call per person.
+var goneUsers sync.Map
+
+// WarmReport is how the last warm went. Refreshed and Failed count only people
+// who still exist in Zitadel; Gone is the rest.
+type WarmReport struct {
+	At        time.Time `json:"at"`
+	Skipped   bool      `json:"skipped"`
+	Refreshed int       `json:"refreshed"`
+	Of        int       `json:"of"`
+	Failed    int       `json:"failed"`
+	Gone      int       `json:"gone"`
+}
+
+var lastWarm atomic.Pointer[WarmReport]
+
+// LastWarm is the last finished warm, false before the first.
+func LastWarm() (WarmReport, bool) {
+	if r := lastWarm.Load(); r != nil {
+		return *r, true
+	}
+	return WarmReport{}, false
+}
+
 // Warm refreshes every known user's claims once. Entries come only from change
 // events and expire after cacheTTL, so without this a restart (or a quiet day)
 // leaves the token path answering degraded for people whose access never
 // changed. Sequential on purpose: it runs beside live traffic and a slow pass
 // costs nothing.
+//
+// A pass that skips or fails anyone says so as an ERROR with its counts: a warm
+// that quietly stops keeping facts fresh is how expiry became the outage.
 func Warm(ctx context.Context) error {
-	// A directory that isn't answering fails every user's profile read; say so
-	// once rather than once per user.
-	if !directoryAnswers(ctx) {
-		log.Printf("[CACHE] warm skipped: the directory is not answering")
-		return nil
-	}
 	ids, err := dbGetAllKnownUserIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("cache warm: %w", err)
 	}
-	warmed := 0
+	// A directory that isn't answering fails every user's profile read; say so
+	// once rather than once per user.
+	if !directoryAnswers(ctx) {
+		lastWarm.Store(&WarmReport{At: time.Now(), Skipped: true, Of: len(ids)})
+		log.Printf("[CACHE] ERROR warm skipped: the directory is not answering; 0 of %d users refreshed (stored facts last %s from their compile)", len(ids), cacheTTL)
+		return nil
+	}
+	rep := WarmReport{Of: len(ids)}
 	for _, id := range ids {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := refreshUser(ctx, id, true, nil); err != nil {
-			log.Printf("[CACHE] warm failed for %s: %v", id, err)
+		if _, gone := goneUsers.Load(id); gone {
+			rep.Gone++
 			continue
 		}
-		warmed++
+		switch err := refreshUser(ctx, id, true, nil); {
+		case err == nil:
+			rep.Refreshed++
+		case errors.Is(err, errGone):
+			goneUsers.Store(id, true)
+			rep.Gone++
+			log.Printf("[CACHE] %s is gone from Zitadel (404) but still holds records here; left out of warms from now on", id)
+		default:
+			rep.Failed++
+			log.Printf("[CACHE] warm failed for %s: %v", id, err)
+		}
 	}
-	log.Printf("[CACHE] Warmed claims for %d of %d users", warmed, len(ids))
+	rep.Of -= rep.Gone
+	rep.At = time.Now()
+	lastWarm.Store(&rep)
+	if rep.Failed > 0 {
+		log.Printf("[CACHE] ERROR warm: refreshed %d of %d users, %d failed (%d gone from Zitadel, not counted)", rep.Refreshed, rep.Of, rep.Failed, rep.Gone)
+		return nil
+	}
+	log.Printf("[CACHE] Warmed claims for %d of %d users (%d gone from Zitadel, not counted)", rep.Refreshed, rep.Of, rep.Gone)
 	return nil
 }

@@ -24,6 +24,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"syndra/internal/services/periodic"
 )
 
 // Window, Keep and Cap are the owner's numbers (3 Nov).
@@ -193,10 +195,18 @@ func (r *Recorder) Record(c Capture) {
 	}
 }
 
+// work files captures until the queue closes. A panic in one (explain reads
+// Zitadel and Postgres) loses that capture, not the worker, and never the
+// process: this goroutine shares it with the claims data plane.
 func (r *Recorder) work() {
 	for c := range r.queue {
-		r.add(c)
+		r.safeAdd(c)
 	}
+}
+
+func (r *Recorder) safeAdd(c Capture) {
+	defer periodic.Recover("CLAIM-DEBUG")
+	r.add(c)
 }
 
 // add files one capture, re-checking the filter: the account may have been

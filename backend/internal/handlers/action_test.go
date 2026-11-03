@@ -84,6 +84,12 @@ func claimByKey(claims []ActionV2Claim, key string) (ActionV2Claim, bool) {
 
 // v2Body builds a minimal v2 function-trigger request body for a single user
 // and grant list.
+// rolesJSON is a grant row's roles as Zitadel sends them.
+func rolesJSON(roles ...string) json.RawMessage {
+	b, _ := json.Marshal(roles)
+	return b
+}
+
 func v2Body(userID string, grants ...ActionV2UserGrantRef) string {
 	b, _ := json.Marshal(map[string]interface{}{
 		"function":    "function/preaccesstoken",
@@ -105,7 +111,7 @@ func TestHandleActionInject_CacheMissFailClosed(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: []string{"admin"}})))
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
 
@@ -130,7 +136,7 @@ func TestHandleActionInject_CacheMissMinimalSafe(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: []string{"viewer"}})))
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("viewer")})))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
 
@@ -159,7 +165,7 @@ func TestHandleActionInject_MalformedCache_FailClosed(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: []string{"admin"}})))
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
 
@@ -184,7 +190,7 @@ func TestHandleActionInject_DBOutage_DefaultsToFailClosed(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: []string{"admin"}})))
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
 
@@ -211,7 +217,7 @@ func TestHandleActionInject_CacheHit_UsesConfiguredClaimNameAndFormat(t *testing
 	stubProjectShapes(services.ProjectShapes{Default: claims.FromFlat("x-groups", claims.FormatCSV, nil, nil)})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: []string{"admin"}})))
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
 
@@ -247,7 +253,7 @@ func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
 		map[string]string{"syndra.laser.team": claims.AttrTeam}, map[string]any{"syndra.tenant": "makerspace"})})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: []string{"trained"}})))
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: rolesJSON("trained")})))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
 
@@ -294,7 +300,7 @@ func TestHandleActionInject_ShapeLookupFailureAnswersWithTheFailureMode(t *testi
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: []string{"trained", "admin"}})))
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: rolesJSON("trained", "admin")})))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
 
@@ -325,8 +331,8 @@ func TestHandleActionInject_CrossProjectTokenCarriesNoClaims(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
 		strings.NewReader(v2Body("u1",
-			ActionV2UserGrantRef{ProjectID: "pPrint", Roles: []string{"operator"}},
-			ActionV2UserGrantRef{ProjectID: "pDoor", Roles: []string{"keyholder"}},
+			ActionV2UserGrantRef{ProjectID: "pPrint", Roles: rolesJSON("operator")},
+			ActionV2UserGrantRef{ProjectID: "pDoor", Roles: rolesJSON("keyholder")},
 		)))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
@@ -391,8 +397,8 @@ func TestHandleActionInject_DuplicateProjectGrants_DedupedToFlatKeys(t *testing.
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
 		strings.NewReader(v2Body("u1",
-			ActionV2UserGrantRef{ProjectID: "p1", Roles: []string{"admin"}},
-			ActionV2UserGrantRef{ProjectID: "p1", Roles: []string{"operator"}},
+			ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")},
+			ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("operator")},
 		)))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)

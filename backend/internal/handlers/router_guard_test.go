@@ -59,7 +59,9 @@ func TestEveryRouteCarriesAGate(t *testing.T) {
 	}
 	// `/healthz` answers before anything is configured and must stay reachable
 	// by the container runtime, which carries no credential of any kind.
-	ungated := map[string]bool{"GET /healthz": true}
+	// `/healthz/claims` is read by an external monitor and carries no ids and
+	// nothing about a person (TestClaimsHealth asserts that).
+	ungated := map[string]bool{"GET /healthz": true, "GET /healthz/claims": true}
 
 	src := handlerSources(t)["router.go"]
 	var offenders []string
