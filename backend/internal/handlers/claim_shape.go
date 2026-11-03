@@ -315,11 +315,11 @@ func handlePutAppDebug(w http.ResponseWriter, r *http.Request) {
 		actor = "system"
 	}
 	s, switched := claimDebug.Start(appID, app.ClientID, userID, actor)
-	action := "claim_debug.started"
+	auditAction := "claim_debug.started"
 	if switched {
-		action = "claim_debug.switched"
+		auditAction = "claim_debug.switched"
 	}
-	auditAs(r.Context(), actor, userID, action, appID)
+	auditAs(r.Context(), actor, userID, auditAction, appID)
 	jsonResponse(w, http.StatusOK, map[string]any{"ends_at": s.EndsAt, "switched": switched, "session": s})
 }
 

@@ -67,9 +67,10 @@ describe("audit action vocabulary", () => {
     // The two concatenated families, and the one action written by the onboarding path under a
     // name with no dot in it.
     // Plus the two the backend stopped writing when Retire began keeping its history (19 Oct
-    // 2026): rows already in the log still carry them.
+    // 2026): rows already in the log still carry them. Likewise the two per-project override
+    // actions, retired when each app got its own shape (A-14, 3 Nov 2026).
     const composed =
-      /^(access_request\.|direct_grant\.)|^welcome_bundle_assigned$|^(bundle|mapping_rule)\.deleted$/;
+      /^(access_request\.|direct_grant\.)|^welcome_bundle_assigned$|^(bundle|mapping_rule)\.deleted$|^app_claim_override\.(updated|deleted)$/;
 
     const stale = Object.keys(AUDIT_ACTIONS).filter(
       (action) => !written.has(action) && !composed.test(action),
