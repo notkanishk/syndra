@@ -455,9 +455,15 @@
     --line-strong: rgba(255, 255, 255, 0.14);
 
     --ink: #f3f5ef;
-    --muted: rgba(243, 245, 239, 0.6);
-    --faint: rgba(243, 245, 239, 0.42);
-    --label: rgba(243, 245, 239, 0.34);
+    /* Quiet text (A-09 §1): the lowest alphas that clear 4.5:1 on every
+       ground, a pressed, chosen or amber row included, are 0.53 here and 0.63
+       in light; these sit a little above. A label is as strong as faint text
+       and reads as structure by its case and tracking, not by being fainter.
+       Text drawn with its own alpha keeps the same floors: 0.56 dark, 0.66
+       light (checked by globals-contrast.test.ts). */
+    --muted: rgba(243, 245, 239, 0.7);
+    --faint: rgba(243, 245, 239, 0.56);
+    --label: var(--faint);
 
     /* Fill and text differ, and must: --violet-500 is the pill you press,
        --violet-400 is the tone that stays legible as 13px text on #141612. */
@@ -523,9 +529,9 @@
     --line-strong: rgba(37, 28, 66, 0.16);
 
     --ink: #1d1830;
-    --muted: rgba(29, 24, 48, 0.6);
-    --faint: rgba(29, 24, 48, 0.45);
-    --label: rgba(29, 24, 48, 0.4);
+    --muted: rgba(29, 24, 48, 0.78);
+    --faint: rgba(29, 24, 48, 0.66);
+    --label: var(--faint);
 
     /* Fill and text differ: #7a5af8 carries a white pill, #5b3fd6 is the
        AA-contrast text/link tone on a white card — and doubles as the dense
@@ -1346,6 +1352,27 @@ html.theme-fading *::after {
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
+
+  /* Stale (A-13 (d)): a card drawn from the last read of a system that isn't
+     answering recedes to the page — canvas ground, line-strong edge, no lift —
+     and its ink stays at full strength. Never an opacity: dimming a card takes
+     --faint under 4.5:1 in both themes. Its dots become rings of their own
+     colour, so a healthy pool still reads lime and an alert still reads amber.
+     Receding and rising back are a tint of surface and edge, on settle. */
+  &[data-stale] {
+    background-color: var(--canvas);
+    border-color: var(--line-strong);
+    box-shadow: none;
+  }
+  &[data-stale] [data-dot] {
+    background-color: transparent;
+    border-width: 1.5px;
+  }
+  &[data-recedes] {
+    transition-property: background-color, border-color, box-shadow;
+    transition-duration: var(--duration-settle);
+    transition-timing-function: var(--ease-settle);
+  }
 }
 
 @utility panel {
@@ -1484,10 +1511,11 @@ html.theme-fading *::after {
      with the theme and the doorway does not. */
   --door-page: #0a0b08;
   --door-ink: #f3f5ef;
-  --door-ink-55: rgba(243, 245, 239, 0.55);
-  --door-ink-50: rgba(243, 245, 239, 0.5);
-  --door-ink-40: rgba(243, 245, 239, 0.4);
-  --door-ink-30: rgba(243, 245, 239, 0.3);
+  /* The room's two quiet steps (A-09 §2), on the doorway's own ground:
+     sentences at muted, eyebrow and credits at faint. The old 0.30/0.40 text
+     measured 2.5 and 3.5:1. --door-ink-25 is a mark (a dot, an edge), never text. */
+  --door-muted: rgba(243, 245, 239, 0.7);
+  --door-faint: rgba(243, 245, 239, 0.56);
   --door-ink-25: rgba(243, 245, 239, 0.25);
 
   --door-stroke: rgba(155, 123, 255, 0.5);
@@ -1626,7 +1654,7 @@ body:has(.login-stage) {
     font-size: 13px;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--door-ink-40);
+    color: var(--door-faint);
   }
 
   .login-base {
@@ -1651,7 +1679,7 @@ body:has(.login-stage) {
     text-wrap: balance;
     font-size: 17px;
     line-height: 1.6;
-    color: var(--door-ink-55);
+    color: var(--door-muted);
   }
 
   .login-credit {
@@ -1660,7 +1688,7 @@ body:has(.login-stage) {
     gap: 14px;
     font-size: 12.5px;
     letter-spacing: 0.05em;
-    color: var(--door-ink-30);
+    color: var(--door-faint);
   }
 
   .login-credit-dot {
@@ -1704,7 +1732,7 @@ body:has(.login-stage) {
     text-align: center;
     text-wrap: pretty;
     font-size: 14.5px;
-    color: var(--door-ink-50);
+    color: var(--door-muted);
   }
 
   .login-error .login-message-head {
@@ -1904,7 +1932,7 @@ body:has(.login-stage) {
     padding: 9px 16px;
     border: 1px solid var(--door-ink-25);
     border-radius: var(--radius-pill);
-    color: var(--door-ink-55);
+    color: var(--door-muted);
     font-size: 13px;
     cursor: pointer;
     transition: border-color 0.15s ease-out, color 0.15s ease-out;
@@ -1921,7 +1949,7 @@ body:has(.login-stage) {
   }
 
   .login-identity-role {
-    color: var(--door-ink-30);
+    color: var(--door-faint);
   }
 }
 

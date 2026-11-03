@@ -380,7 +380,7 @@ func TestEachPlaceCarriesBothAddressesBuiltFromTheHost(t *testing.T) {
 	addonsConnection = func(string) (*addons.Connection, error) {
 		return &addons.Connection{Protocol: "smb", Host: "nas.example.edu"}, nil
 	}
-	addonsMyStorage = func(context.Context, string, string) addons.StorageStatus {
+	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus {
 		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
 			{Share: "main", Folder: "home_dir/ada", Access: "change", Home: true},
 			{Share: "main", Folder: "laser cutter", Access: "read"},
@@ -411,7 +411,7 @@ func TestEachPlaceCarriesBothAddressesBuiltFromTheHost(t *testing.T) {
 func TestAccessGivenBackCarriesWhenItWasGivenBack(t *testing.T) {
 	storage, allowances := addonsMyStorage, dbAllowancesForSubject
 	t.Cleanup(func() { addonsMyStorage, dbAllowancesForSubject = storage, allowances })
-	addonsMyStorage = func(context.Context, string, string) addons.StorageStatus {
+	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus {
 		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, NeedsNewPassword: true}
 	}
 	lifted := time.Date(2026, 10, 12, 10, 0, 0, 0, time.UTC)
@@ -443,7 +443,7 @@ func TestAccessGivenBackCarriesWhenItWasGivenBack(t *testing.T) {
 func TestPlacesNameTheRolesThatOpenThem(t *testing.T) {
 	storage, reach := addonsMyStorage, addonsReadReach
 	t.Cleanup(func() { addonsMyStorage, addonsReadReach = storage, reach })
-	addonsMyStorage = func(context.Context, string, string) addons.StorageStatus {
+	addonsMyStorage = func(context.Context, string, string, string) addons.StorageStatus {
 		return addons.StorageStatus{Outcome: addons.OutcomeSucceeded, PlacesReadable: true, Places: []addons.Place{
 			{Share: "main", Folder: "home_dir/ada", Path: "/mnt/p/main/home_dir/ada", Access: "change", Home: true},
 			{Share: "main", Folder: "waddle_share", Path: "/mnt/p/main/waddle_share", Access: "change"},
