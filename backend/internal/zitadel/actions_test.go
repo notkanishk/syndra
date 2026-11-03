@@ -29,7 +29,8 @@ func actionsClient(t *testing.T, handle func(req *http.Request, body map[string]
 	return &managementClient{domain: "test.zitadel.dev", tokens: tm, http: &http.Client{}}
 }
 
-// The search pages by offset until it has totalResult, reading "result".
+// The search pages by offset until it has totalResult. Zitadel v4 lists
+// executions under "executions" (seen on prod, 3 Nov 2026), not "result".
 func TestListActionExecutions_Pages(t *testing.T) {
 	var offsets []string
 	c := actionsClient(t, func(req *http.Request, body map[string]any) *http.Response {
@@ -47,7 +48,7 @@ func TestListActionExecutions_Pages(t *testing.T) {
 		for i := range res {
 			res[i] = map[string]any{"condition": map[string]any{"event": map[string]any{"event": "e"}}, "targets": []string{"t1"}}
 		}
-		return jsonResp(200, map[string]any{"pagination": map[string]any{"totalResult": fmt.Sprint(actionsPageSize + 3)}, "result": res})
+		return jsonResp(200, map[string]any{"pagination": map[string]any{"totalResult": fmt.Sprint(actionsPageSize + 3)}, "executions": res})
 	})
 	got, err := c.ListActionExecutions(context.Background())
 	if err != nil {
@@ -95,5 +96,32 @@ func TestTokenFlowActions(t *testing.T) {
 	got, err := c.TokenFlowActions(context.Background())
 	if err != nil || len(got) != 1 || got[0].Name != "roles" {
 		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+// Zitadel v4's target search answers {"pagination":…, "targets":[…]}. Read
+// as "result", the list was empty and the reconciler reported the claims
+// target missing; the older "result" key still reads; rows under a key we
+// don't know are an error, never "none exist".
+func TestListActionTargets_ReadsTheResourceKey(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		body    map[string]any
+		want    int
+		wantErr bool
+	}{
+		{"targets", map[string]any{"pagination": map[string]any{"totalResult": "2"}, "targets": []map[string]any{{"name": "syndra-claim-injector", "restCall": map[string]any{}}, {"name": "syndra-event-listener", "restAsync": map[string]any{}}}}, 2, false},
+		{"legacy result", map[string]any{"pagination": map[string]any{"totalResult": "1"}, "result": []map[string]any{{"name": "syndra-claim-injector"}}}, 1, false},
+		{"none", map[string]any{"pagination": map[string]any{"totalResult": "0"}}, 0, false},
+		{"unknown key", map[string]any{"pagination": map[string]any{"totalResult": "2"}, "items": []map[string]any{{}, {}}}, 0, true},
+	} {
+		c := actionsClient(t, func(*http.Request, map[string]any) *http.Response { return jsonResp(200, tc.body) })
+		got, err := c.ListActionTargets(context.Background())
+		if (err != nil) != tc.wantErr || len(got) != tc.want {
+			t.Errorf("%s: got %d, err %v", tc.name, len(got), err)
+		}
+		if tc.name == "targets" && (got[0].Name != "syndra-claim-injector" || got[0].Type() != "restCall" || got[1].Type() != "restAsync") {
+			t.Errorf("targets decoded wrong: %+v", got)
+		}
 	}
 }
