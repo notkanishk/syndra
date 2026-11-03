@@ -19,8 +19,9 @@ import (
 // (documented fields: function, userinfo, user, user_metadata, org,
 // user_grants), a token issued for a project carries the default AND every
 // override key on that project, and each application reads its own. That is
-// why claim keys must be unique — not per project, but across every project,
-// since one token can span several.
+// why claim keys must be unique within a project. A token never spans two
+// projects (the data plane refuses cross-project delivery), so keys need not
+// be unique across them.
 
 // ResolveClaimProfiles returns the profile set the data plane must apply for a
 // project: the default (built-in if the operator never edited it) followed by
@@ -152,7 +153,7 @@ func emittedKeys(profiles []claims.Profile) []models.ClaimKeyOwner {
 func SaveProjectClaimProfile(ctx context.Context, projectID string, p claims.Profile) error {
 	p.ProjectID = projectID
 	p.ApplicationID = ""
-	if err := validateAgainstEverything(ctx, p); err != nil {
+	if err := validateAgainstProject(ctx, p); err != nil {
 		return err
 	}
 	return svcUpsertClaimProfile(ctx, db.ClaimProfileRow{
@@ -180,7 +181,7 @@ func SaveAppClaimOverride(ctx context.Context, applicationID string, p claims.Pr
 	p.ApplicationID = applicationID
 	p.ApplicationName = app.Name
 	p.ProjectID = app.ProjectID
-	if err := validateAgainstEverything(ctx, p); err != nil {
+	if err := validateAgainstProject(ctx, p); err != nil {
 		return err
 	}
 	return svcUpsertAppClaimOverride(ctx, db.AppClaimOverrideRow{
@@ -198,54 +199,32 @@ func DeleteAppClaimOverride(ctx context.Context, applicationID string) error {
 	return svcDeleteAppClaimOverride(ctx, applicationID)
 }
 
-// validateAgainstEverything runs the standalone profile checks, then rejects
-// any claim key already emitted by another profile — including profiles on
-// OTHER projects, because a user with grants in several projects receives all
-// of them in one flat token.
-func validateAgainstEverything(ctx context.Context, p claims.Profile) error {
+// validateAgainstProject runs the standalone profile checks, then rejects any
+// claim key another profile on the SAME project already emits, the built-in
+// default included: a token carries its project's default and every override,
+// so siblings share one flat namespace. Other projects never share a token
+// (the data plane refuses cross-project delivery), so two projects may both
+// use "roles".
+func validateAgainstProject(ctx context.Context, p claims.Profile) error {
 	if err := claims.ValidateProfile(p); err != nil {
 		return err
 	}
 
-	existing, err := allClaimProfiles(ctx)
+	emitted, err := ResolveClaimProfiles(ctx, p.ProjectID)
 	if err != nil {
 		return err
 	}
-	others := make([]claims.Profile, 0, len(existing))
-	for _, e := range existing {
-		if e.ApplicationID == p.ApplicationID && e.ProjectID == p.ProjectID {
-			continue // this is the row being replaced
+	others := make([]claims.Profile, 0, len(emitted))
+	for _, e := range emitted {
+		if e.ApplicationID != p.ApplicationID {
+			others = append(others, e) // skip the row being replaced
 		}
-		others = append(others, e)
 	}
 
 	if conflicts := claims.Conflicts(append(others, p)); len(conflicts) > 0 {
 		return conflicts[0]
 	}
 	return nil
-}
-
-// allClaimProfiles returns every profile in the system — project defaults
-// (only where a row exists; an unedited project emits the built-in default,
-// which is included so "roles" cannot be claimed twice) plus every override.
-func allClaimProfiles(ctx context.Context) ([]claims.Profile, error) {
-	rows, err := svcListClaimProfiles(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]claims.Profile, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, profileFromRow(r))
-	}
-
-	overrides, err := svcListAppClaimOverrides(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, o := range overrides {
-		out = append(out, profileFromOverrideRow(o))
-	}
-	return out, nil
 }
 
 func profileFromRow(r db.ClaimProfileRow) claims.Profile {
