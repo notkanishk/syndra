@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"syndra/internal/claims"
 	"syndra/internal/models"
 )
@@ -21,6 +23,7 @@ const cacheTTL = 24 * time.Hour
 type UserGrant struct {
 	ProjectID string
 	RoleKey   string
+	ExpiresAt *time.Time
 }
 
 // fetchBaseGrants simulates fetching the user's primary roles from Zitadel.
@@ -35,6 +38,7 @@ func fetchBaseGrants(ctx context.Context, userID string) ([]UserGrant, error) {
 		result = append(result, UserGrant{
 			ProjectID: grant.ProjectID,
 			RoleKey:   grant.RoleKey,
+			ExpiresAt: grant.ExpiresAt,
 		})
 	}
 	return result, nil
@@ -44,10 +48,16 @@ func fetchBaseGrants(ctx context.Context, userID string) ([]UserGrant, error) {
 // their direct grants and bundles, then whatever the mapping rules derive from
 // those. A refresh covers many projects from this single pass.
 type userRoles struct {
-	userID  string
-	active  map[string]map[string]bool // projectID -> roleKey -> held
+	userID string
+	active map[string]map[string]bool // projectID -> roleKey -> held
+	// ends is the date each role ends, kept only when every source of it
+	// ends: a role also held through a bundle, a rule or an open grant has none.
+	ends map[string]map[string]time.Time
+	// bundles names the bundles that give a role in each project.
+	bundles map[string][]string
 	profile models.UserProfile
 	hasProf bool
+	service bool
 	// profileErr is a profile read that failed. Not fatal to a compile (a
 	// token without an email still opens doors), but a warm must not store it.
 	profileErr error
@@ -68,11 +78,23 @@ func compileUser(ctx context.Context, userID string) (userRoles, error) {
 	}
 
 	activeRoles := make(map[string]map[string]bool) // projectID -> map[roleKey]exists
+	ends := map[string]map[string]time.Time{}
+	endless := map[string]bool{} // projectID+"\x00"+roleKey held with no end
 	for _, g := range baseGrants {
 		if activeRoles[g.ProjectID] == nil {
 			activeRoles[g.ProjectID] = make(map[string]bool)
 		}
 		activeRoles[g.ProjectID][g.RoleKey] = true
+		if g.ExpiresAt == nil {
+			endless[g.ProjectID+"\x00"+g.RoleKey] = true
+			continue
+		}
+		if ends[g.ProjectID] == nil {
+			ends[g.ProjectID] = map[string]time.Time{}
+		}
+		if g.ExpiresAt.After(ends[g.ProjectID][g.RoleKey]) {
+			ends[g.ProjectID][g.RoleKey] = *g.ExpiresAt
+		}
 	}
 
 	// What their bundles give them, through each assignment's pinned version.
@@ -80,11 +102,21 @@ func compileUser(ctx context.Context, userID string) (userRoles, error) {
 	if err != nil {
 		return userRoles{}, fmt.Errorf("cache compile: %w", err)
 	}
+	bundleIDs := map[string]map[string]bool{} // projectID -> bundle ids
 	for _, r := range bundleRoles {
 		if activeRoles[r.ProjectID] == nil {
 			activeRoles[r.ProjectID] = make(map[string]bool)
 		}
 		activeRoles[r.ProjectID][r.RoleKey] = true
+		endless[r.ProjectID+"\x00"+r.RoleKey] = true
+		if bundleIDs[r.ProjectID] == nil {
+			bundleIDs[r.ProjectID] = map[string]bool{}
+		}
+		bundleIDs[r.ProjectID][r.BundleID] = true
+	}
+	bundles, err := bundleNames(ctx, bundleIDs)
+	if err != nil {
+		return userRoles{}, fmt.Errorf("cache compile: %w", err)
 	}
 
 	// 3. Iterative Role Resolution (Forward Pass)
@@ -103,13 +135,24 @@ func compileUser(ctx context.Context, userID string) (userRoles, error) {
 				}
 				if !activeRoles[rule.TargetProject][rule.TargetRole] {
 					activeRoles[rule.TargetProject][rule.TargetRole] = true
+					// ponytail: a role a rule gives has no end, even when its
+					// source does; carry the source's end once an app needs it.
+					endless[rule.TargetProject+"\x00"+rule.TargetRole] = true
 					changed = true
 				}
 			}
 		}
 	}
 
-	u := userRoles{userID: userID, active: activeRoles}
+	for pid, byRole := range ends {
+		for role := range byRole {
+			if endless[pid+"\x00"+role] {
+				delete(byRole, role)
+			}
+		}
+	}
+
+	u := userRoles{userID: userID, active: activeRoles, ends: ends, bundles: bundles}
 	// Profile attributes (email, team, ...) are captured now because a
 	// directory call is affordable during compile and is not affordable inside
 	// the Actions v2 latency budget.
@@ -120,6 +163,14 @@ func compileUser(ctx context.Context, userID string) (userRoles, error) {
 		u.profileErr = err
 	} else if ok {
 		u.profile, u.hasProf = profile, true
+		// The token is the only place an app learns this, so a failed read of
+		// the marks counts as a failed profile read: never guess "a person".
+		if service, serr := cacheIsServiceAccount(ctx, profile); serr != nil {
+			log.Printf("[CACHE] service-account mark unavailable for %s: %v", userID, serr)
+			u.profileErr = serr
+		} else {
+			u.service = service
+		}
 	}
 	return u, nil
 }
@@ -146,6 +197,15 @@ func (u userRoles) facts(projectID string) claims.Facts {
 	}
 	if u.hasProf {
 		facts.Email, facts.Name, facts.Title, facts.Team = u.profile.Email, u.profile.Name, u.profile.Title, u.profile.Team
+		facts.GivenName, facts.FamilyName, facts.Username = u.profile.GivenName, u.profile.FamilyName, u.profile.Username
+		facts.IsServiceAccount = u.service
+	}
+	facts.Bundles = u.bundles[projectID]
+	for role, end := range u.ends[projectID] {
+		if facts.RoleEnds == nil {
+			facts.RoleEnds = map[string]string{}
+		}
+		facts.RoleEnds[role] = end.UTC().Format(time.DateOnly)
 	}
 	return facts
 }
@@ -160,6 +220,25 @@ func CompileFacts(ctx context.Context, userID, projectID string) (claims.Facts, 
 		return claims.Facts{}, err
 	}
 	return u.facts(projectID), nil
+}
+
+// StoredFacts is what the token path serves right now: the facts the write
+// paths stored for (user, project), and false when there is no entry. The
+// explain step reads this so its "claims are ready" check is the live answer,
+// not a fresh compile that would hide a stale or missing entry.
+func StoredFacts(ctx context.Context, userID, projectID string) (claims.Facts, bool, error) {
+	raw, err := redisGet(ctx, cacheKey(userID, projectID))
+	if errors.Is(err, redis.Nil) {
+		return claims.Facts{}, false, nil
+	}
+	if err != nil {
+		return claims.Facts{}, false, err
+	}
+	var f claims.Facts
+	if err := json.Unmarshal([]byte(raw), &f); err != nil {
+		return claims.Facts{}, false, fmt.Errorf("stored facts for %s: %w", cacheKey(userID, projectID), err)
+	}
+	return f, true, nil
 }
 
 func cacheKey(userID, projectID string) string {

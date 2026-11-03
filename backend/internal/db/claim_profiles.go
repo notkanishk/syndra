@@ -26,8 +26,9 @@ type ClaimProfileRow struct {
 }
 
 // AppClaimOverrideRow is one application's departure from its project's
-// default shape. Keyed by application id; the project id is carried so the
-// data plane can resolve every override for a project in one query.
+// default under the retired per-project shaping (000018). Nothing writes it
+// any more: the Actions v1 seed folds a row into that app's first shape
+// version (services.seedApp). Drop the table once every environment is seeded.
 type AppClaimOverrideRow struct {
 	ApplicationID   string
 	ProjectID       string
@@ -102,9 +103,8 @@ func UpsertClaimProfile(ctx context.Context, r ClaimProfileRow) error {
 	return nil
 }
 
-// ListAppClaimOverrides returns every per-application override. The data
-// plane loads the whole (small) set once per token rather than issuing a
-// query per project.
+// ListAppClaimOverrides returns every retired per-application override, for
+// the Actions v1 seed only.
 func ListAppClaimOverrides(ctx context.Context) ([]AppClaimOverrideRow, error) {
 	rows, err := querier(ctx).Query(ctx, `
 		SELECT application_id, zitadel_project_id, claim_name, format_type, attribute_claims, static_claims
@@ -130,39 +130,6 @@ func ListAppClaimOverrides(ctx context.Context) ([]AppClaimOverrideRow, error) {
 		return nil, fmt.Errorf("iterate app claim overrides: %w", err)
 	}
 	return out, nil
-}
-
-// UpsertAppClaimOverride writes one application's override.
-func UpsertAppClaimOverride(ctx context.Context, r AppClaimOverrideRow) error {
-	attrs, statics, err := marshalClaimMaps(r.AttributeClaims, r.StaticClaims)
-	if err != nil {
-		return err
-	}
-	_, err = querier(ctx).Exec(ctx, `
-		INSERT INTO app_claim_overrides
-			(application_id, zitadel_project_id, claim_name, format_type, attribute_claims, static_claims)
-		VALUES ($1,$2,$3,$4,$5,$6)
-		ON CONFLICT (application_id) DO UPDATE
-		SET zitadel_project_id = EXCLUDED.zitadel_project_id,
-		    claim_name = EXCLUDED.claim_name,
-		    format_type = EXCLUDED.format_type,
-		    attribute_claims = EXCLUDED.attribute_claims,
-		    static_claims = EXCLUDED.static_claims,
-		    updated_at = CURRENT_TIMESTAMP`,
-		r.ApplicationID, r.ProjectID, r.ClaimName, r.FormatType, attrs, statics)
-	if err != nil {
-		return fmt.Errorf("upsert app claim override for %s: %w", r.ApplicationID, err)
-	}
-	return nil
-}
-
-// DeleteAppClaimOverride drops an override so the application falls back to
-// its project's default shape.
-func DeleteAppClaimOverride(ctx context.Context, applicationID string) error {
-	if _, err := querier(ctx).Exec(ctx, `DELETE FROM app_claim_overrides WHERE application_id = $1`, applicationID); err != nil {
-		return fmt.Errorf("delete app claim override for %s: %w", applicationID, err)
-	}
-	return nil
 }
 
 // rowScanner is satisfied by both pgx.Row and pgx.Rows.

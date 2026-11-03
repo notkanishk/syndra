@@ -842,41 +842,26 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 	// Actions v2 path never emitted, so the screen operators used to debug
 	// "my app isn't seeing the roles it expects" was showing them a token that
 	// did not exist.
-	profiles, err := ResolveClaimProfiles(ctx, app.ProjectID)
+	// A token now carries only its own app's claims (ADR-003), so every key is
+	// this app's.
+	e, err := resolveApp(ctx, appID)
 	if err != nil {
 		return models.ApplicationSimulation{}, err
 	}
-	payload := claims.Shape(profiles, facts)
-
-	// Which of those keys does THIS application actually read? Everything else
-	// in the map belongs to a sibling application on the same project and is
-	// carried because Zitadel does not tell us which app the token is for.
-	own := ownedKeys(profiles, appID)
+	payload := claims.Shape(e.profile, facts)
+	owners := []models.ClaimKeyOwner{}
+	for _, c := range e.profile.Claims {
+		owners = append(owners, models.ClaimKeyOwner{Key: c.Path[0], OwnerLabel: app.Name, ApplicationID: appID, Kind: c.Kind, Source: c.Source})
+	}
 
 	return models.ApplicationSimulation{
 		Application:  app,
 		User:         user,
 		RawRoles:     rawRoles,
 		CustomClaims: payload,
-		OwnedClaims:  own,
-		ClaimOwners:  emittedKeys(profiles),
+		OwnedClaims:  topKeys(e.profile),
+		ClaimOwners:  owners,
 	}, nil
-}
-
-// ownedKeys lists the claim keys the given application reads: its own override
-// if it has one, otherwise the project default.
-func ownedKeys(profiles []claims.Profile, applicationID string) []string {
-	for _, p := range profiles {
-		if p.ApplicationID == applicationID {
-			return p.Keys()
-		}
-	}
-	for _, p := range profiles {
-		if p.ApplicationID == "" {
-			return p.Keys()
-		}
-	}
-	return []string{}
 }
 
 func ListProjects(ctx context.Context) ([]models.ProjectSummary, error) {
