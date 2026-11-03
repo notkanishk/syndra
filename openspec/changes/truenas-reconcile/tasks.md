@@ -136,7 +136,7 @@ TrueNAS gives a new account the next free uid, and gives its personal group the 
 
 - [x] 7.1 Full verification: backend, add-on and UI suites, plus lint and build
 - [x] 7.2 `design_handoff_syndra/reconcile-2026-10/SHIPPED.md` for this slice
-- [ ] 7.3 Owner reruns `/design-sync` so `Notice` and `ConnectionGuide` reach the design system
+- [x] 7.3 `Notice`, `NotOpenYet`, `NextStep` and the other new parts reached the design system (3 Nov 2026): `ui/.design-sync` rebuilt to 104 components and published into the Syndra Project canvas (Claude Design is retired; `design_handoff_syndra/BRIDGE.md`).
 - [x] 7.4 Fold in A-01 from design (operator intermediate state, "paused" wording, NAS with no groups of its own)
 - [ ] 7.5 Codebase-memory re-index (`detect_changes`)
 

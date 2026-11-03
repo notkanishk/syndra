@@ -1,0 +1,38 @@
+import { Card, CardColumns, CardRow, SortHead, orderBy, useSort } from "ui";
+
+const rows = [
+  { project: "Laser Cutter", people: 23 },
+  { project: "CNC Router", people: 9 },
+  { project: "Wood Shop", people: 41 },
+  { project: "Electronics Bench", people: 17 },
+];
+const name = { width: 250, fontSize: 15, fontWeight: 600 } as const;
+const num = { width: 110, textAlign: "right", fontSize: 14.5, color: "var(--muted)" } as const;
+
+/** Sort lives on the headings: the arrow shows only on the one in force. */
+export function ProjectList() {
+  const [sort, setSort, view] = useSort<"project" | "people">("project");
+  const sorted = orderBy(rows, view.sort, { project: (r) => r.project, people: (r) => r.people });
+  return (
+    <Card>
+      <CardColumns>
+        <span style={{ width: 250 }}>
+          <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
+        </span>
+        <span style={{ flex: 1 }} />
+        <span style={{ width: 110, textAlign: "right" }}>
+          <SortHead label="People" name="people" sort={sort} onSort={setSort} />
+        </span>
+      </CardColumns>
+      <div className={view.className}>
+        {sorted.map((r, i) => (
+          <CardRow key={r.project} first={i === 0}>
+            <div style={name}>{r.project}</div>
+            <div style={{ flex: 1 }} />
+            <div style={num}>{r.people}</div>
+          </CardRow>
+        ))}
+      </div>
+    </Card>
+  );
+}

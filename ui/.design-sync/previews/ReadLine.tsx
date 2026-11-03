@@ -1,0 +1,17 @@
+import { ReadFreshness, ReadLine } from "ui";
+
+const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+
+/** How current the list is on the left, one chip per section at the right end. */
+export const Drift = () => (
+  <ReadLine
+    label="Sections of drift"
+    sections={[
+      { id: "unexplained", label: "No record", count: 4, tone: "warn" },
+      { id: "missing", label: "Missing in Zitadel", count: 2, tone: "danger" },
+      { id: "explained", label: "Explained", count: 31 },
+    ]}
+  >
+    <ReadFreshness state={{ readAt: ago(1), current: true }} subject="What Zitadel confirmed" />
+  </ReadLine>
+);
