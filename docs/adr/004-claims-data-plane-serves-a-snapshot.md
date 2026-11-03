@@ -29,3 +29,8 @@ Zitadel calls Syndra's Actions v2 target on every token, with a 3s timeout and i
 - The snapshot also reloads at least once a minute without a `claims:gen` move, so a write whose `INCR` was lost still lands.
 - The last-known-good bound is per project (`claim_profiles.claim_lkg_max_age_seconds`, default 6h pending the owner), counted from when the copy was last read from Redis.
 - The facts read falls back to the old `mapping:{u}:{p}` key on a miss until every person has moved to the hash; the move deletes a person's old keys in the same transaction that writes their hash.
+
+### As built (S3 to S5, 3 Nov 2026)
+
+- The keyring is part of the snapshot: the write side reads the claims target's key from Zitadel every minute (and at once, at most every 10s, after a call matches no key), publishes `claims:keyring` `{current, previous until +15 min}` and moves `claims:gen`. The data plane verifies with current, then previous, then the env key, which stays the bootstrap and the fallback. Each call records which (`key_slot`: current, previous, env). A denied read leaves the env key verifying and raises `CANNOT_CHECK`.
+- Detection reads, never writes Zitadel: the correlator (sign-ins against the recorder's per-(person, client) spans), the reconciler (`internal/claimcheck`, pure over recorded JSON), and the dead-man ping share one findings table (`claim_findings`, migration 000074). `/healthz/claims` reads the open findings from memory, so the data plane's door still never touches Postgres.

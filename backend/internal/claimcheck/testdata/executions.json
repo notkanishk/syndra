@@ -1,0 +1,16 @@
+{
+  "pagination": { "totalResult": "11", "appliedLimit": "100" },
+  "result": [
+    { "creationDate": "2026-10-20T09:12:46.000Z", "changeDate": "2026-10-20T09:12:46.000Z", "condition": { "function": { "name": "preaccesstoken" } }, "targets": ["339871032650000001"] },
+    { "creationDate": "2026-10-20T09:12:46.001Z", "changeDate": "2026-10-20T09:12:46.001Z", "condition": { "function": { "name": "preuserinfo" } }, "targets": ["339871032650000001"] },
+    { "creationDate": "2026-10-20T09:12:46.002Z", "changeDate": "2026-10-20T09:12:46.002Z", "condition": { "event": { "event": "user.human.added" } }, "targets": ["339871032650000002"] },
+    { "creationDate": "2026-10-20T09:12:46.003Z", "changeDate": "2026-10-20T09:12:46.003Z", "condition": { "event": { "event": "user.human.selfregistered" } }, "targets": ["339871032650000002"] },
+    { "creationDate": "2026-10-20T09:12:46.004Z", "changeDate": "2026-10-20T09:12:46.004Z", "condition": { "event": { "event": "user.deactivated" } }, "targets": ["339871032650000002"] },
+    { "creationDate": "2026-10-20T09:12:46.005Z", "changeDate": "2026-10-20T09:12:46.005Z", "condition": { "event": { "event": "user.locked" } }, "targets": ["339871032650000002"] },
+    { "creationDate": "2026-10-20T09:12:46.006Z", "changeDate": "2026-10-20T09:12:46.006Z", "condition": { "event": { "event": "user.grant.added" } }, "targets": ["339871032650000002"] },
+    { "creationDate": "2026-10-20T09:12:46.007Z", "changeDate": "2026-10-20T09:12:46.007Z", "condition": { "event": { "event": "user.grant.changed" } }, "targets": ["339871032650000002"] },
+    { "creationDate": "2026-10-20T09:12:46.008Z", "changeDate": "2026-10-20T09:12:46.008Z", "condition": { "event": { "event": "user.grant.removed" } }, "targets": ["339871032650000002"] },
+    { "creationDate": "2026-10-20T09:12:46.009Z", "changeDate": "2026-10-20T09:12:46.009Z", "condition": { "event": { "event": "oidc_session.added" } }, "targets": ["339871032650000002"] },
+    { "creationDate": "2026-10-20T09:12:46.010Z", "changeDate": "2026-10-20T09:12:46.010Z", "condition": { "event": { "event": "user.token.added" } }, "targets": ["339871032650000002"] }
+  ]
+}

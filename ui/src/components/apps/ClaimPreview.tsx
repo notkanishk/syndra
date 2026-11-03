@@ -19,11 +19,11 @@ import { selectContents, useClipboardAvailable } from "@/lib/clipboard";
 import type { CatalogUser } from "@/lib/queries/useCatalogUsers";
 import type { Explanation, Preview } from "@/lib/queries/useClaimShape";
 
-import { check5, checkWords, verdictOf, type CheckContext } from "./claim-words";
+import { check5, check6, checkWords, verdictOf, type CheckContext } from "./claim-words";
 
 /**
  * The preview (A-11, A-14 §1, A-15 §5): "Preview for <person>", one verdict
- * line, the five checks one step away, then the token. When every check
+ * line, the six checks one step away, then the token. When every check
  * passes the trail waits behind Show the checks; a failure or a warning opens
  * it by itself, compact, so only what didn't pass carries its detail. With a
  * draft the checks run on the draft and the token marks what leaves (−) and
@@ -58,7 +58,7 @@ export function ClaimPreview({
 
   const lines = asDraft ? diffLines(one!.now.token, one!.draft!.token) : tokenLines(shown?.token);
   const c5 = shown ? check5(shown, ctx, asDraft) : null;
-  const checks = shown && c5 ? [...checkWords(shown, ctx), c5] : [];
+  const checks = shown && c5 ? [...checkWords(shown, ctx), c5, ...check6(shown, ctx)] : [];
   const verdict = verdictOf(checks, asDraft);
 
   // Shown on demand it is the whole trail; opened by a failure it is compact.

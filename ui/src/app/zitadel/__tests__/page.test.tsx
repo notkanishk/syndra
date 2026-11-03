@@ -19,6 +19,15 @@ vi.mock("@/lib/queries/useZitadel", () => ({
   useZitadelHealth: () => ({ data: health.value, isLoading: false, error: null, refetch: () => {} }),
 }));
 
+const keyring = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
+vi.mock("@/lib/queries/useClaimsDelivery", () => ({
+  useClaimsDelivery: () => ({ data: keyring.value ? { keyring: keyring.value } : undefined, isLoading: !keyring.value, error: null }),
+}));
+// Claims delivery has its own file; here it is only a seat.
+vi.mock("@/components/system/ClaimsDelivery", () => ({
+  ClaimsDelivery: () => <section id="claims-delivery" aria-label="Claims delivery" />,
+}));
+
 vi.mock("@/lib/queries/useProjects", () => ({
   useProjects: () => ({ data: projects.value, isLoading: false, error: null }),
 }));
@@ -35,6 +44,7 @@ function renderPage() {
 beforeEach(() => {
   health.value = { status: "ok", mode: "live", latency_ms: 21, domain: "auth.example.org" };
   projects.value = [];
+  keyring.value = null;
   rotation.value = {
     key_installed: true,
     status: "ok",
@@ -178,14 +188,32 @@ describe("Identity provider · signing key guide", () => {
     ).toBeInTheDocument();
   });
 
-  // The command alone is half the job: rotation that Zitadel accepts and the
-  // backend never picks up leaves every Action call failing verification.
-  it("names the env swap and the restart that must follow it", async () => {
+  // S5: the claims key follows Zitadel, so only the event listener's key
+  // still needs a restart; .env is updated at the next deploy, not urgently.
+  it("says the claims key needs no restart, and which key still does", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "How to replace it" }));
-    expect(await screen.findByText(/ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT/)).toBeInTheDocument();
-    expect(screen.getByText(/docker compose restart backend/)).toBeInTheDocument();
-    expect(screen.getByText(/access\s+details Syndra normally adds at sign-in are missing/)).toBeInTheDocument();
+    expect(await screen.findByText(/keeps the old one working for 15 minutes, so sign-ins carry on/)).toBeInTheDocument();
+    expect(screen.getByText(/ZITADEL_EVENT_SIGNING_KEY/).closest("li")).toHaveTextContent(/docker compose restart backend/);
+    expect(screen.getByText(/ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT/).closest("li")).toHaveTextContent(/At the next deploy, not before/);
+    expect(screen.queryByText(/access\s+details Syndra normally adds at sign-in are missing/)).toBeNull();
+  });
+
+  it("says when Syndra last read the key from Zitadel", async () => {
+    keyring.value = { read_at: new Date().toISOString(), changed_at: null, reads: 4 };
+    renderPage();
+    expect(await screen.findByText(/reads the key from Zitadel every minute.*Last read at \d\d:\d\d today/)).toBeInTheDocument();
+  });
+
+  it("tells the owner what to grant when Zitadel refuses the key read", async () => {
+    keyring.value = { read_at: null, changed_at: null, error: { status: 403 }, reads: 2 };
+    renderPage();
+    expect(await screen.findByText(/isn't allowed to read the key.*IAM_OWNER_VIEWER/)).toBeInTheDocument();
+  });
+
+  it("keeps the claims delivery section in its seat", async () => {
+    renderPage();
+    expect(await screen.findByRole("region", { name: "Claims delivery" })).toHaveAttribute("id", "claims-delivery");
   });
 
   it("never offers to rotate the key itself: the only button opens the guide", async () => {

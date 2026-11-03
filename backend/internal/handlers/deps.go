@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"syndra/internal/addons"
 	"syndra/internal/auth"
@@ -335,9 +336,31 @@ var (
 	dbClaimDeliveryWindow      = db.ClaimDeliveryWindow
 	dbClaimDeliveryLast        = db.ClaimDeliveryLast
 	dbClaimPayloadFingerprints = db.ClaimPayloadFingerprints
-	cacheLastWarm              = cache.LastWarm
-	backgroundPanics           = periodic.Panics
-	redisPing                  = func(ctx context.Context) error {
+
+	// The detectors (claims-delivery-integrity S3-S5): findings, the reads the
+	// reconciler and the keyring make, and the dead-man ping.
+	dbApplyClaimFindings        = db.ApplyClaimFindings
+	dbSettleUnseenClaimFindings = db.SettleUnseenClaimFindings
+	dbClaimFindings             = db.ClaimFindings
+	dbLastSignInPerApp          = db.LastSignInPerApp
+	zitadelActions              = zitadel.Actions
+	zitadelTokenSettings        = func(ctx context.Context, projectID, appID string) (*zitadel.TokenSettings, error) {
+		if zitadel.MgmtClient == nil {
+			return nil, errNoClient
+		}
+		return zitadel.MgmtClient.TokenSettings(ctx, projectID, appID)
+	}
+	dirRoleKeys = func(ctx context.Context, projectID string) ([]string, error) {
+		return directory.Default.RoleKeysForProject(ctx, projectID)
+	}
+	resolveHost = func(ctx context.Context, host string) error {
+		_, err := net.DefaultResolver.LookupHost(ctx, host)
+		return err
+	}
+	deadmanPost      = postDeadman
+	cacheLastWarm    = cache.LastWarm
+	backgroundPanics = periodic.Panics
+	redisPing        = func(ctx context.Context) error {
 		if db.Redis == nil {
 			return fmt.Errorf("redis is not connected")
 		}

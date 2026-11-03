@@ -29,7 +29,55 @@ const (
 	// the person was last compiled. Its presence also says the person is on the
 	// hash layout, so their old mapping:* keys are gone.
 	MetaField = "_compiled_at"
+	// KeyringKey holds the claims target's signing keys as the write side read
+	// them from Zitadel (Keyring JSON, no TTL). The key is in Redis because the
+	// data plane may run in its own container (P4); Redis is internal-only.
+	KeyringKey = "claims:keyring"
 )
+
+// PreviousKeyKeep is how long the key Zitadel signed with before a rotation
+// keeps verifying: calls Zitadel signed just before it swapped still arrive.
+const PreviousKeyKeep = 15 * time.Minute
+
+// Keyring is the signing keys read from Zitadel (S5, P3). Zitadel signs with
+// one key and swaps it with no grace period, so the data plane follows it
+// here; the env key stays the bootstrap and the fallback. Never logged.
+type Keyring struct {
+	Current       string `json:"current"`
+	Previous      string `json:"previous,omitempty"`
+	PreviousUntil int64  `json:"previous_until,omitempty"` // unix seconds
+}
+
+// Next is the keyring after Zitadel was read holding key: unchanged when it is
+// the current one, else key becomes current and the old current is kept
+// PreviousKeyKeep.
+func (k Keyring) Next(key string, now time.Time) Keyring {
+	if key == "" || key == k.Current {
+		return k
+	}
+	next := Keyring{Current: key}
+	if k.Current != "" {
+		next.Previous, next.PreviousUntil = k.Current, now.Add(PreviousKeyKeep).Unix()
+	}
+	return next
+}
+
+// SlotKey is one key the data plane verifies with, and its telemetry slot.
+type SlotKey struct {
+	Slot, Key string
+}
+
+// Keys is the keyring's live keys, current first.
+func (k Keyring) Keys(now time.Time) []SlotKey {
+	var out []SlotKey
+	if k.Current != "" {
+		out = append(out, SlotKey{Slot: "current", Key: k.Current})
+	}
+	if k.Previous != "" && now.Unix() < k.PreviousUntil {
+		out = append(out, SlotKey{Slot: "previous", Key: k.Previous})
+	}
+	return out
+}
 
 // ShapesKey holds one project's shapes (ProjectShapes JSON), no TTL.
 func ShapesKey(projectID string) string { return "claim_shapes:" + projectID }
@@ -137,6 +185,8 @@ type Config struct {
 	// ClientProject maps each client with a shape of its own to its project
 	// (invariant I2: the client's own project is the token's).
 	ClientProject map[string]string
+	// Keys is the signing keyring, empty until the write side has read it.
+	Keys Keyring
 }
 
 // Claim is one entry in the Actions v2 append_claims list.

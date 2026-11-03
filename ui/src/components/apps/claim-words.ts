@@ -1,10 +1,11 @@
 import type { StatusTone } from "@/components/ui/Badge";
 import type { TrailCheck } from "@/components/ui/CheckTrail";
-import { clockOf, READS_LABEL } from "@/lib/claims";
+import { clockOf, outcomePhrase, READS_LABEL } from "@/lib/claims";
+import { formatAt } from "@/lib/format";
 import type { CheckState, ClaimTemplate, Explanation, Lands, Profile, ProjectRole } from "@/lib/queries/useClaimShape";
 
 /**
- * The five checks' words (A-11, A-14 §1, §5), read off the facts the
+ * The six checks' words (A-11, A-14 §1, §5), read off the facts the
  * backend's explain step returns. The verdict is the backend's; these only
  * say it.
  */
@@ -255,8 +256,54 @@ export function checkWords(e: Explanation, ctx: CheckContext): TrailCheck[] {
 }
 
 /**
+ * Check 6 (S3): Zitadel reached Syndra for this app recently. The same for
+ * everyone: it reads the app's last call against its last sign-in. An empty
+ * list when the answer has no sixth check, so the trail never invents one.
+ */
+export function check6(e: Explanation, ctx: CheckContext): TrailCheck[] {
+  const c = e.checks[5];
+  if (!c) return [];
+  const f = (k: string) => c.facts?.[k] as string | null | undefined;
+  const { app } = ctx;
+  if (c.state === "stale" || c.facts?.unread) {
+    return [{ tone: "neutral", ring: true, sentence: `Syndra couldn't read its record of Zitadel's calls for ${app}.`, faint: ["Check again in a moment."] }];
+  }
+  switch (c.state) {
+    case "pass":
+      return [{ tone: "healthy", sentence: `Zitadel reached Syndra for ${app} recently.`, faint: [`Last called ${formatAt(f("last_call_at"))}, and Syndra served its claims.`] }];
+    case "warn":
+      return [{
+        tone: "warn",
+        sentence: `Zitadel reached Syndra for ${app}, but the last answer carried no claims.`,
+        faint: [`Last called ${formatAt(f("last_call_at"))}: ${outcomePhrase(f("last_outcome") ?? undefined) || "no reason was recorded"}.`],
+      }];
+    case "fail": {
+      const at = formatAt(f("last_sign_in_at"));
+      const lastIn = at ? `, the last ${at},` : "";
+      const out: TrailCheck = f("last_call_at")
+        ? {
+            tone: "danger",
+            sentence: `Zitadel stopped reaching Syndra for ${app}.`,
+            faint: [`Its last call was ${formatAt(f("last_call_at"))}. People signed in after it${lastIn} and their tokens went out without Syndra's claims.`],
+          }
+        : {
+            tone: "danger",
+            sentence: `Zitadel has never called Syndra for ${app}.`,
+            faint: [`People signed in${lastIn} and their tokens went out without Syndra's claims.`],
+          };
+      out.faint!.push("Claims delivery, on System › Zitadel, says what in Zitadel's setup differs.");
+      return [out];
+    }
+    default:
+      return [{ tone: "neutral", sentence: `Nobody has signed in to ${app} lately, so there is no call to look at.` }];
+  }
+}
+
+const COUNT_WORD = ["no", "one", "two", "three", "four", "five", "six", "seven"];
+
+/**
  * The preview's verdict line (A-15 §5), read off the trail's own tones so the
- * line and the trail can't disagree: "All five checks pass", "Check 1 fails",
+ * line and the trail can't disagree: "All six checks pass", "Check 1 fails",
  * "Checks 1 and 5 fail", "Check 4 needs a look", each " on this draft" with one.
  */
 export function verdictOf(checks: { tone: StatusTone }[], draft: boolean): { tone: StatusTone; text: string } {
@@ -271,7 +318,7 @@ export function verdictOf(checks: { tone: StatusTone }[], draft: boolean): { ton
       ? warned.length === 1
         ? `Check ${warned[0]} needs a look`
         : `Checks ${list(warned)} need a look`
-      : "All five checks pass";
+      : `All ${COUNT_WORD[checks.length] ?? checks.length} checks pass`;
   return { tone: failed.length ? "danger" : warned.length ? "warn" : "healthy", text: `${text}${draft ? " on this draft" : ""}` };
 }
 

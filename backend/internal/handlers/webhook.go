@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"syndra/internal/claimtel"
 	"syndra/internal/db"
 	"syndra/internal/models"
 )
@@ -48,6 +49,11 @@ type WebhookPayload struct {
 	// first, each already bounded. Untrusted beyond "a string to look up": they
 	// only ever select a project from the directory. Internal-only.
 	ClientRefs []string `json:"-"`
+	// SignInClientID and SignInScopes are what oidc_session.added says the
+	// session's client asked for: the correlator's (person, client) and the
+	// functions the tokens call. Scopes nil means the event did not say.
+	SignInClientID string   `json:"-"`
+	SignInScopes   []string `json:"-"`
 }
 
 var validEventTypes = map[string]bool{
@@ -250,6 +256,13 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	case "user_deactivated", "user_locked":
 		processingErr = processUserDeactivated(r.Context(), event)
 	case "user_created":
+		// A sign-in this soon after is the first-sign-in race (SC4), counted
+		// by the correlator, not alarmed.
+		at := time.Now()
+		if event.EventCreatedAt != nil {
+			at = *event.EventCreatedAt
+		}
+		claimCorrelator.Created(event.UserID, at)
 		processingErr = processUserCreated(r.Context(), event)
 	}
 
@@ -491,6 +504,9 @@ func recordSignIn(w http.ResponseWriter, r *http.Request, event WebhookPayload) 
 	at := now
 	if event.EventCreatedAt != nil && event.EventCreatedAt.Before(now) {
 		at = *event.EventCreatedAt // never a time in the future
+	}
+	if event.SignInClientID != "" {
+		claimCorrelator.SignIn(claimtel.SignIn{At: at, UserID: event.UserID, ClientID: event.SignInClientID, Scopes: event.SignInScopes})
 	}
 	app := resolveSignInApp(r.Context(), event.ClientRefs)
 	if err := dbRecordUsage(r.Context(), event.UserID, app.ProjectID, app.ID, db.UsageSignIn, at); err != nil {

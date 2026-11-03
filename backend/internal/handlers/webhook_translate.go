@@ -204,6 +204,7 @@ type signInPayload struct {
 	ClientID      string          `json:"clientId"`
 	ClientIDSnake string          `json:"client_id"`
 	Audience      json.RawMessage `json:"audience"`
+	Scope         json.RawMessage `json:"scope"`
 }
 
 // Bounds for everything read out of a sign-in payload. The delivery is signed,
@@ -213,6 +214,7 @@ const (
 	maxSignInUserIDLen = 128
 	maxSignInRefLen    = 256
 	maxSignInAudience  = 8
+	maxSignInScopes    = 32
 )
 
 // mapSignInEvent builds the user_signed_in payload. No user id, or one that
@@ -249,7 +251,28 @@ func mapSignInEvent(ev zitadelEventPayload, userID string) WebhookPayload {
 		}
 		add(a)
 	}
-	return WebhookPayload{EventType: "user_signed_in", UserID: userID, ClientRefs: refs}
+	out := WebhookPayload{EventType: "user_signed_in", UserID: userID, ClientRefs: refs}
+	// Only the session's own client id names the client the tokens are for;
+	// an audience can name more than one.
+	for _, c := range []string{p.ClientID, p.ClientIDSnake} {
+		if validSignInRef(c) {
+			out.SignInClientID = c
+			break
+		}
+	}
+	var scopes []string
+	if json.Unmarshal(p.Scope, &scopes) == nil && scopes != nil {
+		out.SignInScopes = make([]string, 0, min(len(scopes), maxSignInScopes))
+		for i, sc := range scopes {
+			if i == maxSignInScopes {
+				break
+			}
+			if validSignInRef(sc) {
+				out.SignInScopes = append(out.SignInScopes, sc)
+			}
+		}
+	}
+	return out
 }
 
 // validSignInUserID is a non-empty run of visible ASCII, at most 128 bytes.

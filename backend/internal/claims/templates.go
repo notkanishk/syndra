@@ -23,6 +23,17 @@ const (
 	ReadsUserinfo    = "userinfo"
 )
 
+// ReachedBy is where claims that land as `lands` arrive, given the app's
+// Zitadel settings: the access token only when it is a JWT, the ID token only
+// with "User Info inside ID Token" on, userinfo whenever they land there.
+func ReachedBy(lands string, jwtAccessToken, idTokenUserinfo bool) map[string]bool {
+	return map[string]bool{
+		ReadsAccessToken: lands != LandsUserinfo && jwtAccessToken,
+		ReadsIDToken:     lands != LandsAccessToken && idTokenUserinfo,
+		ReadsUserinfo:    lands != LandsAccessToken,
+	}
+}
+
 // Template is a starting point that is copied into an app's shape. A saved
 // shape records its template's id and version; a template change never
 // changes a saved shape.

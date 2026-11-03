@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
@@ -256,6 +257,20 @@ var (
 	}
 	svcApplications = func(ctx context.Context) ([]models.ApplicationCatalog, error) {
 		return directory.Default.Applications(ctx)
+	}
+	// Check 6's reads: each app's last call (the data plane's telemetry) and
+	// last sign-in. Unread without Postgres.
+	svcClaimDeliveryLast = func(ctx context.Context) ([]db.ClaimDeliveryLastRow, error) {
+		if db.PG == nil {
+			return nil, errors.New("postgres is not connected")
+		}
+		return db.ClaimDeliveryLast(ctx)
+	}
+	svcLastSignInPerApp = func(ctx context.Context) (map[string]time.Time, error) {
+		if db.PG == nil {
+			return nil, errors.New("postgres is not connected")
+		}
+		return db.LastSignInPerApp(ctx)
 	}
 
 	// Directory lookup used by drift triage to tell a departed alumnus from an

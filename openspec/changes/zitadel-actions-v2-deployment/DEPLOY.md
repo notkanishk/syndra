@@ -236,3 +236,25 @@ The backend now serves the claims target on a second listener, `:8090` (`SYNDRA_
 **Check after the edit:** `curl -s -X POST -d '{}' https://<syndra host>/api/action/inject` still answers 401 (the deploy job checks the same), and `curl -s http://<APP_HOST>:8090/healthz/claims` shows `"snapshot":{"loaded":true,…}`.
 
 **Rollback:** point the handle back at `<APP_HOST>:8080`. Both doors serve the same answer.
+
+## 3 Nov 2026: the detectors and the keyring (claims-delivery-integrity S3, S4, S5)
+
+Three things now watch claim delivery from outside the token path, and the claims target's signing key is read from Zitadel instead of only from `.env`:
+
+- **The sign-in correlator** (S3) matches every `oidc_session.added` against the calls Zitadel made for that person and app. No call within 2 minutes either side is `CLAIMS_NOT_CALLED`; a call answered without the person's claims is `CLAIMS_NOT_SERVED`. It needs no setup.
+- **The configuration reconciler** (S4) reads the targets, executions, the Actions v1 Complement Token flow and every app's token settings at start and every 10 minutes, and raises `CONFIG_DRIFT` for each check (R1 to R9) that differs. Read-only.
+- **The keyring** (S5) reads the claims target's signing key every minute, and at once after a call matches no key Syndra holds. The key Zitadel signed with before a rotation keeps verifying for 15 minutes. `ZITADEL_ACTION_SIGNING_KEY` stays the starting point and the fallback: with the read denied, it alone verifies.
+
+All three surface on System › Zitadel ("Claims delivery") and on Home's claims line, and as id-free reasons on `GET /healthz/claims`.
+
+**Owner step 1 (S4-perm): let Syndra read the Actions setup.** In the Zitadel console, Instance → Managers, add the backend's service account (the user in `ZITADEL_MACHINE_KEY_PATH`'s key) with the role **`IAM_OWNER_VIEWER`**. It is read-only: it grants `action.target.read` and `action.execution.read`. It also lets the account read the claims target's signing key, which Syndra already holds. Until this is done, System › Zitadel shows "couldn't check" for R1 to R3 (`CANNOT_CHECK`), Home counts it as a problem, and the keyring cannot follow a rotation (the env key keeps verifying).
+
+*Check:* within 10 minutes (or after a backend restart), `curl -s http://<APP_HOST>:8090/healthz/claims` no longer lists `CANNOT_CHECK:R1`, and System › Zitadel's Configuration part says the setup matches.
+
+**Owner step 2 (S3-alert): the dead-man's switch.** Create a check that expects a ping every 5 minutes with a grace of 10 (healthchecks.io free tier, or an Uptime Kuma push monitor), alerting your phone or email. Put its ping URL in the server's `.env` as `SYNDRA_DEADMAN_URL=…` and redeploy. Syndra pings it every 5 minutes **only while** `/healthz/claims` is `ok`, with the reasons in the body; any problem, a crashed backend or a stopped LXC is a missed ping, and the service alerts you. Do step 1 first: an open `CANNOT_CHECK` stops the pings.
+
+*Check:* the service shows a ping within 5 minutes of the deploy. Unset, `/healthz/claims` carries the note `NO_EXTERNAL_ALERT` (it changes no status). The URL is never logged.
+
+**Rotating the claims key** is now `make zitadel-actions-rotate-key` alone: Syndra follows within seconds, no restart. Update `ZITADEL_ACTION_SIGNING_KEY` in `.env` at the next deploy (System › Zitadel says so while it is behind). The event listener's key (`ZITADEL_EVENT_SIGNING_KEY`) is still env-only and still needs the restart.
+
+**The proof still to record** (`changes/claims-delivery-integrity/tasks.md`): on the dev box, unbind the `preaccesstoken` execution and confirm `CONFIG_DRIFT:R2` within 10 minutes and `CLAIMS_NOT_CALLED` within 5 minutes of a sign-in, and a missed dead-man ping; rotate the key and confirm zero `sig_mismatch` after the first call.
