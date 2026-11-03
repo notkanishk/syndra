@@ -1,8 +1,8 @@
 /* What the Next host supplies outside globals.css: next/font's --font-* variables (src/app/layout.tsx). */
 :root {
-  --font-bricolage: 'Bricolage Grotesque';
-  --font-figtree: 'Figtree';
-  --font-jetbrains: 'JetBrains Mono';
+  --font-bricolage: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-figtree: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-jetbrains: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* The app's own body surface (globals.css @layer base), restated unlayered so a

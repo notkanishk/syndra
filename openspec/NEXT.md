@@ -113,7 +113,7 @@ findings are about classes of defect rather than about bundles.
 
 The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built under `changes/truenas-reconcile`; its decisions are in `design_handoff_syndra/reconcile-2026-10/BUILD-NOTES.md`.
 
-- **Network storage on a person's page** (owner, 2026-10-15). A read-only section for operators: the person's account on TrueNAS, their home folder use against its limit, the folders they can open, and any limit or hold of their own, each with "Set on TrueNAS's page →". Every write stays on the system's page (one write place, many read places). The reads exist: `GET /targets/{t}/homes`, the member's own places, allowances.
+- **Network storage on a person's page** (owner, 2026-10-15; designed 3 Nov in A-10). A read-only section for operators: the person's account on TrueNAS, their home folder use against its limit, the folders they can open, and any limit or hold of their own, each with "Set on TrueNAS's page →". Every write stays on the system's page (one write place, many read places). The reads exist: `GET /targets/{t}/homes`, the member's own places, allowances.
 - **Composed roles, created by administrators** (owner, 2026-10-14; details to be settled with the owner before building). Today TrueNAS maps one role to the wide base groups. The goal is an operator flow that composes a role from others: a tier role carries resource roles, and those resource roles map to resource groups (`mk-<resource>-<ro|rw>`, AGDLP). The model already exists as `mapping_rules`, kept depth-1 so `effectiveClosure` (`services/cascade.go:108`) and `EnforceMappingRules` agree.
   - **Blocked on the untraced rule propagation below.** Production has zero mapping rules. The first composed role an operator creates is the rule that springs that trap, so the enqueue fix lands first.
 - **What happens to a home folder after someone leaves** (owner, 2026-10-14). Today it is kept, always: Syndra never moves or deletes a home (truenas-reconcile D10). The choice to build: keep it (today), archive it (owner becomes root, private, the shape the 14 Oct cleanup of old folders used), or delete it after N days. It should be settable per system, with the date the person left shown beside each kept folder.
@@ -136,6 +136,45 @@ Design answers A-04 to A-06 (17 Oct 2026) are built on `feat/design-answers-04-0
 ### Architecture deepening — the 16 Oct review
 
 Seven candidates where one question is answered by several copies, ranked, in [`changes/architecture-deepening`](changes/architecture-deepening/tasks.md) with the review page beside them. Top: one access-change planner, so a plan's preview and its apply are the same code.
+
+### Design answers of 3 Nov — A-09 to A-12, ready to build
+
+Claude Design is retired. Design now lives on the Syndra Project canvas, and the process is `design_handoff_syndra/BRIDGE.md`. Every open design question got an answer and a board (`reconcile-2026-10/from-design/A-09…A-12`, boards in `reconcile-2026-10/design/a09…a12-*.dc.html`). Each answer ends in "For code".
+- **A-09:**
+  - Contrast tokens: audit 3.2.
+  - Unconfirmed add-on changes in the system page's Waiting on you, settled by "Say what happened": audit 2.9. This needs a per-target read, a settle endpoint and an `about` column.
+- **A-10:**
+  - A read-only Network storage card per system on the person's Access tab, which needs `GET /users/{id}/targets`.
+  - Last sign-in per app on the person page and the app page.
+- **A-11:** the claims-shaping flow, built on one explain step that live and every preview call:
+  - a trail of five checks;
+  - draft preview;
+  - test people;
+  - a save summary;
+  - history;
+  - what the app reads;
+  - moving off Actions v1, as advice.
+- **A-12:**
+  - Home's calm line swaps by Unfold for data changes too.
+  - The phone bulk bar becomes one primary verb plus "More changes".
+  - Copy for 6.34 f and g.
+- **Owner, 3 Nov:**
+  - **Sign-ins: 1a.** Keep each person's last sign-in per app and daily totals per app with no names; any operator sees these, with no lookup log. "Who signed in, and when" comes from Zitadel's own log only through a deliberate, reasoned and audited "Look up sign-ins".
+  - **Passwords: self-settling (A-13).** A lost reply is resent once at once with the same password. The member sees "Changed" only on a confirmed done. History and Audit mark "Sent again automatically", with both times. Passwords never reach an operator.
+  - **Stale data: A-13 (d).** A stale card recedes to the ground with a line-strong edge, and its text stays full strength. No dim on text, no amber outline.
+  - **Claims:** no v1 gate or readiness checklist. The owner removes Actions v1 himself. A-11 is redone around rich per-app shaping: rename roles, choose roles, nested claims, role-conditional claims, more attributes, app templates. "Start from a token" is dropped.
+  - **Yes:** Revoke is the primary phone verb for "Departed, still has access"; single-folder holds are left out until needed.
+- **Claims debug mode** (owner): its toggle lives only on the app's claims part, beside the preview and the checks. A-14 redraws claims shaping around it.
+- **A-14 replaces A-11** (claims shaping, rescoped).
+  - Templates come from `docs/research/2026-11-03-app-claims.md`: every app wants a flat list; renames break NetBird and GitLab; claims must be sent as `[]`, never left out.
+  - **Gap for code, found while checking:** the live path shapes with every profile in the project (`claimProfilesRead(projectID)`), so each app's override reaches every app in that project. Per-app shapes need the request's `application.client_id` mapped to its app. Zitadel may send that only from v4. Debug mode's first capture will show whether prod sends it.
+- **Owner, 3 Nov, on A-14:**
+  - text formats for roles: Advanced only, with a warning;
+  - debug mode captures one chosen account at a time (default: the operator), never everyone;
+  - a save the app will act on needs "I understand";
+  - an app with no shape gets the basic default (the project's shape, else the built-in `roles` list);
+  - new: "Copy another app's shape" (from any project) as a draft beside the templates. Role renames copy only for keys that exist in this project.
+  - Design's call in A-14, flagged for the owner: the project default is set on the project's page only (one write place). Copies aren't linked; NetBird and its clients stay in step by copying again.
 
 ### Audit of 27 Oct — remediation in batches
 
