@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.container.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/react-cache-shim.js"></script>
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:56px;display:flex;flex-direction:column;gap:48px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="A person's storage and sign-ins board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · /users/[id] · network storage and sign-ins · Final, 3 Nov 2026</span>
+    <h1 class="type-page-title" style="margin:0">A person's storage, and where they sign in</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted)">Answer A-10 to Q-10. Part 1 adds one read-only card per connected system to the Access tab, under the projects. Part 2 puts the last sign-in in each project's heading and a short line on the app page. Each frame is the real shell and components at true width; open one alone with <span class="type-mono">?frame=</span> and its name.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1488px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Carried · settled</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">One write place</strong> (owner, 15 Oct): limits and holds are set on System › TrueNAS. This card only reads, and every row set elsewhere says where. <strong style="color:var(--ink)">States</strong> as everywhere: last known with its age under an amber Notice, NotOpenYet for what can't be read yet, nothing shown before it is read. <strong style="color:var(--ink)">A-06 §7</strong>: "No sign-in to its app in 90 days".</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">Resolved · the 6 Oct "Put on hold" row</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Dropped. The 15 Oct read-only ruling is later, and there's no experience reason to overturn it: the hold is one tap away, on the row that already holds Put on hold and Revoke. The Hold row here shows what's in force and links there. The Withheld band above the projects stays as built.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;border-color:var(--accent-line)"><span class="type-label" style="color:var(--accent-text)">Owner's call · sign-in counts</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">Recommended: A, no counts.</strong> One last sign-in per person per app, overwritten each time, gone after 13 months without a sign-in. It's what Syndra keeps today, keyed by app instead of project, and it answers every frame below. B and C are drawn so you can see what they'd add.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Part 1 · Network storage on a person's page · Desktop 1440</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ storageFrames }}" as="f" hint-placeholder-count="11">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:750px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1500px;;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Part 2 · Where someone signs in</h2>
+    <p style="margin:0;max-width:96ch;font-size:14px;line-height:1.6;color:var(--muted)">What Syndra keeps decides what can be drawn. Three choices, smallest first. The frames below say which one each needs.</p>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;max-width:1488px">
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:10px;border-color:var(--accent-line)">
+        <span style="display:flex;align-items:baseline;gap:10px"><span style="font-family:var(--font-display);font-size:19px;font-weight:600">A · Last sign-in only</span><span class="type-label" style="color:var(--accent-text)">Recommended</span></span>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--ink)">One date per person per app, overwritten on every sign-in. No history, no counts.</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Answers the person page's line, the app page's "9 people in 7 days" (everyone whose last sign-in is inside the 7 days) and Held but not used. A row goes after 13 months without a sign-in, or when the person is removed from Zitadel. Same size as today's per-project record.</p>
+      </div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:10px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600">B · A, plus a daily total per app</span>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--ink)">A number per app per day, kept 13 months. Nobody is named in it.</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Adds one thing: the app page's 30-day strip (app-b). Cheap and impersonal, but no decision in Syndra reads it. Add it the day someone asks how an app is trending.</p>
+      </div>
+      <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:10px">
+        <span style="font-family:var(--font-display);font-size:19px;font-weight:600">C · Counts per person per app per day</span>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--ink)">How often each person signed in to each app, every day, for 13 months. Q-10's proposal.</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Adds a person's 30-day strip (sign-b). It's a day-by-day diary of when each student uses the makerspace's apps, and nothing an operator decides needs it. Not recommended.</p>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ signFrames }}" as="f" hint-placeholder-count="5">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:750px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1500px;;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">Phone · 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:390px;height:844px"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFrame }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="{{ pathname }}" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ session }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+
+<sc-if value="{{ isPerson }}" hint-placeholder-val="{{ true }}">
+  <div class="flex flex-col items-start gap-4 sm:flex-row sm:gap-[22px]" style="padding-bottom:12px">
+    <x-import component-from-global-scope="Syndra.Avatar" name="Aanya Rao" size="header" hint-size="62px,62px"></x-import>
+    <div class="w-full flex-1"><x-import component-from-global-scope="Syndra.PageHeader" title="Aanya Rao" meta="{{ metaRow }}" lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why." actions="{{ headerActions }}" hint-size="100%,140px"></x-import></div>
+  </div>
+
+  <x-import component-from-global-scope="Syndra.Tabs" label="Views of this person's access" value="access" options="{{ tabs }}" on-select="{{ noop }}" hint-size="100%,44px"></x-import>
+
+  <div class="flex flex-col gap-[18px]">
+    <div class="panel flex flex-wrap items-center gap-3 px-5 py-4">
+      <span class="type-label">Bundles</span>
+      <a href="route-bundles-v2.dc.html" style="text-decoration:none;color:inherit"><x-import component-from-global-scope="Syndra.Chip" class-name="gap-[5px]" hint-size="160px,32px">Fabrication crew<span class="text-faint">v2</span></x-import></a>
+      <span class="flex-1"></span>
+      <span class="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6">Manage bundles</span>
+    </div>
+
+    <sc-if value="{{ hasBand }}" hint-placeholder-val="{{ false }}">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,110px"><div class="px-5 py-4"><x-import component-from-global-scope="Syndra.Withheld" items="{{ bandItems }}" audience="operator" hint-size="100%,80px"></x-import></div></x-import>
+    </sc-if>
+
+    <div id="readline" style="margin:0 0 -4px;padding:0 20px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;scroll-margin-top:16px">{{ readEl }}<nav aria-label="Sections on this page" style="display:flex;flex-wrap:wrap;gap:8px;margin-left:auto"><sc-for list="{{ chips }}" as="c" hint-placeholder-count="3"><a href="{{ c.href }}" style="text-decoration:none;color:inherit;border-radius:var(--radius-pill)"><x-import component-from-global-scope="Syndra.Chip" class-name="gap-2" hint-size="120px,32px">{{ c.label }}<sc-if value="{{ c.hasCount }}" hint-placeholder-val="{{ true }}"><span class="text-faint">{{ c.count }}</span></sc-if><span aria-hidden="true" style="color:var(--faint);font-size:12px">↓</span></x-import></a></sc-for></nav></div>
+
+    <sc-if value="{{ isStorage }}" hint-placeholder-val="{{ true }}">
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,170px">
+        <div class="flex flex-wrap items-center gap-3 px-5 py-4" style="border-radius:var(--radius-card) var(--radius-card) 0 0"><button type="button" aria-expanded="true" aria-label="Fold this project" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:var(--radius-pill);border:1px solid var(--line);background:none;color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button><span class="type-card-title"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Fabrication</a></span><span class="text-[13.5px] text-faint">1 role</span></div>
+        <div class="row-divider px-5 pb-2 pt-1.5"><span class="type-label">Given</span></div>
+        <div class="flex flex-wrap items-center gap-[18px] px-5 py-3">
+          <div class="w-[230px] shrink-0 text-[15px] font-semibold">{{ roleName }} <span class="type-mono" style="font-weight:400;color:var(--faint)">{{ roleKey }}</span></div>
+          <div class="min-w-0 flex-1"><span class="inline-flex items-center gap-1.5 rounded-pill py-[5px] pl-[9px] pr-[11px] text-[12.5px] font-semibold leading-none whitespace-nowrap bg-accent-soft text-accent-text"><i aria-hidden="true" class="block h-2 w-2 flex-none rounded-pill bg-accent"></i>Direct</span></div>
+          <span class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px]"><span class="inline-flex items-center gap-2 font-semibold"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="7px,7px"></x-import>In Zitadel</span><span class="text-faint">No end date</span></span>
+          <span class="flex w-[104px] shrink-0 justify-end"><x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="96px,34px">Revoke</x-import></span>
+        </div>
+      </x-import>
+
+      <section id="sys-truenas" aria-label="Network storage" style="display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px">
+        <span class="type-label" style="padding:0 20px;color:var(--label)">Network storage</span>
+
+        <sc-if value="{{ stError }}" hint-placeholder-val="{{ false }}">
+          <!-- stands in for Syndra.Notice until it is in the design system -->
+          <div role="alert" style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--danger-line);background:var(--danger-soft)">
+            <span style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--danger)"></span>
+            <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+              <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--danger-text)">Couldn't load Aanya's storage on TrueNAS.</span>
+              <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink)">Syndra's server did not answer when this page asked for it. Nothing was changed.</p>
+              <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px">
+                <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="100px,34px">Try again</x-import>
+                <span style="font-size:12.5px;color:var(--muted)">Reference <span class="type-mono" style="color:var(--ink)">req_4c19be70</span> · quote this if you ask for help</span>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasCard }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,520px">
+          <div style="padding:18px 20px 14px;display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px">
+              <span class="type-card-title"><a href="route-system-targets-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">TrueNAS</a></span>
+              <sc-if value="{{ hasStatus }}" hint-placeholder-val="{{ true }}"><span role="status" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;line-height:1.4;color:{{ statusInk }}"><span aria-hidden="true" style="width:7px;height:7px;flex:none;border-radius:var(--radius-pill);background:{{ statusDot }}"></span>{{ statusText }}</span></sc-if>
+            </div>
+            <p style="margin:0;max-width:80ch;font-size:13.5px;line-height:1.5;color:var(--faint);text-wrap:pretty">What TrueNAS says about Aanya's account. Limits, holds and folders are set on TrueNAS's page; only Aanya sets their password.</p>
+          </div>
+
+          <sc-if value="{{ stLoading }}" hint-placeholder-val="{{ false }}"><div style="padding:0 20px 20px"><x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" avatar="{{ false }}" label="Loading Aanya's storage on TrueNAS" hint-size="100%,220px"></x-import></div></sc-if>
+
+          <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}">
+            <!-- stands in for Syndra.Notice until it is in the design system -->
+            <div role="status" style="margin:2px 20px 16px;display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-radius:var(--radius-panel);border:1px solid var(--warn-line);background:var(--warn-soft)">
+              <span class="breathe" style="margin-top:7px;width:8px;height:8px;flex:none;border-radius:var(--radius-pill);background:var(--warn)"></span>
+              <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                <span style="font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--warn-text)">TrueNAS is offline</span>
+                <p style="margin:0;max-width:76ch;font-size:14.5px;line-height:1.55;color:var(--ink);text-wrap:pretty">It stopped answering at 08:33. Home folder and Folders below are what it said at 08:31, 2 hours ago. Aanya's access hasn't changed, and their folders open again when it's back.</p>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ false }}">
+            <!-- stands in for Syndra.NotOpenYet until it is in the design system -->
+            <div style="margin:2px 20px 20px;border:1px dashed var(--line-strong);border-radius:var(--radius-inner)">
+              <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:14px 16px">
+                <span style="display:inline-flex;align-items:center;gap:10px;font-size:15px;font-weight:600;color:var(--ink)"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="8px,8px"></x-import>Opens once TrueNAS is set up</span>
+                <span style="font-size:14px;color:var(--muted);text-wrap:pretty">TrueNAS has no Zitadel project yet, so no role reaches it and nobody has an account there.</span>
+                <a href="route-system-targets-id.dc.html?frame=noproject" style="margin-left:auto;font-size:14px;font-weight:600;white-space:nowrap">Finish setting it up →</a>
+              </div>
+              <div aria-disabled="true" style="opacity:.45;pointer-events:none;user-select:none">
+                <sc-for list="{{ setupRows }}" as="r" hint-placeholder-count="5"><div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:48px;padding:9px 16px"><span class="type-label" style="width:170px;flex:none;color:var(--label)">{{ r }}</span><span style="flex:1 1 160px;font-size:15px;color:var(--faint)">—</span></div></sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ hasAccountRow }}" hint-placeholder-val="{{ true }}">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:52px;padding:9px 20px">
+            <span class="type-label" style="width:170px;flex:none;color:var(--label)">Account</span>
+            <span style="flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:15px;line-height:1.45;color:var(--ink)">
+              <sc-if value="{{ acctNormal }}" hint-placeholder-val="{{ true }}"><span class="type-mono" style="font-size:14.5px">aanya.rao</span><span style="font-size:13px;color:var(--faint)">Made by Syndra on 3 Sept</span></sc-if>
+              <sc-if value="{{ acctAdopted }}" hint-placeholder-val="{{ false }}"><span class="type-mono" style="font-size:14.5px">arao</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Made by hand on TrueNAS before Syndra managed it. <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Kanishk Singh</a> assigned it to Aanya on 12 Sept, with everything it held.</span></sc-if>
+              <sc-if value="{{ acctWaiting }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="7px,7px"></x-import><a href="route-pending.dc.html?frame=person">Waiting for you to send →</a></span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Their Fabrication lead role reaches TrueNAS. Syndra makes the account once you send it.</span></sc-if>
+              <sc-if value="{{ acctNone }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">None</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">None of their roles reaches TrueNAS. Fabrication lead and Archive admin do.</span></sc-if>
+            </span>
+            <span style="min-width:200px;flex:none;margin-left:auto;display:flex;justify-content:flex-end"></span>
+          </div>
+          </sc-if>
+
+          <sc-if value="{{ hasLive }}" hint-placeholder-val="{{ true }}">
+          <div style="border:{{ nBorder }};border-radius:var(--radius-inner);margin:{{ nMargin }}">
+            <sc-if value="{{ notOpen }}" hint-placeholder-val="{{ false }}">
+              <!-- stands in for Syndra.NotOpenYet until it is in the design system -->
+              <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:14px 16px">
+                <span style="display:inline-flex;align-items:center;gap:10px;font-size:15px;font-weight:600;color:var(--ink)"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="8px,8px"></x-import>Opens once their account is made</span>
+                <span style="font-size:14px;color:var(--muted);text-wrap:pretty">Password, home folder and folders are read from the account itself. This is what they'll get.</span>
+              </div>
+            </sc-if>
+            <div aria-disabled="{{ notOpen }}" style="opacity:{{ nOp }};pointer-events:{{ nPe }};user-select:{{ nSel }}">
+              <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:52px;padding:9px 20px">
+                <span class="type-label" style="width:170px;flex:none;color:var(--label)">Password</span>
+                <span style="flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:15px;line-height:1.45;color:var(--ink)">
+                  <sc-if value="{{ pwSet }}" hint-placeholder-val="{{ true }}"><span>Set, last changed 14 Oct</span><span style="font-size:13px;color:var(--faint)">Only Aanya sets it, on their Network storage page.</span></sc-if>
+                  <sc-if value="{{ pwAdopted }}" hint-placeholder-val="{{ false }}"><span>Set before Syndra managed this account</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">TrueNAS accepts it, so it works. Syndra has no date for it, and only Aanya can change it.</span></sc-if>
+                  <sc-if value="{{ pwNew }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="7px,7px"></x-import>Needs a new password</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Their access was given back on 20 Oct. TrueNAS opens their folders again only once Aanya sets a new one on their Network storage page. Nobody else can.</span></sc-if>
+                  <sc-if value="{{ pwNotYet }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">Not set yet</span></sc-if>
+                </span>
+                <span style="min-width:200px;flex:none;margin-left:auto;display:flex;justify-content:flex-end"></span>
+              </div>
+
+              <div style="opacity:{{ staleOp }}">
+                <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:52px;padding:12px 20px">
+                  <span class="type-label" style="width:170px;flex:none;color:var(--label)">Home folder</span>
+                  <span style="flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:3px;font-size:15px;line-height:1.45;color:var(--ink)">
+                    <sc-if value="{{ homeOwn }}" hint-placeholder-val="{{ true }}">
+                      <span>18.4 GB of 50 GB</span>
+                      <div aria-hidden="true" style="margin:3px 0 4px;max-width:360px;height:5px;border-radius:var(--radius-pill);background:var(--line);overflow:hidden"><div style="height:100%;width:37%;border-radius:var(--radius-pill);background:var(--muted)"></div></div>
+                      <span style="font-size:13.5px;color:var(--ink);text-wrap:pretty">Up to 50 GB, their own · ends 28 Nov · “Thesis renders for the final review.”</span>
+                      <span style="font-size:13px;color:var(--faint);text-wrap:pretty">In place of the 20 GB their Fabrication lead role gives.</span>
+                    </sc-if>
+                    <sc-if value="{{ homeRoles }}" hint-placeholder-val="{{ false }}">
+                      <span>6.2 GB of 20 GB</span>
+                      <div aria-hidden="true" style="margin:3px 0 4px;max-width:360px;height:5px;border-radius:var(--radius-pill);background:var(--line);overflow:hidden"><div style="height:100%;width:31%;border-radius:var(--radius-pill);background:var(--muted)"></div></div>
+                      <span style="font-size:13px;color:var(--faint)">Up to 20 GB, from their Fabrication lead role</span>
+                    </sc-if>
+                    <sc-if value="{{ homeRolesNoUse }}" hint-placeholder-val="{{ false }}"><span>Up to 20 GB, from their Fabrication lead role</span></sc-if>
+                    <sc-if value="{{ homeNone }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">None</span><span style="font-size:13px;color:var(--faint)">None of their roles gives a home folder.</span></sc-if>
+                  </span>
+                  <span style="min-width:200px;flex:none;margin-left:auto;display:flex;justify-content:flex-end"><a href="{{ homeHref }}" style="font-size:14px;font-weight:600;white-space:nowrap">Set on TrueNAS's page →</a></span>
+                </div>
+
+                <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:52px;padding:12px 20px">
+                  <span class="type-label" style="width:170px;flex:none;color:var(--label)">Folders</span>
+                  <span style="flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:9px;font-size:15px;line-height:1.45;color:var(--ink)">
+                    <sc-if value="{{ foldHeldNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:13px;color:var(--faint)">None of these opens while the hold is on.</span></sc-if>
+                    <sc-if value="{{ foldList }}" hint-placeholder-val="{{ true }}">
+                      <sc-for list="{{ folders }}" as="fo" hint-placeholder-count="3"><span style="display:flex;flex-direction:column;gap:1px"><span style="display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px"><span style="font-weight:600;overflow-wrap:anywhere">{{ fo.name }}</span><span style="font-size:13px;color:var(--muted);white-space:nowrap">{{ fo.access }}</span><span style="font-size:13px;color:var(--faint)">{{ fo.from }}</span></span><span class="type-mono" style="font-size:12.5px;color:var(--faint);overflow-wrap:anywhere">{{ fo.path }}</span></span></sc-for>
+                    </sc-if>
+                    <sc-if value="{{ foldNone }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">None yet</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">Their Fab visitor role reaches TrueNAS, but no folder there is open to it. Folders open to a group on TrueNAS itself; this fills in when one does.</span></sc-if>
+                  </span>
+                  <span style="min-width:200px;flex:none;margin-left:auto;display:flex;justify-content:flex-end"><a href="route-system-targets-id-mappings.dc.html?frame=default" style="font-size:14px;font-weight:600;white-space:nowrap">Set in TrueNAS's mappings →</a></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          </sc-if>
+
+          <sc-if value="{{ hasHold }}" hint-placeholder-val="{{ true }}">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:52px;padding:9px 20px 12px">
+            <span class="type-label" style="width:170px;flex:none;color:var(--label)">Hold</span>
+            <span style="flex:1 1 160px;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:15px;line-height:1.45;color:var(--ink)">
+              <sc-if value="{{ holdNone }}" hint-placeholder-val="{{ true }}"><span style="color:var(--muted)">None</span></sc-if>
+              <sc-if value="{{ holdEnded }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted)">None</span><span style="font-size:13px;color:var(--faint)">The last one ended on 20 Oct.</span></sc-if>
+              <sc-if value="{{ holdOn }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:8px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="7px,7px"></x-import>Their whole account, since 20 Oct</span><span style="font-size:13px;color:var(--faint);text-wrap:pretty">“Lost their key card. Until it's found.” · put on hold by <a href="route-users-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">Kanishk Singh</a> · review on 17 Nov</span></sc-if>
+            </span>
+            <span style="min-width:200px;flex:none;margin-left:auto;display:flex;justify-content:flex-end"><a href="route-system-targets-id.dc.html?frame=default" style="font-size:14px;font-weight:600;white-space:nowrap">Set on TrueNAS's page →</a></span>
+          </div>
+          </sc-if>
+        </x-import>
+        </sc-if>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{ isSign }}" hint-placeholder-val="{{ false }}">
+      <sc-for list="{{ projs }}" as="p" hint-placeholder-count="4">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,60px">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-4"><button type="button" aria-expanded="false" aria-label="Open this project" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:var(--radius-pill);border:1px solid var(--line);background:none;color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:rotate(-90deg)"><path d="M6 9l6 6 6-6"></path></svg></button><span class="type-card-title"><a href="route-projects-id.dc.html?frame=default" style="color:inherit;text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ p.title }}</a></span><span class="text-[13.5px] text-faint">{{ p.count }}</span><sc-if value="{{ p.hasSign }}" hint-placeholder-val="{{ true }}"><span class="text-[13.5px] text-faint" style="text-wrap:pretty">· {{ p.sign }}</span></sc-if></div>
+        </x-import>
+      </sc-for>
+
+      <sc-if value="{{ isSignB }}" hint-placeholder-val="{{ false }}">
+        <x-import component-from-global-scope="Syndra.Card" hint-size="100%,300px">
+          <div style="padding:18px 20px 12px;display:flex;flex-direction:column;gap:4px"><h2 class="type-card-title" style="margin:0">Apps Aanya signs in to</h2><p style="margin:0;font-size:13.5px;color:var(--faint)">Sign-ins per day, last 30 days. Needs C: a count per person per app per day.</p></div>
+          <sc-for list="{{ appRows }}" as="a" hint-placeholder-count="4">
+            <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:12px 20px">
+              <span style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:1px"><sc-if value="{{ a.isApp }}" hint-placeholder-val="{{ true }}"><a href="route-applications-id.dc.html?frame=default" style="align-self:flex-start;font-size:15px;font-weight:600;color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ a.name }}</a></sc-if><sc-if value="{{ a.isUnknown }}" hint-placeholder-val="{{ false }}"><span style="font-size:15px;font-weight:600">{{ a.name }}</span></sc-if><span style="font-size:13px;color:var(--faint)">{{ a.sub }}</span></span>
+              <span aria-hidden="true" style="flex:none;display:inline-flex;align-items:flex-end;gap:2px;height:24px"><sc-for list="{{ a.bars }}" as="b" hint-placeholder-count="30"><span style="width:4px;height:{{ b.h }};border-radius:1px;background:{{ b.c }}"></span></sc-for></span>
+              <span style="width:110px;flex:none;text-align:right;font-size:14px;font-variant-numeric:tabular-nums">{{ a.n }}</span>
+            </div>
+          </sc-for>
+        </x-import>
+      </sc-if>
+    </sc-if>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isApp }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" eyebrow="Apps" title="Laser bookings" lede="When someone signs in to Laser bookings, Zitadel hands it a token — a short list of facts about that person, including their roles. Token format sets what goes in it; Preview token shows exactly what Laser bookings would receive for a given person." meta="{{ appMeta }}" hint-size="100%,150px"></x-import></div>
+  <div class="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap">
+    <div class="w-full tablet:min-w-[420px] tablet:flex-1"><x-import component-from-global-scope="Syndra.Card" class-name="h-full" hint-size="100%,180px"><div class="px-[22px] pb-5 pt-5"><h2 class="type-card-title" style="margin:0">Token format</h2><p class="mt-1 text-[14px] leading-[1.5] text-faint">What Laser bookings is told about a person when they sign in, and how it is laid out. A change takes effect the next time someone signs in.</p><p class="mt-3 text-[13px] text-faint" style="opacity:.7">The rest of this card as on route-applications-id.</p></div></x-import></div>
+    <div class="w-full tablet:min-w-[420px] tablet:flex-1"><x-import component-from-global-scope="Syndra.Card" class-name="h-full" hint-size="100%,180px"><div class="px-[22px] pb-5 pt-5"><h2 class="type-card-title" style="margin:0">Preview token</h2><p class="mt-1 text-[14px] leading-[1.5] text-faint">Exactly what Laser bookings would receive right now.</p><p class="mt-3 text-[13px] text-faint" style="opacity:.7">The rest of this card as on route-applications-id.</p></div></x-import></div>
+  </div>
+  <sc-if value="{{ isAppB }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+      <div style="padding:18px 22px 20px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;flex-direction:column;gap:4px"><h2 class="type-card-title" style="margin:0">Sign-ins</h2><p style="margin:0;font-size:13.5px;color:var(--faint)">Every sign-in to Laser bookings, per day, last 30 days. Nobody is named. Needs B.</p></div>
+        <span aria-hidden="true" style="display:flex;align-items:flex-end;gap:4px;height:56px;max-width:560px"><sc-for list="{{ appBars }}" as="b" hint-placeholder-count="30"><span style="flex:1;height:{{ b.h }};border-radius:2px;background:{{ b.c }}"></span></sc-for></span>
+        <p style="margin:0;font-size:14px;color:var(--muted)">142 sign-ins in 30 days, by 23 people.</p>
+      </div>
+    </x-import>
+  </sc-if>
+</sc-if>
+
+<sc-if value="{{ isInsights }}" hint-placeholder-val="{{ false }}">
+  <div style="padding-bottom:12px"><x-import component-from-global-scope="Syndra.PageHeader" title="Insights" lede="How access travels through the makerspace, and how that is changing. Ask about anything to follow its thread." hint-size="100%,100px"></x-import></div>
+  <x-import component-from-global-scope="Syndra.Tabs" label="Views of the makerspace's access" value="trends" options="{{ insightTabs }}" on-select="{{ noop }}" hint-size="100%,40px"></x-import>
+  <div style="max-width:640px">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,280px">
+      <div style="padding:18px 20px 10px;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px"><h2 class="type-card-title" style="margin:0">Held but not used</h2><span style="font-size:13px;color:var(--muted)">No sign-in to its app in 90 days.</span><span style="flex:1"></span><a href="route-insights.dc.html?frame=default" style="font-size:13.5px;font-weight:600">Show on the map →</a></div>
+      <sc-for list="{{ idle }}" as="r" hint-placeholder-count="3">
+        <div class="row-divider" style="display:flex;align-items:baseline;gap:12px;padding:11px 20px"><span style="flex:1;min-width:0;text-wrap:pretty"><span style="font-weight:600">{{ r.role }}</span> <span style="color:var(--muted)">·</span> <a href="route-projects-id.dc.html?frame=default" style="color:var(--ink);text-decoration:none" style-hover="color:var(--accent-text);text-decoration:underline;text-underline-offset:3px">{{ r.p }}</a></span><span style="width:110px;flex:none;text-align:right;font-variant-numeric:tabular-nums">{{ r.n }}</span></div>
+      </sc-for>
+      <p class="row-divider" style="margin:0;padding:12px 20px 16px;font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty">Read from app sign-ins. Holding access you don't use is not wrong; it is a place to tidy.</p>
+    </x-import>
+  </div>
+</sc-if>
+
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":10200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "default";
+    if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }
+    this.preScroll = this.st === "phone" ? "sys-truenas" : this.st === "phone-sign" ? "readline" : null;
+    this.session = { id: "u1", name: "Kanishk", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 3, expiring_grants: 2, drift: 4, unconfirmed_revocations: 1, holds_due: 0, pending_propagation: 12 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  findScroller(el) { let p = el; while (p && p !== document.body) { const o = getComputedStyle(p).overflowY; if (o === "auto" || o === "scroll") return p; p = p.parentElement; } return null; }
+  componentDidMount() {
+    if (!this.preScroll) return;
+    setTimeout(() => { const el = document.getElementById(this.preScroll); if (!el) return; const sc = this.findScroller(el.parentElement); const off = el.getBoundingClientRect().top - (sc ? sc.getBoundingClientRect().top : 0) - 16; if (sc) sc.scrollTop += off; else window.scrollTo(0, window.scrollY + off); }, 1200);
+  }
+  bars(list, max, tall) { return list.map(n => ({ h: n === 0 ? "2px" : Math.max(3, Math.round((n / max) * tall)) + "px", c: n === 0 ? "var(--line)" : "var(--muted)" })); }
+  renderVals() {
+    const S = window.Syndra; const st = this.st; const h = React.createElement;
+    const f = (frame, label, note) => ({ src: "a10-person-storage-and-sign-ins.dc.html?frame=" + frame, label, note });
+    const storageSt = ["default", "adopted", "newpw", "held", "noaccount", "norole", "nofolders", "offline", "setup", "loading", "error", "phone"];
+    const isStorage = storageSt.indexOf(st) >= 0;
+    const isSign = st === "sign-a" || st === "sign-b" || st === "phone-sign";
+    const k = st === "phone" ? "default" : st;
+    const C = {
+      default: { acct: "normal", pw: "set", home: "own", fold: "list", hold: "none", status: "ok" },
+      adopted: { acct: "adopted", pw: "adopted", home: "roles", fold: "list", hold: "none", status: "ok" },
+      newpw: { acct: "normal", pw: "new", home: "roles", fold: "list", hold: "ended", status: "ok" },
+      held: { acct: "normal", pw: "set", home: "roles", fold: "list", hold: "on", status: "held", band: true },
+      noaccount: { acct: "waiting", pw: "notyet", home: "rolesNoUse", fold: "list", hold: "none", status: "ok", notOpen: true },
+      norole: { acct: "none", status: "ok" },
+      nofolders: { acct: "normal", pw: "set", home: "none", fold: "none", hold: "none", status: "ok" },
+      offline: { acct: "normal", pw: "set", home: "roles", fold: "list", hold: "none", status: "offline", stale: true },
+      setup: { setup: true, status: "answering" },
+      loading: { loading: true },
+      error: { error: true },
+    }[k] || {};
+    const STATUS = {
+      ok: ["var(--healthy)", "var(--muted)", "Answering · read 2 min ago"],
+      held: ["var(--line-strong)", "var(--muted)", "Answering · their account is on hold"],
+      offline: ["var(--warn)", "var(--warn-text)", "Offline since 08:33 · last read 08:31"],
+      answering: ["var(--healthy)", "var(--muted)", "Answering"],
+    }[C.status] || ["", "", ""];
+    const notOpen = !!C.notOpen;
+    const signA = st === "sign-a" || st === "phone-sign";
+    const P = signA
+      ? [["Fabrication", "1 role", "Last sign-in 10 min ago, to Fab queue"], ["Laser Lab", "2 roles", "Last sign-in 3 days ago, to Laser bookings"], ["Archive", "1 role", "No sign-in to its app in 90 days"], ["Wood shop", "1 role", ""]]
+      : [["Fabrication", "1 role", ""], ["Laser Lab", "2 roles", ""], ["Archive", "1 role", ""], ["Wood shop", "1 role", ""]];
+    const chip = (label, count, id) => ({ label, count, hasCount: !!count, href: "#" + id });
+    const chips = isSign ? P.map(p => chip(p[0], p[1].split(" ")[0], "readline")).concat([chip("TrueNAS", "", "readline")]) : [chip("Fabrication", "1", "readline"), chip("TrueNAS", "", "sys-truenas")];
+    const d30a = [1, 0, 2, 1, 0, 0, 1, 3, 1, 0, 0, 2, 1, 1, 0, 0, 0, 1, 2, 0, 1, 0, 0, 1, 1, 0, 0, 2, 1, 1];
+    const d30b = [0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0];
+    const d30c = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+    const appDays = [3, 5, 6, 4, 2, 1, 4, 7, 6, 5, 6, 3, 1, 2, 5, 8, 7, 6, 5, 2, 1, 4, 6, 7, 5, 6, 3, 1, 2, 5];
+    return {
+      isBoard: !this.frame, isFrame: !!this.frame, session: this.session, rootData: this.rootData, noop: () => {},
+      pathname: st.indexOf("app-") === 0 ? "/applications/a1" : st === "insights" ? "/insights" : "/users/u7",
+      isPerson: isStorage || isSign, isStorage, isSign, isSignB: st === "sign-b",
+      isApp: st === "app-a" || st === "app-b", isAppB: st === "app-b", isInsights: st === "insights",
+      tabs: [{ value: "access", label: "Access" }, { value: "requests", label: "Requests" }, { value: "activity", label: "Activity" }],
+      insightTabs: [{ value: "map", label: "Map" }, { value: "trends", label: "Trends" }],
+      headerActions: S ? h(S.Button, { variant: "accent" }, "Give a role") : null,
+      metaRow: S ? h(S.MetaRow, null, ["aanya.rao@example.edu", "Research assistant", "Mechanical Engineering"]) : null,
+      readEl: S ? h(S.ReadFreshness, { state: { readAt: new Date(Date.now() - 60000).toISOString(), current: true }, subject: "What Zitadel confirmed" }) : null,
+      chips,
+      hasBand: !!C.band,
+      bandItems: [{ field: "enabled", value: "true", reason: "Lost their key card. Until it's found.", target: "TrueNAS", actorId: "u1" }],
+      roleName: k === "nofolders" ? "Fab visitor" : "Fabrication lead", roleKey: k === "nofolders" ? "fab.visitor" : "fab.lead",
+      stError: !!C.error, stLoading: !!C.loading, hasCard: !C.error,
+      hasStatus: !!C.status, statusDot: STATUS[0], statusInk: STATUS[1], statusText: STATUS[2],
+      isOffline: C.status === "offline", isSetup: !!C.setup,
+      setupRows: ["Account", "Password", "Home folder", "Folders", "Hold"],
+      hasAccountRow: !!C.acct,
+      acctNormal: C.acct === "normal", acctAdopted: C.acct === "adopted", acctWaiting: C.acct === "waiting", acctNone: C.acct === "none",
+      hasLive: !!C.pw, notOpen,
+      nBorder: notOpen ? "1px dashed var(--line-strong)" : "0", nMargin: notOpen ? "4px 12px 12px" : "0",
+      nOp: notOpen ? 0.45 : 1, nPe: notOpen ? "none" : "auto", nSel: notOpen ? "none" : "auto",
+      staleOp: C.stale ? 0.62 : 1,
+      pwSet: C.pw === "set", pwAdopted: C.pw === "adopted", pwNew: C.pw === "new", pwNotYet: C.pw === "notyet",
+      homeOwn: C.home === "own", homeRoles: C.home === "roles", homeRolesNoUse: C.home === "rolesNoUse", homeNone: C.home === "none",
+      homeHref: C.home === "own" ? "route-system-targets-id.dc.html?frame=limit-on" : "route-system-targets-id.dc.html?frame=default",
+      foldList: C.fold === "list", foldNone: C.fold === "none", foldHeldNote: C.hold === "on",
+      folders: [
+        { name: "laser_files", access: "Can change files", from: "from Fabrication lead", path: "main/fabrication/laser_files" },
+        { name: "renders", access: "Can change files", from: "from Fabrication lead", path: "main/projects/renders" },
+        { name: "archive", access: "Read only", from: "from Archive admin", path: "main/archive" },
+      ],
+      hasHold: !!C.hold, holdNone: C.hold === "none", holdEnded: C.hold === "ended", holdOn: C.hold === "on",
+      projs: P.map(p => ({ title: p[0], count: p[1], sign: p[2], hasSign: !!p[2] })),
+      appRows: [
+        { name: "Fab queue", sub: "Fabrication", isApp: true, isUnknown: false, bars: this.bars(d30a, 3, 24), n: "26 in 30 days" },
+        { name: "Laser bookings", sub: "Laser Lab", isApp: true, isUnknown: false, bars: this.bars(d30b, 3, 24), n: "6 in 30 days" },
+        { name: "Laser badge reader", sub: "Laser Lab", isApp: true, isUnknown: false, bars: this.bars(d30c, 3, 24), n: "2 in 30 days" },
+        { name: "App unknown", sub: "Sign-ins Syndra couldn't match to an app", isApp: false, isUnknown: true, bars: this.bars([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], 3, 24), n: "1 in 30 days" },
+      ],
+      appBars: this.bars(appDays, 8, 56),
+      appMeta: S ? h("span", { className: "flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint" }, "uses roles from ", h("a", { href: "route-projects-id.dc.html?frame=default", className: "font-semibold text-accent-text", style: { textDecoration: "none" } }, "Laser Lab →"), h("span", { "aria-hidden": true }, "·"), "9 people in 7 days", h("span", { "aria-hidden": true }, "·"), "last sign-in 10 min ago") : null,
+      idle: [{ role: "Storage · Member", p: "Network storage", n: "11 people" }, { role: "Laser cutter · Supervisor", p: "Laser Lab", n: "2 people" }, { role: "Archive admin", p: "Archive", n: "1 person" }],
+      storageFrames: [
+        f("default", "Default · their own limit in force", "One card per connected system on the Access tab, under the projects, with a chip in the read line. The system's name links to its page; beside it, a dot and how current the read is. One row per fact: label · value · its one write place in the right seat. The limit in force reads first, in ink, with its end and reason; the roles' limit it replaces sits under it, faint. Folders are listed, not counted; their paths in mono are Advanced only. Nothing on the card writes."),
+        f("adopted", "An account Syndra didn't make", "The account row says it was made by hand and who assigned it, and when. The password row follows what TrueNAS says, not Syndra's empty record: it works, and Syndra has no date for it. The home folder here is the roles' limit, so its line is the only one."),
+        f("newpw", "Needs a new password", "Access given back after a hold. The password row says why it's needed and that only Aanya can set it, with no link, because there's nowhere for an operator to go. The Hold row says when the last one ended, which explains it. Folders stay at full strength: the operator can read them, even though Aanya can't open them yet."),
+        f("held", "Whole account on hold", "Where the 6 Oct per-row Put on hold would have been: the Hold row says what's in force, why, by whom, and when it's reviewed, and links to the row that changes it. The Withheld band above the projects stays as built. The status beside the name turns neutral: TrueNAS is fine."),
+        f("noaccount", "No account yet · waiting for you to send", "The account row is the step's status seat: Waiting for you to send →, opening Pending changes. Everything read from the account is NotOpenYet, previewed at 0.45 with what they'll get: their roles' limit and the folders their groups open. No link in the lead line: the step is the row above."),
+        f("norole", "No role reaches TrueNAS", "Nothing is about to open, so no NotOpenYet: the card is one row saying so, and naming the roles that would reach it."),
+        f("nofolders", "Not mapped to any folder", "A role that reaches TrueNAS through a group no folder opens. One plain sentence, no box: nothing is wrong, and folders are opened on TrueNAS itself. The link goes to the mappings, Syndra's half of it."),
+        f("offline", "TrueNAS offline · last known", "One amber Notice in the card, with the time it stopped and the age of what's shown. Home folder and Folders are TrueNAS's reads, so they sit at 0.62. Account, Password and Hold are Syndra's own records and stay at full strength. With no last read, the Notice stands alone and those two rows aren't drawn."),
+        f("setup", "TrueNAS still being set up", "NotOpenYet over the whole card: what opens it, why, and the violet link to the step on TrueNAS's page. The rows are previewed empty: nothing has been read."),
+        f("loading", "Loading", "The system's name and the caption are known; no status, no age and no values until TrueNAS answers."),
+        f("error", "Error", "Syndra's own server failed. The red Notice takes the card's place, under the section label. The projects above loaded and stay."),
+      ],
+      signFrames: [
+        f("sign-a", "Q6 · A, recommended: a line in each project's heading", "The last sign-in sits beside the access it uses, where Revoke is decided, folded or open. It names the newest app. Under a day, relative; then a date. A project with apps and no sign-in in 90 days reads A-06's line. A project with no app says nothing. Needs only A."),
+        f("sign-b", "Q6 · B, not recommended: a card of apps with a 30-day strip", "What counts per person would buy. It's precise, and it's a diary: a day-by-day record of when one student uses each app. No decision on this page needs it. Needs C."),
+        f("app-a", "Q7 · A, recommended: the app page's meta row", "After \"uses roles from Laser Lab →\": 9 people in 7 days · last sign-in 10 min ago. Both come from A: people whose last sign-in falls inside the 7 days, and the newest of them. No card, no chart: it's a fact about the app."),
+        f("app-b", "Q7 · B: plus a 30-day strip of daily totals", "Only if the owner keeps per-app daily totals (B). One card under the two, nobody named. Drawn so the choice is visible; not needed."),
+        f("insights", "Q8 · Held but not used stays as built", "No counts: \"not used\" is zero by definition. Role · project · people, most first, with A-06's caption. The older board's Last used column and \"tap or sign-in\" wording go. Keying by app doesn't change it: \"its app\" is any app on the role's project."),
+      ],
+      phoneFrames: [
+        f("phone", "Phone · storage card", "Each row wraps: the label, then the value, then the link on its own line, still at the right. Scrolled to the card."),
+        f("phone-sign", "Phone · sign-in line", "The line wraps under the project's name. Scrolled to the read line."),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
