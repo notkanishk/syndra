@@ -171,6 +171,21 @@ func TestCorrelator_FirstSignInBeforeAccessIsCountedNotAlarmed(t *testing.T) {
 	}
 }
 
+// With the welcome switch on, a new member's first sign-in is delivered.
+func TestCorrelator_WelcomeAnswerIsDelivered(t *testing.T) {
+	clk := newClock(t0)
+	r, c := New(clk.now), NewCorrelator(clk.now)
+	clk.add(10 * time.Minute)
+	at := clk.now()
+	c.Created("new", at.Add(-40*time.Second))
+	call(r, at, "new", "app-1", FnPreAccessToken, ServedWelcome)
+	c.SignIn(SignIn{At: at, UserID: "new", ClientID: "app-1", Scopes: []string{}})
+	clk.add(3 * time.Minute)
+	if v := verdicts(c.Check(r, jwtApps)); v[Delivered] != 1 {
+		t.Fatalf("got %v, want delivered", v)
+	}
+}
+
 func TestCorrelator_ExpectedFunctions(t *testing.T) {
 	bearer := func(string) (bool, bool) { return false, true }
 	unknown := func(string) (bool, bool) { return false, false }

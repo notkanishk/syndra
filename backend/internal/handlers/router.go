@@ -151,6 +151,9 @@ func NewRouter() http.Handler {
 	// "To the end of next term"); only an operator changes it.
 	mux.HandleFunc("GET /api/v1/terms", withCORS(withUserAuth(handleGetTerms)))
 	mux.HandleFunc("PUT /api/v1/terms", withCORS(withOperatorAuth(handlePutTerms)))
+	// Welcome roles on a first sign-in (SC4): Makerspace settings' switch.
+	mux.HandleFunc("GET /api/v1/config/welcome-claims", withCORS(withOperatorAuth(handleGetWelcomeClaims)))
+	mux.HandleFunc("PUT /api/v1/config/welcome-claims", withCORS(withOperatorAuth(handlePutWelcomeClaims)))
 
 	// Service accounts: who is one and what it is for. Operator-only; writes only
 	// Syndra's own record, never Zitadel.

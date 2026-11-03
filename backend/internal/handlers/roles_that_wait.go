@@ -104,6 +104,7 @@ func handleMarkRoleWaits(w http.ResponseWriter, r *http.Request) {
 	}
 	if created {
 		_ = dbInsertAuditLog(r.Context(), actor, "", "role.waits_marked", project+":"+role)
+		publishWelcomeAfterSave(r.Context()) // a role that waits is never sent early
 	}
 	jsonResponse(w, http.StatusOK, map[string]bool{"marked": true})
 }
