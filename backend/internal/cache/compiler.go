@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"syndra/internal/claims"
+	"syndra/internal/claimserve"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -28,6 +29,20 @@ import (
 // is in every entry), not an outage.
 const cacheTTL = 7 * 24 * time.Hour
 
+// warmPace spreads a warm over time instead of one burst: at 10ms a person,
+// 10,000 people take under two minutes of mostly-idle pass beside live
+// traffic, never a wall of queries in front of the data plane's Redis or the
+// directory (assessment P10).
+var warmPace = 10 * time.Millisecond
+
+// Facts layout (assessment SC1). One Redis hash per person, facts:{u}, with a
+// field per project and claimserve.MetaField. A refresh is one HKEYS and one
+// MULTI, O(the person's own projects); the data plane reads one HGET. The old
+// layout, a key per (person, project), needed a SCAN of the whole keyspace per
+// refresh, so a warm was O(people x keys). A person without MetaField is still
+// on the old layout: their first refresh SCANs once for their old keys and
+// deletes them in the same MULTI that writes the hash.
+
 // UserGrant represents a simple role held by a user in Zitadel
 type UserGrant struct {
 	ProjectID string
@@ -35,8 +50,7 @@ type UserGrant struct {
 	ExpiresAt *time.Time
 }
 
-// fetchBaseGrants simulates fetching the user's primary roles from Zitadel.
-// In Phase 2, this will call the real Zitadel Management API using MgmtClient.
+// fetchBaseGrants reads the user's direct grants from Syndra's ledger.
 func fetchBaseGrants(ctx context.Context, userID string) ([]UserGrant, error) {
 	grants, err := dbGetDirectGrantsForUser(ctx, userID, false)
 	if err != nil {
@@ -51,6 +65,89 @@ func fetchBaseGrants(ctx context.Context, userID string) ([]UserGrant, error) {
 		})
 	}
 	return result, nil
+}
+
+// pass is what a compile reads once however many people it compiles (SC2,
+// SC3): the mapping rules, bundle names and service-account marks, and, for a
+// warm, one directory snapshot. Per person only their grants and bundle
+// assignments are read. Bundle names and marks are read on first need, so a
+// one-person refresh of someone with no bundle never lists bundles. Not safe
+// for concurrent use: a warm is sequential, a refresh has its own.
+type pass struct {
+	rules []models.MappingRule
+	// users is the warm's directory snapshot by id; nil means ask the
+	// directory per person (a change-driven refresh of one person).
+	users map[string]models.UserProfile
+	// legacy is every old per-project key by person, from one sweep at the
+	// start of a warm; nil means SCAN for the one person being refreshed.
+	legacy map[string][]string
+
+	bundles    map[string]string // bundle id -> name
+	bundlesErr error
+	bundlesRd  bool
+	service    map[string]bool // user ids an operator marked
+	serviceErr error
+	serviceRd  bool
+}
+
+func newPass(ctx context.Context, snapshot []models.UserProfile) (*pass, error) {
+	rules, err := dbGetActiveMappingRules(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cache compile: failed to load rules: %w", err)
+	}
+	p := &pass{rules: rules}
+	if snapshot != nil {
+		p.users = make(map[string]models.UserProfile, len(snapshot))
+		for _, u := range snapshot {
+			p.users[u.ID] = u
+		}
+	}
+	return p, nil
+}
+
+// errNotInDirectory is a person the warm's directory snapshot does not list:
+// deleted in Zitadel, still holding records here.
+var errNotInDirectory = errors.New("not in the directory")
+
+func (p *pass) profile(ctx context.Context, userID string) (models.UserProfile, bool, error) {
+	if p.users == nil {
+		return cacheFindUser(ctx, userID)
+	}
+	u, ok := p.users[userID]
+	if !ok {
+		return models.UserProfile{}, false, errNotInDirectory
+	}
+	return u, true, nil
+}
+
+func (p *pass) bundleNames(ctx context.Context) (map[string]string, error) {
+	if !p.bundlesRd {
+		p.bundlesRd = true
+		all, err := dbGetAllBundles(ctx)
+		p.bundles, p.bundlesErr = make(map[string]string, len(all)), err
+		for _, b := range all {
+			p.bundles[b.ID] = b.Name
+		}
+	}
+	return p.bundles, p.bundlesErr
+}
+
+// isServiceAccount is the one rule (services.IsServiceAccount): a Zitadel
+// machine user, or one an operator marked. Restated here because services
+// imports this package.
+func (p *pass) isServiceAccount(ctx context.Context, u models.UserProfile) (bool, error) {
+	if u.IsMachine() {
+		return true, nil
+	}
+	if !p.serviceRd {
+		p.serviceRd = true
+		rows, err := dbListServiceAccounts(ctx)
+		p.service, p.serviceErr = make(map[string]bool, len(rows)), err
+		for _, r := range rows {
+			p.service[r.UserID] = true
+		}
+	}
+	return p.service[u.ID], p.serviceErr
 }
 
 // userRoles is everything one user holds across every project, resolved once:
@@ -73,17 +170,10 @@ type userRoles struct {
 }
 
 // compileUser evaluates all mapping rules against the user's current roles.
-func compileUser(ctx context.Context, userID string) (userRoles, error) {
-	// 1. Fetch user's base roles from Zitadel (mocked)
+func compileUser(ctx context.Context, userID string, ps *pass) (userRoles, error) {
 	baseGrants, err := fetchBaseGrants(ctx, userID)
 	if err != nil {
 		return userRoles{}, fmt.Errorf("cache compile: failed to fetch base grants: %w", err)
-	}
-
-	// 2. Load all active mapping rules
-	allRules, err := dbGetActiveMappingRules(ctx)
-	if err != nil {
-		return userRoles{}, fmt.Errorf("cache compile: failed to load rules: %w", err)
 	}
 
 	activeRoles := make(map[string]map[string]bool) // projectID -> map[roleKey]exists
@@ -123,22 +213,17 @@ func compileUser(ctx context.Context, userID string) (userRoles, error) {
 		}
 		bundleIDs[r.ProjectID][r.BundleID] = true
 	}
-	bundles, err := bundleNames(ctx, bundleIDs)
+	bundles, err := bundleNamesByProject(ctx, ps, bundleIDs)
 	if err != nil {
 		return userRoles{}, fmt.Errorf("cache compile: %w", err)
 	}
 
-	// 3. Iterative Role Resolution (Forward Pass)
-	// We start with the user's base roles and see which rules they activate.
-
-	// Simple fixed-point iteration (max passes = number of rules)
+	// Iterative role resolution: a fixed point, at most one pass per rule.
 	changed := true
-	for i := 0; i < len(allRules) && changed; i++ {
+	for i := 0; i < len(ps.rules) && changed; i++ {
 		changed = false
-		for _, rule := range allRules {
-			// If user has the source role...
+		for _, rule := range ps.rules {
 			if activeRoles[rule.SourceProject] != nil && activeRoles[rule.SourceProject][rule.SourceRole] {
-				// ...and doesn't yet have the target role
 				if activeRoles[rule.TargetProject] == nil {
 					activeRoles[rule.TargetProject] = make(map[string]bool)
 				}
@@ -163,18 +248,20 @@ func compileUser(ctx context.Context, userID string) (userRoles, error) {
 
 	u := userRoles{userID: userID, active: activeRoles, ends: ends, bundles: bundles}
 	// Profile attributes (email, team, ...) are captured now because a
-	// directory call is affordable during compile and is not affordable inside
+	// directory read is affordable during compile and is not affordable inside
 	// the Actions v2 latency budget.
-	if profile, ok, err := cacheFindUser(ctx, userID); err != nil {
+	if profile, ok, err := ps.profile(ctx, userID); err != nil {
 		// Non-fatal: roles are the load-bearing part of the token. A missing
 		// email claim is a degraded token; a missing roles claim is a locked door.
-		log.Printf("[CACHE] profile attributes unavailable for %s: %v", userID, err)
+		if !errors.Is(err, errNotInDirectory) {
+			log.Printf("[CACHE] profile attributes unavailable for %s: %v", userID, err)
+		}
 		u.profileErr = err
 	} else if ok {
 		u.profile, u.hasProf = profile, true
 		// The token is the only place an app learns this, so a failed read of
 		// the marks counts as a failed profile read: never guess "a person".
-		if service, serr := cacheIsServiceAccount(ctx, profile); serr != nil {
+		if service, serr := ps.isServiceAccount(ctx, profile); serr != nil {
 			log.Printf("[CACHE] service-account mark unavailable for %s: %v", userID, serr)
 			u.profileErr = serr
 		} else {
@@ -224,7 +311,11 @@ func (u userRoles) facts(projectID string) claims.Facts {
 // write paths stored. A preview that stored its own answer would quietly
 // repair the one project being looked at and hide a cache that had gone stale.
 func CompileFacts(ctx context.Context, userID, projectID string) (claims.Facts, error) {
-	u, err := compileUser(ctx, userID)
+	ps, err := newPass(ctx, nil)
+	if err != nil {
+		return claims.Facts{}, err
+	}
+	u, err := compileUser(ctx, userID, ps)
 	if err != nil {
 		return claims.Facts{}, err
 	}
@@ -234,9 +325,13 @@ func CompileFacts(ctx context.Context, userID, projectID string) (claims.Facts, 
 // StoredFacts is what the token path serves right now: the facts the write
 // paths stored for (user, project), and false when there is no entry. The
 // explain step reads this so its "claims are ready" check is the live answer,
-// not a fresh compile that would hide a stale or missing entry.
+// not a fresh compile that would hide a stale or missing entry. Same read as
+// the data plane: the hash field, then the old key while it may still exist.
 func StoredFacts(ctx context.Context, userID, projectID string) (claims.Facts, bool, error) {
-	raw, err := redisGet(ctx, cacheKey(userID, projectID))
+	raw, err := redisHGet(ctx, claimserve.FactsKey(userID), projectID)
+	if errors.Is(err, redis.Nil) {
+		raw, err = redisGet(ctx, claimserve.LegacyFactsKey(userID, projectID))
+	}
 	if errors.Is(err, redis.Nil) {
 		return claims.Facts{}, false, nil
 	}
@@ -245,48 +340,27 @@ func StoredFacts(ctx context.Context, userID, projectID string) (claims.Facts, b
 	}
 	var f claims.Facts
 	if err := json.Unmarshal([]byte(raw), &f); err != nil {
-		return claims.Facts{}, false, fmt.Errorf("stored facts for %s: %w", cacheKey(userID, projectID), err)
+		return claims.Facts{}, false, fmt.Errorf("stored facts for %s in %s: %w", userID, projectID, err)
 	}
 	return f, true, nil
-}
-
-func cacheKey(userID, projectID string) string {
-	return fmt.Sprintf("mapping:%s:%s", userID, projectID)
-}
-
-func store(ctx context.Context, facts claims.Facts) error {
-	data, err := json.Marshal(facts)
-	if err != nil {
-		return fmt.Errorf("cache compile: marshal failed: %w", err)
-	}
-	if err := redisSet(ctx, cacheKey(facts.UserID, facts.ProjectID), string(data), cacheTTL); err != nil {
-		return fmt.Errorf("cache compile: redis write failed: %w", err)
-	}
-	log.Printf("[CACHE] Successfully compiled %d roles for %s in %s", len(facts.Roles), facts.UserID, facts.ProjectID)
-	return nil
-}
-
-// CompileUserCache compiles and stores a user's claims for one project.
-func CompileUserCache(ctx context.Context, userID, projectID string) error {
-	facts, err := CompileFacts(ctx, userID, projectID)
-	if err != nil {
-		return err
-	}
-	return store(ctx, facts)
 }
 
 // RefreshUser recompiles a user's claims after something changed what they
 // hold. The token path serves ONLY what is stored here, so deleting a key and
 // waiting is an outage of the claims, not a refresh: nothing else rebuilds it.
 //
-// It refreshes every project the user already has a key for (a revoke must
+// It refreshes every project the user already has facts for (a revoke must
 // reach all of them, including one they no longer hold anything in), every
-// project they now hold roles in, and any project the caller names. A key is
-// dropped only when it must not be served: its project now yields no roles
-// (and nobody asked for it), or the compile failed, where a stale key could
-// still carry a revoked role and the data plane's degraded path is safer.
+// project they now hold roles in, and any project the caller names. A project
+// is dropped only when it must not be served: it now yields no roles (and
+// nobody asked for it), or the compile failed, where stale facts could still
+// carry a revoked role and the data plane's degraded path is safer.
 func RefreshUser(ctx context.Context, userID string, projectIDs ...string) error {
-	return refreshUser(ctx, userID, false, projectIDs)
+	ps, err := newPass(ctx, nil)
+	if err != nil {
+		return err
+	}
+	return refreshUser(ctx, userID, false, projectIDs, ps)
 }
 
 // userLocks serialize refreshes per user, so a slower compile can't store over
@@ -301,26 +375,50 @@ var userLocks sync.Map
 var globEscape = strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`, `]`, `\]`).Replace
 
 // refreshUser is RefreshUser; warm marks a background pass, which must never
-// make a good entry worse: a failed compile there keeps the keys, since
+// make a good entry worse: a failed compile there keeps the facts, since
 // nothing changed and the stored claims are as right as they were. A
-// change-driven refresh drops them instead, where a stale key could carry a
+// change-driven refresh drops them instead, where stale facts could carry a
 // revoked role.
-func refreshUser(ctx context.Context, userID string, warm bool, projectIDs []string) error {
+func refreshUser(ctx context.Context, userID string, warm bool, projectIDs []string, ps *pass) error {
 	mu, _ := userLocks.LoadOrStore(userID, &sync.Mutex{})
 	mu.(*sync.Mutex).Lock()
 	defer mu.(*sync.Mutex).Unlock()
 
-	prefix := cacheKey(userID, "")
-	keys, err := redisScanKeys(ctx, globEscape(prefix)+"*")
+	key := claimserve.FactsKey(userID)
+	fields, err := redisHKeys(ctx, key)
 	if err != nil {
-		return fmt.Errorf("cache refresh: scan error: %w", err)
+		return fmt.Errorf("cache refresh: read %s: %w", key, err)
+	}
+	existing := map[string]bool{}
+	migrated := false
+	for _, f := range fields {
+		if f == claimserve.MetaField {
+			migrated = true
+			continue
+		}
+		existing[f] = true
+	}
+	// Still on the old layout: find their old keys once, so the write below
+	// deletes them with the same MULTI and the data plane's fallback read
+	// never finds a project the hash has since dropped.
+	var legacy []string
+	if !migrated {
+		prefix := claimserve.LegacyFactsKey(userID, "")
+		if ps.legacy != nil {
+			legacy = ps.legacy[userID]
+		} else if legacy, err = redisScanKeys(ctx, globEscape(prefix)+"*"); err != nil {
+			return fmt.Errorf("cache refresh: scan error: %w", err)
+		}
+		for _, k := range legacy {
+			existing[strings.TrimPrefix(k, prefix)] = true
+		}
 	}
 
-	u, err := compileUser(ctx, userID)
+	u, err := compileUser(ctx, userID, ps)
 	if err != nil {
-		if len(keys) > 0 && !warm {
-			if derr := redisDel(ctx, keys...); derr != nil {
-				log.Printf("[CACHE] could not drop %d stale entries for %s: %v", len(keys), userID, derr)
+		if len(existing) > 0 && !warm {
+			if derr := redisDel(ctx, append(legacy, key)...); derr != nil {
+				log.Printf("[CACHE] could not drop %d stale entries for %s: %v", len(existing), userID, derr)
 			}
 		}
 		return err
@@ -333,35 +431,37 @@ func refreshUser(ctx context.Context, userID string, warm bool, projectIDs []str
 	}
 
 	asked := map[string]bool{}
-	targets := map[string]bool{}
+	targets := existing
 	for _, p := range projectIDs {
 		asked[p], targets[p] = true, true
-	}
-	for _, k := range keys {
-		targets[strings.TrimPrefix(k, prefix)] = true
 	}
 	for p := range u.active {
 		targets[p] = true
 	}
 
-	var errs []error
+	set := map[string]string{claimserve.MetaField: time.Now().UTC().Format(time.RFC3339)}
+	var drop []string
 	for p := range targets {
 		facts := u.facts(p)
 		if len(facts.Roles) == 0 && !asked[p] {
-			if err := redisDel(ctx, cacheKey(userID, p)); err != nil {
-				errs = append(errs, fmt.Errorf("cache refresh: drop %s: %w", p, err))
-			}
+			drop = append(drop, p)
 			continue
 		}
-		if err := store(ctx, facts); err != nil {
-			// A failed write leaves the OLD value, which may hold a revoked role.
-			if !warm {
-				_ = redisDel(ctx, cacheKey(userID, p))
-			}
-			errs = append(errs, err)
+		data, err := json.Marshal(facts)
+		if err != nil {
+			return fmt.Errorf("cache compile: marshal failed: %w", err)
 		}
+		set[p] = string(data)
 	}
-	return errors.Join(errs...)
+	if err := redisWriteFacts(ctx, key, set, drop, legacy, cacheTTL); err != nil {
+		// Nothing of the MULTI applied: the OLD facts stand, and may hold a
+		// revoked role.
+		if !warm {
+			_ = redisDel(ctx, append(legacy, key)...)
+		}
+		return fmt.Errorf("cache compile: redis write failed: %w", err)
+	}
+	return nil
 }
 
 // RebuildUserCache refreshes a user's cache, logging rather than returning a
@@ -372,19 +472,48 @@ func RebuildUserCache(ctx context.Context, userID string, projectIDs []string) {
 	}
 }
 
-// errGone is a person Zitadel answers 404 for: deleted there, still holding
+// errGone is a person Zitadel no longer has: deleted there, still holding
 // records here. Not a failure to retry on every pass (assessment D1).
 var errGone = errors.New("gone from Zitadel")
 
+// isGone is a person the warm's directory snapshot does not list, or a
+// Zitadel 404 for them.
 func isGone(err error) bool {
+	if errors.Is(err, errNotInDirectory) {
+		return true
+	}
 	var se *zitadel.StatusError
 	return errors.As(err, &se) && se.Code == 404
 }
 
-// goneUsers are the people this process has seen Zitadel 404. Later warms
-// skip them; a change event for one still refreshes them as usual. In-process
-// only: a restart asks once more, which costs one call per person.
-var goneUsers sync.Map
+// legacyCleared is set once a warm's sweep found no old per-project key left:
+// from then on this process never sweeps again.
+var legacyCleared atomic.Bool
+
+// legacyKeys is every old per-project key, by person, from one SCAN sweep of
+// the keyspace: once per warm, never once per person, and not at all once a
+// sweep has found none. Project and user ids are Zitadel's numeric ids, so the
+// person is everything between the prefix and the last colon.
+func legacyKeys(ctx context.Context) (map[string][]string, error) {
+	out := map[string][]string{}
+	if legacyCleared.Load() {
+		return out, nil
+	}
+	keys, err := redisScanKeys(ctx, claimserve.LegacyFactsPrefix+"*")
+	if err != nil {
+		return nil, fmt.Errorf("sweep old keys: %w", err)
+	}
+	for _, k := range keys {
+		rest := strings.TrimPrefix(k, claimserve.LegacyFactsPrefix)
+		if i := strings.LastIndex(rest, ":"); i > 0 {
+			out[rest[:i]] = append(out[rest[:i]], k)
+		}
+	}
+	if len(keys) == 0 {
+		legacyCleared.Store(true)
+	}
+	return out, nil
+}
 
 // WarmReport is how the last warm went. Refreshed and Failed count only people
 // who still exist in Zitadel; Gone is the rest.
@@ -410,8 +539,12 @@ func LastWarm() (WarmReport, bool) {
 // Warm refreshes every known user's claims once. Entries come only from change
 // events and expire after cacheTTL, so without this a restart (or a quiet day)
 // leaves the token path answering degraded for people whose access never
-// changed. Sequential on purpose: it runs beside live traffic and a slow pass
-// costs nothing.
+// changed. Sequential and paced on purpose: it runs beside live traffic.
+//
+// One pass reads the global tables once and the directory once (one snapshot:
+// ListUsers pages, no per-person call), then per person only their own grants
+// and their own facts hash. A person the snapshot does not list is gone:
+// counted apart, their facts kept, and nothing asked of Zitadel about them.
 //
 // A pass that skips or fails anyone says so as an ERROR with its counts: a warm
 // that quietly stops keeping facts fresh is how expiry became the outage.
@@ -422,27 +555,39 @@ func Warm(ctx context.Context) error {
 	}
 	// A directory that isn't answering fails every user's profile read; say so
 	// once rather than once per user.
-	if !directoryAnswers(ctx) {
+	users, current := directorySnapshot(ctx)
+	if !current {
 		lastWarm.Store(&WarmReport{At: time.Now(), Skipped: true, Of: len(ids)})
 		log.Printf("[CACHE] ERROR warm skipped: the directory is not answering; 0 of %d users refreshed (stored facts last %s from their compile)", len(ids), cacheTTL)
 		return nil
 	}
+	if users == nil {
+		users = []models.UserProfile{}
+	}
+	ps, err := newPass(ctx, users)
+	if err != nil {
+		return fmt.Errorf("cache warm: %w", err)
+	}
+	if ps.legacy, err = legacyKeys(ctx); err != nil {
+		return fmt.Errorf("cache warm: %w", err)
+	}
 	rep := WarmReport{Of: len(ids)}
-	for _, id := range ids {
+	for i, id := range ids {
+		if i > 0 && warmPace > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(warmPace):
+			}
+		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if _, gone := goneUsers.Load(id); gone {
-			rep.Gone++
-			continue
-		}
-		switch err := refreshUser(ctx, id, true, nil); {
+		switch err := refreshUser(ctx, id, true, nil, ps); {
 		case err == nil:
 			rep.Refreshed++
 		case errors.Is(err, errGone):
-			goneUsers.Store(id, true)
 			rep.Gone++
-			log.Printf("[CACHE] %s is gone from Zitadel (404) but still holds records here; left out of warms from now on", id)
 		default:
 			rep.Failed++
 			log.Printf("[CACHE] warm failed for %s: %v", id, err)

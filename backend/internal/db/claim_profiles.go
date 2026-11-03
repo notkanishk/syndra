@@ -217,3 +217,60 @@ func GetClaimFailureMode(ctx context.Context, projectID string) (string, map[str
 	}
 	return mode, claims, nil
 }
+
+// ClaimMode is a project's whole degraded-mode setting, as the data plane is
+// given it: the failure mode, its minimal-safe claims, and how old a
+// last-known-good answer may be (0 means the data plane's default).
+type ClaimMode struct {
+	Mode              string
+	MinimalSafeClaims map[string]any
+	LKGMaxAgeSeconds  int
+}
+
+// GetClaimMode reads a project's degraded-mode setting. A project with no
+// claim profile is fail_closed with the default bound. Malformed minimal-safe
+// claims are an error, never a guessed set.
+func GetClaimMode(ctx context.Context, projectID string) (ClaimMode, error) {
+	var m ClaimMode
+	var raw []byte
+	var lkg *int
+	err := querier(ctx).QueryRow(ctx, `
+		SELECT claim_failure_mode, minimal_safe_claims, claim_lkg_max_age_seconds
+		FROM claim_profiles WHERE zitadel_project_id = $1`, projectID).Scan(&m.Mode, &raw, &lkg)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ClaimMode{Mode: "fail_closed"}, nil
+	}
+	if err != nil {
+		return ClaimMode{}, fmt.Errorf("query claim mode for project %s: %w", projectID, err)
+	}
+	if lkg != nil {
+		m.LKGMaxAgeSeconds = *lkg
+	}
+	if raw != nil {
+		if err := json.Unmarshal(raw, &m.MinimalSafeClaims); err != nil {
+			return ClaimMode{}, fmt.Errorf("malformed minimal_safe_claims for project %s: %w", projectID, err)
+		}
+	}
+	return m, nil
+}
+
+// ClaimConfigProjects is every project Syndra holds claim config for: a
+// default shape, a failure mode, or an app's shape.
+func ClaimConfigProjects(ctx context.Context) ([]string, error) {
+	rows, err := querier(ctx).Query(ctx, `
+		SELECT zitadel_project_id FROM claim_profiles
+		UNION SELECT project_id FROM app_claim_shape_versions`)
+	if err != nil {
+		return nil, fmt.Errorf("list claim config projects: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan claim config project: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"syndra/internal/claimserve"
 	"syndra/internal/claimtel"
 	"syndra/internal/db"
 	"syndra/internal/services/periodic"
@@ -168,7 +169,14 @@ type claimsHealth struct {
 	WarmFailed      *int             `json:"warm_failed,omitempty"`
 	TelemetryFailed int              `json:"telemetry_flush_failures"`
 	BackgroundPanic int64            `json:"background_panics"`
+	// Snapshot is the data plane's config: its generation, how long since
+	// Redis last confirmed it current, and the last-known-good copy's size.
+	Snapshot claimserve.Status `json:"snapshot"`
 }
+
+// snapshotStaleAfter is ten missed polls: the snapshot still answers, but an
+// edit made since may not have reached it.
+const snapshotStaleAfter = 10 * time.Second
 
 func ageS(now, t time.Time) *int64 {
 	if t.IsZero() {
@@ -221,6 +229,16 @@ func handleClaimsHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.BackgroundPanic = backgroundPanics(); h.BackgroundPanic > 0 {
 		soft = append(soft, "BACKGROUND_PANIC")
+	}
+	h.Snapshot = claimPlane.Status()
+	switch {
+	case !h.Snapshot.Loaded:
+		hard = append(hard, "SNAPSHOT_NOT_LOADED") // every call answers fail closed
+	case h.Snapshot.Projects == 0:
+		soft = append(soft, "SNAPSHOT_EMPTY")
+	}
+	if c := h.Snapshot.CheckedAgo; h.Snapshot.Loaded && (c == nil || time.Duration(*c)*time.Second > snapshotStaleAfter) {
+		soft = append(soft, "SNAPSHOT_STALE")
 	}
 
 	sort.Strings(hard)

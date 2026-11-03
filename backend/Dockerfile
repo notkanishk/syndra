@@ -27,5 +27,5 @@ WORKDIR /app
 COPY --from=builder /app/syndra .
 COPY --from=builder /app/db ./db
 
-EXPOSE 8080
+EXPOSE 8080 8090
 CMD ["./syndra"]

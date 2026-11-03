@@ -10,49 +10,123 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
+	"syndra/internal/claimserve"
+	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
-// fakeRedis swaps the three Redis seams for an in-memory map.
-func fakeRedis(t *testing.T) map[string]string {
+// factsStore is an in-memory Redis for the cache's seams: the facts hashes,
+// the old per-project keys, and a count of every command.
+type factsStore struct {
+	mu     sync.Mutex
+	hashes map[string]map[string]string
+	kv     map[string]string
+	ops    map[string]int
+}
+
+func (s *factsStore) count(op string) { s.mu.Lock(); s.ops[op]++; s.mu.Unlock() }
+
+// fakeRedis swaps every Redis seam for an in-memory store.
+func fakeRedis(t *testing.T) *factsStore {
 	t.Helper()
-	origSet, origDel, origScan := redisSet, redisDel, redisScanKeys
-	t.Cleanup(func() { redisSet, redisDel, redisScanKeys = origSet, origDel, origScan })
-	kv := map[string]string{}
-	redisSet = func(_ context.Context, key, value string, _ time.Duration) error {
-		kv[key] = value
+	oKeys, oHGet, oWrite, oGet, oDel, oScan := redisHKeys, redisHGet, redisWriteFacts, redisGet, redisDel, redisScanKeys
+	t.Cleanup(func() {
+		redisHKeys, redisHGet, redisWriteFacts, redisGet, redisDel, redisScanKeys = oKeys, oHGet, oWrite, oGet, oDel, oScan
+	})
+	s := &factsStore{hashes: map[string]map[string]string{}, kv: map[string]string{}, ops: map[string]int{}}
+	redisHKeys = func(_ context.Context, key string) ([]string, error) {
+		s.count("HKEYS")
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		var out []string
+		for f := range s.hashes[key] {
+			out = append(out, f)
+		}
+		return out, nil
+	}
+	redisHGet = func(_ context.Context, key, field string) (string, error) {
+		s.count("HGET")
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		v, ok := s.hashes[key][field]
+		if !ok {
+			return "", redis.Nil
+		}
+		return v, nil
+	}
+	redisWriteFacts = func(_ context.Context, key string, set map[string]string, drop, legacy []string, _ time.Duration) error {
+		s.count("MULTI")
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.hashes[key] == nil {
+			s.hashes[key] = map[string]string{}
+		}
+		for f, v := range set {
+			s.hashes[key][f] = v
+		}
+		for _, f := range drop {
+			delete(s.hashes[key], f)
+		}
+		for _, k := range legacy {
+			delete(s.kv, k)
+		}
 		return nil
 	}
+	redisGet = func(_ context.Context, key string) (string, error) {
+		s.count("GET")
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		v, ok := s.kv[key]
+		if !ok {
+			return "", redis.Nil
+		}
+		return v, nil
+	}
 	redisDel = func(_ context.Context, keys ...string) error {
+		s.count("DEL")
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		for _, k := range keys {
-			delete(kv, k)
+			delete(s.kv, k)
+			delete(s.hashes, k)
 		}
 		return nil
 	}
 	redisScanKeys = func(_ context.Context, pattern string) ([]string, error) {
+		s.count("SCAN")
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		prefix := strings.TrimSuffix(pattern, "*")
 		var keys []string
-		for k := range kv {
+		for k := range s.kv {
 			if strings.HasPrefix(k, prefix) {
 				keys = append(keys, k)
 			}
 		}
 		return keys, nil
 	}
-	return kv
+	return s
 }
 
-func cachedRoles(t *testing.T, kv map[string]string, key string) []string {
+// roles is what the data plane would read for (user, project), nil when none.
+func (s *factsStore) roles(t *testing.T, user, project string) []string {
 	t.Helper()
-	raw, ok := kv[key]
+	raw, ok := s.hashes[claimserve.FactsKey(user)][project]
 	if !ok {
 		return nil
 	}
 	var f struct{ Roles []string }
 	if err := json.Unmarshal([]byte(raw), &f); err != nil {
-		t.Fatalf("parse %s: %v", key, err)
+		t.Fatalf("parse %s/%s: %v", user, project, err)
 	}
 	return f.Roles
+}
+
+func (s *factsStore) has(user, project string) bool {
+	_, ok := s.hashes[claimserve.FactsKey(user)][project]
+	return ok
 }
 
 func holding(grants ...models.DirectGrant) {
@@ -66,7 +140,7 @@ func holding(grants ...models.DirectGrant) {
 // stored claims while the rest stay.
 func TestRefreshUser_RecompilesInsteadOfInvalidating(t *testing.T) {
 	resetCacheDeps(t)
-	kv := fakeRedis(t)
+	s := fakeRedis(t)
 	ctx := context.Background()
 
 	holding(
@@ -77,7 +151,7 @@ func TestRefreshUser_RecompilesInsteadOfInvalidating(t *testing.T) {
 	if err := RefreshUser(ctx, "u1"); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
-	if got := cachedRoles(t, kv, "mapping:u1:pA"); len(got) != 1 {
+	if got := s.roles(t, "u1", "pA"); len(got) != 1 {
 		t.Fatalf("a held project must be compiled without being named: %v", got)
 	}
 
@@ -91,9 +165,9 @@ func TestRefreshUser_RecompilesInsteadOfInvalidating(t *testing.T) {
 	if err := RefreshUser(ctx, "u1", "pC"); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
-	for key, want := range map[string]int{"mapping:u1:pA": 1, "mapping:u1:pB": 2, "mapping:u1:pC": 1} {
-		if got := cachedRoles(t, kv, key); len(got) != want {
-			t.Errorf("%s after a grant in pC: want %d roles, got %v", key, want, got)
+	for p, want := range map[string]int{"pA": 1, "pB": 2, "pC": 1} {
+		if got := s.roles(t, "u1", p); len(got) != want {
+			t.Errorf("%s after a grant in pC: want %d roles, got %v", p, want, got)
 		}
 	}
 
@@ -105,14 +179,59 @@ func TestRefreshUser_RecompilesInsteadOfInvalidating(t *testing.T) {
 	if err := RefreshUser(ctx, "u1", "pB"); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
-	if got := cachedRoles(t, kv, "mapping:u1:pB"); len(got) != 1 || got[0] != "editor" {
+	if got := s.roles(t, "u1", "pB"); len(got) != 1 || got[0] != "editor" {
 		t.Errorf("the revoked role must be gone and the other kept: %v", got)
 	}
-	if _, stale := kv["mapping:u1:pA"]; stale {
+	if s.has("u1", "pA") {
 		t.Errorf("a project the user holds nothing in must not keep serving its old roles")
 	}
-	if got := cachedRoles(t, kv, "mapping:u1:pC"); len(got) != 1 {
+	if got := s.roles(t, "u1", "pC"); len(got) != 1 {
 		t.Errorf("an untouched project must survive: %v", got)
+	}
+	if s.ops["SCAN"] != 1 {
+		t.Errorf("a person on the hash layout must never SCAN: %d scans over three refreshes, want the one migration", s.ops["SCAN"])
+	}
+}
+
+// A person still on the old layout moves in one refresh: their old keys are
+// read as the projects they had, and deleted by the same write that creates
+// the hash, so the data plane's fallback read can never find a project the
+// hash has since dropped. Later refreshes never SCAN.
+func TestRefreshUser_MovesTheOldLayoutOnce(t *testing.T) {
+	resetCacheDeps(t)
+	s := fakeRedis(t)
+	ctx := context.Background()
+	s.kv["mapping:u1:pOld"] = `{"roles":["revoked"]}`
+	s.kv["mapping:u1:pA"] = `{"roles":["viewer"]}`
+	s.kv["mapping:u2:pA"] = `{"roles":["admin"]}`
+	holding(models.DirectGrant{ProjectID: "pA", RoleKey: "viewer"})
+
+	if err := RefreshUser(ctx, "u1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.kv["mapping:u1:pOld"]; ok {
+		t.Error("an old key survived the move: the fallback would serve its revoked role")
+	}
+	if _, ok := s.kv["mapping:u1:pA"]; ok {
+		t.Error("an old key survived the move")
+	}
+	if _, ok := s.kv["mapping:u2:pA"]; !ok {
+		t.Error("another person's old key was touched")
+	}
+	if s.has("u1", "pOld") || len(s.roles(t, "u1", "pA")) != 1 {
+		t.Errorf("hash after the move: %v", s.hashes[claimserve.FactsKey("u1")])
+	}
+	if _, ok := s.hashes[claimserve.FactsKey("u1")][claimserve.MetaField]; !ok {
+		t.Error("the hash does not say it is on the new layout")
+	}
+	f, ok, err := StoredFacts(ctx, "u2", "pA")
+	if err != nil || !ok || len(f.Roles) != 1 {
+		t.Errorf("an unmoved person reads from the old key until they move: %+v %v %v", f, ok, err)
+	}
+
+	_ = RefreshUser(ctx, "u1")
+	if s.ops["SCAN"] != 1 {
+		t.Errorf("SCANs = %d, want one, for the move only", s.ops["SCAN"])
 	}
 }
 
@@ -121,9 +240,9 @@ func TestRefreshUser_RecompilesInsteadOfInvalidating(t *testing.T) {
 // answer.
 func TestRefreshUser_ACompileFailureDropsWhatItCouldNotRefresh(t *testing.T) {
 	resetCacheDeps(t)
-	kv := fakeRedis(t)
-	kv["mapping:u1:pA"] = `{"roles":["admin"]}`
-	kv["mapping:u2:pA"] = `{"roles":["admin"]}`
+	s := fakeRedis(t)
+	s.hashes[claimserve.FactsKey("u1")] = map[string]string{"pA": `{"roles":["admin"]}`, claimserve.MetaField: "x"}
+	s.hashes[claimserve.FactsKey("u2")] = map[string]string{"pA": `{"roles":["admin"]}`, claimserve.MetaField: "x"}
 	dbGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
 		return nil, errors.New("db down")
 	}
@@ -131,11 +250,11 @@ func TestRefreshUser_ACompileFailureDropsWhatItCouldNotRefresh(t *testing.T) {
 	if err := RefreshUser(context.Background(), "u1", "pA"); err == nil {
 		t.Fatal("a failed compile must be reported")
 	}
-	if _, ok := kv["mapping:u1:pA"]; ok {
-		t.Error("the unrefreshable key kept serving")
+	if s.has("u1", "pA") {
+		t.Error("the unrefreshable facts kept serving")
 	}
-	if _, ok := kv["mapping:u2:pA"]; !ok {
-		t.Error("another user's key was touched")
+	if !s.has("u2", "pA") {
+		t.Error("another user's facts were touched")
 	}
 }
 
@@ -143,33 +262,59 @@ func TestRefreshUser_ACompileFailureDropsWhatItCouldNotRefresh(t *testing.T) {
 // answer would repair the one project being looked at and hide a stale cache.
 func TestCompileFacts_WritesNothing(t *testing.T) {
 	resetCacheDeps(t)
-	kv := fakeRedis(t)
+	s := fakeRedis(t)
 	holding(models.DirectGrant{ProjectID: "pA", RoleKey: "viewer"})
 
 	facts, err := CompileFacts(context.Background(), "u1", "pA")
 	if err != nil || len(facts.Roles) != 1 {
 		t.Fatalf("facts=%+v err=%v", facts, err)
 	}
-	if len(kv) != 0 {
-		t.Errorf("a preview wrote to the token cache: %v", kv)
+	if len(s.ops) != 0 {
+		t.Errorf("a preview touched the token cache: %v", s.ops)
 	}
+}
+
+// warmDirectory makes the warm's one directory snapshot list these people.
+func warmDirectory(t *testing.T, ids ...string) *int {
+	t.Helper()
+	orig := directorySnapshot
+	t.Cleanup(func() { directorySnapshot = orig })
+	reads := 0
+	directorySnapshot = func(context.Context) ([]models.UserProfile, bool) {
+		reads++
+		out := make([]models.UserProfile, len(ids))
+		for i, id := range ids {
+			out[i] = models.UserProfile{ID: id}
+		}
+		return out, true
+	}
+	return &reads
+}
+
+// noPace runs warms without spreading them, for tests.
+func noPace(t *testing.T) {
+	orig := warmPace
+	warmPace = 0
+	t.Cleanup(func() { warmPace = orig })
 }
 
 // Warm covers everyone Syndra knows, so a restart does not leave the token
 // path degraded for people whose access never changed.
 func TestWarm_CompilesEveryKnownUser(t *testing.T) {
 	resetCacheDeps(t)
-	kv := fakeRedis(t)
+	noPace(t)
+	s := fakeRedis(t)
 	orig := dbGetAllKnownUserIDs
 	t.Cleanup(func() { dbGetAllKnownUserIDs = orig })
 	dbGetAllKnownUserIDs = func(context.Context) ([]string, error) { return []string{"u1", "u2"}, nil }
+	warmDirectory(t, "u1", "u2")
 	holding(models.DirectGrant{ProjectID: "pA", RoleKey: "viewer"})
 
 	if err := Warm(context.Background()); err != nil {
 		t.Fatalf("warm: %v", err)
 	}
-	if len(cachedRoles(t, kv, "mapping:u1:pA")) != 1 || len(cachedRoles(t, kv, "mapping:u2:pA")) != 1 {
-		t.Errorf("not everyone was warmed: %v", kv)
+	if len(s.roles(t, "u1", "pA")) != 1 || len(s.roles(t, "u2", "pA")) != 1 {
+		t.Errorf("not everyone was warmed: %v", s.hashes)
 	}
 }
 
@@ -178,42 +323,40 @@ func TestWarm_CompilesEveryKnownUser(t *testing.T) {
 // for people whose access never changed).
 func TestWarm_NeverDegradesGoodEntries(t *testing.T) {
 	resetCacheDeps(t)
-	kv := fakeRedis(t)
-	origIDs, origFind, origAnswers := dbGetAllKnownUserIDs, cacheFindUser, directoryAnswers
-	t.Cleanup(func() { dbGetAllKnownUserIDs, cacheFindUser, directoryAnswers = origIDs, origFind, origAnswers })
+	noPace(t)
+	s := fakeRedis(t)
+	origIDs := dbGetAllKnownUserIDs
+	t.Cleanup(func() { dbGetAllKnownUserIDs = origIDs })
 	dbGetAllKnownUserIDs = func(context.Context) ([]string, error) { return []string{"u1"}, nil }
-	directoryAnswers = func(context.Context) bool { return true }
 	holding(models.DirectGrant{ProjectID: "pA", RoleKey: "viewer"})
 	const good = `{"roles":["admin"]}`
+	key := claimserve.FactsKey("u1")
+	s.hashes[key] = map[string]string{"pA": good, claimserve.MetaField: "x"}
 
-	// Profile read fails: skip the user, keep the keys.
-	kv["mapping:u1:pA"] = good
-	cacheFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
-		return models.UserProfile{}, false, errors.New("directory down")
-	}
+	// The marks can't be read: skip the user, keep the facts.
+	warmDirectory(t, "u1")
+	dbListServiceAccounts = func(context.Context) ([]db.ServiceAccountRow, error) { return nil, errors.New("db down") }
 	_ = Warm(context.Background())
-	if kv["mapping:u1:pA"] != good {
-		t.Errorf("a failed profile read rewrote or dropped the entry: %q", kv["mapping:u1:pA"])
+	if s.hashes[key]["pA"] != good {
+		t.Errorf("a failed profile read rewrote or dropped the entry: %q", s.hashes[key]["pA"])
 	}
 
-	// Compile fails: keep the keys (a change-driven refresh would drop them).
-	cacheFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
-		return models.UserProfile{}, false, nil
-	}
+	// Compile fails: keep the facts (a change-driven refresh would drop them).
+	dbListServiceAccounts = func(context.Context) ([]db.ServiceAccountRow, error) { return nil, nil }
 	dbGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
 		return nil, errors.New("db down")
 	}
 	_ = Warm(context.Background())
-	if kv["mapping:u1:pA"] != good {
-		t.Errorf("a failed compile dropped the entry: %q", kv["mapping:u1:pA"])
+	if s.hashes[key]["pA"] != good {
+		t.Errorf("a failed compile dropped the entry: %q", s.hashes[key]["pA"])
 	}
 
 	// Directory not answering: the pass is skipped outright.
 	holding(models.DirectGrant{ProjectID: "pA", RoleKey: "viewer"})
-	directoryAnswers = func(context.Context) bool { return false }
+	directorySnapshot = func(context.Context) ([]models.UserProfile, bool) { return nil, false }
 	_ = Warm(context.Background())
-	if kv["mapping:u1:pA"] != good {
-		t.Errorf("a pass with the directory down still wrote: %q", kv["mapping:u1:pA"])
+	if s.hashes[key]["pA"] != good {
+		t.Errorf("a pass with the directory down still wrote: %q", s.hashes[key]["pA"])
 	}
 }
 
@@ -223,7 +366,7 @@ func TestWarm_NeverDegradesGoodEntries(t *testing.T) {
 // arrives; unserialized, the old compile stores admin back over the revoke.
 func TestRefreshUser_SerializedPerUser(t *testing.T) {
 	resetCacheDeps(t)
-	kv := fakeRedis(t)
+	s := fakeRedis(t)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
 	dbGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
@@ -245,8 +388,8 @@ func TestRefreshUser_SerializedPerUser(t *testing.T) {
 	close(release)
 	wg.Wait()
 
-	if raw, ok := kv["mapping:u1:pA"]; ok {
-		t.Errorf("the older compile overwrote the newer one: %s", raw)
+	if s.has("u1", "pA") {
+		t.Errorf("the older compile overwrote the newer one: %v", s.hashes[claimserve.FactsKey("u1")])
 	}
 }
 

@@ -568,6 +568,49 @@ func TestZitadelSource_Cache_TTLExpires(t *testing.T) {
 	}
 }
 
+// A users-list rebuild every 30s must not be a metadata call per person every
+// 30s (assessment SC3): metadata keeps its own, longer TTL, so a rebuild past
+// the list's TTL costs only the ListUsers pages. An edit through Syndra still
+// drops it at once.
+func TestZitadelSource_MetadataOutlivesTheUsersList(t *testing.T) {
+	mc := newMockClient()
+	mc.listUsersFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelUser], error) {
+		return &zitadel.SearchResult[zitadel.ZitadelUser]{Items: []zitadel.ZitadelUser{{ID: "u1"}, {ID: "u2"}}}, nil
+	}
+	src := newZitadelSourceForTest(mc)
+	now := time.Now()
+	src.now = func() time.Time { return now }
+	metadataCalls := func() int {
+		mc.mu.Lock()
+		defer mc.mu.Unlock()
+		return mc.listMetadataCalls["u1"] + mc.listMetadataCalls["u2"]
+	}
+
+	for i, step := range []time.Duration{0, CacheTTL + time.Second, 10 * time.Minute} {
+		now = now.Add(step)
+		if _, err := src.Users(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if mc.listUsersCalls != i+1 || metadataCalls() != 2 {
+			t.Fatalf("rebuild %d: %d list calls, %d metadata calls; want %d and 2 (the first rebuild only)", i, mc.listUsersCalls, metadataCalls(), i+1)
+		}
+	}
+	now = now.Add(MetadataTTL)
+	if _, err := src.Users(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if metadataCalls() != 4 {
+		t.Fatalf("metadata past its TTL was not read again: %d calls", metadataCalls())
+	}
+	src.InvalidateUsers()
+	if _, err := src.Users(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if metadataCalls() != 6 {
+		t.Fatalf("an invalidation did not drop metadata: %d calls", metadataCalls())
+	}
+}
+
 func TestZitadelSource_InvalidateProject_DropsOnlyTargeted(t *testing.T) {
 	mc := newMockClient()
 	mc.listProjectsFn = func(context.Context, zitadel.SearchParams) (*zitadel.SearchResult[zitadel.ZitadelProject], error) {

@@ -65,11 +65,15 @@ jobs:
           # restart it can honestly read degraded (the first warm is running),
           # and the deploy must not fail on that. 503 means "failing" and is
           # still an answer; anything else is a route that is gone.
-          code="$(curl -sS -o /tmp/healthz-claims.json -w '%{http_code}' -m 10 http://localhost:8080/healthz/claims)"
-          case "$code" in
-            200|503) grep -q '"status"' /tmp/healthz-claims.json && echo "/healthz/claims: $(cat /tmp/healthz-claims.json)" ;;
-            *) echo "/healthz/claims answered HTTP ${code}"; exit 1 ;;
-          esac
+          # Both doors: the admin one (8080) and the data plane's own (8090,
+          # claims-delivery-integrity S2), which Caddy routes /api/action/* to.
+          for port in 8080 8090; do
+            code="$(curl -sS -o /tmp/healthz-claims.json -w '%{http_code}' -m 10 --retry 10 --retry-delay 2 --retry-connrefused "http://localhost:${port}/healthz/claims")"
+            case "$code" in
+              200|503) grep -q '"status"' /tmp/healthz-claims.json && echo ":${port}/healthz/claims: $(cat /tmp/healthz-claims.json)" ;;
+              *) echo ":${port}/healthz/claims answered HTTP ${code}"; exit 1 ;;
+            esac
+          done
 
       # Zitadel POSTs to SYNDRA_EXTERNAL_URL, not to localhost. On the dev box
       # that URL drifted to a decommissioned IP and every Action silently
