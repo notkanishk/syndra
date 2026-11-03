@@ -33,7 +33,21 @@ const (
 	// them from Zitadel (Keyring JSON, no TTL). The key is in Redis because the
 	// data plane may run in its own container (P4); Redis is internal-only.
 	KeyringKey = "claims:keyring"
+	// WelcomeKey holds Makerspace settings' welcome switch and what it sends
+	// (Welcome JSON, no TTL).
+	WelcomeKey = "claims:welcome"
 )
+
+// Welcome is what a brand-new member's first token may carry before
+// onboarding has given them anything (assessment SC4 option b). The write side
+// computes it (services.WelcomeClaims): per project, the roles the welcome
+// bundle is about to give without waiting for approval. Clients maps every app
+// of those projects to its project, because the token names none.
+type Welcome struct {
+	On      bool                    `json:"on"`
+	Facts   map[string]claims.Facts `json:"facts,omitempty"`
+	Clients map[string]string       `json:"clients,omitempty"`
+}
 
 // PreviousKeyKeep is how long the key Zitadel signed with before a rotation
 // keeps verifying: calls Zitadel signed just before it swapped still arrive.
@@ -189,6 +203,9 @@ type Config struct {
 	Keys Keyring
 	// Debug is debug mode's watched sign-ins by client id (DebugKey).
 	Debug map[string]DebugWatch
+	// Welcome is the first-sign-in switch and what it sends; off when unset
+	// or unreadable.
+	Welcome Welcome
 }
 
 // KeysWithEnv is every key a claims call may be signed with: the keyring,

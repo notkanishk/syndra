@@ -42,3 +42,8 @@ Zitadel calls Syndra's Actions v2 target on every token, with a 3s timeout and i
 - The L1 probe exercises the whole public path every minute with a canary that exists only in Redis (published and compiled by the same code as everyone), counted apart from every SLI. L2, a real Zitadel token, is built and stays off until the owner creates its canary.
 - Not yet: a Redis ACL user for the claims process.
 
+### As built (welcome roles at a first sign-in, 3 Nov 2026)
+
+- The snapshot also carries `claims:welcome`: Makerspace settings' switch (off by default), the welcome roles per project that wait for nobody, and every app of those projects by client id. It is written through like a shape save.
+- With it on, a token naming no project for a person whose Zitadel account is under 10 minutes old (`user.creation_date`, from the payload) is answered from the snapshot and the same one facts read: no facts in the app's project means the app's shape over the welcome roles (`served_welcome`). Still no Postgres or Zitadel on the request path.
+

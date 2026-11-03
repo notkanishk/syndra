@@ -28,8 +28,20 @@ const TERMS = [
   { name: "Monsoon", start: `${Y}-08-01`, end: `${Y}-12-31` },
 ];
 
-function mount(read: unknown = { terms: TERMS, set_by: "u1", set_at: `${Y}-03-04T10:00:00Z` }) {
-  respond.mockImplementation(async (path: string, init?: { method?: string }) => {
+function mount(
+  read: unknown = { terms: TERMS, set_by: "u1", set_at: `${Y}-03-04T10:00:00Z` },
+  welcome: unknown = { on: false, set_by: null, set_at: null },
+  welcomeSave?: Error,
+) {
+  respond.mockImplementation(async (path: string, init?: { method?: string; body?: unknown }) => {
+    if (path === "/config/welcome-claims") {
+      if (init?.method === "PUT") {
+        if (welcomeSave) throw welcomeSave;
+        return { ...(init.body as object), set_by: "u1", set_at: `${Y}-11-03T10:00:00Z` };
+      }
+      if (welcome instanceof Error) throw welcome;
+      return welcome;
+    }
     if (init?.method === "PUT") return {};
     if (path === "/terms") {
       if (read instanceof Error) throw read;
@@ -132,8 +144,9 @@ describe("Makerspace settings page", () => {
   });
 
   it("claims nothing before the read lands, or when it fails", async () => {
-    mount(new ApiError(500, "boom"));
+    mount(new ApiError(500, "boom"), new ApiError(500, "boom"));
     await screen.findByText(/Couldn't load the term dates/);
+    await screen.findByText("Couldn't load this setting.");
     expect(screen.queryByRole("button", { name: "Edit term dates" })).toBeNull();
     expect(screen.queryByText(/Never set/)).toBeNull();
     expect(screen.queryByText(/Set by/)).toBeNull();
@@ -317,5 +330,55 @@ describe("Edit term dates", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Edit term dates" }));
     expect((within(dialog()).getByLabelText("Spring, name") as HTMLInputElement).value).toBe("Spring");
+  });
+});
+
+// Welcome roles at a first sign-in (owner, 3 Nov 2026): one switch, off by
+// default, saved the moment it is changed, with who set it and when.
+describe("Makerspace settings: first sign-in", () => {
+  const group = () => screen.getByRole("radiogroup", { name: "Welcome roles early" });
+  const radio = (name: "Off" | "On") => within(group()).getByRole("radio", { name });
+  const welcomePuts = () =>
+    respond.mock.calls.filter(([path, init]) => path === "/config/welcome-claims" && init?.method === "PUT");
+
+  it("explains what it does, reads Off when never set, and says so", async () => {
+    mount();
+    await screen.findByRole("radiogroup", { name: "Welcome roles early" });
+    expect(screen.getByText("First sign-in")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /For a new member's first sign-in only, apps are told the roles the welcome bundle is about to give, so they see the right things straight away\. Roles that wait for approval are never sent early\./,
+      ),
+    ).toBeTruthy();
+    expect(radio("Off").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Never set. Off until you turn it on.")).toBeTruthy();
+  });
+
+  it("turns on with one change, saved at once, and says who set it", async () => {
+    mount();
+    await screen.findByRole("radiogroup", { name: "Welcome roles early" });
+    fireEvent.click(radio("On"));
+    await waitFor(() => expect(welcomePuts()).toHaveLength(1));
+    expect(welcomePuts()[0][1].body).toEqual({ on: true });
+    await waitFor(() => expect(radio("On").getAttribute("aria-checked")).toBe("true"));
+    const readLine = (await screen.findAllByText(/Set by/)).find((n) => n.textContent?.includes("3 Nov"));
+    expect(readLine).toBeTruthy();
+    // Choosing what it already is saves nothing.
+    fireEvent.click(radio("On"));
+    expect(welcomePuts()).toHaveLength(1);
+  });
+
+  it("a failed save says so and leaves the switch as it was", async () => {
+    mount(undefined, { on: false }, new ApiError(500, "boom"));
+    await screen.findByRole("radiogroup", { name: "Welcome roles early" });
+    fireEvent.click(radio("On"));
+    expect(await screen.findByText("The setting didn't save.")).toBeTruthy();
+    expect(radio("Off").getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("a failed read shows the error in place of the switch", async () => {
+    mount(undefined, new ApiError(500, "boom"));
+    expect(await screen.findByText("Couldn't load this setting.")).toBeTruthy();
+    expect(screen.queryByRole("radiogroup", { name: "Welcome roles early" })).toBeNull();
   });
 });

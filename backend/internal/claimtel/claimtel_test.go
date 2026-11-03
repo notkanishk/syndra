@@ -277,8 +277,11 @@ func TestOutcomes_SeverityCoversEveryClass(t *testing.T) {
 		}
 		seen[o] = true
 	}
-	if len(seen) != 16 {
-		t.Fatalf("%d classes, want the 16 of assessment §4a", len(seen))
+	if len(seen) != 17 {
+		t.Fatalf("%d classes, want the 16 of assessment §4a and served_welcome (SC4)", len(seen))
+	}
+	if ServedWelcome.Severity() != Informational || Rank(ServedWelcome) > Rank(ServedLKG) {
+		t.Error("a welcome answer is delivered, not a fault")
 	}
 	if SigMissing.Severity() != Informational || SigMismatch.Severity() != Hard || DegradedNoFacts.Severity() != Soft {
 		t.Error("severity table changed")

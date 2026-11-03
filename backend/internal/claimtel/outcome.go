@@ -19,8 +19,12 @@ import (
 type Outcome string
 
 const (
-	Served                  Outcome = "served"
-	ServedLKG               Outcome = "served_lkg" // a last-known-good answer while Redis is out (claimserve)
+	Served    Outcome = "served"
+	ServedLKG Outcome = "served_lkg" // a last-known-good answer while Redis is out (claimserve)
+	// ServedWelcome is a brand-new member's first token answered with the
+	// welcome bundle's roles before onboarding has given them (SC4 option b,
+	// behind Makerspace settings' switch). Delivered, not a fault.
+	ServedWelcome           Outcome = "served_welcome"
 	DegradedNoFacts         Outcome = "degraded_no_facts"
 	DegradedShapeUnreadable Outcome = "degraded_shape_unreadable"
 	DegradedMalformed       Outcome = "degraded_malformed"
@@ -39,7 +43,7 @@ const (
 
 // Outcomes lists every class once, in a fixed order.
 var Outcomes = [...]Outcome{
-	Served, ServedLKG, DegradedNoFacts, DegradedShapeUnreadable, DegradedMalformed,
+	Served, ServedLKG, ServedWelcome, DegradedNoFacts, DegradedShapeUnreadable, DegradedMalformed,
 	NoGrants, ContractFault, RefusedCrossProject, NotLanding, UnknownFunction,
 	SigMissing, SigStale, SigMismatch, BadRequest, DeadlineExceeded, Panic,
 }
