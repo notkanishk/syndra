@@ -69,6 +69,9 @@ services:
       - MIGRATION_PATH=${MIGRATION_PATH:-file:///app/db/migrations}
       - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
       - ZITADEL_AUDIENCE=${ZITADEL_AUDIENCE:-}
+      # The public URL Zitadel calls (claims and events); the reconciler checks
+      # Zitadel's targets point here, and the probe will call it.
+      - SYNDRA_EXTERNAL_URL=${SYNDRA_EXTERNAL_URL:-}
       # ZITADEL_MACHINE_KEY_PATH in .env is a HOST path (e.g. ./zitadel-machine-key.json).
       # Inside the container it is rewritten to the fixed mount point below, but
       # only when the operator actually set it — when unset, the container sees

@@ -42,6 +42,6 @@ function calmWords(s: ClaimsStatus, now = Date.now()): string {
   const since = new Date(s.checking_since).getTime();
   const span = now - since < DAY ? `since ${formatWhen(s.checking_since)}` : "in the last 24h";
   const n = s.sign_ins_24h;
-  const checked = (n.delivered ?? 0) + (n.not_called ?? 0) + (n.not_served ?? 0) + (n.first_sign_in_before_access ?? 0);
+  const checked = (n.delivered ?? 0) + (n.not_called ?? 0) + (n.not_served ?? 0) + (n.first_sign_in_before_access ?? 0) + (n.nothing_to_deliver ?? 0);
   return checked === 0 ? `no sign-ins to check ${span}` : `delivered to every sign-in ${span}`;
 }
