@@ -319,7 +319,9 @@ func TestUnresolvedAgesFromTheClaimWhereThereIsOne(t *testing.T) {
 		t.Fatalf("read addon_operations.go: %v", err)
 	}
 	body := funcBody(t, string(src), "ListUnresolvedAddonOperations")
-	if !strings.Contains(body, "COALESCE(claimed_at, created_at)") {
+	// Claimed rows only, aged from the claim: an unclaimed record was never sent
+	// and is settled as unreached instead (SettleUnclaimedAddonOperations).
+	if !strings.Contains(body, "claimed_at IS NOT NULL") || !strings.Contains(body, "claimed_at < NOW() - $2::interval") {
 		t.Error("a dispatch that waited in the process before being sent would otherwise be aged from " +
 			"when its record was written rather than from when the call began")
 	}
@@ -329,13 +331,63 @@ func TestUnresolvedAgesFromTheClaimWhereThereIsOne(t *testing.T) {
 // list, including a later one. Without this, the column guard reads only the
 // CREATE TABLE and a future ALTER could add a free-text column it never sees.
 func TestNoLaterMigrationAltersTheRecordTable(t *testing.T) {
-	all := stripSQLComments(allUpMigrationsSQL(t))
+	dir := findMigrationsDir(t)
+	ups, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	re := regexp.MustCompile(`(?is)ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?addon_operations`)
-	if re.MatchString(all) {
-		t.Fatal("a migration alters addon_operations. Every column on this table lives beside a subject's " +
-			"identity forever and the table is written on the path that carries a password: add it to the " +
-			"CREATE TABLE and to the closed list in TestAddonOperationsHasNoColumnThatCouldHoldASecret, " +
-			"so the guard can see it.")
+	for _, p := range ups {
+		if filepath.Base(p) == unconfirmedMigration+".up.sql" {
+			continue // read, column by column, by the test below
+		}
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if re.MatchString(stripSQLComments(string(raw))) {
+			t.Fatalf("%s alters addon_operations. Every column on this table lives beside a subject's "+
+				"identity forever and the table is written on the path that carries a password: a column "+
+				"is a decision, made in the closed list in TestUnconfirmedMigrationAddsOnlyItsColumns, "+
+				"so the guard can see it.", filepath.Base(p))
+		}
+	}
+}
+
+// unconfirmedMigration is the one later migration that alters the record table
+// (A-09, A-13): answers, the one automatic resend, and `about`.
+const unconfirmedMigration = "000070_unconfirmed_operations"
+
+// The columns 000070 adds are a closed list too, and none is shaped to hold a
+// value: `about` is the one text column, and Go writes it only for the four
+// operations that carry no secret (addonop.aboutOperations, pinned there).
+func TestUnconfirmedMigrationAddsOnlyItsColumns(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(findMigrationsDir(t), unconfirmedMigration+".up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := stripSQLComments(string(raw))
+	var got []string
+	for _, m := range regexp.MustCompile(`(?i)ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+(\w+)`).FindAllStringSubmatch(sql, -1) {
+		got = append(got, m[1])
+	}
+	sort.Strings(got)
+	want := []string{"about", "attempt", "resolution", "resolved_at", "resolved_by", "retry_of", "superseded_by"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("000070's column set changed.\n got: %v\nwant: %v", got, want)
+	}
+	lower := strings.ToLower(sql)
+	for _, banned := range []string{"json", "payload", "params", "secret", "password", "detail", "body", "response"} {
+		if strings.Contains(lower, banned) {
+			t.Errorf("000070 mentions %q: a column shaped to hold arbitrary content is where a secret ends up", banned)
+		}
+	}
+	// Once, and only once, in the table as well as on the page.
+	if !strings.Contains(sql, "CREATE UNIQUE INDEX IF NOT EXISTS idx_addon_operations_one_resend") {
+		t.Error("a send must have at most one resend, enforced by a unique index on retry_of")
+	}
+	if !strings.Contains(sql, "(attempt = 1) = (retry_of IS NULL)") {
+		t.Error("a resend must name its first send, and a first send must name nothing")
 	}
 }
 

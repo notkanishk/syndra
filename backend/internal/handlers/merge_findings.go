@@ -489,6 +489,7 @@ func releaseOnTarget(ctx context.Context, f db.MergeFinding, actor string) error
 	res, err := svcDispatchOperation(ctx, addonop.Request{
 		Target: f.Target, Operation: "account.release",
 		ActorID: actor, SubjectID: f.SubjectID, Confirmed: true,
+		About: boundUsername(ctx, f.Target, f.SubjectID),
 	})
 	if err != nil {
 		return fmt.Errorf("release %s on %s: %w", f.SubjectID, f.Target, err)

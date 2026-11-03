@@ -173,6 +173,10 @@ type AuditLog struct {
 	// Details is structured detail an entry carries when it has any (migration
 	// 000064); today a propagation.cancelled_unsent's what-and-why. Operator-only.
 	Details json.RawMessage `json:"details,omitempty"`
+	// Operation is, on an add-on send's row, that change as one record: its
+	// send, its one automatic resend, and what settled it. Read from the
+	// record table, never stored in the audit row.
+	Operation json.RawMessage `json:"operation,omitempty"`
 }
 
 // ServiceAccount is one account made for a purpose rather than a person

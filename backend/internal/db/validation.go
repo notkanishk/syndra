@@ -155,11 +155,13 @@ func GetAuditLogsForUser(
 	for rows.Next() {
 		var l models.AuditLog
 		var details []byte
+		var operation []byte
 		if err := rows.Scan(&l.ID, &l.ActorID, &l.TargetID, &l.Action, &l.ResourceID, &l.CreatedAt,
-			&l.CascadeID, &details); err != nil {
+			&l.CascadeID, &details, &operation); err != nil {
 			return nil, err
 		}
 		l.Details = details
+		l.Operation = operation
 		logs = append(logs, l)
 	}
 	if err := rows.Err(); err != nil {
@@ -168,6 +170,26 @@ func GetAuditLogsForUser(
 	return logs, nil
 }
 
+// auditOperationColumn is, for an add-on send's audit row, the operation it
+// recorded as one change (A-13 §4, "In the record"): how its send ended, its
+// one automatic resend and how that ended, what settled it, and the earlier
+// changes it settled. NULL for every other row.
+//
+// Joined on read rather than written into the audit row, because the answer
+// arrives after the row is written and an audit row is never rewritten.
+const auditOperationColumn = `CASE WHEN a.action LIKE 'addon.%.dispatched' THEN (
+	  SELECT json_build_object(
+	    'operation', o.operation, 'status', o.status, 'attempt', o.attempt, 'retry_of', o.retry_of,
+	    'sent_at', COALESCE(o.claimed_at, o.created_at), 'resolution', o.resolution, 'resolved_at', o.resolved_at,
+	    'retry', (SELECT json_build_object('id', r.id, 'status', r.status, 'sent_at', COALESCE(r.claimed_at, r.created_at))
+	                FROM addon_operations r WHERE r.retry_of = o.id),
+	    'supersedes', (SELECT COALESCE(json_agg(COALESCE(p.claimed_at, p.created_at) ORDER BY p.created_at), '[]'::json)
+	                     FROM addon_operations p
+	                    WHERE p.attempt = 1 AND p.id <> o.id
+	                      AND p.superseded_by IN (SELECT o.id UNION ALL SELECT r.id FROM addon_operations r WHERE r.retry_of = o.id)))
+	    FROM addon_operations o WHERE o.id = a.resource_id::uuid)
+	END`
+
 // buildAuditQuery is separated from execution so the argument numbering can be
 // tested without a database. Every clause here is optional and each one shifts
 // the placeholder indices of the ones after it, which is precisely the kind of
@@ -175,8 +197,8 @@ func GetAuditLogsForUser(
 // returns the wrong page.
 func buildAuditQuery(userID string, limit int, after *AuditCursor) (string, []any) {
 	const columns = `SELECT id, actor_zitadel_user_id, target_zitadel_user_id, action, resource_id, created_at,
-	                        COALESCE(cascade_id::text,''), details
-	                 FROM audit_logs`
+	                        COALESCE(cascade_id::text,''), details, ` + auditOperationColumn + `
+	                 FROM audit_logs a`
 
 	var where []string
 	var args []any

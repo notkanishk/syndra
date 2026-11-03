@@ -54,6 +54,21 @@ type Request struct {
 	SubjectID string
 	Confirmed bool
 	Params    map[string]any
+	// About is the non-secret thing this change is about, for the record's
+	// `about` column: the account for adopt, release and purge, the value for
+	// setting.put. Dropped for every other operation (aboutOperations), so a
+	// password operation's record can never carry one.
+	About string
+	// RetryOf names the first send when this is the member page's one
+	// automatic resend of the same value after a lost reply (A-13 §4). The
+	// record links to it, and the resend does not spend the rate limit: the
+	// limiter must not be what answers it.
+	RetryOf string
+}
+
+// aboutOperations are the only operations whose record may carry `about`.
+var aboutOperations = map[string]bool{
+	"account.adopt": true, "account.release": true, "account.purge": true, "setting.put": true,
 }
 
 // String, GoString and MarshalJSON all redact, because this type carries a
@@ -262,8 +277,18 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 	// a malformed request costs no database read — and it must not spend a
 	// member's budget either, since it never reached the target and never cost
 	// it anything.
-	if err := withinSubjectRate(ctx, op, req); err != nil {
-		return Result{}, err
+	//
+	// The automatic resend is the exception: it is the same change sent again
+	// once, and the insert below refuses a second resend or one naming a
+	// different call, so skipping the count here cannot be spent twice.
+	if req.RetryOf == "" {
+		if err := withinSubjectRate(ctx, op, req); err != nil {
+			return Result{}, err
+		}
+	}
+	about := req.About
+	if !aboutOperations[req.Operation] {
+		about = ""
 	}
 
 	id, err := beginOperation(ctx, db.AddonOperationParams{
@@ -271,6 +296,8 @@ func Dispatch(ctx context.Context, req Request) (Result, error) {
 		Operation: req.Operation,
 		ActorID:   req.ActorID,
 		SubjectID: req.SubjectID,
+		About:     about,
+		RetryOf:   req.RetryOf,
 	})
 	if err != nil {
 		// Nothing was sent. The record is the precondition for the call, not a

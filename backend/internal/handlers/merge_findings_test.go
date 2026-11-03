@@ -116,6 +116,11 @@ func stubFindings(t *testing.T, h *findingHarness) {
 	svcResolveEntitlementsFor = func(context.Context, string, string) (map[string]json.RawMessage, error) {
 		return map[string]json.RawMessage{"enabled": json.RawMessage(`true`)}, nil
 	}
+	getBinding := dbGetTargetBinding
+	t.Cleanup(func() { dbGetTargetBinding = getBinding })
+	dbGetTargetBinding = func(context.Context, string, string) (db.TargetBinding, bool, error) {
+		return db.TargetBinding{}, false, nil
+	}
 	dbForgetTargetBinding = func(_ context.Context, _, subject string) error {
 		if h.forgetErr != nil {
 			return h.forgetErr

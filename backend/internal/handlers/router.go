@@ -350,6 +350,11 @@ func NewRouter() http.Handler {
 	// values in a finding mean nothing without the target they were read from.
 	mux.HandleFunc("GET /api/v1/targets/{target}/merge-findings", withCORS(withOperatorAuth(handleMergeFindings)))
 	mux.HandleFunc("POST /api/v1/targets/{target}/merge-findings/{id}/resolve", withCORS(withOperatorAuth(withTargetProject(handleResolveMergeFinding))))
+	// Changes the target never answered, and an operator's answer to one
+	// (A-09 §3-4). The answer has its own path, apart from dispatch: nothing is
+	// sent, and the dispatch status is never rewritten as success.
+	mux.HandleFunc("GET /api/v1/targets/{target}/unconfirmed", withCORS(withOperatorAuth(handleListUnconfirmed)))
+	mux.HandleFunc("POST /api/v1/targets/{target}/unconfirmed/{id}/answer", withCORS(withOperatorAuth(handleSettleUnconfirmed)))
 
 	// Access withdrawn that has not gone away. Beside drift triage, never inside
 	// it: drift is access that appeared without an explanation, and this is
