@@ -2,6 +2,7 @@ import type { Panel } from "@/components/insights/AnswerPanel";
 import { roleName } from "@/components/insights/answers";
 import { listOf, openOf, refNode, type Model, type Tone } from "@/components/insights/model";
 import type { InsightOverlap, InsightSingleRoute, InsightsFindings } from "@/lib/queries/useInsights";
+import { sortByName, sortNames } from "@/lib/sort";
 
 /**
  * The three findings that read how access is arranged (single route, unused,
@@ -84,7 +85,7 @@ export function unusedView(m: Model, u: InsightsFindings["unused"]) {
   const ids = [...projectNodes, ...bundleNodes, ...roleNodes].filter((x): x is string => Boolean(x));
 
   const lines: Panel["lines"] = [
-    ...u.projects.map((p) => {
+    ...sortByName(u.projects, (p) => p.name, (p) => p.project_id).map((p) => {
       const k = u.roles.filter((r) => r.project_id === p.project_id).length;
       return {
         tone: "ink" as const,
@@ -92,7 +93,7 @@ export function unusedView(m: Model, u: InsightsFindings["unused"]) {
         text: k === 0 ? "no roles yet." : `${roleWord(k)}, and nobody has ${k === 1 ? "it" : k === 2 ? "either" : "any of them"}.`,
       };
     }),
-    ...u.bundles.map((b) => ({
+    ...sortByName(u.bundles, (b) => b.name).map((b) => ({
       tone: "ink" as const,
       lead: `${b.name}:`,
       text: b.holders > 0 ? `its ${people(b.holders)} already have everything it gives.` : "nobody holds it yet.",
@@ -113,7 +114,7 @@ export function unusedView(m: Model, u: InsightsFindings["unused"]) {
     lines: lines.slice(0, 6),
     open: target ?? { label: "See them in Roles", href: "/roles?unused=1" },
   };
-  const names = [...u.projects.map((p) => p.name), ...u.bundles.map((b) => b.name), ...loose.map((r) => roleName(m, r))];
+  const names = sortNames([...u.projects.map((p) => p.name), ...u.bundles.map((b) => b.name), ...loose.map((r) => roleName(m, r))]);
   return { panel, count, ids, names };
 }
 

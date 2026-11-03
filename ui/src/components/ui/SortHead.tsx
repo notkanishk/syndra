@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { stillMotion, TINT_MS } from "@/lib/motion";
+import { compareNames } from "@/lib/sort";
 
 /**
  * Sorting by a column heading (RULES: sort lives on the headings).
@@ -74,7 +75,7 @@ export function orderBy<T, K extends string>(
     const order =
       typeof x === "number" && typeof y === "number"
         ? x - y
-        : String(x).localeCompare(String(y), undefined, { sensitivity: "base", numeric: true });
+        : compareNames(String(x), String(y));
     return order * sort.dir;
   });
 }

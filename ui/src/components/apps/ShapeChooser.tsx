@@ -14,6 +14,7 @@ import { useApplications, type ApplicationView } from "@/lib/queries/useApplicat
 import { useDraftFrom, type AppClaimShape, type ClaimTemplate } from "@/lib/queries/useClaimShape";
 
 import { draftFrom, type ShapeDraft } from "./shape-draft";
+import { sortByName } from "@/lib/sort";
 
 /**
  * The one chooser for both offers (A-14 §2, §8): a template, or another
@@ -138,10 +139,7 @@ export function ShapeChooser({
           list.length === 0 ? null : (
             <Fragment key={gi}>
               <span className="type-label px-2 pb-0.5 pt-2.5">{label}</span>
-              {list
-                .slice()
-                .sort((a, b) => a.application.name.localeCompare(b.application.name))
-                .map((a) => (
+              {sortByName(list, (a) => a.application.name, (a) => a.application.id).map((a) => (
                   <div key={a.application.id} className="flex flex-col">
                     <ChoiceRow
                       single

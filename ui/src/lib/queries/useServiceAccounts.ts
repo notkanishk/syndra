@@ -5,6 +5,7 @@ import { useMemo } from "react";
 
 import { request } from "@/lib/api-client";
 import type { ServiceAccount, ServiceAccountKind } from "@/lib/types";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Service accounts (A-07 §26–31): a Zitadel machine user, or a human-type
@@ -34,11 +35,13 @@ const KEYS = {
   one: (id: string) => ["service-accounts", "one", id] as const,
 };
 
+const byAccountName = (data: { accounts: ServiceAccount[] }) => sortByName(data.accounts ?? [], (a) => a.name);
+
 export function useServiceAccounts() {
   return useQuery({
     queryKey: KEYS.list,
     queryFn: () => request<{ accounts: ServiceAccount[] }>("/service-accounts"),
-    select: (data) => data.accounts ?? [],
+    select: byAccountName,
   });
 }
 

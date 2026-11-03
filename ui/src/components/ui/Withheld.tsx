@@ -3,6 +3,7 @@
 import React from "react";
 
 import { targetLabel } from "@/lib/nav";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Access an operator has deliberately taken away, with the reason (design §20,
@@ -97,7 +98,7 @@ export function Withheld({
         </p>
       </div>
       <ul className="mt-2 grid gap-1.5">
-        {items.map((item) => (
+        {byValue(items).map((item) => (
           <li key={`${item.target ?? ""}:${item.field}:${item.value}`} className="text-[13.5px]">
             <Held item={item} voice={audience === "member" ? "Your" : "Their"} className="text-[13px] text-ink" />
             {audience === "operator" && item.target && item.field !== "enabled" && (
@@ -154,11 +155,15 @@ export function Withheld({
  * Same component file as the banner deliberately. They are two densities of one
  * object, and the day the vocabulary changes it must change in both.
  */
+/** Holds A to Z by what is held (RULES.md), the same value on two systems by system. */
+const byValue = (items: WithheldItem[]) =>
+  sortByName(items, (i) => i.value, (i) => `${i.target ?? ""}:${i.field}`);
+
 export function WithheldInline({ items }: { items: WithheldItem[] }) {
   if (items.length === 0) return null;
   return (
     <ul className="mt-1 grid gap-0.5">
-      {items.map((item) => (
+      {byValue(items).map((item) => (
         <li
           key={`${item.target ?? ""}:${item.field}:${item.value}`}
           className="flex flex-wrap items-baseline gap-x-1.5 text-[13px]"

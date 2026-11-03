@@ -24,6 +24,8 @@ import {
   type BundleVersion,
 } from "@/lib/queries/useBundleVersions";
 import dynamic from "next/dynamic";
+import { sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 // Opened on demand, so it stays out of the page's first load.
 const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
@@ -47,6 +49,7 @@ export function BundleVersions({
 }) {
   const versions = useBundleVersions(bundleId);
   const holders = useBundleHolders(bundleId);
+  const names = useShownNames();
   const [moving, setMoving] = useState<BundleVersion | null>(null);
 
   const rows = useMemo(() => versions.data ?? [], [versions.data]);
@@ -132,7 +135,7 @@ export function BundleVersions({
               {(version.roles ?? []).length === 0 ? (
                 <span className="text-faint">Contained no roles.</span>
               ) : (
-                (version.roles ?? []).map((role) => (
+                sortByName(version.roles ?? [], (r) => names.roleRef(r.zitadel_project_id, r.zitadel_role_key), (r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`).map((role) => (
                   <RoleRef
                     key={`${role.zitadel_project_id}:${role.zitadel_role_key}`}
                     projectId={role.zitadel_project_id}
@@ -229,7 +232,9 @@ function Holders({
   onMoveTo: (version: BundleVersion) => void;
 }) {
   const holders = useBundleHolders(bundleId);
-  const rows = holders.data ?? [];
+  const names = useShownNames();
+  // People A to Z by the name shown; the groups stay newest version first.
+  const rows = sortByName(holders.data ?? [], (h) => names.user(h.user_id), (h) => h.user_id);
   if (rows.length === 0) return null;
 
   const byVersion = new Map<number, typeof rows>();

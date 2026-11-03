@@ -26,6 +26,7 @@ import {
 } from "@/lib/queries/useUpstream";
 import { useDebounce } from "@/lib/useDebounce";
 import { humanizeKey } from "@/lib/format";
+import { sortByName, sortNames } from "@/lib/sort";
 
 /** "USER_STATE_ACTIVE" → "Active": the API's word, in ours. */
 function userStateLabel(state: string): string {
@@ -51,7 +52,7 @@ export default function UpstreamUsersPage() {
   const search = useDebounce(query, 200).trim().toLowerCase();
 
   const rows = useMemo(() => {
-    const all = users.data?.items ?? [];
+    const all = sortByName(users.data?.items ?? [], (user) => user.displayName || user.userName);
     if (!search) return all;
     return all.filter((user) =>
       [user.displayName, user.userName, user.email].join(" ").toLowerCase().includes(search),
@@ -191,7 +192,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
           <div key={grant.id} className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
             <span className="min-w-[200px] flex-1 truncate text-[14.5px]">
               <ProjectName id={grant.projectId} />{" "}
-              {grant.roleKeys.map((key) => (
+              {sortNames(grant.roleKeys).map((key) => (
                 <Mono key={key} className="mr-1.5 text-muted">
                   {key}
                 </Mono>
@@ -248,7 +249,7 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
           <div className="flex flex-col gap-3.5 px-6">
             <div className="text-[14.5px]">
               <ProjectName id={revoking.projectId} />{" "}
-              {revoking.roleKeys.map((key) => (
+              {sortNames(revoking.roleKeys).map((key) => (
                 <Mono key={key} className="mr-1.5 text-muted">
                   {key}
                 </Mono>
@@ -361,7 +362,7 @@ function AssignDialog({
             onChange={(event) => setProjectId(event.target.value)}
           >
             <option value="">Choose…</option>
-            {(projects.data?.items ?? []).map((project) => (
+            {sortByName(projects.data?.items ?? [], (p) => p.name).map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>
@@ -382,7 +383,7 @@ function AssignDialog({
           </FieldHint>
           {roles.data && (
             <p className="mt-1.5 text-[12.5px] text-faint">
-              Available: {roles.data.items.map((role) => role.key).join(", ") || "none"}
+              Available: {sortNames(roles.data.items.map((role) => role.key)).join(", ") || "none"}
             </p>
           )}
         </div>

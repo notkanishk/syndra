@@ -37,6 +37,7 @@ import {
   type ReachPlace,
 } from "@/lib/queries/useTargets";
 import dynamic from "next/dynamic";
+import { sortByName } from "@/lib/sort";
 
 // Opened on demand, so it stays out of the page's first load.
 const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
@@ -197,7 +198,7 @@ export function RoleMappingDialog({
               <>
                 <Select id="m-val" value={value} onChange={(e) => setValue(e.target.value)}>
                   <option value="">Choose a group</option>
-                  {list.values.map((v) => (
+                  {sortByName(list.values, (v) => list.labels?.[v] ?? v, (v) => v).map((v) => (
                     <option key={v} value={v}>
                       {list.labels?.[v] ?? v}
                     </option>

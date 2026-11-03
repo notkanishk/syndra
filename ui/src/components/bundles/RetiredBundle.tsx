@@ -16,6 +16,8 @@ import { formatShortDate } from "@/lib/format";
 import { useCrumb } from "@/lib/page-crumb";
 import { useBundleVersions } from "@/lib/queries/useBundleVersions";
 import { useBundle, useBundleRoles, useRetiredBundles, type BundleRow } from "@/lib/queries/useBundles";
+import { sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 type Tab = "history" | "gave" | "people";
 
@@ -78,6 +80,7 @@ function RetiredBundleView({ bundleId, bundle }: { bundleId: string; bundle: Bun
   const [tab, setTab] = useState<Tab>("history");
   const versions = useBundleVersions(bundleId);
   const gave = useBundleRoles(bundleId, { published: true });
+  const names = useShownNames();
   const last = (versions.data ?? []).reduce<number>((best, v) => Math.max(best, v.version), 0);
   const name = bundle.name;
 
@@ -122,7 +125,7 @@ function RetiredBundleView({ bundleId, bundle }: { bundleId: string; bundle: Bun
               skeleton={<RowSkeleton rows={3} avatar={false} label="Loading roles" />}
               empty={<EmptyState title={`${name} gave no roles.`} guidance="Its last version held none." />}
             >
-              {(gave.data ?? []).map((role) => (
+              {sortByName(gave.data ?? [], (r) => names.roleRef(r.zitadel_project_id, r.zitadel_role_key), (r) => `${r.zitadel_project_id}:${r.zitadel_role_key}`).map((role) => (
                 <div
                   key={`${role.zitadel_project_id}:${role.zitadel_role_key}`}
                   className="row-divider px-5 py-3.5 text-[14.5px]"

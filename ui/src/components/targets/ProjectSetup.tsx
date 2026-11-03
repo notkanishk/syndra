@@ -25,6 +25,7 @@ import {
   type TargetSetting,
 } from "@/lib/queries/useTargets";
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
+import { sortByName } from "@/lib/sort";
 
 /**
  * A system's one Zitadel project (3a, frames `noproject` and `projectset`).
@@ -292,7 +293,7 @@ function HomeLocationDialog({
             </Select>
           ) : (
             <Select id="home-folder" value={chosen} onChange={(e) => setChosen(e.target.value)}>
-              {setting.values.map((v) => (
+              {sortByName(setting.values, label, (v) => v).map((v) => (
                 <option key={v} value={v}>
                   {label(v)}
                 </option>

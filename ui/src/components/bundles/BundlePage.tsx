@@ -65,6 +65,7 @@ import {
 import { useMappingRules } from "@/lib/queries/useMappingRules";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import dynamic from "next/dynamic";
+import { compareNames, sortByName } from "@/lib/sort";
 
 // Opened on demand, so it stays out of the page's first load.
 const PublishVersionDialog = dynamic(() => import("@/components/bundles/PublishVersionDialog").then((m) => m.PublishVersionDialog));
@@ -432,9 +433,11 @@ function WhatItGives({
       group.list.push(r);
       out.set(r.zitadel_project_id, group);
     }
-    return Array.from(out.entries()).sort(([, a], [, b]) =>
-      projectLabel(a.name, null).localeCompare(projectLabel(b.name, null)),
-    );
+    // Projects A to Z, and the roles inside each A to Z by their shown name.
+    const roleName = (r: BundleRoleRow) => byId.get(idOf(r))?.display_name || humanizeKey(r.zitadel_role_key);
+    return Array.from(out.entries())
+      .sort(([, a], [, b]) => compareNames(projectLabel(a.name, null), projectLabel(b.name, null)))
+      .map(([id, g]) => [id, { ...g, list: sortByName(g.list, roleName, idOf) }] as const);
   }, [drawn.rows, byId]);
   const next = draft?.next_version;
   const leavingIds = new Set(leaving.map(idOf));

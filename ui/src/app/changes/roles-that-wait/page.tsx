@@ -28,6 +28,7 @@ import {
   useSwitchToRolesThatWait,
   type WaitSuggestion,
 } from "@/lib/queries/useRolesThatWait";
+import { compareNames } from "@/lib/sort";
 
 const roleId = (projectId: string, roleKey: string) =>
   `${projectId}:${roleKey}`;
@@ -167,7 +168,7 @@ function WaitingRoles({
       run.rows.push(m);
       out.set(m.project_id, run);
     }
-    return Array.from(out.entries()).sort(([, a], [, b]) => a.project.localeCompare(b.project));
+    return Array.from(out.entries()).sort(([, a], [, b]) => compareNames(a.project, b.project));
   }, [marked, byId]);
 
   return (

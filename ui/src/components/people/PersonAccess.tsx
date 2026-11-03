@@ -54,6 +54,7 @@ import { useApplications } from "@/lib/queries/useApplications";
 import { usePersonSignIns } from "@/lib/queries/useSignIns";
 import { useTargets } from "@/lib/queries/useTargets";
 import { projectSignInLine } from "@/lib/sign-in-line";
+import { sortByName } from "@/lib/sort";
 
 type Tab = "access" | "requests" | "activity";
 
@@ -712,7 +713,7 @@ function UnexplainedRoles({
         </span>
       </div>
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        {roleKeys.map((key) => (
+        {sortByName(roleKeys, (key) => roleName(projectId, key), (key) => key).map((key) => (
           <span
             key={key}
             className="rounded-pill border border-line-strong px-2.5 py-1 text-[13.5px] font-semibold"
@@ -921,7 +922,7 @@ function RoleGroup({
       <div className="row-divider px-5 pb-2 pt-1.5">
         <span className="type-label">{label}</span>
       </div>
-      {roles.map((role) => {
+      {sortByName(roles, (role) => roleName(projectId, role.role_key), (role) => role.role_key).map((role) => {
         const grant = grantsByRole.get(`${projectId}::${role.role_key}`);
         const sources = orderedSources(role.reasons);
         const strongest = sources[0];

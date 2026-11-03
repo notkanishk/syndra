@@ -1,4 +1,5 @@
 import type { Lane } from "@/components/insights/model";
+import { compareNames } from "@/lib/sort";
 
 /**
  * The question the map is answering, as one value. It is what the seat shows
@@ -154,7 +155,7 @@ export function suggest(text: string, entities: Entity[], max = 6): Question[] {
       : entities
           .map((e) => ({ e, r: kinds.includes(e.kind) ? rank(e.label, phrase) : null }))
           .filter((x): x is { e: Entity; r: number } => x.r != null)
-          .sort((a, b) => a.r - b.r || a.e.label.localeCompare(b.e.label))
+          .sort((a, b) => a.r - b.r || compareNames(a.e.label, b.e.label))
           .slice(0, limit)
           .map((x) => x.e);
 
