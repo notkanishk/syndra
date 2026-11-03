@@ -38,6 +38,7 @@ vi.mock("@/lib/queries/useTargets", () => {
   const inert = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, error: null, data: undefined, reset: vi.fn() });
   return {
     useTargets: () => ({ ...idle(), data: [] }),
+    useUnconfirmedOperations: () => ({ data: [], isLoading: false, error: null }),
     useMergeFindings: () => ({ ...idle(), data: [] }),
     useTargetHealth: idle,
     useTargetInventory: idle,

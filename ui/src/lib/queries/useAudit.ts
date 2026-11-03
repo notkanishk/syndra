@@ -20,6 +20,27 @@ export interface AuditEntry {
   cascade_id?: string;
   /** What the entry carries beyond its columns; omitted when null. Only `propagation.cancelled_unsent` has any today. */
   details?: CancelledUnsentDetails | Record<string, unknown>;
+  /**
+   * On a send to a connected system (`addon.<system>.<operation>.dispatched`):
+   * that change as one record, read from the record table (A-13 §4). Absent on
+   * every other entry.
+   */
+  operation?: AuditOperation;
+}
+
+/** One change sent to a connected system, with its one automatic resend and what settled it. */
+export interface AuditOperation {
+  operation: string;
+  status: "dispatching" | "succeeded" | "rejected" | "unreached" | "indeterminate";
+  /** 2 for the page's automatic resend, which names its first send in retry_of. */
+  attempt: 1 | 2;
+  retry_of?: string | null;
+  sent_at: string;
+  resolution?: "happened" | "not_happened" | "superseded" | null;
+  resolved_at?: string | null;
+  retry?: { id: string; status: AuditOperation["status"]; sent_at: string } | null;
+  /** When the earlier changes this one settled were sent. */
+  supersedes?: string[];
 }
 
 /** `propagation.cancelled_unsent`: the change that was cancelled, and the act that cancelled it. */
