@@ -267,7 +267,10 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 	if _, ok := payload[logClaimL2]; ok {
 		return done("log_claim", "Zitadel logged a dropped claim on the canary's token: a key Syndra sent collides")
 	}
-	if !sawCanaryCall(pctx, userID, clientID, start.Add(-5*time.Second)) {
+	// Only this run's own calls: the window keeps the worst outcome, so a
+	// neighbour (the previous run, or the old process during a deploy) must
+	// not fall inside it. Both doors run on this LXC's clock.
+	if !sawCanaryCall(pctx, userID, clientID, start.Add(-time.Second)) {
 		// The token's own client_id is what SYNDRA_CANARY_CLIENT_ID must be
 		// when the two differ; it is no secret.
 		tc, _ := payload["client_id"].(string)
