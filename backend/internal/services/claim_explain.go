@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"syndra/internal/claims"
+	"syndra/internal/claimtel"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -26,6 +27,8 @@ import (
 //  4. Which shape applies: the app's own (version, template), the project
 //     default or the built-in, or a draft.
 //  5. The token.
+//  6. Zitadel reached Syndra for this app recently: the data plane's last
+//     call from it, against its last sign-in (the same for everyone).
 //
 // Every check always runs; a failure never hides the rest.
 
@@ -97,11 +100,7 @@ func readTokenSettings(ctx context.Context, app models.ApplicationCatalog) token
 // reachedBy is where a shape's claims arrive, given Zitadel's settings for the
 // app: the access token only as a JWT, the ID token only with userinfo inside.
 func reachedBy(lands string, st *zitadel.TokenSettings) map[string]bool {
-	return map[string]bool{
-		claims.ReadsAccessToken: lands != claims.LandsUserinfo && st.AccessTokenType == "JWT",
-		claims.ReadsIDToken:     lands != claims.LandsAccessToken && st.IDTokenUserinfoAssertion,
-		claims.ReadsUserinfo:    lands != claims.LandsAccessToken,
-	}
+	return claims.ReachedBy(lands, st.AccessTokenType == "JWT", st.IDTokenUserinfoAssertion)
 }
 
 // lastReaches is the apps index's verdict: whether the claims reach where the
@@ -124,10 +123,10 @@ func lastReaches(appID string, p claims.Profile, templateID string) *bool {
 	return &r
 }
 
-func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTest, settings tokenSettingsRead, userID string) Explanation {
+func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTest, settings tokenSettingsRead, reached Check, userID string) Explanation {
 	tpl, _ := claims.FindTemplate(s.templateID)
 	signInOnly := len(s.profile.Claims) == 0
-	out := Explanation{UserID: userID, ReadAt: readAtNow(), Checks: make([]Check, 5)}
+	out := Explanation{UserID: userID, ReadAt: readAtNow(), Checks: make([]Check, 6)}
 
 	// 1 · Zitadel's settings for the app.
 	c1 := Check{State: CheckPass, Facts: map[string]any{"lands": s.profile.Lands, "reads": tpl.Reads}}
@@ -218,7 +217,58 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 		c5.State = CheckFail
 	}
 	out.Checks[4] = c5
+	out.Checks[5] = reached
 	return out
+}
+
+// reachedRecently is how long since its last call an app counts as reached.
+const reachedRecently = 24 * time.Hour
+
+// reachedSyndra is check 6. Pass: Zitadel called Syndra for the app in the
+// last day and it was served. Warn: it called, and the last answer carried no
+// claims. Fail: people signed in to it after its last call (or it was never
+// called), so Zitadel is not reaching Syndra for it. None: nobody has signed
+// in to it lately, so there is nothing to tell. Stale: the telemetry could not
+// be read.
+func reachedSyndra(ctx context.Context, app models.ApplicationCatalog) Check {
+	c := Check{State: CheckNone, Facts: map[string]any{}}
+	rows, err := svcClaimDeliveryLast(ctx)
+	if err != nil {
+		c.State, c.Facts["unread"] = CheckStale, true
+		return c
+	}
+	var last, served *time.Time
+	var outcome string
+	for _, r := range rows {
+		if r.ClientID != app.ClientID || app.ClientID == "" {
+			continue
+		}
+		if last == nil || r.LastAt.After(*last) {
+			at := r.LastAt
+			last, outcome = &at, r.LastOutcome
+		}
+		if r.LastServedAt != nil && (served == nil || r.LastServedAt.After(*served)) {
+			served = r.LastServedAt
+		}
+	}
+	var signIn *time.Time
+	if m, err := svcLastSignInPerApp(ctx); err == nil {
+		if at, ok := m[app.ID]; ok {
+			signIn = &at
+		}
+	}
+	c.Facts["last_call_at"], c.Facts["last_outcome"], c.Facts["last_served_at"], c.Facts["last_sign_in_at"] = last, outcome, served, signIn
+	now := time.Now()
+	switch {
+	case last != nil && now.Sub(*last) <= reachedRecently:
+		c.State = CheckPass
+		if claimtel.Rank(claimtel.Outcome(outcome)) > claimtel.Rank(claimtel.ServedLKG) {
+			c.State = CheckWarn
+		}
+	case signIn != nil && now.Sub(*signIn) <= reachedRecently && (last == nil || signIn.After(last.Add(claimtel.MatchWithin))):
+		c.State = CheckFail
+	}
+	return c
 }
 
 // degradedToken is what the token path answers with no stored claims: the
@@ -350,10 +400,11 @@ func PreviewAppClaimShape(ctx context.Context, appID string, req PreviewRequest)
 	}
 
 	settings := readTokenSettings(ctx, e.app)
+	reached := reachedSyndra(ctx, e.app)
 	for _, uid := range req.UserIDs {
-		pp := PersonPreview{UserID: uid, Now: explain(ctx, e.app, now, settings, uid)}
+		pp := PersonPreview{UserID: uid, Now: explain(ctx, e.app, now, settings, reached, uid)}
 		if draft != nil {
-			d := explain(ctx, e.app, *draft, settings, uid)
+			d := explain(ctx, e.app, *draft, settings, reached, uid)
 			pp.Draft = &d
 		}
 		out.People = append(out.People, pp)
@@ -381,7 +432,7 @@ func ExplainSignIn(ctx context.Context, clientID, userID, projectID string) (Exp
 		if e.saved != nil {
 			s.version, s.templateID = e.saved.Version, e.saved.TemplateID
 		}
-		return explain(ctx, a, s, readTokenSettings(ctx, a), userID), nil
+		return explain(ctx, a, s, readTokenSettings(ctx, a), reachedSyndra(ctx, a), userID), nil
 	}
 	return Explanation{}, errors.New("the client isn't an app on this project")
 }

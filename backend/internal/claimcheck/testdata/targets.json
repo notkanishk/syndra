@@ -1,0 +1,27 @@
+{
+  "pagination": { "totalResult": "2", "appliedLimit": "100" },
+  "result": [
+    {
+      "id": "339871032650000001",
+      "creationDate": "2026-10-20T09:12:44.118Z",
+      "changeDate": "2026-10-28T14:03:10.552Z",
+      "name": "syndra-claim-injector",
+      "restCall": { "interruptOnError": false },
+      "timeout": "3s",
+      "endpoint": "https://syndra.example.edu/api/action/inject",
+      "signingKey": "test-signing-key-claims-0123456789abcdef",
+      "payloadType": "PAYLOAD_TYPE_JSON"
+    },
+    {
+      "id": "339871032650000002",
+      "creationDate": "2026-10-20T09:12:45.001Z",
+      "changeDate": "2026-10-20T09:12:45.001Z",
+      "name": "syndra-event-listener",
+      "restAsync": {},
+      "timeout": "5s",
+      "endpoint": "https://syndra.example.edu/api/webhooks/zitadel",
+      "signingKey": "test-signing-key-events-0123456789abcdef",
+      "payloadType": "PAYLOAD_TYPE_JSON"
+    }
+  ]
+}

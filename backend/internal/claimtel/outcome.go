@@ -81,9 +81,14 @@ func (o Outcome) Severity() Severity {
 	return Informational
 }
 
-// KeySlotCurrent names the signing key that verified a call. Only one key
-// exists until the keyring (S5) adds a next one.
-const KeySlotCurrent = "current"
+// Key slots: which signing key verified a call (S5). current and previous are
+// the keyring read from Zitadel; env is the env key, the bootstrap and the
+// fallback, counted apart only when the keyring does not hold it.
+const (
+	KeySlotCurrent  = "current"
+	KeySlotPrevious = "previous"
+	KeySlotEnv      = "env"
+)
 
 // None stands in for an absent dimension (no project, no client id).
 const None = "-"

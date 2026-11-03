@@ -52,7 +52,7 @@ func ClaimsAddr() string {
 func NewClaimsRouter() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/action/inject",
-		withClaimDelivery(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject)))
+		withClaimDelivery(withClaimsSignature(HandleActionInject)))
 	mux.HandleFunc("GET /healthz/claims", handleClaimsHealth)
 	return withPanicGuard(withMaxBody(mux))
 }

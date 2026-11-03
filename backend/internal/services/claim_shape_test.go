@@ -77,6 +77,12 @@ func stubClaimShapeDeps(t *testing.T) *shapeStore {
 	o1, o2, o3, o4, o5, o6, o7 := svcGetClaimProfile, svcUpsertClaimProfile, svcListAppClaimOverrides, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape
 	o8, o9, o10, o11, o12, o13 := svcClaimShapeSeedCutoff, svcGetClaimFailureMode, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications
 	origReach := reachOf
+	o14, o15 := svcClaimDeliveryLast, svcLastSignInPerApp
+	recent := time.Now().Add(-5 * time.Minute)
+	svcClaimDeliveryLast = func(context.Context) ([]db.ClaimDeliveryLastRow, error) {
+		return []db.ClaimDeliveryLastRow{{ClientID: "cNB", Function: "function/preaccesstoken", LastAt: recent, LastOutcome: "served", LastServedAt: &recent}}, nil
+	}
+	svcLastSignInPerApp = func(context.Context) (map[string]time.Time, error) { return map[string]time.Time{}, nil }
 	reachOf = func(_ context.Context, _ string, changes []claims.Change) *Reach {
 		if len(changes) == 0 {
 			return nil
@@ -85,6 +91,7 @@ func stubClaimShapeDeps(t *testing.T) *shapeStore {
 	}
 	t.Cleanup(func() {
 		reachOf = origReach
+		svcClaimDeliveryLast, svcLastSignInPerApp = o14, o15
 		directory.Default = origDir
 		svcGetClaimProfile, svcUpsertClaimProfile, svcListAppClaimOverrides, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape = o1, o2, o3, o4, o5, o6, o7
 		svcClaimShapeSeedCutoff, svcGetClaimFailureMode, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications = o8, o9, o10, o11, o12, o13
@@ -487,5 +494,54 @@ func TestAttachClaimLines(t *testing.T) {
 	svcLatestClaimShapes = func(context.Context, string) ([]db.ClaimShapeVersion, error) { return nil, errors.New("db down") }
 	if views()[0].Claims != nil {
 		t.Fatal("unread shapes give no line")
+	}
+}
+
+// Check 6: whether Zitadel reached Syndra for the app lately, from the data
+// plane's last call and the app's last sign-in.
+func TestReachedSyndra(t *testing.T) {
+	o1, o2 := svcClaimDeliveryLast, svcLastSignInPerApp
+	t.Cleanup(func() { svcClaimDeliveryLast, svcLastSignInPerApp = o1, o2 })
+	app := models.ApplicationCatalog{ID: "aNB", ClientID: "cNB"}
+	now := time.Now()
+	ago := func(d time.Duration) *time.Time { at := now.Add(-d); return &at }
+	for _, tc := range []struct {
+		name    string
+		last    *time.Time
+		outcome string
+		signIn  *time.Time
+		readErr error
+		want    string
+	}{
+		{"called and served", ago(time.Hour), "served", ago(time.Hour), nil, CheckPass},
+		{"called, shape lands elsewhere", ago(time.Hour), "not_landing", nil, nil, CheckPass},
+		{"called, no claims", ago(time.Hour), "degraded_no_facts", nil, nil, CheckWarn},
+		{"signed in, never called", nil, "", ago(time.Hour), nil, CheckFail},
+		{"signed in after the last call", ago(20 * time.Hour), "served", ago(time.Hour), nil, CheckPass},
+		{"last call days ago, signed in since", ago(72 * time.Hour), "served", ago(time.Hour), nil, CheckFail},
+		{"nobody lately", ago(72 * time.Hour), "served", ago(72 * time.Hour), nil, CheckNone},
+		{"never anything", nil, "", nil, nil, CheckNone},
+		{"telemetry unread", nil, "", nil, errors.New("down"), CheckStale},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svcClaimDeliveryLast = func(context.Context) ([]db.ClaimDeliveryLastRow, error) {
+				if tc.readErr != nil {
+					return nil, tc.readErr
+				}
+				if tc.last == nil {
+					return []db.ClaimDeliveryLastRow{{ClientID: "other", LastAt: now}}, nil
+				}
+				return []db.ClaimDeliveryLastRow{{ClientID: "cNB", Function: "function/preuserinfo", LastAt: *tc.last, LastOutcome: tc.outcome}}, nil
+			}
+			svcLastSignInPerApp = func(context.Context) (map[string]time.Time, error) {
+				if tc.signIn == nil {
+					return map[string]time.Time{}, nil
+				}
+				return map[string]time.Time{"aNB": *tc.signIn}, nil
+			}
+			if got := reachedSyndra(context.Background(), app); got.State != tc.want {
+				t.Fatalf("state = %s (%v), want %s", got.State, got.Facts, tc.want)
+			}
+		})
 	}
 }

@@ -56,6 +56,7 @@ func TestEveryRouteCarriesAGate(t *testing.T) {
 		"withSelfOrOperatorAuth",     // the subject themselves, or an admin
 		"withAPIKeyAuth",             // a service, by shared key
 		"withZitadelActionSignature", // Zitadel, by request signature
+		"withClaimsSignature",        // Zitadel, by request signature (the keyring, then the env key)
 	}
 	// `/healthz` answers before anything is configured and must stay reachable
 	// by the container runtime, which carries no credential of any kind.
