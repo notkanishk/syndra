@@ -676,6 +676,9 @@ func PutSetting(ctx context.Context, target, name, value, actor string) (CallRes
 	const operation = "setting.put"
 	id, err := dbBeginAddonOperation(ctx, db.AddonOperationParams{
 		Target: target, Operation: operation, ActorID: actor, SubjectID: name,
+		// The value is not a secret: it is a dataset path, shown back on the
+		// system page, and it is how a later read settles this record.
+		About: value,
 	})
 	if err != nil {
 		// No record, no call: the record is the precondition, not a log of it.

@@ -12,6 +12,7 @@ import (
 
 func TestBuildAuditQuery_NewestPage(t *testing.T) {
 	query, args := buildAuditQuery("", 50, nil)
+	query = strings.Replace(query, auditOperationColumn, "", 1)
 
 	if strings.Contains(query, "WHERE") {
 		t.Errorf("unfiltered newest page should have no WHERE clause: %s", query)
@@ -79,7 +80,8 @@ func TestBuildAuditQuery_ScopeAndCursorTogether(t *testing.T) {
 	if len(args) != 4 || args[0] != "u-1" || args[3] != 10 {
 		t.Errorf("unexpected args %v", args)
 	}
-	if strings.Count(query, "WHERE") != 1 || !strings.Contains(query, " AND ") {
+	outer := strings.Replace(query, auditOperationColumn, "", 1)
+	if strings.Count(outer, "WHERE") != 1 || !strings.Contains(outer, " AND ") {
 		t.Errorf("both clauses should join into one WHERE: %s", query)
 	}
 }

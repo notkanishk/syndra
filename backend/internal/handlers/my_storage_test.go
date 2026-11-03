@@ -43,6 +43,11 @@ type storageHarness struct {
 	// recordedAt dates the middle state. Zero means nothing has been recorded,
 	// which is a different sentence from "recorded a moment ago".
 	recordedAt time.Time
+	// The record table, as the member's own password change reads it.
+	resendable  string    // the first send a resend repeats; empty for none
+	unconfirmed time.Time // the open change's send time; zero for none
+	superseded  []string  // confirmed operations that settled earlier ones
+	dispatchErr error     // returned beside a result that HAS an operation id
 }
 
 func stubMyStorage(t *testing.T, h *storageHarness) {
@@ -84,7 +89,7 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 		if outcome == "" {
 			outcome = addons.OutcomeSucceeded
 		}
-		return addonop.Result{OperationID: "op_1", Outcome: outcome}, nil
+		return addonop.Result{OperationID: "op_1", Outcome: outcome}, h.dispatchErr
 	}
 	svcRecordCredentialSet = func(_ context.Context, uid, _, _, _ string) error {
 		h.recorded = append(h.recorded, uid)
@@ -105,6 +110,20 @@ func stubMyStorage(t *testing.T, h *storageHarness) {
 	}
 	dbEntitlementRecordedAt = func(context.Context, string, string) (time.Time, bool, error) {
 		return h.recordedAt, !h.recordedAt.IsZero(), nil
+	}
+	resendable, unconfirmed, supersede := dbResendableAddonOperation, dbUnconfirmedChangeAt, dbSupersedeAddonOperations
+	t.Cleanup(func() {
+		dbResendableAddonOperation, dbUnconfirmedChangeAt, dbSupersedeAddonOperations = resendable, unconfirmed, supersede
+	})
+	dbResendableAddonOperation = func(context.Context, string, string, string, time.Duration) (string, bool, error) {
+		return h.resendable, h.resendable != "", nil
+	}
+	dbUnconfirmedChangeAt = func(context.Context, string, string, string, time.Duration) (time.Time, bool, error) {
+		return h.unconfirmed, !h.unconfirmed.IsZero(), nil
+	}
+	dbSupersedeAddonOperations = func(_ context.Context, by string) (int64, error) {
+		h.superseded = append(h.superseded, by)
+		return 1, nil
 	}
 }
 
