@@ -12,7 +12,9 @@ How code and design talk. One page, so nobody guesses.
 | **Syndra design system** `project/_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/` inside the canvas | The library the boards mount (`window.Syndra`): the real `ui/src/components/{ui,shell,names,states}` and every token from `globals.css` | **Only** the bundle that `ui/.design-sync` builds (below) |
 | **This repo** | The truth: what the product does, and what was built | Claude Code |
 
-The old Claude Design project (`35ef762a-…`) and its separate design-system project are read-only history. Everything they held was carried into the canvas on 2 Nov 2026.
+The old Claude Design project (`35ef762a-…`) and its separate design-system project are read-only history.
+
+**Which copy of a board is current.** The canvas copy is always the live board. Since 3 Nov 2026, every board is shown on the canvas through `Frame.dc.html` (frames rendered inline, using `_ds_bundle.container.css`), not through iframes. The repo's `design/` copies of the boards up to A-08 are the 23 Oct package as handed over. Boards from A-09 on are mirrored whenever they change. Everything they held was carried into the canvas on 2 Nov 2026.
 
 ## Questions and answers
 
