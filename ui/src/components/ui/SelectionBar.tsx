@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { Seat } from "@/components/ui/Choice";
-import { TINT_MS, useExitPhase } from "@/lib/motion";
+import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { LIGHT_LEAD_MS, TINT_MS, stillMotion, useExitPhase } from "@/lib/motion";
+import { useIsPhone } from "@/lib/useViewport";
 
 /**
  * The one selection bar.
@@ -19,6 +22,15 @@ import { TINT_MS, useExitPhase } from "@/lib/motion";
  * people's access. `composition` is the second half of that: what the selection
  * is made of, not just how much of it there is.
  */
+
+/** A verb on the bar, as data, so one list draws both the desktop row and the phone's two rows. */
+export interface SelectionVerb {
+  key: string;
+  label: string;
+  /** `danger` for anything that takes access away. */
+  tone?: "neutral" | "danger";
+  onClick: () => void;
+}
 
 interface SelectionBarProps {
   count: number;
@@ -50,8 +62,15 @@ interface SelectionBarProps {
   /** Narrows the selection to the first `ceiling` rows, in the order shown. */
   onTakeCeiling?: () => void;
   onClear: () => void;
-  /** The verbs. Rendered right-aligned, destructive ones marked. */
-  children: React.ReactNode;
+  /**
+   * The verbs as data. Below tablet, three or more become one primary verb and
+   * "More changes", a sheet of the rest (A-12 §2); above it, one row as always.
+   */
+  verbs?: SelectionVerb[];
+  /** The key of the verb the phone bar offers first. Defaults to the first verb. */
+  primary?: string;
+  /** The verbs, for a bar with one or two: rendered right-aligned, unchanged at every width. */
+  children?: React.ReactNode;
 }
 
 /**
@@ -80,9 +99,29 @@ function SelectionBarBody({
   ceilingNoun,
   onTakeCeiling,
   onClear,
+  verbs,
+  primary,
   children,
   leaving = false,
 }: SelectionBarProps & { leaving?: boolean }) {
+  const phone = useIsPhone();
+  const [more, setMore] = useState(false);
+  // Sheets don't stack (A-12 §2): a verb chosen in More changes waits for that
+  // sheet to leave (S1: the card on tint, the scrim 40ms behind) before its own
+  // dialog opens.
+  const [chosen, setChosen] = useState<SelectionVerb | null>(null);
+  useEffect(() => {
+    if (!chosen) return;
+    const timer = setTimeout(
+      () => {
+        setChosen(null);
+        chosen.onClick();
+      },
+      stillMotion() ? 0 : TINT_MS + LIGHT_LEAD_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [chosen]);
+
   const things = `${count} ${count === 1 ? noun[0] : noun[1]}`;
   const canNarrow =
     wholeScope && visibleCount !== undefined && onSelectVisibleOnly && count > visibleCount;
@@ -105,54 +144,110 @@ function SelectionBarBody({
       ? `they cover ${gated} ${gated === 1 ? gatedNoun[0] : gatedNoun[1]}, and `
       : "";
 
+  const stacked = phone && verbs !== undefined && verbs.length >= 3;
+  const frame = `${leaving ? "tint-out pointer-events-none" : "tint-in"} sticky bottom-4 z-20 mt-2 flex rounded-[18px] border px-5 py-3.5 shadow-dialog ${
+    overCeiling ? "border-warn-line bg-warn-soft" : "border-line-strong bg-surface-2"
+  }`;
+  const takeCeiling =
+    overCeiling && onTakeCeiling ? (
+      <SelectionAction onClick={onTakeCeiling} wide={stacked ? true : undefined}>
+        Select the first {ceiling} {gatedNoun[1]} in the order shown
+      </SelectionAction>
+    ) : null;
+
+  const summary = (
+    <span className={stacked ? "min-w-0 flex-1 pt-[3px] text-[14.5px] leading-[1.45]" : "text-[14.5px]"}>
+      <strong className="font-semibold">
+        {wholeScope ? `All ${things}` : things} selected
+      </strong>
+      {overCeiling ? (
+        <span className="text-warn-text">
+          {" "}
+          · {coverage}you can change at most {ceiling} {gatedNoun[1]} at once.
+        </span>
+      ) : (
+        <>
+          {scope ? <span className="text-muted"> {scope}</span> : null}
+          {composition ? (
+            // On a phone it wraps under the count, and the bar grows by that line only.
+            <span className={stacked ? "block text-faint" : "text-faint"}>
+              {stacked ? composition : ` · ${composition}`}
+            </span>
+          ) : null}
+        </>
+      )}
+      {canNarrow && !overCeiling ? (
+        <>
+          {" — "}
+          <button
+            type="button"
+            onClick={onSelectVisibleOnly}
+            className="font-semibold text-accent-text link-tint"
+          >
+            select only the {visibleCount} {noun[1]} shown
+          </button>
+        </>
+      ) : null}
+    </span>
+  );
+
+  if (stacked) {
+    const lead = verbs.find((verb) => verb.key === primary) ?? verbs[0];
+    const rest = verbs.filter((verb) => verb !== lead);
+    return (
+      <div role="region" aria-label="Selection" aria-hidden={leaving ? true : undefined} className={`${frame} flex-col gap-2`}>
+        <div className="flex min-h-7 items-start gap-3">
+          {summary}
+          {/* 28px drawn, 44px to the touch. */}
+          <button
+            type="button"
+            onClick={onClear}
+            className="-my-2 -mr-2 min-h-[44px] flex-none rounded-pill px-2 text-[13px] font-semibold text-muted control press-scale hover:text-ink"
+          >
+            Clear the selection
+          </button>
+        </div>
+        {/* Over the ceiling nothing in More changes can run, so it goes and the one move takes the row. */}
+        <div className="flex gap-2">
+          {takeCeiling ?? (
+            <>
+              <SelectionAction tone={lead.tone} onClick={lead.onClick} wide>
+                {lead.label}
+              </SelectionAction>
+              <SelectionAction onClick={() => setMore(true)} wide={false} sheet>
+                More changes
+              </SelectionAction>
+            </>
+          )}
+        </div>
+        <MoreChanges
+          open={more}
+          verbs={rest}
+          onClose={() => setMore(false)}
+          onChoose={(verb) => {
+            setMore(false);
+            setChosen(verb);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div
-      role="region"
-      aria-label="Selection"
-      aria-hidden={leaving ? true : undefined}
-      className={`${leaving ? "tint-out pointer-events-none" : "tint-in"} sticky bottom-4 z-20 mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[18px] border px-5 py-3.5 shadow-dialog ${
-        overCeiling ? "border-warn-line bg-warn-soft" : "border-line-strong bg-surface-2"
-      }`}
-    >
-      <span className="text-[14.5px]">
-        <strong className="font-semibold">
-          {wholeScope ? `All ${things}` : things} selected
-        </strong>
-        {overCeiling ? (
-          <span className="text-warn-text">
-            {" "}
-            · {coverage}you can change at most {ceiling} {gatedNoun[1]} at once.
-          </span>
-        ) : (
-          <>
-            {scope ? <span className="text-muted"> {scope}</span> : null}
-            {composition ? <span className="text-faint"> · {composition}</span> : null}
-          </>
-        )}
-        {canNarrow && !overCeiling ? (
-          <>
-            {" — "}
-            <button
-              type="button"
-              onClick={onSelectVisibleOnly}
-              className="font-semibold text-accent-text link-tint"
-            >
-              select only the {visibleCount} {noun[1]} shown
-            </button>
-          </>
-        ) : null}
-      </span>
+    <div role="region" aria-label="Selection" aria-hidden={leaving ? true : undefined} className={`${frame} flex-wrap items-center gap-x-3 gap-y-2`}>
+      {summary}
 
       <span className="flex-1" />
 
       <div className="flex flex-wrap items-center gap-2">
-        {overCeiling && onTakeCeiling ? (
-          <SelectionAction onClick={onTakeCeiling}>
-            Select the first {ceiling} {gatedNoun[1]} in the order shown
-          </SelectionAction>
-        ) : (
-          children
-        )}
+        {takeCeiling ??
+          (verbs
+            ? verbs.map((verb) => (
+                <SelectionAction key={verb.key} tone={verb.tone} onClick={verb.onClick}>
+                  {verb.label}
+                </SelectionAction>
+              ))
+            : children)}
         <button
           type="button"
           onClick={onClear}
@@ -165,24 +260,83 @@ function SelectionBarBody({
   );
 }
 
+/**
+ * The phone bar's other verbs (A-12 §2, frame a-more): a Modal sm sheet, title
+ * only, because the count is said once, in the bar still readable under the
+ * scrim. Desktop order, the neutral verbs first, then the danger outlines after
+ * a 16px gap. Choosing one closes this sheet; its own dialog opens after.
+ */
+function MoreChanges({
+  open,
+  verbs,
+  onClose,
+  onChoose,
+}: {
+  open: boolean;
+  verbs: SelectionVerb[];
+  onClose: () => void;
+  onChoose: (verb: SelectionVerb) => void;
+}) {
+  const firstDanger = verbs.find((verb) => verb.tone === "danger");
+  return (
+    <Modal open={open} onClose={onClose} size="sm">
+      <ModalHeader title="More changes" />
+      <div className="flex flex-col gap-2 px-6 pb-2">
+        {verbs.map((verb) => (
+          <Button
+            key={verb.key}
+            variant={verb.tone === "danger" ? "danger" : "outline"}
+            className={`w-full ${verb === firstDanger && verb !== verbs[0] ? "mt-2" : ""}`}
+            onClick={() => onChoose(verb)}
+          >
+            {verb.label}
+          </Button>
+        ))}
+      </div>
+      <ModalFooter note="Each one shows who would change, person by person, before anything happens.">
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
 /** A verb in the selection bar. `tone="danger"` for anything that takes access away. */
 export function SelectionAction({
   onClick,
   tone = "neutral",
   disabled = false,
+  wide,
+  sheet = false,
   children,
 }: {
   onClick: () => void;
   tone?: "neutral" | "danger";
   disabled?: boolean;
+  /**
+   * The phone bar's second row (A-12 §2): 44px, 14px. `true` takes the row's
+   * width (the primary verb, or the ceiling's one move); `false` keeps its own
+   * (More changes). Unset is the desktop row's verb.
+   */
+  wide?: boolean;
+  /** Opens a sheet, so it says so to assistive technology. */
+  sheet?: boolean;
   children: React.ReactNode;
 }) {
+  const size =
+    wide === undefined
+      ? "px-3.5 text-[13px] desktop:min-h-0 desktop:py-1.5"
+      : wide
+        ? "min-w-0 flex-1 px-3.5 text-[14px]"
+        : "flex-none px-4 text-[14px]";
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`min-h-[44px] rounded-pill border px-3.5 text-[13px] font-semibold control press-scale disabled:cursor-not-allowed disabled:opacity-50 desktop:min-h-0 desktop:py-1.5 ${
+      aria-haspopup={sheet ? "dialog" : undefined}
+      className={`min-h-[44px] rounded-pill border font-semibold control press-scale disabled:cursor-not-allowed disabled:opacity-50 ${size} ${
         tone === "danger"
           ? "border-danger-line text-danger-text hover:bg-danger-soft"
           : "border-line-strong hover:bg-[var(--hover)]"

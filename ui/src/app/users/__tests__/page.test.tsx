@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PeoplePage from "@/app/users/page";
@@ -401,6 +401,39 @@ describe("People index — bulk mode", () => {
       </QueryClientProvider>,
     );
     await waitFor(() => expect(screen.queryByText(/1 person selected/)).not.toBeInTheDocument());
+  });
+
+  // A-12 §2: on a phone the bar offers the verb the list was filtered for, read from
+  // the filter and never the selection, so ticking another row never moves it.
+  it("on a phone, leads with the job the filter names and holds it as rows are ticked", () => {
+    setMediaQuery("(max-width: 44.99rem)", true);
+    users.data = [
+      person({ user: { ...person().user, status: "departed" } }),
+      person({ user: { ...person().user, id: "u2", name: "Nina Roy", status: "departed" } }),
+    ];
+    nav.url = "/users?bulk=1&attention=departed";
+    renderPeople();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+    const bar = screen.getByRole("region", { name: "Selection" });
+    const lead = () => within(bar).getAllByRole("button")[1];
+    expect(lead()).toHaveTextContent("Revoke a role");
+    expect(lead().className).toContain("border-danger-line");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Nina Roy" }));
+    expect(within(bar).getByText(/2 people selected/)).toBeTruthy();
+    expect(lead()).toHaveTextContent("Revoke a role");
+    expect(within(bar).getByRole("button", { name: "More changes" })).toBeTruthy();
+  });
+
+  it("on a phone with no filter, leads with Give a role", () => {
+    setMediaQuery("(max-width: 44.99rem)", true);
+    nav.url = "/users?bulk=1";
+    renderPeople();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Tomas Beck" }));
+    const bar = screen.getByRole("region", { name: "Selection" });
+    expect(within(bar).getAllByRole("button")[1]).toHaveTextContent("Give a role");
+    expect(within(bar).queryByRole("button", { name: "Revoke a role" })).toBeNull();
   });
 
   it("names the filter in the selection bar rather than only counting", async () => {

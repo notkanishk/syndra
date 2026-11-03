@@ -351,7 +351,10 @@ per-route browser pass, now carrying every type change from §10 and §11).
   pinned at the viewport bottom, no sub-floor text, one exempt inline link.
 
 - [ ] 15.4 The bulk bar is 312px tall at 390 with five verbs stacked — 43% of
-  the scrollport. Correct behaviour, open design question.
+  the scrollport. Correct behaviour, open design question. Answered by A-12 §2
+  (2a) and built (reconcile-build 6.104): one primary verb and "More changes",
+  about 110px by its parts (14 + 28 + 8 + 44 + 14, plus the border), every
+  target 44px. Closes once the touch sweep measures it at 390.
 - [ ] 15.5 Still unseen: the over-ceiling copy on any bar (needs >500 rows, and
   the dev host has 5 people), the rehearsal dialogs and every plan they render,
   and the three routes whose endpoints answer 502 there — drift, holds and
