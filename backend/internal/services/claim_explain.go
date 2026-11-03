@@ -94,6 +94,36 @@ func readTokenSettings(ctx context.Context, app models.ApplicationCatalog) token
 	return last
 }
 
+// reachedBy is where a shape's claims arrive, given Zitadel's settings for the
+// app: the access token only as a JWT, the ID token only with userinfo inside.
+func reachedBy(lands string, st *zitadel.TokenSettings) map[string]bool {
+	return map[string]bool{
+		claims.ReadsAccessToken: lands != claims.LandsUserinfo && st.AccessTokenType == "JWT",
+		claims.ReadsIDToken:     lands != claims.LandsAccessToken && st.IDTokenUserinfoAssertion,
+		claims.ReadsUserinfo:    lands != claims.LandsAccessToken,
+	}
+}
+
+// lastReaches is the apps index's verdict: whether the claims reach where the
+// app's template says it reads, from Zitadel's last answer for check 1. nil
+// when that was never read here, or the template names no read.
+// ponytail: last answer only, so the index never calls Zitadel per app; it
+// fills in as app pages are opened. Read fresh if the index must know cold.
+func lastReaches(appID string, p claims.Profile, templateID string) *bool {
+	tpl, ok := claims.FindTemplate(templateID)
+	if !ok || tpl.Reads == "" {
+		return nil
+	}
+	lastSettingsMu.Lock()
+	last, seen := lastSettings[appID]
+	lastSettingsMu.Unlock()
+	if !seen || last.settings == nil {
+		return nil
+	}
+	r := reachedBy(p.Lands, last.settings)[tpl.Reads]
+	return &r
+}
+
 func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTest, settings tokenSettingsRead, userID string) Explanation {
 	tpl, _ := claims.FindTemplate(s.templateID)
 	signInOnly := len(s.profile.Claims) == 0
@@ -109,11 +139,7 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 		c1.Facts["project_role_check"] = st.ProjectRoleCheck
 		c1.Facts["access_token_type"] = st.AccessTokenType
 		c1.Facts["id_token_userinfo_assertion"] = st.IDTokenUserinfoAssertion
-		reached := map[string]bool{
-			claims.ReadsAccessToken: s.profile.Lands != claims.LandsUserinfo && st.AccessTokenType == "JWT",
-			claims.ReadsIDToken:     s.profile.Lands != claims.LandsAccessToken && st.IDTokenUserinfoAssertion,
-			claims.ReadsUserinfo:    s.profile.Lands != claims.LandsAccessToken,
-		}
+		reached := reachedBy(s.profile.Lands, st)
 		c1.Facts["reached"] = reached
 		switch {
 		case signInOnly && !st.ProjectRoleCheck:

@@ -29,7 +29,7 @@ Contract: `design.md`. Tags per `docs/agents/triage-labels.md`.
 - [x] 4.5 `…/versions` and `…/versions/{n}/restore`
 - [x] 4.6 Zitadel `TokenSettings` (accessTokenType, idTokenUserinfoAssertion, projectRoleAssertion, projectRoleCheck): read-only, faked in tests, with the last answer kept for a degraded check 1
 - [x] 4.7 The project default stays at `/projects/{id}/claim-profile`; the per-app override endpoints are removed
-- [ ] 4.8 [ready-for-agent] Drop `overrides`, `emitted_keys` and `conflicts` from `GET /projects/{id}/claim-shape` once the UI slice replaces the app's token screen
+- [x] 4.8 Drop `overrides`, `emitted_keys` and `conflicts` from `GET /projects/{id}/claim-shape` (the UI slice replaced the app's token screen)
 - [ ] 4.9 [ready-for-human] Drop `app_claim_overrides` once every environment has been seeded (check that `app_claim_shape_versions` has a version 1 for each app)
 - [ ] 4.10 [ready-for-human] Run `TestClaimShapeVersions_Live` against a `_test` database (it is skipped without `SYNDRA_TEST_DATABASE_URL`)
 
@@ -45,7 +45,20 @@ Contract: `design.md`. Tags per `docs/agents/triage-labels.md`.
 - [ ] 6.4 [needs-triage] More than one API replica splits captures: pin debug mode to one replica, or move it to Redis, if the API is scaled out
 
 ## 7. Not in this slice
-- [ ] 7.1 [ready-for-agent] UI slice: the claims part per A-14 on this API (ClaimRow, RoleWordsTable, SignInRow, CheckTrail, TokenBlock)
+- [x] 7.1 UI slice: the claims part per A-14 on this API (§8 below)
 - [ ] 7.2 [ready-for-agent] Test people (`GET/PUT /applications/{id}/test-people`) and "What the app reads" (A-11 §3, §6)
 - [ ] 7.3 [needs-info] Which Supabase provider the deployment uses (research unverified)
 - [ ] 7.4 [needs-triage] Confirm on prod that Zitadel sends `application.client_id` in both functions (debug mode's first capture shows it); without it every app gets its project's default
+
+## 8. The UI (A-14 §1–§8)
+- [x] 8.1 The page: header (client id in Advanced), "What <app> is told" beside the sticky preview, Debug mode, History; on a phone the shape comes first. The old per-app override screen (`TokenFormatEditor`, `TokenPreview`) is gone
+- [x] 8.2 Design-system parts in `components/ui`, registered in `.design-sync` (entry + componentSrcMap): `CheckTrail`, `TokenBlock` (+ raw mode, and `Ticks` for backticked words), `ClaimRow`, `RoleWordsTable`, `SignInRow`
+- [x] 8.3 The preview: the five checks read off the explain step's facts (`components/apps/claim-words.ts`), check 5's token, a draft's − and + lines (marks plus screen-reader words, never colour alone), check 1's Zitadel console links from `/zitadel/health`'s domain
+- [x] 8.4 Templates: the chooser on an app with no shape (Suggested preselected, the draft previews at once), the template sheet (sections, Changed since, Start again), Start from … makes a draft
+- [x] 8.5 Copy another app's shape: the same chooser in the offer and in a sheet; what copies, "Not in this project, so not copied", and a copied if-role row with no role stops Save with its danger line
+- [x] 8.6 Roles table with was-lines and shared-word notes; one ClaimRow form for every kind ending "Sent as …" (nested path, if_role through the role picker in single-project mode, bundles, role_ends, attributes behind More claims, typed fixed values); text formats only in Advanced or when already saved, with the warning; Lands in (Segmented in Advanced) and its check-1 line; Roles added later in Advanced
+- [x] 8.7 Breaking saves: the before-line, the save summary (What changes, What <app> will do) and the I-understand tick that sends `acknowledge_breaking`; History with Go back (asks for the tick on a 409)
+- [x] 8.8 Debug mode: one account at a time (you by default, or someone else by search), the 15-minute end shown and enforced by the server, the live list whose new rows wait while the pointer, focus or an opened sign-in is in it, one sign-in opened in place (request, answer, checks, labelled rebuild, no signatures), the ended state
+- [x] 8.9 Apps index: the Claims column (real key, where it lands, amber "Doesn't reach it"), the sub-line naming the template or default, one warn line above the table. Backend: `GET /applications` gains `claims` per app (`attachClaimLines`); its verdict is check 1's last answer, never a fresh Zitadel call per app
+- [x] 8.10 The project default moves to the project's page (`ProjectClaimDefault`), with the apps it reaches
+- [ ] 8.11 [ready-for-agent] Test people in the debug sheet and the preview (needs 7.2); "Last on 2 Nov, for 15 minutes, by …" on the off row (needs the last session kept past its hour)

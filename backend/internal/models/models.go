@@ -439,6 +439,24 @@ type ApplicationView struct {
 	ConfirmedUserCount *int             `json:"confirmed_user_count,omitempty"`
 	ObservedUserCount  *int             `json:"observed_user_count,omitempty"`
 	Observation        ObservationBasis `json:"observation"`
+	// Claims is the apps index's Claims column (A-14 §7): the app's own
+	// shape, not its project's. Absent when the shapes couldn't be read.
+	Claims *AppClaimsLine `json:"claims,omitempty"`
+}
+
+// AppClaimsLine is what one app is told, in a line: its top-level keys, where
+// they land, where the shape comes from, and whether its claims reach where
+// its template says the app reads them.
+type AppClaimsLine struct {
+	Source          string   `json:"source"` // app | project_default | builtin
+	Keys            []string `json:"keys"`
+	Lands           string   `json:"lands"`
+	TemplateID      string   `json:"template_id,omitempty"`
+	TemplateChanged bool     `json:"template_changed,omitempty"`
+	CopiedFrom      string   `json:"copied_from_application_id,omitempty"`
+	// Reaches is check 1's verdict from Zitadel's last answer this process
+	// saw; absent when it was never read, or the template names no read.
+	Reaches *bool `json:"reaches,omitempty"`
 }
 
 // ApplicationSimulation is the dry run of a real token. CustomClaims is the

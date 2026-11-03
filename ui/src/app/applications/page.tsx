@@ -12,8 +12,8 @@ import { ProjectName } from "@/components/names";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useApplications, type ApplicationView } from "@/lib/queries/useApplications";
-import { Notice } from "@/components/ui/Notice";
-import { Unfold } from "@/components/ui/Unfold";
+import { StatusDot } from "@/components/ui/Badge";
+import { useClaimTemplates, type ClaimTemplate } from "@/lib/queries/useClaimShape";
 
 type AppSort = "app" | "people";
 
@@ -44,46 +44,21 @@ export default function AppsPage() {
     truncated: basis?.truncated,
   };
 
-  // The common failure, surfaced on the index rather than making somebody open
-  // every app to find it: two apps reading the same project through different
-  // formats. Legal, sometimes deliberate, and the single most common cause of
-  // "this app isn't seeing the roles it expects".
-  const mixedProjects = useMemo(() => {
-    const formats = new Map<string, Set<string>>();
-    for (const entry of all) {
-      const key = entry.application.project_id;
-      if (!formats.has(key)) formats.set(key, new Set());
-      formats.get(key)!.add(entry.application.format_type);
-    }
-    const mixed = new Set<string>();
-    formats.forEach((set, projectId) => {
-      if (set.size > 1) mixed.add(projectId);
-    });
-    return mixed;
-  }, [all]);
+  const templates = useClaimTemplates().data ?? [];
+  // A mismatch is said once, above the table: the app's page says the fix (A-14 §7).
+  const unreached = all.filter((entry) => entry.claims?.reaches === false).map((entry) => entry.application.name);
 
   return (
     <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Apps"
-        lede="An app is something people sign in to — the booking site, the badge reader. Each one is told a person's roles from one project. Open an app when it is not seeing the roles it should."
+        lede="An app is something people sign in to: NetBird, GitLab, the inventory. Each is told a person's roles from one project, in its own shape. Open an app when it isn't seeing the roles it should."
         meta={
           rows.length > 0
             ? `${rows.length} ${rows.length === 1 ? "app" : "apps"}`
             : undefined
         }
       />
-
-      <Unfold open={mixedProjects.size > 0} gap={18}>
-        <Notice
-          tone="warn"
-          title={`${mixedProjects.size === 1 ? "One project is" : `${mixedProjects.size} projects are`} read in more than one format.`}
-        >
-          That is legal and often deliberate, but it is the single most common cause of
-          &ldquo;this app isn&rsquo;t seeing the roles it expects&rdquo; — so the index surfaces it
-          rather than making somebody open every app to find it.
-        </Notice>
-      </Unfold>
 
       {/* One basis for the whole page — every row carries an identical copy,
           so the freshness is stated once here rather than once per row. The
@@ -93,14 +68,22 @@ export default function AppsPage() {
       {apps.data && (
         <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
       )}
+      {unreached.length > 0 && (
+        <p className="max-w-[100ch] px-[2px] text-[13.5px] leading-[1.55] text-muted">
+          <span className="font-semibold text-warn-text">
+            {unreached.join(", ")} {unreached.length === 1 ? "doesn't" : "don't"} get {unreached.length === 1 ? "its" : "their"} claims.
+          </span>{" "}
+          {unreached.length === 1 ? "Its page says" : "Each page says"} which Zitadel setting to change.
+        </p>
+      )}
 
       <Card stale={readState.current === false}>
         <CardColumns>
-          <span className="w-[250px] min-w-[170px]">
+          <span className="w-[300px] min-w-[170px]">
             <SortHead label="App" name="app" sort={sort} onSort={setSort} />
           </span>
           <span className="min-w-[140px] flex-1">Reads roles from</span>
-          <span className="w-[110px] shrink-0 text-right">Format</span>
+          <span className="w-[220px] shrink-0 text-right">Claims</span>
           <span className="w-[110px] shrink-0 text-right">
             <SortHead label="People" name="people" sort={sort} onSort={setSort} />
           </span>
@@ -134,12 +117,13 @@ export default function AppsPage() {
               href={`/applications/${entry.application.id}`}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
-              <span className="w-full min-w-0 tablet:w-[250px] tablet:min-w-[170px] tablet:shrink-0">
+              <span className="w-full min-w-0 tablet:w-[300px] tablet:min-w-[170px] tablet:shrink-0">
                 <span className="block text-[15.5px] font-semibold [text-wrap:pretty]">
                   {entry.application.name}
                 </span>
                 <span className="block text-[13px] text-faint [text-wrap:pretty]">
-                  {kindOf(entry)} · <Mono>{entry.application.claim_name}</Mono>
+                  {kindOf(entry)}
+                  {shapeLine(entry, all, templates)}
                 </span>
               </span>
 
@@ -147,19 +131,8 @@ export default function AppsPage() {
                 <ProjectName id={entry.application.project_id} />
               </span>
 
-              <span
-                className={`text-[13px] tablet:w-[110px] tablet:shrink-0 tablet:text-right ${
-                  mixedProjects.has(entry.application.project_id)
-                    ? "font-semibold text-warn-text"
-                    : "text-muted"
-                }`}
-              >
-                <Mono>{entry.application.format_type}</Mono>
-                {mixedProjects.has(entry.application.project_id) && (
-                  <span className="block text-[12.5px] font-normal">
-                    mixed in <ProjectName id={entry.application.project_id} />
-                  </span>
-                )}
+              <span className="text-[13px] tablet:w-[220px] tablet:shrink-0 tablet:text-right">
+                <ClaimsCell entry={entry} />
               </span>
 
               <span className="text-[15px] tablet:w-[110px] tablet:shrink-0 tablet:text-right">
@@ -193,4 +166,58 @@ function kindOf(entry: ApplicationView): string {
   if (raw.includes("oidc") || raw.includes("oauth")) return "OIDC";
   if (raw.includes("api")) return "API";
   return raw ? entry.application.consumer : "—";
+}
+
+const WHERE: Record<string, string> = {
+  both: "access token, userinfo",
+  access_token: "access token",
+  userinfo: "ID token, userinfo",
+};
+
+/** The Claims column (A-14 §7): the app's real key, then faint where it lands; amber when it doesn't reach. */
+function ClaimsCell({ entry }: { entry: ApplicationView }) {
+  const c = entry.claims;
+  if (/truenas/i.test(entry.application.name) && !c?.keys.length) return <span className="text-faint">Access goes through the add-on</span>;
+  if (!c) return <span className="text-faint">—</span>;
+  if (c.keys.length === 0) return <span className="text-faint">Nothing of its own</span>;
+  return (
+    <span className="flex flex-col tablet:items-end">
+      <Mono>{c.keys[0]}</Mono>
+      {c.reaches === false ? (
+        <span className="inline-flex items-center gap-1.5 font-semibold text-warn-text">
+          <StatusDot tone="warn" />
+          Doesn&rsquo;t reach it
+        </span>
+      ) : (
+        <span className="text-faint">
+          {c.keys.length > 1 ? `and ${c.keys.length - 1} more · ` : ""}
+          {WHERE[c.lands] ?? c.lands}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** The sub-line's shape: " · NetBird template, changed", " · Code's default", " · copied from NetBird". */
+function shapeLine(entry: ApplicationView, all: ApplicationView[], templates: ClaimTemplate[]): React.ReactNode {
+  const c = entry.claims;
+  if (/truenas/i.test(entry.application.name) && (!c || c.source !== "app")) return " · no template: TrueNAS can't sign in with Zitadel";
+  if (!c) return null;
+  if (c.source !== "app") {
+    return (
+      <>
+        {" · "}
+        <ProjectName id={entry.application.project_id} />
+        &rsquo;s default
+      </>
+    );
+  }
+  if (c.copied_from_application_id) {
+    const from = all.find((a) => a.application.id === c.copied_from_application_id)?.application.name;
+    return from ? ` · copied from ${from}` : " · copied from another app";
+  }
+  const t = templates.find((x) => x.id === c.template_id);
+  if (!t) return " · its own shape";
+  const bare = t.id === "custom" || t.id === "sign-in-only";
+  return ` · ${t.name}${bare ? "" : " template"}${c.template_changed ? ", changed" : ""}`;
 }

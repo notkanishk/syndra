@@ -632,12 +632,6 @@ type ProjectClaimShape struct {
 	Profile claims.Profile     `json:"profile"`
 	// Applications says, per app on the project, which shape it gets.
 	Applications []ProjectAppShape `json:"applications"`
-
-	// Retired with the A-14 UI slice: per-project overrides no longer exist.
-	// Kept empty so the app screen built on them doesn't crash meanwhile.
-	Overrides   []any                  `json:"overrides"`
-	EmittedKeys []models.ClaimKeyOwner `json:"emitted_keys"`
-	Conflicts   []any                  `json:"conflicts"`
 }
 
 // ProjectDefaultForm is the project default's editable fields.
@@ -666,15 +660,12 @@ func GetProjectClaimShape(ctx context.Context, projectID string) (ProjectClaimSh
 	out := ProjectClaimShape{
 		ProjectID: projectID, ProjectName: projectID, Configured: found,
 		Default:      ProjectDefaultForm{ClaimName: claims.DefaultClaimName, FormatType: claims.DefaultFormat, AttributeClaims: map[string]string{}, StaticClaims: map[string]any{}},
-		Applications: []ProjectAppShape{}, Overrides: []any{}, Conflicts: []any{}, EmittedKeys: []models.ClaimKeyOwner{},
+		Applications: []ProjectAppShape{},
 	}
 	if found {
 		out.Default = ProjectDefaultForm{ClaimName: row.ClaimName, FormatType: row.FormatType, AttributeClaims: row.AttributeClaims, StaticClaims: row.StaticClaims}
 	}
 	out.Profile = claims.FromFlat(out.Default.ClaimName, out.Default.FormatType, out.Default.AttributeClaims, out.Default.StaticClaims)
-	for _, c := range out.Profile.Claims {
-		out.EmittedKeys = append(out.EmittedKeys, models.ClaimKeyOwner{Key: c.Path[0], OwnerLabel: "Project default", Kind: c.Kind, Source: c.Source})
-	}
 	if name, nerr := directory.Default.ProjectName(ctx, projectID); nerr == nil && name != "" {
 		out.ProjectName = name
 	}
@@ -730,3 +721,52 @@ func SaveProjectClaimProfile(ctx context.Context, projectID string, f ProjectDef
 
 // readAtNow is the clock, injectable for tests.
 var readAtNow = func() time.Time { return time.Now().UTC() }
+
+// ---------------------------------------------------------------------------
+// The apps index's Claims column.
+
+// attachClaimLines gives each app its claims line, with one shape read per
+// project. A project whose shapes can't be read leaves its apps without a
+// line rather than guessing one.
+func attachClaimLines(ctx context.Context, views []models.ApplicationView) {
+	type projectShapes struct {
+		def    claims.Profile
+		src    string
+		byApp  map[string]db.ClaimShapeVersion
+		failed bool
+	}
+	read := map[string]*projectShapes{}
+	for i := range views {
+		app := views[i].Application
+		ps, ok := read[app.ProjectID]
+		if !ok {
+			ps = &projectShapes{byApp: map[string]db.ClaimShapeVersion{}}
+			read[app.ProjectID] = ps
+			def, src, err := projectDefault(ctx, app.ProjectID)
+			versions, verr := svcLatestClaimShapes(ctx, app.ProjectID)
+			if err != nil || verr != nil {
+				log.Printf("[CLAIM-SHAPE] apps index: shapes for project %s unread: %v %v", app.ProjectID, err, verr)
+				ps.failed = true
+			}
+			ps.def, ps.src = def, src
+			for _, v := range versions {
+				ps.byApp[v.ApplicationID] = v
+			}
+		}
+		if ps.failed {
+			continue
+		}
+		profile := ps.def
+		line := &models.AppClaimsLine{Source: ps.src}
+		if v, ok := ps.byApp[app.ID]; ok {
+			profile = v.Profile
+			line.Source, line.TemplateID, line.CopiedFrom = SourceApp, v.TemplateID, v.CopiedFromApp
+			if t, ok := claims.FindTemplate(v.TemplateID); ok {
+				line.TemplateChanged = len(claims.ShapeOnly(claims.Diff(t.Profile, v.Profile))) > 0
+			}
+		}
+		line.Keys, line.Lands = topKeys(profile), profile.Lands
+		line.Reaches = lastReaches(app.ID, profile, line.TemplateID)
+		views[i].Claims = line
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -445,7 +446,46 @@ func TestProjectClaimShape(t *testing.T) {
 	}
 	view, err := GetProjectClaimShape(ctx, "pNet")
 	if err != nil || !view.Configured || len(view.Applications) != 1 || view.Applications[0].Source != SourceApp ||
-		len(view.Profile.Claims) != 2 || view.Overrides == nil {
+		len(view.Profile.Claims) != 2 {
 		t.Fatalf("project view: %+v err=%v", view, err)
+	}
+}
+
+// The apps index's Claims column: each app's own key and template, its
+// project's default for an app with none, and check 1's verdict only once
+// Zitadel's settings for that app have been read.
+func TestAttachClaimLines(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	ctx := context.Background()
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: netbirdShape(), TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	views := func() []models.ApplicationView {
+		v := []models.ApplicationView{{Application: shapeApps[0]}, {Application: shapeApps[2]}}
+		attachClaimLines(ctx, v)
+		return v
+	}
+	v := views()
+	nb, gl := v[0].Claims, v[1].Claims
+	if nb.Source != SourceApp || nb.TemplateID != "netbird" || nb.TemplateChanged || strings.Join(nb.Keys, ",") != "groups" || nb.Reaches != nil {
+		t.Fatalf("NetBird before any read: %+v", nb)
+	}
+	if gl.Source != SourceBuiltin || strings.Join(gl.Keys, ",") != "roles" || gl.Lands != claims.LandsBoth {
+		t.Fatalf("GitLab on the built-in default: %+v", gl)
+	}
+
+	// Opening NetBird's page reads Zitadel: a Bearer token keeps its claims out.
+	s.settings.AccessTokenType = "BEARER"
+	if _, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}}); err != nil {
+		t.Fatal(err)
+	}
+	if r := views()[0].Claims.Reaches; r == nil || *r {
+		t.Fatalf("NetBird with a Bearer token: reaches=%v", r)
+	}
+
+	// Shapes that can't be read leave no line, rather than a guessed one.
+	svcLatestClaimShapes = func(context.Context, string) ([]db.ClaimShapeVersion, error) { return nil, errors.New("db down") }
+	if views()[0].Claims != nil {
+		t.Fatal("unread shapes give no line")
 	}
 }
