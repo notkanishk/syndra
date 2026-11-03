@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
 
 import Link from "next/link";
@@ -41,6 +41,7 @@ import { ArriveList } from "@/components/ui/ArriveList";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
+import { stillMotion, TINT_MS } from "@/lib/motion";
 import { Unfold } from "@/components/ui/Unfold";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
@@ -197,7 +198,101 @@ export function Home({ session }: { session: SessionUser }) {
   // While the load is failing the count is unknown, and "nothing needs you" is
   // exactly the wrong thing to say to somebody whose queue might be full.
   const calm = blocks === 0 && queue.rows.length === 0 && gaps.rows.length === 0;
-  const headline = error ? "Couldn't check." : workSentence(blocks, loading);
+  const swap = useCalmHandover(calm, {
+    ready: !loading && !error,
+    advanced,
+    rows: queue.rows.length + gaps.rows.length,
+  });
+  // A swap held for the pointer (S5) keeps the grid as it last was, and the
+  // headline with it: what leaves is what was there.
+  const held = useRef<{ grid: React.ReactNode; blocks: number }>({ grid: null, blocks: 0 });
+  const headline = error
+    ? "Couldn't check."
+    : workSentence(calm && !swap.showsCalm ? held.current.blocks : blocks, loading);
+
+  // One wrapper, so the Basic footnote's Unfold is not a direct child of the
+  // arriving list (its settled rule would stop the unfold playing). It is also
+  // what the pointer and focus are inside of, for a swap that waits (S5).
+  const grid = (
+    <div className="flex flex-col gap-6" {...swap.holdProps}>
+      <div className="grid items-start gap-6 desktop:grid-cols-2">
+        {/* Time-sensitive: access ends, stays wrong, or goes unseen if you wait.
+            Drift leads, and a target Syndra cannot read stays beside the
+            findings it qualifies, in the same column. */}
+        {/* A block or a column that empties while you are here folds (5b): it fades, then its
+            gap closes. It never just vanishes under the pointer. */}
+        <Unfold
+          open={
+            expiring.length > 0 ||
+            (advanced &&
+              ((drift?.count ?? 0) > 0 || unvouched.length > 0 || unconfirmedWrites.count > 0))
+          }
+          className="min-w-0 desktop:col-start-1"
+        >
+          <QueueColumn
+            title="Time-sensitive"
+            note="Access ends, stays wrong, or goes unseen if you wait."
+          >
+            <Block open={advanced && (drift?.count ?? 0) > 0}>
+              <UnexplainedAccess count={drift?.count ?? 0} />
+            </Block>
+            <Block open={expiring.length > 0}>
+              <ExpiringSoon grants={expiring} />
+            </Block>
+            <Block open={advanced && unvouched.length > 0}>
+              <UnvouchedTargets targets={unvouched} />
+            </Block>
+            <Block open={advanced && unconfirmedWrites.count > 0}>
+              <UnconfirmedWrites summary={unconfirmedWrites} />
+            </Block>
+          </QueueColumn>
+        </Unfold>
+        {/* When you're ready: nothing changes until you act. */}
+        <Unfold
+          open={
+            queue.rows.length > 0 ||
+            onboardingGaps > 0 ||
+            gaps.rows.length > 0 ||
+            unowned.length > 0 ||
+            (advanced && (findings > 0 || (propagation?.count ?? 0) > 0))
+          }
+          className="min-w-0 desktop:col-start-2"
+        >
+          <QueueColumn title="When you're ready" note="Nothing changes until you act.">
+            <Block open={queue.rows.length > 0}>
+              <OpenRequests rows={queue.rows} decisions={decisions} queue={queue} />
+            </Block>
+            <Block open={onboardingGaps > 0 || gaps.rows.length > 0}>
+              <OnboardingGaps report={onboarding.data!} gaps={gaps} />
+            </Block>
+            <Block open={unowned.length > 0}>
+              <ServiceAccountsToLookAt accounts={unowned} />
+            </Block>
+            <Block open={advanced && findings > 0}>
+              <MergeFindingsWaiting count={findings} />
+            </Block>
+            <Block open={advanced && (propagation?.count ?? 0) > 0}>
+              <PendingChanges
+                count={propagation?.count ?? 0}
+                reachable={propagation?.zitadel_reachable ?? true}
+              />
+            </Block>
+          </QueueColumn>
+        </Unfold>
+      </div>
+
+      {/* Basic's own sentence folds when Advanced opens (A-08 §3), by the same
+          Unfold as everything else the switch moves. */}
+      <Unfold open={!advanced} gap={24}>
+        <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
+          In Basic these blocks are your whole queue. Pending changes and unexplained access
+          aren&rsquo;t hidden from you — they belong to the machine, and the machine lives in
+          Advanced.
+        </p>
+      </Unfold>
+    </div>
+  );
+  if (!calm) held.current = { grid, blocks };
 
   return (
     <div className="flex flex-col gap-6">
@@ -209,7 +304,12 @@ export function Home({ session }: { session: SessionUser }) {
             leaving one word stranded. */}
         <h1 className="type-greeting max-w-[22ch] text-balance sm:max-w-[34ch]">
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}
-          {who ? `, ${who}` : ""}. <span className="text-ink/40">{headline}</span>
+          {who ? `, ${who}` : ""}.{" "}
+          <span className="text-ink/40">
+            <Crossfade id={headline} inline>
+              {headline}
+            </Crossfade>
+          </span>
         </h1>
         <div className="mt-2 text-[14.5px] text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
@@ -222,8 +322,11 @@ export function Home({ session }: { session: SessionUser }) {
         </div>
         {/* #27: a clear block gives up its seat, so this says it was checked. Only
             where there is a queue to read: the one calm line below says the rest. */}
-        {!error && !loading && (blocks > 0 || queue.rows.length > 0 || gaps.rows.length > 0) && clear.length > 0 && (
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-muted">
+        {/* It goes and comes with the grid, by the same Unfold, in step with the swap (A-12 §1).
+            Mounted with the first read, so it is simply there when the page arrives. */}
+        {!error && !loading && (
+          <Unfold open={swap.gridOpen && clear.length > 0}>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[13.5px] text-muted">
             <span aria-hidden className="h-[7px] w-[7px] rounded-pill bg-healthy" />
             <span>Checked, nothing waiting:</span>
             {clear.map(([name, href], index) => (
@@ -235,6 +338,7 @@ export function Home({ session }: { session: SessionUser }) {
               </span>
             ))}
           </div>
+          </Unfold>
         )}
       </div>
 
@@ -259,12 +363,12 @@ export function Home({ session }: { session: SessionUser }) {
             </Card>
           }
         >
-        {/* The calm line and the grid hand over by Unfold: the Basic/Advanced switch or a
-            read can flip `calm`, and neither may swap them in one frame (A-08 §3). */}
+        {/* The calm line and the grid hand over by Unfold, whatever flipped `calm`
+            (A-12 §1, `useCalmHandover`): never in one frame, never a crossfade. */}
         {/* The last decided row is still on its beat: the empty state waits for it.
             One calm line, not a full-page card: the page continues below, and a
             hero-sized empty state would read as the end of it. */}
-        <Unfold open={calm} gap={24}>
+        <Unfold open={swap.calmOpen} gap={24}>
         <div className="panel flex items-center gap-3 px-5 py-4">
           {/* Healthy, not accent. Violet is what you can act on, and the whole
               statement of this row is that there is nothing to act on. */}
@@ -277,86 +381,8 @@ export function Home({ session }: { session: SessionUser }) {
           </span>
         </div>
         </Unfold>
-        <Unfold open={!calm} gap={24}>
-        {/* One wrapper, so the Basic footnote's Unfold is not a direct child of the
-            arriving list (its settled rule would stop the unfold playing). */}
-        <div className="flex flex-col gap-6">
-          <div className="grid items-start gap-6 desktop:grid-cols-2">
-            {/* Time-sensitive: access ends, stays wrong, or goes unseen if you wait.
-                Drift leads, and a target Syndra cannot read stays beside the
-                findings it qualifies, in the same column. */}
-            {/* A block or a column that empties while you are here folds (5b): it fades, then its
-                gap closes. It never just vanishes under the pointer. */}
-            <Unfold
-              open={
-                expiring.length > 0 ||
-                (advanced &&
-                  ((drift?.count ?? 0) > 0 || unvouched.length > 0 || unconfirmedWrites.count > 0))
-              }
-              className="min-w-0 desktop:col-start-1"
-            >
-              <QueueColumn
-                title="Time-sensitive"
-                note="Access ends, stays wrong, or goes unseen if you wait."
-              >
-                <Block open={advanced && (drift?.count ?? 0) > 0}>
-                  <UnexplainedAccess count={drift?.count ?? 0} />
-                </Block>
-                <Block open={expiring.length > 0}>
-                  <ExpiringSoon grants={expiring} />
-                </Block>
-                <Block open={advanced && unvouched.length > 0}>
-                  <UnvouchedTargets targets={unvouched} />
-                </Block>
-                <Block open={advanced && unconfirmedWrites.count > 0}>
-                  <UnconfirmedWrites summary={unconfirmedWrites} />
-                </Block>
-              </QueueColumn>
-            </Unfold>
-            {/* When you're ready: nothing changes until you act. */}
-            <Unfold
-              open={
-                queue.rows.length > 0 ||
-                onboardingGaps > 0 ||
-                gaps.rows.length > 0 ||
-                unowned.length > 0 ||
-                (advanced && (findings > 0 || (propagation?.count ?? 0) > 0))
-              }
-              className="min-w-0 desktop:col-start-2"
-            >
-              <QueueColumn title="When you're ready" note="Nothing changes until you act.">
-                <Block open={queue.rows.length > 0}>
-                  <OpenRequests rows={queue.rows} decisions={decisions} queue={queue} />
-                </Block>
-                <Block open={onboardingGaps > 0 || gaps.rows.length > 0}>
-                  <OnboardingGaps report={onboarding.data!} gaps={gaps} />
-                </Block>
-                <Block open={unowned.length > 0}>
-                  <ServiceAccountsToLookAt accounts={unowned} />
-                </Block>
-                <Block open={advanced && findings > 0}>
-                  <MergeFindingsWaiting count={findings} />
-                </Block>
-                <Block open={advanced && (propagation?.count ?? 0) > 0}>
-                  <PendingChanges
-                    count={propagation?.count ?? 0}
-                    reachable={propagation?.zitadel_reachable ?? true}
-                  />
-                </Block>
-              </QueueColumn>
-            </Unfold>
-          </div>
-
-          {/* Basic's own sentence folds when Advanced opens (A-08 §3), by the same
-              Unfold as everything else the switch moves. */}
-          <Unfold open={!advanced} gap={24}>
-            <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
-              In Basic these blocks are your whole queue. Pending changes and unexplained access
-              aren&rsquo;t hidden from you — they belong to the machine, and the machine lives in
-              Advanced.
-            </p>
-          </Unfold>
-        </div>
+        <Unfold open={swap.gridOpen} gap={24}>
+          {calm ? held.current.grid : grid}
         </Unfold>
 
         {/* The work zone above never moves. This is appended, never inserted. */}
@@ -398,6 +424,78 @@ function QueueColumn({
  * One work block in a column. The 14px above it is inside what folds, so closing
  * the block takes its gap with it and nothing hops when it is gone.
  */
+/**
+ * Which of the calm line and the grid is open (A-12 §1). One hands over to the
+ * other: the leaving one fades and folds at once, the arriving one opens one
+ * tint later, so the page makes one height change and no frame shows "Nothing
+ * here needs you." beside a block that still needs you.
+ *
+ * What caused the swap decides only when it starts:
+ *  - the view switch, or work arriving on a calm Home: at once;
+ *  - the last row leaving (a decision after its beat, 5b; a row a read dropped,
+ *    which has already waited for the pointer to leave its list, S5): at once;
+ *  - anything else emptying Home (another operator, a background read): it
+ *    waits while the pointer or focus is inside the blocks (`holdProps`), then
+ *    plays once they leave (S5).
+ * Under reduced motion both change at once. The first read is the page
+ * arriving, not a swap: it is simply there.
+ *
+ * ponytail: a swap that turns back inside its tint never opened the other side,
+ * so it is as if nothing happened; one that turns back later replays the
+ * reopening Unfold rather than reversing it, because `Unfold` runs keyframes.
+ * Reversing from where it is needs Unfold on transitions, as `leave-row` is.
+ */
+function useCalmHandover(calm: boolean, now: { ready: boolean; advanced: boolean; rows: number }) {
+  const [target, setTarget] = useState(calm);
+  const [opened, setOpened] = useState(calm);
+  const [was, setWas] = useState(now);
+  const [pointer, setPointer] = useState(false);
+  const [focus, setFocus] = useState(false);
+
+  if (was.ready !== now.ready || was.advanced !== now.advanced || was.rows !== now.rows) setWas(now);
+  if (!now.ready || !was.ready) {
+    if (target !== calm) setTarget(calm);
+    if (opened !== calm) setOpened(calm);
+  } else if (target !== calm) {
+    const atOnce = !calm || was.advanced !== now.advanced || was.rows > 0 || !(pointer || focus);
+    if (atOnce) {
+      setTarget(calm);
+      // The grid goes, and nothing is inside it any more.
+      if (calm) {
+        setPointer(false);
+        setFocus(false);
+      }
+    }
+  }
+  if (opened !== target && stillMotion()) setOpened(target);
+
+  // The arriving side waits one tint, for the leaving side's fade.
+  useEffect(() => {
+    if (opened === target) return;
+    const timer = setTimeout(() => setOpened(target), TINT_MS);
+    return () => clearTimeout(timer);
+  }, [opened, target]);
+
+  return {
+    calmOpen: target && opened,
+    gridOpen: !target && !opened,
+    /** The side the page is going to, once any hold is over. */
+    showsCalm: target,
+    holdProps: {
+      onPointerEnter: () => setPointer(true),
+      // A focused button that is removed never says it blurred, so focus is read again here.
+      onPointerLeave: (event: React.PointerEvent<HTMLElement>) => {
+        setPointer(false);
+        setFocus(event.currentTarget.contains(document.activeElement));
+      },
+      onFocus: () => setFocus(true),
+      onBlur: (event: React.FocusEvent<HTMLElement>) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocus(false);
+      },
+    },
+  };
+}
+
 function Block({ open, children }: { open: boolean; children: React.ReactNode }) {
   return (
     <Unfold open={open}>

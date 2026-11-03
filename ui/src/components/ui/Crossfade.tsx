@@ -16,11 +16,15 @@ export function Crossfade({
   id,
   children,
   className = "",
+  inline = false,
 }: {
   id: string;
   children: ReactNode;
   className?: string;
+  /** Words inside a sentence (Home's headline): spans, and the seat sits in the line. */
+  inline?: boolean;
 }) {
+  const Layer = inline ? "span" : "div";
   const last = useRef({ id, children });
   const [leaving, setLeaving] = useState<ReactNode>(null);
   const [fading, setFading] = useState(false);
@@ -46,15 +50,15 @@ export function Crossfade({
   }, [fading, id]);
 
   return (
-    <div className={`grid [&>*]:col-start-1 [&>*]:row-start-1 ${className}`}>
+    <Layer className={`${inline ? "inline-grid" : "grid"} [&>*]:col-start-1 [&>*]:row-start-1 ${className}`}>
       {fading && (
-        <div key="leaving" className="tint-out min-w-0" aria-hidden inert>
+        <Layer key="leaving" className="tint-out min-w-0" aria-hidden inert>
           {leaving}
-        </div>
+        </Layer>
       )}
-      <div key={id} className={`min-w-0 ${fading ? "tint-in" : ""}`}>
+      <Layer key={id} className={`min-w-0 ${fading ? "tint-in" : ""}`}>
         {children}
-      </div>
-    </div>
+      </Layer>
+    </Layer>
   );
 }

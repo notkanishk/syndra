@@ -169,7 +169,7 @@ describe("Ask for access", () => {
     search.value = "project=pNet";
     renderAs(false);
     expect(
-      screen.getByText("Nothing is set up here yet, so there's nothing to ask for. Makerspace staff can set it up."),
+      screen.getByText("Network storage has no roles yet, so there's nothing to ask for. Makerspace staff can add them."),
     ).toBeInTheDocument();
     expect(sendButton()).toBeDisabled();
   });
