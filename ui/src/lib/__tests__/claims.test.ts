@@ -14,6 +14,7 @@ import {
   setRole,
   summaryLines,
   understandLine,
+  namesRoles,
 } from "@/lib/claims";
 import type { Profile } from "@/lib/queries/useClaimShape";
 
@@ -203,5 +204,15 @@ describe("the preview's verdict (A-15 §5)", () => {
     expect(verdictOf(t("danger", "healthy", "healthy", "healthy", "healthy"), false)).toEqual({ tone: "danger", text: "Check 1 fails" });
     expect(verdictOf(t("danger", "healthy", "healthy", "warn", "danger"), false)).toEqual({ tone: "danger", text: "Checks 1 and 5 fail" });
     expect(verdictOf(t("healthy", "healthy", "healthy", "warn", "healthy"), false)).toEqual({ tone: "warn", text: "Check 4 needs a look" });
+  });
+});
+
+describe("namesRoles", () => {
+  it("is false for a shape that never chose roles, so no role reads as new", () => {
+    expect(namesRoles(null)).toBe(false);
+    expect(namesRoles({ include_new: true, roles: [] } as unknown as Profile)).toBe(false);
+  });
+  it("is true once the shape names a role of its own", () => {
+    expect(namesRoles({ include_new: true, roles: [{ key: "staff", included: true }] } as unknown as Profile)).toBe(true);
   });
 });
