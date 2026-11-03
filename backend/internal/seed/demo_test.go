@@ -118,6 +118,10 @@ func (fake stubClient) TokenSettings(context.Context, string, string) (*zitadel.
 	return &zitadel.TokenSettings{}, nil
 }
 
+func (fake stubClient) SearchEvents(context.Context, zitadel.EventSearch) ([]zitadel.LoggedEvent, bool, error) {
+	return nil, false, nil
+}
+
 func (fake stubClient) GrantOriginByID(context.Context, string) (*zitadel.GrantOrigin, error) {
 	return nil, nil
 }

@@ -203,20 +203,3 @@ func handleInsightsLens(w http.ResponseWriter, r *http.Request) {
 		jsonValidationErrorResponse(w, "kind must be ending or group", map[string]string{"kind": "must be ending or group"})
 	}
 }
-
-// handleGetUserUsage is one person's last use of each project, by kind. A person
-// nothing has been seen for gets [], not a 404: absence of a row is not absence
-// of the person.
-func handleGetUserUsage(w http.ResponseWriter, r *http.Request) {
-	userID := r.PathValue("id")
-	if !trimmedNonEmpty(userID) {
-		jsonValidationErrorResponse(w, "id path parameter is required", map[string]string{"id": "required"})
-		return
-	}
-	rows, err := dbGetUserUsage(r.Context(), userID)
-	if err != nil {
-		viewError(w, err, http.StatusInternalServerError, "INSIGHTS_ERROR")
-		return
-	}
-	jsonResponse(w, http.StatusOK, rows)
-}

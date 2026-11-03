@@ -16,8 +16,12 @@ import (
 
 func stubUsage(t *testing.T) {
 	t.Helper()
-	u, g := svcInsightsUsage, dbGetUserUsage
-	t.Cleanup(func() { svcInsightsUsage, dbGetUserUsage = u, g })
+	u, g, l, s := svcInsightsUsage, dbGetUserUsage, dbUsageLatestByKind, dbSignInsSince
+	t.Cleanup(func() { svcInsightsUsage, dbGetUserUsage, dbUsageLatestByKind, dbSignInsSince = u, g, l, s })
+	dbUsageLatestByKind = func(context.Context, time.Time) (map[string]time.Time, error) {
+		return map[string]time.Time{}, nil
+	}
+	dbSignInsSince = func(context.Context) (*time.Time, error) { return nil, nil }
 }
 
 func getUsage(query string) *httptest.ResponseRecorder {
@@ -79,32 +83,6 @@ func TestInsightsUsageHandler_ShapeAndFailure(t *testing.T) {
 		return models.InsightsUsage{}, errors.New("boom")
 	}
 	if rr := getUsage(""); rr.Code != http.StatusInternalServerError {
-		t.Errorf("status %d", rr.Code)
-	}
-}
-
-func TestUserUsageHandler(t *testing.T) {
-	stubUsage(t)
-	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	var asked string
-	dbGetUserUsage = func(_ context.Context, id string) ([]db.UsageRow, error) {
-		asked = id
-		return []db.UsageRow{{ProjectID: "p", Kind: "sign_in", LastAt: at}}, nil
-	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/users/u7/usage", nil)
-	req.SetPathValue("id", "u7")
-	rr := httptest.NewRecorder()
-	handleGetUserUsage(rr, req)
-	var rows []map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &rows); err != nil || rr.Code != 200 || asked != "u7" ||
-		len(rows) != 1 || rows[0]["project_id"] != "p" || rows[0]["kind"] != "sign_in" || rows[0]["last_at"] == nil {
-		t.Fatalf("status %d asked %q body %s", rr.Code, asked, rr.Body.String())
-	}
-
-	dbGetUserUsage = func(context.Context, string) ([]db.UsageRow, error) { return nil, errors.New("boom") }
-	rr = httptest.NewRecorder()
-	handleGetUserUsage(rr, req)
-	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("status %d", rr.Code)
 	}
 }

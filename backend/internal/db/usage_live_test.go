@@ -19,7 +19,7 @@ func TestUsageLastSeen_AgainstTheSchema(t *testing.T) {
 
 	// Upsert: the later time wins whichever order they arrive in.
 	for _, at := range []time.Time{newer, old} {
-		if err := RecordUsage(ctx, "usage-live-a", "pA", UsageSignIn, at); err != nil {
+		if err := RecordUsage(ctx, "usage-live-a", "pA", "", UsageSignIn, at); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -27,7 +27,7 @@ func TestUsageLastSeen_AgainstTheSchema(t *testing.T) {
 	if err != nil || len(rows) != 1 || !rows[0].LastAt.Equal(newer) || rows[0].ProjectID != "pA" || rows[0].Kind != UsageSignIn {
 		t.Fatalf("after newer then older: %+v, %v; want one row at %v", rows, err, newer)
 	}
-	if err := RecordUsage(ctx, "usage-live-a", "pA", UsageSignIn, now); err != nil {
+	if err := RecordUsage(ctx, "usage-live-a", "pA", "", UsageSignIn, now); err != nil {
 		t.Fatal(err)
 	}
 	if rows, _ = GetUserUsage(ctx, "usage-live-a"); !rows[0].LastAt.Equal(now) {
@@ -39,7 +39,7 @@ func TestUsageLastSeen_AgainstTheSchema(t *testing.T) {
 		{"usage-live-a", "pB", UsageSignIn}, {"usage-live-a", "", UsageSignIn},
 		{"usage-live-a", "pA", UsageBadge}, {"usage-live-b", "pA", UsageSignIn},
 	} {
-		if err := RecordUsage(ctx, r.user, r.project, r.kind, old); err != nil {
+		if err := RecordUsage(ctx, r.user, r.project, "", r.kind, old); err != nil {
 			t.Fatalf("%+v: %v", r, err)
 		}
 	}
@@ -51,7 +51,7 @@ func TestUsageLastSeen_AgainstTheSchema(t *testing.T) {
 	}
 
 	// The kind constraint holds.
-	if err := RecordUsage(ctx, "usage-live-a", "pA", "telepathy", now); err == nil {
+	if err := RecordUsage(ctx, "usage-live-a", "pA", "", "telepathy", now); err == nil {
 		t.Error("an unknown kind must be refused by the CHECK constraint")
 	}
 
@@ -89,5 +89,57 @@ func TestUsageLastSeen_AgainstTheSchema(t *testing.T) {
 	}
 	if rows, _ = GetUserUsage(ctx, "usage-live-b"); len(rows) != 0 {
 		t.Errorf("b after prune: %+v", rows)
+	}
+}
+
+// Per app, with daily totals that name nobody: a redelivery is counted once,
+// a later sign-in counts again, and the app's read sees both.
+func TestSignInDailyTotals_AgainstTheSchema(t *testing.T) {
+	ctx := liveDB(t)
+	clean := func() {
+		_, _ = PG.Exec(ctx, `DELETE FROM usage_last_seen WHERE user_id LIKE 'usage-live-%'`)
+		_, _ = PG.Exec(ctx, `DELETE FROM sign_in_daily WHERE app_id LIKE 'usage-live-%'`)
+	}
+	clean()
+	t.Cleanup(clean)
+
+	now := time.Now().Truncate(time.Second)
+	at := now.Add(-time.Hour)
+	for i := 0; i < 3; i++ { // one event, delivered three times
+		if err := RecordUsage(ctx, "usage-live-a", "pA", "usage-live-app", UsageSignIn, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := RecordUsage(ctx, "usage-live-a", "pA", "usage-live-app", UsageSignIn, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecordUsage(ctx, "usage-live-b", "pA", "usage-live-app", UsageSignIn, now.Add(-10*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	// A badge is no sign-in and adds no total.
+	if err := RecordUsage(ctx, "usage-live-a", "pA", "usage-live-app", UsageBadge, now); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := GetAppUsage(ctx, "usage-live-app", now.Add(-7*24*time.Hour), now.Add(-30*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RecentPeople != 1 || got.WindowPeople != 2 || got.LastAt == nil || !got.LastAt.Equal(now) {
+		t.Fatalf("usage = %+v; want 1 in 7 days, 2 in 30, last at %v", got, now)
+	}
+	total := 0
+	for _, d := range got.Days {
+		total += d.Count
+	}
+	if total != 3 { // a's two distinct sign-ins and b's one; the redeliveries add nothing
+		t.Fatalf("days = %+v; want 3 sign-ins in all", got.Days)
+	}
+	rows, _ := GetUserUsage(ctx, "usage-live-a")
+	if len(rows) != 2 || rows[0].AppID != "usage-live-app" {
+		t.Fatalf("rows = %+v; want per-app rows", rows)
+	}
+	if since, err := SignInsSince(ctx); err != nil || since == nil {
+		t.Fatalf("since = %v, %v", since, err)
 	}
 }

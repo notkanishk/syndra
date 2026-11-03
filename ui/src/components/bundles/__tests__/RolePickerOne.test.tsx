@@ -131,12 +131,24 @@ describe("RolePicker · single choice", () => {
     expect(fold("Safety")).toHaveTextContent("1 you have");
   });
 
-  it("an empty place says so, once opened", () => {
+  // A-12 §3 (f): the sentence names the project, because "here" pointed at a fold heading
+  // the reader may have scrolled past, then says where the next step is. No link: a link
+  // out of a dialog loses the form.
+  it("an empty place says so by name, once opened", () => {
     render(<Harness />);
     fireEvent.click(fold("Network storage"));
     expect(
-      screen.getByText("Nothing is set up here yet, so there's nothing to ask for. Makerspace staff can set it up."),
+      screen.getByText("Network storage has no roles yet, so there's nothing to ask for. Makerspace staff can add them."),
     ).toBeInTheDocument();
+  });
+
+  it("an operator's empty place says where a role is added, with no link out of the form", () => {
+    render(<Harness audience="operator" />);
+    fireEvent.click(fold("Network storage"));
+    const line = screen.getByText(
+      "Network storage has no roles yet, so there's nothing to give. You can add one on its project page.",
+    );
+    expect(line.querySelector("a")).toBeNull();
   });
 
   it("an operator reads the key after the name, N people with no status, and what's given", () => {

@@ -1,4 +1,5 @@
 import { humanizeKey } from "@/lib/format";
+import type { BulkOp } from "@/lib/queries/useBulkGrants";
 import type { UserListEntry } from "@/lib/queries/useUsers";
 
 /**
@@ -250,6 +251,21 @@ export function applyFilters(
     if (filters.attention && !matchesAttention(entry, filters.attention)) return false;
     return true;
   });
+}
+
+/**
+ * The bulk verb a phone's selection bar offers first (A-12 §2): the one that
+ * does the job the list was filtered for, otherwise Give a role. It reads the
+ * filter, never the selection, so ticking a row never moves the bar under the
+ * thumb (changing the filter already clears the selection). Departed, still has
+ * access only ends with a revoke, so there the primary is the danger verb
+ * (owner, 3 Nov).
+ */
+export function primaryBulkVerb(filters: PeopleFilters): BulkOp {
+  if (filters.bundle === NO_BUNDLE || filters.attention === "no-access") return "assign_bundle";
+  if (filters.attention === "expiring") return "extend";
+  if (filters.attention === "departed") return "remove_role";
+  return "assign_role";
 }
 
 /**

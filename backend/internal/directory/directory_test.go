@@ -710,6 +710,10 @@ func (fake *mockDirClient) TokenSettings(context.Context, string, string) (*zita
 	return &zitadel.TokenSettings{}, nil
 }
 
+func (fake *mockDirClient) SearchEvents(context.Context, zitadel.EventSearch) ([]zitadel.LoggedEvent, bool, error) {
+	return nil, false, nil
+}
+
 func (fake *mockDirClient) GrantOriginByID(context.Context, string) (*zitadel.GrantOrigin, error) {
 	return nil, nil
 }

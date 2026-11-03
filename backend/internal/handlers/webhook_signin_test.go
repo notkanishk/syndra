@@ -113,8 +113,8 @@ func TestTranslate_UnknownSessionEventsStayIgnored(t *testing.T) {
 }
 
 type usageCall struct {
-	user, project, kind string
-	at                  time.Time
+	user, project, app, kind string
+	at                       time.Time
 }
 
 // setupSignInDeps makes every grant-path seam fail the test if it is touched,
@@ -145,8 +145,8 @@ func setupSignInDeps(t *testing.T) *[]usageCall {
 	}
 
 	var calls []usageCall
-	dbRecordUsage = func(_ context.Context, user, project, kind string, at time.Time) error {
-		calls = append(calls, usageCall{user, project, kind, at})
+	dbRecordUsage = func(_ context.Context, user, project, app, kind string, at time.Time) error {
+		calls = append(calls, usageCall{user, project, app, kind, at})
 		return nil
 	}
 	directoryApplications = func(context.Context) ([]models.ApplicationCatalog, error) {
@@ -173,7 +173,7 @@ func TestWebhook_SignIn_RecordsUsageAndTouchesNothingElse(t *testing.T) {
 		t.Fatalf("usage calls = %v", *calls)
 	}
 	c := (*calls)[0]
-	if c.user != "u1" || c.project != "proj-B" || c.kind != "sign_in" || !c.at.Equal(created) {
+	if c.user != "u1" || c.project != "proj-B" || c.app != "app-2" || c.kind != "sign_in" || !c.at.Equal(created) {
 		t.Errorf("recorded %+v; want u1/proj-B/sign_in at %v (client id resolved to its project)", c, created)
 	}
 }
@@ -182,7 +182,7 @@ func TestWebhook_SignIn_ResolvesByAppIDAndFallsBackToAudience(t *testing.T) {
 	calls := setupSignInDeps(t)
 	postWebhook(t, realZitadelBody("u1", "user", "user.token.added", "u1", `{"applicationId":"app-1"}`))
 	postWebhook(t, realZitadelBody("u2", "user", "user.token.added", "u2", `{"applicationId":"unknown","audience":["nope","111@portal"]}`))
-	if len(*calls) != 2 || (*calls)[0].project != "proj-A" || (*calls)[1].project != "proj-A" {
+	if len(*calls) != 2 || (*calls)[0].project != "proj-A" || (*calls)[1].project != "proj-A" || (*calls)[0].app != "app-1" || (*calls)[1].app != "app-1" {
 		t.Errorf("calls = %v", *calls)
 	}
 }
@@ -198,7 +198,7 @@ func TestWebhook_SignIn_UnresolvableAppRecordsEmptyProject(t *testing.T) {
 		t.Fatalf("calls = %v", *calls)
 	}
 	for _, c := range *calls {
-		if c.project != "" {
+		if c.project != "" || c.app != "" {
 			t.Errorf("recorded project %q, want ''", c.project)
 		}
 	}
@@ -231,7 +231,7 @@ func TestWebhook_SignIn_UnusableEventsAreAcknowledgedAndNotRecorded(t *testing.T
 
 func TestWebhook_SignIn_StoreFailureIs500SoZitadelRedelivers(t *testing.T) {
 	setupSignInDeps(t)
-	dbRecordUsage = func(context.Context, string, string, string, time.Time) error { return errors.New("db down") }
+	dbRecordUsage = func(context.Context, string, string, string, string, time.Time) error { return errors.New("db down") }
 	rr := postWebhook(t, realZitadelBody("u1", "user", "user.token.added", "u1", `{}`))
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("status %d", rr.Code)
