@@ -35,8 +35,11 @@ func TestClaimsConfigProblems(t *testing.T) {
 		{"live, no external URL", with(map[string]string{"SYNDRA_EXTERNAL_URL": ""}), "SYNDRA_EXTERNAL_URL is empty"},
 		{"live, http", with(map[string]string{"SYNDRA_EXTERNAL_URL": "http://syndra.example.edu"}), "not https"},
 		{"not a URL", with(map[string]string{"SYNDRA_EXTERNAL_URL": "syndra.example.edu"}), "not an http(s) URL"},
-		{"the canary half set", with(map[string]string{"SYNDRA_CANARY_PROJECT_ID": "123"}), "half set"},
-		{"the canary two of three", with(map[string]string{"SYNDRA_CANARY_PROJECT_ID": "123", "SYNDRA_CANARY_CLIENT_ID": "456"}), "SYNDRA_CANARY_KEY_PATH not"},
+		// Owner, 3 Nov 2026: L2 reuses Syndra's own service account, so the
+		// project alone switches it on; a key or client id without one is half set.
+		{"the canary on Syndra's own key", with(map[string]string{"SYNDRA_CANARY_PROJECT_ID": "123", "ZITADEL_MACHINE_KEY_PATH": "/etc/syndra/zitadel-sa-key.json"}), ""},
+		{"the canary with no key at all", with(map[string]string{"SYNDRA_CANARY_PROJECT_ID": "123"}), "has no key"},
+		{"the canary half set", with(map[string]string{"SYNDRA_CANARY_CLIENT_ID": "456"}), "SYNDRA_CANARY_PROJECT_ID not"},
 		{"the canary without Zitadel", canary, "needs ZITADEL_DOMAIN"},
 	}
 	for _, tc := range cases {

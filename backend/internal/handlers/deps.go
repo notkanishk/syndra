@@ -335,7 +335,7 @@ var (
 	probeClient = func() *http.Client { return defaultProbeClient }
 	// canaryToken mints the L2 canary's token from its machine-user key.
 	canaryToken = func(ctx context.Context, scope string) (string, error) {
-		return zitadel.MintToken(ctx, os.Getenv("ZITADEL_DOMAIN"), os.Getenv(canaryKeyPathEnv), scope)
+		return zitadel.MintToken(ctx, os.Getenv("ZITADEL_DOMAIN"), canaryKeyPath(), scope)
 	}
 	canaryUserinfo    = fetchCanaryUserinfo
 	canaryUserinfoURL = func() string { return "https://" + os.Getenv("ZITADEL_DOMAIN") + "/oidc/v1/userinfo" }

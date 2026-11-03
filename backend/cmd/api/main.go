@@ -91,20 +91,23 @@ func claimsConfigProblems(getenv func(string) string) []string {
 	case live && u.Scheme != "https":
 		problems = append(problems, "SYNDRA_EXTERNAL_URL is not https")
 	}
-	canary := []string{"SYNDRA_CANARY_KEY_PATH", "SYNDRA_CANARY_PROJECT_ID", "SYNDRA_CANARY_CLIENT_ID"}
-	var set, unset []string
-	for _, k := range canary {
+	// L2 needs a project; the key defaults to Syndra's own service account and
+	// the client id to the token's own. A key or client id with no project is
+	// half set.
+	project := getenv("SYNDRA_CANARY_PROJECT_ID")
+	var extra []string
+	for _, k := range []string{"SYNDRA_CANARY_KEY_PATH", "SYNDRA_CANARY_CLIENT_ID"} {
 		if getenv(k) != "" {
-			set = append(set, k)
-		} else {
-			unset = append(unset, k)
+			extra = append(extra, k)
 		}
 	}
 	switch {
-	case len(set) > 0 && len(unset) > 0:
-		problems = append(problems, "the L2 canary is half set ("+strings.Join(set, ", ")+" set, "+strings.Join(unset, ", ")+" not)")
-	case len(set) > 0 && !live:
+	case project == "" && len(extra) > 0:
+		problems = append(problems, "the L2 canary is half set ("+strings.Join(extra, ", ")+" set, SYNDRA_CANARY_PROJECT_ID not)")
+	case project != "" && !live:
 		problems = append(problems, "the L2 canary needs ZITADEL_DOMAIN")
+	case project != "" && getenv("SYNDRA_CANARY_KEY_PATH") == "" && getenv("ZITADEL_MACHINE_KEY_PATH") == "":
+		problems = append(problems, "the L2 canary has no key (SYNDRA_CANARY_KEY_PATH or ZITADEL_MACHINE_KEY_PATH)")
 	}
 	return problems
 }

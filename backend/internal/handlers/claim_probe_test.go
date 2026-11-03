@@ -259,6 +259,26 @@ func TestProbeL2(t *testing.T) {
 		claimDelivery.Record(claimtel.Call{UserID: "uC", ClientID: "cC", Function: claims.FunctionPreAccessToken, Outcome: claimtel.Served, At: time.Now()})
 	}
 
+	// Owner, 3 Nov 2026: L2 reuses Syndra's own service account. With only the
+	// project set, the key is ZITADEL_MACHINE_KEY_PATH and the client id is the
+	// token's own.
+	t.Run("on Syndra's own service account", func(t *testing.T) {
+		_, tok := setup(t)
+		t.Setenv(canaryKeyPathEnv, "")
+		t.Setenv(canaryClientIDEnv, "")
+		t.Setenv("ZITADEL_MACHINE_KEY_PATH", "/etc/syndra/zitadel-sa-key.json")
+		(*tok)["client_id"] = "cC"
+		if !ProbeL2Enabled() || canaryKeyPath() != "/etc/syndra/zitadel-sa-key.json" {
+			t.Fatalf("enabled=%v key=%q", ProbeL2Enabled(), canaryKeyPath())
+		}
+		served()
+		if err := RunProbeL2(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if res := lastProbeL2.Load(); res == nil || !res.Pass {
+			t.Fatalf("L2: %+v", res)
+		}
+	})
 	t.Run("pass", func(t *testing.T) {
 		setup(t)
 		served()
@@ -319,9 +339,9 @@ func TestProbeL2(t *testing.T) {
 	})
 	t.Run("off until the owner sets it", func(t *testing.T) {
 		setup(t)
-		t.Setenv(canaryClientIDEnv, "")
+		t.Setenv(canaryProjectIDEnv, "")
 		if err := RunProbeL2(context.Background()); err != nil || lastProbeL2.Load() != nil {
-			t.Fatal("L2 ran half configured")
+			t.Fatal("L2 ran with no project set")
 		}
 	})
 }
