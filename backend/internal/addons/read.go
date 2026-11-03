@@ -847,9 +847,12 @@ func (p *Place) Address(host string) {
 // would fill the operation log with events that changed nothing — the same
 // reason an unchanged apply issues no call.
 //
-// The subject is the caller's and the add-on takes no subject parameter at all,
-// so there is no shape in which this reports on somebody else.
-func MyStorage(ctx context.Context, target, subject string) StorageStatus {
+// The add-on takes no subject parameter: the subject is the call's own, set
+// here. Who may name it is the route's decision, made before this is called:
+// the member's own page passes the authenticated person as both subject and
+// actor, and the operator-only person page (GET /users/{id}/targets) passes
+// the person it shows as subject and the operator as actor.
+func MyStorage(ctx context.Context, target, subject, actor string) StorageStatus {
 	a, err := Get(target)
 	if err != nil {
 		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
@@ -867,7 +870,7 @@ func MyStorage(ctx context.Context, target, subject string) StorageStatus {
 		"call_id":          "read-" + target + "-" + subject,
 		"operation":        "storage.status",
 		"subject":          subject,
-		"actor":            subject,
+		"actor":            actor,
 		"params":           map[string]any{},
 	})
 	if err != nil {

@@ -147,3 +147,114 @@ func (c *managementClient) GrantOriginByID(ctx context.Context, grantID string) 
 	}
 	return origin, nil
 }
+
+// EventSearch asks Zitadel's log for events of some types inside a window.
+// Types and both bounds are required; Limit is 1..1000.
+type EventSearch struct {
+	Types []string
+	Since time.Time
+	Until time.Time
+	Limit int
+}
+
+// LoggedEvent is one event as Zitadel's log returns it. Payload is the
+// event's own body, verbatim, for the caller to read in its own vocabulary.
+type LoggedEvent struct {
+	Type          string
+	AggregateID   string
+	AggregateType string
+	EditorUserID  string
+	At            time.Time
+	Payload       json.RawMessage
+}
+
+const maxEventSearch = 1000
+
+// searchEventsResponse is listEventsResponse with the parts a search needs.
+// The same tolerance: objects where a string would be the naive guess, and
+// every field optional.
+type searchEventsResponse struct {
+	Events []struct {
+		Editor *struct {
+			UserID string `json:"userId"`
+		} `json:"editor"`
+		Type *struct {
+			Type string `json:"type"`
+		} `json:"type"`
+		Aggregate *struct {
+			ID   string `json:"id"`
+			Type *struct {
+				Type string `json:"type"`
+			} `json:"type"`
+		} `json:"aggregate"`
+		CreationDate string          `json:"creationDate"`
+		Payload      json.RawMessage `json:"payload"`
+	} `json:"events"`
+}
+
+// SearchEvents reads the events of q.Types created inside [q.Since, q.Until],
+// newest first, at most q.Limit of them. The bool says Zitadel holds more than
+// were returned, so a caller never reads a cut-off answer as the whole one.
+//
+// `POST /admin/v1/events/_search` with `eventTypes` and the `range` creation
+// filter, written against the published schema like GrantOriginByID and
+// tested against the documented shape: one more than the limit is asked for,
+// which is how truncation is known without a count.
+func (c *managementClient) SearchEvents(ctx context.Context, q EventSearch) ([]LoggedEvent, bool, error) {
+	switch {
+	case len(q.Types) == 0:
+		return nil, false, fmt.Errorf("at least one event type is required")
+	case q.Since.IsZero() || q.Until.IsZero() || !q.Since.Before(q.Until):
+		return nil, false, fmt.Errorf("a window with since before until is required")
+	case q.Limit < 1 || q.Limit > maxEventSearch:
+		return nil, false, fmt.Errorf("limit must be 1 to %d", maxEventSearch)
+	}
+
+	resp, err := c.doRequest(ctx, http.MethodPost, "/admin/v1/events/_search", map[string]any{
+		"asc":        false,
+		"limit":      q.Limit + 1,
+		"eventTypes": q.Types,
+		"range": map[string]string{
+			"since": q.Since.UTC().Format(time.RFC3339),
+			"until": q.Until.UTC().Format(time.RFC3339),
+		},
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, false, fmt.Errorf("read events response: %w", err)
+	}
+	var out searchEventsResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, false, fmt.Errorf("decode events response: %w", err)
+	}
+
+	events := make([]LoggedEvent, 0, len(out.Events))
+	for _, e := range out.Events {
+		ev := LoggedEvent{Payload: e.Payload}
+		if e.Type != nil {
+			ev.Type = e.Type.Type
+		}
+		if e.Aggregate != nil {
+			ev.AggregateID = e.Aggregate.ID
+			if e.Aggregate.Type != nil {
+				ev.AggregateType = e.Aggregate.Type.Type
+			}
+		}
+		if e.Editor != nil {
+			ev.EditorUserID = e.Editor.UserID
+		}
+		if at, err := time.Parse(time.RFC3339, e.CreationDate); err == nil {
+			ev.At = at.UTC()
+		}
+		events = append(events, ev)
+	}
+	truncated := len(events) > q.Limit
+	if truncated {
+		events = events[:q.Limit]
+	}
+	return events, truncated, nil
+}
