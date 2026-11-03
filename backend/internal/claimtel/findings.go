@@ -89,7 +89,7 @@ func Observe(checked []Checked) []Observation {
 			obs = append(obs,
 				Observation{Kind: KindNotCalled, Subject: ch.ClientID, At: ch.At},
 				Observation{Kind: KindNotServed, Subject: ch.ClientID, Fail: true, At: ch.At, Sample: sample})
-		case Delivered:
+		case Delivered, NothingToDeliver:
 			obs = append(obs,
 				Observation{Kind: KindNotCalled, Subject: ch.ClientID, At: ch.At},
 				Observation{Kind: KindNotServed, Subject: ch.ClientID, At: ch.At})
