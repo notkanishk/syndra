@@ -27,7 +27,6 @@ import {
   RowCheckbox,
   SelectAllRow,
   SelectModeToggle,
-  SelectionAction,
   SelectionBar,
 } from "@/components/ui/SelectionBar";
 import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
@@ -42,6 +41,7 @@ import {
   NO_BUNDLE,
   EMPTY_FILTERS,
   parseFilters,
+  primaryBulkVerb,
   serializeFilters,
   type PeopleFilters,
   observedHolding,
@@ -53,6 +53,19 @@ import { useUsers, type UserListEntry } from "@/lib/queries/useUsers";
 import { useDebounce } from "@/lib/useDebounce";
 import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
+
+/**
+ * People's bulk verbs, in the desktop order. Every one opens a rehearsal, so
+ * none is "Remove role": the plan comes first, and a label that hides that is
+ * the one an operator taps expecting to be asked.
+ */
+const BULK_VERBS: [BulkOp, string, "neutral" | "danger"][] = [
+  ["assign_role", "Give a role", "neutral"],
+  ["assign_bundle", "Give a bundle", "neutral"],
+  ["extend", "Extend what ends", "neutral"],
+  ["remove_bundle", "Remove from a bundle", "danger"],
+  ["remove_role", "Revoke a role", "danger"],
+];
 
 /** Explicit pagination, never infinite scroll: a queue you can reach the end of. */
 
@@ -492,28 +505,11 @@ export default function PeoplePage() {
             selection.clear();
             setWholeFilter(false);
           }}
-        >
-          {/* Every one of these opens a rehearsal, so every one of them says
-              so. "Remove role" on a bar above nine selected people names an
-              outcome that tapping it does not produce — the plan comes first,
-              and the label that hides that is the label an operator taps
-              expecting to be asked. */}
-          <SelectionAction onClick={() => setBulkOp("assign_role")}>
-            Give a role
-          </SelectionAction>
-          <SelectionAction onClick={() => setBulkOp("assign_bundle")}>
-            Give a bundle
-          </SelectionAction>
-          <SelectionAction onClick={() => setBulkOp("extend")}>
-            Extend what ends
-          </SelectionAction>
-          <SelectionAction tone="danger" onClick={() => setBulkOp("remove_bundle")}>
-            Remove from a bundle
-          </SelectionAction>
-          <SelectionAction tone="danger" onClick={() => setBulkOp("remove_role")}>
-            Revoke a role
-          </SelectionAction>
-        </SelectionBar>
+          // Every one of these opens a rehearsal first. On a phone the one the
+          // filter was for leads, and the rest wait in More changes (A-12 §2).
+          verbs={BULK_VERBS.map(([key, label, tone]) => ({ key, label, tone, onClick: () => setBulkOp(key) }))}
+          primary={primaryBulkVerb(filters)}
+        />
       )}
 
       {bulkOp && (
