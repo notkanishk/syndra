@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -173,8 +172,15 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 	if facts.ProjectID == "" {
 		facts.ProjectID = app.ProjectID
 	}
-	c2 := Check{State: CheckPass, Facts: map[string]any{"roles": nonNil(facts.Roles)}}
-	if len(facts.Roles) == 0 {
+	// The roles are Zitadel's, as Syndra last observed them: what the token's
+	// payload lists, never what Syndra's records say (ADR-004).
+	roles, _, oerr := ObservedRoles(ctx, userID, app.ProjectID)
+	facts.Roles = roles
+	c2 := Check{State: CheckPass, Facts: map[string]any{"roles": nonNil(roles)}}
+	switch {
+	case oerr != nil:
+		c2.State, c2.Facts["unread"] = CheckStale, true
+	case len(roles) == 0:
 		c2.State = CheckNone
 	}
 	out.Checks[1] = c2
@@ -202,17 +208,21 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 	out.Checks[3] = c4
 
 	// 5 · the token.
-	shaped := claims.ShapeAt(s.profile, facts, time.Now())
+	shaped := claims.Shape(s.profile, facts)
 	c5 := Check{State: CheckPass, Facts: map[string]any{"lands": s.profile.Lands}}
 	out.Token = shaped
 	switch {
 	case signInOnly:
 		c5.State = CheckNone
-	case c3.State == CheckFail || c3.State == CheckWarn:
-		// The token path serves only stored claims: with none it answers
-		// degraded, and this is what it would send once they're built.
-		out.Token, out.WouldReceive = degradedToken(ctx, app.ProjectID), shaped
-		c5.State = CheckFail
+	case serr != nil || !built:
+		// With no stored claims the token path answers the shape over
+		// Zitadel's roles alone, exactly as here; with roles to build, this is
+		// what it would send once they're built.
+		bare := claims.Facts{UserID: userID, ProjectID: app.ProjectID, Roles: roles}
+		out.Token = claims.Shape(s.profile.RolesOnly(), bare)
+		if c3.State != CheckNone {
+			out.WouldReceive, c5.State = shaped, CheckWarn
+		}
 	case c1.State == CheckFail:
 		c5.State = CheckFail
 	}
@@ -269,29 +279,6 @@ func reachedSyndra(ctx context.Context, app models.ApplicationCatalog) Check {
 		c.State = CheckFail
 	}
 	return c
-}
-
-// degradedToken is what the token path answers with no stored claims: the
-// project's minimal-safe claims, or nothing (fail closed).
-func degradedToken(ctx context.Context, projectID string) *claims.Object {
-	out := claims.NewObject()
-	mode, minimal, err := svcGetClaimFailureMode(ctx, projectID)
-	if err != nil || mode != "minimal_safe" {
-		return out
-	}
-	for _, k := range sortedMapKeys(minimal) {
-		out.Set(k, minimal[k])
-	}
-	return out
-}
-
-func sortedMapKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func nonNil(s []string) []string {

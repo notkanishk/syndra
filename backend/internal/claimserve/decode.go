@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"syndra/internal/claims"
 	"syndra/internal/claimtel"
 )
 
@@ -35,11 +36,13 @@ type UserRef struct {
 // carried no Syndra claims while Actions v1 hid it. Both spellings are read;
 // snake_case wins when both are present.
 //
-// Roles is kept raw: only debug capture shows it, and a field Syndra does not
-// need must never be the reason a token loses its claims (F-4).
+// Roles is the token's roles: Zitadel's live list at token time, the only
+// source of the roles a token carries (ADR-004, 4 Nov 2026). Absent or null
+// reads as none; any other value that is not a list of strings breaks the
+// contract, loudly, rather than serving a token with its roles silently gone.
 type GrantRef struct {
-	ProjectID string          `json:"project_id"`
-	Roles     json.RawMessage `json:"roles,omitempty"`
+	ProjectID string   `json:"project_id"`
+	Roles     []string `json:"roles,omitempty"`
 }
 
 // errGrantContract is a grant row that names no project in either spelling.
@@ -57,13 +60,17 @@ func (g *GrantRef) UnmarshalJSON(b []byte) error {
 }
 
 // grantFromJSON reads one grant row. Not ok when the row is not an object, or
-// carries no project key (a rename, the F-0 class), or one that is not a string.
+// carries no project key (a rename, the F-0 class), or one that is not a
+// string, or roles that are not a list of strings.
 func grantFromJSON(b []byte) (GrantRef, bool) {
 	var raw map[string]json.RawMessage
 	if json.Unmarshal(b, &raw) != nil || raw == nil {
 		return GrantRef{}, false
 	}
-	g := GrantRef{Roles: raw["roles"]}
+	var g GrantRef
+	if r, ok := raw["roles"]; ok && json.Unmarshal(r, &g.Roles) != nil {
+		return GrantRef{}, false
+	}
 	found := false
 	for _, k := range []string{"project_id", "projectId"} {
 		v, ok := raw[k]
@@ -120,8 +127,8 @@ var KnownTopLevel = map[string]bool{
 // whose rows name no project in either spelling is a contract fault too: that
 // is exactly how F-0 read for months.
 //
-// Everything else is best-effort: a function, application or roles value of
-// another type reads as empty, never as a 400 (F-4).
+// Everything else is best-effort: a function or application value of another
+// type reads as empty, never as a 400 (F-4).
 func Decode(body []byte) (Request, claimtel.Outcome) {
 	var top map[string]json.RawMessage
 	if err := decodeOne(bytes.NewReader(body), &top); err != nil || top == nil {
@@ -201,4 +208,17 @@ func (r Request) Projects() []string {
 		}
 	}
 	return out
+}
+
+// Roles is Zitadel's roles for projectID at token time: every row's roles for
+// it, as one claims.RoleSet. A preview reads the same set from Syndra's last
+// observation of Zitadel's grants (services.ObservedRoles).
+func (r Request) Roles(projectID string) []string {
+	var all []string
+	for _, g := range r.UserGrants {
+		if strings.TrimSpace(g.ProjectID) == projectID {
+			all = append(all, g.Roles...)
+		}
+	}
+	return claims.RoleSet(all)
 }

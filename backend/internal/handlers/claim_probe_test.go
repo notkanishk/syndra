@@ -30,9 +30,9 @@ import (
 var (
 	probeKey   = strings.Repeat("k", 32)
 	otherKey   = strings.Repeat("x", 32)
-	canaryJSON = func(roles ...string) string {
+	canaryJSON = func(team string) string {
 		f := claimserve.CanaryFacts()
-		f.Roles = roles
+		f.Team = team // the roles are the payload's; a fact is what can go wrong here
 		b, _ := json.Marshal(f)
 		return string(b)
 	}
@@ -243,7 +243,7 @@ func TestProbeL2(t *testing.T) {
 		ct, cu, cw := canaryToken, canaryUserinfo, canaryCallWait
 		t.Cleanup(func() { canaryToken, canaryUserinfo, canaryCallWait = ct, cu, cw })
 		canaryCallWait = 50 * time.Millisecond
-		tok := map[string]any{"sub": "uC", "roles": []string{"canary"}}
+		tok := map[string]any{"sub": "uC", "roles": []string{"canary"}, "urn:zitadel:iam:org:project:pC:roles": map[string]any{"canary": map[string]any{"o1": "example.edu"}}}
 		canaryToken = func(_ context.Context, scope string) (string, error) {
 			if !strings.Contains(scope, "urn:zitadel:iam:org:project:id:pC:aud") || !strings.Contains(scope, "urn:zitadel:iam:org:projects:roles") {
 				return "", errors.New("no audience or roles scope: Zitadel would list no grants")
