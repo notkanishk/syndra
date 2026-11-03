@@ -27,8 +27,8 @@ Every exchange belongs to one handoff: `design_handoff_syndra/<handoff>/` here, 
 ## The design system
 
 Components reach the canvas only through `ui/.design-sync` (its `NOTES.md` has the commands):
-1. Re-stage and run `resync.mjs`. It writes `ui/ds-bundle/`.
-2. Publish `README.md`, `_ds_bundle.js`, `_ds_bundle.css`, `styles.css`, `fonts/` and `_ds_sync.json` from `ui/ds-bundle/` to `project/_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/` on the canvas, in one call. Leave out `components/`, `_preview/`, `_vendor/` and `_screenshots/`: the boards don't load them, and the canvas holds 512 files at most. The published `_ds_sync.json` is the `--remote` anchor for the next resync (copy it to `ui/.design-sync/.cache/remote-sync.json` first).
+1. Re-stage and run `resync.mjs`, then `node .design-sync/build-container-css.mjs`. Together they write `ui/ds-bundle/`, including `_ds_bundle.container.css`: the stylesheet boards load, with width queries keyed to each frame (container `syndra-frame`) rather than the artboard.
+2. Publish `README.md`, `_ds_bundle.js`, `_ds_bundle.css`, `_ds_bundle.container.css`, `styles.css` and `_ds_sync.json` (and `fonts/` only if a font file changed: the canvas's `fonts.css` points at its uploaded copies, so a new font file also needs a new upload and id; `ui/.design-sync/NOTES.md`) from `ui/ds-bundle/` to `project/_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/` on the canvas, in one call. Leave out `components/`, `_preview/`, `_vendor/` and `_screenshots/`: the boards don't load them, and the canvas holds 512 files at most. The published `_ds_sync.json` is the `--remote` anchor for the next resync (copy it to `ui/.design-sync/.cache/remote-sync.json` first).
 
 Run it before drawing boards that need a new component, and after any component change.
 
