@@ -105,8 +105,12 @@ type Call struct {
 	ClientKnown bool   // the client has a shape of its own
 	Gen         int64  // the config snapshot that answered (claims:gen), 0 before any
 	Body        []byte // the verified body, for the payload fingerprint
-	At          time.Time
-	Elapsed     time.Duration
+	// Probe marks the L1 canary's own call (claims-delivery-integrity S6): it
+	// is counted apart and never reaches the SLIs, the correlator or the
+	// payload fingerprints.
+	Probe   bool
+	At      time.Time
+	Elapsed time.Duration
 }
 
 // Set records the outcome. Safe on a nil Call, so shared middleware can call

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"syndra/internal/claimserve"
 )
 
 var Redis *redis.Client
@@ -56,14 +58,7 @@ func AwaitRedis(ctx context.Context) error {
 // call (claims-delivery-integrity F-1). The socket timeouts below are the
 // ceiling for callers that pass no deadline at all; Redis on the internal
 // network answers in well under 1ms.
-func NewRedisClient(addr string) *redis.Client {
-	return redis.NewClient(&redis.Options{
-		Addr:                  addr,
-		DB:                    0,
-		ContextTimeoutEnabled: true,
-		DialTimeout:           200 * time.Millisecond,
-		ReadTimeout:           200 * time.Millisecond,
-		WriteTimeout:          200 * time.Millisecond,
-		PoolTimeout:           100 * time.Millisecond,
-	})
-}
+//
+// The options live in claimserve so the claims process (cmd/claims) builds
+// its client the same way without importing this package.
+func NewRedisClient(addr string) *redis.Client { return claimserve.NewRedisClient(addr) }

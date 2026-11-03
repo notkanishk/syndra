@@ -172,8 +172,8 @@ func TestPublishAllClaimConfig(t *testing.T) {
 		got = append(got, id)
 	}
 	sort.Strings(got)
-	if fmt.Sprint(got) != "[pA pZ]" {
-		t.Fatalf("published %v, want pA and pZ (never a guess for pBad)", got)
+	if fmt.Sprint(got) != "[pA pZ syndra-canary]" {
+		t.Fatalf("published %v, want pA, pZ and the L1 canary (never a guess for pBad)", got)
 	}
 	if m := plane.Config().Projects["pA"].Mode; m.LKGMaxAge() != 15*time.Minute || m.Claims()[0].Value != "pA" {
 		t.Fatalf("mode: %+v", m)
@@ -195,14 +195,14 @@ func TestPublishAllClaimConfig(t *testing.T) {
 
 func TestClaimsServer_OwnDoor(t *testing.T) {
 	t.Setenv("SYNDRA_CLAIMS_ADDR", "")
-	if ClaimsAddr() != ":8090" {
-		t.Fatalf("default addr %q", ClaimsAddr())
+	if claimserve.Addr() != ":8090" {
+		t.Fatalf("default addr %q", claimserve.Addr())
 	}
 	t.Setenv("SYNDRA_CLAIMS_ADDR", "127.0.0.1:9999")
-	if ClaimsAddr() != "127.0.0.1:9999" {
-		t.Fatalf("env addr %q", ClaimsAddr())
+	if claimserve.Addr() != "127.0.0.1:9999" {
+		t.Fatalf("env addr %q", claimserve.Addr())
 	}
-	s := NewClaimsServer(":8090")
+	s := claimserve.NewServer(":8090", nil)
 	if s.ReadTimeout != 2*time.Second || s.WriteTimeout != 2*time.Second || s.ReadHeaderTimeout != 2*time.Second || s.MaxHeaderBytes != 16<<10 {
 		t.Fatalf("claims server limits: %+v", s)
 	}
@@ -253,7 +253,7 @@ func TestClaimsDoor_UnaffectedByAdminPanicsAndSlowness(t *testing.T) {
 	admin := httptest.NewServer(NewRouter())
 	defer admin.Close()
 	cs := httptest.NewUnstartedServer(nil)
-	cs.Config = NewClaimsServer("")
+	cs.Config = claimserve.NewServer("", NewClaimsRouter())
 	cs.Start()
 	defer cs.Close()
 	var once sync.Once
@@ -307,4 +307,11 @@ func TestClaimsDoor_UnaffectedByAdminPanicsAndSlowness(t *testing.T) {
 	}
 	unstick()
 	wg.Wait()
+}
+
+// NewClaimsRouter is this process's door served the way the claims container
+// serves it (claimserve.Router: no admin route, no CORS, its own panic guard),
+// so a test can hold both routers to one behaviour.
+func NewClaimsRouter() http.Handler {
+	return claimserve.Router(claimDoor.Handler(), handleClaimsHealth)
 }

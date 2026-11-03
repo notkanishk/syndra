@@ -5,9 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
-	"os"
-	"time"
 
 	"syndra/internal/claimserve"
 	"syndra/internal/services/periodic"
@@ -18,13 +15,15 @@ import (
 // read per call. Nothing here reads Postgres or Zitadel; the write side below
 // publishes into Redis and the plane follows within a second.
 
-// claimPlane answers every Actions v2 call, on :8090 and on the old :8080
-// route alike. Before StartClaimsPlane it has no config and answers degraded.
+// claimPlane answers the Actions v2 calls that reach this process (the :8080
+// route, the fallback until Caddy routes to the claims container on :8090),
+// and is what the detectors read the snapshot from. Before StartClaimsPlane it
+// has no config and answers degraded.
 var claimPlane = claimserve.New(nil, nil)
 
 // StartClaimsPlane builds the plane over rdb and keeps its snapshot current
-// until ctx ends. Called first in main, before migrations: it needs only Redis,
-// and serves degraded (counted) until Redis answers.
+// until ctx ends. Called first in main, before migrations: it needs only
+// Redis, and serves degraded (counted) until Redis answers.
 func StartClaimsPlane(ctx context.Context, rdb claimserve.Redis) {
 	claimPlane = claimserve.New(rdb, nil)
 	_ = claimPlane.Poll(ctx)
@@ -38,40 +37,6 @@ func StartClaimsPlane(ctx context.Context, rdb claimserve.Redis) {
 	}()
 }
 
-// ClaimsAddr is the data plane's listen address: SYNDRA_CLAIMS_ADDR, else :8090.
-func ClaimsAddr() string {
-	if a := os.Getenv("SYNDRA_CLAIMS_ADDR"); a != "" {
-		return a
-	}
-	return ":8090"
-}
-
-// NewClaimsRouter serves only the data plane: the claims target and its
-// health. No CORS, no cancel gate, no admin route shares its mux (S18), and a
-// panic anywhere in it is a 500 that leaves the process serving.
-func NewClaimsRouter() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/action/inject",
-		withClaimDelivery(withClaimsSignature(HandleActionInject)))
-	mux.HandleFunc("GET /healthz/claims", handleClaimsHealth)
-	return withPanicGuard(withMaxBody(mux))
-}
-
-// NewClaimsServer is the data plane's own http.Server (P2). Zitadel's whole
-// budget is 3s; a connection that has not delivered its request in 2s, or
-// cannot take its answer in 2s, is closed rather than held.
-func NewClaimsServer(addr string) *http.Server {
-	return &http.Server{
-		Addr:              addr,
-		Handler:           NewClaimsRouter(),
-		ReadHeaderTimeout: 2 * time.Second,
-		ReadTimeout:       2 * time.Second,
-		WriteTimeout:      2 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    16 << 10,
-	}
-}
-
 // ---------------------------------------------------------------------------
 // The write side: every shape save, restore, seed and failure-mode write goes
 // through publishClaimConfig, which resolves the project from Postgres and
@@ -83,7 +48,16 @@ func NewClaimsServer(addr string) *http.Server {
 // publishClaimConfig resolves and publishes projects. A project that can't be
 // resolved is left as it was, never published as a guess.
 func publishClaimConfig(ctx context.Context, projectIDs ...string) error {
-	projects := make(map[string]claimserve.Project, len(projectIDs))
+	return publishProjects(ctx, nil, projectIDs...)
+}
+
+// publishProjects resolves projectIDs and publishes them with extra (already
+// resolved) in one write, so one pass moves claims:gen at most once.
+func publishProjects(ctx context.Context, extra map[string]claimserve.Project, projectIDs ...string) error {
+	projects := make(map[string]claimserve.Project, len(projectIDs)+len(extra))
+	for id, p := range extra {
+		projects[id] = p
+	}
 	var errs []error
 	for _, id := range projectIDs {
 		if id == "" {
@@ -144,5 +118,8 @@ func PublishAllClaimConfig(ctx context.Context) error {
 	if dirErr != nil {
 		log.Printf("[CLAIM-SHAPE] directory unavailable, publishing the %d projects Syndra holds config for: %v", len(ids), dirErr)
 	}
-	return errors.Join(dbErr, publishClaimConfig(ctx, ids...))
+	// The L1 canary's project rides along (S6): published like any other, so
+	// the probe exercises the same write-through and reload.
+	canary := map[string]claimserve.Project{claimserve.CanaryProjectID: claimserve.CanaryProject()}
+	return errors.Join(dbErr, publishProjects(ctx, canary, ids...))
 }

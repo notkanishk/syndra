@@ -187,6 +187,21 @@ func (r *Recorder) Wants(clientID, userID string) bool {
 	return ok && s.UserID == userID && s.On(r.now())
 }
 
+// Watching is every session on now, by client id: whose sign-ins a data
+// plane in another process should hand over (claimserve.DebugWatch).
+func (r *Recorder) Watching() map[string]Session {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := map[string]Session{}
+	t := r.now()
+	for client, app := range r.byClient {
+		if s, ok := r.sessions[app]; ok && s.On(t) {
+			out[client] = *s
+		}
+	}
+	return out
+}
+
 // Record queues a capture without blocking; a full queue drops it.
 func (r *Recorder) Record(c Capture) {
 	select {

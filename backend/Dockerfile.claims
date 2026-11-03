@@ -1,0 +1,24 @@
+# The claims data plane's own image (claims-delivery-integrity S7, P4).
+#
+# Narrow on purpose: only go.mod, go.sum and the packages cmd/claims imports
+# are copied, so a backend-only change leaves every layer cached, the image ID
+# unchanged, and `docker compose up -d --build` does not recreate the claims
+# container. `TestTheImageCopiesExactlyWhatTheBinaryImports` (cmd/claims)
+# keeps this list equal to `go list -deps`. A go.mod change still rebuilds it.
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY internal/claims ./internal/claims
+COPY internal/claimtel ./internal/claimtel
+COPY internal/claimserve ./internal/claimserve
+COPY internal/services/periodic ./internal/services/periodic
+COPY cmd/claims ./cmd/claims
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/claims ./cmd/claims
+
+FROM alpine:3.22
+RUN addgroup -g 65532 -S claims && adduser -u 65532 -S claims -G claims
+COPY --from=build /out/claims /usr/local/bin/claims
+USER 65532:65532
+EXPOSE 8090
+ENTRYPOINT ["/usr/local/bin/claims"]

@@ -9,8 +9,8 @@
 // then the failure mode. No Postgres, no Zitadel: nothing on the request path
 // can block past FactsTimeout.
 //
-// It imports only internal/claims and internal/claimtel, so the data plane can
-// move to its own container (assessment P4) as packaging, not a rewrite.
+// It imports only internal/claims, internal/claimtel and services/periodic: it is
+// the claims container (cmd/claims, assessment P4) and the backend's fallback door.
 package claimserve
 
 import (
@@ -187,6 +187,22 @@ type Config struct {
 	ClientProject map[string]string
 	// Keys is the signing keyring, empty until the write side has read it.
 	Keys Keyring
+	// Debug is debug mode's watched sign-ins by client id (DebugKey).
+	Debug map[string]DebugWatch
+}
+
+// KeysWithEnv is every key a claims call may be signed with: the keyring,
+// then the env key under its own slot when the keyring does not hold it.
+func KeysWithEnv(keyring []SlotKey, env string) []SlotKey {
+	if env == "" {
+		return keyring
+	}
+	for _, k := range keyring {
+		if k.Key == env {
+			return keyring
+		}
+	}
+	return append(keyring, SlotKey{Slot: "env", Key: env})
 }
 
 // Claim is one entry in the Actions v2 append_claims list.
