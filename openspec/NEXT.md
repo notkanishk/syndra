@@ -174,6 +174,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
   - a save the app will act on needs "I understand";
   - an app with no shape gets the basic default (the project's shape, else the built-in `roles` list);
   - new: "Copy another app's shape" (from any project) as a draft beside the templates. Role renames copy only for keys that exist in this project.
+  - Design's call in A-14, flagged for the owner: the project default is set on the project's page only (one write place). Copies aren't linked; NetBird and its clients stay in step by copying again.
 
 ### Audit of 27 Oct — remediation in batches
 
