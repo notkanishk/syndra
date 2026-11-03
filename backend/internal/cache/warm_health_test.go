@@ -180,8 +180,9 @@ func TestWarm_TenThousandPeopleScale(t *testing.T) {
 			pass, people, took.Round(time.Millisecond), redisOps, float64(redisOps)/people, s.ops, global.Load(), perPerson.Load(), *snapshots, find.Load())
 
 		// Per person: one HKEYS and one MULTI (three projects ride in it). Per
-		// pass: one sweep for old keys, until a sweep finds none.
-		if wantRedis := 2*people + 1; redisOps != wantRedis || s.ops["SCAN"] != 1 {
+		// pass: one sweep for old keys, until a sweep finds none, and the L1
+		// canary's one MULTI (S6).
+		if wantRedis := 2*people + 2; redisOps != wantRedis || s.ops["SCAN"] != 1 {
 			t.Errorf("pass %d: %d Redis commands (%v), want %d", pass, redisOps, s.ops, wantRedis)
 		}
 		if len(s.kv) != 0 {

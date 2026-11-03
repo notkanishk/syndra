@@ -96,12 +96,12 @@ func appSettingsForCorrelator(clientID string) (jwt, known bool) {
 // RunClaimCorrelation checks every sign-in old enough to check, and the
 // inverse (calls with no sign-in events: the detector is blind).
 func RunClaimCorrelation(ctx context.Context) error {
-	checked := claimCorrelator.Check(claimDelivery, appSettingsForCorrelator)
+	checked := claimCorrelator.Check(claimCalls{}, appSettingsForCorrelator)
 	obs := claimtel.Observe(checked)
 	now := time.Now()
-	if claimCorrelator.EventsMissing(claimDelivery.LastCalled()) {
+	if lastCalled := claimLastCalled(ctx); claimCorrelator.EventsMissing(lastCalled) {
 		obs = append(obs, claimtel.Observation{Kind: claimtel.KindEventsMissing, Subject: claimtel.None, Fail: true, At: now,
-			Sample: map[string]any{"last_sign_in_at": nullTime(claimCorrelator.LastSignIn()), "last_call_at": nullTime(claimDelivery.LastCalled())}})
+			Sample: map[string]any{"last_sign_in_at": nullTime(claimCorrelator.LastSignIn()), "last_call_at": nullTime(lastCalled)}})
 	} else if len(checked) > 0 {
 		obs = append(obs, claimtel.Observation{Kind: claimtel.KindEventsMissing, Subject: claimtel.None, At: now})
 	}
@@ -147,7 +147,9 @@ func RunClaimConfigCheck(ctx context.Context) error {
 }
 
 func gatherConfigInputs(ctx context.Context) claimcheck.Inputs {
-	in := claimcheck.Inputs{ExternalURL: os.Getenv("SYNDRA_EXTERNAL_URL"), Snapshot: claimPlane.Config()}
+	// The L1 canary's project is no app Zitadel knows: left out, or R6 and R7
+	// would report it.
+	in := claimcheck.Inputs{ExternalURL: os.Getenv("SYNDRA_EXTERNAL_URL"), Snapshot: claimserve.WithoutCanary(claimPlane.Config())}
 	reader := zitadelActions()
 	if reader == nil {
 		in.TargetsErr, in.ExecutionsErr, in.V1Err = errNoClient, errNoClient, errNoClient

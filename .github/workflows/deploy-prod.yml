@@ -65,8 +65,8 @@ jobs:
           # restart it can honestly read degraded (the first warm is running),
           # and the deploy must not fail on that. 503 means "failing" and is
           # still an answer; anything else is a route that is gone.
-          # Both doors: the admin one (8080) and the data plane's own (8090,
-          # claims-delivery-integrity S2), which Caddy routes /api/action/* to.
+          # Both doors: the backend (8080) and the claims container (8090,
+          # claims-delivery-integrity S7), which Caddy routes /api/action/* to.
           for port in 8080 8090; do
             code="$(curl -sS -o /tmp/healthz-claims.json -w '%{http_code}' -m 10 --retry 10 --retry-delay 2 --retry-connrefused "http://localhost:${port}/healthz/claims")"
             case "$code" in
@@ -74,6 +74,27 @@ jobs:
               *) echo ":${port}/healthz/claims answered HTTP ${code}"; exit 1 ;;
             esac
           done
+
+      # The L1 probe (claims-delivery-integrity S6, §4f): within seconds of
+      # the start the backend posts the signed canary to SYNDRA_EXTERNAL_URL
+      # (public DNS, Caddy, TLS, whichever door Caddy routes to) and must get
+      # the canary's exact claims. A deploy is good only once that has passed.
+      # Bounded: the first run is 5s after listen and it repeats every minute,
+      # so 150s is two chances and the boot.
+      - name: Require the L1 probe to pass
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 50); do
+            body="$(curl -sS -m 5 http://localhost:8080/healthz/claims || true)"
+            l1="$(printf '%s' "$body" | sed -n 's/.*"probe_l1":"\([a-z_]*\)".*/\1/p')"
+            case "$l1" in
+              pass) echo "L1 probe passed: $body"; exit 0 ;;
+              off)  echo "L1 probe is off: SYNDRA_EXTERNAL_URL is unset in the backend"; exit 1 ;;
+            esac
+            sleep 3
+          done
+          echo "L1 probe did not pass within 150s (last: ${l1:-no answer}): $body"
+          exit 1
 
       # Zitadel POSTs to SYNDRA_EXTERNAL_URL, not to localhost. On the dev box
       # that URL drifted to a decommissioned IP and every Action silently

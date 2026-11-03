@@ -45,6 +45,55 @@ services:
     # served from what is stored. An evicting policy would instead drop
     # someone's facts at random: a silent fail_closed for that person.
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    # The cgroup ceiling (assessment §4.0a): maxmemory plus the AOF rewrite's
+    # fork and the allocator's overhead. Redis is what every token reads.
+    mem_limit: 768m
+
+  # The claims data plane in its own container (claims-delivery-integrity S7,
+  # assessment P4): only POST /api/action/inject and GET /healthz/claims, from
+  # the snapshot in Redis. No Postgres, no Zitadel, no admin route. Its image
+  # is built from a narrow Dockerfile (only the packages it imports), so a
+  # backend deploy leaves it cached and compose does not recreate this
+  # container: a backend restart is no longer a claim-less window. Caddy routes
+  # /api/action/* here once the owner edits it (DEPLOY.md); until then the
+  # backend's :8080 route answers with the same code.
+  claims:
+    logging: *default-logging
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.claims
+    container_name: syndra_claims
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis:6379}
+      # Production when set: unsigned calls are refused, and the env key must
+      # be a real one (it verifies until the keyring is read from Redis).
+      - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
+      - ZITADEL_ACTION_SIGNING_KEY=${ZITADEL_ACTION_SIGNING_KEY:-}
+    ports:
+      - "${CLAIMS_HOST_PORT:-8090}:8090"
+    networks: [edge, data]
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # §4.0a: about 40MB of last-known-good copies at the design point; the
+    # ceiling keeps it from ever being what starves the host.
+    mem_limit: 256m
+    pids_limit: 128
+    healthcheck:
+      # Liveness: the door answers its health (200, or 503 with a status).
+      # Whether claims are healthy is /healthz/claims itself, read by the
+      # deploy job and the external monitor.
+      test: ["CMD", "/usr/local/bin/claims", "-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   backend:
     logging: *default-logging
@@ -70,8 +119,16 @@ services:
       - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
       - ZITADEL_AUDIENCE=${ZITADEL_AUDIENCE:-}
       # The public URL Zitadel calls (claims and events); the reconciler checks
-      # Zitadel's targets point here, and the probe will call it.
+      # Zitadel's targets point here, and the L1 probe calls it every minute.
+      # Must be https when ZITADEL_DOMAIN is set, or the backend refuses to start.
       - SYNDRA_EXTERNAL_URL=${SYNDRA_EXTERNAL_URL:-}
+      # The L2 canary (claims-delivery-integrity S6): off until all three are
+      # set (half set refuses the start). The key path is a HOST path in .env,
+      # rewritten to the mount below like ZITADEL_MACHINE_KEY_PATH.
+      - SYNDRA_CANARY_KEY_PATH=${SYNDRA_CANARY_KEY_PATH:+/etc/syndra/canary-key.json}
+      - SYNDRA_CANARY_PROJECT_ID=${SYNDRA_CANARY_PROJECT_ID:-}
+      - SYNDRA_CANARY_CLIENT_ID=${SYNDRA_CANARY_CLIENT_ID:-}
+      - SYNDRA_DEADMAN_URL=${SYNDRA_DEADMAN_URL:-}
       # ZITADEL_MACHINE_KEY_PATH in .env is a HOST path (e.g. ./zitadel-machine-key.json).
       # Inside the container it is rewritten to the fixed mount point below, but
       # only when the operator actually set it — when unset, the container sees
@@ -124,6 +181,7 @@ services:
       # ZITADEL_MACHINE_KEY_PATH is unset, this resolves to a /dev/null no-op
       # mount and the backend skips M2M init via the env-var check above.
       - ${ZITADEL_MACHINE_KEY_PATH:-/dev/null}:/etc/syndra/zitadel-sa-key.json:ro
+      - ${SYNDRA_CANARY_KEY_PATH:-/dev/null}:/etc/syndra/canary-key.json:ro
       # The backend's own secrets. This used to hold its add-on client
       # certificate and the private CA, kept apart from the add-on's directory
       # because the add-on must never read the credential authenticating the
@@ -158,13 +216,8 @@ services:
       # next deploy silently overwrote. Defaults to the old literal, so nothing
       # changes for a deployment that never set it.
       - "${BACKEND_HOST_PORT:-8080}:8080"
-      # The claims data plane's own door (claims-delivery-integrity S2): only
-      # POST /api/action/inject and GET /healthz/claims, listening before
-      # migrations. Published the same way as 8080 so Caddy can reach it;
-      # Caddy routes /api/action/* here once the owner edits it (DEPLOY.md).
-      - "${CLAIMS_HOST_PORT:-8090}:8090"
-    # Reachable on the internal networks too, for a future in-stack caller.
-    expose: ["8090"]
+      # :8090 is the claims container's now (S7). This process keeps the
+      # claims route on :8080, the fallback until Caddy moves.
     # The only service on all three. It is the single mutation authority, so it
     # is also the only thing that needs to reach both the datastores and the
     # add-ons — and the segmentation below is what makes that a fact about the
@@ -182,6 +235,11 @@ services:
       redis:
         condition: service_started
     restart: unless-stopped
+    # §4.0a: the admin side (sweeps, drains, warms, bulk work over thousands
+    # of people) cannot take the whole LXC from the claims container and
+    # Redis. Minimum LXC: 2 vCPU, 4GB.
+    cpus: 1.5
+    mem_limit: 2g
 
   ui:
     logging: *default-logging

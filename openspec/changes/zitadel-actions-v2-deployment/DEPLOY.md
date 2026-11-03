@@ -249,12 +249,48 @@ All three surface on System › Zitadel ("Claims delivery") and on Home's claims
 
 **Owner step 1 (S4-perm): let Syndra read the Actions setup.** In the Zitadel console, Instance → Managers, add the backend's service account (the user in `ZITADEL_MACHINE_KEY_PATH`'s key) with the role **`IAM_OWNER_VIEWER`**. It is read-only: it grants `action.target.read` and `action.execution.read`. It also lets the account read the claims target's signing key, which Syndra already holds. Until this is done, System › Zitadel shows "couldn't check" for R1 to R3 (`CANNOT_CHECK`), Home counts it as a problem, and the keyring cannot follow a rotation (the env key keeps verifying).
 
-*Check:* within 10 minutes (or after a backend restart), `curl -s http://<APP_HOST>:8090/healthz/claims` no longer lists `CANNOT_CHECK:R1`, and System › Zitadel's Configuration part says the setup matches.
+*Check:* within 10 minutes (or after a backend restart), `curl -s http://<APP_HOST>:8080/healthz/claims` no longer lists `CANNOT_CHECK:R1`, and System › Zitadel's Configuration part says the setup matches.
 
-**Owner step 2 (S3-alert): the dead-man's switch.** Create a check that expects a ping every 5 minutes with a grace of 10 (healthchecks.io free tier, or an Uptime Kuma push monitor), alerting your phone or email. Put its ping URL in the server's `.env` as `SYNDRA_DEADMAN_URL=…` and redeploy. Syndra pings it every 5 minutes **only while** `/healthz/claims` is `ok`, with the reasons in the body; any problem, a crashed backend or a stopped LXC is a missed ping, and the service alerts you. Do step 1 first: an open `CANNOT_CHECK` stops the pings.
+**Owner step 2 (S3-alert): the dead-man's switch.** Create a check that expects a ping every 5 minutes with a grace of 10 (healthchecks.io free tier, or an Uptime Kuma push monitor), alerting your phone or email. Put its ping URL in the server's `.env` as `SYNDRA_DEADMAN_URL=…` and redeploy (compose passes it to the backend since S6; before that it did not reach the container). Syndra pings it every 5 minutes **only while** `/healthz/claims` is `ok`, with the reasons in the body; any problem, a crashed backend or a stopped LXC is a missed ping, and the service alerts you. Do step 1 first: an open `CANNOT_CHECK` stops the pings.
 
 *Check:* the service shows a ping within 5 minutes of the deploy. Unset, `/healthz/claims` carries the note `NO_EXTERNAL_ALERT` (it changes no status). The URL is never logged.
 
 **Rotating the claims key** is now `make zitadel-actions-rotate-key` alone: Syndra follows within seconds, no restart. Update `ZITADEL_ACTION_SIGNING_KEY` in `.env` at the next deploy (System › Zitadel says so while it is behind). The event listener's key (`ZITADEL_EVENT_SIGNING_KEY`) is still env-only and still needs the restart.
 
 **The proof still to record** (`changes/claims-delivery-integrity/tasks.md`): on the dev box, unbind the `preaccesstoken` execution and confirm `CONFIG_DRIFT:R2` within 10 minutes and `CLAIMS_NOT_CALLED` within 5 minutes of a sign-in, and a missed dead-man ping; rotate the key and confirm zero `sig_mismatch` after the first call.
+
+## 3 Nov 2026: the claims container and the probes (claims-delivery-integrity S6, S7)
+
+**The claims container (S7).** The claims target now runs in its own container, `claims` (`backend/Dockerfile.claims`, `cmd/claims`), on `:8090`: the same code as before (`internal/claimserve`), with no Postgres, no Zitadel and no admin route. Its image is built from only the packages it imports, so a backend deploy leaves it cached and compose does not recreate it: a backend restart is no longer a window of tokens without claims. Its counters, its calls (for the sign-in correlator) and its requests (recompile a person, read the keyring, a debug capture) reach the backend through Redis. The backend no longer listens on `:8090`; it keeps the claims route on `:8080` with the same code, the fallback until the Caddy edit. Compose now caps the backend at 1.5 CPUs and 2GB, Redis at 768MB and the claims container at 256MB (minimum LXC: 2 vCPU, 4GB).
+
+**Owner step, on the Caddy host (`<PROXY_HOST>`), S2-caddy:** the block in the S2 section above is unchanged, and `<APP_HOST>:8090` is now the claims container. Until the edit, Caddy reaches the backend's `:8080` route and everything works as before; after it, a backend deploy no longer touches claim delivery.
+
+*Check after the edit:* `curl -s http://<APP_HOST>:8090/healthz/claims` answers with `"snapshot":{"loaded":true,…}` (the container's own health: its door and its relay), and `curl -s http://<APP_HOST>:8080/healthz/claims` shows `probe_l1: "pass"` within a minute (the whole picture: detectors, probes, warm, and the container's calls). `docker compose ps` shows `syndra_claims` healthy, and a backend deploy afterwards leaves its "Created" time alone.
+
+**Not yet (follow-up):** a Redis ACL user for the claims container (read `facts:*`, `mapping:*`, `claim_*`, `claims:gen`, `claims:projects`, `claims:keyring`, `claims:debug`; write `claims:tel:*`, `claims:calls:*`, `claims:signals`). It needs a new secret in `.env` and a Redis restart, and every current client uses the default user, so it is left for a change of its own.
+
+**The L1 probe (S6).** Every minute, starting 5s after the backend listens, Syndra posts a fixed canary call, signed with the key it holds, to `SYNDRA_EXTERNAL_URL/api/action/inject`: through public DNS, Caddy, TLS and whichever door Caddy routes to. It must get the canary's exact claims. The canary (`syndra-canary`) exists only in Redis: its project is published and its facts written by the same code as everyone's, and it is no app or person in Zitadel or on any screen. A failure is the finding `PROBE_L1` with its class (`dns`, `tls`, `timeout`, `unreachable`, `signature`, `status`, `claims`) and a hard reason on `/healthz/claims`; a certificate within 14 days of its end is `CERT_EXPIRING` (soft). No setup: it needs only `SYNDRA_EXTERNAL_URL`.
+
+**The deploy job** now waits (up to 150s) for `/healthz/claims` to show `"probe_l1":"pass"`, after checking both doors answer, and keeps the unsigned-401 check.
+
+**Start-up refuses a bad configuration (§4f)** with one log line naming it: with `ZITADEL_DOMAIN` set, `ZITADEL_ACTION_SIGNING_KEY` shorter than 32 bytes or holding a space or a non-printable byte, `SYNDRA_EXTERNAL_URL` empty or not `https`, and the canary half set. *Before merging, check the server:* `awk -F= '/^ZITADEL_ACTION_SIGNING_KEY=/{print length($2)}' .env` prints 32 or more, and `grep '^SYNDRA_EXTERNAL_URL=https://' .env` matches. A dependency that is down is not a refusal: Syndra starts degraded and says which.
+
+**Owner step (S6-canary): the L2 canary in Zitadel.** L2 asks Zitadel for a real token every 15 minutes and checks Syndra's claims are in it. It stays off until all three settings below are set; half set refuses the start.
+
+1. In the Zitadel console, create a project named `Syndra canary`. Copy its **Resource ID**.
+2. In that project, **Roles** → New: key `canary`, display name `Canary`.
+3. **Users** → Service Users → New: user name `syndra-canary`, name `Syndra canary`, **Access Token Type: JWT**. Copy its **User ID**.
+4. On that user, **Authorizations** → New: project `Syndra canary`, role `canary`.
+5. On that user, **Keys** → New, type JSON, no expiry (or note the date). Download the file.
+6. On the server: copy the file to `/opt/syndra/syndra-canary-key.json`, `chmod 600` it, and add to `.env`:
+
+   ```bash
+   SYNDRA_CANARY_KEY_PATH=./syndra-canary-key.json
+   SYNDRA_CANARY_PROJECT_ID=<the project's Resource ID>
+   SYNDRA_CANARY_CLIENT_ID=<the user's User ID>
+   ```
+
+7. Redeploy.
+
+*Check:* within a minute of the start, `curl -s http://<APP_HOST>:8080/healthz/claims` shows `"probe_l2":"pass"`. The first run can say `PROBE_L2:no_facts`: the canary's first call is what makes Syndra compile it, and the next run (15 minutes) passes. If it says `PROBE_L2:not_called`, its detail names the `client_id` the token carried: put that in `SYNDRA_CANARY_CLIENT_ID` and redeploy. Other classes: `token` (no token: the key, the user or the JWT token type), `claims` (the token lacks Syndra's claim: Zitadel's execution or a deny list), `log_claim` (Zitadel dropped a key Syndra sent: a collision), `userinfo`. When L2 fails and L1 passes, the fault is on Zitadel's side. The canary is a real service user, so People lists it.
+

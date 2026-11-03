@@ -74,7 +74,7 @@ func TestAnswer_TheLadder(t *testing.T) {
 	p, r, c := plane(t, minimalSafe())
 
 	// 1. Facts from Redis.
-	r.HSet(FactsKey("u1"), "p1", facts("admin"))
+	r.SetField(FactsKey("u1"), "p1", facts("admin"))
 	res := p.Answer(ctx, "u1", "p1", "c1", pre)
 	if res.Outcome != claimtel.Served || len(rolesOf(t, res)) != 1 || res.Gen == 0 {
 		t.Fatalf("served: %+v", res)
@@ -100,7 +100,7 @@ func TestAnswer_TheLadder(t *testing.T) {
 	// Redis says none: degraded, a repair signal, and the copy is dropped so
 	// a later outage cannot serve the revoked facts from memory.
 	r.Fail(nil)
-	r.HSet(FactsKey("u3"), "p1", facts("admin"))
+	r.SetField(FactsKey("u3"), "p1", facts("admin"))
 	p.Answer(ctx, "u3", "p1", "c1", pre)
 	r.HDel(FactsKey("u3"), "p1")
 	if res = p.Answer(ctx, "u3", "p1", "c1", pre); res.Outcome != claimtel.DegradedNoFacts || !res.Miss {
@@ -113,7 +113,7 @@ func TestAnswer_TheLadder(t *testing.T) {
 
 	// Malformed facts are never served.
 	r.Fail(nil)
-	r.HSet(FactsKey("u4"), "p1", "{{")
+	r.SetField(FactsKey("u4"), "p1", "{{")
 	if res = p.Answer(ctx, "u4", "p1", "c1", pre); res.Outcome != claimtel.DegradedMalformed {
 		t.Fatalf("malformed: %+v", res)
 	}
@@ -132,7 +132,7 @@ func TestAnswer_TheLadder(t *testing.T) {
 func TestAnswer_TheBoundIsPerProject(t *testing.T) {
 	ctx := context.Background()
 	p, r, c := plane(t, Mode{Mode: FailClosed, LKGMaxAgeS: 3600})
-	r.HSet(FactsKey("u1"), "p1", facts("admin"))
+	r.SetField(FactsKey("u1"), "p1", facts("admin"))
 	p.Answer(ctx, "u1", "p1", "", pre)
 	r.Fail(errors.New("down"))
 	c.add(59 * time.Minute)
@@ -149,7 +149,7 @@ func TestAnswer_TheBoundIsPerProject(t *testing.T) {
 func TestAnswer_HungRedisIsBounded(t *testing.T) {
 	ctx := context.Background()
 	p, r, _ := plane(t, Mode{})
-	r.HSet(FactsKey("u1"), "p1", facts("admin"))
+	r.SetField(FactsKey("u1"), "p1", facts("admin"))
 	p.Answer(ctx, "u1", "p1", "", pre)
 	r.Hang()
 	start := time.Now()
@@ -166,7 +166,7 @@ func TestAnswer_DropsEndedRoles(t *testing.T) {
 	p, r, _ := plane(t, Mode{})
 	b, _ := json.Marshal(claims.Facts{UserID: "u1", ProjectID: "p1", Roles: []string{"ended", "lastday", "open"},
 		RoleEnds: map[string]string{"ended": "2026-11-02", "lastday": "2026-11-03"}})
-	r.HSet(FactsKey("u1"), "p1", string(b))
+	r.SetField(FactsKey("u1"), "p1", string(b))
 	got := rolesOf(t, p.Answer(context.Background(), "u1", "p1", "", pre))
 	if fmt.Sprint(got) != "[lastday open]" {
 		t.Fatalf("roles served on 3 Nov: %v", got)
@@ -193,7 +193,7 @@ func TestAnswer_ShapeLandsAndFunction(t *testing.T) {
 	}}})
 	p := New(r, nil)
 	_ = p.Poll(ctx)
-	r.HSet(FactsKey("u1"), "p1", facts("a", "b"))
+	r.SetField(FactsKey("u1"), "p1", facts("a", "b"))
 
 	if res := p.Answer(ctx, "u1", "p1", "cOwn", pre); res.Outcome != claimtel.NotLanding || !res.ClientKnown || len(res.Claims) != 0 {
 		t.Fatalf("not landing: %+v", res)
@@ -276,7 +276,7 @@ func TestReloadRace(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p, r, _ := plane(t, Mode{})
-	r.HSet(FactsKey("u1"), "p1", facts("admin"))
+	r.SetField(FactsKey("u1"), "p1", facts("admin"))
 	var wg sync.WaitGroup
 	for w := 0; w < 4; w++ {
 		wg.Add(1)
@@ -327,7 +327,7 @@ func BenchmarkAnswer(b *testing.B) {
 	p := New(r, nil)
 	_ = p.Poll(context.Background())
 	fb, _ := json.Marshal(claims.Facts{UserID: "u1", ProjectID: "p1", Roles: []string{"a", "b", "c", "d"}, Email: "u1@example.edu", GivenName: "U"})
-	r.HSet(FactsKey("u1"), "p1", string(fb))
+	r.SetField(FactsKey("u1"), "p1", string(fb))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		p.Answer(context.Background(), "u1", "p1", "c1", pre)

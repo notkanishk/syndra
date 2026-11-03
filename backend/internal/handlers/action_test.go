@@ -57,7 +57,7 @@ func builtinPlane(t *testing.T, projectIDs ...string) *claimservetest.Redis {
 }
 
 func setFacts(r *claimservetest.Redis, userID, projectID, factsJSON string) {
-	r.HSet(claimserve.FactsKey(userID), projectID, factsJSON)
+	r.SetField(claimserve.FactsKey(userID), projectID, factsJSON)
 }
 
 // factsJSON builds the cache body the compiler writes: facts, not claims.

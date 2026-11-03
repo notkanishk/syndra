@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,6 +17,7 @@ import (
 
 	"syndra/internal/addons"
 	"syndra/internal/cache"
+	"syndra/internal/claimserve"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/handlers"
@@ -64,6 +67,52 @@ func liveAuthConfigProblems() []string {
 		problems = append(problems, "SYNDRA_API_KEY is the development default")
 	}
 	return problems
+}
+
+// claimsConfigProblems names the claims configuration that must refuse a
+// start (claims-delivery-integrity §4f): a config error is loud at boot, never
+// a silent miss on every token. A dependency that is down is not one of these:
+// Syndra starts degraded and /healthz/claims says which.
+func claimsConfigProblems(getenv func(string) string) []string {
+	var problems []string
+	live := getenv("ZITADEL_DOMAIN") != ""
+	if key := getenv("ZITADEL_ACTION_SIGNING_KEY"); live && key != "" {
+		if p := claimserve.KeyProblem(key); p != "" {
+			problems = append(problems, "ZITADEL_ACTION_SIGNING_KEY "+p)
+		}
+	}
+	ext := getenv("SYNDRA_EXTERNAL_URL")
+	u, err := url.Parse(ext)
+	switch {
+	case live && ext == "":
+		problems = append(problems, "SYNDRA_EXTERNAL_URL is empty (Zitadel calls it, and the L1 probe checks it)")
+	case ext != "" && (err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http")):
+		problems = append(problems, "SYNDRA_EXTERNAL_URL is not an http(s) URL")
+	case live && u.Scheme != "https":
+		problems = append(problems, "SYNDRA_EXTERNAL_URL is not https")
+	}
+	canary := []string{"SYNDRA_CANARY_KEY_PATH", "SYNDRA_CANARY_PROJECT_ID", "SYNDRA_CANARY_CLIENT_ID"}
+	var set, unset []string
+	for _, k := range canary {
+		if getenv(k) != "" {
+			set = append(set, k)
+		} else {
+			unset = append(unset, k)
+		}
+	}
+	switch {
+	case len(set) > 0 && len(unset) > 0:
+		problems = append(problems, "the L2 canary is half set ("+strings.Join(set, ", ")+" set, "+strings.Join(unset, ", ")+" not)")
+	case len(set) > 0 && !live:
+		problems = append(problems, "the L2 canary needs ZITADEL_DOMAIN")
+	}
+	return problems
+}
+
+func requireClaimsConfig() {
+	if p := claimsConfigProblems(os.Getenv); len(p) > 0 {
+		log.Fatalf("[STARTUP] Refusing to start: %s.", strings.Join(p, "; "))
+	}
 }
 
 func requireLiveAuthConfig() {
@@ -180,6 +229,7 @@ func warnIfWelcomeBundleMissing(ctx context.Context) {
 func main() {
 	requireProductionSigningKeys()
 	requireLiveAuthConfig()
+	requireClaimsConfig()
 	fmt.Println("Syndra Backend Starting...")
 
 	// Root context cancelled on SIGINT/SIGTERM. Created before anything that
@@ -188,19 +238,13 @@ func main() {
 	defer stop()
 
 	// The claims data plane first (claims-delivery-integrity S2, ADR-004): it
-	// needs only Redis, so it listens before migrations, the Zitadel client and
-	// the add-on refresh, and a restart is a gap of milliseconds, not the whole
-	// boot. Until Redis answers it serves fail closed, counted; once it does,
-	// the snapshot the write side left in Redis (no TTL) answers at once.
+	// needs only Redis, so it loads before migrations, the Zitadel client and
+	// the add-on refresh. Since S7 the claims container (cmd/claims) owns :8090
+	// and this process serves the claims route only on :8080, the fallback
+	// until Caddy routes /api/action/* to the container; the detectors read
+	// this process's snapshot either way.
 	db.ConnectRedis()
 	handlers.StartClaimsPlane(ctx, db.Redis)
-	claimsServer := handlers.NewClaimsServer(handlers.ClaimsAddr())
-	go func() {
-		fmt.Printf("Claims data plane listening on %s\n", claimsServer.Addr)
-		if err := claimsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Claims server error: %v", err)
-		}
-	}()
 
 	// The admin side needs both datastores. Waiting for them is not fatal:
 	// the data plane above keeps answering while they come up (S15).
@@ -504,9 +548,14 @@ func main() {
 	// Claim delivery telemetry: counters fold into Postgres once a minute; a
 	// failed flush keeps them for the next. Repair-on-miss recompiles people
 	// whose facts a token found missing, at most 20 a second.
-	claimTelSched := periodic.New("CLAIM-TEL", time.Minute, time.Minute, handlers.FlushClaimDelivery)
+	// The claims container's counters arrive through Redis and are folded on
+	// the same tick; its repair, keyring and debug signals every second.
+	claimTelSched := periodic.New("CLAIM-TEL", time.Minute, time.Minute, func(ctx context.Context) error {
+		return errors.Join(handlers.FlushClaimDelivery(ctx), handlers.FoldClaimRelay(ctx))
+	})
 	go claimTelSched.Start(ctx)
 	go handlers.RunClaimRepair(ctx)
+	go handlers.RunClaimSignals(ctx)
 
 	// The detectors (claims-delivery-integrity S3-S5). The correlator checks
 	// sign-ins against calls every minute. With Zitadel connected, the
@@ -528,13 +577,42 @@ func main() {
 		log.Println("[DATA PLANE] dead-man: SYNDRA_DEADMAN_URL is unset: no external alert is configured (shown on /healthz/claims)")
 	}
 
-	// Start server in background
+	// Listen, then serve in the background. The listener is open before the
+	// probes start, so the first L1 can reach this door through Caddy.
+	ln, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		log.Fatalf("Server error: %v", err)
+	}
 	go func() {
 		fmt.Println("Control Plane Backend Listening on :8080")
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
+
+	// The self-check after listen (§4f): L1 at once and every minute (the
+	// reconciler above already ran at start); L2 every 15 minutes once the
+	// owner has made the canary in Zitadel. The deploy job waits for L1.
+	var probeScheds []*periodic.Runner
+	if handlers.ProbeL1Enabled() {
+		probeScheds = append(probeScheds, periodic.New("PROBE-L1", time.Minute, time.Minute, handlers.RunProbeL1))
+	}
+	if handlers.ProbeL2Enabled() {
+		probeScheds = append(probeScheds, periodic.New("PROBE-L2", 15*time.Minute, 15*time.Minute, handlers.RunProbeL2))
+	}
+	for _, r := range probeScheds {
+		// 5s in: the start-up publish and the warm (which writes the canary
+		// first) have landed and the snapshot has polled, so a boot does not
+		// raise a finding that the next minute settles. Still within §4f's 10s.
+		go func(r *periodic.Runner) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+			r.Start(ctx)
+		}(r)
+	}
 
 	<-ctx.Done()
 
@@ -644,9 +722,11 @@ func main() {
 		}
 	}
 
-	// The data plane stops last: it answered through the whole drain above.
-	if err := claimsServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Claims server shutdown error: %v", err)
+	for _, r := range probeScheds {
+		select {
+		case <-r.Done():
+		case <-shutdownCtx.Done():
+		}
 	}
 
 	db.PG.Close()
