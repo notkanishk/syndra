@@ -11,8 +11,8 @@ Zitadel calls Syndra's Actions v2 target on every token, with a 3s timeout and i
 
 - At request time the data plane reads only memory and one bounded Redis read. Never Postgres, never Zitadel.
 - Config (shapes, failure modes, the client→app map and the keyring) is an immutable, versioned snapshot. It is reloaded when `claims:gen` moves, and written through by the write side.
-- A token's roles are the ones Zitadel lists for the project in the payload's `user_grants` (amended 4 Nov 2026, below). Syndra's facts only enrich them.
-- Facts come from one `HGET facts:{u} {p}` with a real deadline. A last-known-good in-process copy answers while Redis is out, within a per-project staleness bound. With no facts, the shape is answered over Zitadel's roles alone.
+- A token's roles are the ones Zitadel lists for the project in the payload's `user_grants` (amended 4 Nov 2026, below). Its identity attributes (names, username, email) are the payload's `user` (amended the same day, below). Syndra's facts only enrich them.
+- Facts come from one `HGET facts:{u} {p}` with a real deadline. A last-known-good in-process copy answers while Redis is out, within a per-project staleness bound. With no facts, the shape is answered over Zitadel's roles and identity alone.
 - Every answer, every fallback rung included, is counted by outcome class. None is silent.
 - The data plane has its own listener. At the design scale it moves to its own container, so backend deploys and admin load do not touch it.
 - The signing key is read from Zitadel (the one place it is written) and followed on rotation.
@@ -62,4 +62,15 @@ Found on prod: the compiler builds facts only from Syndra's own records (the led
 - The correlator's "holds a role here" is the observed grants too: none counts only from a complete, current sweep.
 - The L1 canary carries a fact-only claim (`syndra_canary_team`), so a canary answered over its roles alone still reads as wrong claims.
 - Still no Postgres or Zitadel on the request path.
+
+### Amended: the names come from Zitadel's payload too (4 Nov 2026)
+
+The roles fix left one gap before Actions v1 can go. A person Syndra holds no facts for (9 of 23 on prod) got their roles but no names, so the seeded v1-parity shape's `custom_claims` lost `given_name`, `family_name` and `name`. v1's `groupsClaim` built those from Zitadel's user. The Actions v2 payload carries the same user: `ContextInfo.User` is Zitadel's `query.User`.
+
+- The data plane decodes the identity from the payload's `user`, tolerantly. A key that is absent or of another type reads as empty, and it never fails the call. The keys come from `internal/query/user.go`, which is identical from v4.0.0 to main and all `omitempty`: top-level `username`, plus `human.first_name`, `human.last_name` and `human.email`. A `machine` object with no `human` is a machine user. `display_name`, `nick_name`, `login_names`, `preferred_login_name` and `type` are not read.
+- `claims.Facts.Identify` puts that identity over the facts' cached copy. Zitadel is the authority and the payload is current, so its values win. A field the payload lacks keeps the facts' value.
+- The names follow v1 exactly. `name` is `given_name + " " + family_name`, never Zitadel's display name, which Syndra's facts used to carry. A machine user's three names are sent as empty strings, as v1's `ctx.v1.user.human ? … : ''` did. Every other empty attribute is still left out. With no user kind in the payload, the facts' names stand.
+- Facts still supply team, title, bundles, role ends, `is_service_account` and `compiled_at`. `Profile.RolesOnly` now keeps the identity rows. A facts miss counts `served_roles_only` only when the shape asks for one of those facts-only attributes. Otherwise the token is whole, and it counts `served`. The seeded v1 shape and the built-in one are both whole. The miss still asks for a repair. The L2 probe still fails `no_facts` on a canary miss.
+- Welcome roles (`Plane.Welcome`) are shaped over the payload's identity too, so a brand-new member's v1-shaped token carries their names.
+- Previews have no payload, so they take the same fields from Syndra's directory read of Zitadel (`services.identityOf`, used by both the explain step and the simulator). Preview still equals live. The equivalence property draws Zitadel's user apart from the facts and decodes it from a `query.User`-shaped payload.
 

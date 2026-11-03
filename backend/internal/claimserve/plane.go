@@ -91,9 +91,13 @@ type Result struct {
 // roles is what Zitadel listed for the project in this token's payload
 // (Request.Roles): the token's roles, always (ADR-004). Syndra's facts only
 // enrich them (names, team, bundles, end dates), and a role of Syndra's that
-// Zitadel did not list, one still queued say, is not sent. With no facts to
-// add, the shape is answered over the roles alone (ServedRolesOnly).
-func (p *Plane) Answer(ctx context.Context, userID, projectID, clientID, function string, roles []string) Result {
+// Zitadel did not list, one still queued say, is not sent. id is the
+// payload's user (UserRef.Identity): the identity attributes, live, over the
+// facts' copy (claims.Facts.Identify). With no facts to add, the shape is
+// answered over the roles and identity alone: ServedRolesOnly when it asks
+// for an attribute only facts hold (team, bundles, ...), Served when nothing
+// it asks for is missing.
+func (p *Plane) Answer(ctx context.Context, userID, projectID, clientID, function string, roles []string, id claims.Identity) Result {
 	cfg := p.cfg.Load()
 	if cfg == nil {
 		return Result{Claims: []Claim{}, Outcome: claimtel.DegradedShapeUnreadable}
@@ -117,18 +121,22 @@ func (p *Plane) Answer(ctx context.Context, userID, projectID, clientID, functio
 	switch {
 	case outcome == claimtel.Served, outcome == claimtel.ServedLKG:
 		facts.Roles = roles
-		res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts)), outcome
-		if outcome == claimtel.Served && function != claims.FunctionPreAccessToken && function != claims.FunctionPreUserinfo {
-			res.Outcome = claimtel.UnknownFunction // answered as both (F-5), and counted
-		}
+		res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts.Identify(id))), outcome
 	case outcome == claimtel.ServedRolesOnly && ctx.Err() == nil:
-		bare := claims.Facts{UserID: userID, ProjectID: projectID, Roles: roles}
-		res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile.RolesOnly(), bare)), outcome
+		bare := claims.Facts{UserID: userID, ProjectID: projectID, Roles: roles}.Identify(id)
+		prof := shape.Profile.RolesOnly()
+		if len(prof.Claims) == len(shape.Profile.Claims) {
+			outcome = claimtel.Served // nothing the shape asks for is Syndra's alone
+		}
+		res.Claims, res.Outcome = Envelope(p.Shaper(prof, bare)), outcome
 	default:
 		res.Claims, res.Outcome = proj.Mode.Claims(), outcome
 		if ctx.Err() != nil {
 			res.Outcome = claimtel.DeadlineExceeded
 		}
+	}
+	if res.Outcome == claimtel.Served && function != claims.FunctionPreAccessToken && function != claims.FunctionPreUserinfo {
+		res.Outcome = claimtel.UnknownFunction // answered as both (F-5), and counted
 	}
 	return res
 }
@@ -176,7 +184,7 @@ func (p *Plane) Welcome(ctx context.Context, user UserRef, clientID, function st
 		return res, projectID, true
 	}
 	facts.UserID, facts.ProjectID = user.ID, projectID
-	res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts)), claimtel.ServedWelcome
+	res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts.Identify(user.Identity))), claimtel.ServedWelcome
 	return res, projectID, true
 }
 

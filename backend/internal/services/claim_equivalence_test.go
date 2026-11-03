@@ -40,11 +40,54 @@ func (equivDir) FindProject(_ context.Context, id string) (models.ProjectCatalog
 }
 func (equivDir) RoleKeysForProject(context.Context, string) ([]string, error) { return equivRoles, nil }
 
+// equivUser is the case's person as Zitadel holds them: the directory's read
+// in the preview, the payload's user live.
+var equivUser models.UserProfile
+
+func (equivDir) FindUser(_ context.Context, id string) (models.UserProfile, bool, error) {
+	return equivUser, id == equivUser.ID, nil
+}
+
+// randomPerson is u1 as Zitadel holds them, apart from Syndra's facts: a
+// machine user, or a person whose names and email Zitadel may lack.
+func randomPerson(rng *rand.Rand) models.UserProfile {
+	pick := func(s string) string { return []string{"", s}[rng.IntN(2)] }
+	if rng.IntN(5) == 0 {
+		return models.UserProfile{ID: "u1", Kind: models.UserKindMachine, Username: pick("probe-bot")}
+	}
+	return models.UserProfile{ID: "u1", Kind: models.UserKindHuman, Username: pick("ada"),
+		GivenName: pick("Ada"), FamilyName: pick("Lovelace"), Email: pick("ada@example.edu")}
+}
+
+// payloadUser is u as Zitadel's query.User serialises it into the payload:
+// snake_case keys, every one omitempty.
+func payloadUser(u models.UserProfile) map[string]any {
+	m := map[string]any{"id": u.ID, "type": 1, "state": 1, "preferred_login_name": "u1@example.edu"}
+	if u.Username != "" {
+		m["username"] = u.Username
+	}
+	if u.IsMachine() {
+		m["type"], m["machine"] = 2, map[string]any{"name": "Probe", "access_token_type": 1}
+		return m
+	}
+	h := map[string]any{"display_name": "Not The Name", "preferred_language": "en"}
+	for k, v := range map[string]string{"first_name": u.GivenName, "last_name": u.FamilyName, "email": u.Email} {
+		if v != "" {
+			h[k] = v
+		}
+	}
+	m["human"] = h
+	return m
+}
+
 var equivRoles = []string{"staff", "admin", "guest", "trained"}
 
 func randomProfile(rng *rand.Rand) claims.Profile {
 	ts := claims.Templates()
 	p := ts[rng.IntN(len(ts))].Profile
+	if rng.IntN(4) == 0 {
+		p = claims.ActionsV1() // the seeded shape: the names, as v1 built them
+	}
 	p.Lands = []string{claims.LandsBoth, claims.LandsAccessToken, claims.LandsUserinfo}[rng.IntN(3)]
 	p.IncludeNew = rng.IntN(2) == 0
 	p.Roles = nil
@@ -56,6 +99,8 @@ func randomProfile(rng *rand.Rand) claims.Profile {
 	extra := []claims.Claim{
 		{Path: []string{"roles_csv"}, Kind: claims.KindRoles, Format: claims.FormatCSV},
 		{Path: []string{"x", "team"}, Kind: claims.KindAttribute, Source: claims.AttrTeam},
+		{Path: []string{"x", "username"}, Kind: claims.KindAttribute, Source: claims.AttrUsername},
+		{Path: []string{"x", "email"}, Kind: claims.KindAttribute, Source: claims.AttrEmail},
 		{Path: []string{"is_admin"}, Kind: claims.KindIfRole, Roles: []string{"admin"}},
 		{Path: []string{"ends"}, Kind: claims.KindRoleEnds},
 		{Path: []string{"bundles"}, Kind: claims.KindBundles},
@@ -72,6 +117,9 @@ func randomProfile(rng *rand.Rand) claims.Profile {
 
 func randomFacts(rng *rand.Rand, today time.Time) claims.Facts {
 	f := claims.Facts{UserID: "u1", ProjectID: "pEq", Team: []string{"", "Fabrication"}[rng.IntN(2)], Email: "u1@example.edu"}
+	if rng.IntN(2) == 0 { // the cached copy, which Zitadel's live identity overrides
+		f.GivenName, f.FamilyName, f.Name, f.Username = "Old", "Name", "Display Name", "old"
+	}
 	for _, r := range equivRoles {
 		if rng.IntN(2) == 0 {
 			f.Roles = append(f.Roles, r)
@@ -122,8 +170,10 @@ func randomGrants(rng *rand.Rand) []db.ObservedGrant {
 // trip and a reload, is exactly what the operator's preview shows for that
 // app: the same claims in the same order, or nothing where the shape does
 // not land. The roles are Zitadel's on both sides (the payload's live, the
-// observed grants' in the preview), whatever Syndra's facts say, and a person
-// with no facts is answered over the roles alone on both.
+// observed grants' in the preview), whatever Syndra's facts say; so is the
+// identity (the payload's user live, the directory's read in the preview),
+// whatever Syndra's cached copy says; and a person with no facts is answered
+// over the roles and identity alone on both.
 func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 	s := stubClaimShapeDeps(t)
 	directory.Default = equivDir{}
@@ -150,11 +200,20 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 		// are the live payload's user_grants and the preview's observed read.
 		grants := randomGrants(rng)
 		s.observed = map[string][]db.ObservedGrant{"u1": grants}
-		var rows []claimserve.GrantRef
+		// Zitadel's user, drawn apart from the facts too: the directory's read
+		// in the preview, the payload's user (query.User's keys) live. The
+		// live side decodes the payload exactly as the door does.
+		equivUser = randomPerson(rng)
+		var rows []map[string]any
 		for _, g := range grants {
-			rows = append(rows, claimserve.GrantRef{ProjectID: g.ProjectID, Roles: g.RoleKeys})
+			rows = append(rows, map[string]any{"project_id": g.ProjectID, "roles": g.RoleKeys})
 		}
-		listed := claimserve.Request{UserGrants: rows}.Roles("pEq")
+		body, _ := json.Marshal(map[string]any{"user": payloadUser(equivUser), "user_grants": rows})
+		req, bad := claimserve.Decode(body)
+		if bad != "" {
+			t.Fatalf("case %d: the payload decoded %s", i, bad)
+		}
+		listed := req.Roles("pEq")
 		built := rng.IntN(4) > 0 // else no facts at all: answered over the roles alone
 		if !built {
 			delete(s.stored, "u1:pEq")
@@ -180,7 +239,7 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 
 		for _, c := range clients {
 			function := functions[rng.IntN(len(functions))]
-			got := plane.Answer(ctx, "u1", "pEq", c.client, function, listed)
+			got := plane.Answer(ctx, "u1", "pEq", c.client, function, listed, req.User.Identity)
 
 			pv, err := PreviewAppClaimShape(ctx, c.app, PreviewRequest{UserIDs: []string{"u1"}})
 			if err != nil {

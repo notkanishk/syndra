@@ -122,6 +122,24 @@ func lastReaches(appID string, p claims.Profile, templateID string) *bool {
 	return &r
 }
 
+// identityOf is what a token's payload user carries for u (Zitadel's
+// query.User): the same fields, from Syndra's directory read of Zitadel, so a
+// preview names a person exactly as their token does.
+func identityOf(u models.UserProfile) claims.Identity {
+	return claims.Identity{Human: !u.IsMachine(), Machine: u.IsMachine(),
+		GivenName: u.GivenName, FamilyName: u.FamilyName, Username: u.Username, Email: u.Email}
+}
+
+// observedIdentity is identityOf the person as the directory holds them; a
+// failed or empty read is no identity, and the facts' copy stands.
+func observedIdentity(ctx context.Context, userID string) claims.Identity {
+	u, ok, err := svcFindUser(ctx, userID)
+	if err != nil || !ok {
+		return claims.Identity{}
+	}
+	return identityOf(u)
+}
+
 func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTest, settings tokenSettingsRead, reached Check, userID string) Explanation {
 	tpl, _ := claims.FindTemplate(s.templateID)
 	signInOnly := len(s.profile.Claims) == 0
@@ -176,6 +194,10 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 	// payload lists, never what Syndra's records say (ADR-004).
 	roles, _, oerr := ObservedRoles(ctx, userID, app.ProjectID)
 	facts.Roles = roles
+	// Likewise the identity: Zitadel's, as the directory read it, as the
+	// token's comes from the payload's user.
+	id := observedIdentity(ctx, userID)
+	facts = facts.Identify(id)
 	c2 := Check{State: CheckPass, Facts: map[string]any{"roles": nonNil(roles)}}
 	switch {
 	case oerr != nil:
@@ -216,11 +238,13 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 		c5.State = CheckNone
 	case serr != nil || !built:
 		// With no stored claims the token path answers the shape over
-		// Zitadel's roles alone, exactly as here; with roles to build, this is
-		// what it would send once they're built.
-		bare := claims.Facts{UserID: userID, ProjectID: app.ProjectID, Roles: roles}
-		out.Token = claims.Shape(s.profile.RolesOnly(), bare)
-		if c3.State != CheckNone {
+		// Zitadel's roles and identity alone, exactly as here; with roles to
+		// build and a row only facts fill, this is what it would send once
+		// they're built. A shape needing no facts is whole: served, as live.
+		bare := claims.Facts{UserID: userID, ProjectID: app.ProjectID, Roles: roles}.Identify(id)
+		prof := s.profile.RolesOnly()
+		out.Token = claims.Shape(prof, bare)
+		if c3.State != CheckNone && len(prof.Claims) != len(s.profile.Claims) {
 			out.WouldReceive, c5.State = shaped, CheckWarn
 		}
 	case c1.State == CheckFail:

@@ -258,9 +258,12 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 	}
 
 	roles := tokenRoles(payload, projectID)
-	want := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreAccessToken, roles)
-	if want.Outcome != claimtel.Served && want.Outcome != claimtel.ServedLKG {
-		return done("no_facts", "Syndra's snapshot answers the canary "+string(want.Outcome))
+	// No identity: the canary's shape asks for none (claimserve.CanaryProject).
+	want := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreAccessToken, roles, claims.Identity{})
+	// A miss is no facts even where the shape needs none: the canary's are
+	// always compiled, so their absence is the compile path broken.
+	if (want.Outcome != claimtel.Served && want.Outcome != claimtel.ServedLKG) || want.Miss {
+		return done("no_facts", fmt.Sprintf("Syndra's snapshot answers the canary %s (no facts: %v)", want.Outcome, want.Miss))
 	}
 	if key, ok := missingClaim(payload, want.Claims); !ok {
 		return done("claims", "the access token lacks Syndra's "+key+" (or carries another value)")
@@ -282,7 +285,7 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 	if err != nil {
 		return done("userinfo", "userinfo: "+truncate(err.Error(), 200))
 	}
-	if ui := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreUserinfo, roles); ui.Outcome != claimtel.NotLanding {
+	if ui := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreUserinfo, roles, claims.Identity{}); ui.Outcome != claimtel.NotLanding {
 		if key, ok := missingClaim(info, ui.Claims); !ok {
 			return done("userinfo", "userinfo lacks Syndra's "+key)
 		}

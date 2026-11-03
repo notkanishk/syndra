@@ -205,12 +205,21 @@ part of the delete.
 | `signature verification disabled (dev mode)` log in prod | `ZITADEL_ACTION_SIGNING_KEY` empty in container env | Same as above. |
 | `/zitadel` Rotation Status panel shows `disabled` | `ZITADEL_ACTION_SIGNING_KEY` is unset on the backend (signature verification off) | Same root cause as the two rows above — fix the env var and restart before trusting any rotation age. |
 | Custom claims missing from issued tokens | Executions not bound; or backend returning non-200 | Re-run `make zitadel-actions-register`; check backend logs for `[DATA PLANE]` entries. |
-| `/healthz/claims` is degraded with `OUTCOME:served_roles_only` (tokens carry Zitadel's roles but no names or team) | Cache compiler has not run / Redis not reachable | Verify `REDIS_URL` and that the warm ran (`warm_age_s`); a miss also queues a recompile of that person. |
+| `/healthz/claims` is degraded with `OUTCOME:served_roles_only` (tokens carry Zitadel's roles and names, but not team, title, bundles or end dates) | Cache compiler has not run / Redis not reachable | Verify `REDIS_URL` and that the warm ran (`warm_age_s`); a miss also queues a recompile of that person. |
 | `/healthz/claims` says `SNAPSHOT_NOT_LOADED` or `SNAPSHOT_EMPTY` | The data plane has no config yet: Redis is down, or the backend has not published (first boot of S2, before migrations finish) | Wait a minute (the publish runs at start and every minute); check Redis. Every call meanwhile answers fail closed, counted. |
 | Token carries no Syndra claims, log says `Refusing cross-project claims` | The app requests another project's `:aud` scope, so the token spans two projects | Drop the extra audience scope, or give the role in the app's own project with a rule. |
 | Token carries no Syndra claims, log says `No project grants` | The app neither asserts roles nor requests role scopes, so Zitadel lists no grants | Turn on "Assert roles on authentication" for the project or app, or request `urn:zitadel:iam:org:project:roles`. |
 | `/zitadel` Rotation Status panel shows `unknown` | `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT` not set on backend, malformed, or in the future | Seed it with `date -u +%Y-%m-%dT%H:%M:%SZ` now, or run `make zitadel-actions-rotate-key` and apply the emitted fragment: `cat zitadel/actions/.action-env.fragment >> .env`. |
 | `/zitadel` Rotation Status panel shows `warn` or `stale` | Signing key is older than the configured threshold | Run `make zitadel-actions-rotate-key`; apply the emitted fragment (`cat zitadel/actions/.action-env.fragment >> .env`, or `sudo install -m 0600 …` for systemd); restart the backend; delete the fragment. |
+
+## 4 Nov 2026: before turning Actions v1 off (roles and names from Zitadel)
+
+Two gaps that Actions v1 hid are closed. Deploy both before you turn v1's `groupsClaim` off:
+
+- **Roles** (`fix/v2-roles-from-zitadel`): a token's roles are the payload's `user_grants` roles, so a role given in Zitadel directly reaches it.
+- **Names** (`fix/v2-names-from-zitadel`): the names come from the payload's `user` (Zitadel's `query.User`: `human.first_name`, `human.last_name`, `human.email`, `username`). A person Syndra holds no facts for still gets them. The seeded v1 shape's `custom_claims.name` is `first_name + " " + last_name`, exactly as v1 built it. It is never Zitadel's display name. A machine user's three names are empty strings, as in v1.
+
+After the deploy, a person with no facts and the seeded v1 shape counts as `served`, not `served_roles_only`. Only a shape asking for team, title, bundles, end dates, the service-account mark or compiled_at still counts `served_roles_only` for them. To check: sign in once in debug mode as someone with roles only in Zitadel. Confirm `custom_claims` carries `given_name`, `family_name` and `name`, the same as a v1 token for that person.
 
 ## 3 Nov 2026: the grant field name
 

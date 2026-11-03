@@ -78,7 +78,7 @@ func TestAnswer_TheLadder(t *testing.T) {
 
 	// 1. Facts from Redis.
 	r.SetField(FactsKey("u1"), "p1", facts("admin"))
-	res := p.Answer(ctx, "u1", "p1", "c1", pre, admin)
+	res := p.Answer(ctx, "u1", "p1", "c1", pre, admin, claims.Identity{})
 	if res.Outcome != claimtel.Served || len(rolesOf(t, res)) != 1 || res.Gen == 0 {
 		t.Fatalf("served: %+v", res)
 	}
@@ -86,17 +86,19 @@ func TestAnswer_TheLadder(t *testing.T) {
 	// 2. Redis down: the last-known-good copy, within the bound.
 	r.Fail(errors.New("connection refused"))
 	c.add(DefaultLKGMaxAge - time.Minute)
-	if res = p.Answer(ctx, "u1", "p1", "c1", pre, admin); res.Outcome != claimtel.ServedLKG || len(rolesOf(t, res)) != 1 {
+	if res = p.Answer(ctx, "u1", "p1", "c1", pre, admin, claims.Identity{}); res.Outcome != claimtel.ServedLKG || len(rolesOf(t, res)) != 1 {
 		t.Fatalf("within the bound: %+v", res)
 	}
 	// 3. Past the bound: Zitadel's roles alone, never the minimal-safe set.
+	// The built-in shape asks for nothing only facts hold, so the token is
+	// whole: served (TestAnswer_IdentityFromThePayload has one that is not).
 	c.add(2 * time.Minute)
-	res = p.Answer(ctx, "u1", "p1", "c1", pre, admin)
-	if res.Outcome != claimtel.ServedRolesOnly || fmt.Sprint(rolesOf(t, res)) != "[admin]" || len(res.Claims) != 1 || res.Miss {
+	res = p.Answer(ctx, "u1", "p1", "c1", pre, admin, claims.Identity{})
+	if res.Outcome != claimtel.Served || fmt.Sprint(rolesOf(t, res)) != "[admin]" || len(res.Claims) != 1 || res.Miss {
 		t.Fatalf("past the bound: %+v", res)
 	}
 	// Someone never served before gets no copy at all.
-	if res = p.Answer(ctx, "u2", "p1", "c1", pre, admin); res.Outcome != claimtel.ServedRolesOnly {
+	if res = p.Answer(ctx, "u2", "p1", "c1", pre, admin, claims.Identity{}); res.Outcome != claimtel.Served {
 		t.Fatalf("no copy: %+v", res)
 	}
 
@@ -104,29 +106,29 @@ func TestAnswer_TheLadder(t *testing.T) {
 	// dropped so a later outage cannot serve the dropped facts from memory.
 	r.Fail(nil)
 	r.SetField(FactsKey("u3"), "p1", facts("admin"))
-	p.Answer(ctx, "u3", "p1", "c1", pre, admin)
+	p.Answer(ctx, "u3", "p1", "c1", pre, admin, claims.Identity{})
 	r.HDel(FactsKey("u3"), "p1")
-	if res = p.Answer(ctx, "u3", "p1", "c1", pre, admin); res.Outcome != claimtel.ServedRolesOnly || !res.Miss || fmt.Sprint(rolesOf(t, res)) != "[admin]" {
+	if res = p.Answer(ctx, "u3", "p1", "c1", pre, admin, claims.Identity{}); res.Outcome != claimtel.Served || !res.Miss || fmt.Sprint(rolesOf(t, res)) != "[admin]" {
 		t.Fatalf("a miss: %+v", res)
 	}
 	r.Fail(errors.New("down"))
-	if res = p.Answer(ctx, "u3", "p1", "c1", pre, admin); res.Outcome == claimtel.ServedLKG {
+	if res = p.Answer(ctx, "u3", "p1", "c1", pre, admin, claims.Identity{}); res.Outcome == claimtel.ServedLKG {
 		t.Fatal("facts Redis said were gone came back from memory")
 	}
 
 	// Malformed facts are never served: the project's failure mode answers.
 	r.Fail(nil)
 	r.SetField(FactsKey("u4"), "p1", "{{")
-	if res = p.Answer(ctx, "u4", "p1", "c1", pre, admin); res.Outcome != claimtel.DegradedMalformed || len(res.Claims) != 1 || res.Claims[0].Key != "syndra_degraded" {
+	if res = p.Answer(ctx, "u4", "p1", "c1", pre, admin, claims.Identity{}); res.Outcome != claimtel.DegradedMalformed || len(res.Claims) != 1 || res.Claims[0].Key != "syndra_degraded" {
 		t.Fatalf("malformed: %+v", res)
 	}
 
 	// 4. A project nobody published: fail closed, never a guessed shape.
-	if res = p.Answer(ctx, "u1", "pUnknown", "c1", pre, admin); res.Outcome != claimtel.DegradedShapeUnreadable || len(res.Claims) != 0 {
+	if res = p.Answer(ctx, "u1", "pUnknown", "c1", pre, admin, claims.Identity{}); res.Outcome != claimtel.DegradedShapeUnreadable || len(res.Claims) != 0 {
 		t.Fatalf("unpublished: %+v", res)
 	}
 	// And before any snapshot at all.
-	if res = New(r, nil).Answer(ctx, "u1", "p1", "c1", pre, admin); res.Outcome != claimtel.DegradedShapeUnreadable || res.Claims == nil {
+	if res = New(r, nil).Answer(ctx, "u1", "p1", "c1", pre, admin, claims.Identity{}); res.Outcome != claimtel.DegradedShapeUnreadable || res.Claims == nil {
 		t.Fatalf("no snapshot: %+v", res)
 	}
 }
@@ -136,14 +138,14 @@ func TestAnswer_TheBoundIsPerProject(t *testing.T) {
 	ctx := context.Background()
 	p, r, c := plane(t, Mode{Mode: FailClosed, LKGMaxAgeS: 3600})
 	r.SetField(FactsKey("u1"), "p1", facts("admin"))
-	p.Answer(ctx, "u1", "p1", "", pre, admin)
+	p.Answer(ctx, "u1", "p1", "", pre, admin, claims.Identity{})
 	r.Fail(errors.New("down"))
 	c.add(59 * time.Minute)
-	if res := p.Answer(ctx, "u1", "p1", "", pre, admin); res.Outcome != claimtel.ServedLKG {
+	if res := p.Answer(ctx, "u1", "p1", "", pre, admin, claims.Identity{}); res.Outcome != claimtel.ServedLKG {
 		t.Fatalf("59m: %+v", res)
 	}
 	c.add(2 * time.Minute)
-	if res := p.Answer(ctx, "u1", "p1", "", pre, admin); res.Outcome != claimtel.ServedRolesOnly || fmt.Sprint(rolesOf(t, res)) != "[admin]" {
+	if res := p.Answer(ctx, "u1", "p1", "", pre, admin, claims.Identity{}); res.Outcome != claimtel.Served || fmt.Sprint(rolesOf(t, res)) != "[admin]" {
 		t.Fatalf("61m: %+v", res)
 	}
 }
@@ -153,10 +155,10 @@ func TestAnswer_HungRedisIsBounded(t *testing.T) {
 	ctx := context.Background()
 	p, r, _ := plane(t, Mode{})
 	r.SetField(FactsKey("u1"), "p1", facts("admin"))
-	p.Answer(ctx, "u1", "p1", "", pre, admin)
+	p.Answer(ctx, "u1", "p1", "", pre, admin, claims.Identity{})
 	r.Hang()
 	start := time.Now()
-	res := p.Answer(ctx, "u1", "p1", "", pre, admin)
+	res := p.Answer(ctx, "u1", "p1", "", pre, admin, claims.Identity{})
 	took := time.Since(start)
 	t.Logf("measured: hung Redis answered %s in %s", res.Outcome, took.Round(time.Millisecond))
 	if res.Outcome != claimtel.ServedLKG || took > 2*FactsTimeout {
@@ -195,7 +197,7 @@ func TestAnswer_RolesAreZitadelsFactsEnrich(t *testing.T) {
 	r.SetField(FactsKey("u1"), "p1", string(b))
 	listed := []string{"admin", "ended", "hidden", "zitadel-only"} // Request.Roles order
 
-	res := p.Answer(ctx, "u1", "p1", "", pre, listed)
+	res := p.Answer(ctx, "u1", "p1", "", pre, listed, claims.Identity{})
 	got, _ := json.Marshal(res.Claims)
 	want := `[{"key":"roles","value":["boss","ended","zitadel-only"]},{"key":"ends","value":{"boss":"2026-12-01","ended":"2026-11-01"}},` +
 		`{"key":"bundles","value":["Makers"]},{"key":"name","value":"Ada"},{"key":"svc","value":false},{"key":"uid","value":"u1"},{"key":"is_boss","value":true}]`
@@ -204,7 +206,7 @@ func TestAnswer_RolesAreZitadelsFactsEnrich(t *testing.T) {
 	}
 
 	r.HDel(FactsKey("u1"), "p1")
-	res = p.Answer(ctx, "u1", "p1", "", pre, listed)
+	res = p.Answer(ctx, "u1", "p1", "", pre, listed, claims.Identity{})
 	got, _ = json.Marshal(res.Claims)
 	want = `[{"key":"roles","value":["boss","ended","zitadel-only"]},{"key":"uid","value":"u1"},{"key":"is_boss","value":true}]`
 	if res.Outcome != claimtel.ServedRolesOnly || !res.Miss || string(got) != want {
@@ -213,7 +215,7 @@ func TestAnswer_RolesAreZitadelsFactsEnrich(t *testing.T) {
 
 	// Zitadel listing none is none, whatever Syndra's facts hold.
 	r.SetField(FactsKey("u1"), "p1", string(b))
-	if res = p.Answer(ctx, "u1", "p1", "", pre, nil); fmt.Sprint(rolesOf(t, res)) != "[]" || res.Claims[6].Value != false {
+	if res = p.Answer(ctx, "u1", "p1", "", pre, nil, claims.Identity{}); fmt.Sprint(rolesOf(t, res)) != "[]" || res.Claims[6].Value != false {
 		t.Fatalf("no roles listed: %+v", res)
 	}
 }
@@ -222,7 +224,7 @@ func TestAnswer_RolesAreZitadelsFactsEnrich(t *testing.T) {
 func TestAnswer_ReadsTheOldLayoutUntilMoved(t *testing.T) {
 	p, r, _ := plane(t, Mode{})
 	r.Set(LegacyFactsKey("u1", "p1"), facts("admin"))
-	if res := p.Answer(context.Background(), "u1", "p1", "", pre, admin); res.Outcome != claimtel.Served {
+	if res := p.Answer(context.Background(), "u1", "p1", "", pre, admin, claims.Identity{}); res.Outcome != claimtel.Served {
 		t.Fatalf("old layout: %+v", res)
 	}
 }
@@ -240,13 +242,13 @@ func TestAnswer_ShapeLandsAndFunction(t *testing.T) {
 	_ = p.Poll(ctx)
 	r.SetField(FactsKey("u1"), "p1", facts("a", "b"))
 
-	if res := p.Answer(ctx, "u1", "p1", "cOwn", pre, admin); res.Outcome != claimtel.NotLanding || !res.ClientKnown || len(res.Claims) != 0 {
+	if res := p.Answer(ctx, "u1", "p1", "cOwn", pre, admin, claims.Identity{}); res.Outcome != claimtel.NotLanding || !res.ClientKnown || len(res.Claims) != 0 {
 		t.Fatalf("not landing: %+v", res)
 	}
-	if res := p.Answer(ctx, "u1", "p1", "cOwn", claims.FunctionPreUserinfo, ab); res.Outcome != claimtel.Served || res.Claims[0].Value != "a,b" {
+	if res := p.Answer(ctx, "u1", "p1", "cOwn", claims.FunctionPreUserinfo, ab, claims.Identity{}); res.Outcome != claimtel.Served || res.Claims[0].Value != "a,b" {
 		t.Fatalf("own shape: %+v", res)
 	}
-	if res := p.Answer(ctx, "u1", "p1", "cOther", "function/new", ab); res.Outcome != claimtel.UnknownFunction || res.ClientKnown || len(res.Claims) != 1 {
+	if res := p.Answer(ctx, "u1", "p1", "cOther", "function/new", ab, claims.Identity{}); res.Outcome != claimtel.UnknownFunction || res.ClientKnown || len(res.Claims) != 1 {
 		t.Fatalf("unknown function, default shape: %+v", res)
 	}
 	if cfg := p.Config(); cfg.ClientProject["cOwn"] != "p1" {
@@ -328,7 +330,7 @@ func TestReloadRace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for ctx.Err() == nil {
-				if res := p.Answer(ctx, "u1", "p1", "", pre, admin); res.Outcome != claimtel.Served {
+				if res := p.Answer(ctx, "u1", "p1", "", pre, admin, claims.Identity{}); res.Outcome != claimtel.Served {
 					t.Errorf("mid-reload answer: %+v", res)
 					return
 				}
@@ -375,6 +377,66 @@ func BenchmarkAnswer(b *testing.B) {
 	r.SetField(FactsKey("u1"), "p1", string(fb))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		p.Answer(context.Background(), "u1", "p1", "c1", pre, admin)
+		p.Answer(context.Background(), "u1", "p1", "c1", pre, admin, claims.Identity{})
+	}
+}
+
+// The names v1's groupsClaim built from Zitadel's user reach the token from
+// the payload, facts or not (4 Nov 2026): given_name, family_name, and name as
+// first + " " + last; a machine user's as empty strings. The payload wins over
+// the facts' copy; a field it lacks keeps the copy. With no facts, the token
+// is served whole unless the shape asks for something only facts hold.
+func TestAnswer_IdentityFromThePayload(t *testing.T) {
+	ctx := context.Background()
+	withTeam := claims.ActionsV1()
+	withTeam.Claims = append(withTeam.Claims, claims.Claim{Path: []string{"team"}, Kind: claims.KindAttribute, Source: claims.AttrTeam})
+	r := claimservetest.New()
+	if _, err := Publish(ctx, r, map[string]Project{"p1": {Shapes: ProjectShapes{
+		Default: claims.ActionsV1(), ByClient: map[string]AppShape{"cTeam": {ApplicationID: "aTeam", Profile: withTeam}},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	p := New(r, nil)
+	if err := p.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ada := claims.Identity{Human: true, GivenName: "Ada", FamilyName: "Lovelace"}
+	answer := func(client string, id claims.Identity) (string, Result) {
+		res := p.Answer(ctx, "u1", "p1", client, pre, admin, id)
+		b, _ := json.Marshal(res.Claims)
+		return string(b), res
+	}
+	v1Token := func(given, family, name string) string {
+		return fmt.Sprintf(`[{"key":"groups","value":["admin"]},{"key":"custom_claims","value":{"groups":["admin"],"given_name":%q,"family_name":%q,"name":%q}}]`, given, family, name)
+	}
+
+	// No facts: the names are the payload's, and the token is whole.
+	if got, res := answer("", ada); got != v1Token("Ada", "Lovelace", "Ada Lovelace") || res.Outcome != claimtel.Served || !res.Miss {
+		t.Fatalf("no facts, %s miss=%v: %s", res.Outcome, res.Miss, got)
+	}
+	// A machine user: v1 sent its three names as empty strings.
+	if got, _ := answer("", claims.Identity{Machine: true, Username: "bot"}); got != v1Token("", "", "") {
+		t.Fatalf("machine: %s", got)
+	}
+	// A shape asking for a fact: the names still, the team left out, counted.
+	if got, res := answer("cTeam", ada); got != v1Token("Ada", "Lovelace", "Ada Lovelace") || res.Outcome != claimtel.ServedRolesOnly {
+		t.Fatalf("no facts, a fact asked for, %s: %s", res.Outcome, got)
+	}
+
+	// Facts with a stale copy: the payload wins, a field it lacks keeps the
+	// copy, and the name is never the display name.
+	b, _ := json.Marshal(claims.Facts{UserID: "u1", ProjectID: "p1", GivenName: "Augusta", FamilyName: "Byron", Name: "Lady Lovelace", Team: "Fab"})
+	r.SetField(FactsKey("u1"), "p1", string(b))
+	if got, res := answer("", ada); got != v1Token("Ada", "Lovelace", "Ada Lovelace") || res.Outcome != claimtel.Served {
+		t.Fatalf("payload over facts, %s: %s", res.Outcome, got)
+	}
+	if got, _ := answer("", claims.Identity{Human: true, GivenName: "Ada"}); got != v1Token("Ada", "Byron", "Ada Byron") {
+		t.Fatalf("a field the payload lacks: %s", got)
+	}
+	if got, _ := answer("", claims.Identity{}); got != v1Token("Augusta", "Byron", "Lady Lovelace") {
+		t.Fatalf("no user in the payload, the facts stand: %s", got)
+	}
+	if got, res := answer("cTeam", ada); got != v1Token("Ada", "Lovelace", "Ada Lovelace")[:len(v1Token("Ada", "Lovelace", "Ada Lovelace"))-1]+`,{"key":"team","value":"Fab"}]` || res.Outcome != claimtel.Served {
+		t.Fatalf("with facts, the team, %s: %s", res.Outcome, got)
 	}
 }
