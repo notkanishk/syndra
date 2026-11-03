@@ -209,7 +209,7 @@ export function Home({ session }: { session: SessionUser }) {
             leaving one word stranded. */}
         <h1 className="type-greeting max-w-[22ch] text-balance sm:max-w-[34ch]">
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}
-          {who ? `, ${who}` : ""}. <span className="text-ink/40">{headline}</span>
+          {who ? `, ${who}` : ""}. <span className="text-faint">{headline}</span>
         </h1>
         <div className="mt-2 text-[14.5px] text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}

@@ -139,7 +139,7 @@ Seven candidates where one question is answered by several copies, ranked, in [`
 
 ### Audit of 27 Oct — remediation in batches
 
-The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/from another side/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 fix partial reads passed off as whole, one answer per fact, keyboard, scale and dead code (`changes/audit-2026-10/tasks.md`). Left: 2.9 and 3.2 wait on Design's A-09 (Q-09: text contrast, and where an unconfirmed add-on change shows).
+The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/from another side/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 fix partial reads passed off as whole, one answer per fact, keyboard, scale and dead code (`changes/audit-2026-10/tasks.md`). 3.2 is built (A-09 §1–2 tokens and text floors; stale data recedes instead of dimming, A-13 (d)). Left: 2.9 (unconfirmed add-on changes, A-09 §3–5 as revised by A-13 §5).
 
 ### Actions v2 before any app moves off v1 — the 27 Oct review
 

@@ -28,7 +28,7 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
 import { Unfold } from "@/components/ui/Unfold";
 import { UserName } from "@/components/names";
-import { formatBytes, formatShortDate, personLine, versionLabel } from "@/lib/format";
+import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
@@ -77,6 +77,10 @@ export function TargetOverview({ target }: { target: string }) {
     (findings.data?.length ?? 0) + anchorFinding + conflicts.length;
   const waitingKnown = !findings.isLoading && !findings.error && !health.isLoading && !health.error;
   const name = targetLabel(target);
+  // It isn't answering, so its own cards show the last read (A-13): they
+  // recede, and the controls that need it live are off. Syndra's own cards
+  // (reach, lifecycle, Waiting on you, what runs here) stay raised.
+  const lastKnown = health.data?.reachable === false;
   // One Zitadel project per system (3a). Unknown until the roster answers;
   // null is "not chosen", and everything that gives access waits for it.
   const project = registered?.project;
@@ -125,7 +129,7 @@ export function TargetOverview({ target }: { target: string }) {
       ) : justSet ? (
         <ProjectSet target={target} project={justSet} />
       ) : project ? (
-        <SetupStrip target={target} project={project} />
+        <SetupStrip target={target} project={project} lastKnown={lastKnown} />
       ) : null}
 
       {/* One chip per region at the right end of the read line (board, RULES):
@@ -200,7 +204,7 @@ export function TargetOverview({ target }: { target: string }) {
                     registered?.transport_status === "error" ? registered.transport_error : undefined
                   }
                 />
-                <SystemHealth target={target} stale={health.data?.reachable === false} />
+                <SystemHealth target={target} stale={lastKnown} />
               </div>
               <LifecycleControl target={target} health={health.data} isLoading={health.isLoading} />
             </>
@@ -252,9 +256,9 @@ export function TargetOverview({ target }: { target: string }) {
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
           <MappingCensus target={target} project={project?.name} />
-          <PeopleOnTarget target={target} />
-          <Inventory target={target} />
-          <DormantAccounts target={target} />
+          <PeopleOnTarget target={target} stale={lastKnown} />
+          <Inventory target={target} stale={lastKnown} />
+          <DormantAccounts target={target} stale={lastKnown} />
         </Region>
 
         {/* Region 3 · what an add-on can do and what actually runs against it
@@ -268,7 +272,7 @@ export function TargetOverview({ target }: { target: string }) {
           {/* Side by side where there is room, as the board draws them. */}
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-4">
             {registered && <Capabilities registered={registered} />}
-            <ReconcileControl target={target} />
+            <ReconcileControl target={target} lastKnown={lastKnown} />
           </div>
         </Region>
         </div>
@@ -328,10 +332,25 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
   const allRead = data.readable && degraded.length === 0;
 
   return (
-    // Last known, dimmed under its Notice, while Syndra cannot reach the system
-    // (RULES): still readable, never disabled.
-    <Card className={stale ? "opacity-[0.62]" : ""}>
-      <CardHeader title={`What ${name} reports`} note={allRead ? "All read" : "Partly read"} />
+    // Last known while Syndra cannot reach the system (A-13): the card recedes
+    // and its dots ring, its words stay full strength, and it is its own read,
+    // so its note carries the age — said once, in amber.
+    <Card stale={stale}>
+      <CardHeader
+        title={`What ${name} reports`}
+        note={
+          stale ? (
+            <span className="inline-flex items-center gap-1.5 text-[12.5px] text-warn-text">
+              <StatusDot tone="warn" ring />
+              Last known · {formatClock(new Date(report.dataUpdatedAt).toISOString())}
+            </span>
+          ) : allRead ? (
+            "All read"
+          ) : (
+            "Partly read"
+          )
+        }
+      />
       {!data.readable && (
         <Reading tone="warn" label="Could not be asked">
           {name} did not answer its own health reads, so this is not a report that nothing
@@ -448,7 +467,7 @@ function alertLabel(level: string): string {
  * act on and which nothing else surfaces. A binding whose account is gone plans
  * as a create, and acting on it would recreate an account somebody deleted.
  */
-function ReconcileControl({ target }: { target: string }) {
+function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: boolean }) {
   const run = useReconcileTarget(target);
   const release = useReleaseBinding(target);
   // Which row asked, and which rows have already let go. The reconcile result
@@ -487,10 +506,14 @@ function ReconcileControl({ target }: { target: string }) {
             `${result.bound} accounts managed · ${result.queued} fixes waiting for you to send · ${result.stale?.length ?? 0} accounts missing from ${name}`
           )}
         </div>
+        {/* It reads the system first, so it waits while that can't answer
+            (A-13 §1.5). The card's one control, so its reason rides on it. */}
         <Button
           variant="outline"
           size="sm"
           isPending={run.isPending}
+          disabled={lastKnown}
+          reason={lastKnown ? `Check now waits too: it reads ${name} first.` : undefined}
           onClick={() => run.mutate()}
         >
           Check now
@@ -1438,7 +1461,7 @@ function MappingCensus({ target, project }: { target: string; project?: string }
  * moved, while applying a plan only joins a queue somebody can still inspect. The
  * two must not be unified.
  */
-function Inventory({ target }: { target: string }) {
+function Inventory({ target, stale }: { target: string; stale: boolean }) {
   const inventory = useTargetInventory(target);
   const adopt = useAdoptAccount(target);
   const [adopting, setAdopting] = useState<string | null>(null);
@@ -1456,9 +1479,10 @@ function Inventory({ target }: { target: string }) {
   };
   const tooOldToAdopt = !inventory.data || blocksIrreversibleAction(read);
   const name = targetLabel(target);
+  const unmanaged = inventory.data?.unmanaged ?? [];
 
   return (
-    <Card>
+    <Card stale={stale || read.current === false}>
       <CardHeader
         title="Not created by Syndra"
         count={inventory.data?.unmanaged?.length}
@@ -1486,7 +1510,7 @@ function Inventory({ target }: { target: string }) {
         }
       >
         <>
-          {(inventory.data?.unmanaged ?? []).map((account, i) => (
+          {unmanaged.map((account, i) => (
             <CardRow
               key={account.username}
               first={i === 0}
@@ -1515,20 +1539,26 @@ function Inventory({ target }: { target: string }) {
                 <span className="text-[13px] text-faint">
                   Syndra&rsquo;s own account on {name} — cannot be assigned to anyone
                 </span>
-              ) : tooOldToAdopt ? (
-                // The reason as text, never a tooltip. A disabled control whose
-                // reason lives in a `title` is a control nobody can find out
-                // about on a keyboard or a phone.
-                <span className="text-[13px] text-faint">
-                  Refresh the list above first — it is too old to act on
-                </span>
               ) : (
-                <Button variant="outline" size="sm" onClick={() => setAdopting(account.username)}>
+                // Off while the read is too old, with its reason said once for
+                // the card below, never under every button (A-13 §1.5).
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={tooOldToAdopt}
+                  onClick={() => setAdopting(account.username)}
+                >
                   Assign to a person
                 </Button>
               )}
             </CardRow>
           ))}
+          {tooOldToAdopt && unmanaged.some((a) => !a.self) && (
+            <div className="row-divider px-5 py-3 text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
+              Assigning waits for a current read of {name}: it ties an account and its files to a
+              person, and there is no undo.
+            </div>
+          )}
           {adopting && (
             <AdoptPanel
               username={adopting}
@@ -1635,7 +1665,7 @@ function AdoptPanel({
                     onClick={() => setChosen({ id: user.id, name: user.name || user.email })}
                     className={`flex min-h-[52px] items-center gap-3 rounded-[12px] border px-3 py-2 text-left ${
                       on ? "border-accent-line bg-accent-soft" : "border-transparent hover-tint"
-                    } ${already ? "cursor-default opacity-55" : ""}`}
+                    } ${already ? "cursor-default" : ""}`}
                   >
                     <span
                       aria-hidden
@@ -1647,7 +1677,9 @@ function AdoptPanel({
                     </span>
                     <Avatar name={user.name} />
                     <span className="flex min-w-0 flex-1 flex-col gap-px [overflow-wrap:anywhere]">
-                      <span className="text-[14.5px] font-semibold">{user.name || user.email}</span>
+                      <span className={`text-[14.5px] font-semibold ${already ? "text-muted" : ""}`}>
+                        {user.name || user.email}
+                      </span>
                       {sub && <span className="text-[12.5px] text-muted">{sub}</span>}
                       <span className="text-[12.5px] text-faint">{user.email}</span>
                     </span>

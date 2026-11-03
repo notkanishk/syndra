@@ -39,7 +39,8 @@ import { oneShot } from "@/lib/secret";
  * who may be quietly locked out — same dormancy, opposite action — so those rows
  * are not selectable at all and say why.
  */
-export function DormantAccounts({ target }: { target: string }) {
+/** `stale`: the system isn't answering, so this is its last read and the card recedes (A-13). */
+export function DormantAccounts({ target, stale = false }: { target: string; stale?: boolean }) {
   const dormant = useDormantAccounts(target);
   const remove = useSweepDormant(target);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -67,7 +68,7 @@ export function DormantAccounts({ target }: { target: string }) {
   }
 
   return (
-    <Card>
+    <Card stale={stale}>
       <CardHeader
         title="No longer needed"
         count={accounts.length}

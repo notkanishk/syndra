@@ -210,7 +210,7 @@ export default function RolesPage() {
         </div>
       )}
 
-      <Card>
+      <Card stale={readState.current === false}>
         <CardColumns>
           <span className="w-[180px] shrink-0">
             <SortHead label="Project" name="project" sort={sort} onSort={setSort} />
