@@ -83,6 +83,7 @@ func TestEverySavePathMovesTheGeneration(t *testing.T) {
 	svcSeedClaimShapes = func(context.Context) ([]string, error) { return []string{"pNet"}, nil }
 	dbClaimConfigProjects = func(context.Context) ([]string, error) { return []string{"pNet"}, nil }
 	dirProjectIDs = func(context.Context) ([]string, error) { return nil, nil }
+	stubWelcomeSwitch(t)
 
 	call := func(method, path string, h http.HandlerFunc, body string, pathValues ...string) int {
 		rr := httptest.NewRecorder()
@@ -112,6 +113,9 @@ func TestEverySavePathMovesTheGeneration(t *testing.T) {
 				return 500
 			}
 			return 200
+		}},
+		{"welcome switch turned on in Makerspace settings", func() int {
+			return call(http.MethodPut, "/", handlePutWelcomeClaims, `{"on":true}`)
 		}},
 		{"failure mode (or anything) edited in SQL, minute pass", func() int {
 			if PublishAllClaimConfig(context.Background()) != nil {

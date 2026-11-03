@@ -121,5 +121,7 @@ func PublishAllClaimConfig(ctx context.Context) error {
 	// The L1 canary's project rides along (S6): published like any other, so
 	// the probe exercises the same write-through and reload.
 	canary := map[string]claimserve.Project{claimserve.CanaryProjectID: claimserve.CanaryProject()}
-	return errors.Join(dbErr, publishProjects(ctx, canary, ids...))
+	// The welcome switch rides the same pass, so a bundle edit, a rule or a
+	// new app reaches it within a minute.
+	return errors.Join(dbErr, publishProjects(ctx, canary, ids...), publishWelcome(ctx))
 }

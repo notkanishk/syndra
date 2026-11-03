@@ -267,8 +267,8 @@ func Classify(s SignIn, worst map[string]Outcome, overflowed, jwt, known, newPer
 		ch.Verdict = NotCalled
 	case Rank(ch.Outcome) <= Rank(ServedLKG):
 		// Served, served from the last-known-good copy, served as both for an
-		// unknown function, or a shape that by design lands elsewhere: the
-		// person's claims went out.
+		// unknown function, a new member's welcome roles, or a shape that by
+		// design lands elsewhere: the person's claims went out.
 		ch.Verdict = Delivered
 	case ch.Outcome == NoGrants && newPerson:
 		ch.Verdict = FirstSignIn

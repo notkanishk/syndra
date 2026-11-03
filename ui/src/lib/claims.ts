@@ -601,6 +601,7 @@ export function rowProblems(
 export const OUTCOME_PHRASE: Record<string, string> = {
   served: "served",
   served_lkg: "served from Syndra's last copy",
+  served_welcome: "served the welcome roles at a first sign-in",
   degraded_no_facts: "their access wasn't built yet",
   degraded_shape_unreadable: "the app's shape couldn't be read",
   degraded_malformed: "their stored access couldn't be read",

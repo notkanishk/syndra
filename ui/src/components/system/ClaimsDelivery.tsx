@@ -26,8 +26,10 @@ const DAY = 24 * 60 * 60 * 1000;
 
 /** The kinds of finding that are about delivery itself, per app. */
 const LIVE_KINDS = new Set(["CLAIMS_NOT_CALLED", "CLAIMS_NOT_SERVED", "SIGNIN_EVENTS_MISSING"]);
+/** Answers that carried the person's claims, a new member's welcome roles included. */
+const SERVED = ["served", "served_lkg", "served_welcome"];
 /** Answers that carry no fault: the app's own settings, or not Zitadel at all. */
-const QUIET_OUTCOMES = new Set(["served", "served_lkg", "no_grants", "not_landing", "sig_missing"]);
+const QUIET_OUTCOMES = new Set(["served", "served_lkg", "served_welcome", "no_grants", "not_landing", "sig_missing"]);
 
 /**
  * System › Zitadel › Claims delivery (claims-delivery-integrity S3–S5, §4g).
@@ -315,8 +317,8 @@ function Live({ d, open }: { d: Delivery; open: ClaimFinding[] }) {
 }
 
 function AppRow({ app }: { app: ClaimApp }) {
-  const served = (app.outcomes.served ?? 0) + (app.outcomes.served_lkg ?? 0);
-  const others = Object.entries(app.outcomes).filter(([o, n]) => n > 0 && o !== "served" && o !== "served_lkg");
+  const served = SERVED.reduce((n, o) => n + (app.outcomes[o] ?? 0), 0);
+  const others = Object.entries(app.outcomes).filter(([o, n]) => n > 0 && !SERVED.includes(o));
   return (
     <div className="row-divider flex flex-col gap-1.5 px-5 py-3 text-[14px] tablet:flex-row tablet:items-baseline tablet:gap-[18px]">
       <span className="flex min-w-0 flex-col gap-0.5 tablet:w-[220px] tablet:shrink-0">

@@ -137,12 +137,7 @@ func (p *Plane) HoldsRoles(ctx context.Context, userID, clientID string) (holds,
 	if !ok || projectID == "" {
 		return false, false
 	}
-	rctx, cancel := context.WithTimeout(ctx, FactsTimeout)
-	defer cancel()
-	raw, err := p.rdb.HGet(rctx, FactsKey(userID), projectID).Result()
-	if errors.Is(err, redis.Nil) {
-		raw, err = p.rdb.Get(rctx, LegacyFactsKey(userID, projectID)).Result()
-	}
+	raw, err := p.rawFacts(ctx, userID, projectID)
 	switch {
 	case errors.Is(err, redis.Nil):
 		return false, true
@@ -156,13 +151,55 @@ func (p *Plane) HoldsRoles(ctx context.Context, userID, clientID string) (holds,
 	return len(f.Roles) > 0, true
 }
 
-func (p *Plane) facts(ctx context.Context, userID, projectID string, maxAge time.Duration) (claims.Facts, claimtel.Outcome, bool) {
+// rawFacts is the one facts read: the hash field, then the old key, within
+// FactsTimeout. redis.Nil means Syndra holds none for (user, project).
+func (p *Plane) rawFacts(ctx context.Context, userID, projectID string) (string, error) {
 	rctx, cancel := context.WithTimeout(ctx, FactsTimeout)
 	defer cancel()
 	raw, err := p.rdb.HGet(rctx, FactsKey(userID), projectID).Result()
 	if errors.Is(err, redis.Nil) {
 		raw, err = p.rdb.Get(rctx, LegacyFactsKey(userID, projectID)).Result()
 	}
+	return raw, err
+}
+
+// Welcome answers a token that names no project, for a brand-new member only
+// (assessment SC4 option b): with Makerspace settings' switch on, a person
+// (never a machine user) whose account Zitadel made within
+// claimtel.NewPersonWithin, an app whose project the welcome bundle gives a
+// role in, and no facts of theirs in that project. The app's own shape is
+// applied to the welcome facts. ok is false otherwise, and the call stays
+// no_grants. A Redis error is not "no facts": it stays no_grants too.
+func (p *Plane) Welcome(ctx context.Context, user UserRef, clientID, function string) (res Result, projectID string, ok bool) {
+	cfg := p.cfg.Load()
+	if cfg == nil || !cfg.Welcome.On || !user.Human || user.CreatedAt.IsZero() || p.rdb == nil {
+		return Result{}, "", false
+	}
+	if age := p.now().Sub(user.CreatedAt); age < -time.Minute || age > claimtel.NewPersonWithin {
+		return Result{}, "", false
+	}
+	projectID = cfg.Welcome.Clients[clientID]
+	facts, has := cfg.Welcome.Facts[projectID]
+	proj, published := cfg.Projects[projectID]
+	if clientID == "" || !has || !published {
+		return Result{}, "", false
+	}
+	if _, err := p.rawFacts(ctx, user.ID, projectID); !errors.Is(err, redis.Nil) {
+		return Result{}, "", false // they have facts, or Redis could not say
+	}
+	shape, known := proj.Shapes.For(clientID)
+	res = Result{ClientKnown: known, Gen: cfg.Gen}
+	if !shape.Profile.LandsIn(function) {
+		res.Claims, res.Outcome = []Claim{}, claimtel.NotLanding
+		return res, projectID, true
+	}
+	facts.UserID, facts.ProjectID = user.ID, projectID
+	res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts, p.now())), claimtel.ServedWelcome
+	return res, projectID, true
+}
+
+func (p *Plane) facts(ctx context.Context, userID, projectID string, maxAge time.Duration) (claims.Facts, claimtel.Outcome, bool) {
+	raw, err := p.rawFacts(ctx, userID, projectID)
 	switch {
 	case err == nil:
 		var f claims.Facts
@@ -271,6 +308,14 @@ func (p *Plane) load(ctx context.Context, gen int64) (*Config, error) {
 	} else if !errors.Is(err, redis.Nil) {
 		return nil, fmt.Errorf("read %s: %w", DebugKey, err)
 	}
+	if wv, err := p.rdb.Get(ctx, WelcomeKey).Result(); err == nil {
+		var w Welcome
+		if json.Unmarshal([]byte(wv), &w) == nil {
+			cfg.Welcome = w // unreadable: off, never half a switch
+		}
+	} else if !errors.Is(err, redis.Nil) {
+		return nil, fmt.Errorf("read %s: %w", WelcomeKey, err)
+	}
 	if len(ids) == 0 {
 		return cfg, nil
 	}
@@ -324,6 +369,32 @@ func PublishKeyring(ctx context.Context, rdb Redis, k Keyring) error {
 	}
 	if err := rdb.Incr(ctx, GenKey).Err(); err != nil {
 		return fmt.Errorf("publish keyring: gen: %w", err)
+	}
+	return nil
+}
+
+// PublishWelcome writes the welcome switch and its facts through and moves
+// claims:gen, only when they changed, so the minute pass costs nothing.
+func PublishWelcome(ctx context.Context, rdb Redis, w Welcome) error {
+	v, err := encode(w)
+	if err != nil {
+		return err
+	}
+	cur, err := rdb.Get(ctx, WelcomeKey).Result()
+	if errors.Is(err, redis.Nil) {
+		cur, err = encode(Welcome{}) // absent reads as off
+	}
+	if err != nil {
+		return fmt.Errorf("publish welcome: read: %w", err)
+	}
+	if cur == v {
+		return nil
+	}
+	if err := rdb.MSet(ctx, WelcomeKey, v).Err(); err != nil {
+		return fmt.Errorf("publish welcome: %w", err)
+	}
+	if err := rdb.Incr(ctx, GenKey).Err(); err != nil {
+		return fmt.Errorf("publish welcome: gen: %w", err)
 	}
 	return nil
 }

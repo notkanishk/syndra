@@ -78,6 +78,9 @@ export const AUDIT_ACTIONS: Record<
   "role.waits_unmarked": { verb: "Stopped a role waiting for you" },
   // Term dates (A-06 §7): one makerspace-wide setting.
   "terms.updated": { verb: "Changed the term dates" },
+  // Welcome roles at a first sign-in (owner, 3 Nov): Makerspace settings' switch.
+  "welcome_claims.turned_on": { verb: "Turned on welcome roles at a first sign-in" },
+  "welcome_claims.turned_off": { verb: "Turned off welcome roles at a first sign-in" },
   // Look up sign-ins (owner, 3 Nov): recorded before Zitadel's log is read, with the
   // reason and the range in its details. The person is the target; an app lookup has none.
   "sign_ins.looked_up": {
