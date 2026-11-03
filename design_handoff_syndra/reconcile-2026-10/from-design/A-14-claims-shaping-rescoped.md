@@ -2,10 +2,13 @@
 
 Answer to `Q-14-claims-shaping-rescoped.md`, 3 Nov 2026. Board: `a14-claims-shaping.dc.html` (Final, 3 Nov 2026). It replaces A-11's board as the final one; A-11's stays for the record. Where they disagree, this one wins.
 
+**Owner, 3 Nov: every call below is settled.** Text formats behind Advanced with a warning (§4). Debug mode captures exactly one account at a time, you by default (§6). The I-understand tick for a save the app will act on (§7). An app with no shape of its own gets its project's default shape (§2, §7). New: copy another app's shape (§8).
+
 The example world is fake but the apps are real:
 - **NetBird** on the project Network, which has 7 roles. NetBird sees 4 of them, in its own words.
 - **Supabase** on Data, through the custom OIDC provider.
-- **GitLab** on Code, with no shape yet.
+- **GitLab** on Code, with no shape of its own yet, so it uses Code's default.
+- **Audio-Dash** on Audio, copying Inventory's shape (§8).
 - **Inventory**, an in-house app on Custom.
 - The preview person is Ada Lovelace. The test people are Aanya Rao, Rohan Mehta and Grace Hopper.
 
@@ -32,7 +35,7 @@ Gaps: 28 from the header to the content, 20 between cards. On a wide screen the 
 - In Advanced, the meta adds the client id in Syndra.Mono.
 
 **"What NetBird is told"** is one card, top to bottom:
-1. **The template line**, faint 13.5: "From the NetBird template. Same as the template." (or "2 changes since", as on Supabase). Then **See the template** (ghost sm; it opens a sheet, so no →).
+1. **The template line**, faint 13.5: "From the NetBird template. Same as the template." (or "2 changes since", as on Supabase). Then **See the template** and **Copy another app's shape** (both ghost sm; each opens a sheet, so no →).
    - Under it is one plain caption with the template's main truth: "Each value becomes a NetBird group. NetBird moves people between groups on every sign-in."
    - This is a caption, never a box.
 2. **Roles NetBird sees**: the roles table (§3).
@@ -77,18 +80,22 @@ Gaps: 28 from the header to the content, 20 between cards. On a wide screen the 
 
 **A template is a starting point that's copied in. Choosing one makes a draft that previews at once. Nothing changes until you save.**
 
-**An app with no shape** (frame `new`, GitLab):
-- The shape card's lede: "GitLab has no shape yet, so Syndra adds nothing to its tokens. Choose where to start. Nothing changes until you save."
-- Then one ChoiceRow per template, single choice. Each has a title, a meta line with what it sends and where, and one description.
+**An app with no shape of its own** (frame `new`, GitLab). **Owner, 3 Nov: it gets its project's default shape, never nothing.** The default works today; templates are an offer on top of it.
+- **The shape card's lede:** "GitLab uses Code's default shape. Nobody has set one for Code, so it's Syndra's built-in: `roles`, every role in Syndra's words, as a list, in the access token and userinfo."
+  - Then a violet link: "Code's default →". The project default has one write place, the project's page; here it is read-only.
+- **"Sends now"**, one read-only claim row in the row form's type: `roles` · "Every role in Code, in Syndra's words" · "Sent as `["users", "admins"]` for Ada Lovelace, and `[]` for anyone who holds none."
+- **The offer.** A type-label, "Shape it for GitLab", then a Segmented sm: **Start from a template** | **Copy another app's shape** (§8).
+- **Templates:** one ChoiceRow per template, single choice. Each has a title, a meta line with what it sends and where, and one description.
 - **Suggested** sits in the note seat when the app's name in Zitadel contains the template's name ("Suggested: this app is called GitLab"). It is preselected.
 - Choosing a row unfolds its short form under it:
   - what it sends;
   - where it lands;
   - its first "no claim can do this" line;
   - **See the whole template** (ghost sm).
-- At the same moment, the preview runs that template as a draft: + lines, check 4 "The GitLab template applies, as a draft."
-- Accent **Start from GitLab**, with the before-line: "Makes a draft. GitLab gets nothing until you save it."
+- At the same moment, the preview runs that template as a draft against the default: `− "roles"` and `+ "groups"`, and check 4 reads "The GitLab template applies, as a draft." Its faint line: "Not saved yet. GitLab gets Code's default until you save."
+- Accent **Start from GitLab**, with the before-line: "Makes a draft. GitLab keeps Code's default until you save."
 - The draft fills the card's rows, and Save follows A-11 §4.
+- **Some apps can't read the default.** NetBird reads `groups`, so on the default it sees no groups. Its check 4 is amber: "Code's default sends `roles`, which NetBird doesn't read. Start from the NetBird template." That's the reason to pick one, not a failure.
 
 **The list of templates, in this order:**
 
@@ -102,8 +109,6 @@ Gaps: 28 from the header to the content, 20 between cards. On a wide screen the 
 | Sign-in only | Nothing of its own | "For Vaultwarden, Kan and Navidrome. Who may sign in is Zitadel's role check." |
 | Custom | `roles` · both | "Every role, in Syndra's words. For in-house apps: SmartDB, Community Slicer, Inventory, Audio-Dash, Printer Config, Syndra." |
 
-- **"Or share another app's shape"** comes last. It appears only when another app on the same project already has a shape. Example: NetBird (clients) offers "NetBird (web)'s shape · edited in one place".
-  - Two NetBird apps with different groups would move people back and forth on every sign-in, so sharing is the safe default for one service with two clients.
 - **TrueNAS** gets no template. Its page says: "TrueNAS's web interface can't sign in with Zitadel. Access to its shares goes through the TrueNAS add-on." Then "TrueNAS add-on →".
 
 **The template sheet** (frames `tpl-*`) is Modal md. Title: "The NetBird template". Its sections, in order, each a type-label and then dot-and-sentence lines (neutral dots, no boxes):
@@ -267,12 +272,12 @@ From the chooser, the footer is Close and accent **Start from …**. From an app
 - Two rows inside the same parent merge into one object.
 - A row named the same as a parent is an error: "`custom_claims` is already an object here, holding `groups`."
 
-**Text formats** (`csv`, `space_delimited`). **Owner's call. Recommend 4a: behind Advanced, with a warning.**
+**Text formats** (`csv`, `space_delimited`). **Owner, 3 Nov: 4a, behind Advanced, with a warning.**
 - **Where:** in Advanced, a roles row gets line 2 "Sent as": "A list" | "Text, with commas" | "Text, with spaces".
 - **The warning:** choosing a text format adds a warn-text line: "No app Syndra has a template for reads roles as text. NetBird would make one group called `netbird-staff,netbird-admins`. Use this only if Inventory's own code splits it."
 - **No template ever chooses text.**
 - **A saved shape that already sends text** shows line 2 in both views, with the warning, so it can't hide.
-- **4b:** remove the text formats entirely. It's cleaner, but an in-house app that splits text (Printer Config today) would have to change first.
+- Not chosen: 4b, removing them entirely.
 
 **Order:** rows keep the order you add them in, and the token keeps that order. Repeated keys are refused, as in A-11 §8.
 
@@ -319,7 +324,7 @@ It checks each fact only where the shape lands. The pass line: "Network's roles 
 
 ## 6 · Debug mode
 
-**A full-width card under the preview: one quiet row when off, a live list when on. One sign-in opens in place and shows what Zitadel sent, what Syndra answered, the five checks, and a labelled rebuild of the claims. It's off by default, turns itself off after 15 minutes, keeps what it saw in memory for an hour, and Change history records who turned it on.**
+**A full-width card under the preview: one quiet row when off, a live list when on. One sign-in opens in place and shows what Zitadel sent, what Syndra answered, the five checks, and a labelled rebuild of the claims. It's off by default, turns itself off after 15 minutes, keeps what it saw in memory for an hour, and Change history records who turned it on. It captures exactly one account at a time (owner, 3 Nov).**
 
 **Off** (frame `netbird`). One settings row:
 - Label: "Debug mode".
@@ -327,29 +332,35 @@ It checks each fact only where the shape lands. The pass line: "Network's roles 
 - Faint: "Last on 2 Nov, for 15 minutes, by Kanishk Singh."
 - Seat: **Turn on debug mode** (outline sm; it opens a sheet).
 
-**Turning it on** (frame `debug-turn-on`), Modal md:
-- **Title:** "Turn on debug mode". **Lede:** "See every sign-in to NetBird live: what Zitadel asked, what Syndra answered, and the five checks. It turns itself off after 15 minutes."
-- **"Whose sign-ins"**, ChoiceRow single:
-  - "Only you, Kanishk Singh" (preselected; see below);
-  - "Everyone signing in to NetBird";
-  - one row per test person: "Only Ada Lovelace", with the note seat "Test person".
+**Turning it on** (frame `debug-turn-on`), Modal md. **Owner, 3 Nov: one account at a time, chosen by you, you by default. There is no "everyone".**
+- **Title:** "Turn on debug mode". **Lede:** "See one account's sign-ins to NetBird live: what Zitadel asked, what Syndra answered, and the five checks. It turns itself off after 15 minutes."
+- **"Whose sign-ins"**, with the faint note "One account at a time". ChoiceRow single:
+  - "You, Kanishk Singh" (preselected), description "Sign in to NetBird yourself to see it here.";
+  - one row per test person ("Ada Lovelace", note seat "Test person");
+  - then "Someone else": an Input, "Choose a person", that opens the person form (A-11 §3).
 - **Faint:** "Syndra keeps what it sees in memory for an hour, never in its database. Names and emails show, because this is for you to debug. Signatures and secrets never do."
-- **Footer note (the before-line):** "Ends at 10:21, 15 minutes from now. Change history records that you turned it on." Then Cancel and accent **Turn on debug mode**.
+- **Footer note (the before-line):** "Ends at 10:21, 15 minutes from now. While it runs, choosing another account moves the capture to them. Change history records each." Then Cancel and accent **Turn on debug mode**.
 - **Result, in the sheet:**
   - The dot blooms once, and **On**.
   - "Debug mode is on for NetBird until 10:21, for your sign-ins."
   - Faint: "Each sign-in appears under the preview as it happens."
   - Close.
-- **Owner's call: who it covers by default. Recommend 6a, "Only you" preselected.** Most debugging starts with signing in yourself, and it records nobody else. "Everyone" is one tap away. 6b preselects Everyone: quicker when one member's NetBird is broken, but it records everyone by default.
+
+**Changing the account while it runs** (frame `debug-switch`). **Change account** (outline sm, in the seat beside Turn off) opens the same sheet:
+- **Title:** "Change whose sign-ins". The account being captured is ticked grey, with the note "Captured now".
+- **Before-line:** "Moves the capture to Aanya Rao from now on. It still ends at 10:21. Ada Lovelace's sign-ins seen so far stay in the list. Change history records the switch."
+- **Confirm:** **Switch to Aanya Rao** (accent). Result: **Switched**, "Debug mode now shows Aanya Rao's sign-ins, until 10:21."
+- The end time doesn't move. A switch never makes a capture longer.
 
 **On** (frames `debug-on`, `debug-empty`). The row becomes:
-- **StatusSeat, lime:** "On", with the note "Your sign-ins · ends 10:21, 14 min left".
+- **StatusSeat, lime:** "On", with the note "Ada Lovelace's sign-ins · ends 10:21, 14 min left".
   - The minutes change in place once a minute (Crossfade, S4). It is never a ticking counter.
-  - The seat has **Turn off** (outline sm).
+  - The seat has **Change account** and **Turn off** (both outline sm).
 - **Beneath, by Unfold:**
   - The read line: a lime dot and "Live · newest on top".
   - Right side, while rows are waiting: faint "2 new sign-ins wait until you move off the list."
-- **Columns:** a chevron seat (28) · Time (96, `10:09:14`, with ↓ for newest first) · Person (210: avatar, name linking to their page) · Asked for (120: "Access token" / "Userinfo") · Syndra answered (mono: "`groups`, 2 values" / "Nothing: she asked for two projects") · Checks (120 right: "All pass", "No roles", "Refused", "Fails check 1").
+- **The Person column stays,** because a switch puts two people in one list.
+- **Columns:** a chevron seat (28) · Time (96, `10:09:14`, with ↓ for newest first) · Person (210: avatar, name linking to their page) · Asked for (120: "Access token" / "Userinfo") · Syndra answered (mono: "`groups`, 2 values" / "Nothing: NetBird asked for two projects") · Checks (120 right: "All pass", "No roles", "Refused", "Fails check 1").
   - It doesn't sort: the order is arrival.
 - **Arrival (Motion v2 S5 and A-08 §4):** a new sign-in opens its gap at the top and tints in (the refresh rule). It does not arrive with the 8px rise.
   - **While the pointer or focus is in the list, or a sign-in is open, new rows wait.** The read line counts them. They come in when you move away or close it.
@@ -380,7 +391,7 @@ It checks each fact only where the shape lands. The pass line: "Network's roles 
 - Seat: **Turn on again** (outline sm).
 - Turned off by hand: "Turned off at 10:12 by you."
 
-**Audited.** Change history gets one entry when it is turned on (who, whose sign-ins, until when) and one when it ends ("Ended by itself" or "Turned off by Kanishk Singh"). The captured sign-ins are not audited and are not kept.
+**Audited.** Change history gets one entry when it is turned on (who, whose sign-ins, until when), one for each switch, and one when it ends ("Ended by itself" or "Turned off by Kanishk Singh"). The captured sign-ins are not audited and are not kept.
 
 **Phone 390** (frame `phone-debug`):
 - The row's seat wraps right.
@@ -397,22 +408,22 @@ It checks each fact only where the shape lands. The pass line: "Network's roles 
   - The "What to edit" Segmented control (project default | this app) goes.
   - "Claims in this project's token" goes.
   - The faded other-app line goes.
-  - Apps on one project can share a shape (§2).
+  - An app with no shape of its own uses its project's default (§2). The default is set on the project's page, its one write place.
   - ADR-002 still holds: a token carries one project's roles.
-- **History is per shape,** and shared when the shape is shared. Lede: "Every save of what NetBird is told, kept as it was."
+- **History is per app.** Lede: "Every save of what NetBird is told, kept as it was."
   - For apps that exist today, version 1 is "As Actions v1 sent it" (see For code).
-- **The save summary's reach** is this app and any app sharing its shape: "Reaches NetBird and 23 people at their next sign-in."
+- **The save summary's reach** is this app: "Reaches NetBird and 23 people at their next sign-in."
   - "The 3 apps on 3D printing" becomes "**What NetBird will do**": the template's consequences, with amber dots.
-  - A breaking save adds an I-understand line before the confirm. **Owner's call. Recommend 7a:** a Checkbox, "I understand NetBird will move 12 people to a new group." Save stays off until it's ticked, and only when the template marks the change as breaking. 7b is the before-line and summary only, with no tick. It is lighter, but a GitLab rename can demote every admin.
+  - A breaking save adds an I-understand line before the confirm. **Owner, 3 Nov: 7a, yes.** A Checkbox, "I understand NetBird will move 12 people to a new group." Save stays off until it's ticked, and only when the template marks the change as breaking.
   - Saved: "NetBird's claims are now version 4." Faint: "12 people move to `network-staff` as they sign in. Point NetBird's policies at it once it appears there; a group made by hand isn't joined."
 - **Check 1** also checks where claims land (§5). **Check 4** names the app's own shape and its template.
 - **The roles claim's "Sent as" control** (array | csv | spaced) leaves the front (§4).
-- **#50**, "nobody named the claim", becomes **"No shape yet"** with the template chooser. **Owner's call. Recommend 7c:** an app with no shape gets nothing from Syndra. 7d sends the old one-size shape (`groups` with every role, plus `custom_claims`) until one is chosen. 7d is gentler, but it would hand a new NetBird every role as a group. Apps that exist today are seeded with that old shape either way, so turning off Actions v1 changes nothing on the day.
+- **#50**, "nobody named the claim", becomes **"Uses Code's default"**, with templates and copying offered on top. **Owner, 3 Nov: an app with no shape of its own gets its project's default shape** (the built-in `roles` list when nobody set one), never nothing. Apps that exist today are seeded with Actions v1's shape, so turning off v1 changes nothing on the day.
 - **"What the app reads"** moves below Test people. The template fills it in, and it gains "where".
 - **Apps index:**
   - The Format column becomes **Claims**: the real key in mono, then faint where it lands.
-  - The sub-line names the template: "OIDC · NetBird template, changed", "OIDC · Custom", "OIDC · shares NetBird (web)'s".
-  - "No shape yet" is neutral, "Sends nothing yet".
+  - The sub-line names the template: "OIDC · NetBird template, changed", "OIDC · Custom", "OIDC · Code's default", "OIDC · copied from NetBird".
+  - An app on its project's default shows the default's key, like any other.
   - A mismatch is amber, "Doesn't reach it". The read line adds: "**Home Assistant doesn't get its claims.** Its page says which Zitadel setting to change."
   - The mixed-format warning goes; every template sends a list.
 - **Kept as A-11 drew them:**
@@ -424,11 +435,40 @@ It checks each fact only where the shape lands. The pass line: "Network's roles 
   - the refused cross-project check;
   - Go back.
 
+## 8 · Copy another app's shape
+
+**Beside the templates: any app's shape, from this project or another, copied onto this app as a draft. It previews at once and saves through the usual summary. The two apps stay separate afterwards.**
+
+**Where it is:**
+- In the offer on an app with no shape of its own: **Start from a template** | **Copy another app's shape** (frame `copy`).
+- Later, from the claims part: **Copy another app's shape** (ghost sm) beside See the template opens the same list in a Modal md (frame `copy-later`).
+
+**The list.** ChoiceRow single, one per app with a shape, under two quiet labels: "In Audio" and "In other projects". It's a short list, so there's no search.
+- Each row: the app's name, meta "`roles` and 7 more · Inventory", and the note seat names its template ("Custom, changed").
+- Choosing one unfolds what copies and what doesn't, then the preview runs it as a draft (− and + lines against what the app gets now).
+
+**What copies:** claim rows, formats, where claims land, fixed values, nested and role-dependent rows, and roles added later.
+- **Role words and inclusions copy only for role keys that exist in this app's project.**
+- **Roles that don't exist here** are listed in a faint line, no box: "Not in this project, so not copied: Admin (`inv-admin`), Trained (`trained`)." The line shows in the unfolded row, and again under the roles table in the draft (frame `copied`).
+- This project's roles that the other app never had follow the copied "Roles added later" rule. Their row says "New. Included, as Inventory includes roles added later."
+- **A role-dependent row whose role isn't here** copies with no role and stops Save. In danger text under the row: "Admin isn't in Audio. Choose a role from Audio, or remove this row." Until then the draft preview leaves it out and says so.
+
+**The button and the before-line:**
+- Accent **Copy Inventory's shape**.
+- Before-line: "Makes a draft on Audio-Dash. Nothing changes until you save. Inventory keeps its own; the two aren't linked."
+
+**After copying,** the template line reads "Copied from [[Inventory]], as a draft. Not saved yet." Once saved: "Copied from Inventory on 3 Nov." It is a fact, not a link. Later changes to Inventory never reach Audio-Dash.
+
+**Saving** uses the usual summary (A-11 §4, §7 above), with the template's breaking rule and its I-understand line when it applies. History notes "Copied from Inventory's version 5."
+
+**Two apps that must match** (NetBird and NetBird clients) are kept in step by copying again. Neither app's save summary links them. When they differ in a claim they both send, each page's check 4 says so in faint text: "NetBird clients is told something different. Copy this shape there too." This replaces the "share" idea from the first draft: there is one pattern for this job.
+
 ## For code
 
 **The shaper (`internal/claims`).** Today it holds `ClaimName` and `FormatType`, and the maps `AttributeClaims` and `StaticClaims`. It must grow these:
-- **Per-app profiles.** A shape is keyed by app (or by a shared shape id that apps point to), not by project default plus override.
-  - `Shape(profiles, facts)`, which merges every profile on a project, becomes `Shape(profile, facts)` for one app.
+- **Per-app profiles, with the project default as the fallback.** A shape is keyed by app. An app with none uses its project's default profile (`ApplicationID` empty), and with none of those, the built-in `roles` list (`DefaultClaimName`, array, both).
+  - `Shape(profiles, facts)`, which merges every profile on a project, becomes `Shape(effective(app), facts)` for one app.
+  - The project default is edited on the project's page (its one write place). The app page reads it.
   - `Conflicts` and `sortedProfiles` shrink to checking within one profile.
 - **Role selection and renaming.**
   - `Roles []RoleMap{ Key, As, Included }` and `IncludeNew bool`.
@@ -486,18 +526,22 @@ Turning off v1 then changes nothing on the day.
 
 **Debug mode:**
 - **Endpoints:**
-  - `PUT /applications/{id}/debug { scope: "self" | "everyone" | user_id }` returns `{ ends_at }`;
-  - `DELETE` turns it off;
+  - `PUT /applications/{id}/debug { user_id }` returns `{ ends_at }`. It always names exactly one account; it defaults to the caller's own.
+  - The same `PUT` while it is on switches the account. It keeps `ends_at` and writes an audit entry.
+  - `DELETE` turns it off.
+  - Capture filters on `user.id` in the action handler, before anything is buffered. Other people's sign-ins are never held.
   - `GET …/debug/sign-ins?after=` (or SSE) for the live list.
 - **Capture** happens in the action handler after the answer is written, off the latency path, as a non-blocking send.
 - **Storage:** an in-memory ring per app, an hour's TTL, and a cap of 200 per app.
 - **Redaction at capture:** drop the `ZITADEL-Signature` header and any secret. Keep the body, emails included.
 - **Each entry:** time, function, client id, user id, the grants, the request body, the response body, the five checks as evaluated at that moment, and the duration.
-- **Audit:** an entry for on (who, scope, until) and one for off ("ended by itself" or who).
+- **Audit:** an entry for on (who, which account, until), one per switch, and one for off ("ended by itself" or who).
 - **Server-side end.** The 15 minutes is enforced on the server, not by the page.
 - **More than one replica:** if the API ever runs more than one, captures split between them. Say so, or pin capture to one.
 
 **Carried from A-11:** the explain step, draft preview, test people, versions (now per shape), and typed static values.
+
+**Copying a shape:** `POST /applications/{id}/claim-shape/draft-from { application_id }`, which returns the draft plus `not_copied: [{ role_key, name }]` and rows with a missing role flagged. Nothing is written until the normal save. The saved version records `copied_from { application_id, version }`.
 
 **Supabase:** confirm which provider the deployed Supabase uses. The research couldn't verify it.
 
