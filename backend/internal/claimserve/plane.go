@@ -225,6 +225,16 @@ func (p *Plane) load(ctx context.Context, gen int64) (*Config, error) {
 		return nil, fmt.Errorf("read %s: %w", ProjectsKey, err)
 	}
 	cfg := &Config{Gen: gen, BuiltAt: p.now(), Projects: make(map[string]Project, len(ids)), ClientProject: map[string]string{}}
+	kr, err := p.rdb.Get(ctx, KeyringKey).Result()
+	switch {
+	case errors.Is(err, redis.Nil):
+	case err != nil:
+		return nil, fmt.Errorf("read %s: %w", KeyringKey, err)
+	case json.Unmarshal([]byte(kr), &cfg.Keys) != nil:
+		// The env key still verifies; the write side rewrites this within a minute.
+		cfg.Keys = Keyring{}
+		log.Printf("[DATA PLANE] the signing keyring in Redis is unreadable; verifying with the env key alone")
+	}
 	if len(ids) == 0 {
 		return cfg, nil
 	}
@@ -254,6 +264,32 @@ func (p *Plane) load(ctx context.Context, gen int64) (*Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// SigningKeys is the keyring's live keys, current first; none before the
+// first load or before the write side has read Zitadel.
+func (p *Plane) SigningKeys() []SlotKey {
+	cfg := p.cfg.Load()
+	if cfg == nil {
+		return nil
+	}
+	return cfg.Keys.Keys(p.now())
+}
+
+// PublishKeyring writes the keyring through and moves claims:gen, so every
+// data plane picks it up within a poll.
+func PublishKeyring(ctx context.Context, rdb Redis, k Keyring) error {
+	v, err := encode(k)
+	if err != nil {
+		return err
+	}
+	if err := rdb.MSet(ctx, KeyringKey, v).Err(); err != nil {
+		return fmt.Errorf("publish keyring: %w", err)
+	}
+	if err := rdb.Incr(ctx, GenKey).Err(); err != nil {
+		return fmt.Errorf("publish keyring: gen: %w", err)
+	}
+	return nil
 }
 
 // Status is the loader's health, for /healthz/claims.

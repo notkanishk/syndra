@@ -22,6 +22,7 @@ import (
 	"syndra/internal/claimserve/claimservetest"
 	"syndra/internal/claimtel"
 	"syndra/internal/db"
+	"syndra/internal/models"
 	"syndra/internal/services"
 )
 
@@ -204,7 +205,8 @@ func TestClaimDelivery_SignatureOutcomes(t *testing.T) {
 			if tc.status == 401 && (got.ClientID != "" || got.Function != "" || got.KeySlot != "") {
 				t.Errorf("%s: a refused call carried dimensions: %+v", tc.name, got)
 			}
-			if tc.want == claimtel.Served && got.KeySlot != claimtel.KeySlotCurrent {
+			// No keyring read yet in this test: the env key verified.
+			if tc.want == claimtel.Served && got.KeySlot != claimtel.KeySlotEnv {
 				t.Errorf("verified call key slot = %q", got.KeySlot)
 			}
 		}
@@ -587,7 +589,21 @@ func TestClaimsHealth(t *testing.T) {
 
 func TestClaimDelivery_Endpoint(t *testing.T) {
 	w, l, f := dbClaimDeliveryWindow, dbClaimDeliveryLast, dbClaimPayloadFingerprints
-	t.Cleanup(func() { dbClaimDeliveryWindow, dbClaimDeliveryLast, dbClaimPayloadFingerprints = w, l, f })
+	cf, ls, da := dbClaimFindings, dbLastSignInPerApp, directoryApplications
+	t.Cleanup(func() {
+		dbClaimDeliveryWindow, dbClaimDeliveryLast, dbClaimPayloadFingerprints = w, l, f
+		dbClaimFindings, dbLastSignInPerApp, directoryApplications = cf, ls, da
+	})
+	dbClaimFindings = func(context.Context, time.Time) ([]db.ClaimFinding, error) {
+		return []db.ClaimFinding{{Kind: claimtel.KindNotCalled, Subject: "c1", FirstSeen: time.Now(), LastSeen: time.Now(), Count: 2,
+			Sample: map[string]any{"missing": []any{"function/preaccesstoken"}}}}, nil
+	}
+	dbLastSignInPerApp = func(context.Context) (map[string]time.Time, error) {
+		return map[string]time.Time{"a1": time.Now()}, nil
+	}
+	directoryApplications = func(context.Context) ([]models.ApplicationCatalog, error) {
+		return []models.ApplicationCatalog{{ID: "a1", Name: "NetBird", ProjectID: "p1", ClientID: "c1"}, {ID: "a2", Name: "Wiki", ProjectID: "p1", ClientID: "c2"}}, nil
+	}
 	var since time.Time
 	hist := make([]int64, claimtel.HistBuckets)
 	hist[0], hist[6] = 99, 1
@@ -616,6 +632,7 @@ func TestClaimDelivery_Endpoint(t *testing.T) {
 		Totals   map[string]int64 `json:"totals"`
 		Rows     []deliveryRow    `json:"rows"`
 		Findings []deliveryFinding
+		Apps     []liveApp `json:"apps"`
 	}
 	_ = json.Unmarshal(rr.Body.Bytes(), &got)
 	if len(got.Totals) != len(claimtel.Outcomes) || got.Totals["served"] != 100 {
@@ -624,8 +641,14 @@ func TestClaimDelivery_Endpoint(t *testing.T) {
 	if got.Rows[0].P50MS == nil || *got.Rows[0].P50MS != 1 || got.Rows[0].P99MS == nil || *got.Rows[0].P99MS != 1 {
 		t.Errorf("row = %+v", got.Rows[0])
 	}
-	if len(got.Findings) != 1 || got.Findings[0].Kind != "PAYLOAD_SHAPE_CHANGED" || !strings.Contains(got.Findings[0].Subject, "new") {
+	if len(got.Findings) != 2 || got.Findings[0].Kind != claimtel.KindNotCalled || got.Findings[0].Severity != "hard" ||
+		got.Findings[1].Kind != "PAYLOAD_SHAPE_CHANGED" || !strings.Contains(got.Findings[1].Subject, "new") {
 		t.Errorf("findings = %+v", got.Findings)
+	}
+	// Every app is listed, called or not, so Live does not move with traffic.
+	if len(got.Apps) != 2 || got.Apps[0].Name != "NetBird" || got.Apps[0].Calls != 100 || got.Apps[0].P99MS == nil ||
+		got.Apps[0].LastSignInAt == nil || got.Apps[1].Name != "Wiki" || got.Apps[1].Calls != 0 {
+		t.Errorf("apps = %+v", got.Apps)
 	}
 
 	for _, bad := range []string{"abc", "100d", "-1h", "0m"} {

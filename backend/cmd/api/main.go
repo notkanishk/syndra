@@ -508,6 +508,26 @@ func main() {
 	go claimTelSched.Start(ctx)
 	go handlers.RunClaimRepair(ctx)
 
+	// The detectors (claims-delivery-integrity S3-S5). The correlator checks
+	// sign-ins against calls every minute. With Zitadel connected, the
+	// configuration reconciler reads its Actions setup at start and every ten
+	// minutes, and the keyring follows the claims target's signing key. With
+	// SYNDRA_DEADMAN_URL set, Syndra pings it every five minutes while claim
+	// delivery is ok; a missed ping is the owner's alert.
+	claimWatchSched := periodic.New("CLAIM-WATCH", time.Minute, time.Minute, handlers.RunClaimCorrelation)
+	go claimWatchSched.Start(ctx)
+	var claimConfigSched *periodic.Runner
+	if zitadel.MgmtClient != nil {
+		claimConfigSched = periodic.New("CLAIM-CONFIG", 10*time.Minute, 10*time.Minute, handlers.RunClaimConfigCheck)
+		go claimConfigSched.Start(ctx)
+		go handlers.RunKeyring(ctx)
+	}
+	if handlers.DeadmanConfigured() {
+		go periodic.New("DEADMAN", handlers.DeadmanEvery, handlers.DeadmanEvery, handlers.PingDeadman).Start(ctx)
+	} else {
+		log.Println("[DATA PLANE] dead-man: SYNDRA_DEADMAN_URL is unset: no external alert is configured (shown on /healthz/claims)")
+	}
+
 	// Start server in background
 	go func() {
 		fmt.Println("Control Plane Backend Listening on :8080")
@@ -612,6 +632,16 @@ func main() {
 	select {
 	case <-claimPublishSched.Done():
 	case <-shutdownCtx.Done():
+	}
+	select {
+	case <-claimWatchSched.Done():
+	case <-shutdownCtx.Done():
+	}
+	if claimConfigSched != nil {
+		select {
+		case <-claimConfigSched.Done():
+		case <-shutdownCtx.Done():
+		}
 	}
 
 	// The data plane stops last: it answered through the whole drain above.
