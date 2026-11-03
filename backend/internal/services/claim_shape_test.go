@@ -65,6 +65,7 @@ type shapeStore struct {
 	defaults  map[string]db.ClaimProfileRow
 	overrides []db.AppClaimOverrideRow
 	stored    map[string]claims.Facts // user:project -> stored facts
+	observed  map[string][]db.ObservedGrant
 	settings  *zitadel.TokenSettings
 }
 
@@ -75,9 +76,9 @@ func stubClaimShapeDeps(t *testing.T) *shapeStore {
 
 	origDir := directory.Default
 	o1, o2, o3, o4, o5, o6, o7 := svcGetClaimProfile, svcUpsertClaimProfile, svcListAppClaimOverrides, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape
-	o8, o9, o10, o11, o12, o13 := svcClaimShapeSeedCutoff, svcGetClaimFailureMode, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications
+	o8, o9, o10, o11, o12, o13 := svcClaimShapeSeedCutoff, svcObservedGrantsFor, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications
 	origReach := reachOf
-	o14, o15 := svcClaimDeliveryLast, svcLastSignInPerApp
+	o14, o15, o16 := svcClaimDeliveryLast, svcLastSignInPerApp, svcLatestOrgObservation
 	recent := time.Now().Add(-5 * time.Minute)
 	svcClaimDeliveryLast = func(context.Context) ([]db.ClaimDeliveryLastRow, error) {
 		return []db.ClaimDeliveryLastRow{{ClientID: "cNB", Function: "function/preaccesstoken", LastAt: recent, LastOutcome: "served", LastServedAt: &recent}}, nil
@@ -91,10 +92,10 @@ func stubClaimShapeDeps(t *testing.T) *shapeStore {
 	}
 	t.Cleanup(func() {
 		reachOf = origReach
-		svcClaimDeliveryLast, svcLastSignInPerApp = o14, o15
+		svcClaimDeliveryLast, svcLastSignInPerApp, svcLatestOrgObservation = o14, o15, o16
 		directory.Default = origDir
 		svcGetClaimProfile, svcUpsertClaimProfile, svcListAppClaimOverrides, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape = o1, o2, o3, o4, o5, o6, o7
-		svcClaimShapeSeedCutoff, svcGetClaimFailureMode, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications = o8, o9, o10, o11, o12, o13
+		svcClaimShapeSeedCutoff, svcObservedGrantsFor, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications = o8, o9, o10, o11, o12, o13
 		lastSettings = map[string]tokenSettingsRead{}
 	})
 	directory.Default = shapeDir{}
@@ -145,7 +146,23 @@ func stubClaimShapeDeps(t *testing.T) *shapeStore {
 		return v, true, nil
 	}
 	svcClaimShapeSeedCutoff = func(context.Context) (time.Time, error) { return seedCutoff, nil }
-	svcGetClaimFailureMode = func(context.Context, string) (string, map[string]interface{}, error) { return "fail_closed", nil, nil }
+	// Zitadel, as last observed: s.observed when a test sets it, else the
+	// roles of each person's stored facts (Zitadel holds what Syndra gave).
+	svcObservedGrantsFor = func(_ context.Context, uid string) ([]db.ObservedGrant, error) {
+		if s.observed != nil {
+			return s.observed[uid], nil
+		}
+		var out []db.ObservedGrant
+		for k, f := range s.stored {
+			if strings.HasPrefix(k, uid+":") {
+				out = append(out, db.ObservedGrant{UserID: uid, ProjectID: f.ProjectID, RoleKeys: f.Roles})
+			}
+		}
+		return out, nil
+	}
+	svcLatestOrgObservation = func(context.Context) (db.Observation, error) {
+		return db.Observation{Scope: "org", ObservedAt: time.Now(), Complete: true}, nil
+	}
 	svcStoredFacts = func(_ context.Context, uid, pid string) (claims.Facts, bool, error) {
 		f, ok := s.stored[uid+":"+pid]
 		return f, ok, nil
@@ -366,6 +383,10 @@ func TestPreview_Checks(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.stored["ada:pNet"] = claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"admin", "staff"}, CompiledAt: "2026-11-03T09:52:00Z"}
+	s.observed = map[string][]db.ObservedGrant{
+		"ada":   {{UserID: "ada", ProjectID: "pNet", RoleKeys: []string{"staff", "admin"}}},
+		"rohan": {{UserID: "rohan", ProjectID: "pNet", RoleKeys: []string{"staff"}}},
+	}
 
 	renamed := netbirdShape()
 	renamed.Roles[0].As = "network-staff"
@@ -391,11 +412,28 @@ func TestPreview_Checks(t *testing.T) {
 	}
 
 	// Rohan's claims were never built: check 3 is amber, and the token is what
-	// the token path really sends (fail closed: nothing), with what he would get.
+	// the token path really sends (the shape over Zitadel's roles alone),
+	// with what he would get.
 	rohan := pv.People[1]
-	if rohan.Now.Checks[2].State != CheckWarn || rohan.Now.Checks[4].State != CheckFail || tok(rohan.Now.Token) != `{}` ||
+	if rohan.Now.Checks[2].State != CheckWarn || rohan.Now.Checks[4].State != CheckWarn || tok(rohan.Now.Token) != `{"groups":["netbird-staff"]}` ||
 		tok(rohan.Now.WouldReceive) != `{"groups":["netbird-staff"]}` {
 		t.Fatalf("not built: %+v token=%s", rohan.Now.Checks, tok(rohan.Now.Token))
+	}
+
+	// The roles are Zitadel's, never Syndra's records: admin, still queued
+	// for Ada in Zitadel, is not previewed though her facts hold it; and a
+	// failed read of Zitadel's grants says so rather than showing none.
+	s.observed["ada"] = []db.ObservedGrant{{UserID: "ada", ProjectID: "pNet", RoleKeys: []string{"staff"}}}
+	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	if now := pv.People[0].Now; tok(now.Token) != `{"groups":["netbird-staff"]}` || tok(now.Checks[1].Facts["roles"]) != `["staff"]` {
+		t.Fatalf("queued role previewed: %s %+v", tok(now.Token), now.Checks[1])
+	}
+	orig := svcObservedGrantsFor
+	svcObservedGrantsFor = func(context.Context, string) ([]db.ObservedGrant, error) { return nil, errors.New("down") }
+	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	svcObservedGrantsFor = orig
+	if c := pv.People[0].Now.Checks[1]; c.State != CheckStale || c.Facts["unread"] != true {
+		t.Fatalf("unread grants: %+v", c)
 	}
 
 	// A Bearer access token keeps NetBird's claims out of where it reads them.

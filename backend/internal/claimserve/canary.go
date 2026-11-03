@@ -25,6 +25,9 @@ var canaryProfile = claims.Profile{
 	Claims: []claims.Claim{
 		{Path: []string{"syndra_canary"}, Kind: claims.KindRoles, Format: claims.FormatArray},
 		{Path: []string{"syndra_canary_user"}, Kind: claims.KindAttribute, Source: claims.AttrUserID},
+		// A fact the token itself cannot carry, so a canary answered over its
+		// roles alone (its facts lost) reads as wrong claims.
+		{Path: []string{"syndra_canary_team"}, Kind: claims.KindAttribute, Source: claims.AttrTeam},
 	},
 	IncludeNew: true,
 	Lands:      claims.LandsBoth,
@@ -45,7 +48,7 @@ func CanaryProject() Project {
 
 // CanaryFacts is what the compiler writes for the canary.
 func CanaryFacts() claims.Facts {
-	return claims.Facts{Roles: []string{canaryRole}, UserID: CanaryUserID, ProjectID: CanaryProjectID}
+	return claims.Facts{Roles: []string{canaryRole}, UserID: CanaryUserID, ProjectID: CanaryProjectID, Team: canaryRole}
 }
 
 // CanaryPayload is the body L1 posts: Zitadel's preaccesstoken shape for the
@@ -54,7 +57,7 @@ func CanaryPayload() []byte {
 	b, _ := json.Marshal(map[string]any{
 		"function":    claims.FunctionPreAccessToken,
 		"user":        map[string]string{"id": CanaryUserID},
-		"user_grants": []map[string]string{{"project_id": CanaryProjectID}},
+		"user_grants": []map[string]any{{"project_id": CanaryProjectID, "roles": []string{canaryRole}}},
 		"application": map[string]string{"client_id": CanaryClientID},
 	})
 	return b
@@ -63,7 +66,7 @@ func CanaryPayload() []byte {
 // CanaryExpected is the exact append_claims the canary must get. Written out,
 // not computed: a shaper change that alters it fails TestCanaryExpected
 // rather than moving the probe's expectation with it.
-const CanaryExpected = `[{"key":"syndra_canary","value":["probe"]},{"key":"syndra_canary_user","value":"syndra-canary"}]`
+const CanaryExpected = `[{"key":"syndra_canary","value":["probe"]},{"key":"syndra_canary_user","value":"syndra-canary"},{"key":"syndra_canary_team","value":"probe"}]`
 
 // WithoutCanary is cfg with the canary project left out: what the reconciler
 // checks, since the canary is no app Zitadel knows.

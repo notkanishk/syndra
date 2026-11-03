@@ -94,7 +94,7 @@ func TestWelcome_NewMemberGetsTheWelcomeRolesShapedByTheApp(t *testing.T) {
 		t.Fatalf("the app's shape (csv, its own claim name) must apply: %#v", ans.Claims)
 	}
 	// Equivalence with the preview: the same shaper over the same facts.
-	want := Envelope(claims.ShapeAt(appShape, claims.Facts{UserID: "u1", ProjectID: "p1", Roles: []string{"maker", "visitor"}, Bundles: []string{"Welcome"}}, c.now()))
+	want := Envelope(claims.Shape(appShape, claims.Facts{UserID: "u1", ProjectID: "p1", Roles: []string{"maker", "visitor"}, Bundles: []string{"Welcome"}}))
 	if !reflect.DeepEqual(ans.Claims, want) {
 		t.Fatalf("welcome answer differs from the preview over the same facts:\n got %#v\nwant %#v", ans.Claims, want)
 	}
