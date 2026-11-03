@@ -182,9 +182,43 @@ func main() {
 	requireLiveAuthConfig()
 	fmt.Println("Syndra Backend Starting...")
 
-	// Initialize connections safely (They read ENVs and connect)
-	db.ConnectPostgres()
+	// Root context cancelled on SIGINT/SIGTERM. Created before anything that
+	// runs in the background so all of it shares one shutdown signal.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// The claims data plane first (claims-delivery-integrity S2, ADR-004): it
+	// needs only Redis, so it listens before migrations, the Zitadel client and
+	// the add-on refresh, and a restart is a gap of milliseconds, not the whole
+	// boot. Until Redis answers it serves fail closed, counted; once it does,
+	// the snapshot the write side left in Redis (no TTL) answers at once.
 	db.ConnectRedis()
+	handlers.StartClaimsPlane(ctx, db.Redis)
+	claimsServer := handlers.NewClaimsServer(handlers.ClaimsAddr())
+	go func() {
+		fmt.Printf("Claims data plane listening on %s\n", claimsServer.Addr)
+		if err := claimsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Claims server error: %v", err)
+		}
+	}()
+
+	// The admin side needs both datastores. Waiting for them is not fatal:
+	// the data plane above keeps answering while they come up (S15).
+	if err := db.AwaitRedis(ctx); err != nil {
+		return
+	}
+	for {
+		err := db.ConnectPostgres()
+		if err == nil {
+			break
+		}
+		log.Printf("[STARTUP] waiting for Postgres (claims keep serving): %v", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
 
 	// Initialize Zitadel service account auth before seeding so the seed path
 	// can see whether we're in live mode and skip itself accordingly.
@@ -238,10 +272,12 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	// Root context cancelled on SIGINT/SIGTERM. Created before background
-	// workers so they participate in the same graceful-shutdown signal.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	// The write side of the claims snapshot: every project Syndra or Zitadel
+	// knows, published now and every minute. Saves publish at once; this pass
+	// catches a publish that failed, a failure mode edited in SQL and a
+	// project new in Zitadel. Only what changed moves claims:gen.
+	claimPublishSched := periodic.New("CLAIM-PUBLISH", time.Minute, time.Minute, handlers.PublishAllClaimConfig)
+	go claimPublishSched.Start(ctx)
 
 	// Claims warm-up: the token path serves only compiled claims, which change
 	// events write and a day's TTL removes. One pass now, then twice per TTL, so
@@ -571,6 +607,16 @@ func main() {
 	// The last minute's counters: the server has stopped, so nothing adds to them.
 	if err := handlers.FlushClaimDelivery(shutdownCtx); err != nil {
 		log.Printf("[DATA PLANE] telemetry: final flush failed; the last minute of counts is lost: %v", err)
+	}
+
+	select {
+	case <-claimPublishSched.Done():
+	case <-shutdownCtx.Done():
+	}
+
+	// The data plane stops last: it answered through the whole drain above.
+	if err := claimsServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Claims server shutdown error: %v", err)
 	}
 
 	db.PG.Close()

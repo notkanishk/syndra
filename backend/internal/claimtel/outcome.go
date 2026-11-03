@@ -20,7 +20,7 @@ type Outcome string
 
 const (
 	Served                  Outcome = "served"
-	ServedLKG               Outcome = "served_lkg" // a last-known-good answer; set from S2 on
+	ServedLKG               Outcome = "served_lkg" // a last-known-good answer while Redis is out (claimserve)
 	DegradedNoFacts         Outcome = "degraded_no_facts"
 	DegradedShapeUnreadable Outcome = "degraded_shape_unreadable"
 	DegradedMalformed       Outcome = "degraded_malformed"
@@ -98,6 +98,7 @@ type Call struct {
 	KeySlot     string
 	UserID      string
 	ClientKnown bool   // the client has a shape of its own
+	Gen         int64  // the config snapshot that answered (claims:gen), 0 before any
 	Body        []byte // the verified body, for the payload fingerprint
 	At          time.Time
 	Elapsed     time.Duration

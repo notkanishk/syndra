@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"syndra/internal/claims"
+	"syndra/internal/claimserve"
 	"syndra/internal/db"
 	"syndra/internal/directory"
 	"syndra/internal/models"
@@ -29,30 +30,12 @@ const (
 	SourceBuiltin        = "builtin"         // nobody set one: claims.Builtin
 )
 
-// AppShape is one app's saved shape, as the data plane needs it.
-type AppShape struct {
-	ApplicationID string         `json:"application_id"`
-	Version       int            `json:"version"`
-	TemplateID    string         `json:"template_id,omitempty"`
-	Profile       claims.Profile `json:"profile"`
-}
-
-// ProjectShapes is everything the data plane needs to shape a token for one
-// project, in one read: the default, and each app's shape by client id.
-type ProjectShapes struct {
-	Default       claims.Profile      `json:"default"`
-	DefaultSource string              `json:"default_source"`
-	ByClient      map[string]AppShape `json:"by_client"`
-}
-
-// For picks the shape for a sign-in's client id: the app's own, else the
-// project default. ok is false when the client has no shape of its own.
-func (ps ProjectShapes) For(clientID string) (AppShape, bool) {
-	if s, ok := ps.ByClient[clientID]; ok && clientID != "" {
-		return s, true
-	}
-	return AppShape{Profile: ps.Default}, false
-}
+// AppShape and ProjectShapes are what the data plane serves from
+// (claimserve); the write side resolves them here and publishes them there.
+type (
+	AppShape      = claimserve.AppShape
+	ProjectShapes = claimserve.ProjectShapes
+)
 
 // ResolveProjectShapes is the data plane's read for one project.
 func ResolveProjectShapes(ctx context.Context, projectID string) (ProjectShapes, error) {
@@ -169,7 +152,7 @@ func resolveApp(ctx context.Context, appID string) (effective, error) {
 
 // GetAppClaimShape reads one app's claims part. An app that existed under
 // Actions v1 and has no shape yet is seeded first (seeded reports it, so the
-// caller drops the data plane's cached copy).
+// caller publishes it to the data plane).
 func GetAppClaimShape(ctx context.Context, appID string) (out AppClaimShape, seeded bool, err error) {
 	e, err := resolveApp(ctx, appID)
 	if err != nil {
@@ -590,7 +573,7 @@ func seedApp(ctx context.Context, app models.ApplicationCatalog) (bool, error) {
 }
 
 // SeedClaimShapes seeds every app Zitadel lists that qualifies, and returns the
-// projects it wrote into so the caller can drop their cached shapes. It is
+// projects it wrote into so the caller can publish them. It is
 // idempotent: run at start and hourly, it catches an app a partial directory
 // read missed.
 func SeedClaimShapes(ctx context.Context) ([]string, error) {

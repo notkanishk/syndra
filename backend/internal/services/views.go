@@ -853,7 +853,7 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 	if err != nil {
 		return models.ApplicationSimulation{}, err
 	}
-	payload := claims.Shape(e.profile, facts)
+	payload := claims.ShapeAt(e.profile, facts, time.Now())
 	owners := []models.ClaimKeyOwner{}
 	for _, c := range e.profile.Claims {
 		owners = append(owners, models.ClaimKeyOwner{Key: c.Path[0], OwnerLabel: app.Name, ApplicationID: appID, Kind: c.Kind, Source: c.Source})
