@@ -14,11 +14,25 @@ import { Unfold } from "@/components/ui/Unfold";
 
 export function Card({
   className = "",
+  stale,
   children,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: React.HTMLAttributes<HTMLDivElement> & {
+  /**
+   * Drawn from the last read of a system that isn't answering (A-13 (d)). The
+   * card recedes to the page and its dots become rings; its text stays at full
+   * strength, under the page's Notice. Pass it (true or false) on any card that
+   * can go stale, so it also rises back by tint. Never dim a stale card.
+   */
+  stale?: boolean;
+}) {
   return (
-    <div className={`card overflow-hidden ${className}`} {...props}>
+    <div
+      className={`card overflow-hidden ${className}`}
+      data-stale={stale || undefined}
+      data-recedes={stale === undefined ? undefined : ""}
+      {...props}
+    >
       {children}
     </div>
   );

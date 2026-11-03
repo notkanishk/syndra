@@ -305,7 +305,7 @@ export function Home({ session }: { session: SessionUser }) {
         <h1 className="type-greeting max-w-[22ch] text-balance sm:max-w-[34ch]">
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}
           {who ? `, ${who}` : ""}.{" "}
-          <span className="text-ink/40">
+          <span className="text-faint">
             <Crossfade id={headline} inline>
               {headline}
             </Crossfade>

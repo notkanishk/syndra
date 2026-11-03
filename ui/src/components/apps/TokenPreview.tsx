@@ -150,27 +150,28 @@ export function TokenPreview({
             </p>
           )}
           <div className="rounded-inner border border-line bg-surface-0 px-[18px] py-4 font-mono text-[13px] leading-[1.85]">
-            <div className="text-ink/35">{`// what ${applicationName} receives`}</div>
+            <div className="text-faint">{`// what ${applicationName} receives`}</div>
             {keys.length === 0 && (
               <div className="text-ink/70">
-                {"{}"} <span className="text-ink/35">{`// they hold no role in ${project}`}</span>
+                {"{}"} <span className="text-faint">{`// they hold no role in ${project}`}</span>
               </div>
             )}
             {keys.map((key, index) => (
-              <div key={key} className={owned.has(key) ? "" : "opacity-60"}>
-                <span className="text-accent-text">&quot;{key}&quot;</span>
+              // Another app's claim steps down a shade, never under the floor (A-09 §2).
+              <div key={key}>
+                <span className={owned.has(key) ? "text-accent-text" : "text-muted"}>&quot;{key}&quot;</span>
                 <span className="text-ink/70">: </span>
-                <span className="text-ink/95">{renderValue(claims[key])}</span>
+                <span className={owned.has(key) ? "text-ink/95" : "text-muted"}>{renderValue(claims[key])}</span>
                 {index < keys.length - 1 && <span className="text-ink/70">,</span>}
                 {!owned.has(key) && (
-                  <span className="text-ink/35">{`  // ${owners.get(key) ?? "another app"} reads this`}</span>
+                  <span className="text-faint">{`  // ${owners.get(key) ?? "another app"} reads this`}</span>
                 )}
               </div>
             ))}
 
             {/* The interesting silences, explained. */}
             {emptyKeys.length > 0 && (
-              <div className="mt-3 text-ink/35">
+              <div className="mt-3 text-faint">
                 {emptyKeys.map((key) => (
                   <div key={key}>
                     {`// ${key} is empty — they hold no role in ${project}.`}
@@ -179,7 +180,7 @@ export function TokenPreview({
               </div>
             )}
             {keys.length > 0 && owned.size < keys.length && (
-              <div className="text-ink/35">
+              <div className="text-faint">
                 {`// Claims for other apps on ${project} are included too — every app on a`}
                 <br />
                 {`// project receives the same token and reads its own claim.`}

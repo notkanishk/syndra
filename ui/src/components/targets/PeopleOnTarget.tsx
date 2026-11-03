@@ -32,7 +32,8 @@ import { HomeLine, LimitDialog, limitVerb } from "@/components/targets/HomeLimit
  * visible; putting them on different screens would make the heavier one the
  * only one an operator remembers.
  */
-export function PeopleOnTarget({ target }: { target: string }) {
+/** `stale`: the system isn't answering, so this is its last read and the card recedes (A-13). */
+export function PeopleOnTarget({ target, stale = false }: { target: string; stale?: boolean }) {
   const inventory = useTargetInventory(target);
   const homes = useTargetHomes(target);
   const accounts = inventory.data?.accounts ?? [];
@@ -47,7 +48,7 @@ export function PeopleOnTarget({ target }: { target: string }) {
   const seat = accounts.some((a) => limitVerb(homeOf.get(a.subject_id))) ? "tablet:w-[380px]" : "tablet:w-[260px]";
 
   return (
-    <Card {...leaving.listProps}>
+    <Card stale={stale || inventory.data?.current === false} {...leaving.listProps}>
       <CardHeader
         title="Accounts Syndra manages"
         count={inventory.data?.bound}

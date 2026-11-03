@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
 import type { TargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
+import { expectFullStrength } from "@/test-utils/fullStrength";
 
 /**
  * What the TARGET says about itself.
@@ -18,14 +19,19 @@ import type { TargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
  * in Syndra can give.
  */
 
-const state: { health: TargetSystemHealth | undefined; loading: boolean } = {
+const state: { health: TargetSystemHealth | undefined; loading: boolean; reachable: boolean | undefined } = {
   health: undefined,
   loading: false,
+  reachable: undefined,
 };
+
+// The report was last read at 09:41, local time.
+const READ_AT = new Date(2026, 10, 3, 9, 41).getTime();
 
 vi.mock("@/lib/queries/useTargetSystemHealth", () => ({
   useTargetSystemHealth: () => ({
     data: state.health,
+    dataUpdatedAt: READ_AT,
     isLoading: state.loading,
     isError: false,
   }),
@@ -39,7 +45,10 @@ vi.mock("@/lib/queries/useTargets", () => {
   return {
     useTargets: () => ({ ...idle(), data: [] }),
     useMergeFindings: () => ({ ...idle(), data: [] }),
-    useTargetHealth: idle,
+    useTargetHealth: () => ({
+      ...idle(),
+      data: state.reachable === undefined ? undefined : { reachable: state.reachable, lifecycle: "active" },
+    }),
     useTargetInventory: idle,
     useResolveLogFinding: inert,
     useResolveBindingConflict: inert,
@@ -67,6 +76,7 @@ describe("what the target reports", () => {
   beforeEach(() => {
     state.health = undefined;
     state.loading = false;
+    state.reachable = undefined;
   });
 
   it("says nothing at all while it is still asking", () => {
@@ -198,5 +208,49 @@ describe("what the target reports", () => {
 
     expect(screen.queryByText(/An update is available/)).toBeNull();
     expect(screen.getByText(/Nothing raised/)).toBeInTheDocument();
+  });
+
+  // A-13 (d): while the system isn't answering, the card is its last read. It
+  // recedes to the page, its dots ring in their own colour, its age is said
+  // once in its note, and nothing in it is dimmed.
+  describe("while the system isn't answering", () => {
+    const report: TargetSystemHealth = {
+      target: "truenas",
+      readable: true,
+      alerts: [{ level: "WARNING", klass: "SMARTUncorrectedErrors", text: "1 uncorrectable error on sde.", dismissed: false }],
+      pools: [
+        { name: "tank", status: "ONLINE", healthy: true, warning: false, free_bytes: 1, allocated_bytes: 1, size_bytes: 2 },
+      ],
+      services: [],
+    };
+    const card = () => screen.getByText("What TrueNAS reports").closest(".card") as HTMLElement;
+
+    it("recedes, rings its dots, says its age once, and dims nothing", () => {
+      state.health = report;
+      state.reachable = false;
+      renderTarget();
+
+      expect(card()).toHaveAttribute("data-stale");
+      expect(card()).toHaveAttribute("data-recedes");
+      expectFullStrength(card());
+      expect(screen.getAllByText(/Last known · 09:41/)).toHaveLength(1);
+      // The pool still reads healthy and the alert still reads amber: a ring
+      // of each dot's own colour, never all amber.
+      const dots = Array.from(card().querySelectorAll("[data-dot]"));
+      expect(dots.some((d) => d.className.includes("border-healthy"))).toBe(true);
+      expect(dots.some((d) => d.className.includes("border-warn"))).toBe(true);
+    });
+
+    it("rises back, filled, once it answers", () => {
+      state.health = report;
+      state.reachable = true;
+      renderTarget();
+
+      expect(card()).not.toHaveAttribute("data-stale");
+      // Still marked as a card that can recede, so the change back is a tint.
+      expect(card()).toHaveAttribute("data-recedes");
+      expect(screen.queryByText(/Last known/)).toBeNull();
+      expect(card().querySelector('[data-dot].bg-healthy')).not.toBeNull();
+    });
   });
 });

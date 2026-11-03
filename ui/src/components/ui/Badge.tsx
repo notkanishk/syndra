@@ -88,7 +88,7 @@ export function Mono({
  * reachability column are one idiom. They were two.
  */
 export const STATUS_TONE = {
-  healthy: { dot: "bg-healthy", label: "text-ink" },
+  healthy: { dot: "bg-healthy", edge: "border-healthy", label: "text-ink" },
   // A reading that is a runtime fact and not a state of health: a target that
   // is registered and has not published a manifest yet.
   //
@@ -98,10 +98,10 @@ export const STATUS_TONE = {
   // that the colour does not mean anything, which is the only thing that makes
   // amber useful anywhere else. Lime is worse: nothing has been read, so
   // nothing is healthy.
-  neutral: { dot: "bg-faint", label: "text-muted" },
-  accent: { dot: "bg-accent", label: "text-accent-text" },
-  warn: { dot: "bg-warn", label: "text-warn-text" },
-  danger: { dot: "bg-danger", label: "text-danger-text" },
+  neutral: { dot: "bg-faint", edge: "border-faint", label: "text-muted" },
+  accent: { dot: "bg-accent", edge: "border-accent", label: "text-accent-text" },
+  warn: { dot: "bg-warn", edge: "border-warn", label: "text-warn-text" },
+  danger: { dot: "bg-danger", edge: "border-danger", label: "text-danger-text" },
 } as const;
 
 export type StatusTone = keyof typeof STATUS_TONE;
@@ -109,17 +109,27 @@ export type StatusTone = keyof typeof STATUS_TONE;
 export function StatusDot({
   tone,
   bloom = false,
+  ring = false,
   className = "",
 }: {
   tone: StatusTone;
   /** One ring of the dot's own colour, once: only for something that just went well because of the reader (A-05). */
   bloom?: boolean;
+  /**
+   * Not a fresh read (A-13 §1.4): a 1.5px ring in the tone's own colour, no
+   * fill. The colour still says what the system said; the ring says it is not
+   * being said now. Every dot inside a `Card stale` rings by itself (the
+   * edge colour is always set, so the card's rule only has to empty it).
+   */
+  ring?: boolean;
   className?: string;
 }) {
+  const t = STATUS_TONE[tone];
   return (
     <span
       aria-hidden
-      className={`size-1.5 shrink-0 rounded-pill motion-tint ${STATUS_TONE[tone].dot} ${bloom ? "bloom" : ""} ${className}`}
+      data-dot
+      className={`size-1.5 shrink-0 rounded-pill motion-tint ${t.edge} ${ring ? "border-[1.5px]" : t.dot} ${bloom ? "bloom" : ""} ${className}`}
     />
   );
 }
