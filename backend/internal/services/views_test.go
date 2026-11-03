@@ -36,6 +36,12 @@ func resetGovernanceDeps(t *testing.T) {
 	origHoldsDue := svcAllowancesDueForReview
 	t.Cleanup(func() { svcAllowancesDueForReview = origHoldsDue })
 	svcAllowancesDueForReview = func(context.Context) ([]db.Allowance, error) { return nil, nil }
+	// And the unconfirmed add-on changes, the seventh read.
+	origUnconfirmed := svcCountUnresolvedAddonOperations
+	t.Cleanup(func() { svcCountUnresolvedAddonOperations = origUnconfirmed })
+	svcCountUnresolvedAddonOperations = func(context.Context, time.Duration) (map[string]int, error) {
+		return map[string]int{}, nil
+	}
 	// And the observation store, same reason again: the access view now reports
 	// what Zitadel holds beside what was decided. The default is the honest one
 	// — nothing has ever been observed — so a test that says nothing about the

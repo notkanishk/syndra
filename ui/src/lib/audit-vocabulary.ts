@@ -134,6 +134,21 @@ export const AUDIT_ACTIONS: Record<
  */
 const ACCOUNT_CHANGE = /^entitlement\.([a-z0-9_-]+)\.enqueued$/;
 const HOLD_LAPSED = /^allowance\.([a-z0-9_-]+)\.lapsed$/;
+/**
+ * Changes sent to a connected system, and what was said about one it never
+ * answered (A-09 §4, A-13 §4): `addon.<system>.<operation>.<dispatched|answered|read>`.
+ */
+export const ADDON_EVENT = /^addon\.([a-z0-9_-]+)\.([a-z_]+\.[a-z_]+)\.(dispatched|answered|read)$/;
+
+/** Each operation as the thing that was sent. */
+export const OPERATION_NOUN: Record<string, string> = {
+  "password.set": "a storage password change",
+  "password.rotate": "a storage password replacement",
+  "account.purge": "a delete of an account and its files",
+  "account.adopt": "an account assignment",
+  "account.release": "a release of an account",
+  "setting.put": "a settings change",
+};
 
 export function describeAction(
   action: string,
@@ -153,6 +168,15 @@ export function describeAction(
       verb: `Recorded a change to their ${targetLabel(account[1])} account, waiting for makerspace staff to send it`,
       destructive: false,
     };
+  }
+  const addon = action.match(ADDON_EVENT);
+  if (addon) {
+    const [, system, operation, how] = addon;
+    const noun = OPERATION_NOUN[operation] ?? "a change";
+    const label = targetLabel(system);
+    if (how === "answered") return { verb: `Said what happened to ${noun} ${label} never answered`, destructive: false };
+    if (how === "read") return { verb: `Settled by Syndra from a read of ${label}: ${noun} it never answered`, destructive: false };
+    return { verb: `Sent ${noun} to ${label}`, destructive: operation === "account.purge" };
   }
   const lapsed = action.match(HOLD_LAPSED);
   if (lapsed) {

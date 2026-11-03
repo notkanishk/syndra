@@ -217,9 +217,15 @@ var (
 	svcGetExclusions               = db.GetExclusions
 
 	// Shadow Password Vault injectable vars.
-	svcRecordCredentialSet     = services.RecordCredentialSet
-	svcClearShadowPassword     = services.ClearShadowPassword
-	dbHasShadowCredential      = db.HasShadowCredential
+	svcRecordCredentialSet = services.RecordCredentialSet
+	svcClearShadowPassword = services.ClearShadowPassword
+	dbHasShadowCredential  = db.HasShadowCredential
+	// A member's own password change, as the record table tells it (A-13 §4):
+	// the send a resend repeats, the change still unconfirmed, and the earlier
+	// ones a confirmed change settles.
+	dbResendableAddonOperation = db.ResendableAddonOperation
+	dbUnconfirmedChangeAt      = db.UnconfirmedChangeAt
+	dbSupersedeAddonOperations = db.SupersedeAddonOperations
 	dbGetShadowCredentialAudit = db.GetShadowCredentialAudit
 
 	// Zitadel discovery injectable vars.

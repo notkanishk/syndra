@@ -80,6 +80,7 @@ func handleAdoptAccount(w http.ResponseWriter, r *http.Request) {
 		SubjectID: req.SubjectID,
 		Confirmed: req.Confirmed,
 		Params:    map[string]any{"username": username},
+		About:     username,
 	})
 	if err != nil {
 		writeAdoptionError(w, err)
@@ -219,6 +220,7 @@ func handleReleaseBinding(w http.ResponseWriter, r *http.Request) {
 		ActorID:   resolveActor(r, ""),
 		SubjectID: subject,
 		Confirmed: req.Confirmed,
+		About:     boundUsername(r.Context(), target, subject),
 	})
 	if err != nil {
 		writeOperationError(w, err, "RELEASE_FAILED",
@@ -463,6 +465,7 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 			Target: target, Operation: "account.purge",
 			ActorID: actor, SubjectID: subject, Confirmed: true,
 			Params: map[string]any{"elevated_key": req.ElevatedKey},
+			About:  name,
 		})
 		switch {
 		case err != nil:
@@ -502,4 +505,13 @@ func handleDormantSweep(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{
 		"target": target, "removed": removed, "outcomes": outcomes,
 	})
+}
+
+// boundUsername is the account name Syndra's own binding records for a
+// subject, for a release's record; empty when there is none to name.
+func boundUsername(ctx context.Context, target, subject string) string {
+	if b, bound, err := dbGetTargetBinding(ctx, target, subject); err == nil && bound {
+		return b.Username
+	}
+	return ""
 }
