@@ -20,5 +20,5 @@ The payload does carry `application.client_id` (Zitadel v4+, the board's debug f
 ### Consequences
 
 - An app's claims depend only on its own shape and its project's roles, so the preview of one app is the token of that app.
-- On a Zitadel that sends no client id, every app on a project gets the project default. That is the old behaviour minus the siblings' keys. Debug mode's first capture shows whether prod sends it.
+- On a Zitadel that sends no client id, every app on a project gets the project default. That is the old behaviour minus the siblings' keys. The backend log says so once per project ("a request named no application.client_id"). Debug mode can't show it: it captures only apps with a client id, so a missing one looks like no sign-ins. Zitadel sends the field from v4.0 (source, PR #10339).
 - An app that existed under Actions v1 is seeded with v1's exact shape, so moving off v1 changes nothing. An app made later starts on its project's default.

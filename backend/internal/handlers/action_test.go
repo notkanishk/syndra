@@ -272,29 +272,38 @@ func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
 
 // A failed shape lookup still sends the roles under the built-in key (a
 // degraded token, not a locked door), and that fallback is never cached.
-func TestHandleActionInject_ShapeLookupFailureUsesBuiltinUncached(t *testing.T) {
+// A shape that can't be read is never guessed: a guess could show a role the
+// app's own shape hides. The project's failure mode answers, and nothing is
+// cached.
+func TestHandleActionInject_ShapeLookupFailureAnswersWithTheFailureMode(t *testing.T) {
 	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
 	resetActionDeps(t, origRedis, origMode)
 
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return factsJSON("u1", "pLaser", "trained"), nil
+		return factsJSON("u1", "pLaser", "trained", "admin"), nil
 	}
 	dbResolveProjectShapes = func(context.Context, string) (services.ProjectShapes, error) {
 		return services.ProjectShapes{}, errors.New("db down")
 	}
+	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
+		return "minimal_safe", map[string]interface{}{"syndra_degraded": true}, nil
+	}
 	redisSetKey = func(context.Context, string, string, int) error {
-		t.Error("the fallback shape was cached")
+		t.Error("a failed shape read was cached")
 		return nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: []string{"trained"}})))
+		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: []string{"trained", "admin"}})))
 	rr := httptest.NewRecorder()
 	HandleActionInject(rr, req)
 
 	got := decodeActionResponse(t, rr)
-	if roles, ok := claimByKey(got.AppendClaims, "roles"); !ok || !rolesEqual(roles.Value, "trained") {
-		t.Fatalf("expected roles=[trained], got %v", got.AppendClaims)
+	if _, ok := claimByKey(got.AppendClaims, "roles"); ok {
+		t.Fatalf("a guessed shape sent roles: %v", got.AppendClaims)
+	}
+	if c, ok := claimByKey(got.AppendClaims, "syndra_degraded"); !ok || c.Value != true {
+		t.Fatalf("expected the project's minimal_safe claims, got %v", got.AppendClaims)
 	}
 }
 
