@@ -232,9 +232,11 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 	}
 	pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	// Client-credentials and JWT-profile grants pass no project: without the
-	// audience scope Zitadel lists no grants (assessment Z-d, Z-e).
-	tok, err := canaryToken(pctx, "openid urn:zitadel:iam:org:project:id:"+projectID+":aud")
+	// Client-credentials and JWT-profile grants have no app, so no project of
+	// their own: Zitadel lists the project's grants only when the request
+	// names its audience AND asks for roles (seen on prod 3 Nov 2026: the
+	// audience alone gave user_grants empty, so Syndra rightly answered none).
+	tok, err := canaryToken(pctx, "openid urn:zitadel:iam:org:project:id:"+projectID+":aud urn:zitadel:iam:org:projects:roles")
 	if err != nil {
 		return done("token", "no token for the canary: "+truncate(err.Error(), 200))
 	}
