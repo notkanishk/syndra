@@ -24,6 +24,11 @@ type UserRef struct {
 	CreatedAt time.Time `json:"-"`
 	// Human: the block carries "human" and no "machine".
 	Human bool `json:"-"`
+	// Identity is the token's identity attributes, live (claims.Identify):
+	// "username" and "human" {"first_name", "last_name", "email"}, all
+	// omitempty in query.User (v4.0.0 to main). Read tolerantly: a field
+	// absent or of another type reads as empty, and the facts' value stands.
+	Identity claims.Identity `json:"-"`
 }
 
 // GrantRef is the subset of a Zitadel Actions v2 user grant row Syndra reads.
@@ -138,16 +143,31 @@ func Decode(body []byte) (Request, claimtel.Outcome) {
 	_ = json.Unmarshal(top["function"], &req.Function)
 	_ = json.Unmarshal(top["application"], &req.Application)
 	var user struct {
-		ID      json.RawMessage `json:"id"`
-		Created json.RawMessage `json:"creation_date"`
-		Human   json.RawMessage `json:"human"`
-		Machine json.RawMessage `json:"machine"`
+		ID       json.RawMessage `json:"id"`
+		Created  json.RawMessage `json:"creation_date"`
+		Username json.RawMessage `json:"username"`
+		Human    json.RawMessage `json:"human"`
+		Machine  json.RawMessage `json:"machine"`
 	}
 	_ = json.Unmarshal(top["user"], &user)
 	_ = json.Unmarshal(user.ID, &req.User.ID)
 	_ = json.Unmarshal(user.Created, &req.User.CreatedAt)
-	req.User.Human = bytes.HasPrefix(bytes.TrimSpace(user.Human), []byte("{")) &&
-		(len(user.Machine) == 0 || string(bytes.TrimSpace(user.Machine)) == "null")
+	isObject := func(b json.RawMessage) bool { return bytes.HasPrefix(bytes.TrimSpace(b), []byte("{")) }
+	req.User.Human = isObject(user.Human) && !isObject(user.Machine)
+	id := &req.User.Identity
+	id.Human, id.Machine = req.User.Human, isObject(user.Machine) && !isObject(user.Human)
+	_ = json.Unmarshal(user.Username, &id.Username)
+	if id.Human {
+		var h struct {
+			First json.RawMessage `json:"first_name"`
+			Last  json.RawMessage `json:"last_name"`
+			Email json.RawMessage `json:"email"`
+		}
+		_ = json.Unmarshal(user.Human, &h)
+		_ = json.Unmarshal(h.First, &id.GivenName)
+		_ = json.Unmarshal(h.Last, &id.FamilyName)
+		_ = json.Unmarshal(h.Email, &id.Email)
+	}
 	if strings.TrimSpace(req.User.ID) == "" {
 		return req, claimtel.ContractFault
 	}

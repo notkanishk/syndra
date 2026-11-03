@@ -245,7 +245,7 @@ func (d *Door) Answer(ctx context.Context, req Request) Answer {
 			req.User.ID, req.Application.ClientID, req.Function, projects)
 		return Answer{Claims: []Claim{}, Outcome: claimtel.RefusedCrossProject}
 	}
-	res := d.Plane().Answer(ctx, req.User.ID, projects[0], req.Application.ClientID, req.Function, req.Roles(projects[0]))
+	res := d.Plane().Answer(ctx, req.User.ID, projects[0], req.Application.ClientID, req.Function, req.Roles(projects[0]), req.User.Identity)
 	if res.Miss && d.OnMiss != nil {
 		// The first sign that a person was never compiled: answer the roles
 		// alone now, recompile off the hot path so the next token finds their

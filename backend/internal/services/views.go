@@ -869,6 +869,8 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 		return models.ApplicationSimulation{}, err
 	}
 	facts.Roles = rawRoles
+	// And its identity is Zitadel's, as the token's payload user carries it.
+	facts = facts.Identify(identityOf(user))
 
 	// The preview is the data plane. Same profile resolution, same shaper, same
 	// facts — the only difference is that nothing is signed. Previously this

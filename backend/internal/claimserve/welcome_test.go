@@ -233,3 +233,27 @@ func TestDecode_UserCreationAndKind(t *testing.T) {
 		t.Fatalf("an odd user block must read as unknown, never fail the call: %q %+v", fault, odd.User)
 	}
 }
+
+// The identity is read from query.User's own keys (v4.0.0 to main): username
+// at the top, first_name, last_name and email in human; display_name is not
+// the name. A field of another type reads as empty; it never fails the call.
+func TestDecode_UserIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name, user string
+		want       claims.Identity
+	}{
+		{"a person", `{"id":"u","type":1,"username":"ada","preferred_login_name":"ada@example.edu","human":{"first_name":"Ada","last_name":"Lovelace","display_name":"Countess","email":"ada@example.edu","is_email_verified":true}}`,
+			claims.Identity{Human: true, GivenName: "Ada", FamilyName: "Lovelace", Username: "ada", Email: "ada@example.edu"}},
+		{"a machine user", `{"id":"u","type":2,"username":"bot","machine":{"name":"Bot","access_token_type":1}}`,
+			claims.Identity{Machine: true, Username: "bot"}},
+		{"omitempty drops a name", `{"id":"u","human":{"first_name":"Ada"}}`, claims.Identity{Human: true, GivenName: "Ada"}},
+		{"the docs' camelCase is not Zitadel's", `{"id":"u","human":{"profile":{"firstName":"Ada"},"firstName":"Ada"}}`, claims.Identity{Human: true}},
+		{"odd types", `{"id":"u","username":7,"human":{"first_name":["Ada"],"last_name":null,"email":{}}}`, claims.Identity{Human: true}},
+		{"neither kind", `{"id":"u","username":"ada"}`, claims.Identity{Username: "ada"}},
+	} {
+		req, fault := Decode([]byte(`{"user":` + tc.user + `}`))
+		if fault != "" || req.User.Identity != tc.want {
+			t.Errorf("%s: %q %+v, want %+v", tc.name, fault, req.User.Identity, tc.want)
+		}
+	}
+}

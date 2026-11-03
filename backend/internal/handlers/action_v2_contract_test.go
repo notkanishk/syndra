@@ -12,6 +12,7 @@ import (
 
 	"syndra/internal/claims"
 	"syndra/internal/claimserve"
+	"syndra/internal/claimtel"
 	"syndra/internal/services"
 )
 
@@ -132,7 +133,9 @@ func TestActionV2_DebugCapturesOnlyTheWatchedAccount(t *testing.T) {
 // canonicalV2Payload is the full shape Zitadel sends for a
 // `function/preaccesstoken` trigger. Fields beyond user and user_grants are
 // included to prove the lenient decoder ignores them without error, even as
-// Zitadel extends the schema over time.
+// Zitadel extends the schema over time. "user" is Zitadel's query.User as it
+// serialises (internal/query/user.go, v4.0.0 to main: snake_case, omitempty,
+// state and type as numbers), not the camelCase profile its docs show.
 const canonicalV2Payload = `{
   "function": "function/preaccesstoken",
   "userinfo": {
@@ -143,20 +146,25 @@ const canonicalV2Payload = `{
   },
   "user": {
     "id": "250124622953808001",
-    "creationDate": "2024-02-01T10:00:00Z",
-    "changeDate": "2024-04-01T12:00:00Z",
-    "state": "USER_STATE_ACTIVE",
+    "creation_date": "2024-02-01T10:00:00Z",
+    "change_date": "2024-04-01T12:00:00Z",
+    "resource_owner": "250124592953808001",
+    "sequence": 12,
+    "state": 1,
+    "type": 1,
+    "username": "test.user",
+    "login_names": ["test.user@makerspace.example.org"],
+    "preferred_login_name": "test.user@makerspace.example.org",
     "human": {
-      "profile": {
-        "firstName": "Test",
-        "lastName": "User",
-        "displayName": "Test User",
-        "preferredLanguage": "en"
-      },
-      "email": {
-        "email": "test@example.com",
-        "isEmailVerified": true
-      }
+      "first_name": "Test",
+      "last_name": "User",
+      "nick_name": "Tess",
+      "display_name": "Tess U.",
+      "preferred_language": "en",
+      "gender": 1,
+      "email": "test@example.com",
+      "is_email_verified": true,
+      "password_changed": "2024-03-01T09:00:00Z"
     }
   },
   "user_metadata": [
@@ -248,6 +256,26 @@ func TestActionV2_RolesComeFromZitadelsPayload(t *testing.T) {
 	got = decodeActionResponse(t, inject(t, canonicalV2Payload))
 	if roles, _ := claimByKey(got.AppendClaims, "roles"); !rolesEqual(roles.Value, "operator", "viewer") {
 		t.Fatalf("a ledger role Zitadel did not list was sent: %v", got.AppendClaims)
+	}
+}
+
+// The gap #82 left before Actions v1 can go: a person Syndra holds no facts
+// for got their roles but not the names v1's groupsClaim sent. They come from
+// the payload's user now, exactly as v1 built them (name is first + " " +
+// last, never display_name), and the token is whole: served.
+func TestActionV2_NamesComeFromZitadelsPayload(t *testing.T) {
+	devMode(t)
+	testPlane(t, map[string]claimserve.Project{"pPrinting": project(services.ProjectShapes{Default: claims.ActionsV1()}, failClosed)})
+	log := captureCalls(t)
+	rr, _ := postInject(t, canonicalV2Payload, nil)
+	got := strings.TrimSpace(rr.Body.String())
+	want := `{"append_claims":[{"key":"groups","value":["operator","viewer"]},{"key":"custom_claims","value":{"groups":["operator","viewer"],` +
+		`"given_name":"Test","family_name":"User","name":"Test User"}}]}`
+	if got != want {
+		t.Fatalf("no facts, v1's shape:\n got %s\nwant %s", got, want)
+	}
+	if o := log.last(t).Outcome; o != claimtel.Served {
+		t.Fatalf("outcome %s, want served", o)
 	}
 }
 
