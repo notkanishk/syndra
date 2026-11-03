@@ -27,6 +27,12 @@ type ActionV2UserGrantRef struct {
 	Roles     []string `json:"roles"`
 }
 
+// ActionV2ApplicationRef names the client the token is for (Zitadel v4+).
+// Syndra only logs it.
+type ActionV2ApplicationRef struct {
+	ClientID string `json:"client_id"`
+}
+
 // ActionV2Request is the acceptance shape for Zitadel Actions v2
 // `function/preaccesstoken` and `function/preuserinfo` trigger payloads.
 // Only the fields Syndra needs are declared; all other fields Zitadel sends
@@ -34,9 +40,10 @@ type ActionV2UserGrantRef struct {
 // lenient decoder, since the v2 payload surface is owned by Zitadel and
 // expected to extend over time.
 type ActionV2Request struct {
-	Function   string                 `json:"function,omitempty"`
-	User       ActionV2UserRef        `json:"user"`
-	UserGrants []ActionV2UserGrantRef `json:"user_grants"`
+	Function    string                 `json:"function,omitempty"`
+	User        ActionV2UserRef        `json:"user"`
+	UserGrants  []ActionV2UserGrantRef `json:"user_grants"`
+	Application ActionV2ApplicationRef `json:"application"`
 }
 
 // ActionV2Claim is one entry in the Zitadel Actions v2 append_claims list.
@@ -64,12 +71,15 @@ const redisTimeout = 50 * time.Millisecond
 // Zitadel POSTs the function trigger payload (preaccesstoken or preuserinfo);
 // Syndra returns the pre-compiled per-project claim envelope.
 //
-// Project resolution: every unique project in user_grants is shaped through
-// its own claim profiles and the results merged into one flat envelope. Keys
-// are operator-authored and validated unique across projects at save time, so
-// a multi-project token cannot collide with itself — the old
-// "syndra.<projectID>." prefixing that guaranteed this is gone, along with the
-// unreadable keys it produced.
+// One project per token. Zitadel lists in user_grants only the token's role
+// audience: the client's own project, plus any project the app asked for with
+// an `urn:zitadel:iam:org:project:id:{id}:aud` scope. Syndra delivers claims
+// for exactly one project and refuses cross-project delivery outright: a token
+// whose grants span several projects carries no Syndra claims, and the log says
+// which client asked. An app that needs a role from elsewhere gets it in its
+// own project through a rule. ponytail: refuse rather than pick the client's
+// own project; resolve application.client_id to its project if an app ever
+// needs extra audiences for another reason.
 //
 // Degraded behavior is resolved per-project via dbGetClaimFailureMode:
 //   - fail_closed (default): empty append_claims for that project
@@ -102,51 +112,15 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	perProject := make(map[string][]ActionV2Claim, len(projectIDs))
-	for _, pid := range projectIDs {
-		perProject[pid] = claimsForProject(r.Context(), req.User.ID, pid).AppendClaims
+	if len(projectIDs) > 1 {
+		log.Printf("[DATA PLANE] Refusing cross-project claims for user=%s client=%q function=%s: the token spans projects %v. "+
+			"Syndra delivers one project per token; drop the extra :aud scopes, or give the role in the app's own project with a rule.",
+			req.User.ID, req.Application.ClientID, req.Function, projectIDs)
+		jsonResponse(w, http.StatusOK, ActionV2Response{AppendClaims: []ActionV2Claim{}})
+		return
 	}
 
-	jsonResponse(w, http.StatusOK, ActionV2Response{
-		AppendClaims: mergeProjectClaims(projectIDs, perProject),
-	})
-}
-
-// mergeProjectClaims flattens per-project claim lists into one envelope,
-// disambiguating any key two projects both want.
-//
-// Configured keys cannot collide — they are validated unique across projects
-// at save time. What can collide is the BUILT-IN default: two projects nobody
-// has opened the Token format panel for both emit "roles", and a user holding
-// grants in both would otherwise receive one project's roles under a key the
-// other project's application is also reading. Prefixing the colliding keys
-// keeps both sets present and wrong-for-nobody, rather than silently dropping
-// one; the operator fixes it properly by naming the claims.
-func mergeProjectClaims(projectIDs []string, perProject map[string][]ActionV2Claim) []ActionV2Claim {
-	owners := map[string]int{}
-	for _, pid := range projectIDs {
-		seen := map[string]bool{}
-		for _, c := range perProject[pid] {
-			if !seen[c.Key] {
-				seen[c.Key] = true
-				owners[c.Key]++
-			}
-		}
-	}
-
-	out := make([]ActionV2Claim, 0, len(owners))
-	for _, pid := range projectIDs {
-		for _, c := range perProject[pid] {
-			if owners[c.Key] > 1 {
-				log.Printf("[DATA PLANE] Claim key %q is claimed by %d projects; namespacing project=%s. "+
-					"Give each project a distinct claim name in Token format.", c.Key, owners[c.Key], pid)
-				c.Key = fmt.Sprintf("syndra.%s.%s", pid, c.Key)
-			}
-			out = append(out, c)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	return out
+	jsonResponse(w, http.StatusOK, claimsForProject(r.Context(), req.User.ID, projectIDs[0]))
 }
 
 // claimsForProject reads the compiled access facts for a (user, project) pair
@@ -158,12 +132,8 @@ func mergeProjectClaims(projectIDs []string, perProject map[string][]ActionV2Cla
 // edit therefore lands on the very next token for every user, instead of only
 // for those whose cache happened to be rebuilt afterwards.
 //
-// There is no key namespacing: claim keys are explicit, operator-owned, and
-// validated unique across projects at save time. The old
-// "syndra.<projectID>.<claim>" prefixing existed to stop collisions between
-// per-project claim maps that all used the same generic key names — with
-// explicit keys the collision cannot arise, and the prefix only made the token
-// unreadable to the application that asked for a specific name.
+// There is no key namespacing: a token carries one project, and keys are
+// validated unique within it at save time.
 //
 // Degraded paths (Redis miss/timeout, malformed cache, DB lookup failure) fall
 // through to degradedResponse for that project.

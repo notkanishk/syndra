@@ -124,8 +124,10 @@ envelope.` and a JSON body with an `append_claims` array.
 
 Issue an access token via your normal user OIDC flow (`make dev` login path
 or production login), decode it, and confirm Syndra-injected claims are
-present. For a single-project grant the claim keys are flat (e.g. `role`);
-for multi-project users the keys are namespaced `syndra.<projectID>.<key>`.
+present. The keys are the project's configured names (e.g. `roles`). A token
+carries one project: if the app requests another project's audience scope,
+the token carries no Syndra claims and the backend logs `Refusing
+cross-project claims` (ADR-002).
 
 Example (replace `<token>`):
 
@@ -204,6 +206,7 @@ part of the delete.
 | `/zitadel` Rotation Status panel shows `disabled` | `ZITADEL_ACTION_SIGNING_KEY` is unset on the backend (signature verification off) | Same root cause as the two rows above — fix the env var and restart before trusting any rotation age. |
 | Custom claims missing from issued tokens | Executions not bound; or backend returning non-200 | Re-run `make zitadel-actions-register`; check backend logs for `[DATA PLANE]` entries. |
 | `Cache miss for key=mapping:…` for every call | Cache compiler has not run / Redis not reachable | Verify `REDIS_URL` and that grant/rule changes have been recompiled. |
-| Multi-project user sees colliding claim keys | Upstream Zitadel cached an older target response | Target response is always current — check for a stale v1 Action on the same trigger. |
+| Token carries no Syndra claims, log says `Refusing cross-project claims` | The app requests another project's `:aud` scope, so the token spans two projects | Drop the extra audience scope, or give the role in the app's own project with a rule. |
+| Token carries no Syndra claims, log says `No project grants` | The app neither asserts roles nor requests role scopes, so Zitadel lists no grants | Turn on "Assert roles on authentication" for the project or app, or request `urn:zitadel:iam:org:project:roles`. |
 | `/zitadel` Rotation Status panel shows `unknown` | `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT` not set on backend, malformed, or in the future | Seed it with `date -u +%Y-%m-%dT%H:%M:%SZ` now, or run `make zitadel-actions-rotate-key` and apply the emitted fragment: `cat zitadel/actions/.action-env.fragment >> .env`. |
 | `/zitadel` Rotation Status panel shows `warn` or `stale` | Signing key is older than the configured threshold | Run `make zitadel-actions-rotate-key`; apply the emitted fragment (`cat zitadel/actions/.action-env.fragment >> .env`, or `sudo install -m 0600 …` for systemd); restart the backend; delete the fragment. |
