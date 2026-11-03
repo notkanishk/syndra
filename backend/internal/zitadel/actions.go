@@ -133,7 +133,10 @@ const (
 )
 
 // searchAll pages a v2 search endpoint whose results are under "result".
-func searchAll[T any](ctx context.Context, c *managementClient, path string) ([]T, error) {
+// searchAll pages a v2 actions search. The list sits under a key named for
+// the resource ("targets", "executions"), not "result": reading "result" saw
+// an empty list on Zitadel v4 and reported the claims target missing.
+func searchAll[T any](ctx context.Context, c *managementClient, path, listKey string) ([]T, error) {
 	var out []T
 	for page := 0; page < actionsMaxPages; page++ {
 		body := map[string]any{"pagination": map[string]any{"offset": strconv.Itoa(page * actionsPageSize), "limit": actionsPageSize, "asc": true}}
@@ -146,18 +149,35 @@ func searchAll[T any](ctx context.Context, c *managementClient, path string) ([]
 		if err != nil {
 			return nil, err
 		}
-		var res struct {
-			Pagination struct {
-				TotalResult string `json:"totalResult"`
-			} `json:"pagination"`
-			Result []T `json:"result"`
-		}
+		var res map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &res); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
-		out = append(out, res.Result...)
-		total, _ := strconv.Atoi(res.Pagination.TotalResult)
-		if len(res.Result) < actionsPageSize || (total > 0 && len(out) >= total) {
+		var pagination struct {
+			TotalResult string `json:"totalResult"`
+		}
+		if p, ok := res["pagination"]; ok {
+			_ = json.Unmarshal(p, &pagination)
+		}
+		list, ok := res[listKey]
+		if !ok {
+			list, ok = res["result"] // older v2beta responses
+		}
+		total, _ := strconv.Atoi(pagination.TotalResult)
+		if !ok {
+			if total > 0 {
+				// Zitadel says there are rows but under a key we don't know: a
+				// contract change, never "none exist".
+				return nil, fmt.Errorf("%s: %d rows under an unknown key", path, total)
+			}
+			return out, nil
+		}
+		var page []T
+		if err := json.Unmarshal(list, &page); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		out = append(out, page...)
+		if len(page) < actionsPageSize || (total > 0 && len(out) >= total) {
 			return out, nil
 		}
 	}
@@ -165,11 +185,11 @@ func searchAll[T any](ctx context.Context, c *managementClient, path string) ([]
 }
 
 func (c *managementClient) ListActionTargets(ctx context.Context) ([]ActionTarget, error) {
-	return searchAll[ActionTarget](ctx, c, "/v2/actions/targets/search")
+	return searchAll[ActionTarget](ctx, c, "/v2/actions/targets/search", "targets")
 }
 
 func (c *managementClient) ListActionExecutions(ctx context.Context) ([]ActionExecution, error) {
-	return searchAll[ActionExecution](ctx, c, "/v2/actions/executions/search")
+	return searchAll[ActionExecution](ctx, c, "/v2/actions/executions/search", "executions")
 }
 
 // flowTypeComplementToken is FLOW_TYPE_CUSTOMISE_TOKEN in the v1 Management API.
