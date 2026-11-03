@@ -593,3 +593,28 @@ export function rowProblems(
     return null;
   });
 }
+
+/**
+ * What one call to the claims action came to, in a few plain words (S3): the
+ * backend's outcome classes, said so they follow a colon.
+ */
+export const OUTCOME_PHRASE: Record<string, string> = {
+  served: "served",
+  served_lkg: "served from Syndra's last copy",
+  degraded_no_facts: "their access wasn't built yet",
+  degraded_shape_unreadable: "the app's shape couldn't be read",
+  degraded_malformed: "their stored access couldn't be read",
+  no_grants: "the token named no project",
+  contract_fault: "Syndra's answer failed its own check",
+  refused_cross_project: "it asked for another project's access",
+  not_landing: "the shape sends nothing at that step",
+  unknown_function: "it came from a step Syndra doesn't know",
+  sig_missing: "unsigned, so not from Zitadel",
+  sig_stale: "its signature was too old",
+  sig_mismatch: "signed with a key Syndra doesn't hold",
+  bad_request: "Syndra couldn't read the call",
+  deadline_exceeded: "Syndra took too long to answer",
+  panic: "Syndra hit an error",
+};
+
+export const outcomePhrase = (o: string | undefined) => (o ? (OUTCOME_PHRASE[o] ?? o) : "");
