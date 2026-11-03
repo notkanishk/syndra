@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"syndra/internal/addons"
 	"syndra/internal/auth"
@@ -19,7 +18,7 @@ import (
 	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
 
-	"syndra/internal/claims"
+	"syndra/internal/claimserve"
 
 	"syndra/internal/services/periodic"
 )
@@ -307,43 +306,27 @@ var (
 	// Zitadel grant-API closures. Removing the handler-side closures makes the
 	// B4/D3 single-mutation-authority boundary structural, not just conventional.
 
-	// Data-plane injectable vars — used by HandleActionInject and degradedResponse.
-	// Separate from the control-plane vars above so tests can exercise the degraded
-	// paths without a live Redis instance or database connection.
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return db.Redis.Get(ctx, key).Result()
-	}
-	dbGetClaimFailureMode = db.GetClaimFailureMode
-
-	// Read-through cache for the per-project claim_failure_mode (audit ref C5).
-	// Layered in front of dbGetClaimFailureMode so a transient DB outage cannot
-	// collapse degraded-mode behaviour into fail_closed for projects whose
-	// operator configured minimal_safe.
-	redisGetClaimMode = func(ctx context.Context, projectID string) (string, error) {
-		return db.Redis.Get(ctx, "claim_mode:"+projectID).Result()
-	}
-	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
-		return db.Redis.SetEx(ctx, "claim_mode:"+projectID, value, time.Duration(ttlSeconds)*time.Second).Err()
-	}
-
-	// Claim shaping. dbResolveProjectShapes is the data plane's read of the
-	// project's shapes (each app's and the default); the Redis pair in front keeps that
-	// read off the token hot path, and redisDelKeys drops the cached shape the
-	// moment an operator saves so an edit is never one TTL late.
+	// The write side of the claims snapshot (claimserve, ADR-004): what a save
+	// resolves from Postgres and publishes through Redis. The data plane reads
+	// none of these; it reads claimPlane.
 	dbResolveProjectShapes = services.ResolveProjectShapes
-	redisGetKey            = func(ctx context.Context, key string) (string, error) {
-		return db.Redis.Get(ctx, key).Result()
+	dbGetClaimMode         = db.GetClaimMode
+	dbClaimConfigProjects  = db.ClaimConfigProjects
+	dirProjectIDs          = func(ctx context.Context) ([]string, error) {
+		projects, err := directory.Default.Projects(ctx)
+		ids := make([]string, 0, len(projects))
+		for _, p := range projects {
+			ids = append(ids, p.ID)
+		}
+		return ids, err
 	}
-	redisSetKey = func(ctx context.Context, key, value string, ttlSeconds int) error {
-		return db.Redis.SetEx(ctx, key, value, time.Duration(ttlSeconds)*time.Second).Err()
-	}
-	redisDelKeys = func(ctx context.Context, keys ...string) error {
-		return db.Redis.Del(ctx, keys...).Err()
+	claimConfigRedis = func() claimserve.Redis {
+		if db.Redis == nil {
+			return nil
+		}
+		return db.Redis
 	}
 
-	// shapeClaims is internal/claims.Shape, the only shaper; a var so a test
-	// can make it panic and prove the data plane survives that.
-	shapeClaims = claims.Shape
 	// cacheRefreshUser recompiles a person after a facts miss (repair on miss).
 	cacheRefreshUser = cache.RefreshUser
 

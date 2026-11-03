@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 
 	"syndra/internal/cache"
 	"syndra/internal/claims"
+	"syndra/internal/claimserve"
+	"syndra/internal/claimserve/claimservetest"
 	"syndra/internal/claimtel"
 	"syndra/internal/db"
 	"syndra/internal/services"
@@ -87,13 +90,12 @@ func TestClaimDelivery_EveryPathHasItsOutcome(t *testing.T) {
 	accessOnly.Lands = claims.LandsAccessToken
 
 	cases := []struct {
-		name    string
-		body    string
-		facts   func(context.Context, string) (string, error)
-		shapes  *services.ProjectShapes
-		shapeKV func(context.Context, string) (string, error)
-		want    claimtel.Outcome
-		status  int
+		name   string
+		body   string
+		facts  *string // nil: the person's facts are stored
+		shapes *services.ProjectShapes
+		want   claimtel.Outcome
+		status int
 	}{
 		{name: "served", body: body(pre, `[{"project_id":"p1","roles":["admin"]}]`, ""), want: claimtel.Served, status: 200},
 		{name: "unknown function", body: body("function/somethingnew", `[{"project_id":"p1"}]`, ""), want: claimtel.UnknownFunction, status: 200},
@@ -106,65 +108,52 @@ func TestClaimDelivery_EveryPathHasItsOutcome(t *testing.T) {
 		{name: "grants not a list", body: body(pre, `{"project_id":"p1"}`, ""), want: claimtel.ContractFault, status: 200},
 		{name: "user.id missing", body: `{"function":"function/preaccesstoken","user":{}}`, want: claimtel.ContractFault, status: 400},
 		{name: "cross project", body: body(pre, `[{"project_id":"p1"},{"project_id":"p2"}]`, ""), want: claimtel.RefusedCrossProject, status: 200},
-		{name: "no facts", body: body(pre, `[{"project_id":"p1"}]`, ""),
-			facts: func(context.Context, string) (string, error) { return "", redis.Nil }, want: claimtel.DegradedNoFacts, status: 200},
-		{name: "malformed facts", body: body(pre, `[{"project_id":"p1"}]`, ""),
-			facts: func(context.Context, string) (string, error) { return "{{", nil }, want: claimtel.DegradedMalformed, status: 200},
-		{name: "shape cache unreadable", body: body(pre, `[{"project_id":"p1"}]`, ""),
-			shapeKV: func(context.Context, string) (string, error) { return "", errors.New("connection refused") },
-			want:    claimtel.DegradedShapeUnreadable, status: 200},
+		{name: "no facts", body: body(pre, `[{"project_id":"p1"}]`, ""), facts: ptr(""), want: claimtel.DegradedNoFacts, status: 200},
+		{name: "malformed facts", body: body(pre, `[{"project_id":"p1"}]`, ""), facts: ptr("{{"), want: claimtel.DegradedMalformed, status: 200},
+		{name: "project never published", body: body(pre, `[{"project_id":"pNew"}]`, ""), want: claimtel.DegradedShapeUnreadable, status: 200},
 		{name: "not JSON", body: `not-json`, want: claimtel.BadRequest, status: 400},
 		{name: "JSON but not an object", body: `[1]`, want: claimtel.BadRequest, status: 400},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetActionDeps(t, redisGetClaims, dbGetClaimFailureMode)
-			log := captureCalls(t)
-			redisGetClaims = func(context.Context, string) (string, error) { return factsJSON("u1", "p1", "admin"), nil }
-			if tc.facts != nil {
-				redisGetClaims = tc.facts
-			}
+			ps := services.ProjectShapes{}
 			if tc.shapes != nil {
-				stubProjectShapes(*tc.shapes)
+				ps = *tc.shapes
 			}
-			pgShapes := 0
-			if tc.shapeKV != nil {
-				redisGetKey = tc.shapeKV
-				dbResolveProjectShapes = func(context.Context, string) (services.ProjectShapes, error) {
-					pgShapes++
-					return services.ProjectShapes{Default: claims.Builtin()}, nil
-				}
+			r := testPlane(t, map[string]claimserve.Project{"p1": project(ps, failClosed), "p2": project(services.ProjectShapes{}, failClosed)})
+			log := captureCalls(t)
+			switch {
+			case tc.facts == nil:
+				setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
+			case *tc.facts != "":
+				setFacts(r, "u1", "p1", *tc.facts)
 			}
-			dbGetClaimFailureMode = func(context.Context, string) (string, map[string]interface{}, error) { return "fail_closed", nil, nil }
 
 			rr, _ := postInject(t, tc.body, nil)
 			got := log.last(t)
 			if got.Outcome != tc.want || rr.Code != tc.status {
 				t.Fatalf("outcome %s / HTTP %d, want %s / %d (body %s)", got.Outcome, rr.Code, tc.want, tc.status, rr.Body.String())
 			}
-			if pgShapes != 0 {
-				t.Errorf("Redis erroring (not missing) still read Postgres for the shapes (F-10)")
-			}
-			if tc.want == claimtel.Served && (got.ProjectID != "p1" || got.ClientID != "c1" || got.Function != pre || len(got.Body) == 0) {
+			if tc.want == claimtel.Served && (got.ProjectID != "p1" || got.ClientID != "c1" || got.Function != pre || len(got.Body) == 0 || got.Gen == 0) {
 				t.Errorf("dimensions not carried: %+v", got)
 			}
 		})
 	}
 }
 
+func ptr(s string) *string { return &s }
+
 // A miss is a repair signal; Redis erroring is not (a compile cannot help it).
 func TestClaimDelivery_MissEnqueuesARepair(t *testing.T) {
 	devMode(t)
-	resetActionDeps(t, redisGetClaims, dbGetClaimFailureMode)
+	r := builtinPlane(t)
 	captureCalls(t)
-	dbGetClaimFailureMode = func(context.Context, string) (string, map[string]interface{}, error) { return "fail_closed", nil, nil }
 
-	redisGetClaims = func(context.Context, string) (string, error) { return "", redis.Nil }
 	postInject(t, `{"function":"function/preaccesstoken","user":{"id":"uMiss"},"user_grants":[{"project_id":"p1"}]}`, nil)
 	if _, ok := claimRepair.pending.Load("uMiss"); !ok {
 		t.Error("a facts miss did not ask for a recompile")
 	}
-	redisGetClaims = func(context.Context, string) (string, error) { return "", errors.New("i/o timeout") }
+	r.Fail(errors.New("i/o timeout"))
 	postInject(t, `{"function":"function/preaccesstoken","user":{"id":"uDown"},"user_grants":[{"project_id":"p1"}]}`, nil)
 	if _, ok := claimRepair.pending.Load("uDown"); ok {
 		t.Error("Redis being down asked for a recompile")
@@ -178,9 +167,9 @@ func TestClaimDelivery_SignatureOutcomes(t *testing.T) {
 	const key = "0123456789abcdef0123456789abcdef"
 	t.Setenv("ZITADEL_DOMAIN", "zitadel.example.edu")
 	t.Setenv("ZITADEL_ACTION_SIGNING_KEY", key)
-	resetActionDeps(t, redisGetClaims, dbGetClaimFailureMode)
+	r := builtinPlane(t)
+	setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
 	log := captureCalls(t)
-	redisGetClaims = func(context.Context, string) (string, error) { return factsJSON("u1", "p1", "admin"), nil }
 	b := body(pre, `[{"project_id":"p1"}]`, "")
 	sign := func(at time.Time, secret string) http.Header {
 		return http.Header{"Zitadel-Signature": {fmt.Sprintf("t=%d,v1=%x", at.Unix(), computeZitadelActionSignature(at, []byte(b), secret))}}
@@ -198,16 +187,26 @@ func TestClaimDelivery_SignatureOutcomes(t *testing.T) {
 		{"garbled", http.Header{"Zitadel-Signature": {"t=abc,v1=zz"}}, claimtel.SigMismatch, 401},
 		{"good", sign(time.Now(), key), claimtel.Served, 200},
 	} {
-		rr, _ := postInject(t, b, tc.header)
-		got := log.last(t)
-		if got.Outcome != tc.want || rr.Code != tc.status {
-			t.Fatalf("%s: outcome %s / HTTP %d, want %s / %d", tc.name, got.Outcome, rr.Code, tc.want, tc.status)
-		}
-		if tc.status == 401 && (got.ClientID != "" || got.Function != "" || got.KeySlot != "") {
-			t.Errorf("%s: a refused call carried dimensions: %+v", tc.name, got)
-		}
-		if tc.want == claimtel.Served && got.KeySlot != claimtel.KeySlotCurrent {
-			t.Errorf("verified call key slot = %q", got.KeySlot)
+		for _, door := range []struct {
+			name string
+			h    http.Handler
+		}{{"admin router", NewRouter()}, {"claims router", NewClaimsRouter()}} {
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(b))
+			for k, v := range tc.header {
+				req.Header[k] = v
+			}
+			door.h.ServeHTTP(rr, req)
+			got := log.last(t)
+			if got.Outcome != tc.want || rr.Code != tc.status {
+				t.Fatalf("%s via %s: outcome %s / HTTP %d, want %s / %d", tc.name, door.name, got.Outcome, rr.Code, tc.want, tc.status)
+			}
+			if tc.status == 401 && (got.ClientID != "" || got.Function != "" || got.KeySlot != "") {
+				t.Errorf("%s: a refused call carried dimensions: %+v", tc.name, got)
+			}
+			if tc.want == claimtel.Served && got.KeySlot != claimtel.KeySlotCurrent {
+				t.Errorf("verified call key slot = %q", got.KeySlot)
+			}
 		}
 	}
 }
@@ -218,13 +217,44 @@ func TestClaimDelivery_SignatureOutcomes(t *testing.T) {
 // logs its measured time.
 // ---------------------------------------------------------------------------
 
-// realRedis points the data plane's real Redis closures at addr, through the
-// production client options (db.NewRedisClient).
-func realRedis(t *testing.T, addr string) {
+// splitRedis serves the snapshot's config from Redis and the facts reads
+// from facts, which a test swaps for a real client against a faulty address.
+type splitRedis struct {
+	claimserve.Redis
+	facts claimserve.Redis
+}
+
+func (s *splitRedis) HGet(ctx context.Context, key, field string) *redis.StringCmd {
+	return s.facts.HGet(ctx, key, field)
+}
+
+func (s *splitRedis) Get(ctx context.Context, key string) *redis.StringCmd {
+	if key == claimserve.GenKey {
+		return s.Redis.Get(ctx, key)
+	}
+	return s.facts.Get(ctx, key)
+}
+
+// realFacts is a plane that served u1 once from a healthy Redis (so the
+// last-known-good copy holds them), whose facts reads then go through the
+// production client options (db.NewRedisClient) to addr.
+func realFacts(t *testing.T, addr string, mode claimserve.Mode) {
 	t.Helper()
-	orig := db.Redis
-	db.Redis = db.NewRedisClient(addr)
-	t.Cleanup(func() { _ = db.Redis.Close(); db.Redis = orig })
+	mem := claimservetest.New()
+	_, _ = claimserve.Publish(context.Background(), mem, map[string]claimserve.Project{"p1": project(services.ProjectShapes{}, mode)})
+	setFacts(mem, "u1", "p1", factsJSON("u1", "p1", "admin"))
+	split := &splitRedis{Redis: mem, facts: mem}
+	p := claimserve.New(split, nil)
+	_ = p.Poll(context.Background())
+	orig := claimPlane
+	claimPlane = p
+	t.Cleanup(func() { claimPlane = orig })
+	if res := p.Answer(context.Background(), "u1", "p1", "c1", pre); res.Outcome != claimtel.Served {
+		t.Fatalf("warm-up: %+v", res)
+	}
+	client := db.NewRedisClient(addr)
+	t.Cleanup(func() { _ = client.Close() })
+	split.facts = client
 }
 
 // hungRedis accepts connections and never answers: a stopped process, an AOF
@@ -271,24 +301,27 @@ func refusedRedis(t *testing.T) string {
 	return addr
 }
 
-// slowUntilCancelled is Postgres that answers only after the caller gave up:
-// a lock, a saturated pool, a stalled disk.
-func slowShapes(ctx context.Context, _ string) (services.ProjectShapes, error) {
-	select {
-	case <-ctx.Done():
-		return services.ProjectShapes{}, ctx.Err()
-	case <-time.After(5 * time.Second):
-		return services.ProjectShapes{Default: claims.Builtin()}, nil
+// failPostgres makes every Postgres read the write side owns fail, slowly.
+// The data plane must not notice: it reads none of them.
+func failPostgres(t *testing.T) *atomic.Int64 {
+	t.Helper()
+	rs, cm, cp := dbResolveProjectShapes, dbGetClaimMode, dbClaimConfigProjects
+	t.Cleanup(func() { dbResolveProjectShapes, dbGetClaimMode, dbClaimConfigProjects = rs, cm, cp })
+	var reads atomic.Int64
+	slow := func(ctx context.Context) error {
+		reads.Add(1)
+		select {
+		case <-ctx.Done():
+		case <-time.After(5 * time.Second):
+		}
+		return errors.New("connection refused")
 	}
-}
-
-func slowMode(ctx context.Context, _ string) (string, map[string]interface{}, error) {
-	select {
-	case <-ctx.Done():
-		return "", nil, ctx.Err()
-	case <-time.After(5 * time.Second):
-		return "minimal_safe", map[string]interface{}{"role": "guest"}, nil
+	dbResolveProjectShapes = func(ctx context.Context, _ string) (services.ProjectShapes, error) {
+		return services.ProjectShapes{}, slow(ctx)
 	}
+	dbGetClaimMode = func(ctx context.Context, _ string) (db.ClaimMode, error) { return db.ClaimMode{}, slow(ctx) }
+	dbClaimConfigProjects = func(ctx context.Context) ([]string, error) { return nil, slow(ctx) }
+	return &reads
 }
 
 const faultBudget = 300 * time.Millisecond
@@ -296,91 +329,71 @@ const faultBudget = 300 * time.Millisecond
 func TestClaimDelivery_FaultInjection(t *testing.T) {
 	devMode(t)
 	b := body(pre, `[{"project_id":"p1","roles":["admin"]}]`, "")
-	minimalSafe := func(context.Context, string) (string, map[string]interface{}, error) {
-		return "minimal_safe", map[string]interface{}{"role": "guest"}, nil
-	}
+	guest := claimserve.Mode{Mode: claimserve.MinimalSafe, MinimalSafeClaims: map[string]any{"role": "guest"}}
 
 	for _, tc := range []struct {
 		name      string
 		setup     func(t *testing.T)
+		user      string
 		want      claimtel.Outcome
 		status    int
-		wantGuest bool // the project's minimal_safe answer still reached the token
+		wantRoles bool // the person's roles still reached the token
+		wantGuest bool // the project's minimal_safe answer reached it instead
 	}{
-		{name: "redis hung", setup: func(t *testing.T) {
-			realRedis(t, hungRedis(t))
-			dbResolveProjectShapes = slowShapes // must never be reached: F-10
-			dbGetClaimFailureMode = minimalSafe
-		}, want: claimtel.DegradedShapeUnreadable, status: 200, wantGuest: true},
-		{name: "redis refused", setup: func(t *testing.T) {
-			realRedis(t, refusedRedis(t))
-			dbResolveProjectShapes = slowShapes
-			dbGetClaimFailureMode = minimalSafe
-		}, want: claimtel.DegradedShapeUnreadable, status: 200, wantGuest: true},
-		{name: "postgres slow", setup: func(t *testing.T) {
-			stubMissingRedis()
-			dbResolveProjectShapes = slowShapes
-			dbGetClaimFailureMode = slowMode
-		}, want: claimtel.DeadlineExceeded, status: 200},
-		{name: "postgres failing", setup: func(t *testing.T) {
-			stubMissingRedis()
-			dbResolveProjectShapes = func(context.Context, string) (services.ProjectShapes, error) {
-				return services.ProjectShapes{}, errors.New("connection refused")
-			}
-			dbGetClaimFailureMode = func(context.Context, string) (string, map[string]interface{}, error) {
-				return "", nil, errors.New("connection refused")
-			}
-		}, want: claimtel.DegradedShapeUnreadable, status: 200},
+		{name: "redis hung, person served before", setup: func(t *testing.T) { realFacts(t, hungRedis(t), guest) },
+			user: "u1", want: claimtel.ServedLKG, status: 200, wantRoles: true},
+		{name: "redis refused, person served before", setup: func(t *testing.T) { realFacts(t, refusedRedis(t), guest) },
+			user: "u1", want: claimtel.ServedLKG, status: 200, wantRoles: true},
+		{name: "redis hung, person never served", setup: func(t *testing.T) { realFacts(t, hungRedis(t), guest) },
+			user: "u2", want: claimtel.DegradedNoFacts, status: 200, wantGuest: true},
+		{name: "postgres down and slow", setup: func(t *testing.T) {
+			r := testPlane(t, map[string]claimserve.Project{"p1": project(services.ProjectShapes{}, guest)})
+			setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
+			reads := failPostgres(t)
+			t.Cleanup(func() {
+				if reads.Load() != 0 {
+					t.Errorf("the data plane read Postgres %d times", reads.Load())
+				}
+			})
+		}, user: "u1", want: claimtel.Served, status: 200, wantRoles: true},
 		{name: "panic in the shaper", setup: func(t *testing.T) {
-			stubMissingRedis()
-			redisGetClaims = func(context.Context, string) (string, error) { return factsJSON("u1", "p1", "admin"), nil }
-			stubProjectShapes(services.ProjectShapes{Default: claims.Builtin()})
-			shapeClaims = func(claims.Profile, claims.Facts) *claims.Object { panic("shaper bug") }
-		}, want: claimtel.Panic, status: 500},
+			r := builtinPlane(t)
+			setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
+			claimPlane.Shaper = func(claims.Profile, claims.Facts, time.Time) *claims.Object { panic("shaper bug") }
+		}, user: "u1", want: claimtel.Panic, status: 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			saveDataPlaneDeps(t)
 			log := captureCalls(t)
 			tc.setup(t)
 
-			rr, elapsed := postInject(t, b, nil)
-			got := log.last(t)
-			t.Logf("measured: %s answered HTTP %d as %s in %s", tc.name, rr.Code, got.Outcome, elapsed.Round(time.Millisecond))
-			if elapsed > faultBudget {
-				t.Errorf("answered in %s, budget %s", elapsed, faultBudget)
-			}
-			if got.Outcome != tc.want || rr.Code != tc.status {
-				t.Fatalf("outcome %s / HTTP %d, want %s / %d (%s)", got.Outcome, rr.Code, tc.want, tc.status, rr.Body.String())
-			}
-			if tc.wantGuest {
+			body := strings.Replace(b, `"id":"u1"`, fmt.Sprintf(`"id":%q`, tc.user), 1)
+			for _, door := range []struct {
+				name string
+				h    http.Handler
+			}{{"admin router", NewRouter()}, {"claims router", NewClaimsRouter()}} {
+				rr := httptest.NewRecorder()
+				start := time.Now()
+				door.h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(body)))
+				elapsed := time.Since(start)
+				got := log.last(t)
+				t.Logf("measured: %s via %s answered HTTP %d as %s in %s", tc.name, door.name, rr.Code, got.Outcome, elapsed.Round(time.Millisecond))
+				if elapsed > faultBudget {
+					t.Errorf("answered in %s, budget %s", elapsed, faultBudget)
+				}
+				if got.Outcome != tc.want || rr.Code != tc.status {
+					t.Fatalf("outcome %s / HTTP %d, want %s / %d (%s)", got.Outcome, rr.Code, tc.want, tc.status, rr.Body.String())
+				}
 				var resp ActionV2Response
 				_ = json.Unmarshal(rr.Body.Bytes(), &resp)
-				if c, ok := claimByKey(resp.AppendClaims, "role"); !ok || c.Value != "guest" {
+				if _, ok := claimByKey(resp.AppendClaims, "roles"); tc.wantRoles && !ok {
+					t.Errorf("the roles did not reach the token: %s", rr.Body.String())
+				}
+				if c, ok := claimByKey(resp.AppendClaims, "role"); tc.wantGuest && (!ok || c.Value != "guest") {
 					t.Errorf("the failure mode did not answer: %s", rr.Body.String())
 				}
 			}
 		})
 	}
-}
-
-// saveDataPlaneDeps restores every data-plane seam a fault test may replace.
-func saveDataPlaneDeps(t *testing.T) {
-	t.Helper()
-	g, gk, sk, gm, sm := redisGetClaims, redisGetKey, redisSetKey, redisGetClaimMode, redisSetClaimMode
-	rs, fm, sh := dbResolveProjectShapes, dbGetClaimFailureMode, shapeClaims
-	t.Cleanup(func() {
-		redisGetClaims, redisGetKey, redisSetKey, redisGetClaimMode, redisSetClaimMode = g, gk, sk, gm, sm
-		dbResolveProjectShapes, dbGetClaimFailureMode, shapeClaims = rs, fm, sh
-	})
-}
-
-// stubMissingRedis is a Redis that answers at once and holds nothing.
-func stubMissingRedis() {
-	redisGetClaims = func(context.Context, string) (string, error) { return "", redis.Nil }
-	redisGetKey = func(context.Context, string) (string, error) { return "", redis.Nil }
-	redisSetKey = func(context.Context, string, string, int) error { return nil }
-	redisGetClaimMode = func(context.Context, string) (string, error) { return "", redis.Nil }
-	redisSetClaimMode = func(context.Context, string, string, int) error { return nil }
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +477,7 @@ func stubHealthDeps(t *testing.T, redisErr error, warm *cache.WarmReport, panics
 		return *warm, true
 	}
 	backgroundPanics = func() int64 { return panics }
+	builtinPlane(t) // a loaded snapshot with one project
 }
 
 func getHealth(t *testing.T) (int, claimsHealth, string) {
@@ -535,6 +549,34 @@ func TestClaimsHealth(t *testing.T) {
 		_ = r.Flush(context.Background(), func(context.Context, claimtel.Batch) error { return errors.New("down") })
 		if _, h, _ := getHealth(t); h.Status != "degraded" || h.TelemetryFailed != 1 {
 			t.Fatalf("%+v", h)
+		}
+	})
+	// The snapshot (S2): none loaded is failing (every call answers fail
+	// closed); loaded but empty, or not confirmed by Redis for 10s, degraded.
+	t.Run("the snapshot", func(t *testing.T) {
+		freshRecorder(t)
+		stubHealthDeps(t, nil, goodWarm, 0)
+		orig := claimPlane
+		t.Cleanup(func() { claimPlane = orig })
+
+		claimPlane = claimserve.New(nil, nil)
+		if code, h, _ := getHealth(t); code != 503 || h.Reasons[0] != "SNAPSHOT_NOT_LOADED" || h.Snapshot.Loaded {
+			t.Fatalf("not loaded: %d %+v", code, h)
+		}
+		testPlane(t, nil)
+		if _, h, _ := getHealth(t); h.Status != "degraded" || h.Reasons[0] != "SNAPSHOT_EMPTY" {
+			t.Fatalf("empty: %+v", h)
+		}
+		r := claimservetest.New()
+		_, _ = claimserve.Publish(context.Background(), r, map[string]claimserve.Project{"p1": project(services.ProjectShapes{}, failClosed)})
+		at := time.Now()
+		claimPlane = claimserve.New(r, func() time.Time { return at })
+		_ = claimPlane.Poll(context.Background())
+		r.Fail(errors.New("down"))
+		at = at.Add(11 * time.Second)
+		_ = claimPlane.Poll(context.Background())
+		if _, h, _ := getHealth(t); h.Status != "degraded" || h.Reasons[0] != "SNAPSHOT_STALE" || h.Snapshot.Failures != 1 || h.Snapshot.Gen != 1 {
+			t.Fatalf("stale: %+v", h)
 		}
 	})
 }

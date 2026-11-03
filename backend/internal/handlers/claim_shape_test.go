@@ -18,23 +18,23 @@ import (
 
 type auditLine struct{ actor, target, action, resource string }
 
-// stubClaimHandlers records audits and cache drops for the claim endpoints.
+// stubClaimHandlers records audits and the projects each claim endpoint
+// published to the data plane's snapshot.
 func stubClaimHandlers(t *testing.T) (*[]auditLine, *[]string) {
 	t.Helper()
-	origAudit, origDel := dbInsertAuditLog, redisDelKeys
+	origAudit := dbInsertAuditLog
 	origFind, origUser, origSave := svcFindApplication, svcDebugFindUser, svcSaveAppClaimShape
 	origGet := svcGetAppClaimShape
 	t.Cleanup(func() {
-		dbInsertAuditLog, redisDelKeys = origAudit, origDel
+		dbInsertAuditLog = origAudit
 		svcFindApplication, svcDebugFindUser, svcSaveAppClaimShape, svcGetAppClaimShape = origFind, origUser, origSave, origGet
 	})
 	var audits []auditLine
-	var dropped []string
+	dropped := publishRecorder(t)
 	dbInsertAuditLog = func(_ context.Context, actor, target, action, resource string) error {
 		audits = append(audits, auditLine{actor, target, action, resource})
 		return nil
 	}
-	redisDelKeys = func(_ context.Context, keys ...string) error { dropped = append(dropped, keys...); return nil }
 	svcFindApplication = func(_ context.Context, id string) (models.ApplicationCatalog, bool, error) {
 		switch id {
 		case "aNB":
@@ -47,7 +47,7 @@ func stubClaimHandlers(t *testing.T) (*[]auditLine, *[]string) {
 	svcDebugFindUser = func(_ context.Context, id string) (models.UserProfile, bool, error) {
 		return models.UserProfile{ID: id}, id == "aanya", nil
 	}
-	return &audits, &dropped
+	return &audits, dropped
 }
 
 func asOperator(req *http.Request, id string) *http.Request {
@@ -87,7 +87,7 @@ func TestSaveAppClaimShape_HTTP(t *testing.T) {
 	}
 	rr := save(`{"profile":{"claims":[{"path":["groups"],"kind":"roles"}],"lands":"both"},"acknowledge_breaking":true}`)
 	if rr.Code != http.StatusOK || len(*audits) != 1 || (*audits)[0] != (auditLine{"op_1", "aNB", "claim_shape.saved", "aNB"}) ||
-		len(*dropped) != 1 || (*dropped)[0] != claimShapeCacheKey("pNet") {
+		len(*dropped) != 1 || (*dropped)[0] != "pNet" {
 		t.Fatalf("saved: %d audits=%v dropped=%v", rr.Code, *audits, *dropped)
 	}
 }

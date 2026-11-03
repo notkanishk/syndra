@@ -121,6 +121,7 @@ type LastCall struct {
 	Function string
 	Outcome  Outcome
 	MS       float64
+	Gen      int64 // the snapshot that answered: each answer is reproducible
 }
 
 type pairKey struct{ user, client string }
@@ -248,7 +249,7 @@ func (r *Recorder) Record(c Call) {
 				break
 			}
 		}
-		s.pairs[pk] = LastCall{At: c.At, Function: key.Function, Outcome: c.Outcome, MS: ms}
+		s.pairs[pk] = LastCall{At: c.At, Function: key.Function, Outcome: c.Outcome, MS: ms, Gen: c.Gen}
 	}
 	s.mu.Unlock()
 

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Format identifiers accepted for a roles claim. Mirrors the
@@ -264,6 +265,33 @@ func (p Profile) role(key string) (bool, string) {
 		}
 	}
 	return p.IncludeNew, key
+}
+
+// HeldOn is f without the roles whose end date is before day (UTC). Facts are
+// compiled ahead of time, so a role can end between its compile and a token;
+// the expiry sweep recompiles, and this is the belt beside it (assessment D4,
+// P9). A role still held on its end date is kept: the date is the last day.
+func (f Facts) HeldOn(day time.Time) Facts {
+	if len(f.RoleEnds) == 0 {
+		return f
+	}
+	today := day.UTC().Format(time.DateOnly)
+	kept := make([]string, 0, len(f.Roles))
+	for _, r := range f.Roles {
+		if end, ok := f.RoleEnds[r]; ok && end < today {
+			continue
+		}
+		kept = append(kept, r)
+	}
+	f.Roles = kept
+	return f
+}
+
+// ShapeAt is Shape on the facts as they stand at now. Every caller that shows
+// or serves a token uses it, so the preview and the data plane drop the same
+// ended roles.
+func ShapeAt(p Profile, f Facts, now time.Time) *Object {
+	return Shape(p, f.HeldOn(now))
 }
 
 // Shape renders one profile against one set of facts, rows in order.

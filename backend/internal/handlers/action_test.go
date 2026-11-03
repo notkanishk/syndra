@@ -3,50 +3,61 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/redis/go-redis/v9"
-
 	"syndra/internal/claims"
+	"syndra/internal/claimserve"
+	"syndra/internal/claimserve/claimservetest"
 	"syndra/internal/services"
 )
 
-// resetActionDeps restores the injectable vars used by HandleActionInject and
-// degradedResponse. Stubs the claim_mode read-through cache vars to bypass
-// Redis (always miss → DB) so legacy tests that only configure
-// dbGetClaimFailureMode keep flowing through to the DB stub.
-//
-// The claim-shape read-through is stubbed the same way: Redis always misses
-// and dbResolveProjectShapes returns the built-in default, so tests that care
-// about degraded behaviour rather than shaping stay short.
-func resetActionDeps(t *testing.T, origRedis func(context.Context, string) (string, error), origMode func(context.Context, string) (string, map[string]interface{}, error)) {
+// testPlane installs a loaded data plane over an in-memory Redis with these
+// projects published, as the write side would have left them. Every project a
+// test names but does not pass answers as never published.
+func testPlane(t *testing.T, projects map[string]claimserve.Project) *claimservetest.Redis {
 	t.Helper()
-	origGetMode, origSetMode := redisGetClaimMode, redisSetClaimMode
-	origGetKey, origSetKey, origResolve := redisGetKey, redisSetKey, dbResolveProjectShapes
-	redisGetClaimMode = func(context.Context, string) (string, error) { return "", redis.Nil }
-	redisSetClaimMode = func(context.Context, string, string, int) error { return nil }
-	redisGetKey = func(context.Context, string) (string, error) { return "", redis.Nil }
-	redisSetKey = func(context.Context, string, string, int) error { return nil }
-	stubProjectShapes(services.ProjectShapes{Default: claims.Builtin(), DefaultSource: services.SourceBuiltin})
-	t.Cleanup(func() {
-		redisGetClaims = origRedis
-		dbGetClaimFailureMode = origMode
-		redisGetClaimMode = origGetMode
-		redisSetClaimMode = origSetMode
-		redisGetKey = origGetKey
-		redisSetKey = origSetKey
-		dbResolveProjectShapes = origResolve
-	})
+	r := claimservetest.New()
+	if _, err := claimserve.Publish(context.Background(), r, projects); err != nil {
+		t.Fatal(err)
+	}
+	p := claimserve.New(r, nil)
+	if err := p.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	orig := claimPlane
+	claimPlane = p
+	t.Cleanup(func() { claimPlane = orig })
+	return r
 }
 
-// stubProjectShapes makes every project resolve to ps.
-func stubProjectShapes(ps services.ProjectShapes) {
-	dbResolveProjectShapes = func(context.Context, string) (services.ProjectShapes, error) { return ps, nil }
+// project is one project's published config: shapes and a failure mode.
+func project(ps services.ProjectShapes, mode claimserve.Mode) claimserve.Project {
+	if ps.Default.Lands == "" {
+		ps.Default = claims.Builtin()
+	}
+	return claimserve.Project{Shapes: ps, Mode: mode}
+}
+
+var failClosed = claimserve.Mode{Mode: claimserve.FailClosed}
+
+// builtinPlane publishes p1 with the built-in shape, failing closed.
+func builtinPlane(t *testing.T, projectIDs ...string) *claimservetest.Redis {
+	t.Helper()
+	if len(projectIDs) == 0 {
+		projectIDs = []string{"p1"}
+	}
+	ps := map[string]claimserve.Project{}
+	for _, id := range projectIDs {
+		ps[id] = project(services.ProjectShapes{}, failClosed)
+	}
+	return testPlane(t, ps)
+}
+
+func setFacts(r *claimservetest.Redis, userID, projectID, factsJSON string) {
+	r.HSet(claimserve.FactsKey(userID), projectID, factsJSON)
 }
 
 // factsJSON builds the cache body the compiler writes: facts, not claims.
@@ -55,7 +66,7 @@ func factsJSON(userID, projectID string, roles ...string) string {
 		Roles:      roles,
 		UserID:     userID,
 		ProjectID:  projectID,
-		Email:      userID + "@makerspace.local",
+		Email:      userID + "@example.edu",
 		Name:       "Test " + userID,
 		Team:       "Fabrication",
 		CompiledAt: "2026-07-30T11:04:00Z",
@@ -82,14 +93,14 @@ func claimByKey(claims []ActionV2Claim, key string) (ActionV2Claim, bool) {
 	return ActionV2Claim{}, false
 }
 
-// v2Body builds a minimal v2 function-trigger request body for a single user
-// and grant list.
 // rolesJSON is a grant row's roles as Zitadel sends them.
 func rolesJSON(roles ...string) json.RawMessage {
 	b, _ := json.Marshal(roles)
 	return b
 }
 
+// v2Body builds a minimal v2 function-trigger request body for a single user
+// and grant list.
 func v2Body(userID string, grants ...ActionV2UserGrantRef) string {
 	b, _ := json.Marshal(map[string]interface{}{
 		"function":    "function/preaccesstoken",
@@ -99,138 +110,50 @@ func v2Body(userID string, grants ...ActionV2UserGrantRef) string {
 	return string(b)
 }
 
-func TestHandleActionInject_CacheMissFailClosed(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return "", fmt.Errorf("redis: nil")
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		return "fail_closed", nil, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
+func inject(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
 	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
+	HandleActionInject(rr, httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(body)))
+	return rr
+}
 
+func TestHandleActionInject_CacheMissFailClosed(t *testing.T) {
+	builtinPlane(t)
+	rr := inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")}))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	got := decodeActionResponse(t, rr)
-	if len(got.AppendClaims) != 0 {
+	if got := decodeActionResponse(t, rr); len(got.AppendClaims) != 0 {
 		t.Fatalf("fail_closed: expected empty append_claims, got %v", got.AppendClaims)
 	}
 }
 
 func TestHandleActionInject_CacheMissMinimalSafe(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return "", fmt.Errorf("redis: nil")
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		return "minimal_safe", map[string]interface{}{"role": "guest"}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("viewer")})))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	got := decodeActionResponse(t, rr)
-	claim, ok := claimByKey(got.AppendClaims, "role")
-	if !ok {
-		t.Fatalf("minimal_safe: expected claim key=role, got %v", got.AppendClaims)
-	}
-	if claim.Value != "guest" {
-		t.Fatalf("minimal_safe: expected role=guest, got %v", claim.Value)
+	testPlane(t, map[string]claimserve.Project{"p1": project(services.ProjectShapes{},
+		claimserve.Mode{Mode: claimserve.MinimalSafe, MinimalSafeClaims: map[string]any{"role": "guest"}})})
+	got := decodeActionResponse(t, inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("viewer")})))
+	if claim, ok := claimByKey(got.AppendClaims, "role"); !ok || claim.Value != "guest" {
+		t.Fatalf("minimal_safe: expected role=guest, got %v", got.AppendClaims)
 	}
 }
 
 func TestHandleActionInject_MalformedCache_FailClosed(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return "not-valid-json{{", nil
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		return "fail_closed", nil, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	got := decodeActionResponse(t, rr)
-	if len(got.AppendClaims) != 0 {
+	r := builtinPlane(t)
+	setFacts(r, "u1", "p1", "not-valid-json{{")
+	if got := decodeActionResponse(t, inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1"}))); len(got.AppendClaims) != 0 {
 		t.Fatalf("malformed cache fail_closed: expected empty append_claims, got %v", got.AppendClaims)
 	}
 }
 
-func TestHandleActionInject_DBOutage_DefaultsToFailClosed(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return "", fmt.Errorf("redis: nil")
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		return "fail_closed", nil, fmt.Errorf("DB connection refused")
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	got := decodeActionResponse(t, rr)
-	if len(got.AppendClaims) != 0 {
-		t.Fatalf("DB outage: expected empty append_claims, got %v", got.AppendClaims)
-	}
-}
-
 func TestHandleActionInject_CacheHit_UsesConfiguredClaimNameAndFormat(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
+	r := testPlane(t, map[string]claimserve.Project{"p1": project(services.ProjectShapes{
+		Default: claims.FromFlat("x-groups", claims.FormatCSV, nil, nil)}, failClosed)})
+	setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin", "lab"))
 
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return factsJSON("u1", "p1", "admin", "lab"), nil
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		t.Error("GetClaimFailureMode called on cache hit — should not happen")
-		return "fail_closed", nil, nil
-	}
-	stubProjectShapes(services.ProjectShapes{Default: claims.FromFlat("x-groups", claims.FormatCSV, nil, nil)})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	got := decodeActionResponse(t, rr)
+	got := decodeActionResponse(t, inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
 	claim, ok := claimByKey(got.AppendClaims, "x-groups")
-	if !ok {
-		t.Fatalf("expected the operator-configured claim key x-groups, got %v", got.AppendClaims)
-	}
-	if claim.Value != "admin,lab" {
-		t.Fatalf("expected csv-formatted roles admin,lab, got %v", claim.Value)
+	if !ok || claim.Value != "admin,lab" {
+		t.Fatalf("expected csv-formatted roles admin,lab under x-groups, got %v", got.AppendClaims)
 	}
 }
 
@@ -239,25 +162,12 @@ func TestHandleActionInject_CacheHit_UsesConfiguredClaimNameAndFormat(t *testing
 // an attribute claim and a static claim configured on the profile both reach
 // the envelope, alongside the roles.
 func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
+	r := testPlane(t, map[string]claimserve.Project{"pLaser": project(services.ProjectShapes{
+		Default: claims.FromFlat("syndra.laser.roles", claims.FormatArray,
+			map[string]string{"syndra.laser.team": claims.AttrTeam}, map[string]any{"syndra.tenant": "makerspace"})}, failClosed)})
+	setFacts(r, "u1", "pLaser", factsJSON("u1", "pLaser", "trained"))
 
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return factsJSON("u1", "pLaser", "trained"), nil
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		t.Error("GetClaimFailureMode called on cache hit — should not happen")
-		return "fail_closed", nil, nil
-	}
-	stubProjectShapes(services.ProjectShapes{Default: claims.FromFlat("syndra.laser.roles", claims.FormatArray,
-		map[string]string{"syndra.laser.team": claims.AttrTeam}, map[string]any{"syndra.tenant": "makerspace"})})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: rolesJSON("trained")})))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	got := decodeActionResponse(t, rr)
+	got := decodeActionResponse(t, inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: rolesJSON("trained")})))
 	roles, okRoles := claimByKey(got.AppendClaims, "syndra.laser.roles")
 	team, okTeam := claimByKey(got.AppendClaims, "syndra.laser.team")
 	tenant, okTenant := claimByKey(got.AppendClaims, "syndra.tenant")
@@ -276,40 +186,14 @@ func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
 	}
 }
 
-// A failed shape lookup still sends the roles under the built-in key (a
-// degraded token, not a locked door), and that fallback is never cached.
-// A shape that can't be read is never guessed: a guess could show a role the
-// app's own shape hides. The project's failure mode answers, and nothing is
-// cached.
-func TestHandleActionInject_ShapeLookupFailureAnswersWithTheFailureMode(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return factsJSON("u1", "pLaser", "trained", "admin"), nil
-	}
-	dbResolveProjectShapes = func(context.Context, string) (services.ProjectShapes, error) {
-		return services.ProjectShapes{}, errors.New("db down")
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		return "minimal_safe", map[string]interface{}{"syndra_degraded": true}, nil
-	}
-	redisSetKey = func(context.Context, string, string, int) error {
-		t.Error("a failed shape read was cached")
-		return nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: rolesJSON("trained", "admin")})))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	got := decodeActionResponse(t, rr)
-	if _, ok := claimByKey(got.AppendClaims, "roles"); ok {
-		t.Fatalf("a guessed shape sent roles: %v", got.AppendClaims)
-	}
-	if c, ok := claimByKey(got.AppendClaims, "syndra_degraded"); !ok || c.Value != true {
-		t.Fatalf("expected the project's minimal_safe claims, got %v", got.AppendClaims)
+// A project the snapshot does not hold is never shaped by a guess: a guess
+// could show a role the app's own shape hides. It answers fail closed.
+func TestHandleActionInject_UnpublishedProjectIsNeverGuessed(t *testing.T) {
+	r := builtinPlane(t, "pOther")
+	setFacts(r, "u1", "pLaser", factsJSON("u1", "pLaser", "trained", "admin"))
+	got := decodeActionResponse(t, inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser"})))
+	if len(got.AppendClaims) != 0 {
+		t.Fatalf("a guessed shape sent claims: %v", got.AppendClaims)
 	}
 }
 
@@ -317,26 +201,14 @@ func TestHandleActionInject_ShapeLookupFailureAnswersWithTheFailureMode(t *testi
 // asked for another project's audience). Syndra delivers one project per
 // token, so it carries no Syndra claims at all, and nothing is read.
 func TestHandleActionInject_CrossProjectTokenCarriesNoClaims(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		t.Errorf("Redis read for a cross-project token: key=%s", key)
-		return "", fmt.Errorf("unreachable")
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		t.Errorf("failure mode read for a cross-project token: project=%s", projectID)
-		return "minimal_safe", map[string]interface{}{"leak": true}, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1",
-			ActionV2UserGrantRef{ProjectID: "pPrint", Roles: rolesJSON("operator")},
-			ActionV2UserGrantRef{ProjectID: "pDoor", Roles: rolesJSON("keyholder")},
-		)))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
+	r := testPlane(t, map[string]claimserve.Project{
+		"pPrint": project(services.ProjectShapes{}, claimserve.Mode{Mode: claimserve.MinimalSafe, MinimalSafeClaims: map[string]any{"leak": true}}),
+		"pDoor":  project(services.ProjectShapes{}, failClosed),
+	})
+	rr := inject(t, v2Body("u1",
+		ActionV2UserGrantRef{ProjectID: "pPrint", Roles: rolesJSON("operator")},
+		ActionV2UserGrantRef{ProjectID: "pDoor", Roles: rolesJSON("keyholder")},
+	))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 so Zitadel still issues the token, got %d", rr.Code)
 	}
@@ -346,32 +218,22 @@ func TestHandleActionInject_CrossProjectTokenCarriesNoClaims(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), `"append_claims":[]`) {
 		t.Errorf("append_claims must be an empty list, not null: %s", rr.Body.String())
 	}
+	if n := r.Count("HGET"); n != 0 {
+		t.Errorf("facts read %d times for a cross-project token", n)
+	}
 }
 
 func TestHandleActionInject_NoGrants_EmptyClaims(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		t.Errorf("Redis called with no grants; should short-circuit. key=%s", key)
-		return "", fmt.Errorf("unreachable")
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		t.Errorf("GetClaimFailureMode called with no grants; should short-circuit. project=%s", projectID)
-		return "fail_closed", nil, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1")))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
+	r := builtinPlane(t)
+	rr := inject(t, v2Body("u1"))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
 	}
-	got := decodeActionResponse(t, rr)
-	if len(got.AppendClaims) != 0 {
+	if got := decodeActionResponse(t, rr); len(got.AppendClaims) != 0 {
 		t.Fatalf("no grants: expected empty append_claims, got %v", got.AppendClaims)
+	}
+	if n := r.Count("HGET"); n != 0 {
+		t.Errorf("no grants must short-circuit; facts read %d times", n)
 	}
 }
 
@@ -379,37 +241,15 @@ func TestHandleActionInject_DuplicateProjectGrants_DedupedToFlatKeys(t *testing.
 	// Zitadel emits one grant row per role. Two rows with the same projectId
 	// but different roles MUST dedupe to a single project in Syndra's view,
 	// or the token would read as cross-project and carry nothing.
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	calls := 0
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		calls++
-		if key != "mapping:u1:p1" {
-			t.Errorf("unexpected cache key: %s", key)
-		}
-		return factsJSON("u1", "p1", "admin"), nil
+	r := builtinPlane(t)
+	setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
+	got := decodeActionResponse(t, inject(t, v2Body("u1",
+		ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")},
+		ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("operator")},
+	)))
+	if n := r.Count("HGET"); n != 1 {
+		t.Fatalf("expected exactly one facts read after dedup, got %d", n)
 	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		t.Error("should not call failure mode on cache hit")
-		return "fail_closed", nil, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1",
-			ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")},
-			ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("operator")},
-		)))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	if calls != 1 {
-		t.Fatalf("expected exactly one Redis call after dedup, got %d", calls)
-	}
-	got := decodeActionResponse(t, rr)
 	claim, ok := claimByKey(got.AppendClaims, "roles")
 	list, isList := claim.Value.([]interface{})
 	if !ok || !isList || len(list) != 1 || list[0] != "admin" {
@@ -418,15 +258,8 @@ func TestHandleActionInject_DuplicateProjectGrants_DedupedToFlatKeys(t *testing.
 }
 
 func TestHandleActionInject_InvalidJSON_400(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(`not-json`))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
+	builtinPlane(t)
+	if rr := inject(t, `not-json`); rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid JSON, got %d", rr.Code)
 	}
 }
@@ -434,146 +267,22 @@ func TestHandleActionInject_InvalidJSON_400(t *testing.T) {
 func TestHandleActionInject_UnknownFields_Accepted(t *testing.T) {
 	// The v2 payload is Zitadel-owned and may grow. Unknown fields MUST NOT
 	// cause a 400 — they are silently ignored by the lenient decoder.
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return factsJSON("u1", "p1", "admin"), nil
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		return "fail_closed", nil, nil
-	}
-
+	r := builtinPlane(t)
+	setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
 	body := `{
 		"function":"function/preaccesstoken",
 		"user":{"id":"u1","human":{"profile":{"displayName":"Test"}}},
 		"user_grants":[{"projectId":"p1","roles":["admin"],"projectName":"Printing"}],
-		"org":{"id":"org1","name":"Ashoka"},
+		"org":{"id":"org1","name":"Example"},
 		"user_metadata":[{"key":"foo","value":"YmFy"}]
 	}`
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(body))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
+	rr := inject(t, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 with unknown fields accepted, got %d (body=%s)", rr.Code, rr.Body.String())
 	}
-	got := decodeActionResponse(t, rr)
-	claim, ok := claimByKey(got.AppendClaims, "roles")
+	claim, ok := claimByKey(decodeActionResponse(t, rr).AppendClaims, "roles")
 	list, isList := claim.Value.([]interface{})
 	if !ok || !isList || len(list) != 1 || list[0] != "admin" {
-		t.Fatalf("expected roles=[admin], got %v", got.AppendClaims)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// claimFailureModeRead (C5) — Redis read-through cache for the per-project
-// failure mode. Tests focus on the helper's three branches: cache hit
-// (Redis returns a value), cache miss + DB success (refresh + cache), and
-// cache miss + DB error (defaults to fail_closed).
-// ---------------------------------------------------------------------------
-
-func resetClaimModeCacheDeps(t *testing.T) {
-	t.Helper()
-	origGet, origSet, origMode := redisGetClaimMode, redisSetClaimMode, dbGetClaimFailureMode
-	t.Cleanup(func() {
-		redisGetClaimMode = origGet
-		redisSetClaimMode = origSet
-		dbGetClaimFailureMode = origMode
-	})
-}
-
-func TestClaimFailureModeRead_DBError_FallsBackToCachedValue(t *testing.T) {
-	resetClaimModeCacheDeps(t)
-
-	redisGetClaimMode = func(ctx context.Context, projectID string) (string, error) {
-		if projectID != "proj-1" {
-			t.Errorf("unexpected projectID %q", projectID)
-		}
-		if _, ok := ctx.Deadline(); !ok {
-			t.Error("expected redisGetClaimMode to receive a deadline-bounded context (redisTimeout wrap missing)")
-		}
-		return `{"mode":"minimal_safe","minimal_safe_claims":{"reason":"degraded"}}`, nil
-	}
-	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
-		t.Errorf("redisSetClaimMode must not be called on cache hit; got projectID=%s", projectID)
-		return nil
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		t.Errorf("dbGetClaimFailureMode must not be called on cache hit; got projectID=%s", projectID)
-		return "fail_closed", nil, nil
-	}
-
-	mode, claims, err := claimFailureModeRead(context.Background(), "proj-1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if mode != "minimal_safe" {
-		t.Errorf("expected mode=minimal_safe; got %q", mode)
-	}
-	if got := claims["reason"]; got != "degraded" {
-		t.Errorf("expected claims.reason=degraded; got %v", got)
-	}
-}
-
-func TestClaimFailureModeRead_CacheMiss_DBSuccess_Caches(t *testing.T) {
-	resetClaimModeCacheDeps(t)
-
-	redisGetClaimMode = func(ctx context.Context, projectID string) (string, error) {
-		return "", redis.Nil
-	}
-	var setCalls int
-	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
-		setCalls++
-		if projectID != "proj-2" {
-			t.Errorf("expected projectID=proj-2; got %q", projectID)
-		}
-		if !strings.Contains(value, `"mode":"fail_closed"`) {
-			t.Errorf("expected fail_closed in cached value; got %q", value)
-		}
-		if ttlSeconds <= 0 {
-			t.Errorf("expected positive TTL; got %d", ttlSeconds)
-		}
-		return nil
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		return "fail_closed", nil, nil
-	}
-
-	mode, _, err := claimFailureModeRead(context.Background(), "proj-2")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if mode != "fail_closed" {
-		t.Errorf("expected mode=fail_closed; got %q", mode)
-	}
-	if setCalls != 1 {
-		t.Errorf("expected exactly 1 SET; got %d", setCalls)
-	}
-}
-
-func TestClaimFailureModeRead_CacheMissAndDBError_DefaultsFailClosed(t *testing.T) {
-	resetClaimModeCacheDeps(t)
-
-	redisGetClaimMode = func(ctx context.Context, projectID string) (string, error) {
-		return "", redis.Nil
-	}
-	redisSetClaimMode = func(ctx context.Context, projectID, value string, ttlSeconds int) error {
-		t.Errorf("must not cache on DB error")
-		return nil
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		return "fail_closed", nil, errors.New("simulated db outage")
-	}
-
-	mode, claims, err := claimFailureModeRead(context.Background(), "proj-3")
-	if err != nil {
-		t.Fatalf("expected nil error (helper swallows for safety); got %v", err)
-	}
-	if mode != "fail_closed" {
-		t.Errorf("expected fail_closed default; got %q", mode)
-	}
-	if claims != nil {
-		t.Errorf("expected nil claims; got %v", claims)
+		t.Fatalf("expected roles=[admin], got %s", rr.Body.String())
 	}
 }
