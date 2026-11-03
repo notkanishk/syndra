@@ -245,8 +245,8 @@ func TestProbeL2(t *testing.T) {
 		canaryCallWait = 50 * time.Millisecond
 		tok := map[string]any{"sub": "uC", "roles": []string{"canary"}}
 		canaryToken = func(_ context.Context, scope string) (string, error) {
-			if !strings.Contains(scope, "urn:zitadel:iam:org:project:id:pC:aud") {
-				return "", errors.New("no audience scope")
+			if !strings.Contains(scope, "urn:zitadel:iam:org:project:id:pC:aud") || !strings.Contains(scope, "urn:zitadel:iam:org:projects:roles") {
+				return "", errors.New("no audience or roles scope: Zitadel would list no grants")
 			}
 			return jwtFor(tok), nil
 		}
