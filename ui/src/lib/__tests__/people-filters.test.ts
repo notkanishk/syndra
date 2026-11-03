@@ -9,6 +9,7 @@ import {
   isPerson,
   parseFilters,
   peopleHref,
+  primaryBulkVerb,
   serializeFilters,
 } from "@/lib/people-filters";
 import type { UserListEntry } from "@/lib/queries/useUsers";
@@ -294,5 +295,38 @@ describe("?bundle=none", () => {
 
   it("states itself in the scope sentence", () => {
     expect(describeFilters({ ...EMPTY_FILTERS, bundle: "none" })).toBe("in no bundle");
+  });
+});
+
+// A-12 §2: the phone bar's first verb does the job the list was filtered for.
+describe("primaryBulkVerb", () => {
+  const read = (query: string) => primaryBulkVerb(parseFilters(new URLSearchParams(query)));
+
+  it("follows the table, row by row", () => {
+    expect(read("bundle=none")).toBe("assign_bundle");
+    expect(read("attention=no-access")).toBe("assign_bundle");
+    expect(read("attention=expiring")).toBe("extend");
+    // Owner, 3 Nov: that cohort only ends with a revoke, so the danger verb leads.
+    expect(read("attention=departed")).toBe("remove_role");
+  });
+
+  it("is Give a role for anything else: no filter, a project, a role, a bundle, Drift, Open requests, a search", () => {
+    for (const query of [
+      "",
+      "project=pLaser",
+      "project=pLaser&role=trained",
+      "bundle=Lab%20Tech",
+      "attention=unexplained",
+      "attention=requests",
+      "q=ada",
+    ]) {
+      expect(read(query), query).toBe("assign_role");
+    }
+  });
+
+  it("reads the job, not the other narrowing around it", () => {
+    expect(read("q=ada&project=pLaser&attention=departed")).toBe("remove_role");
+    // An unknown cohort degrades to unset, and so to the default.
+    expect(read("attention=everyone")).toBe("assign_role");
   });
 });

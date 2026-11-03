@@ -154,7 +154,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
   - history;
   - what the app reads;
   - moving off Actions v1, as advice.
-- **A-12:**
+- **A-12 (built 3 Nov, `feat/three-loose-ends`):**
   - Home's calm line swaps by Unfold for data changes too.
   - The phone bulk bar becomes one primary verb plus "More changes".
   - Copy for 6.34 f and g.
