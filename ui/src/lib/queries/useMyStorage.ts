@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { request } from "@/lib/api-client";
+import { ApiError, request } from "@/lib/api-client";
 import type { OneShotSecret } from "@/lib/secret";
 
 /**
@@ -73,6 +73,13 @@ export interface MyTargetView {
   reachable_since?: string;
   /** When access was given back, while the account waits for a new password. */
   restored_at?: string;
+  /**
+   * Present only while their latest password change here is unconfirmed: sent,
+   * no answer to it or to its one automatic resend, and no later confirmed
+   * change has settled it (A-13 §4 step 3). Cleared by their next confirmed
+   * change, and by nothing else.
+   */
+  password_change?: { state: "unconfirmed"; at: string };
   /** A home folder no role they hold gives any more. It stays. */
   home_kept?: boolean;
   /**
@@ -156,15 +163,62 @@ export function useMyStorage() {
  * variables outlive the request in the MutationCache, so taking the password as
  * a plain argument retained it — under this exact sentence.
  */
+/** What the backend said, or what the page concluded when nothing it said arrived. */
+export interface CredentialAnswer {
+  /** `set` is the only confirmed done; the other three are not success. */
+  status: "set" | "indeterminate" | "rejected" | "unreached";
+  detail?: string;
+}
+
+/**
+ * A reply that never arrived: the network failed, or a proxy in front gave up
+ * before the backend answered (a 502–504 with none of Syndra's own codes).
+ * Anything Syndra itself answered is a clear answer, never this.
+ */
+export function lostReply(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true;
+  return error.status >= 502 && error.status <= 504 && error.code === "UNKNOWN_ERROR";
+}
+
+/**
+ * One send, and on a lost reply one more, at once, with the same value (A-13
+ * §4 step 1, owner 3 Nov). Only a confirmed `set` from either send is done; if
+ * neither is answered with one, the change is unconfirmed, whatever the second
+ * send heard, because the first may have landed. A clear refusal of the first
+ * send is final and is not resent.
+ */
+export async function sendWithOneResend(send: (resend: boolean) => Promise<CredentialAnswer>): Promise<CredentialAnswer> {
+  try {
+    const first = await send(false);
+    if (first.status !== "indeterminate") return first;
+  } catch (error) {
+    if (!lostReply(error)) throw error;
+  }
+  try {
+    const second = await send(true);
+    if (second.status === "set") return second;
+  } catch {
+    // Unanswered again, or refused after a first send that may have landed:
+    // either way nobody knows, and the page says so.
+  }
+  return { status: "indeterminate" };
+}
+
 export function useSetStorageCredential(target: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (password: OneShotSecret) =>
-      request<{ status: string; detail: string }>(`/me/targets/${target}/credential`, {
-        method: "POST",
-        body: { password: password.take() },
-      }),
-    onSuccess: () => {
+    // The value is taken out of its box once and held only by this call, in
+    // memory, until a final answer: never stored, never in the query cache.
+    mutationFn: (password: OneShotSecret) => {
+      const value = password.take();
+      return sendWithOneResend((resend) =>
+        request<CredentialAnswer>(`/me/targets/${target}/credential`, {
+          method: "POST",
+          body: resend ? { password: value, resend: true } : { password: value },
+        }),
+      );
+    },
+    onSettled: () => {
       client.invalidateQueries({ queryKey: ["me", "targets"] });
     },
   });

@@ -163,6 +163,28 @@ export function formatWhen(iso: string | null | undefined, now: Date = new Date(
   return date.toDateString() === now.toDateString() ? clock : `${formatShortDate(iso, now)} ${clock}`;
 }
 
+/**
+ * "at 09:41 today" or "on 2 Nov at 18:05": when something was sent, as the
+ * middle of a sentence (A-09 §4, A-13 §4).
+ */
+export function formatAt(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const clock = formatClock(iso);
+  return date.toDateString() === now.toDateString()
+    ? `at ${clock} today`
+    : `on ${formatShortDate(iso, now)} at ${clock}`;
+}
+
+/** "09:41:02": seconds only where the gap between two sends is the point (A-13 §4). */
+export function formatClockSeconds(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString(DATE_LOCALE, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+}
+
 /** "Friday 31 July" — the line under a greeting. */
 export function formatWeekday(date: Date = new Date()): string {
   // Short month, matching formatShortDate everywhere else. "Saturday 19

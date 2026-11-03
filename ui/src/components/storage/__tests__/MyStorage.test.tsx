@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MyStorage } from "@/components/storage/MyStorage";
 import { deviceFrom } from "@/components/storage/device";
-import type { MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
+import type { CredentialAnswer, MyTargetView, StoragePlace } from "@/lib/queries/useMyStorage";
 import type { OneShotSecret } from "@/lib/secret";
 
 // The member's storage page, state by state (route-storage; A-01, A-02).
@@ -13,7 +13,12 @@ import type { OneShotSecret } from "@/lib/secret";
 // password can't land, an address that won't answer, or a zero for usage
 // nobody read are each a page that lies.
 
-const state = { targets: [] as MyTargetView[], sent: [] as OneShotSecret[] };
+const state = {
+  targets: [] as MyTargetView[],
+  sent: [] as OneShotSecret[],
+  // The mutation's state, as the form reads it (A-13 §4).
+  credential: { isPending: false, data: undefined as CredentialAnswer | undefined, error: null as Error | null },
+};
 
 vi.mock("@/lib/queries/useMyStorage", async () => {
   const actual = await vi.importActual<typeof import("@/lib/queries/useMyStorage")>(
@@ -24,9 +29,7 @@ vi.mock("@/lib/queries/useMyStorage", async () => {
     useMyStorage: () => ({ data: state.targets, isLoading: false, error: null, refetch: vi.fn() }),
     useSetStorageCredential: () => ({
       mutate: (secret: OneShotSecret) => state.sent.push(secret),
-      isPending: false,
-      data: undefined,
-      error: null,
+      ...state.credential,
     }),
   };
 });
@@ -98,6 +101,7 @@ const passwordField = () => document.getElementById("storage-password-truenas");
 
 beforeEach(() => {
   state.sent = [];
+  state.credential = { isPending: false, data: undefined, error: null };
 });
 
 describe("the three states", () => {
@@ -336,5 +340,79 @@ describe("a folder over its limit", () => {
     ];
     renderStorage();
     expect(screen.getByText(/^Full\. You can open and delete files here, but not save new ones until you're under 20\.0 GiB\.$/)).toBeTruthy();
+  });
+});
+
+// A-13 §4: the change shows as in progress until the add-on confirms it, and
+// only then "Changed". Lost twice, the form stays open with what was typed; on
+// return one line stays until the next confirmed change.
+describe("a password change nobody has confirmed", () => {
+  const ready = () => view({ credential: { set: true, last_changed_at: "2026-09-20T10:00:00Z" } });
+
+  it("never says Changed while the sends are in progress", () => {
+    vi.useFakeTimers();
+    try {
+      state.targets = [ready()];
+      state.credential = { isPending: true, data: undefined, error: null };
+      renderStorage();
+      expect(screen.queryByText("Changed")).toBeNull();
+      expect(screen.getByRole("button", { name: "Change password" }).getAttribute("aria-busy")).toBe("true");
+      // At 4 seconds with no answer, one line says to keep the page open.
+      expect(screen.queryByText(/Keep this page open/)).toBeNull();
+      act(() => vi.advanceTimersByTime(4000));
+      expect(screen.getByText("Still waiting for TrueNAS. Keep this page open until it answers.")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says Changed only on a confirmed set", () => {
+    state.targets = [ready()];
+    state.credential = { isPending: false, data: { status: "set" }, error: null };
+    renderStorage();
+    expect(screen.getByText("Changed")).toBeTruthy();
+    expect(screen.getByText("TrueNAS has your new password.")).toBeTruthy();
+    expect(screen.getByText(/^Last changed just now\./)).toBeTruthy();
+  });
+
+  it("unanswered twice: the amber line, the form open, no Changed and no stale last-changed", () => {
+    state.targets = [ready()];
+    state.credential = { isPending: false, data: { status: "indeterminate" }, error: null };
+    renderStorage();
+    fireEvent.change(passwordField()!, { target: { value: "correct horse" } });
+    expect(screen.getByText("TrueNAS didn't answer, so your password may not have changed.")).toBeTruthy();
+    expect(screen.queryByText("Changed")).toBeNull();
+    expect(screen.queryByText(/Last changed/)).toBeNull();
+    // One press sends what is still typed.
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+    expect(state.sent).toHaveLength(1);
+    expect(state.sent[0].take()).toBe("correct horse");
+  });
+
+  it("a clear refusal is red and says nothing changed", () => {
+    state.targets = [ready()];
+    state.credential = { isPending: false, data: { status: "rejected" }, error: null };
+    renderStorage();
+    expect(screen.getByRole("alert").textContent).toBe("TrueNAS refused the change. Nothing was changed.");
+  });
+
+  it("back later: one line above an open form, until the next confirmed change", () => {
+    state.targets = [view({ ...ready(), password_change: { state: "unconfirmed", at: new Date().toISOString() } })];
+    renderStorage();
+    expect(screen.getByText(/^Your password change at \d\d:\d\d today may not have reached TrueNAS\.$/)).toBeTruthy();
+    expect(screen.getByText("If your new password doesn't work, your old one still does. Set it again below to be sure.")).toBeTruthy();
+    expect(passwordField()).toBeTruthy();
+    expect(screen.queryByText(/Last changed/)).toBeNull();
+  });
+
+  it("back while offline: the blocked sentence and the line are one, and the form waits", () => {
+    state.targets = [
+      view({ ...ready(), health: "offline", reachable: false, password_change: { state: "unconfirmed", at: "2026-11-02T18:05:00Z" } }),
+    ];
+    renderStorage();
+    expect(screen.getByText(/^Your password change on 2 Nov( 2026)? at \d\d:\d\d may not have reached TrueNAS\.$/)).toBeTruthy();
+    expect(screen.getByText(/You can set it again here once TrueNAS is back/)).toBeTruthy();
+    expect(passwordField()).toBeNull();
+    expect(screen.queryByText(/You can't change your password while TrueNAS is offline/)).toBeNull();
   });
 });

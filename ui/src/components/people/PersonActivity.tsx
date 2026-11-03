@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, machineName } from "@/lib/audit-vocabulary";
-import { EventSentence } from "@/components/audit/EventLine";
+import { EventSentence, describeSends, isPasswordSend } from "@/components/audit/EventLine";
 import { formatClock, formatList, formatShortDate } from "@/lib/format";
 import { useAuditEntries, type AuditEntry } from "@/lib/queries/useAudit";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -37,7 +37,9 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
   const limit = paging.limit;
   const entries = useAuditEntries({ userId, limit });
 
-  const rows = useMemo(() => entries.data ?? [], [entries.data]);
+  // One row per change: the page's automatic resend is told inside the change
+  // it repeats, never as a second change (A-13 §4). Audit keeps both rows.
+  const rows = useMemo(() => (entries.data ?? []).filter((e) => e.operation?.attempt !== 2), [entries.data]);
   // Keyed by `formatShortDate`, the SAME local-time source the row's own
   // clock (`formatClock`) reads against. `audit-vocabulary`'s `groupByDay`
   // keys on `created_at.slice(0, 10)` — the UTC calendar date — so an entry a
@@ -48,7 +50,8 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
   const days = useMemo(() => groupByLocalDay(rows), [rows]);
   // The backend caps at 200. Past that the feed is genuinely partial, and
   // saying so beats a "Load more" button that quietly stops working.
-  const atCap = rows.length >= 200;
+  const read = entries.data?.length ?? 0;
+  const atCap = read >= 200;
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -81,7 +84,7 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
         {!atCap && (
           <PaginationRow
             shown={rows.length}
-            hasMore={rows.length >= limit || entries.isPlaceholderData}
+            hasMore={read >= limit || entries.isPlaceholderData}
             since={rows.length ? formatShortDate(rows[rows.length - 1].created_at) : null}
             pending={entries.isPlaceholderData}
             onMore={paging.more}
@@ -290,7 +293,9 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
           Gurasheesh's own Activity tab says his name twice and buries the one
           fact the row adds, which is who did it. */}
       <span className="min-w-[240px] flex-1 text-[14px]">
-        {direction === "acted" ? (
+        {isPasswordSend(entry) ? (
+          <SendRow entry={entry} />
+        ) : direction === "acted" ? (
           <EventSentence entry={entry} />
         ) : (
           <>
@@ -311,5 +316,22 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
 
       <TraceCell entry={entry} className="w-[86px] shrink-0 text-right" />
     </div>
+  );
+}
+
+/** A password change on this person's record: what happened, who did it, then its sends, faint (A-13 §4). */
+function SendRow({ entry }: { entry: AuditEntry }) {
+  const { headline, sends } = describeSends(entry);
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span>
+        <span className="font-semibold">{headline}</span>
+        <span className="text-muted">
+          {" — by "}
+          <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
+        </span>
+      </span>
+      {sends && <span className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">{sends}</span>}
+    </span>
   );
 }

@@ -114,6 +114,11 @@ export function Home({ session }: { session: SessionUser }) {
   // not been made, and a page that omits them says "nothing needs you" while
   // somebody's access sits disputed.
   const findings = summary.data?.merge_findings ?? 0;
+  // Changes a connected system never answered, which a person must settle on
+  // that system's page (A-09 §3). Per system; none is absent. The placeholder
+  // zeros are not a reading, so they count as nothing.
+  const unconfirmedBy = (indicators.isPlaceholderData ? undefined : indicators.data?.unconfirmed_operations) ?? {};
+  const unconfirmed = Object.values(unconfirmedBy).reduce((sum, n) => sum + n, 0);
   // Writes Zitadel accepted that no later read has been able to see, old
   // enough that the gap is a finding rather than Zitadel's read projection
   // catching up (see UnconfirmedWrites — the threshold lives on the backend
@@ -164,6 +169,7 @@ export function Home({ session }: { session: SessionUser }) {
           (drift?.count ?? 0) > 0,
           unvouched.length > 0,
           findings > 0,
+          unconfirmed > 0,
         ]
       : []),
   ].filter(Boolean).length;
@@ -320,7 +326,7 @@ export function Home({ session }: { session: SessionUser }) {
                 onboardingGaps > 0 ||
                 gaps.rows.length > 0 ||
                 unowned.length > 0 ||
-                (advanced && (findings > 0 || (propagation?.count ?? 0) > 0))
+                (advanced && (findings > 0 || unconfirmed > 0 || (propagation?.count ?? 0) > 0))
               }
               className="min-w-0 desktop:col-start-2"
             >
@@ -336,6 +342,9 @@ export function Home({ session }: { session: SessionUser }) {
                 </Block>
                 <Block open={advanced && findings > 0}>
                   <MergeFindingsWaiting count={findings} />
+                </Block>
+                <Block open={advanced && unconfirmed > 0}>
+                  <NotConfirmed count={unconfirmed} bySystem={unconfirmedBy} />
                 </Block>
                 <Block open={advanced && (propagation?.count ?? 0) > 0}>
                   <PendingChanges
@@ -935,6 +944,34 @@ function MergeFindingsWaiting({ count }: { count: number }) {
           </ButtonLink>
         ))}
       </CardRow>
+    </Card>
+  );
+}
+
+/**
+ * Changes sent to a connected system that never answered (A-09 §3). Each may or
+ * may not have happened, and they are kept with each system, under Waiting on
+ * you, where one verb asks what happened. Never passwords: they settle
+ * themselves (A-13 §5).
+ */
+function NotConfirmed({ count, bySystem }: { count: number; bySystem: Record<string, number> }) {
+  const systems = Object.entries(bySystem)
+    .filter(([, n]) => n > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+  return (
+    <Card>
+      <CardHeader title="Not confirmed" count={count} tone="warn" />
+      <p className="px-5 pb-3 text-[13.5px] leading-[1.55] text-muted">
+        Changes sent to a connected system that never answered. They are kept with each system.
+      </p>
+      {systems.map(([target, n]) => (
+        <CardRow key={target} className="flex-wrap">
+          <span className="flex-1 text-[14.5px]">
+            {targetLabel(target)} <span className="text-faint">· {n === 1 ? "1 change" : `${n} changes`}</span>
+          </span>
+          <ArrowLink href={`/system/targets/${target}#waiting`}>{`Open ${targetLabel(target)}`}</ArrowLink>
+        </CardRow>
+      ))}
     </Card>
   );
 }
