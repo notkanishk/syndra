@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { SignInLookup } from "@/components/people/SignInLookup";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { actedOn, describeAction, machineName } from "@/lib/audit-vocabulary";
@@ -49,9 +51,22 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
   // The backend caps at 200. Past that the feed is genuinely partial, and
   // saying so beats a "Load more" button that quietly stops working.
   const atCap = rows.length >= 200;
+  const [lookingUp, setLookingUp] = useState(false);
 
   return (
     <div className="flex flex-col gap-[18px]">
+    {/* Sign-ins aren't history Syndra keeps (A-10 §6); they're read on demand
+        from Zitadel's own log, with a reason (owner, 3 Nov). */}
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5">
+      <p className="m-0 min-w-0 flex-1 basis-[280px] text-[13.5px] leading-[1.5] text-faint [text-wrap:pretty]">
+        Sign-ins aren&apos;t listed here. Syndra keeps only {name}&apos;s last sign-in to each app; Look up sign-ins
+        reads the rest from Zitadel&apos;s own log.
+      </p>
+      <Button variant="outline" size="sm" onClick={() => setLookingUp(true)}>
+        Look up sign-ins
+      </Button>
+    </div>
+    {lookingUp && <SignInLookup userId={userId} name={name} onClose={() => setLookingUp(false)} />}
     <Card>
       <ListStates
         isLoading={entries.isLoading}

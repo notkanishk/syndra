@@ -144,7 +144,9 @@ func operationSet(probe capabilityProbe) []Operation {
 		{
 			// A member asking about their own account: can I use this yet, and
 			// how much room is left. No parameters at all, so there is no shape
-			// in which one member asks about another.
+			// in which one member asks about another. The subject is the call's
+			// own: the backend sets it to the member on their page, or to the
+			// person an operator is reading on that person's page (read-only).
 			ID: "storage.status", Scope: "member", Confirm: false,
 		},
 		{

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
 // WebhookPayload represents our interpretation of a Zitadel event payload.
@@ -491,8 +492,8 @@ func recordSignIn(w http.ResponseWriter, r *http.Request, event WebhookPayload) 
 	if event.EventCreatedAt != nil && event.EventCreatedAt.Before(now) {
 		at = *event.EventCreatedAt // never a time in the future
 	}
-	project := resolveSignInProject(r.Context(), event.ClientRefs)
-	if err := dbRecordUsage(r.Context(), event.UserID, project, db.UsageSignIn, at); err != nil {
+	app := resolveSignInApp(r.Context(), event.ClientRefs)
+	if err := dbRecordUsage(r.Context(), event.UserID, app.ProjectID, app.ID, db.UsageSignIn, at); err != nil {
 		// A 5xx is safe: the redelivery is idempotent.
 		log.Printf("[WEBHOOK] failed to record sign-in user=%s: %v", event.UserID, err)
 		jsonErrorResponse(w, http.StatusInternalServerError, "PROCESSING_FAULT", "failed to record sign-in")
@@ -501,25 +502,31 @@ func recordSignIn(w http.ResponseWriter, r *http.Request, event WebhookPayload) 
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "sign-in recorded"})
 }
 
-// resolveSignInProject maps the first ref that names a known application (by
-// its application id or its client id) to that application's project. "" when
-// none does, or the directory cannot be read: the sign-in is still recorded,
-// as use of no particular project.
-func resolveSignInProject(ctx context.Context, refs []string) string {
+// resolveSignInApp is the application the first resolvable ref names (by its
+// application id or its client id), with its project. Zero when none does, or
+// the directory cannot be read: the sign-in is still recorded, as "app
+// unknown".
+func resolveSignInApp(ctx context.Context, refs []string) models.ApplicationCatalog {
 	if len(refs) == 0 {
-		return ""
+		return models.ApplicationCatalog{}
 	}
 	apps, err := directoryApplications(ctx)
 	if err != nil {
-		log.Printf("[WEBHOOK] sign-in app lookup failed: %v — recording without a project", err)
-		return ""
+		log.Printf("[WEBHOOK] sign-in app lookup failed: %v — recording without an app", err)
+		return models.ApplicationCatalog{}
 	}
+	return matchSignInApp(apps, refs)
+}
+
+// matchSignInApp is resolveSignInApp over a directory already read. Only an
+// app with a project counts: an app nobody can give access to explains no use.
+func matchSignInApp(apps []models.ApplicationCatalog, refs []string) models.ApplicationCatalog {
 	for _, ref := range refs {
 		for _, a := range apps {
 			if a.ProjectID != "" && (a.ID == ref || (a.ClientID != "" && a.ClientID == ref)) {
-				return a.ProjectID
+				return a
 			}
 		}
 	}
-	return ""
+	return models.ApplicationCatalog{}
 }

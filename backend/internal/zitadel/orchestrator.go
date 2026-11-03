@@ -91,6 +91,9 @@ type ZitadelClient interface {
 	// here can answer. The sweep compares grant SETS and therefore cannot name
 	// an actor; this can, because Zitadel is event-sourced.
 	GrantOriginByID(ctx context.Context, grantID string) (*GrantOrigin, error)
+	// SearchEvents reads events by type and time, for the operator's reasoned
+	// "Look up sign-ins". Never called by a sweep or a page load.
+	SearchEvents(ctx context.Context, q EventSearch) ([]LoggedEvent, bool, error)
 }
 
 // EnforceMappingRules is triggered when a user is modified.
