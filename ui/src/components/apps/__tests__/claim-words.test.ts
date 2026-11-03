@@ -24,8 +24,8 @@ function explanation(states: CheckState[], facts: Record<string, unknown>[] = []
 describe("claim words, with a token's roles from Zitadel (ADR-004)", () => {
   it("says a person not built yet still gets their roles", () => {
     const e = explanation(["pass", "pass", "warn", "pass", "warn", "none"], [{}, { roles: ["staff"] }]);
-    expect(checkWords(e, ctx)[2].faint).toEqual(["Syndra builds them at their next change. Until then Zitadel gets their roles from Syndra, and nothing else."]);
-    expect(check5(e, ctx, false).sentence).toBe("Syndra answers with `groups`, their roles alone for now.");
+    expect(checkWords(e, ctx)[2].faint).toEqual(["Syndra builds them at their next change. Until then it sends only what Zitadel already knows about them."]);
+    expect(check5(e, ctx, false).sentence).toBe("Syndra answers with `groups` for now.");
   });
 
   it("never reads an unread grants list as no roles", () => {

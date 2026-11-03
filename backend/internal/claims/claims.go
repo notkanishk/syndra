@@ -58,8 +58,9 @@ const (
 )
 
 // Attribute sources a row may project. Every one is resolvable from the
-// compiled cache entry alone — nothing here needs a directory call at
-// token-issue time.
+// token's payload and the compiled cache entry — nothing here needs a
+// directory call at token-issue time. The identity ones (names, username,
+// email) come from the payload's user first (Facts.Identify).
 const (
 	AttrUserID           = "user_id"
 	AttrProjectID        = "project_id"
@@ -188,6 +189,48 @@ type Facts struct {
 	// end (from any source) is absent.
 	RoleEnds         map[string]string `json:"role_ends,omitempty"`
 	IsServiceAccount bool              `json:"is_service_account,omitempty"`
+	// machine: Identify was told a machine user, whose names are sent as
+	// empty strings (Actions v1 parity). Never stored.
+	machine bool
+}
+
+// Identity is who a token is for as Zitadel holds them at token time: the
+// Actions v2 payload's user (Zitadel's query.User) live, Syndra's directory
+// read of Zitadel in a preview, so preview == live. It supplies the identity
+// attributes; Facts supply the rest (ADR-004, 4 Nov 2026).
+type Identity struct {
+	// Human and Machine are what Zitadel says the account is. Neither: it did
+	// not say, and the facts' names stand.
+	Human, Machine                         bool
+	GivenName, FamilyName, Username, Email string
+}
+
+// Identify is f with Zitadel's identity over Syndra's cached copy: Zitadel is
+// the authority and the payload is current. A field Zitadel left empty keeps
+// the facts' value. The names follow Actions v1's groupsClaim exactly, so the
+// seeded v1 shape changes nothing at cutover: a person's name is
+// given + " " + family (not Zitadel's display name), and a machine user's
+// three names are sent as empty strings.
+func (f Facts) Identify(id Identity) Facts {
+	if id.Email != "" {
+		f.Email = id.Email
+	}
+	if id.Username != "" {
+		f.Username = id.Username
+	}
+	switch {
+	case id.Machine:
+		f.GivenName, f.FamilyName, f.Name, f.machine = "", "", "", true
+	case id.Human:
+		if id.GivenName != "" {
+			f.GivenName = id.GivenName
+		}
+		if id.FamilyName != "" {
+			f.FamilyName = id.FamilyName
+		}
+		f.Name = f.GivenName + " " + f.FamilyName
+	}
+	return f
 }
 
 // FormatRoles renders a role list in the requested shape. An unknown format
@@ -289,21 +332,29 @@ func RoleSet(roles []string) []string {
 // plane sends when Zitadel listed the person's roles but Syndra holds nothing
 // to add for them (no entry yet, or Redis down with no last copy). Roles,
 // if_role and static rows stay, and the attributes the token itself carries
-// (user id, project id, role count). The rest are left out rather than sent
-// empty: an empty bundles list or a false is_service_account is a claim, not
-// a gap.
+// (user id, project id, role count, and Zitadel's identity: names, username,
+// email; see Identify). The rest (team, title, bundles, role ends,
+// is_service_account, compiled_at) are left out rather than sent empty: an
+// empty bundles list or a false is_service_account is a claim, not a gap.
+// Nothing left out means the shape is whole without facts.
 func (p Profile) RolesOnly() Profile {
 	kept := make([]Claim, 0, len(p.Claims))
 	for _, c := range p.Claims {
 		switch {
 		case c.Kind == KindBundles, c.Kind == KindRoleEnds:
-		case c.Kind == KindAttribute && c.Source != AttrUserID && c.Source != AttrProjectID && c.Source != AttrRoleCount:
+		case c.Kind == KindAttribute && !fromToken[c.Source]:
 		default:
 			kept = append(kept, c)
 		}
 	}
 	p.Claims = kept
 	return p
+}
+
+// fromToken is the attributes the token's own payload carries.
+var fromToken = map[string]bool{
+	AttrUserID: true, AttrProjectID: true, AttrRoleCount: true,
+	AttrGivenName: true, AttrFamilyName: true, AttrName: true, AttrUsername: true, AttrEmail: true,
 }
 
 // Shape renders one profile against one set of facts, rows in order.
@@ -391,9 +442,11 @@ func place(root *Object, path []string, v any) {
 
 // attributeValue resolves one Attr* source. An unknown or empty source emits
 // nothing rather than a null claim — a null reads to an app as "the user has
-// no email", a different and worse lie than the claim being absent.
+// no email", a different and worse lie than the claim being absent. A machine
+// user's names are the exception: empty strings, sent, as Actions v1 sent them.
 func attributeValue(source string, f Facts) (any, bool) {
 	text := func(s string) (any, bool) { return s, s != "" }
+	name := func(s string) (any, bool) { return s, s != "" || f.machine }
 	switch source {
 	case AttrUserID:
 		return text(f.UserID)
@@ -402,11 +455,11 @@ func attributeValue(source string, f Facts) (any, bool) {
 	case AttrEmail:
 		return text(f.Email)
 	case AttrName:
-		return text(f.Name)
+		return name(f.Name)
 	case AttrGivenName:
-		return text(f.GivenName)
+		return name(f.GivenName)
 	case AttrFamilyName:
-		return text(f.FamilyName)
+		return name(f.FamilyName)
 	case AttrUsername:
 		return text(f.Username)
 	case AttrTitle:
