@@ -77,3 +77,10 @@ Slices from `assessment.md` §5. Each ships alone and has a named proof.
   - [ ] Redis ACL for the claims container: not done. Every client uses the default user; an ACL needs a new secret in `.env` and a Redis restart, so it is a change of its own (key list in DEPLOY.md). #ready-for-agent
   - Proof: `TestClaimsContainer_TenBackendRestartsDoNotTouchIt` (calls on both sides of ten simulated backend starts, each a fresh backend snapshot, the start-up publish, the canary write, a fold and a drain: 505 served, 0 not, 0 container snapshot reloads, its count equal to the calls); `TestCorrelator_SeesACallTheClaimsContainerAnswered` (delivered through the relay; not called without it, the control); `TestClaimSignals_ReachTheBackend`; `TestClaimsHealth_CountsTheClaimsContainer` (a mismatch over there fails the health here); `TestRelay_TelemetryFoldsOnce`, `_Signals`, `_Window`, `_FailedFlushKeeps`, `TestProcess_Health`; `TestTheImageCopiesExactlyWhatTheBinaryImports` (Dockerfile.claims equals `go list -deps`, and no admin package is imported). Still to record: ten consecutive backend deploys on the dev box with zero claims-container restarts and zero non-served sign-ins (`docker compose ps` "Created" unchanged). #ready-for-human
 - [ ] Chaos drill on the dev box (assessment §4h), recorded here. #ready-for-human
+
+## Owner, 3 Nov 2026
+- **Last-known-good bound:** 6h stays. "Ideally it'll never fall back to this."
+- **Alert channel (dead-man's switch):** later. Until `SYNDRA_DEADMAN_URL` is set, `/healthz/claims` carries the note `NO_EXTERNAL_ALERT`, and an LXC outage tells nobody.
+- **L2 canary:** Zitadel's existing `testuser` is a human account, so it can't sign in unattended. L2 needs a machine user (JWT token type) holding a role in a `syndra-canary` project, with a key on the LXC. The steps are in DEPLOY.md. #ready-for-human
+- **Read access:** already sufficient. The keyring and the reconciler read targets and executions with the current service account.
+- **Open, explained to the owner:** the Caddy move to `:8090`, and welcome claims on a new member's first sign-in (SC4 option b).
