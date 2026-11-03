@@ -106,9 +106,10 @@ type Correlator struct {
 	dropped    int64
 
 	// Holds says whether the person holds any role in the client's app's
-	// project, by Syndra's own facts (known false when there is no app or no
-	// facts read). Nil: never consulted, so no_grants stays a failure. Set
-	// once before Check runs.
+	// project, by Zitadel's grants as Syndra last observed them (known false
+	// when there is no app, or no complete read can vouch for none). Nil:
+	// never consulted, so no_grants stays a failure. Set once before Check
+	// runs.
 	Holds func(userID, clientID string) (holds, known bool)
 }
 
@@ -211,8 +212,8 @@ const anyFunction = "*"
 
 // Classify is one sign-in's verdict from the calls in its window. Pure.
 //
-// holdsNone is true when Syndra's facts say the person holds no role in the
-// app's project: a no_grants call is then the right answer, not a failure.
+// holdsNone is true when Zitadel, as Syndra last observed it, gives the person
+// no role in the app's project: a no_grants call is then the right answer.
 func Classify(s SignIn, worst map[string]Outcome, overflowed, jwt, known, newPerson, holdsNone bool) Checked {
 	ch := Checked{SignIn: s}
 	// The functions are exact (assessment Z-e): a JWT access token calls

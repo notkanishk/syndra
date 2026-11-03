@@ -244,7 +244,6 @@ var (
 	svcClaimShapeHistory     = db.ClaimShapeHistory
 	svcInsertClaimShape      = db.InsertClaimShapeVersion
 	svcClaimShapeSeedCutoff  = db.ClaimShapeSeedCutoff
-	svcGetClaimFailureMode   = db.GetClaimFailureMode
 	// The explain step's reads: what the token path stores, a fresh compile
 	// when it stores nothing, and Zitadel's settings for check 1 (read-only).
 	svcStoredFacts   = cache.StoredFacts

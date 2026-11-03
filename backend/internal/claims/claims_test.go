@@ -81,6 +81,41 @@ func TestShape_RolesAlwaysSent(t *testing.T) {
 	}
 }
 
+// One order for a token's roles, wherever they were read: Zitadel's rows
+// deduplicated and sorted.
+func TestRoleSet(t *testing.T) {
+	if got := RoleSet([]string{"staff", "admin", "staff", "guest"}); !reflect.DeepEqual(got, []string{"admin", "guest", "staff"}) {
+		t.Fatalf("got %v", got)
+	}
+	if got := RoleSet(nil); len(got) != 0 {
+		t.Fatalf("none: %v", got)
+	}
+}
+
+// With no facts, only the rows the token itself can answer stay: roles,
+// if_role, statics, and the ids and role count. Nothing is sent empty.
+func TestRolesOnly(t *testing.T) {
+	p := Profile{Lands: LandsBoth, IncludeNew: true, Claims: []Claim{
+		{Path: []string{"r"}, Kind: KindRoles},
+		{Path: []string{"email"}, Kind: KindAttribute, Source: AttrEmail},
+		{Path: []string{"svc"}, Kind: KindAttribute, Source: AttrIsServiceAccount},
+		{Path: []string{"uid"}, Kind: KindAttribute, Source: AttrUserID},
+		{Path: []string{"pid"}, Kind: KindAttribute, Source: AttrProjectID},
+		{Path: []string{"n"}, Kind: KindAttribute, Source: AttrRoleCount},
+		{Path: []string{"b"}, Kind: KindBundles},
+		{Path: []string{"e"}, Kind: KindRoleEnds},
+		{Path: []string{"is"}, Kind: KindIfRole, Roles: []string{"admin"}},
+		{Path: []string{"s"}, Kind: KindStatic, Value: json.RawMessage(`1`)},
+	}}
+	got, _ := json.Marshal(Shape(p.RolesOnly(), Facts{UserID: "u", ProjectID: "p", Roles: []string{"admin"}}))
+	if string(got) != `{"r":["admin"],"uid":"u","pid":"p","n":1,"is":true,"s":1}` {
+		t.Fatalf("got %s", got)
+	}
+	if len(p.Claims) != 10 {
+		t.Fatal("RolesOnly changed the profile it was given")
+	}
+}
+
 func TestShape_EveryKind(t *testing.T) {
 	p := Profile{
 		Claims: []Claim{

@@ -24,7 +24,15 @@ const (
 	// ServedWelcome is a brand-new member's first token answered with the
 	// welcome bundle's roles before onboarding has given them (SC4 option b,
 	// behind Makerspace settings' switch). Delivered, not a fault.
-	ServedWelcome           Outcome = "served_welcome"
+	ServedWelcome Outcome = "served_welcome"
+	// ServedRolesOnly is the roles Zitadel listed, shaped, with no facts of
+	// Syndra's to add (no entry for the person in the project yet, or Redis
+	// down with no last copy): the attribute rows that need facts are left
+	// out. Delivered; soft in health only while it outnumbers full answers.
+	ServedRolesOnly Outcome = "served_roles_only"
+	// DegradedNoFacts is no longer answered (4 Nov 2026: a token's roles come
+	// from Zitadel, so a person with none of Syndra's facts is
+	// ServedRolesOnly). Kept so counts recorded before then still read.
 	DegradedNoFacts         Outcome = "degraded_no_facts"
 	DegradedShapeUnreadable Outcome = "degraded_shape_unreadable"
 	DegradedMalformed       Outcome = "degraded_malformed"
@@ -43,7 +51,7 @@ const (
 
 // Outcomes lists every class once, in a fixed order.
 var Outcomes = [...]Outcome{
-	Served, ServedLKG, ServedWelcome, DegradedNoFacts, DegradedShapeUnreadable, DegradedMalformed,
+	Served, ServedLKG, ServedWelcome, ServedRolesOnly, DegradedNoFacts, DegradedShapeUnreadable, DegradedMalformed,
 	NoGrants, ContractFault, RefusedCrossProject, NotLanding, UnknownFunction,
 	SigMissing, SigStale, SigMismatch, BadRequest, DeadlineExceeded, Panic,
 }

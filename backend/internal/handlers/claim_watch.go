@@ -30,13 +30,30 @@ import (
 // sign-ins from before then are unchecked ("checking since …").
 var claimCorrelator = func() *claimtel.Correlator {
 	c := claimtel.NewCorrelator(time.Now)
-	// A no_grants call is only a failure if Syndra knows the person holds a
-	// role in that app's project; otherwise there was nothing to deliver.
+	// A no_grants call is only a failure if Zitadel, as Syndra last observed
+	// it, gives the person a role in that app's project: Syndra's own facts
+	// lack roles given in Zitadel directly, and a role Syndra has queued is
+	// not one Zitadel could have listed.
 	c.Holds = func(userID, clientID string) (bool, bool) {
-		return claimPlane.HoldsRoles(context.Background(), userID, clientID)
+		return observedHolds(context.Background(), userID, clientID)
 	}
 	return c
 }()
+
+// observedHolds is whether Zitadel, as last observed, gives the person a role
+// in the project of the client's app. known is false when the client maps to
+// no app, the read fails, or no complete current sweep can vouch for "none".
+func observedHolds(ctx context.Context, userID, clientID string) (holds, known bool) {
+	cfg := claimPlane.Config()
+	if cfg == nil || cfg.ClientProject[clientID] == "" {
+		return false, false
+	}
+	roles, absent, err := svcObservedRoles(ctx, userID, cfg.ClientProject[clientID])
+	if err != nil {
+		return false, false
+	}
+	return len(roles) > 0, len(roles) > 0 || absent
+}
 
 // ---------------------------------------------------------------------------
 // Findings: applied by each detector, cached in memory for /healthz/claims

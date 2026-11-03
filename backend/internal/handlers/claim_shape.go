@@ -354,6 +354,7 @@ var (
 	svcRestoreAppClaimShape    = services.RestoreAppClaimShape
 	svcSeedClaimShapes         = services.SeedClaimShapes
 	svcExplainSignIn           = services.ExplainSignIn
+	svcObservedRoles           = services.ObservedRoles
 	svcFindApplication         = func(ctx context.Context, appID string) (models.ApplicationCatalog, bool, error) {
 		return directory.Default.FindApplication(ctx, appID)
 	}
