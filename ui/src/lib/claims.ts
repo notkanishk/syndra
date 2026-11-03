@@ -121,6 +121,13 @@ export function roleWords(profile: Profile, roles: ProjectRole[]): RoleWord[] {
   });
 }
 
+/**
+ * Whether a role missing from a saved shape is worth calling "new". Only once
+ * the shape names roles of its own: a shape that never chose any (the seeded
+ * Actions v1 shape) would otherwise call every role new.
+ */
+export const namesRoles = (saved: Profile | null | undefined) => (saved?.roles?.length ?? 0) > 0;
+
 /** The word a role is sent as: its own, or Syndra's key. */
 export const wordOf = (r: { key: string; as?: string }) => r.as || r.key;
 
