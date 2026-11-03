@@ -161,10 +161,18 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 - **Owner, 3 Nov:**
   - **Sign-ins: 1a.** Keep each person's last sign-in per app and daily totals per app with no names; any operator sees these, with no lookup log. "Who signed in, and when" comes from Zitadel's own log only through a deliberate, reasoned and audited "Look up sign-ins".
   - **Passwords: self-settling (A-13).** A lost reply is resent once at once with the same password. The member sees "Changed" only on a confirmed done. History and Audit mark "Sent again automatically", with both times. Passwords never reach an operator.
-  - **Stale data:** no unreadable dim; marked visibly and calmly (A-13). The dim's form is the owner's pick: (d) recommended.
+  - **Stale data: A-13 (d).** A stale card recedes to the ground with a line-strong edge, and its text stays full strength. No dim on text, no amber outline.
   - **Claims:** no v1 gate or readiness checklist. The owner removes Actions v1 himself. A-11 is redone around rich per-app shaping: rename roles, choose roles, nested claims, role-conditional claims, more attributes, app templates. "Start from a token" is dropped.
   - **Yes:** Revoke is the primary phone verb for "Departed, still has access"; single-folder holds are left out until needed.
-- **Owner's calls still open:** how stale data recedes (A-13 (d) recommended, (b) the fallback); the A-11 redo.
+- **Claims debug mode** (owner): its toggle lives only on the app's claims part, beside the preview and the checks. A-14 redraws claims shaping around it.
+- **A-14 replaces A-11** (claims shaping, rescoped).
+  - Templates come from `docs/research/2026-11-03-app-claims.md`: every app wants a flat list; renames break NetBird and GitLab; claims must be sent as `[]`, never left out.
+  - **Gap for code, found while checking:** the live path shapes with every profile in the project (`claimProfilesRead(projectID)`), so each app's override reaches every app in that project. Per-app shapes need the request's `application.client_id` mapped to its app. Zitadel may send that only from v4. Debug mode's first capture will show whether prod sends it.
+- **Owner's calls still open (A-14):**
+  - text formats for roles: Advanced only, with a warning, or removed;
+  - debug mode's default scope: "Only you" or everyone;
+  - an "I understand" tick for a save the app will act on;
+  - an app with no shape: nothing from Syndra, or a basic default.
 
 ### Audit of 27 Oct — remediation in batches
 
