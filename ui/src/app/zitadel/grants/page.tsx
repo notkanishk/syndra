@@ -13,6 +13,8 @@ import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ProjectName, UserName } from "@/components/names";
 import { useUpstreamGrants } from "@/lib/queries/useUpstream";
 import { useDebounce } from "@/lib/useDebounce";
+import { sortByName, sortNames } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * Every grant the identity provider holds.
@@ -29,8 +31,13 @@ export default function UpstreamGrantsPage() {
   const limit = paging.limit;
   const search = useDebounce(query, 200).trim().toLowerCase();
 
+  const names = useShownNames();
+  // A to Z by the person shown, then the project, before the page cuts the list.
   const rows = useMemo(() => {
-    const all = grants.data?.items ?? [];
+    const all = sortByName(
+      grants.data?.items ?? [],
+      (g) => `${names.user(g.userId)} \u0000${names.project(g.projectId)}`,
+    );
     if (!search) return all;
     return all.filter((grant) =>
       [grant.userId, grant.projectId, grant.roleKeys.join(" ")]
@@ -38,7 +45,7 @@ export default function UpstreamGrantsPage() {
         .toLowerCase()
         .includes(search),
     );
-  }, [grants.data, search]);
+  }, [grants.data, search, names]);
 
   const visible = rows.slice(0, limit);
 
@@ -120,7 +127,7 @@ export default function UpstreamGrantsPage() {
                 <ProjectName id={grant.projectId} />
               </span>
               <span className="min-w-0 flex-1 truncate">
-                {grant.roleKeys.map((key) => (
+                {sortNames(grant.roleKeys).map((key) => (
                   <Mono key={key} className="mr-2 text-muted">
                     {key}
                   </Mono>

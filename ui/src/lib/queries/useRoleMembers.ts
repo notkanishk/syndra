@@ -6,6 +6,7 @@ import type { RoleReason } from "@/components/access/AccessSource";
 import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { UserProfile } from "@/lib/types";
+import { sortByName } from "@/lib/sort";
 
 /** One holder of a (project, role) pair, with the sources that produced it. */
 export interface RoleMember {
@@ -80,6 +81,11 @@ export function useRoleMembers(projectId: string, roleKey: string) {
         `/projects/${encodeURIComponent(projectId)}/roles/${encodeURIComponent(roleKey)}/members`,
       ),
     enabled: Boolean(projectId && roleKey),
+    select: (view) => ({
+      ...view,
+      members: sortByName(view.members ?? [], (m) => m.user.name, (m) => m.user.id),
+      observed_only: view.observed_only && sortByName(view.observed_only, (p) => p.name),
+    }),
   });
 }
 

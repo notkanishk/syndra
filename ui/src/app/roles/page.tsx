@@ -24,6 +24,7 @@ import { WaitsMark } from "@/components/ui/WaitsMark";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { humanizeKey } from "@/lib/format";
+import { sortByName, sortNames } from "@/lib/sort";
 
 type RoleSort = "project" | "role" | "group" | "people";
 
@@ -64,10 +65,10 @@ export default function RolesPage() {
   // projects, not one "Unknown project", and an id is never the label.
   const projects = useMemo(() => {
     const byId = new Map(all.map((role) => [role.project_id, projectLabel(role.project_name, role.project_id)]));
-    return Array.from(byId, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+    return sortByName(Array.from(byId, ([id, label]) => ({ id, label })), (p) => p.label);
   }, [all]);
   const groups = useMemo(
-    () => Array.from(new Set(all.map((role) => role.group).filter(Boolean))).sort() as string[],
+    () => sortNames(Array.from(new Set(all.map((role) => role.group).filter(Boolean))) as string[]),
     [all],
   );
 

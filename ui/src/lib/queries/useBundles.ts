@@ -3,6 +3,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { sortByName } from "@/lib/sort";
 import type { CascadeOutcome } from "@/lib/types";
 
 export interface BundleRow {
@@ -111,7 +112,9 @@ function rolesKey(bundleId: string, published: boolean) {
   return published ? KEYS.publishedRolesFor(bundleId) : KEYS.rolesFor(bundleId);
 }
 
-/** List all bundles. */
+const byBundleName = (rows: BundleRow[]) => sortByName(rows, (b) => b.name);
+
+/** List all bundles, A to Z. */
 export function useBundles() {
   return useQuery({
     queryKey: KEYS.list,
@@ -119,6 +122,7 @@ export function useBundles() {
       const data = await request<unknown>("/bundles");
       return Array.isArray(data) ? (data as BundleRow[]) : [];
     },
+    select: byBundleName,
   });
 }
 

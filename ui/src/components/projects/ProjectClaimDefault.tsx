@@ -19,6 +19,7 @@ import {
   type ClaimFormat,
   type ProjectDefaultForm,
 } from "@/lib/queries/useClaimShape";
+import { sortNames } from "@/lib/sort";
 
 /**
  * The project's default shape (A-14 §2, §7): what every app on this project
@@ -247,7 +248,7 @@ function ProfileForm({
                   }
                   className="w-[170px]"
                 >
-                  {(vocabulary.data?.attributes ?? []).map((attribute) => (
+                  {sortNames(vocabulary.data?.attributes ?? []).map((attribute) => (
                     <option key={attribute} value={attribute}>
                       {attribute}
                     </option>

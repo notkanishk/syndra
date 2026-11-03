@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { sortAccounts, sortByName } from "@/lib/sort";
 import type { CatalogResponse, ProjectCatalog } from "@/lib/types";
 
 export interface CatalogUser {
@@ -10,6 +11,7 @@ export interface CatalogUser {
   name: string;
   title: string;
   email: string;
+  service_account?: boolean;
 }
 
 /**
@@ -20,17 +22,23 @@ export interface CatalogUser {
  */
 const KEY = ["catalog", "response"] as const;
 
-function useCatalog() {
+function useCatalog<T>(select: (data: CatalogResponse) => T) {
   return useQuery({
     queryKey: KEY,
     queryFn: () => request<CatalogResponse>("/catalog"),
+    select,
   });
 }
 
-/** The persona list for pickers. */
+// Module-level so the query memoises the sorted slices across renders.
+const users = (data: CatalogResponse): CatalogUser[] => sortAccounts(data.users ?? []);
+const projects = (data: CatalogResponse): ProjectCatalog[] =>
+  sortByName(data.projects ?? [], (p) => p.name).map((p) => ({ ...p, roles: sortByName(p.roles ?? [], (r) => r.label || r.key, (r) => r.key) }));
+
+/** The persona list for pickers: people A to Z, then service accounts A to Z. */
 export function useCatalogUsers() {
-  const catalog = useCatalog();
-  return { ...catalog, data: catalog.data?.users ?? [] };
+  const catalog = useCatalog(users);
+  return { ...catalog, data: catalog.data ?? [] };
 }
 
 /**
@@ -46,9 +54,9 @@ export function useCatalogProjects(): {
   error: unknown;
   refetch: () => void;
 } {
-  const catalog = useCatalog();
+  const catalog = useCatalog(projects);
   return {
-    data: catalog.data?.projects ?? [],
+    data: catalog.data ?? [],
     isLoading: catalog.isLoading,
     error: catalog.error,
     refetch: catalog.refetch,

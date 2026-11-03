@@ -103,8 +103,6 @@ function AppClaims({ applicationId }: { applicationId: string }) {
     setPersonId(users.data.some((u) => u.id === selfId) ? selfId! : users.data[0].id);
   }, [users.data, selfId, personId]);
   const person = users.data.find((u) => u.id === personId)?.name ?? "this person";
-  // You first, then everyone (A-15 §5).
-  const people = [...users.data.filter((u) => u.id === selfId), ...users.data.filter((u) => u.id !== selfId)];
 
   const [draft, setDraft] = useState<ShapeDraft | null>(null);
   const [sheet, setSheet] = useState<{ kind: "template"; id: string } | { kind: "copy" } | { kind: "save" } | null>(null);
@@ -214,7 +212,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
             isLoading={preview.isLoading}
             error={preview.error}
             onRetry={() => preview.refetch()}
-            people={people}
+            people={users.data}
             personId={personId}
             onPerson={setPersonId}
             ctx={ctx}

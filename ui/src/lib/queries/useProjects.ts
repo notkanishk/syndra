@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { sortByName } from "@/lib/sort";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
 
 export interface ProjectSummaryRow {
@@ -55,7 +56,15 @@ export function useProjects() {
       const data = await request<unknown>("/projects");
       return Array.isArray(data) ? (data as ProjectSummaryRow[]) : [];
     },
+    select: byProjectName,
   });
 }
+
+/** Projects A to Z, and each project's roles A to Z by their shown label. */
+const byProjectName = (rows: ProjectSummaryRow[]) =>
+  sortByName(rows, (r) => r.project.name, (r) => r.project.id).map((r) => ({
+    ...r,
+    project: { ...r.project, roles: sortByName(r.project.roles ?? [], (x) => x.label || x.key, (x) => x.key) },
+  }));
 
 export const projectsQueryKeys = KEYS;

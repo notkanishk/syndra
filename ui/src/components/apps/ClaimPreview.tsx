@@ -18,6 +18,7 @@ import { clockOf, diffLines, tokenLines } from "@/lib/claims";
 import { selectContents, useClipboardAvailable } from "@/lib/clipboard";
 import type { CatalogUser } from "@/lib/queries/useCatalogUsers";
 import type { Explanation, Preview } from "@/lib/queries/useClaimShape";
+import { sortAccounts } from "@/lib/sort";
 
 import { check5, check6, checkWords, verdictOf, type CheckContext } from "./claim-words";
 
@@ -48,6 +49,11 @@ export function ClaimPreview({
   onPerson: (id: string) => void;
   ctx: CheckContext;
 }) {
+  // People A to Z, then service accounts A to Z under their own label: the
+  // selected one is marked by the select, never moved to the top.
+  const sorted = sortAccounts(people);
+  const humans = sorted.filter((u) => !u.service_account);
+  const machines = sorted.filter((u) => u.service_account);
   const one = preview?.people[0];
   const shown: Explanation | undefined = one?.draft ?? one?.now;
   const asDraft = Boolean(one?.draft);
@@ -83,11 +89,20 @@ export function ClaimPreview({
             onChange={(e) => onPerson(e.target.value)}
             className="w-[160px] border-0 px-1 py-0 text-[14px]"
           >
-            {people.map((u) => (
+            {humans.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
               </option>
             ))}
+            {machines.length > 0 && (
+              <optgroup label="Service accounts">
+                {machines.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </Select>
         </span>
         <span className="ml-auto flex items-center gap-2.5">

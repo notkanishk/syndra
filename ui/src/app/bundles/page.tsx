@@ -40,7 +40,7 @@ import { useUserAccess } from "@/lib/queries/useUsers";
 export default function BundlesPage() {
   const bundles = useBundles();
   const [creating, setCreating] = useState(false);
-  const rows = [...(bundles.data ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  const rows = bundles.data ?? []; // A to Z (useBundles)
   // S5: a bundle that leaves on a later read (retired) fades where it was and closes its gap
   // after, and not under the pointer.
   const leaving = useLeavingRows(rows, (bundle) => bundle.id, !bundles.isLoading && !bundles.error);

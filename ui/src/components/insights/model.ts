@@ -1,6 +1,7 @@
 import { projectLabel } from "@/components/names/Unresolved";
 import { formatList } from "@/lib/format";
 import type { TopologyGraph, TopologyNode } from "@/lib/queries/useTopology";
+import { sortByName, sortNames } from "@/lib/sort";
 
 /**
  * Insights reads one graph and draws it as four lanes: what is given through
@@ -56,7 +57,7 @@ export function buildModel(graph: TopologyGraph): Model {
   const nodes = graph.nodes.map(named);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const lanes: Record<Lane, TopologyNode[]> = { bundle: [], role: [], project: [], application: [] };
-  for (const n of [...nodes].sort((a, b) => a.label.localeCompare(b.label))) lanes[n.kind]?.push(n);
+  for (const n of sortByName(nodes, (x) => x.label)) lanes[n.kind]?.push(n);
 
   const projectByPid = new Map(lanes.project.map((p) => [p.project_id ?? p.id, p]));
   const roleIds = new Map<string, string>();
@@ -174,8 +175,9 @@ export function refNode(m: Model, kind: "bundle" | "project", id: string): strin
   return [`${kind}:${id}`, id].find((x) => m.byId.get(x)?.kind === kind) ?? null;
 }
 
-/** Up to four names, then how many more. */
-export function listOf(names: string[], max = 4): string {
+/** Up to four names A to Z, then how many more. */
+export function listOf(unsorted: string[], max = 4): string {
+  const names = sortNames(unsorted);
   return names.length > max ? `${names.slice(0, max).join(", ")} and ${names.length - max} more` : formatList(names);
 }
 

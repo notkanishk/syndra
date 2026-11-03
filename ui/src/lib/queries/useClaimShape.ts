@@ -3,6 +3,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { sortByName } from "@/lib/sort";
 
 /**
  * What each app is told (A-14, ADR-003). A shape belongs to one app; an app
@@ -185,11 +186,13 @@ export const claimKeys = {
   project: (projectId: string) => ["claim-shape", "project", projectId] as const,
 };
 
+const byTemplateName = (data: { templates: ClaimTemplate[] }) => sortByName(data.templates ?? [], (t) => t.name);
+
 export function useClaimTemplates() {
   return useQuery({
     queryKey: ["claim-templates"],
     queryFn: () => request<{ templates: ClaimTemplate[] }>("/claim-templates"),
-    select: (data) => data.templates,
+    select: byTemplateName,
     staleTime: Infinity,
   });
 }
