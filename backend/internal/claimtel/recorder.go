@@ -126,6 +126,126 @@ type LastCall struct {
 
 type pairKey struct{ user, client string }
 
+// The two Actions v2 functions, as Zitadel names them on the wire.
+const (
+	FnPreAccessToken = "function/preaccesstoken"
+	FnPreUserinfo    = "function/preuserinfo"
+)
+
+// span is a run of calls through one function for one (person, client), at
+// most spanMax from first to last, keeping the worst outcome inside it: what
+// the sign-in correlator matches an event against. Several calls per sign-in
+// (an access token, the ID token, a userinfo read) fold into one span.
+type span struct {
+	from, to int64 // unix ms
+	fn       uint8 // fnCode
+	worst    uint8 // index into Outcomes
+}
+
+const (
+	spansPerPair = 8
+	spanMax      = 2 * time.Minute
+)
+
+func fnCode(f string) uint8 {
+	switch f {
+	case FnPreAccessToken:
+		return 1
+	case FnPreUserinfo:
+		return 2
+	}
+	return 0
+}
+
+// pairState is one (person, client): its newest call, and a ring of spans.
+// About 220 bytes, so the 65,536-pair cap is under 15MB at worst.
+type pairState struct {
+	last  LastCall
+	spans [spansPerPair]span
+	n     uint8 // spans in use
+	head  uint8 // the newest span
+}
+
+func (p *pairState) add(at time.Time, fn string, o Outcome) {
+	ms, code, idx := at.UnixMilli(), fnCode(fn), uint8(outcomeIndex[o])
+	// The newest span of this function takes the call while it is young enough.
+	for i := uint8(0); i < p.n; i++ {
+		s := &p.spans[(p.head+spansPerPair-i)%spansPerPair]
+		if s.fn != code {
+			continue
+		}
+		if ms-s.from <= spanMax.Milliseconds() && ms >= s.from {
+			if ms > s.to {
+				s.to = ms
+			}
+			if Worse(Outcomes[idx], Outcomes[s.worst]) {
+				s.worst = idx
+			}
+			return
+		}
+		break
+	}
+	if p.n > 0 {
+		p.head = (p.head + 1) % spansPerPair
+	}
+	if p.n < spansPerPair {
+		p.n++
+	}
+	p.spans[p.head] = span{from: ms, to: ms, fn: code, worst: idx}
+}
+
+// Rank orders outcomes from best to worst for one sign-in: served, then a
+// shape that by design does not land in this function, then answers that
+// still carried the person's claims, then no claims for a reason that is the
+// app's setting, then the rest by severity.
+func Rank(o Outcome) int {
+	switch o {
+	case Served:
+		return 0
+	case NotLanding:
+		return 1
+	case ServedLKG, UnknownFunction:
+		return 2
+	case NoGrants:
+		return 3
+	}
+	return 4 + int(o.Severity())
+}
+
+// Worse reports whether a is a worse outcome than b.
+func Worse(a, b Outcome) bool { return Rank(a) > Rank(b) }
+
+// Window is what one (person, client) called between from and to: the worst
+// outcome per function among the spans that overlap it. Overflowed is true
+// when the ring is full and its oldest span starts after from, so a call
+// inside the window may have been pushed out: the caller cannot say "not
+// called".
+func (r *Recorder) Window(userID, clientID string, from, to time.Time) (worst map[string]Outcome, overflowed bool) {
+	s := &r.shards[maphash.String(r.seed, userID+"\x00"+clientID)%shards]
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ps := s.pairs[pairKey{userID, orNone(clientID)}]
+	if ps == nil {
+		return nil, false
+	}
+	f, t := from.UnixMilli(), to.UnixMilli()
+	names := [...]string{"", FnPreAccessToken, FnPreUserinfo}
+	worst = map[string]Outcome{}
+	oldest := int64(0)
+	for i := uint8(0); i < ps.n; i++ {
+		sp := ps.spans[(ps.head+spansPerPair-i)%spansPerPair]
+		oldest = sp.from
+		if sp.to < f || sp.from > t {
+			continue
+		}
+		fn, o := names[sp.fn], Outcomes[sp.worst]
+		if cur, ok := worst[fn]; !ok || Worse(o, cur) {
+			worst[fn] = o
+		}
+	}
+	return worst, ps.n == spansPerPair && oldest > f
+}
+
 // FingerprintSeen is a payload shape this process had not seen.
 type FingerprintSeen struct {
 	FP       string
@@ -160,7 +280,7 @@ type shard struct {
 	mu      sync.Mutex
 	counts  map[Key]*Count
 	clients map[ClientKey]ClientLast
-	pairs   map[pairKey]LastCall
+	pairs   map[pairKey]*pairState
 }
 
 type minuteTally struct {
@@ -177,6 +297,7 @@ type Recorder struct {
 
 	recent     [recentMinutes]minuteTally
 	lastServed atomic.Int64 // unix nanoseconds
+	lastCalled atomic.Int64 // unix nanoseconds of the last call that named a person
 
 	fps     sync.Map // fingerprint -> struct{}
 	fpCount atomic.Int64
@@ -194,7 +315,7 @@ type Recorder struct {
 func New(now func() time.Time) *Recorder {
 	r := &Recorder{now: now, seed: maphash.MakeSeed()}
 	for i := range r.shards {
-		r.shards[i] = shard{counts: map[Key]*Count{}, clients: map[ClientKey]ClientLast{}, pairs: map[pairKey]LastCall{}}
+		r.shards[i] = shard{counts: map[Key]*Count{}, clients: map[ClientKey]ClientLast{}, pairs: map[pairKey]*pairState{}}
 	}
 	return r
 }
@@ -241,17 +362,26 @@ func (r *Recorder) Record(c Call) {
 	}
 	if c.UserID != "" {
 		pk := pairKey{c.UserID, key.ClientID}
-		if _, ok := s.pairs[pk]; !ok && len(s.pairs) >= maxPairsPerShard {
-			// ponytail: evicts an arbitrary pair when full; an LRU if the
-			// correlator ever reports pairs missing under a real burst.
-			for k := range s.pairs {
-				delete(s.pairs, k)
-				break
+		ps := s.pairs[pk]
+		if ps == nil {
+			if len(s.pairs) >= maxPairsPerShard {
+				// ponytail: evicts an arbitrary pair when full; an LRU if the
+				// correlator ever reports pairs missing under a real burst.
+				for k := range s.pairs {
+					delete(s.pairs, k)
+					break
+				}
 			}
+			ps = &pairState{}
+			s.pairs[pk] = ps
 		}
-		s.pairs[pk] = LastCall{At: c.At, Function: key.Function, Outcome: c.Outcome, MS: ms, Gen: c.Gen}
+		ps.last = LastCall{At: c.At, Function: key.Function, Outcome: c.Outcome, MS: ms, Gen: c.Gen}
+		ps.add(c.At, c.Function, c.Outcome)
 	}
 	s.mu.Unlock()
+	if c.UserID != "" {
+		r.lastCalled.Store(c.At.UnixNano())
+	}
 
 	r.tally(c.At, c.Outcome)
 	if c.Outcome == Served {
@@ -345,8 +475,19 @@ func (r *Recorder) LastCall(userID, clientID string) (LastCall, bool) {
 	s := &r.shards[maphash.String(r.seed, userID+"\x00"+clientID)%shards]
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	lc, ok := s.pairs[pairKey{userID, orNone(clientID)}]
-	return lc, ok
+	ps, ok := s.pairs[pairKey{userID, orNone(clientID)}]
+	if !ok {
+		return LastCall{}, false
+	}
+	return ps.last, true
+}
+
+// LastCalled is when a call that named a person last arrived, or zero.
+func (r *Recorder) LastCalled() time.Time {
+	if n := r.lastCalled.Load(); n != 0 {
+		return time.Unix(0, n)
+	}
+	return time.Time{}
 }
 
 // Status is the flush's health.
@@ -384,8 +525,8 @@ func (r *Recorder) Flush(ctx context.Context, write func(context.Context, Batch)
 			mergeClient(b.Clients, k, v)
 		}
 		s.counts, s.clients = map[Key]*Count{}, map[ClientKey]ClientLast{}
-		for k, lc := range s.pairs {
-			if lc.At.Before(cut) {
+		for k, ps := range s.pairs {
+			if ps.last.At.Before(cut) {
 				delete(s.pairs, k)
 			}
 		}

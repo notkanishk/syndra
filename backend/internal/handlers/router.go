@@ -26,6 +26,7 @@ func NewRouter() http.Handler {
 	// no ids, no person's data (claims-delivery-integrity S1).
 	mux.HandleFunc("GET /healthz/claims", handleClaimsHealth)
 	mux.HandleFunc("GET /api/v1/claims/delivery", withCORS(withOperatorAuth(handleClaimDelivery)))
+	mux.HandleFunc("GET /api/v1/claims/status", withCORS(withOperatorAuth(handleClaimsStatus)))
 
 	// System mode diagnostic — auth-gated to avoid leaking deployment posture.
 	// UI consumes this to render a "Live"/"Demo"/"Degraded" indicator.
@@ -424,7 +425,7 @@ func NewRouter() http.Handler {
 	// withClaimDelivery is outermost so the signature check is counted too:
 	// every call to the claims target lands in exactly one outcome class.
 	mux.HandleFunc("POST /api/action/inject",
-		withClaimDelivery(withCORS(withZitadelActionSignature("ZITADEL_ACTION_SIGNING_KEY", HandleActionInject))))
+		withClaimDelivery(withCORS(withClaimsSignature(HandleActionInject))))
 
 	return withPanicGuard(withMaxBody(withSecurityHeaders(mux)))
 }

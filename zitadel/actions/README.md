@@ -370,14 +370,18 @@ curl -fsS -X POST "https://${ZITADEL_DOMAIN}/v2/actions/targets/${TARGET_ID}" \
 The response returns the new `signingKey`. Capture it immediately — it will
 not be returned again.
 
-Because Syndra only accepts signatures that match the currently configured
-`ZITADEL_ACTION_SIGNING_KEY`, there is a brief window between Zitadel
-accepting the new key on outbound Action calls and Syndra being restarted
-with the new value. During that window, incoming Action requests fail
-signature verification, Syndra returns `401`, and Zitadel proceeds to issue
-the token with stock claims (because `restCall.interruptOnError: false`).
-Users are never blocked; custom claims simply disappear for the gap. Keep it
-under a minute.
+**The claims target** (`syndra-claim-injector`) no longer needs a restart
+(claims-delivery-integrity S5): with `IAM_OWNER_VIEWER` granted, Syndra reads
+the target's key from Zitadel every minute and at once after a call it can't
+verify, so it follows a rotation within seconds, and the key Zitadel signed
+with before keeps verifying for 15 minutes. `ZITADEL_ACTION_SIGNING_KEY` is
+the starting point and the fallback: update it at the next deploy.
+
+**The event listener** (`syndra-event-listener`) still trusts only
+`ZITADEL_EVENT_SIGNING_KEY`, so there is a brief window between Zitadel
+signing with the new key and Syndra being restarted with it. During that
+window events fail signature verification with `401` and Zitadel redelivers
+them. Keep it under a minute.
 
 `.action-signing-key.<target>.previous` is retained for audit / operator
 rollback but is **not read by the backend at runtime** — Syndra trusts a

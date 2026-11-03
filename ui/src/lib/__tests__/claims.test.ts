@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { verdictOf } from "@/components/apps/claim-words";
+import { check6, verdictOf, type CheckContext } from "@/components/apps/claim-words";
 import type { StatusTone } from "@/components/ui/Badge";
 import {
   breakingLine,
@@ -204,6 +204,8 @@ describe("the preview's verdict (A-15 §5)", () => {
     expect(verdictOf(t("danger", "healthy", "healthy", "healthy", "healthy"), false)).toEqual({ tone: "danger", text: "Check 1 fails" });
     expect(verdictOf(t("danger", "healthy", "healthy", "warn", "danger"), false)).toEqual({ tone: "danger", text: "Checks 1 and 5 fail" });
     expect(verdictOf(t("healthy", "healthy", "healthy", "warn", "healthy"), false)).toEqual({ tone: "warn", text: "Check 4 needs a look" });
+    expect(verdictOf(t("healthy", "healthy", "healthy", "healthy", "healthy", "healthy"), false).text).toBe("All six checks pass");
+    expect(verdictOf(t("healthy", "healthy", "healthy", "healthy", "healthy", "danger"), false).text).toBe("Check 6 fails");
   });
 });
 
@@ -214,5 +216,54 @@ describe("namesRoles", () => {
   });
   it("is true once the shape names a role of its own", () => {
     expect(namesRoles({ include_new: true, roles: [{ key: "staff", included: true }] } as unknown as Profile)).toBe(true);
+  });
+});
+
+describe("check 6: Zitadel reached Syndra for this app recently (S3)", () => {
+  const ctx = { app: "NetBird", project: "Network", person: "Ada", roles: [], profile: { claims: [], include_new: false, lands: "both" }, templates: [] } as unknown as CheckContext;
+  const at = new Date().toISOString();
+  const e = (state: string, facts: Record<string, unknown> = {}) =>
+    ({ user_id: "ada", read_at: at, token: null, checks: [0, 1, 2, 3, 4].map(() => ({ state: "pass", facts: {} })).concat([{ state, facts }]) }) as never;
+
+  it("passes when called in the last day and served", () => {
+    const [c] = check6(e("pass", { last_call_at: at, last_outcome: "served", last_served_at: at }), ctx);
+    expect(c.tone).toBe("healthy");
+    expect(c.sentence).toBe("Zitadel reached Syndra for NetBird recently.");
+    expect(c.faint?.[0]).toMatch(/^Last called at \d\d:\d\d today, and Syndra served its claims\.$/);
+  });
+
+  it("needs a look when the last answer carried no claims, and says why plainly", () => {
+    const [c] = check6(e("warn", { last_call_at: at, last_outcome: "sig_mismatch" }), ctx);
+    expect(c.tone).toBe("warn");
+    expect(c.sentence).toBe("Zitadel reached Syndra for NetBird, but the last answer carried no claims.");
+    expect(c.faint?.[0]).toMatch(/: signed with a key Syndra doesn't hold\.$/);
+  });
+
+  it("fails when people signed in after the last call", () => {
+    const [c] = check6(e("fail", { last_call_at: "2026-11-01T08:00:00Z", last_sign_in_at: at }), ctx);
+    expect(c.tone).toBe("danger");
+    expect(c.sentence).toBe("Zitadel stopped reaching Syndra for NetBird.");
+    expect(c.faint?.[0]).toMatch(/People signed in after it, the last at \d\d:\d\d today, and their tokens went out without Syndra's claims\./);
+  });
+
+  it("fails when Zitadel never called for it", () => {
+    const [c] = check6(e("fail", { last_call_at: null, last_sign_in_at: at }), ctx);
+    expect(c.sentence).toBe("Zitadel has never called Syndra for NetBird.");
+  });
+
+  it("has nothing to tell when nobody signed in lately", () => {
+    const [c] = check6(e("none"), ctx);
+    expect(c.tone).toBe("neutral");
+    expect(c.sentence).toBe("Nobody has signed in to NetBird lately, so there is no call to look at.");
+  });
+
+  it("says it couldn't read the record, as a ring, when telemetry is unread", () => {
+    const [c] = check6(e("stale", { unread: true }), ctx);
+    expect(c).toMatchObject({ tone: "neutral", ring: true });
+    expect(c.sentence).toBe("Syndra couldn't read its record of Zitadel's calls for NetBird.");
+  });
+
+  it("invents no sixth check for an answer that has only five", () => {
+    expect(check6({ user_id: "ada", read_at: at, token: null, checks: [] } as never, ctx)).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@ import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
 import Link from "next/link";
 
 import { AccessSource } from "@/components/access/AccessSource";
+import { ClaimsLine } from "@/components/home/ClaimsLine";
 import { Makerspace } from "@/components/home/Makerspace";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Owner } from "@/components/system/ServiceAccountOwner";
@@ -329,6 +330,9 @@ export function Home({ session }: { session: SessionUser }) {
             </>
           )}
         </div>
+        {/* Claims delivery's one line: fixed here, ahead of anything that folds,
+            so it holds its seat whether it says all is well or not (§4g). */}
+        <ClaimsLine />
         {/* #27: a clear block gives up its seat, so this says it was checked. Only
             where there is a queue to read: the one calm line below says the rest. */}
         {/* It goes and comes with the grid, by the same Unfold, in step with the swap (A-12 §1).

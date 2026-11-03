@@ -32,7 +32,7 @@ import {
 } from "@/lib/queries/useClaimShape";
 import { useUiView } from "@/lib/ui-view";
 
-import { check5, checkWords, verdict, type CheckContext } from "./claim-words";
+import { check5, check6, checkWords, verdict, type CheckContext } from "./claim-words";
 
 const clockSec = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
@@ -327,7 +327,7 @@ function OpenedSignIn({ s, ctx }: { s: SignIn; ctx: CheckContext }) {
     .map(([k, v]) => ({ key: String(k), text: `"${k}": ${literal(v)}`, theirs: true }));
   const ours: TokenBlockLine[] = claims.map((c) => ({ key: c.key, text: `"${c.key}": ${literal(c.value)}` }));
   const answered = { user_id: s.user_id, checks: checks ?? [], token: Object.fromEntries(claims.map((c) => [c.key, c.value])), read_at: s.at };
-  const trail = checks ? [...checkWords(answered, ctx), check5(answered, ctx, false)] : null;
+  const trail = checks ? [...checkWords(answered, ctx), check5(answered, ctx, false), ...check6(answered, ctx)] : null;
 
   return (
     <>
@@ -428,7 +428,7 @@ function DebugSheet({
           done
             ? undefined
             : mode === "on"
-              ? `See one account's sign-ins to ${app} live: what Zitadel asked, what Syndra answered, and the five checks. It turns itself off after 15 minutes.`
+              ? `See one account's sign-ins to ${app} live: what Zitadel asked, what Syndra answered, and the six checks. It turns itself off after 15 minutes.`
               : `Debug mode captures one account at a time. It's showing ${current === selfId ? "your" : `${nameOf(current ?? "")}'s`} sign-ins to ${app} until ${clockOf(ends)}.`
         }
       />

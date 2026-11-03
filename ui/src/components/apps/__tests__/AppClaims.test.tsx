@@ -75,6 +75,7 @@ function explanation(token: Record<string, unknown>, draft = false): Explanation
       pass({ compiled_at: "2026-11-03T09:52:00Z" }),
       pass({ source: "app", version: 3, template_id: "netbird", draft, keys: ["groups"] }),
       pass({ lands: "both" }),
+      pass({ last_call_at: "2026-11-03T09:53:00Z", last_outcome: "served", last_served_at: "2026-11-03T09:53:00Z", last_sign_in_at: "2026-11-03T09:53:00Z" }),
     ],
   };
 }
@@ -199,7 +200,7 @@ describe("a save NetBird will act on", () => {
   it("previews the draft with − and + lines, not colour alone, and says the one difference", async () => {
     renderScreen();
     fireEvent.change(await screen.findByLabelText("NetBird calls Staff"), { target: { value: "network-staff" } });
-    await screen.findByText("All five checks pass on this draft");
+    await screen.findByText("All six checks pass on this draft");
     expect(screen.getByText("Removed:", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Added:", { exact: false })).toBeInTheDocument();
     expect(screen.getByText(/"groups": \["network-staff", "netbird-admins"\]/)).toBeInTheDocument();
@@ -276,7 +277,7 @@ describe("the page, calm by default (A-15)", () => {
 
   it("keeps the checks to one line when all pass, and shows them on demand, whole", async () => {
     renderScreen();
-    expect(await screen.findByText("All five checks pass")).toBeInTheDocument();
+    expect(await screen.findByText("All six checks pass")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Checks" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show the checks" }));
     expect(await screen.findByRole("list", { name: "Checks" })).toBeInTheDocument();

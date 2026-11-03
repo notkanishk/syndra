@@ -13,7 +13,10 @@ import { CommandBlock } from "@/components/ui/CommandBlock";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Unfold } from "@/components/ui/Unfold";
+import { ClaimsDelivery } from "@/components/system/ClaimsDelivery";
 import { request } from "@/lib/api-client";
+import { formatAt } from "@/lib/format";
+import { useClaimsDelivery, type ClaimsDelivery as Delivery } from "@/lib/queries/useClaimsDelivery";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useZitadelHealth } from "@/lib/queries/useZitadel";
 
@@ -47,6 +50,8 @@ export default function IdentityProviderPage() {
     retry: false,
   });
 
+  const keyring = useClaimsDelivery().data?.keyring;
+
   const live = health.data?.status === "ok";
   const notConfigured = health.data?.status === "disabled";
   const projectCount = live
@@ -58,8 +63,8 @@ export default function IdentityProviderPage() {
     <div className="flex flex-col gap-4">
       <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
         <Notice tone="warn" title={`The action signing key is ${rotation.data?.age_days} days old.`} live>
-          It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works. Replace it
-          when nobody is working: How to replace it, below, walks through it.
+          It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works. How to
+          replace it, below, walks through it; sign-ins carry on while you do.
         </Notice>
       </Unfold>
 
@@ -101,7 +106,9 @@ export default function IdentityProviderPage() {
         />
       )}
 
-      <SigningKey status={rotation.data} loading={rotation.isLoading} error={rotation.error} />
+      {/* Fixed, under the health line: what Zitadel is doing with claims (§4g). */}
+      <ClaimsDelivery domain={health.data?.domain} connected={!notConfigured} />
+      <SigningKey status={rotation.data} loading={rotation.isLoading} error={rotation.error} keyring={keyring} />
       <UpstreamInspection reachable={live} />
       <UpstreamWrites reachable={live} />
       <TheName />
@@ -136,12 +143,14 @@ function TheName() {
 /**
  * The signing key, as one compact row — read-only, and deliberately so.
  *
- * There is no "Rotate now" button and there should not be one. Rotation is two
- * writes that must both land: Zitadel mints a new key, and the backend must be
- * restarted holding it. A click that does the first and not the second leaves
- * every claim-injection call failing signature verification, with the browser
- * showing a success toast. The operator running it in a terminal sees the exit
- * code, the new key, and the restart they still owe.
+ * There is no "Rotate now" button and there should not be one. Rotation is a
+ * command the operator runs on the server, and they see its exit code and the
+ * new keys. Since S5 the claims key needs no restart: Syndra reads the claims
+ * action's key from Zitadel every minute and right after a call it can't
+ * verify, keeping the previous key working for 15 minutes. The key in .env is
+ * the starting point and the fallback, updated at the next deploy. The event
+ * listener's key is still read from .env only, so that one still needs a
+ * restart.
  *
  * "How to replace it" opens the guide, and the guide is CommandBlocks: the
  * command and everything that has to happen after it (#71). The button only
@@ -151,10 +160,12 @@ function SigningKey({
   status,
   loading,
   error,
+  keyring,
 }: {
   status?: RotationStatus;
   loading: boolean;
   error: unknown;
+  keyring?: Delivery["keyring"];
 }) {
   const [open, setOpen] = useState(false);
   const rotateCommand = status?.rotate_command ?? "make zitadel-actions-rotate-key";
@@ -178,6 +189,9 @@ function SigningKey({
             {loading ? "Checking when the key was last replaced…" : rotationSentence(status, error)}{" "}
             Zitadel signs every sign-in request with it, so Syndra can tell they are genuine.
           </p>
+          {!loading && keyring && (
+            <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{keyringSentence(keyring)}</p>
+          )}
         </div>
         <Button
           size="sm"
@@ -217,36 +231,48 @@ function SigningKey({
           ) : (
             <CommandBlock
               command={rotateCommand}
-              caption="Run this in a terminal on the server Syndra runs on. This panel does not replace the key itself — you must restart afterwards, and a half-done replacement is worse than an old key."
+              caption="Run this in a terminal on the server Syndra runs on. This panel does not replace the key itself. Syndra picks up the new claims key from Zitadel within a minute and keeps the old one working for 15 minutes, so sign-ins carry on."
               steps={[
                 <>
                   The command writes the new key to a file under <Mono>zitadel/actions/</Mono>,
                   one per registered Action, and backs up the old one alongside it.
                 </>,
                 <>
-                  Put the new value in <Mono>ZITADEL_ACTION_SIGNING_KEY</Mono>, and the printed
-                  timestamp in <Mono>ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT</Mono> — without the
-                  second one this panel goes back to reporting an unknown age.
-                </>,
-                <>
-                  Restart the backend: <Mono>docker compose restart backend</Mono>.
+                  The event listener&rsquo;s key, <Mono>ZITADEL_EVENT_SIGNING_KEY</Mono>, is read from{" "}
+                  <Mono>.env</Mono> only: put its new value there and restart the backend,{" "}
+                  <Mono>docker compose restart backend</Mono>. Until then Syndra can&rsquo;t verify
+                  the events Zitadel sends it.
                 </>,
                 <>
                   Confirm it took: <Mono>make zitadel-actions-verify</Mono>.
                 </>,
+                <>
+                  At the next deploy, not before, put the new claims key in{" "}
+                  <Mono>ZITADEL_ACTION_SIGNING_KEY</Mono> and the printed timestamp in{" "}
+                  <Mono>ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT</Mono>. The key in <Mono>.env</Mono> is
+                  only where Syndra starts and what it falls back to; without the timestamp this
+                  panel goes back to reporting an unknown age.
+                </>,
               ]}
             />
           )}
-
-          <p className="max-w-[84ch] text-[13.5px] leading-[1.55] text-muted">
-            Between replacing the key and restarting, people can still sign in, but the access
-            details Syndra normally adds at sign-in are missing. Keep the gap short and do it when
-            nobody is working.
-          </p>
         </div>
       </Unfold>
     </Card>
   );
+}
+
+/** What the keyring last did: Syndra follows the claims key in Zitadel on its own (S5). */
+function keyringSentence(k: Delivery["keyring"]): string {
+  if (k.error?.status === 403) {
+    return "Syndra isn't allowed to read the key from Zitadel, so it checks with the key in .env alone. Give Syndra's service account the read-only IAM_OWNER_VIEWER role in Zitadel.";
+  }
+  if (k.error) {
+    return "Syndra couldn't read the key from Zitadel on its last try. The key in .env and the last key it read keep working.";
+  }
+  if (!k.read_at) return "Syndra hasn't read the key from Zitadel yet. The key in .env works meanwhile.";
+  const changed = k.changed_at ? ` It last changed ${formatAt(k.changed_at)}.` : "";
+  return `Syndra reads the key from Zitadel every minute, and right after a call it can't verify, so a new key works without a restart. Last read ${formatAt(k.read_at)}.${changed}`;
 }
 
 function keyState(

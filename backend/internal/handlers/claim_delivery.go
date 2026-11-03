@@ -172,6 +172,11 @@ type claimsHealth struct {
 	// Snapshot is the data plane's config: its generation, how long since
 	// Redis last confirmed it current, and the last-known-good copy's size.
 	Snapshot claimserve.Status `json:"snapshot"`
+	// Notes are worth knowing and change no status: no external alert is
+	// configured, or its last ping did not get through.
+	Notes []string `json:"notes"`
+	// CheckingSince is when the sign-in correlator started watching.
+	CheckingSince time.Time `json:"checking_since"`
 }
 
 // snapshotStaleAfter is ten missed polls: the snapshot still answers, but an
@@ -187,8 +192,17 @@ func ageS(now, t time.Time) *int64 {
 }
 
 func handleClaimsHealth(w http.ResponseWriter, r *http.Request) {
+	h, status := claimsHealthNow(r.Context())
+	w.Header().Set("Cache-Control", "no-store")
+	jsonResponse(w, status, h)
+}
+
+// claimsHealthNow is /healthz/claims' answer and its status code. It reads
+// memory and pings Redis; never Postgres (it is served on the data plane's
+// door). Open findings come from the detectors' in-memory copy.
+func claimsHealthNow(ctx context.Context) (claimsHealth, int) {
 	now := time.Now()
-	h := claimsHealth{Reasons: []string{}, Outcomes10m: map[string]int64{}, Redis: "ok"}
+	h := claimsHealth{Reasons: []string{}, Outcomes10m: map[string]int64{}, Redis: "ok", Notes: deadmanNotes(), CheckingSince: claimCorrelator.Since().UTC()}
 	hard, soft := []string{}, []string{}
 
 	for o, n := range claimDelivery.Recent(healthWindowMinutes) {
@@ -203,7 +217,7 @@ func handleClaimsHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	h.LastServedAgeS = ageS(now, claimDelivery.LastServed())
 
-	pingCtx, cancel := context.WithTimeout(r.Context(), 100*time.Millisecond)
+	pingCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	if err := redisPing(pingCtx); err != nil {
 		h.Redis = "down"
 		hard = append(hard, "REDIS_DOWN")
@@ -241,6 +255,20 @@ func handleClaimsHealth(w http.ResponseWriter, r *http.Request) {
 		soft = append(soft, "SNAPSHOT_STALE")
 	}
 
+	seen := map[string]bool{}
+	for _, f := range openClaimFindings() {
+		reason := claimtel.FindingReason(f.Kind, f.Subject)
+		if seen[reason] {
+			continue
+		}
+		seen[reason] = true
+		if claimtel.FindingSeverity(f.Kind, f.Sample) == claimtel.Hard {
+			hard = append(hard, reason)
+		} else {
+			soft = append(soft, reason)
+		}
+	}
+
 	sort.Strings(hard)
 	sort.Strings(soft)
 	h.Reasons = append(hard, soft...)
@@ -253,8 +281,7 @@ func handleClaimsHealth(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.Status = "ok"
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	jsonResponse(w, status, h)
+	return h, status
 }
 
 // ---------------------------------------------------------------------------
@@ -295,11 +322,106 @@ type deliveryRow struct {
 	P99MS *float64 `json:"p99_le_ms"`
 }
 
+// deliveryFinding is one finding: the detectors' (claim_findings) and the
+// payload shapes Zitadel changed. Severity is hard, soft or info.
 type deliveryFinding struct {
-	Kind      string    `json:"kind"`
-	Severity  string    `json:"severity"`
-	Subject   string    `json:"subject"`
-	FirstSeen time.Time `json:"first_seen"`
+	Kind       string         `json:"kind"`
+	Severity   string         `json:"severity"`
+	Subject    string         `json:"subject"`
+	FirstSeen  time.Time      `json:"first_seen"`
+	LastSeen   time.Time      `json:"last_seen"`
+	Count      int64          `json:"count"`
+	Sample     map[string]any `json:"sample,omitempty"`
+	ResolvedAt *time.Time     `json:"resolved_at"`
+}
+
+var severityWord = map[claimtel.Severity]string{claimtel.Hard: "hard", claimtel.Soft: "soft", claimtel.Informational: "info"}
+
+// liveApp is one app's delivery over the window: the Live part of System ›
+// Zitadel. Every app with a client id is listed, called or not, so the list
+// does not move with traffic; a client Zitadel named that no app has is
+// listed too.
+type liveApp struct {
+	ClientID     string           `json:"client_id"`
+	AppID        string           `json:"app_id,omitempty"`
+	Name         string           `json:"name,omitempty"`
+	ProjectID    string           `json:"project_id,omitempty"`
+	LastSignInAt *time.Time       `json:"last_sign_in_at"`
+	LastCallAt   *time.Time       `json:"last_call_at"`
+	LastServedAt *time.Time       `json:"last_served_at"`
+	LastOutcome  string           `json:"last_outcome,omitempty"`
+	Calls        int64            `json:"calls"`
+	Outcomes     map[string]int64 `json:"outcomes"`
+	P99MS        *float64         `json:"p99_le_ms"`
+}
+
+func liveApps(ctx context.Context, rows []db.ClaimDeliveryRow, last []db.ClaimDeliveryLastRow) []liveApp {
+	byClient := map[string]*liveApp{}
+	var order []string
+	get := func(client string) *liveApp {
+		a, ok := byClient[client]
+		if !ok {
+			a = &liveApp{ClientID: client, Outcomes: map[string]int64{}}
+			byClient[client] = a
+			order = append(order, client)
+		}
+		return a
+	}
+	if apps, err := directoryApplications(ctx); err == nil {
+		signIns, _ := dbLastSignInPerApp(ctx)
+		for _, d := range apps {
+			if d.ClientID == "" {
+				continue
+			}
+			a := get(d.ClientID)
+			a.AppID, a.Name, a.ProjectID = d.ID, d.Name, d.ProjectID
+			if at, ok := signIns[d.ID]; ok {
+				a.LastSignInAt = &at
+			}
+		}
+	}
+	hists := map[string][]int64{}
+	for _, r := range rows {
+		a := get(r.ClientID)
+		a.Calls += r.N
+		a.Outcomes[string(r.Outcome)] += r.N
+		h := hists[r.ClientID]
+		if h == nil {
+			h = make([]int64, claimtel.HistBuckets)
+			hists[r.ClientID] = h
+		}
+		for i := range h {
+			if i < len(r.Hist) {
+				h[i] += r.Hist[i]
+			}
+		}
+	}
+	for _, l := range last {
+		a := get(l.ClientID)
+		if a.LastCallAt == nil || l.LastAt.After(*a.LastCallAt) {
+			at := l.LastAt
+			a.LastCallAt, a.LastOutcome = &at, l.LastOutcome
+		}
+		if l.LastServedAt != nil && (a.LastServedAt == nil || l.LastServedAt.After(*a.LastServedAt)) {
+			a.LastServedAt = l.LastServedAt
+		}
+	}
+	out := make([]liveApp, 0, len(order))
+	for _, c := range order {
+		a := byClient[c]
+		a.P99MS = claimtel.UpperBoundMS(hists[c], 0.99)
+		out = append(out, *a)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if (out[i].Name == "") != (out[j].Name == "") {
+			return out[j].Name == "" // named apps first
+		}
+		if out[i].Name != out[j].Name {
+			return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+		}
+		return out[i].ClientID < out[j].ClientID
+	})
+	return out
 }
 
 func handleClaimDelivery(w http.ResponseWriter, r *http.Request) {
@@ -340,14 +462,27 @@ func handleClaimDelivery(w http.ResponseWriter, r *http.Request) {
 			P99MS:            claimtel.UpperBoundMS(row.Hist, 0.99),
 		})
 	}
-	findings := []deliveryFinding{}
+	detected, err := dbClaimFindings(ctx, since)
+	if err != nil {
+		jsonErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Could not read claim delivery.")
+		return
+	}
+	findings := make([]deliveryFinding, 0, len(detected))
+	for _, f := range detected {
+		findings = append(findings, deliveryFinding{
+			Kind: f.Kind, Severity: severityWord[claimtel.FindingSeverity(f.Kind, f.Sample)], Subject: f.Subject,
+			FirstSeen: f.FirstSeen, LastSeen: f.LastSeen, Count: f.Count, Sample: f.Sample, ResolvedAt: f.ResolvedAt,
+		})
+	}
 	for _, f := range fps {
 		if f.Changed && !f.FirstSeen.Before(since) {
 			findings = append(findings, deliveryFinding{
 				Kind: "PAYLOAD_SHAPE_CHANGED", Severity: "info", Subject: f.Function + " " + f.FP, FirstSeen: f.FirstSeen,
+				LastSeen: f.FirstSeen, Count: 1,
 			})
 		}
 	}
+	counts, waiting, dropped := claimCorrelator.Summary()
 
 	jsonResponse(w, http.StatusOK, map[string]any{
 		"window":       window.String(),
@@ -357,10 +492,41 @@ func handleClaimDelivery(w http.ResponseWriter, r *http.Request) {
 		"last":         last,
 		"fingerprints": fps,
 		"findings":     findings,
+		"apps":         liveApps(ctx, rows, last),
+		"sign_ins": map[string]any{
+			"checking_since":  claimCorrelator.Since().UTC(),
+			"last_24h":        counts,
+			"waiting":         waiting,
+			"dropped":         dropped,
+			"last_sign_in_at": nullTime(claimCorrelator.LastSignIn()),
+		},
+		"configuration": lastConfigRun.Load(),
+		"keyring":       keyringSnapshot(),
+		"alert":         map[string]any{"configured": DeadmanConfigured(), "notes": deadmanNotes()},
 		"telemetry": map[string]any{
 			"flush":        claimDelivery.Status(),
 			"active_pairs": claimDelivery.ActivePairs(),
 			"repair":       claimRepair.stats(),
 		},
+	})
+}
+
+// GET /api/v1/claims/status (operator): Home's one line. The same answer the
+// dead-man's switch acts on, so Home says "problems" exactly when the
+// external alert has stopped hearing from Syndra, plus the last day of
+// checked sign-ins.
+func handleClaimsStatus(w http.ResponseWriter, r *http.Request) {
+	if claimFindingsOpen.Load() == nil {
+		_ = refreshClaimFindings(r.Context()) // a fresh process: read once
+	}
+	h, _ := claimsHealthNow(r.Context())
+	counts, waiting, _ := claimCorrelator.Summary()
+	jsonResponse(w, http.StatusOK, map[string]any{
+		"status":         h.Status,
+		"problems":       len(h.Reasons),
+		"reasons":        h.Reasons,
+		"checking_since": claimCorrelator.Since().UTC(),
+		"sign_ins_24h":   counts,
+		"waiting":        waiting,
 	})
 }
