@@ -275,22 +275,40 @@ All three surface on System › Zitadel ("Claims delivery") and on Home's claims
 
 **Start-up refuses a bad configuration (§4f)** with one log line naming it: with `ZITADEL_DOMAIN` set, `ZITADEL_ACTION_SIGNING_KEY` shorter than 32 bytes or holding a space or a non-printable byte, `SYNDRA_EXTERNAL_URL` empty or not `https`, and the canary half set. *Before merging, check the server:* `awk -F= '/^ZITADEL_ACTION_SIGNING_KEY=/{print length($2)}' .env` prints 32 or more, and `grep '^SYNDRA_EXTERNAL_URL=https://' .env` matches. A dependency that is down is not a refusal: Syndra starts degraded and says which.
 
-**Owner step (S6-canary): the L2 canary in Zitadel.** L2 asks Zitadel for a real token every 15 minutes and checks Syndra's claims are in it. It stays off until all three settings below are set; half set refuses the start.
+**Owner step (S6-canary): L2 on Syndra's own service account** (owner, 3 Nov 2026: no dummy account or project). L2 asks Zitadel for a real token every 15 minutes and checks that Syndra's claims are in it. It reuses the service account Syndra already uses to talk to Zitadel. That account is a machine user with JWT access tokens, and its key is already on the LXC. It only needs one role in an existing project.
 
-1. In the Zitadel console, create a project named `Syndra canary`. Copy its **Resource ID**.
-2. In that project, **Roles** → New: key `canary`, display name `Canary`.
-3. **Users** → Service Users → New: user name `syndra-canary`, name `Syndra canary`, **Access Token Type: JWT**. Copy its **User ID**.
-4. On that user, **Authorizations** → New: project `Syndra canary`, role `canary`.
-5. On that user, **Keys** → New, type JSON, no expiry (or note the date). Download the file.
-6. On the server: copy the file to `/opt/syndra/syndra-canary-key.json`, `chmod 600` it, and add to `.env`:
+1. In the Zitadel console, open the **Syndra** project. **Roles** → New: key `syndra-probe`, display name `Syndra probe`. Give it no meaning anywhere else: Syndra's operator checks use `ZITADEL_ADMIN_ROLE_KEY`, never this role.
+2. On Syndra's service account (the user in `ZITADEL_MACHINE_KEY_PATH`), **Authorizations** → New: project `Syndra`, role `syndra-probe`.
+3. Copy the Syndra project's **Resource ID** and add one line to `.env`:
 
    ```bash
-   SYNDRA_CANARY_KEY_PATH=./syndra-canary-key.json
-   SYNDRA_CANARY_PROJECT_ID=<the project's Resource ID>
-   SYNDRA_CANARY_CLIENT_ID=<the user's User ID>
+   SYNDRA_CANARY_PROJECT_ID=<the Syndra project's Resource ID>
    ```
 
-7. Redeploy.
+   `SYNDRA_CANARY_KEY_PATH` and `SYNDRA_CANARY_CLIENT_ID` stay unset. The key defaults to `ZITADEL_MACHINE_KEY_PATH`, and the client id to the one Zitadel names in the token. Set them only for a separate canary account.
+4. Redeploy.
 
-*Check:* within a minute of the start, `curl -s http://<APP_HOST>:8080/healthz/claims` shows `"probe_l2":"pass"`. The first run can say `PROBE_L2:no_facts`: the canary's first call is what makes Syndra compile it, and the next run (15 minutes) passes. If it says `PROBE_L2:not_called`, its detail names the `client_id` the token carried: put that in `SYNDRA_CANARY_CLIENT_ID` and redeploy. Other classes: `token` (no token: the key, the user or the JWT token type), `claims` (the token lacks Syndra's claim: Zitadel's execution or a deny list), `log_claim` (Zitadel dropped a key Syndra sent: a collision), `userinfo`. When L2 fails and L1 passes, the fault is on Zitadel's side. The canary is a real service user, so People lists it.
+The service account then shows as holding one role in Syndra. It is a service account, so it never counts as a person.
 
+*Check:* within a minute of the start, `curl -s http://<APP_HOST>:8080/healthz/claims` shows `"probe_l2":"pass"`. The first run can say `PROBE_L2:no_facts`: the canary's first call is what makes Syndra compile it, and the next run (15 minutes) passes. If it says `PROBE_L2:not_called`, no served call matched the token's own `client_id`; the detail names it. Other classes: `token` (no token: the key, the user or the JWT token type), `claims` (the token lacks Syndra's claim: Zitadel's execution or a deny list), `log_claim` (Zitadel dropped a key Syndra sent: a collision), `userinfo`. When L2 fails and L1 passes, the fault is on Zitadel's side.
+
+
+
+## Zitadel upgrades: the claims check (owner, 3 Nov 2026)
+
+A Zitadel upgrade is the one time the Actions v2 contract can change underneath Syndra: payload field names (the `project_id` defect was one), how claims are merged, or new built-in claims. Do this on every upgrade, minor ones included:
+
+1. **Before the upgrade:** on System › Zitadel → Claims delivery, check everything is clean. Note the open findings, so new ones stand out.
+2. **Right after the upgrade:**
+   - `curl -s http://<APP_HOST>:8080/healthz/claims` shows `"probe_l1":"pass"` and, within 15 minutes, `"probe_l2":"pass"`.
+   - A "Zitadel's payload changed shape" finding means the fields Zitadel sends moved. Read its redacted example before anything else.
+3. **One real sign-in, in debug mode:**
+   1. On one app's claims part, turn on Debug mode for yourself, then sign in to that app.
+   2. Open the sign-in: Zitadel's request should name the project as `user_grants[].project_id`, with `application.client_id` present (v4+). Syndra's answer should be `served`.
+   3. Decode the app's token (or call userinfo) and confirm Syndra's claims are in it, with no `urn:zitadel:iam:action:function/…:log` claim, which would mean Zitadel dropped a key.
+4. **Record the payload:**
+   1. Copy that sign-in's request JSON (debug mode already strips signatures) into `backend/internal/handlers/testdata/zitadel/<version>/preaccesstoken.json`, replacing personal values with example ones.
+   2. Add its expected `append_claims` to the contract test.
+   
+   The upgrade PR carries the fixture, so the next code change is tested against the real shape.
+5. **If anything fails:** Syndra's claims are missing, but sign-ins still work (interrupt-on-error is off). Roll Zitadel back, or fix forward with the finding's link, before turning Actions v1 off or leaving it off.
