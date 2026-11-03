@@ -66,3 +66,6 @@ Run from `ui/`. `.ds-sync/` already holds the staged scripts and `esbuild ts-mor
 - `overrides/dts.mjs` is a fork of the skill's `lib/dts.mjs` (types root + `@/` paths): diff against the bundled lib on every re-sync and merge upstream changes.
 - Seeded fixtures in names/DegradedBanner previews mirror `CatalogResponse` / `SystemMode`; shape changes there break those cards (they fall back to skeletons, not errors).
 - Not previewed: RehearsalDialog scope + result steps, Term's open popover.
+
+## Fonts on the design canvas (3 Nov 2026)
+The canvas renders each artboard as a srcdoc document whose base is `/appifact/<name>.dc.html`, so a linked stylesheet's relative `./*.woff2` resolves to a 404. `fonts/fonts.css` therefore lists the canvas's uploaded font assets first (`url(/_blob/<id>)`), then the relative file, which is what local previews use. The three ids are the canvas's uploads of the same woff2 files; if a font file changes, upload it to the canvas again and replace its id here. `host.css` gives each `--font-*` a system fallback stack, so a font that fails never falls back to Times.
