@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
 <link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
-<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.container.css">
 <link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
 <script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/react-cache-shim.js"></script>
 <script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"></script>
@@ -14,7 +14,7 @@
 <x-dc>
 <helmet>
 <meta name="design_doc_mode" content="canvas">
-<style>body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}</style>
 </helmet>
 
 <sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
@@ -69,7 +69,7 @@
     <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
       <sc-for list="{{ bg.frames }}" as="f" hint-placeholder-count="3">
         <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
-          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><iframe src="{{ f.src }}" title="{{ f.label }}" style="width:{{ f.w }}px;height:{{ f.h }}px;border:0;transform:scale({{ f.scale }});transform-origin:0 0"></iframe></div>
+          <div style="width:{{ f.boxW }}px;height:{{ f.boxH }}px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:{{ f.w }}px;height:{{ f.h }}px;;transform:scale({{ f.scale }});transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
           <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:{{ f.boxW }}px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
         </figure>
       </sc-for>
@@ -263,7 +263,7 @@
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    const q = new URLSearchParams(window.location.search);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
     this.frame = q.get("frame");
     this.st = this.frame || "waiting";
     if (this.frame) { try { window.localStorage.setItem("syndra_ui_view", "advanced"); } catch (e) {} }

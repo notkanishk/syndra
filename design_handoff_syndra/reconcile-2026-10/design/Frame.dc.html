@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Frame</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div ref="{{ host }}" data-theme="{{ theme }}" data-syndra-portal="" style="width: 100%; height: 100%; overflow: hidden; background: var(--ground); contain: layout paint; container-type: inline-size; container-name: syndra-frame"></div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"frameSrc":{"editor":"text","default":"route-holds.dc.html?frame=default"},"$preview":{"width":1440,"height":1000}}'>
+// Draws one board frame (a page plus its ?query) inline, in place of the
+// <iframe> the boards used outside the canvas. A separate React root keeps the
+// page from counting as importing itself when a board shows its own frames.
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.host = React.createRef();
+  }
+  componentDidMount() { this.mount(); }
+  componentDidUpdate() { this.mount(); }
+  componentWillUnmount() { if (this.root) this.root.unmount(); }
+  mount() {
+    const src = this.props.frameSrc || "";
+    if (!this.host.current || src === this.src) return;
+    const i = src.indexOf("?");
+    const name = (i < 0 ? src : src.slice(0, i)).replace(/^\.\//, "").replace(/\.dc\.html$/, "");
+    const C = window.getDC && window.getDC(name);
+    if (!C || !window.ReactDOM) return;
+    this.src = src;
+    if (!this.root) this.root = window.ReactDOM.createRoot(this.host.current);
+    this.root.render(React.createElement(C, { frameQuery: i < 0 ? "" : src.slice(i) }));
+  }
+  renderVals() {
+    // Each frame carries its own theme: frames share one document here, so none
+    // may set the theme on <html>. Light frames are named "...-light" or were
+    // marked by the board's old daylight onLoad handler (passed as light).
+    const m = /[?&]frame=([^&]*)/.exec(this.props.frameSrc || "");
+    const light = !!this.props.light || (m && /-light$/.test(decodeURIComponent(m[1])));
+    return { host: this.host, theme: light ? "light" : "dark" };
+  }
+}
+</script>
+</body>
+</html>

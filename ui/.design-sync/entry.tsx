@@ -1,7 +1,7 @@
 // design-sync entry: the synced surface (primitives + shell + names + states)
 // plus the app's own root providers. Re-exports only - no component code here.
 import "./process-shim";
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 
@@ -9,6 +9,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NameResolverProvider } from "@/lib/queries/useNameResolver";
 import { getQueryClient, makeQueryClient } from "@/lib/query-client";
 import { ThemeProvider } from "@/lib/theme";
+import { PortalTarget } from "@/components/ui/Modal";
 
 export * from "@/components/ui/Acknowledge";
 export * from "@/components/ui/ActionOutcome";
@@ -109,15 +110,27 @@ export function SyndraRoot({
     for (const { key, value } of data) seeded.setQueryData(key, value);
     return seeded;
   });
+  // On the design canvas a frame marks itself [data-syndra-portal]; overlays
+  // portal into it instead of the board's <body>. Resolved before paint (a
+  // layout effect re-renders synchronously), so a dialog drawn open never
+  // flashes on the board first. Outside a frame, behaviour is the app's.
+  const probe = useRef<HTMLSpanElement>(null);
+  const [frame, setFrame] = useState<HTMLElement | null | undefined>(undefined);
+  useLayoutEffect(() => {
+    setFrame(probe.current?.closest<HTMLElement>("[data-syndra-portal]") ?? null);
+  }, []);
+  if (frame === undefined) return <span ref={probe} hidden />;
   return (
-    <PathnameContext.Provider value={pathname}>
-      <QueryClientProvider client={client}>
-        <NameResolverProvider>
-          <ThemeProvider>
-            <ErrorBoundary>{children}</ErrorBoundary>
-          </ThemeProvider>
-        </NameResolverProvider>
-      </QueryClientProvider>
-    </PathnameContext.Provider>
+    <PortalTarget.Provider value={frame}>
+      <PathnameContext.Provider value={pathname}>
+        <QueryClientProvider client={client}>
+          <NameResolverProvider>
+            <ThemeProvider>
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </ThemeProvider>
+          </NameResolverProvider>
+        </QueryClientProvider>
+      </PathnameContext.Provider>
+    </PortalTarget.Provider>
   );
 }
