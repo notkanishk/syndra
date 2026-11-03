@@ -71,7 +71,11 @@
   - Zitadel grant dialogs keep their outcome.
   - Deleting an app's claim asks first, with one verb on the button and the confirm.
   - Audit export says it exports every match, and CSV cells can't run as formulas.
-- [ ] 3.2 Contrast. Designed 3 Nov in A-09 §1–2: dark `--muted` 0.70 / `--faint` 0.56, light 0.78 / 0.66, `--label: var(--faint)`. Ready to build; whether stale data stops dimming to 0.62 is the owner's call.
+- [x] 3.2 Contrast (A-09 §1–2, with A-13 (d) for stale data, owner 3 Nov). Built:
+  - Tokens: dark `--muted` 0.70 / `--faint` 0.56, light 0.78 / 0.66, `--label: var(--faint)` in both. The doorway's own text moved to the same two steps (`--door-muted`, `--door-faint`); its 0.30/0.40 text measured 2.5 and 3.5:1.
+  - Text drawn with its own alpha lifted to the floors: Home's greeting headline, the token preview's comments and other apps' claims, a departed person's row, a blocked ChoiceRow's words, an adopt option someone already has, and Insights nodes outside the answer (they recede instead of fading). Disabled controls and NotOpenYet's 0.45 preview keep the inactive-component exception.
+  - Stale data no longer dims. `Card stale` recedes to the page (canvas, line-strong edge, no lift, tint on settle) and rings every `StatusDot` inside it (`StatusDot ring`). Used on TrueNAS's four cards (What it reports, its accounts, not created by Syndra, no longer needed) and on Zitadel last-known lists (projects, a project, roles, people, apps, Home's roles tile). "What it reports" says "Last known · 09:41" once, in amber. Assign, Check now and Change folder are off with one reason per card. Mappings' "Opens" lines stop dimming; the note turns amber with a ring.
+  - Guards: `src/__tests__/contrast.test.ts` measures muted, faint and label on every ground and tint in both themes, and fails on `text-ink/NN` under 66 or any 0.62 dim; `expectFullStrength` (test-utils) fails a stale card that dims anything.
 
 ## 4. Batch 4: scale and less code
 - [x] 4.1 Scale:

@@ -114,7 +114,7 @@ export default function ProjectsPage() {
         <ReadFreshness state={readState} subject="What Zitadel confirmed" className="-mt-1.5 px-[2px]" />
       )}
 
-      <Card>
+      <Card stale={readState.current === false}>
         <CardColumns>
           <span className="w-[250px] min-w-[170px]">
             <SortHead label="Project" name="project" sort={sort} onSort={setSort} />

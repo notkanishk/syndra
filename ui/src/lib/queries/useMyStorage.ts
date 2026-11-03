@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError, request } from "@/lib/api-client";
+import type { AccountHome } from "@/lib/queries/useTargets";
 import type { OneShotSecret } from "@/lib/secret";
 
 /**
@@ -141,6 +142,45 @@ export interface MyTargetView {
  */
 export function waitingOn(view: MyTargetView): boolean {
   return view.health === "offline" || view.lifecycle === "draining" || view.lifecycle === "read_only";
+}
+
+/** A hold in force on one person on one system, as the person page reads it. */
+export interface PersonHold {
+  field: string;
+  value: string;
+  reason: string;
+  actor_id: string;
+  since: string;
+  review_date?: string;
+  expires_at?: string;
+}
+
+/**
+ * A person's storage on one system, for operators (A-10 Part 1): the member's
+ * own view of it, plus what only an operator reads. Read-only.
+ */
+export interface PersonTargetView extends MyTargetView {
+  /** Made by hand on the system and assigned by an operator, not made by Syndra. */
+  adopted?: { actor_id: string; at: string };
+  /** Their home folder limit and where it comes from, with use as last read. */
+  home?: AccountHome;
+  holds: PersonHold[];
+  /** The last successful read, while the system is offline. */
+  last_known?: { storage: NonNullable<MyTargetView["storage"]>; read_at: string };
+  /** Why nobody can have an account there yet. */
+  setup?: "no_project" | "no_mapping";
+  /** What an account still to be made will open. */
+  preview?: StoragePlace[];
+}
+
+/** A person's storage on every connected system (operators). */
+export function usePersonTargets(userId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["users", userId, "targets"],
+    enabled,
+    queryFn: () => request<{ targets: PersonTargetView[] }>(`/users/${encodeURIComponent(userId)}/targets`),
+    select: (data) => data.targets ?? [],
+  });
 }
 
 export function useMyStorage() {

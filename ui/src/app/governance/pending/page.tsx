@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
 import { Unfold } from "@/components/ui/Unfold";
@@ -67,7 +68,10 @@ export default function PendingChangesPage() {
 
   // Search narrows what is shown, never what Send sends: the note beside it says so.
   const resolver = useNameResolver();
-  const [query, setQuery] = useState("");
+  // Seeded from `?q=`, so "Waiting for you to send →" on a person's page opens
+  // this list narrowed to them (A-10 §3).
+  const params = useSearchParams();
+  const [query, setQuery] = useState(() => params?.get("q") ?? "");
   const needle = query.trim().toLowerCase();
   const matched = useMemo(
     () => (needle ? rows.filter((row) => matches(row, needle, resolver)) : rows),

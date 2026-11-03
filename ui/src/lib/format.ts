@@ -92,6 +92,17 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
 }
 
 /**
+ * When someone last signed in (A-10 §6): "10 min ago" or "3 hours ago" under a
+ * day, then the date, "2 Oct", with the year only when it isn't this year.
+ */
+export function formatSignIn(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  return now.getTime() - then < 24 * 60 * 60 * 1000 ? formatRelative(iso, now) : formatShortDate(iso, now);
+}
+
+/**
  * "2h ago": the short stamp a note seat has room for (A-04 §10). Past a month it
  * is the date, the year only when it isn't this year.
  */

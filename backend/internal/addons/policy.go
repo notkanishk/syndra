@@ -135,6 +135,13 @@ var operationPolicy = map[string]OperationPolicy{
 	// one that forgets to check.
 	//
 	// No confirmation: it writes nothing.
+	//
+	// The operator case (A-10): a person's page reads the same answer about
+	// that person, read-only, so an operator sees what the member sees. It is
+	// not a second operation and not a subject parameter. It is a read
+	// (addons.MyStorage, never dispatched), and the operator-only route
+	// GET /users/{id}/targets names the subject and passes the operator as the
+	// actor. Members still reach it only through /me/targets, for themselves.
 	"storage.status": {
 		Scope:   ScopeMember,
 		Confirm: false,
