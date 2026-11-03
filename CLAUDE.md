@@ -9,7 +9,7 @@ Identity & Access Management orchestration layer for an academic makerspace. Com
 - **Architecture:** `openspec/changes/syndra-core-architecture/design.md` — three-plane design, Zitadel interaction matrix, IdP chain
 - **Roadmap:** `openspec/changes/syndra-core-architecture/ROADMAP.md` — phase timeline (1-4 complete, 5-6 ahead)
 - **Reality check:** `openspec/changes/syndra-core-architecture/specs/feature-coverage.md` — planned vs integrated
-- **Design bridge:** `design_handoff_syndra/BRIDGE.md` — how Claude Code and Claude Design exchange questions, answers and components; read it before any UI work from a board
+- **Design bridge:** `design_handoff_syndra/BRIDGE.md` — how questions, answers, boards and components move between this repo and the Syndra Project design canvas (a claude.ai artifact of the Design type; Claude Design itself is deprecated); read it before any UI work from a board
 - **UI design system + IA:** `openspec/changes/basic-advanced-ia/design.md` — Basic/Advanced views, the navigation contract, and where the token shape lives
 
 ## Tech Stack

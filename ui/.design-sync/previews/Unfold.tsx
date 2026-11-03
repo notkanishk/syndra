@@ -1,0 +1,24 @@
+import { useState } from "react";
+import { Button, Card, Notice, Unfold } from "ui";
+
+/** Opens to its own height and pushes what is below down; closing fades first, then shuts the gap. */
+export function Toggle() {
+  const [open, setOpen] = useState(true);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 560 }}>
+      <div>
+        <Button variant="outline" size="sm" onClick={() => setOpen((v) => !v)}>
+          {open ? "Hide the reason" : "Show the reason"}
+        </Button>
+      </div>
+      <Unfold open={open} gap={16}>
+        <Notice tone="warn" title="Paused by Priya Nair">
+          {"The laser cutter's extraction fan is being serviced. Operator grants resume on Monday."}
+        </Notice>
+      </Unfold>
+      <Card>
+        <div style={{ padding: "14px 20px", fontSize: 14.5 }}>Laser Cutter · 23 people hold Operator</div>
+      </Card>
+    </div>
+  );
+}

@@ -1,0 +1,46 @@
+import { Card, Notice } from "ui";
+
+const col = { display: "grid", gap: 14, maxWidth: 640 } as const;
+
+/** Warn: data is stale or paused. The dot breathes while it is still going on. */
+export const Stale = () => (
+  <div style={col}>
+    <Notice tone="warn" live title="Showing what Zitadel said 14 minutes ago">
+      {"Syndra can't reach Zitadel right now. Nothing below is wrong, but it may be out of date."}
+    </Notice>
+  </div>
+);
+
+/** Danger: a read failed. The reference copies so it can be quoted. */
+export const ReadFailed = () => (
+  <div style={col}>
+    <Notice
+      tone="danger"
+      title="Couldn't load who holds this role"
+      action={{ label: "Try again", onClick: () => {} }}
+      reference="req_7f3a91c2e4"
+    >
+      The list may be incomplete. Try again, or quote the reference to the person who runs Syndra.
+    </Notice>
+  </div>
+);
+
+/** Neutral: out of reach, and nothing is in doubt. */
+export const OutOfReach = () => (
+  <div style={col}>
+    <Notice tone="neutral" title="TrueNAS is offline">
+      Storage changes wait until it is back. Everything you can see is still current.
+    </Notice>
+  </div>
+);
+
+/** Blocking: an alert, the thing it is about can't be used until it clears. One per card. */
+export const BlockingInCard = () => (
+  <Card>
+    <div style={{ padding: 20 }}>
+      <Notice tone="danger" blocking title="This rule can't be saved">
+        It gives Laser Cutter · Operator to everyone in Wood Shop, and Operator always waits for you.
+      </Notice>
+    </div>
+  </Card>
+);

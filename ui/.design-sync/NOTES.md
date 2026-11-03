@@ -10,7 +10,7 @@ Package shape, run from `ui/`. Scope: `src/components/{ui,shell,names,states}` (
 - `.design-sync/host.css` (appended by build-css.mjs) = what the Next host supplies: next/font's `--font-*` vars, and the app's body surface restated unlayered (the preview harness sets `body{background:#fff}`, which otherwise beats `@layer base` and breaks dark theme).
 - Fonts: next/font Google families self-hosted in `.design-sync/fonts/` (latin, variable woff2, OFL) via `cfg.extraFonts`.
 - Types: `buildCmd` also runs `tsc -p .design-sync/tsconfig.types.json` -> `.cache/types`; `.design-sync/overrides/dts.mjs` (declared in `libOverrides`) reads those and maps the `@/` alias. Needs `ln -sfn ../.ds-sync/node_modules .design-sync/node_modules` per clone.
-- `dtsPropsFor` inlines app-internal types (SessionUser, BulkPlan, ActionOutcome, ReadState, WithheldItem) that the emitted .d.ts would otherwise reference by a dangling name. Keep them in sync if those types change.
+- `dtsPropsFor` inlines app-internal types (SessionUser, BulkPlan, ActionOutcome, ReadState, WithheldItem, CancelStep, NavSection, Sort, GlideIndicator's Box) that the emitted .d.ts would otherwise reference by a dangling name. Keep them in sync if those types change.
 - Render check / capture: no playwright browser cache; use system Chrome: `DS_CHROMIUM_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`.
 
 ## Authoring previews
@@ -37,7 +37,7 @@ Package shape, run from `ui/`. Scope: `src/components/{ui,shell,names,states}` (
 - AppShell owns its own `UiViewProvider`: pin a view with the setView helper inside its children.
 - UNC paths in JSX string attributes: single backslashes in source.
 - CommandBlock `tone="onWarn"` needs a solid `var(--warn)` surface behind it.
-- Generic components (Segmented, FilterPills, Tabs) get `dtsPropsFor` with `T` -> `string`; the extractor emits a dangling `T` otherwise.
+- Generic components (Segmented, FilterPills, Tabs, SortHead, ReadLine, SectionPill) get `dtsPropsFor` with `T` -> `string`; the extractor emits a dangling `T` otherwise.
 
 ## Known render warns
 - Cells for one-line components (ReadFreshness, ConfirmByTyping, Skeleton, Mono…) are mostly empty space at the default card height - not a defect.
@@ -45,20 +45,30 @@ Package shape, run from `ui/`. Scope: `src/components/{ui,shell,names,states}` (
 - Term's popover needs hover/click (portalled); cards show the dotted-underline trigger only.
 - Withheld member copy says "this one part" for several items - component wording.
 - RehearsalDialog's scope step (needs a thrown `ApiError`) and result step (needs a click) are not previewed.
+- `[RENDER_BLANK]` on Modal, ModalHeader, ModalFooter, RehearsalDialog and PushedStep: the fixed overlay collapses the measured PNG; the capture sheets show them drawn. `[GRID_OVERFLOW]` on FilterPanel/FilterField (the open panel escapes its cell). `[RENDER_THIN]` on CopiedSeat (floor card).
+- PushedStep's preview refuses one write with `WouldCancelQueued` on mount (exported from "ui" for this); it needs the seeded name catalog.
 
 ## Findings for the app (not changed by the sync)
 - DegradedBanner: the "For the person who runs the Syndra server" type-label reads low-contrast on the amber surface.
 
 ## Re-sync
-Run from `ui/`: re-stage scripts (`cp -r` from the skill), `(cd .ds-sync && npm i esbuild ts-morph @types/react && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright)`, `ln -sfn ../.ds-sync/node_modules .design-sync/node_modules`, run `cfg.buildCmd`, fetch `_ds_sync.json` to `.design-sync/.cache/remote-sync.json`, then
-`DS_CHROMIUM_PATH=... node .ds-sync/resync.mjs --config .design-sync/config.json --node-modules ./node_modules --entry ./.design-sync/entry.tsx --out ./ds-bundle --remote .design-sync/.cache/remote-sync.json`.
-- Auth: the first session's login could read but not create/write ("subscription required" / "cannot edit this project") until `/design-login` was re-run against the account that owns the project.
+Run from `ui/`. `.ds-sync/` already holds the staged scripts and `esbuild ts-morph @types/react playwright` - reuse them; only on a fresh clone re-stage (`cp -r` from the skill), `(cd .ds-sync && npm i esbuild ts-morph @types/react && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i playwright)` and `ln -sfn ../.ds-sync/node_modules .design-sync/node_modules`. Then run `cfg.buildCmd`, put the last published `_ds_sync.json` at `.design-sync/.cache/remote-sync.json`, and
+`DS_CHROMIUM_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" node .ds-sync/resync.mjs --config .design-sync/config.json --node-modules ./node_modules --entry ./.design-sync/entry.tsx --out ./ds-bundle --remote .design-sync/.cache/remote-sync.json`.
+- Where it goes: the bundle is published to the Syndra Project design canvas (a claude.ai artifact) at `project/_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/`, by Claude Code through the Artifact tool. Not to the retired Claude Design project. The resync itself only builds locally; publishing is a separate step.
+- Remote file: nothing fetches it any more. Before the build wipes `ds-bundle/`, copy the previous bundle's own sidecar: `cp ds-bundle/_ds_sync.json .design-sync/.cache/remote-sync.json` (only while `ds-bundle/` still holds what was last published - every local run overwrites it, so after a publish refresh the cache copy from the published bundle; the diff then anchors on it, `anchor: ok`). If no previous bundle exists, drop `--remote`: everything is graded as new and uploads.
+- 3 Nov 2026: 76 -> 104 components (Notice, NotOpenYet, NextStep, StatusSeat, WaitsMark, ChoiceRow, Checkbox, Radio, Seat, ArrowLink, SortHead, RunLabel, ReadLine, SectionPill, Unfold, Tinted, UnfoldOnArrival, PaginationRow, Unresolved, PushedStep, AnchoredPanel, ArriveList, CopiedSeat, Crossfade, FormPart, GlideIndicator, LeavingRow, ReadGate). Motion/hook helpers ship on the floor card, unpreviewed: ArriveList, CopiedSeat, Crossfade, FormPart, GlideIndicator, LeavingRow, Tinted, UnfoldOnArrival, ReadGate, Seat, RunLabel, SectionPill (shows only once the read line has scrolled away).
 
 ## Re-sync risks
 - `entry.tsx` enumerates the synced files and `componentSrcMap` enumerates their exports: a new component in `src/components/{ui,shell,names,states}` is NOT picked up until both are extended.
-- `dtsPropsFor` hand-inlines app types (SessionUser, BulkPlan, ActionOutcome, ReadState, WithheldItem, the Segmented/FilterPills/Tabs props). If those types change, the uploaded contracts go stale silently - diff them against `src/` on every re-sync.
+- `dtsPropsFor` hand-inlines app types (SessionUser, BulkPlan, ActionOutcome, ReadState, WithheldItem, CancelStep, NavSection, the Segmented/FilterPills/Tabs/SortHead/ReadLine/SectionPill props). If those types change, the uploaded contracts go stale silently - diff them against `src/` on every re-sync.
 - `SyndraRoot` duplicates the composition in `src/components/providers.tsx` (minus devtools). If Providers gains a provider, mirror it in entry.tsx.
 - `host.css` restates next/font variables and the body surface from `src/app/layout.tsx` / `globals.css`; the fonts in `.design-sync/fonts/` were fetched from Google Fonts (latin subset) once - re-fetch if layout.tsx changes families or weights.
 - `overrides/dts.mjs` is a fork of the skill's `lib/dts.mjs` (types root + `@/` paths): diff against the bundled lib on every re-sync and merge upstream changes.
 - Seeded fixtures in names/DegradedBanner previews mirror `CatalogResponse` / `SystemMode`; shape changes there break those cards (they fall back to skeletons, not errors).
 - Not previewed: RehearsalDialog scope + result steps, Term's open popover.
+
+## Fonts on the design canvas (3 Nov 2026)
+The canvas renders each artboard as a srcdoc document whose base is `/appifact/<name>.dc.html`, so a linked stylesheet's relative `./*.woff2` resolves to a 404. `fonts/fonts.css` therefore lists the canvas's uploaded font assets first (`url(/_blob/<id>)`), then the relative file, which is what local previews use. The three ids are the canvas's uploads of the same woff2 files; if a font file changes, upload it to the canvas again and replace its id here. `host.css` gives each `--font-*` a system fallback stack, so a font that fails never falls back to Times.
+
+## The container-query copy (3 Nov 2026)
+The canvas shows a board's frames inline (`<dc-import … frame=…>` inside a `syndra-frame` container), where `@media` would see the artboard's width. After each resync, run `node .design-sync/build-container-css.mjs` from `ui/`: it writes `ds-bundle/_ds_bundle.container.css`, the same stylesheet with every width `@media` turned into `@container syndra-frame (…)`. Boards link it instead of `_ds_bundle.css`. Publish both.
