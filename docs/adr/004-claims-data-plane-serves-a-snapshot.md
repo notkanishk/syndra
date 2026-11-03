@@ -11,7 +11,8 @@ Zitadel calls Syndra's Actions v2 target on every token, with a 3s timeout and i
 
 - At request time the data plane reads only memory and one bounded Redis read. Never Postgres, never Zitadel.
 - Config (shapes, failure modes, the client→app map and the keyring) is an immutable, versioned snapshot. It is reloaded when `claims:gen` moves, and written through by the write side.
-- Facts come from one `HGET facts:{u} {p}` with a real deadline. A last-known-good in-process copy answers while Redis is out, within a per-project staleness bound. Then the failure mode answers.
+- A token's roles are the ones Zitadel lists for the project in the payload's `user_grants` (amended 4 Nov 2026, below). Syndra's facts only enrich them.
+- Facts come from one `HGET facts:{u} {p}` with a real deadline. A last-known-good in-process copy answers while Redis is out, within a per-project staleness bound. With no facts, the shape is answered over Zitadel's roles alone.
 - Every answer, every fallback rung included, is counted by outcome class. None is silent.
 - The data plane has its own listener. At the design scale it moves to its own container, so backend deploys and admin load do not touch it.
 - The signing key is read from Zitadel (the one place it is written) and followed on rotation.
@@ -46,4 +47,19 @@ Zitadel calls Syndra's Actions v2 target on every token, with a 3s timeout and i
 
 - The snapshot also carries `claims:welcome`: Makerspace settings' switch (off by default), the welcome roles per project that wait for nobody, and every app of those projects by client id. It is written through like a shape save.
 - With it on, a token naming no project for a person whose Zitadel account is under 10 minutes old (`user.creation_date`, from the payload) is answered from the snapshot and the same one facts read: no facts in the app's project means the app's shape over the welcome roles (`served_welcome`). Still no Postgres or Zitadel on the request path.
+
+### Amended: the roles come from Zitadel's payload (4 Nov 2026)
+
+Found on prod: the compiler builds facts only from Syndra's own records (the ledger, bundles, rules), so a role given in Zitadel directly (the operator's admin role in the Syndra project, grants from before Syndra, console grants) never reached a token. 9 of 23 people had no facts for their project; the operator's own sign-in to Syndra was answered `degraded_no_facts` though Zitadel's payload listed his grant. Actions v1, still on, read Zitadel's grants and hid it. The rule it broke: every holder is observed from Zitadel, and Syndra's records only explain.
+
+- The token's roles are the union of `roles` across the payload's `user_grants` rows for the token's project, deduplicated and sorted (`claims.RoleSet`, via `Request.Roles`). The app's shape (include, rename, nesting, `if_role`) applies to them as before. A role Syndra holds that Zitadel did not list (queued, not yet sent) is not sent.
+- `roles` is now read, so a value that is not a list of strings is a `contract_fault`, never a silent `[]`.
+- Facts still enrich: names, username, title, team, bundles, end dates, the service-account mark. `role_ends` only ever names a listed role.
+- A role past its end date that Zitadel still lists is kept. The expiry sweep ends a role by removing it from Zitadel, and Zitadel's own roles claim carries it until then, so dropping it here would hide the sweep's failure, not end the role (drift reports it). `claims.ShapeAt` and P9's serve-time drop are gone; the one shaper is `claims.Shape`.
+- No facts (no entry for the project, or Redis out with no last-known-good copy): the shape over Zitadel's roles alone, without the rows that need facts (`Profile.RolesOnly`: other attributes, bundles, end dates), counted `served_roles_only`. It is delivered for the correlator, and soft in health only while it is persistent (at least 5 in the window and more than the full answers). The miss still asks for a repair. `degraded_no_facts` is no longer answered; malformed facts and a blown deadline still answer the project's failure mode.
+- Welcome roles still apply only when the token lists no project at all.
+- Previews (the explain step, the simulator) take the roles from Syndra's last observation of Zitadel's grants (`services.ObservedRoles`, the same store the People pages count), and a person with no stored facts is previewed over those roles alone, as served. The equivalence property now draws Zitadel's grants independently of Syndra's facts.
+- The correlator's "holds a role here" is the observed grants too: none counts only from a complete, current sweep.
+- The L1 canary carries a fact-only claim (`syndra_canary_team`), so a canary answered over its roles alone still reads as wrong claims.
+- Still no Postgres or Zitadel on the request path.
 

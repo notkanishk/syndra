@@ -233,7 +233,8 @@ func (d *Door) Answer(ctx context.Context, req Request) Answer {
 	case len(projects) == 0:
 		// A first sign-in races onboarding (SC4): the token names no project
 		// yet. With the welcome switch on, a brand-new member gets the welcome
-		// roles for the app's own project.
+		// roles for the app's own project: the one answer whose roles are not
+		// Zitadel's, and only while Zitadel lists none.
 		if res, pid, ok := d.Plane().Welcome(ctx, req.User, req.Application.ClientID, req.Function); ok {
 			return Answer{Claims: res.Claims, ProjectID: pid, Outcome: res.Outcome, ClientKnown: res.ClientKnown, Gen: res.Gen}
 		}
@@ -244,10 +245,11 @@ func (d *Door) Answer(ctx context.Context, req Request) Answer {
 			req.User.ID, req.Application.ClientID, req.Function, projects)
 		return Answer{Claims: []Claim{}, Outcome: claimtel.RefusedCrossProject}
 	}
-	res := d.Plane().Answer(ctx, req.User.ID, projects[0], req.Application.ClientID, req.Function)
+	res := d.Plane().Answer(ctx, req.User.ID, projects[0], req.Application.ClientID, req.Function, req.Roles(projects[0]))
 	if res.Miss && d.OnMiss != nil {
-		// The first sign that a person was never compiled: answer degraded
-		// now, recompile off the hot path so the next token finds them (F-7).
+		// The first sign that a person was never compiled: answer the roles
+		// alone now, recompile off the hot path so the next token finds their
+		// facts (F-7).
 		d.OnMiss(req.User.ID)
 	}
 	return Answer{Claims: res.Claims, ProjectID: projects[0], Outcome: res.Outcome, ClientKnown: res.ClientKnown, Gen: res.Gen}

@@ -18,9 +18,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
-	"time"
 )
 
 // Format identifiers accepted for a roles claim. Mirrors the
@@ -167,6 +167,9 @@ func FromFlat(claimName, format string, attrs map[string]string, statics map[str
 // is exactly what the cache compiler persists, so Shape never needs to widen
 // its inputs at the point where latency matters.
 type Facts struct {
+	// Roles is what Syndra's records give. A token never shows it: the data
+	// plane replaces it with the roles Zitadel lists in the payload, and a
+	// preview with the roles Syndra last observed in Zitadel (ADR-004).
 	Roles      []string `json:"roles"`
 	UserID     string   `json:"user_id"`
 	ProjectID  string   `json:"project_id"`
@@ -267,31 +270,40 @@ func (p Profile) role(key string) (bool, string) {
 	return p.IncludeNew, key
 }
 
-// HeldOn is f without the roles whose end date is before day (UTC). Facts are
-// compiled ahead of time, so a role can end between its compile and a token;
-// the expiry sweep recompiles, and this is the belt beside it (assessment D4,
-// P9). A role still held on its end date is kept: the date is the last day.
-func (f Facts) HeldOn(day time.Time) Facts {
-	if len(f.RoleEnds) == 0 {
-		return f
-	}
-	today := day.UTC().Format(time.DateOnly)
-	kept := make([]string, 0, len(f.Roles))
-	for _, r := range f.Roles {
-		if end, ok := f.RoleEnds[r]; ok && end < today {
-			continue
-		}
-		kept = append(kept, r)
-	}
-	f.Roles = kept
-	return f
+// RoleSet is roles deduplicated and sorted: the one order a token's roles
+// take, whether they come from a token's payload (the data plane) or from
+// Syndra's last read of Zitadel's grants (every preview). Zitadel may list a
+// project's roles across several rows; they are one set.
+//
+// A role is held while Zitadel lists it, end date or not (4 Nov 2026): the
+// expiry sweep ends a role by removing it from Zitadel, and a role Zitadel
+// still lists past its date is in Zitadel's own roles claim too, so dropping
+// it here would hide the sweep's failure, not end the role. Drift reports it.
+func RoleSet(roles []string) []string {
+	out := slices.Clone(roles)
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
-// ShapeAt is Shape on the facts as they stand at now. Every caller that shows
-// or serves a token uses it, so the preview and the data plane drop the same
-// ended roles.
-func ShapeAt(p Profile, f Facts, now time.Time) *Object {
-	return Shape(p, f.HeldOn(now))
+// RolesOnly is p without the rows that need Syndra's facts: what the data
+// plane sends when Zitadel listed the person's roles but Syndra holds nothing
+// to add for them (no entry yet, or Redis down with no last copy). Roles,
+// if_role and static rows stay, and the attributes the token itself carries
+// (user id, project id, role count). The rest are left out rather than sent
+// empty: an empty bundles list or a false is_service_account is a claim, not
+// a gap.
+func (p Profile) RolesOnly() Profile {
+	kept := make([]Claim, 0, len(p.Claims))
+	for _, c := range p.Claims {
+		switch {
+		case c.Kind == KindBundles, c.Kind == KindRoleEnds:
+		case c.Kind == KindAttribute && c.Source != AttrUserID && c.Source != AttrProjectID && c.Source != AttrRoleCount:
+		default:
+			kept = append(kept, c)
+		}
+	}
+	p.Claims = kept
+	return p
 }
 
 // Shape renders one profile against one set of facts, rows in order.

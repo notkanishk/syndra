@@ -169,6 +169,16 @@ describe("Claims delivery, with problems", () => {
     expect(screen.getByText(/Settled in the last 24h: 1 problem/)).toBeInTheDocument();
   });
 
+  it("counts Zitadel's roles sent alone as served, never as a fault", () => {
+    const d = delivery();
+    d.apps[0] = { ...d.apps[0], calls: 40, outcomes: { served: 38, served_roles_only: 2 } };
+    set(d);
+    renderIt();
+    fireEvent.click(screen.getByRole("button", { name: "Show each app" }));
+    expect(screen.getByText("40 served")).toBeInTheDocument();
+    expect(screen.queryByText(/before the rest of their claims were built/)).toBeNull();
+  });
+
   it("says why a call went without claims, in plain words, amber for a soft class", () => {
     set(delivery({ findings: [finding({ kind: "CLAIMS_NOT_SERVED", severity: "soft", sample: { outcome: "degraded_no_facts" } })] }));
     renderIt();

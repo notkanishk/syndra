@@ -202,6 +202,32 @@ func (s *accessSnapshot) Observed(userID string) (map[string]bool, error) {
 	return set, nil
 }
 
+// ObservedRoles is the person's roles in a project as Syndra last read them
+// from Zitadel, as one claims.RoleSet: what a token's payload would list. Every
+// preview takes a token's roles from here, as the data plane takes them from
+// the payload, so neither reads Syndra's records for them (ADR-004). absent is
+// true only when there are none and the last sweep was complete and current:
+// the one footing for "Zitadel gives them nothing here" (NobodyObserved's rule).
+func ObservedRoles(ctx context.Context, userID, projectID string) (roles []string, absent bool, err error) {
+	grants, err := svcObservedGrantsFor(ctx, userID)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, g := range grants {
+		if g.ProjectID == projectID {
+			roles = append(roles, g.RoleKeys...)
+		}
+	}
+	if roles = claims.RoleSet(roles); len(roles) > 0 {
+		return roles, false, nil
+	}
+	basis, err := observationBasis(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	return nil, basis.ReadAt != nil && basis.Current && !basis.Truncated, nil
+}
+
 // Basis is the one observation-basis fact for this snapshot's counts: whether
 // the org has ever been swept, how long ago, and whether that sweep was
 // complete. db.ErrNoObservation becomes the zero value — ReadAt nil — which is
@@ -837,8 +863,11 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 		facts.UserID = user.ID
 	}
 
-	rawRoles := append([]string(nil), facts.Roles...)
-	sort.Strings(rawRoles)
+	// The token's roles are Zitadel's: here, its grants as last observed.
+	rawRoles, _, err := ObservedRoles(ctx, userID, app.ProjectID)
+	if err != nil {
+		return models.ApplicationSimulation{}, err
+	}
 	facts.Roles = rawRoles
 
 	// The preview is the data plane. Same profile resolution, same shaper, same
@@ -853,7 +882,7 @@ func SimulateApplication(ctx context.Context, appID, userID string) (models.Appl
 	if err != nil {
 		return models.ApplicationSimulation{}, err
 	}
-	payload := claims.ShapeAt(e.profile, facts, time.Now())
+	payload := claims.Shape(e.profile, facts)
 	owners := []models.ClaimKeyOwner{}
 	for _, c := range e.profile.Claims {
 		owners = append(owners, models.ClaimKeyOwner{Key: c.Path[0], OwnerLabel: app.Name, ApplicationID: appID, Kind: c.Kind, Source: c.Source})

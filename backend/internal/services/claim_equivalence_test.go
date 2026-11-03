@@ -96,13 +96,34 @@ func randomFacts(rng *rand.Rand, today time.Time) claims.Facts {
 	return f
 }
 
+// randomGrants is Zitadel's grants for u1: some of the project's roles and one
+// only Zitadel knows, in any order, split over one or two rows (Zitadel may
+// send a row per role), and a grant in another project that must not count.
+func randomGrants(rng *rand.Rand) []db.ObservedGrant {
+	var roles []string
+	for _, r := range append([]string{"zitadel-only"}, equivRoles...) {
+		if rng.IntN(2) == 0 {
+			roles = append(roles, r)
+		}
+	}
+	rng.Shuffle(len(roles), func(i, j int) { roles[i], roles[j] = roles[j], roles[i] })
+	cut := rng.IntN(len(roles) + 1)
+	return []db.ObservedGrant{
+		{UserID: "u1", ProjectID: "pEq", RoleKeys: roles[:cut]},
+		{UserID: "u1", ProjectID: "pOther", RoleKeys: []string{"admin"}},
+		{UserID: "u1", ProjectID: "pEq", RoleKeys: roles[cut:]},
+	}
+}
+
 // The equivalence property (assessment §4h; CLAUDE.md: "a preview computed by
 // different code from the token it previews is a preview of nothing"). For
 // random shapes, facts, functions and client ids, what the data plane's
 // snapshot answers, after the write side's resolve, Publish, a Redis round
 // trip and a reload, is exactly what the operator's preview shows for that
 // app: the same claims in the same order, or nothing where the shape does
-// not land.
+// not land. The roles are Zitadel's on both sides (the payload's live, the
+// observed grants' in the preview), whatever Syndra's facts say, and a person
+// with no facts is answered over the roles alone on both.
 func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 	s := stubClaimShapeDeps(t)
 	directory.Default = equivDir{}
@@ -123,7 +144,21 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 			s.versions["aOwn"] = []db.ClaimShapeVersion{{ApplicationID: "aOwn", ProjectID: "pEq", ClientID: "cOwn", Version: 1, Profile: randomProfile(rng)}}
 		}
 		facts := randomFacts(rng, today)
-		s.stored["u1:pEq"] = facts
+		s.stored = map[string]claims.Facts{"u1:pEq": facts}
+		// Zitadel's grants, independent of Syndra's facts (a role given in
+		// Zitadel directly, or one of Syndra's still queued): the same rows
+		// are the live payload's user_grants and the preview's observed read.
+		grants := randomGrants(rng)
+		s.observed = map[string][]db.ObservedGrant{"u1": grants}
+		var rows []claimserve.GrantRef
+		for _, g := range grants {
+			rows = append(rows, claimserve.GrantRef{ProjectID: g.ProjectID, Roles: g.RoleKeys})
+		}
+		listed := claimserve.Request{UserGrants: rows}.Roles("pEq")
+		built := rng.IntN(4) > 0 // else no facts at all: answered over the roles alone
+		if !built {
+			delete(s.stored, "u1:pEq")
+		}
 
 		// The write side, as a save publishes it, and the data plane reading it.
 		ps, err := ResolveProjectShapes(ctx, "pEq")
@@ -134,8 +169,10 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 		if _, err := claimserve.Publish(ctx, r, map[string]claimserve.Project{"pEq": {Shapes: ps}}); err != nil {
 			t.Fatal(err)
 		}
-		raw, _ := json.Marshal(facts)
-		r.SetField(claimserve.FactsKey("u1"), "pEq", string(raw))
+		if built {
+			raw, _ := json.Marshal(facts)
+			r.SetField(claimserve.FactsKey("u1"), "pEq", string(raw))
+		}
 		plane := claimserve.New(r, nil)
 		if err := plane.Poll(ctx); err != nil {
 			t.Fatal(err)
@@ -143,7 +180,7 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 
 		for _, c := range clients {
 			function := functions[rng.IntN(len(functions))]
-			got := plane.Answer(ctx, "u1", "pEq", c.client, function)
+			got := plane.Answer(ctx, "u1", "pEq", c.client, function, listed)
 
 			pv, err := PreviewAppClaimShape(ctx, c.app, PreviewRequest{UserIDs: []string{"u1"}})
 			if err != nil {

@@ -277,11 +277,20 @@ func TestOutcomes_SeverityCoversEveryClass(t *testing.T) {
 		}
 		seen[o] = true
 	}
-	if len(seen) != 17 {
-		t.Fatalf("%d classes, want the 16 of assessment §4a and served_welcome (SC4)", len(seen))
+	if len(seen) != 18 {
+		t.Fatalf("%d classes, want the 16 of assessment §4a, served_welcome (SC4) and served_roles_only", len(seen))
 	}
 	if ServedWelcome.Severity() != Informational || Rank(ServedWelcome) > Rank(ServedLKG) {
 		t.Error("a welcome answer is delivered, not a fault")
+	}
+	// Zitadel's roles went out; only Syndra's enrichment was missing. Health
+	// reads it as soft only when persistent (claimserve.Assess).
+	if ServedRolesOnly.Severity() != Informational || Rank(ServedRolesOnly) > Rank(ServedLKG) {
+		t.Error("a roles-only answer is delivered, not a fault")
+	}
+	s := SignIn{UserID: "ada", ClientID: "c1", Scopes: []string{"openid"}}
+	if got := Classify(s, map[string]Outcome{FnPreUserinfo: ServedRolesOnly}, false, false, true, false, false).Verdict; got != Delivered {
+		t.Errorf("a roles-only sign-in: %s, want delivered", got)
 	}
 	if SigMissing.Severity() != Informational || SigMismatch.Severity() != Hard || DegradedNoFacts.Severity() != Soft {
 		t.Error("severity table changed")
