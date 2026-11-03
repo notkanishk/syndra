@@ -126,7 +126,7 @@ export function MappingManagement({ target }: { target: string }) {
                 homeRoot={homeRoot}
                 first={i === 0}
                 opens={mapping.field === "group" && reach.data?.read ? (reach.data.groups?.[mapping.value] ?? []) : undefined}
-                dim={reach.data?.read === true && reach.data.current === false}
+                lastKnown={reach.data?.read === true && reach.data.current === false}
                 onEdit={() => setEditing(mapping)}
                 onDelete={() => setDeleting(mapping)}
               />
@@ -191,7 +191,9 @@ function useRoleName(projectId: string, roleKey: string): string {
 
 /**
  * The freshness of what each group opens, said once in the card header
- * (A-02 §3). The mappings themselves are Syndra's own record and need none.
+ * (A-02 §3). The mappings themselves are Syndra's own record and need none, so
+ * the card never recedes; when the read is the last one, only this note turns
+ * amber with a ring (A-13 §2).
  */
 function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefined }) {
   if (!reach) return null;
@@ -201,7 +203,12 @@ function OpensNote({ name, reach }: { name: string; reach: TargetReach | undefin
       What each group opens, read from {name}&apos;s folder permissions <Relative iso={reach.read_at} />
     </>
   ) : (
-    <>What each group opens, as last read from {name}&apos;s folder permissions at {formatClock(reach.read_at)}</>
+    <span className="inline-flex items-baseline gap-1.5 text-warn-text">
+      <StatusDot tone="warn" ring className="self-center" />
+      <span>
+        What each group opens, as last read from {name}&apos;s folder permissions at {formatClock(reach.read_at)}
+      </span>
+    </span>
   );
 }
 
@@ -211,7 +218,7 @@ function MappingRow({
   homeRoot,
   first,
   opens,
-  dim,
+  lastKnown,
   onEdit,
   onDelete,
 }: {
@@ -223,8 +230,8 @@ function MappingRow({
   first: boolean;
   /** What its group opens; undefined when not read or not a group. */
   opens: ReachPlace[] | undefined;
-  /** Last known, not a fresh read: the lines dim, the mapping doesn't. */
-  dim: boolean;
+  /** Last known, not a fresh read: the lines stay full strength, their dot rings (A-13). */
+  lastKnown: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -252,10 +259,10 @@ function MappingRow({
           {mapping.field} → {mapping.value}
         </span>
         {opens && (
-          <span className="flex flex-col gap-0.5" style={{ opacity: dim ? 0.62 : 1 }}>
+          <span className="flex flex-col gap-0.5">
             {opens.length === 0 ? (
               <span className="flex items-baseline gap-2 text-[13px] leading-[1.5] text-warn-text [text-wrap:pretty]">
-                <StatusDot tone="warn" />
+                <StatusDot tone="warn" ring={lastKnown} />
                 <span>
                   Opens nothing yet. No folder on {name} gives {mapping.value} anything, so its{" "}
                   {holders.isLoading ? "" : `${cohort.length} `}

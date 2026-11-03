@@ -172,7 +172,12 @@ beforeEach(() => {
 });
 
 const node = (name: string | RegExp) => screen.getByRole("button", { name });
-const opacityOf = (name: string | RegExp) => node(name).style.opacity;
+// A node with no part in the answer recedes, its words at full strength (A-09 §2): never an opacity.
+const lightOf = (name: string | RegExp) => {
+  const el = node(name);
+  expect(el.style.opacity).toBe("");
+  return el.hasAttribute("data-dim") ? "receded" : "lit";
+};
 
 describe("tabs and the link", () => {
   it("opens on Map, and the link holds the tab", () => {
@@ -315,12 +320,12 @@ describe("following a node", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Role · Laser Lab · 5 people")).toBeInTheDocument();
 
-    // What gives it and what it gives stay; the rest steps back to 0.35.
-    expect(opacityOf("Lab Tech")).toBe("1");
-    expect(opacityOf("Laser Lab")).toBe("1");
-    expect(opacityOf("Badge reader")).toBe("1");
-    expect(opacityOf("Metal Shop")).toBe("0.35");
-    expect(opacityOf(/Metal Shop · welder/)).toBe("0.35");
+    // What gives it and what it gives stay; the rest recedes.
+    expect(lightOf("Lab Tech")).toBe("lit");
+    expect(lightOf("Laser Lab")).toBe("lit");
+    expect(lightOf("Badge reader")).toBe("lit");
+    expect(lightOf("Metal Shop")).toBe("receded");
+    expect(lightOf(/Metal Shop · welder/)).toBe("receded");
   });
 
   it("finds a node by name in the question and opens it", () => {
@@ -510,9 +515,9 @@ describe("the findings read from how access is arranged", () => {
     expect(within(panel).getByRole("link", { name: /Open Lab Tech/ })).toHaveAttribute("href", "/bundles/b1");
     expect(screen.getByTitle("Single route")).toBeInTheDocument();
     // The role and its bundle stay lit; what the finding does not reach steps back.
-    expect(opacityOf("Lab Tech")).toBe("1");
-    expect(opacityOf(/Laser Lab · Door/)).toBe("1");
-    expect(opacityOf("New members")).toBe("0.35");
+    expect(lightOf("Lab Tech")).toBe("lit");
+    expect(lightOf(/Laser Lab · Door/)).toBe("lit");
+    expect(lightOf("New members")).toBe("receded");
   });
 
   it("unused names the projects nobody reaches, bundles that add nothing, and roles nobody has", () => {
@@ -680,8 +685,8 @@ describe("the answers", () => {
     expect(panel).toHaveTextContent("By rule from Laser Lab · Operator: Laser Lab · Door comes automatically with Laser Lab · Operator.");
     expect(panel).toHaveTextContent("3 routes. Removing one of them won't stop Priya Nair having it.");
     expect(within(panel).getByRole("link", { name: /Open Priya Nair/ })).toHaveAttribute("href", "/users/u1");
-    expect(opacityOf("Lab Tech")).toBe("1");
-    expect(opacityOf("New members")).toBe("0.35");
+    expect(lightOf("Lab Tech")).toBe("lit");
+    expect(lightOf("New members")).toBe("receded");
 
     // Pin this pins the thread the question is about.
     fireEvent.click(within(panel).getByRole("button", { name: "Pin" }));
@@ -905,8 +910,8 @@ describe("lenses", () => {
     expect(screen.getByRole("link", { name: /Open Expiring access/ })).toHaveAttribute("href", "/review/expiring-access?within=14");
     // The count sits on the role, which is lit; everything else steps back.
     expect(node("Laser Lab · trained, 3 people lose it within 14 days")).toHaveTextContent("3");
-    expect(opacityOf("Laser Lab · trained, 3 people lose it within 14 days")).toBe("1");
-    expect(opacityOf(/Metal Shop · welder/)).toBe("0.35");
+    expect(lightOf("Laser Lab · trained, 3 people lose it within 14 days")).toBe("lit");
+    expect(lightOf(/Metal Shop · welder/)).toBe("receded");
     expect(screen.getByText("Lit roles have access ending within 14 days. The number is how many people lose it.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("radio", { name: "30 days" }));
@@ -998,7 +1003,7 @@ describe("lenses", () => {
     expect(screen.getByRole("heading", { name: "1 role held but not used in 90 days" })).toBeInTheDocument();
     expect(screen.getByText("is held by 4 people, and none has used it.")).toBeInTheDocument();
     expect(node("Laser Lab · trained, 4 people held but not used")).toBeInTheDocument();
-    expect(opacityOf(/Metal Shop · welder/)).toBe("0.35");
+    expect(lightOf(/Metal Shop · welder/)).toBe("receded");
     expect(screen.getByText("Lit roles are held by people who haven't used them in 90 days. The number is how many.")).toBeInTheDocument();
   });
 
@@ -1007,7 +1012,7 @@ describe("lenses", () => {
     nav.set("lens=use");
     renderPage();
     expect(screen.getByText("This fills in once sign-ins arrive.")).toBeInTheDocument();
-    expect(opacityOf(/Metal Shop · welder/)).toBe("1");
+    expect(lightOf(/Metal Shop · welder/)).toBe("lit");
     expect(screen.queryByText(/held but not used/)).not.toBeInTheDocument();
   });
 

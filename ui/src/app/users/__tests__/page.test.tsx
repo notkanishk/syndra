@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PeoplePage from "@/app/users/page";
@@ -222,11 +222,13 @@ describe("People index", () => {
     expect(screen.getByText("Nothing yet")).toBeInTheDocument();
   });
 
-  it("keeps a departed account visible, at reduced contrast", () => {
+  it("keeps a departed account visible, its name a shade down and never dimmed", () => {
     users.data = [person({ user: { ...person().user, status: "departed" } })];
     renderPeople();
     const row = screen.getByRole("link", { name: /Tomas Beck/ });
-    expect(row.className).toContain("opacity-60");
+    // An opacity took the row's quiet lines under 4.5:1 (A-09 §2).
+    expect(row.className).not.toMatch(/opacity-/);
+    expect(within(row).getByText("Tomas Beck").className).toContain("text-muted");
   });
 
   it("tells people they can search by role key", () => {

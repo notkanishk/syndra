@@ -94,7 +94,7 @@ export default function AppsPage() {
         <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
       )}
 
-      <Card>
+      <Card stale={readState.current === false}>
         <CardColumns>
           <span className="w-[250px] min-w-[170px]">
             <SortHead label="App" name="app" sort={sort} onSort={setSort} />
