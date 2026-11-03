@@ -315,33 +315,20 @@ func TestHandleActionInject_EmitsProjectDefaultAndAppOverrides(t *testing.T) {
 	}
 }
 
-func TestHandleActionInject_MultiProject_KeepsEachProjectsOwnKeys(t *testing.T) {
+// A token whose grants span two projects is a cross-project request (an app
+// asked for another project's audience). Syndra delivers one project per
+// token, so it carries no Syndra claims at all, and nothing is read.
+func TestHandleActionInject_CrossProjectTokenCarriesNoClaims(t *testing.T) {
 	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
 	resetActionDeps(t, origRedis, origMode)
 
-	// Two distinct projects, both hit Redis. Each keeps the claim key its
-	// operator configured — no "syndra.<projectID>." prefix, because keys are
-	// validated unique across projects at save time and an application that
-	// asked for "printing.roles" must receive exactly that.
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		switch key {
-		case "mapping:u1:pPrint":
-			return factsJSON("u1", "pPrint", "operator"), nil
-		case "mapping:u1:pDoor":
-			return factsJSON("u1", "pDoor", "keyholder"), nil
-		}
-		return "", fmt.Errorf("unexpected key: %s", key)
+		t.Errorf("Redis read for a cross-project token: key=%s", key)
+		return "", fmt.Errorf("unreachable")
 	}
 	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		t.Errorf("GetClaimFailureMode called for project=%s on cache hit", projectID)
-		return "fail_closed", nil, nil
-	}
-	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
-		return []claims.Profile{{
-			ProjectID:  projectID,
-			ClaimName:  projectID + ".roles",
-			FormatType: claims.FormatCSV,
-		}}, nil
+		t.Errorf("failure mode read for a cross-project token: project=%s", projectID)
+		return "minimal_safe", map[string]interface{}{"leak": true}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
@@ -353,58 +340,13 @@ func TestHandleActionInject_MultiProject_KeepsEachProjectsOwnKeys(t *testing.T) 
 	HandleActionInject(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf("expected 200 so Zitadel still issues the token, got %d", rr.Code)
 	}
-	got := decodeActionResponse(t, rr)
-	printClaim, okP := claimByKey(got.AppendClaims, "pPrint.roles")
-	doorClaim, okD := claimByKey(got.AppendClaims, "pDoor.roles")
-	if !okP || !okD {
-		t.Fatalf("multi-project: expected each project's own key, got %v", got.AppendClaims)
+	if got := decodeActionResponse(t, rr); len(got.AppendClaims) != 0 {
+		t.Fatalf("cross-project token: expected no claims, got %v", got.AppendClaims)
 	}
-	if printClaim.Value != "operator" || doorClaim.Value != "keyholder" {
-		t.Fatalf("multi-project: wrong values; got print=%v door=%v", printClaim.Value, doorClaim.Value)
-	}
-}
-
-func TestHandleActionInject_MultiProject_OneDegraded(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	// pPrint hits; pDoor misses and is fail_closed. Final response MUST contain
-	// only the pPrint claim — degraded projects MUST NOT block sibling projects.
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		if key == "mapping:u1:pPrint" {
-			return factsJSON("u1", "pPrint", "operator"), nil
-		}
-		return "", fmt.Errorf("redis: nil")
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		if projectID == "pDoor" {
-			return "fail_closed", nil, nil
-		}
-		t.Errorf("GetClaimFailureMode called for unexpected project=%s", projectID)
-		return "fail_closed", nil, nil
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
-		strings.NewReader(v2Body("u1",
-			ActionV2UserGrantRef{ProjectID: "pPrint", Roles: []string{"operator"}},
-			ActionV2UserGrantRef{ProjectID: "pDoor", Roles: []string{"keyholder"}},
-		)))
-	rr := httptest.NewRecorder()
-	HandleActionInject(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	got := decodeActionResponse(t, rr)
-	if len(got.AppendClaims) != 1 {
-		t.Fatalf("expected exactly 1 claim (sibling should not be blocked), got %v", got.AppendClaims)
-	}
-	claim, ok := claimByKey(got.AppendClaims, "roles")
-	list, isList := claim.Value.([]interface{})
-	if !ok || !isList || len(list) != 1 || list[0] != "operator" {
-		t.Fatalf("expected the healthy project's roles claim to survive, got %v", got.AppendClaims)
+	if !strings.Contains(rr.Body.String(), `"append_claims":[]`) {
+		t.Errorf("append_claims must be an empty list, not null: %s", rr.Body.String())
 	}
 }
 
@@ -438,7 +380,7 @@ func TestHandleActionInject_NoGrants_EmptyClaims(t *testing.T) {
 func TestHandleActionInject_DuplicateProjectGrants_DedupedToFlatKeys(t *testing.T) {
 	// Zitadel emits one grant row per role. Two rows with the same projectId
 	// but different roles MUST dedupe to a single project in Syndra's view,
-	// keeping the response on the single-project fast path (flat keys).
+	// or the token would read as cross-project and carry nothing.
 	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
 	resetActionDeps(t, origRedis, origMode)
 

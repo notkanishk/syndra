@@ -70,4 +70,4 @@
 - [ ] ISC-42 Exercise `000019`, the enriched drift read and the upstream console against a live Postgres + Redis + Zitadel. Unit-tested only so far.
 - [ ] ISC-43 Per-route manual a11y checklist for the twelve screens this change touched (empty / loading / error / dense / ultra-wide / narrow / keyboard / light-theme contrast).
 - [ ] ISC-44 Thread a cascade id through audit writes so the Trace column is a real trace rather than an inference from the action name.
-- [ ] ISC-45 Decide whether an application may read more than one project. The design assumes it can; the data model says one. Until then the apps index warns per project rather than per app.
+- [x] ISC-45 Decide whether an application may read more than one project. **Decided 28 Oct 2026: no.** A token carries one project (ADR-002), so the apps index warning per project is right.
