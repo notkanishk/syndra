@@ -263,7 +263,7 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 - Sheets and dialogs appear and leave together with their scrim.
 - 7a doesn't move; its sentence tints.
 
-## Answers of 3 Nov 2026 (A-09 to A-12)
+## Answers of 3 Nov 2026 (A-09 to A-13)
 
 Answered on this canvas after Claude Design was retired (`design_handoff_syndra/BRIDGE.md` in the repo). Where any of these touches a choice above, the dated answer wins.
 
@@ -273,5 +273,6 @@ Answered on this canvas after Claude Design was retired (`design_handoff_syndra/
 | `from-design/A-10-person-storage-and-sign-ins.md` | `a10-person-storage-and-sign-ins` | A read-only card per connected system on the person's Access tab; last sign-in per app on the person and app pages. |
 | `from-design/A-11-claims-shaping.md` | `a11-claims-shaping` | The app page as a trail of five checks ending in the token; draft preview; test people; save summary; history; what the app reads; moving off Actions v1 as advice. |
 | `from-design/A-12-three-loose-ends.md` | `a12-phone-bulk-bar` | Home's calm line swaps by Unfold for data changes too; phone bulk bar is one primary verb plus "More changes"; two copy lines. |
+| `from-design/A-13-stale-and-self-settling-passwords.md` | `a13-stale-and-passwords` | Revises A-09. Stale data: the Notice, the age once per read, rings in their own colour, live-only controls off; no amber outline; no text dim. A member's lost password reply is resent once at once, "Changed" only on a confirmed done, logged as "Sent again automatically"; passwords leave Waiting on you. |
 
 Owner's calls in these answers are listed in each file and are settled in chat.
