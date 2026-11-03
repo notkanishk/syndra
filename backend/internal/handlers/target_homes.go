@@ -74,18 +74,9 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 	for _, b := range bindings {
 		row := accountHome{SubjectID: b.SubjectID, Username: b.Username}
 		if set, err := svcResolveEntitlementSet(r.Context(), b.SubjectID, target); err == nil {
-			row.GivesHome = len(set.Fields["home"]) > 0
-			row.RolesLimit, row.RolesLimitFrom = largestGiven(set, fieldHomeQuota)
+			roleLimits(&row, set)
 		}
-		if inForce, err := dbAllowancesInForce(r.Context(), b.SubjectID, target); err == nil {
-			for _, a := range inForce {
-				if a.Direction == db.AllowanceSet && a.Field == fieldHomeQuota {
-					n, _ := strconv.ParseInt(a.Value, 10, 64)
-					row.Own = &homeOwnLimit{AllowanceID: a.ID, Bytes: n, Reason: a.Reason, ActorID: a.ActorID,
-						SetAt: a.CreatedAt, ExpiresAt: a.ExpiresAt, ReviewDate: a.ReviewDate, ReviewDue: a.ReviewDue(now)}
-				}
-			}
-		}
+		row.Own = ownHomeLimit(r, b.SubjectID, target, now)
 		if h, ok := byName[b.Username]; ok {
 			row.Home = h.Home
 			if homes.UsageRead {
@@ -93,13 +84,43 @@ func handleTargetHomes(w http.ResponseWriter, r *http.Request) {
 				row.UsedBytes, row.QuotaBytes = &used, &quota
 			}
 		}
-		if row.Own == nil && row.UsedBytes != nil && row.RolesLimit != nil && *row.UsedBytes > *row.RolesLimit {
-			row.OwnEnded = lastOwnLimitEnded(r, b.SubjectID, target, now)
-		}
+		ownEndedIfOver(r, &row, target, now)
 		out = append(out, row)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Username < out[j].Username })
 	jsonResponse(w, http.StatusOK, map[string]any{"read": homes.Read, "usage_read": homes.UsageRead, "accounts": out})
+}
+
+// roleLimits is what a person's roles give: a home folder at all, and the
+// largest limit, with the role that gives it.
+func roleLimits(row *accountHome, set services.EntitlementSet) {
+	row.GivesHome = len(set.Fields["home"]) > 0
+	row.RolesLimit, row.RolesLimitFrom = largestGiven(set, fieldHomeQuota)
+}
+
+// ownHomeLimit is the person's own limit in force, or nil.
+func ownHomeLimit(r *http.Request, subject, target string, now time.Time) *homeOwnLimit {
+	inForce, err := dbAllowancesInForce(r.Context(), subject, target)
+	if err != nil {
+		return nil
+	}
+	var own *homeOwnLimit
+	for _, a := range inForce {
+		if a.Direction == db.AllowanceSet && a.Field == fieldHomeQuota {
+			n, _ := strconv.ParseInt(a.Value, 10, 64)
+			own = &homeOwnLimit{AllowanceID: a.ID, Bytes: n, Reason: a.Reason, ActorID: a.ActorID,
+				SetAt: a.CreatedAt, ExpiresAt: a.ExpiresAt, ReviewDate: a.ReviewDate, ReviewDue: a.ReviewDue(now)}
+		}
+	}
+	return own
+}
+
+// ownEndedIfOver names the own limit that ended, only while the folder still
+// holds more than the roles give.
+func ownEndedIfOver(r *http.Request, row *accountHome, target string, now time.Time) {
+	if row.Own == nil && row.UsedBytes != nil && row.RolesLimit != nil && *row.UsedBytes > *row.RolesLimit {
+		row.OwnEnded = lastOwnLimitEnded(r, row.SubjectID, target, now)
+	}
 }
 
 // largestGiven is the largest limit a field's roles give, and the role that
