@@ -8,6 +8,7 @@ import { CopyableValue } from "@/components/ui/CopyableValue";
 import { FieldLabel } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Segmented, Select } from "@/components/ui/Select";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Step by step, from a member's own device (proposed/ConnectionGuide.md, 4b).
@@ -170,7 +171,11 @@ export function ConnectionGuide({
             <div className="flex min-w-[160px] flex-[0_1_220px] flex-col gap-1.5">
               <FieldLabel htmlFor="guide-folder">Folder</FieldLabel>
               <Select id="guide-folder" value={String(chosen)} onChange={(e) => setChosen(Number(e.target.value))}>
-                {folders.map((f, i) => (
+                {sortByName(
+                  folders.map((f, i) => ({ f, i })),
+                  ({ f }) => f.label,
+                  ({ f }) => f.smb,
+                ).map(({ f, i }) => (
                   <option key={f.smb} value={i}>
                     {f.label}
                   </option>

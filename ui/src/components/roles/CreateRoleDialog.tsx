@@ -13,6 +13,7 @@ import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateRole, useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Creating a role through Syndra writes it locally AND upstream in one action,
@@ -158,7 +159,7 @@ export function CreateRoleDialog({
               onChange={(event) => setCloneFrom(event.target.value)}
             >
               <option value="">Nothing — start empty</option>
-              {all.map((role) => (
+              {sortByName(all, (role) => `${role.project_name} / ${role.role_key}`, (role) => role.project_id).map((role) => (
                 <option
                   key={`${role.project_id}:${role.role_key}`}
                   value={`${role.project_id}:${role.role_key}`}

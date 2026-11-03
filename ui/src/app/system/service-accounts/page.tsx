@@ -17,8 +17,8 @@ import {
 
 /**
  * Service accounts (A-07 §26–31, route-service-accounts, 23 Oct 2026): accounts
- * made for one purpose, not one person. A short list, so no search, sorted by
- * name by the backend.
+ * made for one purpose, not one person. A short list, so no search, A to Z
+ * by name (useServiceAccounts).
  *
  * ponytail: the board's "Last used" column and its 90-day stale check are not
  * here. The API can't read last use yet (A-07 §22: boards change to what can be

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import type { OneShotSecret } from "@/lib/secret";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Accounts Syndra created whose reason for existing has gone (9.11/9.12).
@@ -49,6 +50,7 @@ export function useDormantAccounts(target: string | undefined) {
     queryKey: ["targets", target, "dormant"],
     queryFn: () => request<DormantReport>(`/targets/${target}/accounts/dormant`),
     enabled: Boolean(target),
+    select: (r) => ({ ...r, accounts: sortByName(r.accounts ?? [], (a) => a.display_name || a.account, (a) => a.account) }),
   });
 }
 

@@ -5,6 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { request } from "@/lib/api-client";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { CascadeOutcome } from "@/lib/types";
+import { sortByName } from "@/lib/sort";
 
 // Shapes mirror the backend `users.go` handler responses. Kept narrow to what
 // the Users page renders; widen if more fields are needed.
@@ -184,6 +185,13 @@ export function useUserAccess(userId: string) {
       return await request<UserAccessView>(`/users/${userId}/access`);
     },
     enabled: !!userId,
+    // Bundles and projects A to Z (RULES.md); the roles inside go by key.
+    select: (view) =>
+      view && {
+        ...view,
+        bundles: sortByName(view.bundles ?? [], (b) => b.name),
+        projects: sortByName(view.projects ?? [], (p) => p.project_name, (p) => p.project_id),
+      },
   });
 }
 

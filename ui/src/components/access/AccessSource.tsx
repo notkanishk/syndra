@@ -5,6 +5,7 @@ import { AnchoredPanel } from "@/components/ui/Anchored";
 
 import { Badge } from "@/components/ui/Badge";
 import { NextStep } from "@/components/ui/NextStep";
+import { compareNames } from "@/lib/sort";
 
 /**
  * Access source — the signature component.
@@ -64,12 +65,13 @@ export function isSourceKind(kind: string): kind is SourceKind {
   return kind === "direct" || kind === "bundle" || kind === "mapping";
 }
 
-/** Sorts reasons into the fixed reading order and drops unknown kinds. */
+/** Sorts reasons into the fixed reading order, A to Z within a kind, and drops unknown kinds. */
 export function orderedSources(reasons: RoleReason[] | undefined | null): RoleReason[] {
+  const name = (r: RoleReason) => r.bundle_name ?? `${r.trigger_project ?? ""} / ${r.trigger_role ?? ""}`;
   return (reasons ?? [])
     .filter((reason) => isSourceKind(reason.kind))
     .slice()
-    .sort((a, b) => ORDER[a.kind as SourceKind] - ORDER[b.kind as SourceKind]);
+    .sort((a, b) => ORDER[a.kind as SourceKind] - ORDER[b.kind as SourceKind] || compareNames(name(a), name(b)));
 }
 
 /** The qualifier that follows a chip: "Lab Tech", "3D Lab / operator". */

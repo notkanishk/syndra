@@ -4,6 +4,7 @@ import { kindMeta, listOf, paint, reach, refNode, type Highlight, type Model, ty
 import { formatList, humanizeKey } from "@/lib/format";
 import type { InsightPerson, InsightsWhatIf, RoleRef } from "@/lib/queries/useInsights";
 import type { AccessRoleReason } from "@/lib/queries/useUsers";
+import { sortByName } from "@/lib/sort";
 
 /**
  * What each question says, in sentences, and which threads the map draws for
@@ -187,7 +188,7 @@ export function whoAnswer(m: Model, hasId: string, withoutId: string | null, fou
   paint(h, reach(m, hasId, ["up"]), "accent");
   if (withoutId) h.nodes.set(withoutId, "ink");
 
-  const lines: Panel["lines"] = found.slice(0, MORE).map((p) => {
+  const lines: Panel["lines"] = sortByName(found, (p) => p.name).slice(0, MORE).map((p) => {
     const via = routesOf(m, hasId, has, p.how);
     const hows = via.map((r) => r.how);
     return {

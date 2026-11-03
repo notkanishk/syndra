@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/Input";
 import { formatList, humanizeKey } from "@/lib/format";
 import { useBundleRolesByBundle, useBundles } from "@/lib/queries/useBundles";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Choosing bundles in the same picker (B9, 3a): a "Bundles" fold first, and a
@@ -94,7 +95,7 @@ function WithBundles(props: PickerProps & { bundles: BundleChoices }) {
   const list = useBundles();
   const all = useMemo(() => list.data ?? [], [list.data]);
   const others = useMemo(
-    () => all.filter((b) => b.id !== selfId).sort((a, b) => a.name.localeCompare(b.name)),
+    () => sortByName(all.filter((b) => b.id !== selfId), (b) => b.name),
     [all, selfId],
   );
   const roles = useBundleRolesByBundle(
@@ -163,7 +164,7 @@ function Picker({
       g.roles.push(role);
       byProject.set(role.project_id, g);
     }
-    return Array.from(byProject.values()).sort((a, b) => a.project.localeCompare(b.project));
+    return sortByName(Array.from(byProject.values()), (g) => g.project);
   }, [all, needle]);
 
   // A chosen or included bundle's roles: ticked, locked, and saying where from.

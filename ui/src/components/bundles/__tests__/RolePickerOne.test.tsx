@@ -67,11 +67,15 @@ describe("RolePicker · single choice", () => {
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
   });
 
-  it("opens the place a link named first, at the top, and nothing else", () => {
+  it("opens the place a link named in its alphabetical seat, and nothing else", () => {
     render(<Harness cameFrom="pWood" />);
     const folds = screen.getAllByRole("button", { name: /roles?$|Nothing yet|chosen/ }).filter((b) => b.hasAttribute("aria-expanded"));
-    expect(folds[0]).toHaveTextContent("Woodshop");
-    expect(folds[0]).toHaveAttribute("aria-expanded", "true");
+    expect(folds.map((f) => f.textContent)).toEqual([
+      expect.stringContaining("Laser Lab"),
+      expect.stringContaining("Network storage"),
+      expect.stringContaining("Woodshop"),
+    ]);
+    expect(fold("Woodshop")).toHaveAttribute("aria-expanded", "true");
     expect(fold("Laser Lab")).toHaveAttribute("aria-expanded", "false");
   });
 

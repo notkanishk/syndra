@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { sortByName } from "@/lib/sort";
 import type { ObservationBasis } from "@/lib/queries/useRoles";
 
 export interface ApplicationView {
@@ -60,7 +61,10 @@ export function useApplications() {
       const data = await request<unknown>("/applications");
       return Array.isArray(data) ? (data as ApplicationView[]) : [];
     },
+    select: byAppName,
   });
 }
+
+const byAppName = (rows: ApplicationView[]) => sortByName(rows, (r) => r.application.name, (r) => r.application.id);
 
 export const applicationsQueryKeys = KEYS;

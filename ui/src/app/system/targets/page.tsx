@@ -20,6 +20,7 @@ import {
   type TargetSummary,
 } from "@/lib/queries/useTargets";
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Connected systems — the index of the target plane.
@@ -38,8 +39,7 @@ import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 export default function ConnectedSystemsPage() {
   const targets = useTargets();
   // A to Z, as the board draws it: the roster arrives in registration order.
-  const rows = [...(targets.data ?? [])].sort((a, b) =>
-    targetLabel(a.target).localeCompare(targetLabel(b.target)),
+  const rows = sortByName(targets.data ?? [], (t) => targetLabel(t.target), (t) => t.target
   );
 
   return (

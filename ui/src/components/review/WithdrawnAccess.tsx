@@ -28,6 +28,7 @@ import { shortId } from "@/lib/audit-vocabulary";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Review › Unfinished revocations (9.9, 9.10).
@@ -136,7 +137,10 @@ export function WithdrawnAccess() {
     [rows, view.sort, text, where, needle],
   );
   // Only systems with a row, so nothing on offer returns nothing.
-  const systems = useMemo(() => Array.from(new Set(rows.map((row) => row.target))).sort(), [rows]);
+  const systems = useMemo(
+    () => sortByName(Array.from(new Set(rows.map((row) => row.target))), targetLabel, (t) => t),
+    [rows],
+  );
 
   const spent = matched.filter((row) => row.spent);
   const queued = matched.filter((row) => !row.spent);
