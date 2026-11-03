@@ -2,12 +2,139 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"syndra/internal/claims"
+	"syndra/internal/services"
 )
+
+// Two apps on one project, each told only what its own shape says, picked by
+// the request's application.client_id (ADR-003). NetBird's shape renames and
+// leaves out; Inventory's nests and keeps row order. Any other client, or a
+// payload with no client id, gets the project's default.
+func TestActionV2_PerAppShapeByClientID(t *testing.T) {
+	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
+	resetActionDeps(t, origRedis, origMode)
+	redisGetClaims = func(context.Context, string) (string, error) {
+		b, _ := json.Marshal(claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"admin", "guest", "staff"}, GivenName: "Ada"})
+		return string(b), nil
+	}
+	netbird, _ := claims.FindTemplate("netbird")
+	nb := netbird.Profile
+	nb.Roles = []claims.RoleMap{{Key: "staff", As: "netbird-staff", Included: true}, {Key: "admin", As: "netbird-admins", Included: true}}
+	stubProjectShapes(services.ProjectShapes{
+		Default: claims.FromFlat("net.roles", claims.FormatArray, nil, nil),
+		ByClient: map[string]services.AppShape{
+			"cNB":  {ApplicationID: "aNB", Version: 3, Profile: nb},
+			"cInv": {ApplicationID: "aInv", Version: 1, Profile: claims.ActionsV1()},
+		},
+	})
+
+	ask := func(client, function string) string {
+		t.Helper()
+		body, _ := json.Marshal(map[string]any{
+			"function":    function,
+			"application": map[string]string{"client_id": client},
+			"user":        map[string]string{"id": "ada"},
+			"user_grants": []ActionV2UserGrantRef{{ProjectID: "pNet", Roles: []string{"staff"}}},
+		})
+		rr := httptest.NewRecorder()
+		HandleActionInject(rr, httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(string(body))))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status %d", rr.Code)
+		}
+		return strings.TrimSpace(rr.Body.String())
+	}
+
+	cases := []struct{ client, function, want string }{
+		{"cNB", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"groups","value":["netbird-staff","netbird-admins"]}]}`},
+		{"cInv", claims.FunctionPreUserinfo, `{"append_claims":[{"key":"groups","value":["admin","guest","staff"]},` +
+			`{"key":"custom_claims","value":{"groups":["admin","guest","staff"],"given_name":"Ada"}}]}`},
+		{"cElse", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"net.roles","value":["admin","guest","staff"]}]}`},
+		{"", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"net.roles","value":["admin","guest","staff"]}]}`},
+	}
+	for _, c := range cases {
+		if got := ask(c.client, c.function); got != c.want {
+			t.Errorf("client %q %s:\n got %s\nwant %s", c.client, c.function, got, c.want)
+		}
+	}
+}
+
+// A shape answers only the function where it lands: Pre Access Token for the
+// access token, Pre Userinfo for userinfo (and the ID token). The other
+// function gets nothing, and no facts are read for it.
+func TestActionV2_LandsGatesTheFunction(t *testing.T) {
+	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
+	resetActionDeps(t, origRedis, origMode)
+	reads := 0
+	redisGetClaims = func(context.Context, string) (string, error) {
+		reads++
+		return factsJSON("ada", "pNet", "staff"), nil
+	}
+	supabase, _ := claims.FindTemplate("supabase-oidc") // lands userinfo
+	stubProjectShapes(services.ProjectShapes{Default: claims.Builtin(), ByClient: map[string]services.AppShape{"cSB": {Profile: supabase.Profile}}})
+
+	for _, c := range []struct {
+		function string
+		want     int
+	}{{claims.FunctionPreAccessToken, 0}, {claims.FunctionPreUserinfo, 1}} {
+		body := fmt.Sprintf(`{"function":%q,"application":{"client_id":"cSB"},"user":{"id":"ada"},"user_grants":[{"projectId":"pNet","roles":["staff"]}]}`, c.function)
+		rr := httptest.NewRecorder()
+		HandleActionInject(rr, httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(body)))
+		got := decodeActionResponse(t, rr)
+		if len(got.AppendClaims) != c.want {
+			t.Fatalf("%s: want %d claims, got %v", c.function, c.want, got.AppendClaims)
+		}
+	}
+	if reads != 1 {
+		t.Fatalf("facts read %d times, want 1 (only where it lands)", reads)
+	}
+}
+
+// Debug mode captures exactly the one watched account on the watched client,
+// after the answer, with the body kept as Zitadel sent it. Nobody else's
+// sign-in is held.
+func TestActionV2_DebugCapturesOnlyTheWatchedAccount(t *testing.T) {
+	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
+	resetActionDeps(t, origRedis, origMode)
+	origExplain := svcExplainSignIn
+	t.Cleanup(func() { svcExplainSignIn = origExplain; claimDebug.Stop("aDbg", "test") })
+	svcExplainSignIn = func(context.Context, string, string, string) (services.Explanation, error) {
+		return services.Explanation{Checks: []services.Check{{State: services.CheckPass}}}, nil
+	}
+	redisGetClaims = func(context.Context, string) (string, error) { return factsJSON("ada", "pNet", "staff"), nil }
+
+	claimDebug.Start("aDbg", "cDbg", "ada", "kanishk")
+	for _, user := range []string{"grace", "ada"} {
+		body := fmt.Sprintf(`{"function":"function/preaccesstoken","application":{"client_id":"cDbg"},"user":{"id":%q},"user_grants":[{"projectId":"pNet","roles":["staff"]}]}`, user)
+		HandleActionInject(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(body)))
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var got []string
+	for time.Now().Before(deadline) {
+		list := claimDebug.SignIns("aDbg", 0)
+		if len(list) > 0 {
+			for _, e := range list {
+				got = append(got, e.UserID)
+				if !strings.Contains(string(e.Request), `"client_id":"cDbg"`) || !strings.Contains(string(e.Response), `"append_claims"`) || e.Checks == nil {
+					t.Fatalf("entry: %+v", e)
+				}
+			}
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(got) != 1 || got[0] != "ada" {
+		t.Fatalf("want only Ada's sign-in, got %v", got)
+	}
+}
 
 // canonicalV2Payload is the full shape Zitadel sends for a
 // `function/preaccesstoken` trigger. Fields beyond user and user_grants are

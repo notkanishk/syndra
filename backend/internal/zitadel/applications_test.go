@@ -61,6 +61,47 @@ func TestListApplications_ParsesOIDCAndAPITypes(t *testing.T) {
 	}
 }
 
+// Check 1's facts come from two GETs and nothing else; Zitadel omits the
+// Bearer enum (its zero value), and an app with no OIDC config has no type.
+func TestTokenSettings_ReadsAppAndProject(t *testing.T) {
+	resetDeps(t)
+	var calls []string
+	tokenType := ""
+	httpDo = func(_ *http.Client, req *http.Request) (*http.Response, error) {
+		if strings.Contains(req.URL.Path, "/oauth/") {
+			return jsonResp(200, map[string]any{"access_token": "t", "token_type": "Bearer", "expires_in": 3600}), nil
+		}
+		calls = append(calls, req.Method+" "+req.URL.Path)
+		if strings.Contains(req.URL.Path, "/apps/") {
+			oidc := map[string]any{"idTokenUserinfoAssertion": true}
+			if tokenType != "" {
+				oidc["accessTokenType"] = tokenType
+			}
+			return jsonResp(200, map[string]any{"app": map[string]any{"oidcConfig": oidc}}), nil
+		}
+		return jsonResp(200, map[string]any{"project": map[string]any{"projectRoleAssertion": true}}), nil
+	}
+	key := testRSAKey(t)
+	tm := newTokenManager("test.zitadel.dev", &ServiceAccountKey{Type: "serviceaccount", KeyID: "k", UserID: "u"}, key)
+	client := &managementClient{domain: "test.zitadel.dev", tokens: tm, http: &http.Client{}}
+
+	s, err := client.TokenSettings(context.Background(), "p1", "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.AccessTokenType != "BEARER" || !s.IDTokenUserinfoAssertion || !s.ProjectRoleAssertion || s.ProjectRoleCheck {
+		t.Fatalf("settings: %+v", s)
+	}
+	tokenType = "OIDC_TOKEN_TYPE_JWT"
+	if s, _ := client.TokenSettings(context.Background(), "p1", "a1"); s.AccessTokenType != "JWT" {
+		t.Fatalf("jwt: %+v", s)
+	}
+	want := []string{"GET /management/v1/projects/p1/apps/a1", "GET /management/v1/projects/p1"}
+	if len(calls) != 4 || calls[0] != want[0] || calls[1] != want[1] {
+		t.Fatalf("read-only calls: %v", calls)
+	}
+}
+
 func TestListApplications_HitsCorrectEndpoint(t *testing.T) {
 	resetDeps(t)
 

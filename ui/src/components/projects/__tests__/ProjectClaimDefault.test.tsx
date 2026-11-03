@@ -3,16 +3,36 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { TokenFormatEditor } from "@/components/apps/TokenFormatEditor";
-import type { ClaimShape } from "@/lib/queries/useClaimShape";
+import { ProjectClaimDefault } from "@/components/projects/ProjectClaimDefault";
+import type { ProjectClaimShape } from "@/lib/queries/useClaimShape";
 import { gapSettled } from "@/test-utils/leaving";
 import { motionInTests } from "@/test-utils/motion";
 
 /**
- * A-08 §5: Discard is a change in place, so nothing arrives. Untouched rows hold still, edited
- * values crossfade back in their seats, a claim added since fades and its gap settles, and one
- * removed since opens its gap and tints in.
+ * The project default's one write place (A-14 §7). A-08 §5: Discard is a
+ * change in place, so nothing arrives. Untouched rows hold still, edited
+ * values crossfade back in their seats, a claim added since fades and its gap
+ * settles, and one removed since opens its gap and tints in.
  */
+
+const saveProject = vi.fn();
+
+const shape: ProjectClaimShape = {
+  project_id: "pLaser",
+  project_name: "Laser Lab",
+  configured: true,
+  default: {
+    claim_name: "syndra.laser.roles",
+    format_type: "array",
+    attribute_claims: { "syndra.laser.email": "email", "syndra.laser.team": "team" },
+    static_claims: {},
+  },
+  profile: { claims: [], include_new: true, lands: "both" },
+  applications: [
+    { application_id: "a1", name: "Bookings", source: "project_default" },
+    { application_id: "a2", name: "Badge Reader", source: "app", version: 2 },
+  ],
+};
 
 vi.mock("@/lib/queries/useClaimShape", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/queries/useClaimShape")>();
@@ -21,41 +41,19 @@ vi.mock("@/lib/queries/useClaimShape", async (importOriginal) => {
     useClaimVocabulary: () => ({
       data: { attributes: ["user_id", "email", "team"], formats: ["array", "csv", "space_delimited"] },
     }),
-    useSaveProjectClaimProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useSaveAppClaimOverride: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useDeleteAppClaimOverride: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useProjectClaimShape: () => query,
+    useSaveProjectClaimProfile: () => ({ mutateAsync: saveProject, isPending: false }),
   };
 });
 
-const shape: ClaimShape = {
-  project_id: "pLaser",
-  project_name: "Laser Lab",
-  default: {
-    project_id: "pLaser",
-    claim_name: "syndra.laser.roles",
-    format_type: "array",
-    attribute_claims: { "syndra.laser.email": "email", "syndra.laser.team": "team" },
-    static_claims: {},
-  },
-  overrides: [],
-  applications: [],
-  emitted_keys: [],
-  conflicts: [],
-};
-
 // One query object for the whole test, as the page's own read is: a profile that is a new
 // object on every render would be a different profile on every render.
+const query = { data: shape, isLoading: false, error: null, refetch: vi.fn() };
+
 function setup() {
-  const query = { data: shape, isLoading: false, error: null, refetch: vi.fn() } as never;
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <TokenFormatEditor
-        projectId="pLaser"
-        applicationId="app_bookings"
-        applicationName="Bookings"
-        shape={query}
-        siblingCount={1}
-      />
+      <ProjectClaimDefault projectId="pLaser" />
     </QueryClientProvider>,
   );
 }
@@ -66,7 +64,25 @@ const discard = () => fireEvent.click(screen.getByRole("button", { name: "Discar
 
 beforeEach(() => motionInTests());
 
-describe("Discard in the token format editor", () => {
+describe("the project's default shape", () => {
+  it("names the apps it reaches: only those with no shape of their own", () => {
+    setup();
+    expect(screen.getByText(/It reaches Bookings today\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Badge Reader/)).toBeNull();
+  });
+
+  it("saves the claim name and format an operator typed, and nothing until then", () => {
+    saveProject.mockClear();
+    setup();
+    expect(screen.getByRole("button", { name: "Save the default" })).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("syndra.laser.roles"), { target: { value: "laser.roles.v2" } });
+    fireEvent.click(screen.getByRole("radio", { name: "csv" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save the default" }));
+    expect(saveProject).toHaveBeenCalledWith(expect.objectContaining({ claim_name: "laser.roles.v2", format_type: "csv" }));
+  });
+});
+
+describe("Discard in the default shape", () => {
   it("holds the rows that were never touched: the same elements, nothing arriving", () => {
     setup();
     const [email, team] = keys();

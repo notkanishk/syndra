@@ -640,6 +640,13 @@ func setupSnapshotTestFixtures(t *testing.T, numUsers, numApps, numProjects int)
 	directory.Default = &snapshotFixtureDirectory{users: users, apps: apps, projs: projs}
 	t.Cleanup(func() { directory.Default = origDir })
 
+	// The apps list reads each project's claim shapes: none, so every app is
+	// on the built-in default.
+	origProfile, origShapes := svcGetClaimProfile, svcLatestClaimShapes
+	t.Cleanup(func() { svcGetClaimProfile, svcLatestClaimShapes = origProfile, origShapes })
+	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) { return db.ClaimProfileRow{}, false, nil }
+	svcLatestClaimShapes = func(context.Context, string) ([]db.ClaimShapeVersion, error) { return nil, nil }
+
 	svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) {
 		return nil, nil
 	}

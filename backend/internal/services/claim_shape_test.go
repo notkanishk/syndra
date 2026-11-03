@@ -2,235 +2,490 @@ package services
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"syndra/internal/claims"
 	"syndra/internal/db"
+	"syndra/internal/directory"
 	"syndra/internal/models"
+	"syndra/internal/zitadel"
 )
 
-// stubClaimShapeDeps neutralises every claim-shaping injectable and returns a
-// pointer to the last profile written, so tests can assert what was persisted.
-func stubClaimShapeDeps(t *testing.T) (*db.ClaimProfileRow, *db.AppClaimOverrideRow) {
-	t.Helper()
-	origGet, origUpsert := svcGetClaimProfile, svcUpsertClaimProfile
-	origListOv, origUpsertOv, origDelOv := svcListAppClaimOverrides, svcUpsertAppClaimOverride, svcDeleteAppClaimOverride
-	t.Cleanup(func() {
-		svcGetClaimProfile, svcUpsertClaimProfile = origGet, origUpsert
-		svcListAppClaimOverrides, svcUpsertAppClaimOverride, svcDeleteAppClaimOverride = origListOv, origUpsertOv, origDelOv
-	})
+var seedCutoff = time.Date(2026, 11, 3, 0, 0, 0, 0, time.UTC)
 
-	savedProfile := &db.ClaimProfileRow{}
-	savedOverride := &db.AppClaimOverrideRow{}
+// shapeDir is the directory the claims tests run against: NetBird and an old
+// in-house app existed under Actions v1; GitLab came after the cutoff.
+type shapeDir struct{ directory.Source }
 
-	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) {
-		return db.ClaimProfileRow{}, false, nil
-	}
-	svcListAppClaimOverrides = func(context.Context) ([]db.AppClaimOverrideRow, error) { return nil, nil }
-	svcUpsertClaimProfile = func(_ context.Context, r db.ClaimProfileRow) error {
-		*savedProfile = r
-		return nil
-	}
-	svcUpsertAppClaimOverride = func(_ context.Context, r db.AppClaimOverrideRow) error {
-		*savedOverride = r
-		return nil
-	}
-	svcDeleteAppClaimOverride = func(context.Context, string) error { return nil }
-	return savedProfile, savedOverride
+var shapeApps = []models.ApplicationCatalog{
+	{ID: "aNB", Name: "NetBird", ProjectID: "pNet", ClientID: "cNB", Created: seedCutoff.Add(-time.Hour)},
+	{ID: "aInv", Name: "Inventory", ProjectID: "pInv", ClientID: "cInv"},
+	{ID: "aGL", Name: "GitLab", ProjectID: "pCode", ClientID: "cGL", Created: seedCutoff.Add(time.Hour)},
 }
 
-// A project nobody has configured still resolves to a usable profile — the
-// data plane must never be handed an empty set, which would emit a token with
-// no roles at all.
-func TestResolveClaimProfiles_FallsBackToBuiltInDefault(t *testing.T) {
-	stubClaimShapeDeps(t)
-
-	got, err := ResolveClaimProfiles(context.Background(), "pLaser")
-	if err != nil {
-		t.Fatalf("ResolveClaimProfiles: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("expected exactly the default profile, got %#v", got)
-	}
-	if got[0].ClaimName != claims.DefaultClaimName || got[0].FormatType != claims.DefaultFormat {
-		t.Fatalf("expected the built-in default shape, got %#v", got[0])
-	}
+var shapeProjects = map[string][]models.ProjectRole{
+	"pNet":  {{Key: "staff", Label: "Staff"}, {Key: "admin", Label: "Admins"}, {Key: "guest", Label: "Guests"}},
+	"pInv":  {{Key: "staff", Label: "Staff"}, {Key: "inv-admin", Label: "Admin"}, {Key: "trained", Label: "Trained"}},
+	"pCode": {{Key: "users", Label: "Users"}},
 }
 
-func TestResolveClaimProfiles_DefaultThenOverridesForThisProjectOnly(t *testing.T) {
-	stubClaimShapeDeps(t)
-
-	svcGetClaimProfile = func(_ context.Context, projectID string) (db.ClaimProfileRow, bool, error) {
-		return db.ClaimProfileRow{ProjectID: projectID, ClaimName: "syndra.laser.roles", FormatType: claims.FormatArray}, true, nil
-	}
-	svcListAppClaimOverrides = func(context.Context) ([]db.AppClaimOverrideRow, error) {
-		return []db.AppClaimOverrideRow{
-			{ApplicationID: "app_badge", ProjectID: "pLaser", ClaimName: "badge.roles", FormatType: claims.FormatCSV},
-			{ApplicationID: "app_other", ProjectID: "pStudio", ClaimName: "studio.roles", FormatType: claims.FormatCSV},
-		}, nil
-	}
-
-	got, err := ResolveClaimProfiles(context.Background(), "pLaser")
-	if err != nil {
-		t.Fatalf("ResolveClaimProfiles: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("expected the default plus this project's one override, got %#v", got)
-	}
-	if got[0].ApplicationID != "" || got[0].ClaimName != "syndra.laser.roles" {
-		t.Errorf("the project default must come first, got %#v", got[0])
-	}
-	if got[1].ApplicationID != "app_badge" {
-		t.Errorf("another project's override leaked in: %#v", got[1])
-	}
+func (shapeDir) Applications(context.Context) ([]models.ApplicationCatalog, error) {
+	return shapeApps, nil
 }
-
-// A token carries one project, so another project's key is no collision: two
-// projects may both name their claim "shared.roles".
-func TestSaveProjectClaimProfile_AllowsAKeyAnotherProjectUses(t *testing.T) {
-	saved, _ := stubClaimShapeDeps(t)
-
-	svcGetClaimProfile = func(_ context.Context, projectID string) (db.ClaimProfileRow, bool, error) {
-		if projectID == "pStudio" {
-			return db.ClaimProfileRow{ProjectID: "pStudio", ClaimName: "shared.roles", FormatType: claims.FormatArray}, true, nil
+func (shapeDir) FindApplication(_ context.Context, id string) (models.ApplicationCatalog, bool, error) {
+	for _, a := range shapeApps {
+		if a.ID == id {
+			return a, true, nil
 		}
-		return db.ClaimProfileRow{}, false, nil
 	}
+	return models.ApplicationCatalog{}, false, nil
+}
+func (shapeDir) FindProject(_ context.Context, id string) (models.ProjectCatalog, bool, error) {
+	roles, ok := shapeProjects[id]
+	return models.ProjectCatalog{ID: id, Name: id, Roles: roles}, ok, nil
+}
+func (shapeDir) RoleKeysForProject(_ context.Context, id string) ([]string, error) {
+	var out []string
+	for _, r := range shapeProjects[id] {
+		out = append(out, r.Key)
+	}
+	return out, nil
+}
+func (shapeDir) ProjectName(_ context.Context, id string) (string, error) { return id, nil }
+func (shapeDir) Users(context.Context) ([]models.UserProfile, error)      { return nil, nil }
 
-	err := SaveProjectClaimProfile(context.Background(), "pLaser", claims.Profile{
-		ClaimName: "shared.roles", FormatType: claims.FormatArray,
-	})
-	if err != nil {
-		t.Fatalf("another project's key must not block this one, got %v", err)
+// shapeStore is an in-memory app_claim_shape_versions.
+type shapeStore struct {
+	versions  map[string][]db.ClaimShapeVersion
+	defaults  map[string]db.ClaimProfileRow
+	overrides []db.AppClaimOverrideRow
+	stored    map[string]claims.Facts // user:project -> stored facts
+	settings  *zitadel.TokenSettings
+}
+
+func stubClaimShapeDeps(t *testing.T) *shapeStore {
+	t.Helper()
+	s := &shapeStore{versions: map[string][]db.ClaimShapeVersion{}, defaults: map[string]db.ClaimProfileRow{}, stored: map[string]claims.Facts{},
+		settings: &zitadel.TokenSettings{AccessTokenType: "JWT", IDTokenUserinfoAssertion: true, ProjectRoleAssertion: true, ProjectRoleCheck: true}}
+
+	origDir := directory.Default
+	o1, o2, o3, o4, o5, o6, o7 := svcGetClaimProfile, svcUpsertClaimProfile, svcListAppClaimOverrides, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape
+	o8, o9, o10, o11, o12, o13 := svcClaimShapeSeedCutoff, svcGetClaimFailureMode, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications
+	origReach := reachOf
+	reachOf = func(_ context.Context, _ string, changes []claims.Change) *Reach {
+		if len(changes) == 0 {
+			return nil
+		}
+		return &Reach{ByRole: map[string]int{"staff": 12}, People: 23}
 	}
-	if saved.ClaimName != "shared.roles" {
-		t.Errorf("expected the key to be persisted, got %q", saved.ClaimName)
+	t.Cleanup(func() {
+		reachOf = origReach
+		directory.Default = origDir
+		svcGetClaimProfile, svcUpsertClaimProfile, svcListAppClaimOverrides, svcLatestClaimShapes, svcClaimShapeAt, svcClaimShapeHistory, svcInsertClaimShape = o1, o2, o3, o4, o5, o6, o7
+		svcClaimShapeSeedCutoff, svcGetClaimFailureMode, svcStoredFacts, svcCompileFacts, svcTokenSettings, svcApplications = o8, o9, o10, o11, o12, o13
+		lastSettings = map[string]tokenSettingsRead{}
+	})
+	directory.Default = shapeDir{}
+
+	svcGetClaimProfile = func(_ context.Context, pid string) (db.ClaimProfileRow, bool, error) {
+		r, ok := s.defaults[pid]
+		return r, ok, nil
+	}
+	svcUpsertClaimProfile = func(_ context.Context, r db.ClaimProfileRow) error { s.defaults[r.ProjectID] = r; return nil }
+	svcListAppClaimOverrides = func(context.Context) ([]db.AppClaimOverrideRow, error) { return s.overrides, nil }
+	svcLatestClaimShapes = func(_ context.Context, pid string) ([]db.ClaimShapeVersion, error) {
+		var out []db.ClaimShapeVersion
+		for _, vs := range s.versions {
+			if l := vs[len(vs)-1]; l.ProjectID == pid {
+				out = append(out, l)
+			}
+		}
+		return out, nil
+	}
+	svcClaimShapeAt = func(_ context.Context, app string, n int) (db.ClaimShapeVersion, bool, error) {
+		vs := s.versions[app]
+		if len(vs) == 0 || n > len(vs) {
+			return db.ClaimShapeVersion{}, false, nil
+		}
+		if n == 0 {
+			n = len(vs)
+		}
+		return vs[n-1], true, nil
+	}
+	svcClaimShapeHistory = func(_ context.Context, app string) ([]db.ClaimShapeVersion, error) {
+		vs := s.versions[app]
+		out := make([]db.ClaimShapeVersion, len(vs))
+		for i := range vs {
+			out[i] = vs[len(vs)-1-i]
+		}
+		return out, nil
+	}
+	svcInsertClaimShape = func(_ context.Context, v db.ClaimShapeVersion, onlyIfNone bool) (db.ClaimShapeVersion, bool, error) {
+		if onlyIfNone && len(s.versions[v.ApplicationID]) > 0 {
+			return db.ClaimShapeVersion{}, false, nil
+		}
+		// A round trip through JSON, as the JSONB column does.
+		b, _ := json.Marshal(v.Profile)
+		v.Profile = claims.Profile{}
+		_ = json.Unmarshal(b, &v.Profile)
+		v.Version = len(s.versions[v.ApplicationID]) + 1
+		s.versions[v.ApplicationID] = append(s.versions[v.ApplicationID], v)
+		return v, true, nil
+	}
+	svcClaimShapeSeedCutoff = func(context.Context) (time.Time, error) { return seedCutoff, nil }
+	svcGetClaimFailureMode = func(context.Context, string) (string, map[string]interface{}, error) { return "fail_closed", nil, nil }
+	svcStoredFacts = func(_ context.Context, uid, pid string) (claims.Facts, bool, error) {
+		f, ok := s.stored[uid+":"+pid]
+		return f, ok, nil
+	}
+	svcCompileFacts = func(_ context.Context, uid, pid string) (claims.Facts, error) {
+		return claims.Facts{UserID: uid, ProjectID: pid, Roles: []string{"staff"}}, nil
+	}
+	svcTokenSettings = func(context.Context, string, string) (*zitadel.TokenSettings, error) {
+		if s.settings == nil {
+			return nil, errors.New("zitadel isn't answering")
+		}
+		cp := *s.settings
+		return &cp, nil
+	}
+	svcApplications = func(context.Context) ([]models.ApplicationCatalog, error) { return shapeApps, nil }
+	return s
+}
+
+func netbirdShape() claims.Profile {
+	t, _ := claims.FindTemplate("netbird")
+	p := t.Profile
+	p.Roles = []claims.RoleMap{{Key: "staff", As: "netbird-staff", Included: true}, {Key: "admin", As: "netbird-admins", Included: true}}
+	return p
+}
+
+// The data plane's read: each app's latest shape by client id, the default
+// for everyone else — built-in when the project has none.
+func TestResolveProjectShapes(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	ps, err := ResolveProjectShapes(context.Background(), "pNet")
+	if err != nil || ps.DefaultSource != SourceBuiltin || !reflect.DeepEqual(ps.Default, claims.Builtin()) {
+		t.Fatalf("no default set: %+v err=%v", ps, err)
+	}
+	if _, err := SaveAppClaimShape(context.Background(), "aNB", "op", SaveClaimShapeRequest{Profile: netbirdShape(), TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	s.defaults["pNet"] = db.ClaimProfileRow{ProjectID: "pNet", ClaimName: "net.roles", FormatType: "array"}
+	ps, _ = ResolveProjectShapes(context.Background(), "pNet")
+	if got, own := ps.For("cNB"); !own || got.ApplicationID != "aNB" || got.Version != 1 {
+		t.Fatalf("NetBird's own shape: %+v own=%v", got, own)
+	}
+	if got, own := ps.For("unknown-client"); own || got.Profile.Claims[0].Path[0] != "net.roles" {
+		t.Fatalf("an unknown client gets the project default: %+v", got)
+	}
+	if _, own := ps.For(""); own {
+		t.Fatal("no client id: the project default")
 	}
 }
 
-// Within one project the default and every override share a token, so an
-// override may not take a key the project already emits, even the built-in
-// "roles" of a project nobody has configured.
-func TestSaveAppClaimOverride_RejectsTheProjectsBuiltInDefaultKey(t *testing.T) {
+// An app that existed under Actions v1 is seeded on first read with exactly
+// v1's shape; one made after the cutoff starts on its project's default. An
+// old per-project override rides along.
+func TestGetAppClaimShape_SeedsOnlyAppsFromBeforeTheCutoff(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	s.overrides = []db.AppClaimOverrideRow{{ApplicationID: "aInv", ProjectID: "pInv", ClaimName: "inv.roles", FormatType: "csv"}}
+	ctx := context.Background()
+
+	nb, seeded, err := GetAppClaimShape(ctx, "aNB")
+	if err != nil || !seeded || nb.Source != SourceApp || nb.Version.Note != SeedNote || nb.Version.SavedBy != "system" {
+		t.Fatalf("NetBird seeded: %+v seeded=%v err=%v", nb.Version, seeded, err)
+	}
+	if !reflect.DeepEqual(nb.Profile, claims.ActionsV1()) || nb.Template.ID != "custom" {
+		t.Fatalf("seed is the v1 shape on the Custom template: %+v", nb.Profile)
+	}
+	if _, again, _ := GetAppClaimShape(ctx, "aNB"); again {
+		t.Fatal("a seeded app is never seeded twice")
+	}
+
+	inv, _, _ := GetAppClaimShape(ctx, "aInv") // no creation date: treated as existing
+	if len(inv.Profile.Claims) != 6 || inv.Profile.Claims[5].Path[0] != "inv.roles" || inv.Version.Note == SeedNote {
+		t.Fatalf("override folded into the seed: %+v note=%q", inv.Profile.Claims, inv.Version.Note)
+	}
+
+	gl, seeded, _ := GetAppClaimShape(ctx, "aGL")
+	if seeded || gl.Source != SourceBuiltin || gl.Version != nil || gl.SuggestedTemplate != "gitlab" {
+		t.Fatalf("GitLab is new: %+v seeded=%v", gl, seeded)
+	}
+	if _, err := SeedClaimShapes(ctx); err != nil || len(s.versions["aGL"]) != 0 {
+		t.Fatalf("the hourly seed leaves new apps alone: err=%v", err)
+	}
+}
+
+// A save the app will act on needs acknowledge_breaking; the refusal says
+// what breaks. Custom never refuses. Role keys must be this project's.
+func TestSaveAppClaimShape_Breaking(t *testing.T) {
 	stubClaimShapeDeps(t)
-	setupSnapshotTestFixtures(t, 1, 1, 1) // app a0 lives on project p0
-
-	err := SaveAppClaimOverride(context.Background(), "a0", claims.Profile{
-		ClaimName: claims.DefaultClaimName, FormatType: claims.FormatCSV,
-	})
-	if err == nil {
-		t.Fatal("expected an override reusing the project's default key to be rejected")
+	ctx := context.Background()
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: netbirdShape(), TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), claims.DefaultClaimName) {
-		t.Errorf("the error must name the colliding key, got %q", err)
+
+	renamed := netbirdShape()
+	renamed.Roles[0].As = "network-staff"
+	_, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: renamed, TemplateID: "netbird"}, 0)
+	var br *BreakingUnacknowledged
+	if !errors.As(err, &br) || len(br.Breaking) != 1 || br.Breaking[0].From != "netbird-staff" || br.Breaking[0].To != "network-staff" ||
+		br.Reach == nil || br.Reach.ByRole["staff"] != 12 {
+		t.Fatalf("want a refused rename, got %v", err)
+	}
+	res, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: renamed, TemplateID: "netbird", AcknowledgeBreaking: true, Note: " renamed "}, 0)
+	if err != nil || res.Version.Version != 2 || res.Version.Note != "renamed" || res.Version.TemplateVersion != 1 {
+		t.Fatalf("acknowledged: %+v err=%v", res, err)
+	}
+
+	// The rule is the app's: a Custom shape on NetBird still breaks NetBird.
+	custom := netbirdShape()
+	custom.Roles[0].As = "stf"
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: custom, TemplateID: "custom"}, 0); !errors.As(err, &br) {
+		t.Fatalf("NetBird acts on a rename whatever template the shape names: %v", err)
+	}
+	// An in-house app on Custom: every rename is said plainly, never refused.
+	shape := claims.Profile{Claims: []claims.Claim{{Path: []string{"roles"}, Kind: claims.KindRoles}}, Roles: []claims.RoleMap{{Key: "staff", Included: true}}}
+	for _, as := range []string{"", "stf"} {
+		shape.Roles[0].As = as
+		if _, err := SaveAppClaimShape(ctx, "aInv", "op", SaveClaimShapeRequest{Profile: shape, TemplateID: "custom"}, 0); err != nil {
+			t.Fatalf("custom renames are never refused: %v", err)
+		}
+	}
+
+	bad := netbirdShape()
+	bad.Roles = append(bad.Roles, claims.RoleMap{Key: "inv-admin", Included: true})
+	var inv *ClaimShapeInvalid
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: bad, AcknowledgeBreaking: true}, 0); !errors.As(err, &inv) {
+		t.Fatalf("a role from another project is refused, got %v", err)
+	}
+	if _, err := SaveAppClaimShape(ctx, "nope", "op", SaveClaimShapeRequest{Profile: bad}, 0); !errors.Is(err, ErrClaimShapeNotFound) {
+		t.Fatalf("unknown app: %v", err)
 	}
 }
 
-// Re-saving a project's own profile is not a collision with itself.
-func TestSaveProjectClaimProfile_AllowsReSaveOfOwnKey(t *testing.T) {
-	saved, _ := stubClaimShapeDeps(t)
-
-	svcGetClaimProfile = func(context.Context, string) (db.ClaimProfileRow, bool, error) {
-		return db.ClaimProfileRow{ProjectID: "pLaser", ClaimName: "syndra.laser.roles", FormatType: claims.FormatArray}, true, nil
+// Go back saves the old version as a new one, through the same checks.
+func TestRestoreAndHistory(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	ctx := context.Background()
+	if _, _, err := GetAppClaimShape(ctx, "aNB"); err != nil { // v1: the seed
+		t.Fatal(err)
 	}
-
-	err := SaveProjectClaimProfile(context.Background(), "pLaser", claims.Profile{
-		ClaimName: "syndra.laser.roles", FormatType: claims.FormatCSV,
-	})
-	if err != nil {
-		t.Fatalf("re-saving the same project's own key must be allowed, got %v", err)
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: netbirdShape(), TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
+		t.Fatal(err)
 	}
-	if saved.FormatType != claims.FormatCSV {
-		t.Errorf("expected the new format to be persisted, got %q", saved.FormatType)
+	if _, err := RestoreAppClaimShape(ctx, "aNB", "op", 1, false); err == nil {
+		t.Fatal("going back from NetBird's shape drops `groups` words: breaking, needs the tick")
 	}
+	res, err := RestoreAppClaimShape(ctx, "aNB", "op", 1, true)
+	if err != nil || res.Version.Version != 3 || res.Version.RestoredFrom != 1 || !reflect.DeepEqual(res.Version.Profile, claims.ActionsV1()) {
+		t.Fatalf("restore: %+v err=%v", res.Version, err)
+	}
+	if _, err := RestoreAppClaimShape(ctx, "aNB", "op", 9, true); !errors.Is(err, ErrClaimShapeNotFound) {
+		t.Fatalf("unknown version: %v", err)
+	}
+	hist, err := AppClaimShapeHistory(ctx, "aNB")
+	if err != nil || len(hist) != 3 || hist[0].Version != 3 || len(hist[2].Changes) != 0 || len(hist[1].Changes) == 0 {
+		t.Fatalf("history: %+v err=%v", hist, err)
+	}
+	_ = s
 }
 
-func TestSaveProjectClaimProfile_RejectsInvalidProfile(t *testing.T) {
+// Copying from another project copies role words only for keys this project
+// has, lists the rest, and flags a role-dependent row that lost its role.
+func TestDraftFrom(t *testing.T) {
 	stubClaimShapeDeps(t)
-
-	err := SaveProjectClaimProfile(context.Background(), "pLaser", claims.Profile{
-		ClaimName: "syndra laser roles", FormatType: claims.FormatArray,
-	})
-	if err == nil {
-		t.Fatal("expected an invalid claim key to be rejected before it reaches a signed token")
+	ctx := context.Background()
+	src := claims.Profile{
+		Claims: []claims.Claim{
+			{Path: []string{"roles"}, Kind: claims.KindRoles, Format: claims.FormatArray},
+			{Path: []string{"is_admin"}, Kind: claims.KindIfRole, Roles: []string{"inv-admin"}},
+		},
+		Roles:      []claims.RoleMap{{Key: "staff", As: "stf", Included: true}, {Key: "inv-admin", Included: true}, {Key: "trained", Included: false}},
+		IncludeNew: true, Lands: claims.LandsBoth,
 	}
-}
+	if _, err := SaveAppClaimShape(ctx, "aInv", "op", SaveClaimShapeRequest{Profile: src, TemplateID: "custom"}, 0); err != nil {
+		t.Fatal(err)
+	}
 
-// The override's project comes from the application, never from the request:
-// an override filed against the wrong project would shape a token the app
-// never receives.
-func TestSaveAppClaimOverride_DerivesProjectFromApplication(t *testing.T) {
-	_, savedOverride := stubClaimShapeDeps(t)
-	setupSnapshotTestFixtures(t, 1, 1, 1) // app a0 lives on project p0
-
-	err := SaveAppClaimOverride(context.Background(), "a0", claims.Profile{
-		ProjectID: "spoofed-project", ClaimName: "badge.roles", FormatType: claims.FormatCSV,
-	})
+	d, err := DraftFrom(ctx, "aNB", DraftFromRequest{ApplicationID: "aInv"})
 	if err != nil {
-		t.Fatalf("SaveAppClaimOverride: %v", err)
+		t.Fatal(err)
 	}
-	if savedOverride.ProjectID != "p0" {
-		t.Errorf("expected the project from the directory, got %q", savedOverride.ProjectID)
+	if d.CopiedFrom == nil || d.CopiedFrom.ApplicationID != "aInv" || d.CopiedFrom.Version != 1 || d.TemplateID != "custom" {
+		t.Fatalf("copied from: %+v", d)
 	}
-	if savedOverride.ApplicationID != "a0" {
-		t.Errorf("expected the application id from the path, got %q", savedOverride.ApplicationID)
+	if !reflect.DeepEqual(d.Profile.Roles, []claims.RoleMap{{Key: "staff", As: "stf", Included: true}}) {
+		t.Fatalf("only this project's keys copy: %+v", d.Profile.Roles)
+	}
+	if !reflect.DeepEqual(d.NotCopied, []RoleRef{{RoleKey: "inv-admin", Name: "Admin"}, {RoleKey: "trained", Name: "Trained"}}) {
+		t.Fatalf("not copied: %+v", d.NotCopied)
+	}
+	if len(d.MissingRoles) != 1 || d.MissingRoles[0].Row != 1 || len(d.Profile.Claims[1].Roles) != 0 {
+		t.Fatalf("missing role flagged and dropped: %+v", d)
+	}
+	// The flagged row stops the save until a role from here is chosen.
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: d.Profile, AcknowledgeBreaking: true}, 0); err == nil {
+		t.Fatal("a row with no role must not save")
+	}
+
+	tpl, err := DraftFrom(ctx, "aGL", DraftFromRequest{TemplateID: "gitlab"})
+	if err != nil || tpl.TemplateID != "gitlab" || tpl.CopiedFrom != nil {
+		t.Fatalf("template draft: %+v err=%v", tpl, err)
+	}
+	// Role words are always the operator's: on the built-in default every role
+	// is included in Syndra's words, and the draft says so row by row.
+	if !reflect.DeepEqual(tpl.Profile.Roles, []claims.RoleMap{{Key: "users", Included: true}}) {
+		t.Fatalf("template draft roles: %+v", tpl.Profile.Roles)
+	}
+	if _, err := DraftFrom(ctx, "aNB", DraftFromRequest{}); err == nil {
+		t.Fatal("exactly one source")
+	}
+	if _, err := DraftFrom(ctx, "aNB", DraftFromRequest{ApplicationID: "aGL"}); !errors.Is(err, ErrClaimShapeNotFound) {
+		t.Fatalf("an app with no shape of its own can't be copied: %v", err)
 	}
 }
 
-func TestSaveAppClaimOverride_UnknownApplication(t *testing.T) {
-	stubClaimShapeDeps(t)
-	setupSnapshotTestFixtures(t, 1, 1, 1)
-
-	err := SaveAppClaimOverride(context.Background(), "nope", claims.Profile{
-		ClaimName: "x.roles", FormatType: claims.FormatCSV,
-	})
-	if err == nil {
-		t.Fatal("expected an override for an unknown application to be rejected")
+// The five checks, live and for a draft, through the one shaper.
+func TestPreview_Checks(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	ctx := context.Background()
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: netbirdShape(), TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
+		t.Fatal(err)
 	}
-}
+	s.stored["ada:pNet"] = claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"admin", "staff"}, CompiledAt: "2026-11-03T09:52:00Z"}
 
-// The operator view has to say which application owns each key, because a
-// token carries every key on the project and a sibling's key otherwise reads
-// as an unexplained extra claim.
-func TestProjectClaimShape_AttributesEveryEmittedKey(t *testing.T) {
-	stubClaimShapeDeps(t)
-	setupSnapshotTestFixtures(t, 1, 1, 1)
-
-	svcGetClaimProfile = func(_ context.Context, projectID string) (db.ClaimProfileRow, bool, error) {
-		return db.ClaimProfileRow{
-			ProjectID: projectID, ClaimName: "syndra.p0.roles", FormatType: claims.FormatArray,
-			AttributeClaims: map[string]string{"syndra.p0.email": claims.AttrEmail},
-		}, true, nil
-	}
-	svcListAppClaimOverrides = func(context.Context) ([]db.AppClaimOverrideRow, error) {
-		return []db.AppClaimOverrideRow{
-			{ApplicationID: "a0", ProjectID: "p0", ClaimName: "badge.roles", FormatType: claims.FormatCSV},
-		}, nil
-	}
-
-	shape, err := ProjectClaimShape(context.Background(), "p0")
+	renamed := netbirdShape()
+	renamed.Roles[0].As = "network-staff"
+	pv, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada", "rohan"}, Draft: &renamed})
 	if err != nil {
-		t.Fatalf("ProjectClaimShape: %v", err)
+		t.Fatal(err)
 	}
-	if len(shape.Conflicts) != 0 {
-		t.Fatalf("distinct keys must not conflict, got %#v", shape.Conflicts)
+	ada := pv.People[0]
+	for i, c := range ada.Now.Checks {
+		if c.State != CheckPass {
+			t.Fatalf("check %d for Ada: %+v", i+1, c)
+		}
+	}
+	tok := func(o any) string { b, _ := json.Marshal(o); return string(b) }
+	if got := tok(ada.Now.Token); got != `{"groups":["netbird-staff","netbird-admins"]}` {
+		t.Fatalf("now: %s", got)
+	}
+	if got := tok(ada.Draft.Token); got != `{"groups":["network-staff","netbird-admins"]}` {
+		t.Fatalf("draft: %s", got)
+	}
+	if !ada.Draft.Checks[3].Facts["draft"].(bool) || len(pv.Breaking) != 1 {
+		t.Fatalf("draft check 4 and breaking: %+v %+v", ada.Draft.Checks[3], pv.Breaking)
 	}
 
-	owners := map[string]models.ClaimKeyOwner{}
-	for _, k := range shape.EmittedKeys {
-		owners[k.Key] = k
+	// Rohan's claims were never built: check 3 is amber, and the token is what
+	// the token path really sends (fail closed: nothing), with what he would get.
+	rohan := pv.People[1]
+	if rohan.Now.Checks[2].State != CheckWarn || rohan.Now.Checks[4].State != CheckFail || tok(rohan.Now.Token) != `{}` ||
+		tok(rohan.Now.WouldReceive) != `{"groups":["netbird-staff"]}` {
+		t.Fatalf("not built: %+v token=%s", rohan.Now.Checks, tok(rohan.Now.Token))
 	}
-	if len(owners) != 3 {
-		t.Fatalf("expected roles + attribute + override keys, got %#v", shape.EmittedKeys)
+
+	// A Bearer access token keeps NetBird's claims out of where it reads them.
+	s.settings.AccessTokenType = "BEARER"
+	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	if c := pv.People[0].Now.Checks[0]; c.State != CheckFail || c.Facts["reached"].(map[string]bool)[claims.ReadsAccessToken] {
+		t.Fatalf("lands-fail: %+v", c)
 	}
-	if owners["badge.roles"].ApplicationID != "a0" || owners["badge.roles"].OwnerLabel != "App 0" {
-		t.Errorf("override key must name its application, got %#v", owners["badge.roles"])
+	if pv.People[0].Now.Checks[4].State != CheckFail {
+		t.Fatal("check 5 turns red with check 1")
 	}
-	if owners["syndra.p0.email"].Kind != "attribute" || owners["syndra.p0.email"].Source != claims.AttrEmail {
-		t.Errorf("attribute key must name its source, got %#v", owners["syndra.p0.email"])
+
+	// Zitadel stops answering: its last answer, marked stale.
+	s.settings.AccessTokenType = "JWT"
+	_, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	s.settings = nil
+	pv, _ = PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}})
+	if c := pv.People[0].Now.Checks[0]; c.State != CheckStale || c.Facts["read_at"] == nil {
+		t.Fatalf("degraded check 1: %+v", c)
 	}
-	if owners["syndra.p0.roles"].OwnerLabel != "Project default" {
-		t.Errorf("default key must be labelled as the project default, got %#v", owners["syndra.p0.roles"])
+	if _, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{}); err == nil {
+		t.Fatal("at least one person")
+	}
+}
+
+// An app on its project's default whose name suggests a template that sends
+// something else gets an amber check 4: the reason to pick a template.
+func TestPreview_DefaultTheAppDoesNotRead(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	s.stored["ada:pCode"] = claims.Facts{UserID: "ada", ProjectID: "pCode", Roles: []string{"users"}, CompiledAt: "x"}
+	pv, err := PreviewAppClaimShape(context.Background(), "aGL", PreviewRequest{UserIDs: []string{"ada"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c4 := pv.People[0].Now.Checks[3]
+	if c4.State != CheckWarn || c4.Facts["suggested_template"] != "gitlab" || c4.Facts["source"] != SourceBuiltin {
+		t.Fatalf("check 4: %+v", c4)
+	}
+}
+
+func TestProjectClaimShape(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	ctx := context.Background()
+	if err := SaveProjectClaimProfile(ctx, "pNet", ProjectDefaultForm{ClaimName: "net.roles", AttributeClaims: map[string]string{"net.roles": claims.AttrEmail}}); err == nil {
+		t.Fatal("a repeated key is refused")
+	}
+	if err := SaveProjectClaimProfile(ctx, "pNet", ProjectDefaultForm{ClaimName: "net.roles", AttributeClaims: map[string]string{"mail": claims.AttrEmail}}); err != nil {
+		t.Fatal(err)
+	}
+	if s.defaults["pNet"].FormatType != claims.FormatArray {
+		t.Fatalf("format defaults to array: %+v", s.defaults["pNet"])
+	}
+	if _, _, err := GetAppClaimShape(ctx, "aNB"); err != nil {
+		t.Fatal(err)
+	}
+	view, err := GetProjectClaimShape(ctx, "pNet")
+	if err != nil || !view.Configured || len(view.Applications) != 1 || view.Applications[0].Source != SourceApp ||
+		len(view.Profile.Claims) != 2 {
+		t.Fatalf("project view: %+v err=%v", view, err)
+	}
+}
+
+// The apps index's Claims column: each app's own key and template, its
+// project's default for an app with none, and check 1's verdict only once
+// Zitadel's settings for that app have been read.
+func TestAttachClaimLines(t *testing.T) {
+	s := stubClaimShapeDeps(t)
+	ctx := context.Background()
+	if _, err := SaveAppClaimShape(ctx, "aNB", "op", SaveClaimShapeRequest{Profile: netbirdShape(), TemplateID: "netbird", AcknowledgeBreaking: true}, 0); err != nil {
+		t.Fatal(err)
+	}
+	views := func() []models.ApplicationView {
+		v := []models.ApplicationView{{Application: shapeApps[0]}, {Application: shapeApps[2]}}
+		attachClaimLines(ctx, v)
+		return v
+	}
+	v := views()
+	nb, gl := v[0].Claims, v[1].Claims
+	if nb.Source != SourceApp || nb.TemplateID != "netbird" || nb.TemplateChanged || strings.Join(nb.Keys, ",") != "groups" || nb.Reaches != nil {
+		t.Fatalf("NetBird before any read: %+v", nb)
+	}
+	if gl.Source != SourceBuiltin || strings.Join(gl.Keys, ",") != "roles" || gl.Lands != claims.LandsBoth {
+		t.Fatalf("GitLab on the built-in default: %+v", gl)
+	}
+
+	// Opening NetBird's page reads Zitadel: a Bearer token keeps its claims out.
+	s.settings.AccessTokenType = "BEARER"
+	if _, err := PreviewAppClaimShape(ctx, "aNB", PreviewRequest{UserIDs: []string{"ada"}}); err != nil {
+		t.Fatal(err)
+	}
+	if r := views()[0].Claims.Reaches; r == nil || *r {
+		t.Fatalf("NetBird with a Bearer token: reaches=%v", r)
+	}
+
+	// Shapes that can't be read leave no line, rather than a guessed one.
+	svcLatestClaimShapes = func(context.Context, string) ([]db.ClaimShapeVersion, error) { return nil, errors.New("db down") }
+	if views()[0].Claims != nil {
+		t.Fatal("unread shapes give no line")
 	}
 }

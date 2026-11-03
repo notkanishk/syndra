@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"syndra/internal/db"
@@ -25,6 +26,33 @@ var (
 	// tests don't need a live directory.
 	cacheFindUser = func(ctx context.Context, userID string) (models.UserProfile, bool, error) {
 		return directory.Default.FindUser(ctx, userID)
+	}
+
+	// dbGetAllBundles names bundles: a token carries bundle names, not ids, so
+	// a rename reaches the app.
+	dbGetAllBundles = db.GetAllBundles
+
+	// cacheIsServiceAccount is the one rule (services.IsServiceAccount): a
+	// Zitadel machine user, or one an operator marked. Restated here because
+	// services imports this package.
+	cacheIsServiceAccount = func(ctx context.Context, u models.UserProfile) (bool, error) {
+		if u.IsMachine() {
+			return true, nil
+		}
+		rows, err := db.ListServiceAccounts(ctx)
+		if err != nil {
+			return false, err
+		}
+		for _, r := range rows {
+			if r.UserID == u.ID {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
+	redisGet = func(ctx context.Context, key string) (string, error) {
+		return db.Redis.Get(ctx, key).Result()
 	}
 
 	// directoryAnswers is whether the directory is answering now: one real
@@ -71,4 +99,33 @@ func bundleRolesFor(ctx context.Context, userID string) ([]models.BundleRole, er
 		roles = append(roles, r...)
 	}
 	return roles, nil
+}
+
+// bundleNames turns each project's bundle ids into sorted bundle names. Only
+// read when the person holds a bundle at all. A bundle missing from the list
+// (retired) is left out rather than sent by its id.
+func bundleNames(ctx context.Context, byProject map[string]map[string]bool) (map[string][]string, error) {
+	if len(byProject) == 0 {
+		return nil, nil
+	}
+	all, err := dbGetAllBundles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("bundle names: %w", err)
+	}
+	names := make(map[string]string, len(all))
+	for _, b := range all {
+		names[b.ID] = b.Name
+	}
+	out := make(map[string][]string, len(byProject))
+	for pid, ids := range byProject {
+		list := []string{}
+		for id := range ids {
+			if n := names[id]; n != "" {
+				list = append(list, n)
+			}
+		}
+		sort.Strings(list)
+		out[pid] = list
+	}
+	return out, nil
 }

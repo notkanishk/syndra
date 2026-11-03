@@ -322,11 +322,11 @@ var (
 		return db.Redis.SetEx(ctx, "claim_mode:"+projectID, value, time.Duration(ttlSeconds)*time.Second).Err()
 	}
 
-	// Claim shaping. dbResolveClaimProfiles is the data plane's read of the
-	// operator-configured token shape; the Redis pair in front of it keeps that
+	// Claim shaping. dbResolveProjectShapes is the data plane's read of the
+	// project's shapes (each app's and the default); the Redis pair in front keeps that
 	// read off the token hot path, and redisDelKeys drops the cached shape the
 	// moment an operator saves so an edit is never one TTL late.
-	dbResolveClaimProfiles = services.ResolveClaimProfiles
+	dbResolveProjectShapes = services.ResolveProjectShapes
 	redisGetKey            = func(ctx context.Context, key string) (string, error) {
 		return db.Redis.Get(ctx, key).Result()
 	}

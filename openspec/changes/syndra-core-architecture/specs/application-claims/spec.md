@@ -20,6 +20,20 @@ The system MUST allow applications to define a custom claim name and format for 
 - **WHEN** the application is configured with `FormatType: space_delimited` and `ClaimName: permissions`
 - **THEN** the token simulation and data plane response MUST return the roles in that specific format.
 
+## One shape per application (claims-shaping, ADR-003)
+A token MUST carry only the shape of the application it is for, picked by the request's `application.client_id`. An application with no shape of its own MUST get its project's default, and a project with none MUST get the built-in `roles` list, never nothing. Every roles claim MUST be sent, as `[]` when the person holds none of the roles the app sees. Contract: `changes/claims-shaping/design.md`.
+
+### Scenario: Two apps on one project
+- **GIVEN** NetBird and Inventory on one project, NetBird sending `groups` in its own words and Inventory sending `roles`
+- **WHEN** a person signs in to NetBird
+- **THEN** the token carries `groups` only, with no Inventory key
+- **AND** a client with no shape of its own, or a request with no client id, gets the project's default
+
+### Scenario: A save the app will act on
+- **GIVEN** NetBird's shape sends `netbird-staff`
+- **WHEN** an operator saves a shape that renames it, without `acknowledge_breaking: true`
+- **THEN** the save is refused with 409 `BREAKING_UNACKNOWLEDGED`, naming the change and whom it reaches
+
 ## Cross-project claim propagation
 The system MUST support "selecting" claims from other projects by utilizing mapping rules to project the desired roles into the application's local context.
 

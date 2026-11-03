@@ -20,6 +20,8 @@ type ZitadelUser struct {
 	ID          string `json:"id"`
 	Username    string `json:"userName"`
 	DisplayName string `json:"displayName"`
+	GivenName   string `json:"-"`
+	FamilyName  string `json:"-"`
 	Email       string `json:"email"`
 	State       string `json:"state"`
 	// Machine is true for a machine user (the search item carries `machine`
@@ -76,6 +78,9 @@ type ZitadelClient interface {
 
 	// Applications (OIDC/API/SAML clients attached to a project)
 	ListApplications(ctx context.Context, projectID string, p SearchParams) (*SearchResult[ZitadelApplication], error)
+	// TokenSettings reads the app and project settings that decide where its
+	// claims land (read-only; check 1 of the claims explain step).
+	TokenSettings(ctx context.Context, projectID, appID string) (*TokenSettings, error)
 
 	// User metadata (arbitrary admin-managed K/V per user, used for Title/Team overlays)
 	ListUserMetadata(ctx context.Context, userID string, p SearchParams) (*SearchResult[UserMetadata], error)
