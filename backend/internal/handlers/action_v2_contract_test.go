@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"syndra/internal/claims"
+	"syndra/internal/claimserve"
 	"syndra/internal/services"
 )
 
@@ -19,22 +20,18 @@ import (
 // leaves out; Inventory's nests and keeps row order. Any other client, or a
 // payload with no client id, gets the project's default.
 func TestActionV2_PerAppShapeByClientID(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-	redisGetClaims = func(context.Context, string) (string, error) {
-		b, _ := json.Marshal(claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"admin", "guest", "staff"}, GivenName: "Ada"})
-		return string(b), nil
-	}
 	netbird, _ := claims.FindTemplate("netbird")
 	nb := netbird.Profile
 	nb.Roles = []claims.RoleMap{{Key: "staff", As: "netbird-staff", Included: true}, {Key: "admin", As: "netbird-admins", Included: true}}
-	stubProjectShapes(services.ProjectShapes{
+	r := testPlane(t, map[string]claimserve.Project{"pNet": project(services.ProjectShapes{
 		Default: claims.FromFlat("net.roles", claims.FormatArray, nil, nil),
 		ByClient: map[string]services.AppShape{
 			"cNB":  {ApplicationID: "aNB", Version: 3, Profile: nb},
 			"cInv": {ApplicationID: "aInv", Version: 1, Profile: claims.ActionsV1()},
 		},
-	})
+	}, failClosed)})
+	b, _ := json.Marshal(claims.Facts{UserID: "ada", ProjectID: "pNet", Roles: []string{"admin", "guest", "staff"}, GivenName: "Ada"})
+	setFacts(r, "ada", "pNet", string(b))
 
 	ask := func(client, function string) string {
 		t.Helper()
@@ -70,15 +67,10 @@ func TestActionV2_PerAppShapeByClientID(t *testing.T) {
 // access token, Pre Userinfo for userinfo (and the ID token). The other
 // function gets nothing, and no facts are read for it.
 func TestActionV2_LandsGatesTheFunction(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-	reads := 0
-	redisGetClaims = func(context.Context, string) (string, error) {
-		reads++
-		return factsJSON("ada", "pNet", "staff"), nil
-	}
 	supabase, _ := claims.FindTemplate("supabase-oidc") // lands userinfo
-	stubProjectShapes(services.ProjectShapes{Default: claims.Builtin(), ByClient: map[string]services.AppShape{"cSB": {Profile: supabase.Profile}}})
+	r := testPlane(t, map[string]claimserve.Project{"pNet": project(services.ProjectShapes{
+		ByClient: map[string]services.AppShape{"cSB": {Profile: supabase.Profile}}}, failClosed)})
+	setFacts(r, "ada", "pNet", factsJSON("ada", "pNet", "staff"))
 
 	for _, c := range []struct {
 		function string
@@ -92,7 +84,7 @@ func TestActionV2_LandsGatesTheFunction(t *testing.T) {
 			t.Fatalf("%s: want %d claims, got %v", c.function, c.want, got.AppendClaims)
 		}
 	}
-	if reads != 1 {
+	if reads := r.Count("HGET"); reads != 1 {
 		t.Fatalf("facts read %d times, want 1 (only where it lands)", reads)
 	}
 }
@@ -101,14 +93,13 @@ func TestActionV2_LandsGatesTheFunction(t *testing.T) {
 // after the answer, with the body kept as Zitadel sent it. Nobody else's
 // sign-in is held.
 func TestActionV2_DebugCapturesOnlyTheWatchedAccount(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
+	r := builtinPlane(t, "pNet")
+	setFacts(r, "ada", "pNet", factsJSON("ada", "pNet", "staff"))
 	origExplain := svcExplainSignIn
 	t.Cleanup(func() { svcExplainSignIn = origExplain; claimDebug.Stop("aDbg", "test") })
 	svcExplainSignIn = func(context.Context, string, string, string) (services.Explanation, error) {
 		return services.Explanation{Checks: []services.Check{{State: services.CheckPass}}}, nil
 	}
-	redisGetClaims = func(context.Context, string) (string, error) { return factsJSON("ada", "pNet", "staff"), nil }
 
 	claimDebug.Start("aDbg", "cDbg", "ada", "kanishk")
 	for _, user := range []string{"grace", "ada"} {
@@ -203,19 +194,8 @@ const canonicalV2Payload = `{
 // documented field populated) without rejecting it, and returns the v2
 // envelope. This is the wire-level contract round-trip test.
 func TestHandleActionInject_CanonicalV2Payload_Accepted(t *testing.T) {
-	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
-	resetActionDeps(t, origRedis, origMode)
-
-	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		if key == "mapping:250124622953808001:pPrinting" {
-			return factsJSON("250124622953808001", "pPrinting", "operator"), nil
-		}
-		return "", fmt.Errorf("unexpected key: %s", key)
-	}
-	dbGetClaimFailureMode = func(ctx context.Context, projectID string) (string, map[string]interface{}, error) {
-		t.Errorf("failure mode queried despite cache hits for project=%s", projectID)
-		return "fail_closed", nil, nil
-	}
+	r := builtinPlane(t, "pPrinting")
+	setFacts(r, "250124622953808001", "pPrinting", factsJSON("250124622953808001", "pPrinting", "operator"))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject", strings.NewReader(canonicalV2Payload))
 	rr := httptest.NewRecorder()

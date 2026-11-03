@@ -16,7 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"syndra/internal/claims"
+	"syndra/internal/claimserve"
+	"syndra/internal/claimserve/claimservetest"
 	"syndra/internal/claimtel"
 	"syndra/internal/services"
 )
@@ -24,14 +25,13 @@ import (
 // fuzzRoute is the real route with fast, always-answering dependencies, and
 // the outcome of the last call.
 func fuzzRoute(_ *testing.F) (func(body []byte) (int, claimtel.Outcome), func()) {
-	g, rm, gk, sk, gm, sm, rs, rec := redisGetClaims, dbGetClaimFailureMode, redisGetKey, redisSetKey, redisGetClaimMode, redisSetClaimMode, dbResolveProjectShapes, recordClaimCall
-	restore := func() {
-		redisGetClaims, dbGetClaimFailureMode, redisGetKey, redisSetKey, redisGetClaimMode, redisSetClaimMode, dbResolveProjectShapes, recordClaimCall = g, rm, gk, sk, gm, sm, rs, rec
-	}
-	stubMissingRedis()
-	redisGetClaims = func(context.Context, string) (string, error) { return factsJSON("u1", "p1", "admin"), nil }
-	stubProjectShapes(services.ProjectShapes{Default: claims.Builtin()})
-	dbGetClaimFailureMode = func(context.Context, string) (string, map[string]interface{}, error) { return "fail_closed", nil, nil }
+	plane, rec := claimPlane, recordClaimCall
+	restore := func() { claimPlane, recordClaimCall = plane, rec }
+	r := claimservetest.New()
+	_, _ = claimserve.Publish(context.Background(), r, map[string]claimserve.Project{"p1": project(services.ProjectShapes{}, failClosed)})
+	claimPlane = claimserve.New(r, nil)
+	_ = claimPlane.Poll(context.Background())
+	setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin"))
 	var last claimtel.Outcome
 	recordClaimCall = func(c claimtel.Call) { last = c.Outcome }
 	router := NewRouter()

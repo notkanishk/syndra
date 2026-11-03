@@ -152,8 +152,20 @@ func (z *zitadelSource) Freshness() (time.Time, bool) {
 }
 
 func (z *zitadelSource) cachePut(key string, val any) {
-	z.cache.Store(key, &cacheEntry{val: val, expires: z.now().Add(CacheTTL)})
+	z.cachePutFor(key, val, CacheTTL)
 }
+
+func (z *zitadelSource) cachePutFor(key string, val any, ttl time.Duration) {
+	z.cache.Store(key, &cacheEntry{val: val, expires: z.now().Add(ttl)})
+}
+
+// MetadataTTL is how long one person's metadata (title, team) is reused. It is
+// a call per person, so at the list's 30s it turned every users-list rebuild
+// into thousands of IdP calls against the Zitadel that is issuing everyone's
+// tokens (assessment SC3). Metadata is edited by hand in Zitadel's console and
+// reaches a token only at the person's next compile anyway; an edit through
+// Syndra drops it at once (InvalidateUsers).
+var MetadataTTL = time.Hour
 
 // --- Users ------------------------------------------------------------------
 
@@ -295,7 +307,7 @@ func (z *zitadelSource) fetchUserMetadata(ctx context.Context, userID string) ([
 		return nil, false
 	}
 	if z.usersGen.Load() == gen {
-		z.cachePut(key, items)
+		z.cachePutFor(key, items, MetadataTTL)
 	}
 	return items, true
 }

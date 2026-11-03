@@ -203,7 +203,7 @@ func explain(ctx context.Context, app models.ApplicationCatalog, s shapeUnderTes
 	out.Checks[3] = c4
 
 	// 5 · the token.
-	shaped := claims.Shape(s.profile, facts)
+	shaped := claims.ShapeAt(s.profile, facts, time.Now())
 	c5 := Check{State: CheckPass, Facts: map[string]any{"lands": s.profile.Lands}}
 	out.Token = shaped
 	switch {

@@ -294,8 +294,14 @@ On the Caddy box (`<PROXY_HOST>`), add a site block:
 
 ```caddyfile
 syndra.example.org {
+	# The claims data plane's own listener (claims-delivery-integrity S2).
+	# The retry turns a restart under 2s into latency, not a token without
+	# claims; Caddy retries only dial failures for a POST.
 	handle /api/action/* {
-		reverse_proxy <APP_HOST>:8080
+		reverse_proxy <APP_HOST>:8090 {
+			lb_try_duration 2s
+			lb_try_interval 100ms
+		}
 	}
 	handle /api/webhooks/* {
 		reverse_proxy <APP_HOST>:8080

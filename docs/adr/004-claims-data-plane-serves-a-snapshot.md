@@ -21,3 +21,11 @@ Zitadel calls Syndra's Actions v2 target on every token, with a 3s timeout and i
 - The hot path gets smaller and is reproducible: each answer records the snapshot `gen` it used.
 - A shape or mode save must write through and bump `claims:gen`. A save that skips this is a bug the equivalence test catches.
 - Interrupt-on-error stays off. Loudness comes from detection (the correlator, reconciler, probes and dead-man's switch), not from failing sign-ins.
+
+### As built (S1b and S2, 3 Nov 2026)
+
+- The equivalence property test (`services/claim_equivalence_test.go`) and a test over every write path (`TestEverySavePathMovesTheGeneration`) hold the two consequences above.
+- A project absent from the snapshot answers fail closed, never the built-in shape: absence means "not published", and a guess could show a role an app's shape hides. The write side publishes every project Syndra or Zitadel knows, at start and every minute, so absence lasts at most a minute.
+- The snapshot also reloads at least once a minute without a `claims:gen` move, so a write whose `INCR` was lost still lands.
+- The last-known-good bound is per project (`claim_profiles.claim_lkg_max_age_seconds`, default 6h pending the owner), counted from when the copy was last read from Redis.
+- The facts read falls back to the old `mapping:{u}:{p}` key on a miss until every person has moved to the hash; the move deletes a person's old keys in the same transaction that writes their hash.

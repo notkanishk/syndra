@@ -34,8 +34,9 @@ import (
 //	GET|PUT|DELETE /api/v1/applications/{id}/debug          debug mode
 //	GET  /api/v1/applications/{id}/debug/sign-ins?after=N   what debug mode saw
 //
-// Every write drops the data plane's cached shapes for the project, so the
-// next token carries the new shape rather than one TTL later.
+// Every write publishes the project's config to the data plane's snapshot
+// (claimserve.Publish moves claims:gen), so the next token, within a second,
+// carries the new shape.
 
 func handleGetClaimTemplates(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]any{"templates": claims.Templates()})
@@ -70,7 +71,7 @@ func handleSetProjectClaimProfile(w http.ResponseWriter, r *http.Request) {
 		claimShapeError(w, err)
 		return
 	}
-	invalidateClaimShape(r.Context(), projectID)
+	publishAfterSave(r.Context(), projectID)
 	auditClaimShape(r, "claim_profile.updated", projectID)
 	handleGetProjectClaimShape(w, r)
 }
@@ -82,7 +83,7 @@ func handleGetAppClaimShape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if seeded {
-		invalidateClaimShape(r.Context(), shape.Application.ProjectID)
+		publishAfterSave(r.Context(), shape.Application.ProjectID)
 	}
 	jsonResponse(w, http.StatusOK, shape)
 }
@@ -98,7 +99,7 @@ func handleSaveAppClaimShape(w http.ResponseWriter, r *http.Request) {
 		claimShapeError(w, err)
 		return
 	}
-	invalidateClaimShape(r.Context(), res.Version.ProjectID)
+	publishAfterSave(r.Context(), res.Version.ProjectID)
 	auditClaimShape(r, "claim_shape.saved", res.Version.ApplicationID)
 	jsonResponse(w, http.StatusOK, res)
 }
@@ -161,7 +162,7 @@ func handleRestoreAppClaimShape(w http.ResponseWriter, r *http.Request) {
 		claimShapeError(w, err)
 		return
 	}
-	invalidateClaimShape(r.Context(), res.Version.ProjectID)
+	publishAfterSave(r.Context(), res.Version.ProjectID)
 	auditClaimShape(r, "claim_shape.restored", res.Version.ApplicationID)
 	jsonResponse(w, http.StatusOK, res)
 }
@@ -200,13 +201,6 @@ func decodeJSONStrictOrEmpty(body io.Reader, dst any) error {
 	return decodeJSONStrict(bytes.NewReader(raw), dst)
 }
 
-// invalidateClaimShape drops the data plane's cached shapes for a project.
-func invalidateClaimShape(ctx context.Context, projectID string) {
-	if err := redisDelKeys(ctx, claimShapeCacheKey(projectID)); err != nil {
-		log.Printf("[CLAIM-SHAPE] cache invalidation failed for project=%s: %v (edit lands within TTL)", projectID, err)
-	}
-}
-
 func auditClaimShape(r *http.Request, action, resourceID string) {
 	auditAs(r.Context(), resolveActor(r, ""), resourceID, action, resourceID)
 }
@@ -218,12 +212,12 @@ func auditAs(ctx context.Context, actor, target, action, resourceID string) {
 }
 
 // SeedClaimShapes seeds apps that existed under Actions v1 (see
-// services.SeedClaimShapes) and drops the cached shapes of every project it
-// wrote into. main runs it at start and hourly.
+// services.SeedClaimShapes) and publishes every project it wrote into. main
+// runs it at start and hourly.
 func SeedClaimShapes(ctx context.Context) error {
 	projects, err := svcSeedClaimShapes(ctx)
-	for _, p := range projects {
-		invalidateClaimShape(ctx, p)
+	if len(projects) > 0 {
+		publishAfterSave(ctx, projects...)
 	}
 	if len(projects) > 0 {
 		log.Printf("[CLAIM-SHAPE] seeded the Actions v1 shape into apps on %d projects", len(projects))

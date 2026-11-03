@@ -2,35 +2,35 @@ package cache
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
+	"syndra/internal/db"
 	"syndra/internal/models"
 )
 
 // resetCacheDeps saves and restores all injectable vars for test isolation.
 func resetCacheDeps(t *testing.T) {
 	t.Helper()
+	legacyCleared.Store(false)
 	origGrants := dbGetDirectGrantsForUser
 	origRules := dbGetActiveMappingRules
 	origBundleRoles := dbGetUserBundleRoles
-	origSet := redisSet
-	origBundles, origService := dbGetAllBundles, cacheIsServiceAccount
+	origBundles, origService := dbGetAllBundles, dbListServiceAccounts
 	t.Cleanup(func() {
 		dbGetDirectGrantsForUser = origGrants
 		dbGetActiveMappingRules = origRules
 		dbGetUserBundleRoles = origBundleRoles
-		redisSet = origSet
-		dbGetAllBundles, cacheIsServiceAccount = origBundles, origService
+		dbGetAllBundles, dbListServiceAccounts = origBundles, origService
 	})
 
 	dbGetUserBundleRoles = func(context.Context, string) (map[string][]models.BundleRole, error) {
 		return nil, nil
 	}
+	dbGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return nil, nil }
 	dbGetAllBundles = func(context.Context) ([]models.Bundle, error) { return nil, nil }
-	cacheIsServiceAccount = func(_ context.Context, u models.UserProfile) (bool, error) { return u.IsMachine(), nil }
+	dbListServiceAccounts = func(context.Context) ([]db.ServiceAccountRow, error) { return nil, nil }
 }
 
 // Facts carry what a claim row may project: the person's names, the bundles
@@ -81,53 +81,29 @@ func TestCompileFacts_NamesBundlesEndsAndServiceAccount(t *testing.T) {
 
 	// A failed read of the service-account marks fails the profile part, so a
 	// warm keeps the old entry instead of storing "not a service account".
-	cacheIsServiceAccount = func(context.Context, models.UserProfile) (bool, error) { return false, errors.New("db down") }
-	u, err := compileUser(context.Background(), "u1")
+	cacheFindUser = func(context.Context, string) (models.UserProfile, bool, error) {
+		return models.UserProfile{ID: "u1", Name: "Ada Lovelace"}, true, nil
+	}
+	dbListServiceAccounts = func(context.Context) ([]db.ServiceAccountRow, error) { return nil, errors.New("db down") }
+	ps, _ := newPass(context.Background(), nil)
+	u, err := compileUser(context.Background(), "u1", ps)
 	if err != nil || u.profileErr == nil {
 		t.Fatalf("want a profile error, got err=%v profileErr=%v", err, u.profileErr)
 	}
 }
 
-// capturedCache collects what was written to Redis.
-type capturedCache struct {
-	key   string
-	value string
-}
-
-func setupNoopRedis(t *testing.T) *capturedCache {
+// compiledRoles is the roles CompileFacts gives user in project.
+func compiledRoles(t *testing.T, user, project string) []string {
 	t.Helper()
-	captured := &capturedCache{}
-	redisSet = func(_ context.Context, key, value string, _ time.Duration) error {
-		captured.key = key
-		captured.value = value
-		return nil
+	f, err := CompileFacts(context.Background(), user, project)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	return captured
+	return f.Roles
 }
 
-func parseCachedRoles(t *testing.T, cached *capturedCache) []string {
-	t.Helper()
-	if cached.value == "" {
-		t.Fatal("nothing was written to cache")
-	}
-	var claims map[string]any
-	if err := json.Unmarshal([]byte(cached.value), &claims); err != nil {
-		t.Fatalf("failed to parse cached JSON: %v", err)
-	}
-	rawRoles, ok := claims["roles"].([]any)
-	if !ok {
-		t.Fatal("roles field is not an array")
-	}
-	roles := make([]string, len(rawRoles))
-	for i, r := range rawRoles {
-		roles[i] = r.(string)
-	}
-	return roles
-}
-
-func TestCompileUserCache_NoGrants(t *testing.T) {
+func TestCompileFacts_NoGrants(t *testing.T) {
 	resetCacheDeps(t)
-	cached := setupNoopRedis(t)
 
 	dbGetDirectGrantsForUser = func(_ context.Context, _ string, _ bool) ([]models.DirectGrant, error) {
 		return nil, nil
@@ -136,23 +112,14 @@ func TestCompileUserCache_NoGrants(t *testing.T) {
 		return nil, nil
 	}
 
-	err := CompileUserCache(context.Background(), "user1", "proj1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	roles := parseCachedRoles(t, cached)
+	roles := compiledRoles(t, "user1", "proj1")
 	if len(roles) != 0 {
 		t.Errorf("expected 0 roles, got %d: %v", len(roles), roles)
 	}
-	if cached.key != "mapping:user1:proj1" {
-		t.Errorf("unexpected cache key: %s", cached.key)
-	}
 }
 
-func TestCompileUserCache_DirectGrants(t *testing.T) {
+func TestCompileFacts_DirectGrants(t *testing.T) {
 	resetCacheDeps(t)
-	cached := setupNoopRedis(t)
 
 	dbGetDirectGrantsForUser = func(_ context.Context, _ string, _ bool) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{
@@ -165,12 +132,7 @@ func TestCompileUserCache_DirectGrants(t *testing.T) {
 		return nil, nil
 	}
 
-	err := CompileUserCache(context.Background(), "user1", "proj1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	roles := parseCachedRoles(t, cached)
+	roles := compiledRoles(t, "user1", "proj1")
 	if len(roles) != 2 {
 		t.Fatalf("expected 2 roles for proj1, got %d: %v", len(roles), roles)
 	}
@@ -180,9 +142,8 @@ func TestCompileUserCache_DirectGrants(t *testing.T) {
 	}
 }
 
-func TestCompileUserCache_MappingRuleTransitivity(t *testing.T) {
+func TestCompileFacts_MappingRuleTransitivity(t *testing.T) {
 	resetCacheDeps(t)
-	cached := setupNoopRedis(t)
 
 	// User has role "member" in proj_a.
 	// Rule 1: proj_a:member -> proj_b:reader
@@ -201,20 +162,14 @@ func TestCompileUserCache_MappingRuleTransitivity(t *testing.T) {
 		}, nil
 	}
 
-	err := CompileUserCache(context.Background(), "user1", "proj_c")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	roles := parseCachedRoles(t, cached)
+	roles := compiledRoles(t, "user1", "proj_c")
 	if len(roles) != 1 || roles[0] != "viewer" {
 		t.Errorf("expected [viewer], got %v", roles)
 	}
 }
 
-func TestCompileUserCache_BundleRolesIncluded(t *testing.T) {
+func TestCompileFacts_BundleRolesIncluded(t *testing.T) {
 	resetCacheDeps(t)
-	cached := setupNoopRedis(t)
 
 	dbGetDirectGrantsForUser = func(_ context.Context, _ string, _ bool) ([]models.DirectGrant, error) {
 		return nil, nil
@@ -232,12 +187,7 @@ func TestCompileUserCache_BundleRolesIncluded(t *testing.T) {
 		}, nil
 	}
 
-	err := CompileUserCache(context.Background(), "user1", "proj1")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	roles := parseCachedRoles(t, cached)
+	roles := compiledRoles(t, "user1", "proj1")
 	if len(roles) != 2 {
 		t.Fatalf("expected 2 roles, got %d: %v", len(roles), roles)
 	}
@@ -246,9 +196,8 @@ func TestCompileUserCache_BundleRolesIncluded(t *testing.T) {
 	}
 }
 
-func TestCompileUserCache_FixedPointTerminates(t *testing.T) {
+func TestCompileFacts_FixedPointTerminates(t *testing.T) {
 	resetCacheDeps(t)
-	cached := setupNoopRedis(t)
 
 	// Chain of 5 rules. Should terminate after at most 5 iterations.
 	dbGetDirectGrantsForUser = func(_ context.Context, _ string, _ bool) ([]models.DirectGrant, error) {
@@ -264,12 +213,7 @@ func TestCompileUserCache_FixedPointTerminates(t *testing.T) {
 		}, nil
 	}
 
-	err := CompileUserCache(context.Background(), "user1", "p5")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	roles := parseCachedRoles(t, cached)
+	roles := compiledRoles(t, "user1", "p5")
 	if len(roles) != 2 {
 		t.Fatalf("expected 2 roles (r5, r_final), got %d: %v", len(roles), roles)
 	}
@@ -283,9 +227,8 @@ func TestCompileUserCache_FixedPointTerminates(t *testing.T) {
 // into real tokens, before anybody published it and without it appearing in any
 // plan. The version-aware lookup is what makes that impossible: it can only
 // return roles that belong to a version somebody is pinned to.
-func TestCompileUserCache_ResolvesBundlesThroughThePinnedVersion(t *testing.T) {
+func TestCompileFacts_ResolvesBundlesThroughThePinnedVersion(t *testing.T) {
 	resetCacheDeps(t)
-	cached := setupNoopRedis(t)
 	dbGetDirectGrantsForUser = func(_ context.Context, _ string, _ bool) ([]models.DirectGrant, error) {
 		return nil, nil
 	}
@@ -300,11 +243,7 @@ func TestCompileUserCache_ResolvesBundlesThroughThePinnedVersion(t *testing.T) {
 		}, nil
 	}
 
-	if err := CompileUserCache(context.Background(), "user1", "proj1"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	roles := parseCachedRoles(t, cached)
+	roles := compiledRoles(t, "user1", "proj1")
 	for _, r := range roles {
 		if r == "draft_only" {
 			t.Fatal("an unpublished role reached the compiled claims")
@@ -323,9 +262,8 @@ func TestCompileUserCache_ResolvesBundlesThroughThePinnedVersion(t *testing.T) {
 // Its two neighbours in this function (base grants, mapping rules) already fail
 // the compile; there is no reason this read alone should decide, on its own, to
 // answer a question it could not read.
-func TestCompileUserCache_AnUnreadableBundleIsNotAnEmptyOne(t *testing.T) {
+func TestCompileFacts_AnUnreadableBundleIsNotAnEmptyOne(t *testing.T) {
 	resetCacheDeps(t)
-	cached := setupNoopRedis(t)
 
 	dbGetDirectGrantsForUser = func(_ context.Context, _ string, _ bool) ([]models.DirectGrant, error) {
 		return []models.DirectGrant{{ProjectID: "proj1", RoleKey: "staff"}}, nil
@@ -335,11 +273,14 @@ func TestCompileUserCache_AnUnreadableBundleIsNotAnEmptyOne(t *testing.T) {
 		return nil, errors.New("connection refused")
 	}
 
-	err := CompileUserCache(context.Background(), "user1", "proj1")
-	if err == nil {
-		t.Fatal("a cache was compiled from roles that could not be read")
+	store := fakeRedis(t)
+	if _, err := CompileFacts(context.Background(), "user1", "proj1"); err == nil {
+		t.Fatal("facts were compiled from roles that could not be read")
 	}
-	if cached.value != "" {
-		t.Fatalf("nothing may be written when the facts are incomplete, wrote %q", cached.value)
+	if err := RefreshUser(context.Background(), "user1", "proj1"); err == nil {
+		t.Fatal("a refresh stored facts compiled from roles that could not be read")
+	}
+	if len(store.hashes) != 0 {
+		t.Fatalf("nothing may be written when the facts are incomplete, wrote %v", store.hashes)
 	}
 }

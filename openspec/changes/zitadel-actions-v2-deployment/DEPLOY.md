@@ -205,7 +205,8 @@ part of the delete.
 | `signature verification disabled (dev mode)` log in prod | `ZITADEL_ACTION_SIGNING_KEY` empty in container env | Same as above. |
 | `/zitadel` Rotation Status panel shows `disabled` | `ZITADEL_ACTION_SIGNING_KEY` is unset on the backend (signature verification off) | Same root cause as the two rows above — fix the env var and restart before trusting any rotation age. |
 | Custom claims missing from issued tokens | Executions not bound; or backend returning non-200 | Re-run `make zitadel-actions-register`; check backend logs for `[DATA PLANE]` entries. |
-| `Cache miss for key=mapping:…` for every call | Cache compiler has not run / Redis not reachable | Verify `REDIS_URL` and that grant/rule changes have been recompiled. |
+| `/healthz/claims` counts `degraded_no_facts` for every call | Cache compiler has not run / Redis not reachable | Verify `REDIS_URL` and that the warm ran (`warm_age_s`); a miss also queues a recompile of that person. |
+| `/healthz/claims` says `SNAPSHOT_NOT_LOADED` or `SNAPSHOT_EMPTY` | The data plane has no config yet: Redis is down, or the backend has not published (first boot of S2, before migrations finish) | Wait a minute (the publish runs at start and every minute); check Redis. Every call meanwhile answers fail closed, counted. |
 | Token carries no Syndra claims, log says `Refusing cross-project claims` | The app requests another project's `:aud` scope, so the token spans two projects | Drop the extra audience scope, or give the role in the app's own project with a rule. |
 | Token carries no Syndra claims, log says `No project grants` | The app neither asserts roles nor requests role scopes, so Zitadel lists no grants | Turn on "Assert roles on authentication" for the project or app, or request `urn:zitadel:iam:org:project:roles`. |
 | `/zitadel` Rotation Status panel shows `unknown` | `ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT` not set on backend, malformed, or in the future | Seed it with `date -u +%Y-%m-%dT%H:%M:%SZ` now, or run `make zitadel-actions-rotate-key` and apply the emitted fragment: `cat zitadel/actions/.action-env.fragment >> .env`. |
@@ -213,4 +214,25 @@ part of the delete.
 
 ## 3 Nov 2026: the grant field name
 
-Zitadel sends each grant's project as `project_id` (its `query.UserGrant` JSON tags). Its docs show `projectId`. Syndra read only `projectId`, so every call logged `No project grants in request` and answered with no claims. Actions v1 kept filling the tokens, so nothing failed loudly. Syndra now reads both. After deploy, a healthy sign-in logs `Cache hit for key=mapping:…`; a `No project grants` line now really means the token listed no project.
+Zitadel sends each grant's project as `project_id` (its `query.UserGrant` JSON tags). Its docs show `projectId`. Syndra read only `projectId`, so every call logged `No project grants in request` and answered with no claims. Actions v1 kept filling the tokens, so nothing failed loudly. Syndra now reads both. After deploy, a healthy sign-in logs `Cache hit for key=mapping:…`; a `No project grants` line now really means the token listed no project. (Since S1 a hit is a count, not a line: `outcomes_10m.served` on `/healthz/claims`.)
+
+## 3 Nov 2026: the data plane's own door (claims-delivery-integrity S2)
+
+The backend now serves the claims target on a second listener, `:8090` (`SYNDRA_CLAIMS_ADDR`, host port `CLAIMS_HOST_PORT`), with only `POST /api/action/inject` and `GET /healthz/claims` on it. It starts first, before migrations, and answers from an in-memory snapshot plus one Redis read, never Postgres or Zitadel. The old route on `:8080` keeps working, so nothing breaks before the Caddy edit.
+
+**Owner step, on the Caddy host (`<PROXY_HOST>`):** in the Syndra site block, replace the `/api/action/*` handle with exactly this, then `caddy reload`:
+
+```caddyfile
+	handle /api/action/* {
+		reverse_proxy <APP_HOST>:8090 {
+			lb_try_duration 2s
+			lb_try_interval 100ms
+		}
+	}
+```
+
+`lb_try_duration` makes Caddy retry a refused connection for up to 2s, so a restart shorter than that is latency, not a token without claims. Caddy retries only dial failures for a POST, so a call that reached Syndra is never sent twice. Leave `/api/webhooks/*` on `:8080`.
+
+**Check after the edit:** `curl -s -X POST -d '{}' https://<syndra host>/api/action/inject` still answers 401 (the deploy job checks the same), and `curl -s http://<APP_HOST>:8090/healthz/claims` shows `"snapshot":{"loaded":true,…}`.
+
+**Rollback:** point the handle back at `<APP_HOST>:8080`. Both doors serve the same answer.

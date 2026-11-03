@@ -12,21 +12,37 @@ import (
 
 var Redis *redis.Client
 
+// ConnectRedis sets Redis without waiting for it to answer: the claims data
+// plane starts on it first and serves degraded (counted) until it does, so a
+// Redis that is late at boot is not a crash loop (assessment S15).
 func ConnectRedis() {
 	url := os.Getenv("REDIS_URL")
 	if url == "" {
 		url = "localhost:6379" // fallback
 	}
+	Redis = NewRedisClient(url)
+}
 
-	client := NewRedisClient(url)
-
-	_, err := client.Ping(context.Background()).Result()
-	if err != nil {
-		log.Fatalf("Unable to connect to Redis: %v", err)
+// AwaitRedis blocks until Redis answers a PING or ctx ends, saying so every
+// few seconds. The admin side needs Redis; the data plane does not wait.
+func AwaitRedis(ctx context.Context) error {
+	for i := 0; ; i++ {
+		pctx, cancel := context.WithTimeout(ctx, time.Second)
+		err := Redis.Ping(pctx).Err()
+		cancel()
+		if err == nil {
+			fmt.Println("Connected to Redis successfully.")
+			return nil
+		}
+		if i%5 == 0 {
+			log.Printf("[STARTUP] waiting for Redis: %v", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
 	}
-
-	Redis = client
-	fmt.Println("Connected to Redis successfully.")
 }
 
 // NewRedisClient is the one way a Redis client is built, so every caller gets
