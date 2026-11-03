@@ -243,6 +243,10 @@ func (fake *failingRoleClient) TokenSettings(context.Context, string, string) (*
 	return &zitadel.TokenSettings{}, nil
 }
 
+func (fake *failingRoleClient) SearchEvents(context.Context, zitadel.EventSearch) ([]zitadel.LoggedEvent, bool, error) {
+	return nil, false, nil
+}
+
 func (fake *failingRoleClient) GrantOriginByID(context.Context, string) (*zitadel.GrantOrigin, error) {
 	return nil, nil
 }

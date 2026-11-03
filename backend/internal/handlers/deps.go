@@ -446,6 +446,8 @@ var (
 	addonsReadHomes      = addons.ReadHomes
 	dbListTargetBindings = db.ListTargetBindings
 	dbAllowancesInForce  = db.AllowancesInForce
+	// How an account came to be a person's: an account.adopt that bound it.
+	dbLastSucceededAddonOperation = db.LastSucceededAddonOperation
 	// What the TARGET's own audit log says about a subject. Also a read: an
 	// operator opening somebody's record must not append to the operation log
 	// for having looked.
@@ -496,6 +498,18 @@ var (
 	svcSaveServiceAccount   = services.SaveServiceAccount
 	svcUnmarkServiceAccount = services.UnmarkServiceAccount
 	dbGetUserUsage          = db.GetUserUsage
+	// Sign-ins per app (A-10 Part 2): the reads, and the audited lookup of
+	// Zitadel's own log.
+	dbUsageLatestByKind     = db.UsageLatestByKind
+	dbSignInsSince          = db.SignInsSince
+	dbGetAppUsage           = db.GetAppUsage
+	dbInsertAuditLogDetails = db.InsertAuditLogDetails
+	zitadelSearchEvents     = func(ctx context.Context, q zitadel.EventSearch) ([]zitadel.LoggedEvent, bool, error) {
+		if zitadel.MgmtClient == nil {
+			return nil, false, errNoClient
+		}
+		return zitadel.MgmtClient.SearchEvents(ctx, q)
+	}
 	// Sign-in usage (I6): the webhook records, and resolves an application to
 	// its project through the directory.
 	dbRecordUsage         = db.RecordUsage

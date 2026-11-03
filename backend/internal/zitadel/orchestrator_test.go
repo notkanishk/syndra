@@ -352,6 +352,10 @@ func (fake *mockClient) TokenSettings(context.Context, string, string) (*TokenSe
 	return &TokenSettings{}, nil
 }
 
+func (fake *mockClient) SearchEvents(context.Context, EventSearch) ([]LoggedEvent, bool, error) {
+	return nil, false, nil
+}
+
 func (fake *mockClient) GrantOriginByID(context.Context, string) (*GrantOrigin, error) {
 	return nil, nil
 }

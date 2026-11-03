@@ -155,7 +155,7 @@ export default function ProjectDetailPage({
         }
       />
 
-      <Card>
+      <Card stale={readState.current === false}>
         <CardColumns>
           <span className="min-w-[200px] flex-1">Role</span>
           <span className="hidden w-[130px] shrink-0 desktop:block">Group</span>

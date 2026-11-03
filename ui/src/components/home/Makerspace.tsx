@@ -262,7 +262,7 @@ function AccessShape() {
   const failed = !loading && !!(roles.error || bundles.error);
 
   return (
-    <Card>
+    <Card stale={readState.current === false}>
       <CardHeader title="Roles most people hold" />
       {/* One hand-over (S7): a skeleton only if the read is slow, then the rows arrive. */}
       <ReadGate loading={loading} skeleton={<RowSkeleton rows={3} label="Loading where access lives" />}>

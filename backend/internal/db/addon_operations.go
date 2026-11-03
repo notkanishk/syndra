@@ -240,6 +240,27 @@ func ListUnresolvedAddonOperations(ctx context.Context, grace time.Duration, lim
 	return out, rows.Err()
 }
 
+// LastSucceededAddonOperation is the newest succeeded `operation` about one
+// subject on one target. found is false when there is none.
+func LastSucceededAddonOperation(ctx context.Context, target, subjectID, operation string) (AddonOperation, bool, error) {
+	const q = `
+		SELECT id, target, operation, actor_id, subject_id, status, created_at, claimed_at, settled_at
+		  FROM addon_operations
+		 WHERE target = $1 AND subject_id = $2 AND operation = $3 AND status = 'succeeded'
+		 ORDER BY created_at DESC
+		 LIMIT 1`
+	var o AddonOperation
+	err := querier(ctx).QueryRow(ctx, q, target, subjectID, operation).Scan(&o.ID, &o.Target, &o.Operation,
+		&o.ActorID, &o.SubjectID, &o.Status, &o.CreatedAt, &o.ClaimedAt, &o.SettledAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AddonOperation{}, false, nil
+	}
+	if err != nil {
+		return AddonOperation{}, false, fmt.Errorf("last addon operation: %w", err)
+	}
+	return o, true, nil
+}
+
 // AddonOperationCounts separates the three answers. Unresolved is its own
 // number and belongs to neither of the others: counting it as a success claims
 // something the backend does not know, and counting it as a failure tells a

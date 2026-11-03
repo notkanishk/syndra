@@ -346,6 +346,12 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/insights/usage", withCORS(withOperatorAuth(handleInsightsUsage)))
 	mux.HandleFunc("GET /api/v1/insights/lens", withCORS(withOperatorAuth(handleInsightsLens)))
 	mux.HandleFunc("GET /api/v1/users/{id}/usage", withCORS(withOperatorAuth(handleGetUserUsage)))
+	mux.HandleFunc("GET /api/v1/applications/{id}/usage", withCORS(withOperatorAuth(handleGetApplicationUsage)))
+	// "Who signed in, and when": only from Zitadel's own log, with a reason,
+	// audited before Zitadel is asked (owner, 3 Nov).
+	mux.HandleFunc("POST /api/v1/sign-ins/lookup", withCORS(withOperatorAuth(handleLookUpSignIns)))
+	// A person's storage on each connected system, read-only (A-10 Part 1).
+	mux.HandleFunc("GET /api/v1/users/{id}/targets", withCORS(withOperatorAuth(handleUserTargets)))
 	// Accounts Syndra created whose reason for existing has gone. A read; the
 	// removal runs through the ordinary plan-then-apply path.
 	mux.HandleFunc("GET /api/v1/targets/{target}/accounts/dormant", withCORS(withOperatorAuth(handleDormantAccounts)))

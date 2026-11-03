@@ -193,8 +193,8 @@ export function RolePickerOne({
                     {roles.length === 0 ? (
                       <p className="px-3.5 py-2 text-[14px] text-muted">
                         {operator
-                          ? "Nothing is set up here yet, so there's nothing to give."
-                          : "Nothing is set up here yet, so there's nothing to ask for. Makerspace staff can set it up."}
+                          ? `${place.name} has no roles yet, so there's nothing to give. You can add one on its project page.`
+                          : `${place.name} has no roles yet, so there's nothing to ask for. Makerspace staff can add them.`}
                       </p>
                     ) : (
                       roles.map((role) => {

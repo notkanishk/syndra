@@ -170,11 +170,18 @@ func handleMyTargets(w http.ResponseWriter, r *http.Request) {
 }
 
 func describeMyTarget(r *http.Request, target, subject string) (myTargetView, error) {
+	view, _, err := describeTargetFor(r, target, subject)
+	return view, err
+}
+
+// describeTargetFor is describeMyTarget with the entitlement set it resolved, for
+// the operator's person page, which reads more from the same set.
+func describeTargetFor(r *http.Request, target, subject string) (myTargetView, services.EntitlementSet, error) {
 	view := myTargetView{Target: target}
 
 	set, err := svcResolveEntitlementSet(r.Context(), subject, target)
 	if err != nil {
-		return myTargetView{}, err
+		return myTargetView{}, services.EntitlementSet{}, err
 	}
 	view.Entitled = set.Lifecycle.Enabled
 	view.Suspended = set.Suppressed
@@ -187,7 +194,7 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 
 	binding, bound, err := dbGetTargetBinding(r.Context(), target, subject)
 	if err != nil {
-		return myTargetView{}, err
+		return myTargetView{}, services.EntitlementSet{}, err
 	}
 	if bound {
 		boundAt := binding.BoundAt
@@ -236,7 +243,7 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 	// come back later, while offering one wrongly is a member told their
 	// credential is set when it is not.
 	if !addonsCallable(target) {
-		return view, nil
+		return view, set, nil
 	}
 	// The live read is counted by the health monitor; the page then says what
 	// the monitor can stand behind, so one slow answer does not read as an
@@ -272,7 +279,9 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 		//
 		// Best-effort: a page that cannot read usage is still worth serving,
 		// and every field it fills is additive.
-		if status := addonsMyStorage(r.Context(), target, subject); status.Outcome == addons.OutcomeSucceeded {
+		// The actor is whoever asked: the member on their own page, the
+		// operator on the person's page (each route decides who may ask).
+		if status := addonsMyStorage(r.Context(), target, subject, resolveActor(r, "")); status.Outcome == addons.OutcomeSucceeded {
 			if view.Connection != nil {
 				for i := range status.Places {
 					status.Places[i].Address(view.Connection.Host)
@@ -281,12 +290,13 @@ func describeMyTarget(r *http.Request, target, subject string) (myTargetView, er
 			attributePlaces(r.Context(), target, set, status.Places)
 			view.HomeKept = homeKept(set, status.Places)
 			view.Storage = &status
+			rememberStorage(target, subject, status)
 			if status.NeedsNewPassword {
 				view.RestoredAt = restoredAt(r.Context(), subject, target)
 			}
 		}
 	}
-	return view, nil
+	return view, set, nil
 }
 
 // attributePlaces names the member's own roles behind each place: the roles
