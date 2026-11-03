@@ -167,7 +167,12 @@ func answerAction(ctx context.Context, req ActionV2Request) (ActionV2Response, s
 // Degraded paths (Redis miss/timeout, malformed cache) fall through to
 // degradedResponse for that project.
 func claimsForProject(ctx context.Context, userID, projectID, clientID, function string) ActionV2Response {
-	shape := claimShapeFor(ctx, projectID, clientID)
+	shape, ok := claimShapeFor(ctx, projectID, clientID)
+	if !ok {
+		// The shapes could not be read. A guessed shape could show a role the
+		// app's own shape hides, so the project's failure mode answers instead.
+		return degradedResponse(ctx, projectID)
+	}
 	if !shape.Profile.LandsIn(function) {
 		return ActionV2Response{AppendClaims: []ActionV2Claim{}}
 	}
@@ -246,8 +251,12 @@ var unmatchedClients sync.Map
 // maps to an app with a shape on this project, else the project's default
 // (then the built-in). An absent client id (Zitadel before v4) or one with no
 // shape of its own gets the default, which is logged once per client.
-func claimShapeFor(ctx context.Context, projectID, clientID string) services.AppShape {
-	shape, own := projectShapesRead(ctx, projectID).For(clientID)
+func claimShapeFor(ctx context.Context, projectID, clientID string) (services.AppShape, bool) {
+	shapes, err := projectShapesRead(ctx, projectID)
+	if err != nil {
+		return services.AppShape{}, false
+	}
+	shape, own := shapes.For(clientID)
 	if !own {
 		if _, seen := unmatchedClients.LoadOrStore(projectID+"\x00"+clientID, true); !seen {
 			if clientID == "" {
@@ -257,33 +266,37 @@ func claimShapeFor(ctx context.Context, projectID, clientID string) services.App
 			}
 		}
 	}
-	return shape
+	return shape, true
 }
+
+// shapeReadTimeout bounds the Postgres read of a project's shapes on a cache
+// miss: Zitadel gives the whole call 3s, and a sign-in that waits longer is
+// issued with no claims at all.
+const shapeReadTimeout = 500 * time.Millisecond
 
 // projectShapesRead resolves a project's shapes via a Redis read-through
 // cache, so the data plane does not hit Postgres per token.
 //
-// A failed read returns the built-in default rather than nothing: the roles
-// under the default key is a degraded token, no claims is a locked door. That
-// fallback is never cached.
-func projectShapesRead(ctx context.Context, projectID string) services.ProjectShapes {
-	fallback := services.ProjectShapes{Default: claims.Builtin(), DefaultSource: services.SourceBuiltin}
-
+// A failed read is an error, never a guessed shape: the caller answers with
+// the project's failure mode, so a role an app's shape hides is never sent.
+func projectShapesRead(ctx context.Context, projectID string) (services.ProjectShapes, error) {
 	redisCtx, cancel := context.WithTimeout(ctx, redisTimeout)
 	defer cancel()
 
 	if raw, err := redisGetKey(redisCtx, claimShapeCacheKey(projectID)); err == nil {
 		var cached services.ProjectShapes
 		if jerr := json.Unmarshal([]byte(raw), &cached); jerr == nil && cached.Default.Lands != "" {
-			return cached
+			return cached, nil
 		}
 		log.Printf("[DATA PLANE] Malformed claim shape cache for project=%s", projectID)
 	}
 
-	shapes, err := dbResolveProjectShapes(ctx, projectID)
+	dbCtx, dbCancel := context.WithTimeout(ctx, shapeReadTimeout)
+	defer dbCancel()
+	shapes, err := dbResolveProjectShapes(dbCtx, projectID)
 	if err != nil {
-		log.Printf("[DATA PLANE] Claim shape lookup failed for project=%s, using the built-in shape: %v", projectID, err)
-		return fallback
+		log.Printf("[DATA PLANE] Claim shape lookup failed for project=%s, answering with its failure mode: %v", projectID, err)
+		return services.ProjectShapes{}, err
 	}
 
 	if encoded, jerr := json.Marshal(shapes); jerr == nil {
@@ -293,7 +306,7 @@ func projectShapesRead(ctx context.Context, projectID string) services.ProjectSh
 			log.Printf("[DATA PLANE] Claim shape cache write failed for project=%s: %v", projectID, serr)
 		}
 	}
-	return shapes
+	return shapes, nil
 }
 
 // claimFailureModeCacheTTL returns the Redis TTL for the read-through cache
