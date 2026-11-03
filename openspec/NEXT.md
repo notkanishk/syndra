@@ -158,12 +158,13 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
   - Home's calm line swaps by Unfold for data changes too.
   - The phone bulk bar becomes one primary verb plus "More changes".
   - Copy for 6.34 f and g.
-- **Owner's calls still open:**
-  - sign-in counts (A-10 recommends none: the last sign-in per app only);
-  - the member's note on an unconfirmed password;
-  - whether stale data stops dimming;
-  - whether the v1 checklist gates anything, and whether the pasted v1 token is kept;
-  - Revoke as the primary phone verb for "Departed, still has access".
+- **Owner, 3 Nov:**
+  - **Sign-ins: 1a.** Keep each person's last sign-in per app and daily totals per app with no names; any operator sees these, with no lookup log. "Who signed in, and when" comes from Zitadel's own log only through a deliberate, reasoned and audited "Look up sign-ins".
+  - **Passwords: self-settling (A-13).** A lost reply is resent once at once with the same password. The member sees "Changed" only on a confirmed done. History and Audit mark "Sent again automatically", with both times. Passwords never reach an operator.
+  - **Stale data:** no unreadable dim; marked visibly and calmly (A-13). The dim's form is the owner's pick: (d) recommended.
+  - **Claims:** no v1 gate or readiness checklist. The owner removes Actions v1 himself. A-11 is redone around rich per-app shaping: rename roles, choose roles, nested claims, role-conditional claims, more attributes, app templates. "Start from a token" is dropped.
+  - **Yes:** Revoke is the primary phone verb for "Departed, still has access"; single-folder holds are left out until needed.
+- **Owner's calls still open:** how stale data recedes (A-13 (d) recommended, (b) the fallback); the A-11 redo.
 
 ### Audit of 27 Oct — remediation in batches
 
