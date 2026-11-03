@@ -48,6 +48,7 @@ import { Crossfade } from "@/components/ui/Crossfade";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
+import { compareNames } from "@/lib/sort";
 
 /**
  * Home — the operator landing. Two zones, in a fixed order.
@@ -1059,7 +1060,7 @@ function MergeFindingsWaiting({ count }: { count: number }) {
 function NotConfirmed({ count, bySystem }: { count: number; bySystem: Record<string, number> }) {
   const systems = Object.entries(bySystem)
     .filter(([, n]) => n > 0)
-    .sort(([a], [b]) => a.localeCompare(b));
+    .sort(([a], [b]) => compareNames(targetLabel(a), targetLabel(b)));
   return (
     <Card>
       <CardHeader title="Not confirmed" count={count} tone="warn" />

@@ -11,6 +11,7 @@ import { NextStep } from "@/components/ui/NextStep";
 import { Unfold } from "@/components/ui/Unfold";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatAgoShort, formatShortDate } from "@/lib/format";
+import { sortByName } from "@/lib/sort";
 
 /**
  * What a person already has of a role, said in the row's note seat before
@@ -102,16 +103,11 @@ export function RolePickerOne({
         .join(" ")
         .toLowerCase()
         .includes(needle);
-    return places
-      .map((place) => ({ place, roles: place.roles.filter((role) => matches(place, role)) }))
-      .filter((entry) => entry.roles.length > 0 || (!needle && entry.place.roles.length === 0))
-      .sort((a, b) => {
-        // The place a link named leads, then A to Z.
-        if (a.place.id === cameFrom) return -1;
-        if (b.place.id === cameFrom) return 1;
-        return a.place.name.localeCompare(b.place.name);
-      });
-  }, [places, needle, cameFrom, operator]);
+    // A to Z, always: the place a link named opens in its own seat, never moved to the top.
+    return sortByName(places, (place) => place.name)
+      .map((place) => ({ place, roles: sortByName(place.roles.filter((role) => matches(place, role)), (role) => role.name) }))
+      .filter((entry) => entry.roles.length > 0 || (!needle && entry.place.roles.length === 0));
+  }, [places, needle, operator]);
 
   const chosen = useMemo(() => {
     if (!value) return null;

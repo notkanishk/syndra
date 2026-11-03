@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
+import { targetLabel } from "@/lib/nav";
+import { sortByName } from "@/lib/sort";
 
 /**
  * The add-on roster and the reads hanging off it.
@@ -80,7 +82,7 @@ export function useTargets(enabled = true) {
     // as often as the rail's indicators are, and never cached longer than that.
     staleTime: 30_000,
     refetchInterval: 30_000,
-    select: (data) => data.targets ?? [],
+    select: (data) => sortByName(data.targets ?? [], (t) => targetLabel(t.target), (t) => t.target),
   });
 }
 

@@ -5,6 +5,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { request } from "@/lib/api-client";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 import { bundlesQueryKeys, type BundleRoleRow } from "@/lib/queries/useBundles";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Bundle versioning.
@@ -132,7 +133,7 @@ export function useBundleIncluders(bundleId: string | null | undefined) {
     queryKey: KEYS.includers(bundleId ?? ""),
     queryFn: async (): Promise<BundleIncluder[]> => {
       const data = await request<unknown>(`/bundles/${bundleId}/includers`);
-      return Array.isArray(data) ? (data as BundleIncluder[]) : [];
+      return Array.isArray(data) ? sortByName(data as BundleIncluder[], (i) => i.name, (i) => i.bundle_id) : [];
     },
     enabled: Boolean(bundleId),
   });

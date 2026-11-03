@@ -78,6 +78,7 @@ import {
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import dynamic from "next/dynamic";
+import { sortByName, sortNames } from "@/lib/sort";
 
 // Opened on demand, so it stays out of the page's first load.
 const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
@@ -221,17 +222,15 @@ export function UnexplainedAccess() {
       if (byId.has(item.user_id)) continue;
       byId.set(item.user_id, resolver.resolveUser(item.user_id).value?.display_name ?? item.user_id);
     }
-    return Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
+    return sortByName(Array.from(byId, ([id, name]) => ({ id, name })), (p) => p.name);
   }, [returned, filters, resolver]);
   const roleKeys = useMemo(
     () =>
-      Array.from(
-        new Set(
-          applyDriftFilters(returned, filters, new Date(), "role").flatMap((item) => item.role_keys),
+      sortNames(
+        Array.from(
+          new Set(applyDriftFilters(returned, filters, new Date(), "role").flatMap((item) => item.role_keys)),
         ),
-      ).sort(),
+      ),
     [returned, filters],
   );
 

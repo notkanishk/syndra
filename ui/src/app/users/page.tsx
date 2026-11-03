@@ -53,6 +53,7 @@ import { useUsers, type UserListEntry } from "@/lib/queries/useUsers";
 import { useDebounce } from "@/lib/useDebounce";
 import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
+import { sortNames } from "@/lib/sort";
 
 /**
  * People's bulk verbs, in the desktop order. Every one opens a rehearsal, so
@@ -547,7 +548,7 @@ function PersonRow({
   // the fallback for someone with no title, never a second line of its own.
   const lead = entry.user.title || entry.user.email;
   const subtitle = entry.user.team ? `${lead} · ${entry.user.team}` : lead;
-  const bundleLine = (entry.bundle_names ?? [])
+  const bundleLine = sortNames(entry.bundle_names ?? [])
     .map((name) => {
       const version = entry.bundle_versions?.[name];
       return version ? `${name} v${version}` : name;
@@ -592,7 +593,7 @@ function PersonRow({
 
       <span className="hidden w-[180px] shrink-0 flex-wrap gap-1.5 desktop:flex">
         {entry.bundle_names?.length ? (
-          entry.bundle_names.map((name) => {
+          sortNames(entry.bundle_names).map((name) => {
             // The version rides on the chip. "Lab Tech" and "Lab Tech v2" are
             // different facts about a person, and the row is where the
             // difference between two people in the same bundle is visible.
