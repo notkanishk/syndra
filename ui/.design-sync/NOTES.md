@@ -69,3 +69,6 @@ Run from `ui/`. `.ds-sync/` already holds the staged scripts and `esbuild ts-mor
 
 ## Fonts on the design canvas (3 Nov 2026)
 The canvas renders each artboard as a srcdoc document whose base is `/appifact/<name>.dc.html`, so a linked stylesheet's relative `./*.woff2` resolves to a 404. `fonts/fonts.css` therefore lists the canvas's uploaded font assets first (`url(/_blob/<id>)`), then the relative file, which is what local previews use. The three ids are the canvas's uploads of the same woff2 files; if a font file changes, upload it to the canvas again and replace its id here. `host.css` gives each `--font-*` a system fallback stack, so a font that fails never falls back to Times.
+
+## The container-query copy (3 Nov 2026)
+The canvas shows a board's frames inline (`<dc-import … frame=…>` inside a `syndra-frame` container), where `@media` would see the artboard's width. After each resync, run `node .design-sync/build-container-css.mjs` from `ui/`: it writes `ds-bundle/_ds_bundle.container.css`, the same stylesheet with every width `@media` turned into `@container syndra-frame (…)`. Boards link it instead of `_ds_bundle.css`. Publish both.
