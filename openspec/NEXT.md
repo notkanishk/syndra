@@ -168,11 +168,12 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 - **A-14 replaces A-11** (claims shaping, rescoped).
   - Templates come from `docs/research/2026-11-03-app-claims.md`: every app wants a flat list; renames break NetBird and GitLab; claims must be sent as `[]`, never left out.
   - **Gap for code, found while checking:** the live path shapes with every profile in the project (`claimProfilesRead(projectID)`), so each app's override reaches every app in that project. Per-app shapes need the request's `application.client_id` mapped to its app. Zitadel may send that only from v4. Debug mode's first capture will show whether prod sends it.
-- **Owner's calls still open (A-14):**
-  - text formats for roles: Advanced only, with a warning, or removed;
-  - debug mode's default scope: "Only you" or everyone;
-  - an "I understand" tick for a save the app will act on;
-  - an app with no shape: nothing from Syndra, or a basic default.
+- **Owner, 3 Nov, on A-14:**
+  - text formats for roles: Advanced only, with a warning;
+  - debug mode captures one chosen account at a time (default: the operator), never everyone;
+  - a save the app will act on needs "I understand";
+  - an app with no shape gets the basic default (the project's shape, else the built-in `roles` list);
+  - new: "Copy another app's shape" (from any project) as a draft beside the templates. Role renames copy only for keys that exist in this project.
 
 ### Audit of 27 Oct — remediation in batches
 
