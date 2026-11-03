@@ -94,10 +94,7 @@ func claimByKey(claims []ActionV2Claim, key string) (ActionV2Claim, bool) {
 }
 
 // rolesJSON is a grant row's roles as Zitadel sends them.
-func rolesJSON(roles ...string) json.RawMessage {
-	b, _ := json.Marshal(roles)
-	return b
-}
+func rolesJSON(roles ...string) []string { return roles }
 
 // v2Body builds a minimal v2 function-trigger request body for a single user
 // and grant list.
@@ -117,23 +114,17 @@ func inject(t *testing.T, body string) *httptest.ResponseRecorder {
 	return rr
 }
 
-func TestHandleActionInject_CacheMissFailClosed(t *testing.T) {
-	builtinPlane(t)
-	rr := inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")}))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-	if got := decodeActionResponse(t, rr); len(got.AppendClaims) != 0 {
-		t.Fatalf("fail_closed: expected empty append_claims, got %v", got.AppendClaims)
-	}
-}
-
-func TestHandleActionInject_CacheMissMinimalSafe(t *testing.T) {
-	testPlane(t, map[string]claimserve.Project{"p1": project(services.ProjectShapes{},
-		claimserve.Mode{Mode: claimserve.MinimalSafe, MinimalSafeClaims: map[string]any{"role": "guest"}})})
-	got := decodeActionResponse(t, inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("viewer")})))
-	if claim, ok := claimByKey(got.AppendClaims, "role"); !ok || claim.Value != "guest" {
-		t.Fatalf("minimal_safe: expected role=guest, got %v", got.AppendClaims)
+// A cache miss answers the roles Zitadel listed, whatever the project's
+// failure mode: that mode is for facts Syndra cannot read, not for facts it
+// has none of.
+func TestHandleActionInject_CacheMissServesZitadelsRolesAlone(t *testing.T) {
+	for _, mode := range []claimserve.Mode{failClosed, {Mode: claimserve.MinimalSafe, MinimalSafeClaims: map[string]any{"role": "guest"}}} {
+		testPlane(t, map[string]claimserve.Project{"p1": project(services.ProjectShapes{}, mode)})
+		rr := inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("viewer")}))
+		got := decodeActionResponse(t, rr)
+		if roles, ok := claimByKey(got.AppendClaims, "roles"); rr.Code != http.StatusOK || !ok || !rolesEqual(roles.Value, "viewer") || len(got.AppendClaims) != 1 {
+			t.Fatalf("%s: HTTP %d %v", mode.Mode, rr.Code, got.AppendClaims)
+		}
 	}
 }
 
@@ -150,7 +141,7 @@ func TestHandleActionInject_CacheHit_UsesConfiguredClaimNameAndFormat(t *testing
 		Default: claims.FromFlat("x-groups", claims.FormatCSV, nil, nil)}, failClosed)})
 	setFacts(r, "u1", "p1", factsJSON("u1", "p1", "admin", "lab"))
 
-	got := decodeActionResponse(t, inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("admin")})))
+	got := decodeActionResponse(t, inject(t, v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: rolesJSON("lab", "admin")})))
 	claim, ok := claimByKey(got.AppendClaims, "x-groups")
 	if !ok || claim.Value != "admin,lab" {
 		t.Fatalf("expected csv-formatted roles admin,lab under x-groups, got %v", got.AppendClaims)
@@ -250,9 +241,9 @@ func TestHandleActionInject_DuplicateProjectGrants_DedupedToFlatKeys(t *testing.
 	if n := r.Count("HGET"); n != 1 {
 		t.Fatalf("expected exactly one facts read after dedup, got %d", n)
 	}
+	// The rows' roles are one set: both of them, though the facts hold one.
 	claim, ok := claimByKey(got.AppendClaims, "roles")
-	list, isList := claim.Value.([]interface{})
-	if !ok || !isList || len(list) != 1 || list[0] != "admin" {
+	if !ok || len(got.AppendClaims) != 1 || !rolesEqual(claim.Value, "admin", "operator") {
 		t.Fatalf("expected one deduped roles claim, got %v", got.AppendClaims)
 	}
 }

@@ -93,9 +93,20 @@ func FuzzActionV2Decode(f *testing.F) {
 		body := `{"function":"function/preaccesstoken","user":{"id":"u1","human":` + fill + `,"x":` + fill + `},` +
 			`"userinfo":` + fill + `,"org":` + fill + `,"user_metadata":` + fill + `,"actor":` + fill + `,` +
 			`"application":{"client_id":"c1","extra":` + fill + `},` +
-			`"user_grants":[{"project_id":"p1","roles":` + fill + `,"state":` + fill + `}]}`
+			`"user_grants":[{"project_id":"p1","roles":["admin"],"state":` + fill + `}]}`
 		if code, got := serve([]byte(body)); code != http.StatusOK || got != claimtel.Served {
 			t.Fatalf("an unused field holding %s gave HTTP %d / %s", fill, code, got)
+		}
+		// roles is used now (the token's roles): a list of strings or null is
+		// served, anything else is a contract fault, never a silent [].
+		var roles []string
+		want := claimtel.ContractFault
+		if json.Unmarshal(filler, &roles) == nil {
+			want = claimtel.Served
+		}
+		body = `{"function":"function/preaccesstoken","user":{"id":"u1"},"user_grants":[{"project_id":"p1","roles":` + fill + `}]}`
+		if code, got := serve([]byte(body)); code != http.StatusOK || got != want {
+			t.Fatalf("roles holding %s gave HTTP %d / %s, want %s", fill, code, got, want)
 		}
 	})
 }

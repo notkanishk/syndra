@@ -204,7 +204,7 @@ func Rank(o Outcome) int {
 		return 0
 	case NotLanding:
 		return 1
-	case ServedLKG, ServedWelcome, UnknownFunction:
+	case ServedLKG, ServedWelcome, ServedRolesOnly, UnknownFunction:
 		return 2
 	case NoGrants:
 		return 3

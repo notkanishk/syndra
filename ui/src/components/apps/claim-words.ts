@@ -104,6 +104,9 @@ function check1(e: Explanation, ctx: CheckContext): TrailCheck {
 function check2(e: Explanation, ctx: CheckContext): TrailCheck {
   const keys = fact<string[]>(e, 1, "roles") ?? [];
   const labels = keys.map((k) => ctx.roles.find((r) => r.key === k)?.label ?? k);
+  if (fact<boolean>(e, 1, "unread")) {
+    return { tone: "warn", sentence: `Syndra couldn't read ${ctx.person}'s roles from Zitadel just now.` };
+  }
   if (keys.length === 0) {
     return {
       tone: "neutral",
@@ -131,7 +134,7 @@ function check3(e: Explanation, ctx: CheckContext): TrailCheck {
       return {
         tone: "warn",
         sentence: "Their claims aren't built yet.",
-        faint: ["Syndra builds them at their next change. Until then Zitadel gets nothing from Syndra for them."],
+        faint: ["Syndra builds them at their next change. Until then Zitadel gets their roles from Syndra, and nothing else."],
       };
     case "fail":
       return { tone: "danger", sentence: "Syndra couldn't read their claims.", faint: [String(fact<string>(e, 2, "error") ?? "")] };
@@ -237,6 +240,15 @@ export function check5(e: Explanation, ctx: CheckContext, asDraft: boolean): Tra
       sentence: where.length ? `${answers} ${keys}, but only for ${list(where)}.` : `${answers} ${keys}, but it doesn't reach the app.`,
       faint: [ZITADEL_ADDS],
       foot: `${ctx.app} reads ${its}, so it sees none of this${/netbird/i.test(ctx.app) ? ", and empties every group it made from a token" : ""}.`,
+    };
+  }
+  if (c.state === "warn") {
+    // Not built yet: the token path sends the shape over Zitadel's roles alone.
+    return {
+      tone,
+      sentence: `${answers} ${keys || "nothing"}, their roles alone for now.`,
+      faint: ["Once their claims are built, it would receive what's below."],
+      foot: ZITADEL_ADDS,
     };
   }
   if (c.state === "fail") {

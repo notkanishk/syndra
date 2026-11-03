@@ -51,9 +51,9 @@ type Plane struct {
 	cfg atomic.Pointer[Config]
 	lkg *lru
 	now func() time.Time
-	// Shaper is claims.ShapeAt, the only shaper; a field so a test can make it
+	// Shaper is claims.Shape, the only shaper; a field so a test can make it
 	// panic and prove the route survives.
-	Shaper func(claims.Profile, claims.Facts, time.Time) *claims.Object
+	Shaper func(claims.Profile, claims.Facts) *claims.Object
 
 	lastCheck atomic.Int64 // unix nanos of the last poll Redis answered
 	failures  atomic.Int64 // polls or reloads that failed since the last success
@@ -67,7 +67,7 @@ func New(rdb Redis, now func() time.Time) *Plane {
 	if now == nil {
 		now = time.Now
 	}
-	return &Plane{rdb: rdb, lkg: newLRU(LKGCap), now: now, Shaper: claims.ShapeAt}
+	return &Plane{rdb: rdb, lkg: newLRU(LKGCap), now: now, Shaper: claims.Shape}
 }
 
 // Config is the snapshot answering now, nil before the first load.
@@ -87,7 +87,13 @@ type Result struct {
 // Answer is the claims for (user, project) as the client's shape says, and
 // what the call came to. Every branch is a counted outcome; none blocks past
 // FactsTimeout or ctx.
-func (p *Plane) Answer(ctx context.Context, userID, projectID, clientID, function string) Result {
+//
+// roles is what Zitadel listed for the project in this token's payload
+// (Request.Roles): the token's roles, always (ADR-004). Syndra's facts only
+// enrich them (names, team, bundles, end dates), and a role of Syndra's that
+// Zitadel did not list, one still queued say, is not sent. With no facts to
+// add, the shape is answered over the roles alone (ServedRolesOnly).
+func (p *Plane) Answer(ctx context.Context, userID, projectID, clientID, function string, roles []string) Result {
 	cfg := p.cfg.Load()
 	if cfg == nil {
 		return Result{Claims: []Claim{}, Outcome: claimtel.DegradedShapeUnreadable}
@@ -108,12 +114,16 @@ func (p *Plane) Answer(ctx context.Context, userID, projectID, clientID, functio
 
 	facts, outcome, miss := p.facts(ctx, userID, projectID, proj.Mode.LKGMaxAge())
 	res.Miss = miss
-	switch outcome {
-	case claimtel.Served, claimtel.ServedLKG:
-		res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts, p.now())), outcome
+	switch {
+	case outcome == claimtel.Served, outcome == claimtel.ServedLKG:
+		facts.Roles = roles
+		res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts)), outcome
 		if outcome == claimtel.Served && function != claims.FunctionPreAccessToken && function != claims.FunctionPreUserinfo {
 			res.Outcome = claimtel.UnknownFunction // answered as both (F-5), and counted
 		}
+	case outcome == claimtel.ServedRolesOnly && ctx.Err() == nil:
+		bare := claims.Facts{UserID: userID, ProjectID: projectID, Roles: roles}
+		res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile.RolesOnly(), bare)), outcome
 	default:
 		res.Claims, res.Outcome = proj.Mode.Claims(), outcome
 		if ctx.Err() != nil {
@@ -121,34 +131,6 @@ func (p *Plane) Answer(ctx context.Context, userID, projectID, clientID, functio
 		}
 	}
 	return res
-}
-
-// facts reads (user, project): served from Redis, else the last-known-good
-// copy within maxAge when Redis is erroring, else a degraded outcome.
-// HoldsRoles says whether Syndra's own facts give the person any role in the
-// project of the client's app. known is false when the client maps to no app
-// or Redis could not answer; the correlator then keeps the stricter verdict.
-func (p *Plane) HoldsRoles(ctx context.Context, userID, clientID string) (holds, known bool) {
-	cfg := p.Config()
-	if cfg == nil || p.rdb == nil {
-		return false, false
-	}
-	projectID, ok := cfg.ClientProject[clientID]
-	if !ok || projectID == "" {
-		return false, false
-	}
-	raw, err := p.rawFacts(ctx, userID, projectID)
-	switch {
-	case errors.Is(err, redis.Nil):
-		return false, true
-	case err != nil:
-		return false, false
-	}
-	var f claims.Facts
-	if json.Unmarshal([]byte(raw), &f) != nil {
-		return false, false
-	}
-	return len(f.Roles) > 0, true
 }
 
 // rawFacts is the one facts read: the hash field, then the old key, within
@@ -194,10 +176,13 @@ func (p *Plane) Welcome(ctx context.Context, user UserRef, clientID, function st
 		return res, projectID, true
 	}
 	facts.UserID, facts.ProjectID = user.ID, projectID
-	res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts, p.now())), claimtel.ServedWelcome
+	res.Claims, res.Outcome = Envelope(p.Shaper(shape.Profile, facts)), claimtel.ServedWelcome
 	return res, projectID, true
 }
 
+// facts reads (user, project): served from Redis, else the last-known-good
+// copy within maxAge when Redis is erroring, else ServedRolesOnly: nothing to
+// add to the roles Zitadel listed.
 func (p *Plane) facts(ctx context.Context, userID, projectID string, maxAge time.Duration) (claims.Facts, claimtel.Outcome, bool) {
 	raw, err := p.rawFacts(ctx, userID, projectID)
 	switch {
@@ -215,15 +200,15 @@ func (p *Plane) facts(ctx context.Context, userID, projectID string, maxAge time
 		p.lkg.put(userID+"\x00"+projectID, f, p.now())
 		return f, claimtel.Served, false
 	case errors.Is(err, redis.Nil):
-		// Redis says there are none: a copy from before would be a revoked
-		// role served from memory.
+		// Redis says there are none: a copy from before would be facts
+		// Syndra has since dropped, served from memory.
 		p.lkg.drop(userID + "\x00" + projectID)
-		return claims.Facts{}, claimtel.DegradedNoFacts, true
+		return claims.Facts{}, claimtel.ServedRolesOnly, true
 	default:
 		if f, at, ok := p.lkg.get(userID + "\x00" + projectID); ok && p.now().Sub(at) <= maxAge {
 			return f, claimtel.ServedLKG, false
 		}
-		return claims.Facts{}, claimtel.DegradedNoFacts, false
+		return claims.Facts{}, claimtel.ServedRolesOnly, false
 	}
 }
 
