@@ -48,7 +48,8 @@ import { Crossfade } from "@/components/ui/Crossfade";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
-import { compareNames } from "@/lib/sort";
+import { compareNames, sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * Home — the operator landing. Two zones, in a fixed order.
@@ -916,6 +917,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
  * where an operator can look at what that person currently holds.
  */
 function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
+  const names = useShownNames();
   const count = summary.count;
   const rows = summary.top ?? [];
   return (
@@ -944,7 +946,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
             </Link>
             <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
               {row.role_keys && row.role_keys.length > 0 ? (
-                row.role_keys.map((key) => (
+                sortByName(row.role_keys, (key) => names.roleRef(row.project_id ?? "", key), (key) => key).map((key) => (
                   <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-2" />
                 ))
               ) : (

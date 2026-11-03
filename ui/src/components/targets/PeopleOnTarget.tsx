@@ -18,6 +18,8 @@ import { glideTo } from "@/lib/motion";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargetHomes, useTargetInventory, type AccountHome, type BoundAccount } from "@/lib/queries/useTargets";
 import { HomeLine, LimitDialog, limitVerb } from "@/components/targets/HomeLimit";
+import { sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * Whose accounts are on this target (design §21's second question).
@@ -37,7 +39,8 @@ import { HomeLine, LimitDialog, limitVerb } from "@/components/targets/HomeLimit
 export function PeopleOnTarget({ target, stale = false }: { target: string; stale?: boolean }) {
   const inventory = useTargetInventory(target);
   const homes = useTargetHomes(target);
-  const accounts = inventory.data?.accounts ?? [];
+  const names = useShownNames();
+  const accounts = sortByName(inventory.data?.accounts ?? [], (a) => names.user(a.subject_id), (a) => a.subject_id);
   const homeOf = new Map((homes.data?.accounts ?? []).map((h) => [h.subject_id, h]));
   const name = targetLabel(target);
   const paging = usePaging();

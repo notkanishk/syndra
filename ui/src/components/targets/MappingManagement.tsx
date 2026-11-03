@@ -50,6 +50,8 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useIsTouch } from "@/lib/useViewport";
 import dynamic from "next/dynamic";
+import { sortByName } from "@/lib/sort";
+import { useShownNames } from "@/components/names/shownNames";
 
 // Opened on demand, so it stays out of the page's first load.
 const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
@@ -83,7 +85,12 @@ export function MappingManagement({ target }: { target: string }) {
   const homeSetting = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
   const homeRoot = homeSetting?.value ? (homeSetting.labels?.[homeSetting.value] ?? homeSetting.value) : "";
   const all = mappings.data ?? [];
-  const shown = all.filter((m) => m.field !== FIELD_HOME && m.field !== FIELD_HOME_QUOTA);
+  const names = useShownNames();
+  // A to Z by the role as its row reads it ("Project / Role").
+  const shown = sortByName(
+    all.filter((m) => m.field !== FIELD_HOME && m.field !== FIELD_HOME_QUOTA),
+    (m) => `${names.project(m.project_id)} / ${names.role(m.project_id, m.role_key)}`,
+  );
   const [editing, setEditing] = useState<RoleMapping | null>(null);
   const [deleting, setDeleting] = useState<RoleMapping | null>(null);
   const name = targetLabel(target);
