@@ -356,6 +356,10 @@ type Indicators struct {
 	// nobody acts, and a hold stays. A badge that summed them would be counting
 	// "access about to end" together with "access still being withheld".
 	HoldsDue int `json:"holds_due"`
+	// UnconfirmedOperations is, per target, the changes it never answered that
+	// wait for a person to say what happened (A-09 §3). Passwords are never in
+	// it: they settle themselves (A-13 §5). Targets with none are absent.
+	UnconfirmedOperations map[string]int `json:"unconfirmed_operations"`
 }
 
 // revocationEscalation is how long a queued revocation may age before it stops
@@ -407,6 +411,12 @@ func GovernanceIndicators(ctx context.Context) (Indicators, error) {
 		return Indicators{}, err
 	}
 	out.HoldsDue = len(holds)
+
+	unconfirmed, err := svcCountUnresolvedAddonOperations(ctx, db.AddonUnresolvedGrace)
+	if err != nil {
+		return Indicators{}, err
+	}
+	out.UnconfirmedOperations = unconfirmed
 
 	// Only worth probing when there is something queued: the flag exists to
 	// explain why "Resume now" is disabled, and with an empty outbox there is

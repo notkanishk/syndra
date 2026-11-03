@@ -236,3 +236,13 @@ func TestPersonTargets_AdoptedOnlyWhenTheAdoptionMadeThisBinding(t *testing.T) {
 		t.Errorf("an old adoption is not this binding's: %+v", view.Adopted)
 	}
 }
+
+// A-13 §5: a member's unconfirmed password change is theirs to settle. The
+// operator's view of the same system carries no line about it.
+func TestPersonTargets_CarryNoPasswordChange(t *testing.T) {
+	h := &personStorageHarness{storageHarness: storageHarness{entitled: true, bound: true, unconfirmed: time.Now()}}
+	stubPersonStorage(t, h)
+	if view := getPersonTargets(t); view.PasswordChange != nil {
+		t.Fatalf("passwords never reach an operator: %+v", view.PasswordChange)
+	}
+}
