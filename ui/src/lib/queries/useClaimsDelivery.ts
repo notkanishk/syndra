@@ -12,7 +12,7 @@ export interface ClaimsStatus {
   reasons: string[];
   /** Sign-ins before this (a restart) are unchecked, never failed. */
   checking_since: string;
-  sign_ins_24h: Partial<Record<"delivered" | "not_called" | "not_served" | "first_sign_in_before_access" | "unchecked", number>>;
+  sign_ins_24h: Partial<Record<"delivered" | "not_called" | "not_served" | "first_sign_in_before_access" | "nothing_to_deliver" | "unchecked", number>>;
   waiting: number;
 }
 

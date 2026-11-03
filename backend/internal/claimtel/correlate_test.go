@@ -344,3 +344,21 @@ func TestFindingReasonCarriesNoIDs(t *testing.T) {
 		t.Error("not served takes its outcome's severity")
 	}
 }
+
+// Zitadel listing no grants is the right answer when Syndra's own facts say
+// the person holds no role in the app's project (seen on prod 3 Nov 2026: an
+// operator with no role in Syndra's own project signing in to Syndra). It is
+// a failure only when Syndra knows they hold one.
+func TestClassify_NoGrantsIsOnlyAFailureWhenThePersonHoldsRoles(t *testing.T) {
+	s := SignIn{UserID: "ada", ClientID: "c1", Scopes: []string{"openid"}}
+	worst := map[string]Outcome{FnPreUserinfo: NoGrants}
+	if got := Classify(s, worst, false, false, true, false, true).Verdict; got != NothingToDeliver {
+		t.Fatalf("holds no role: got %s, want %s", got, NothingToDeliver)
+	}
+	if got := Classify(s, worst, false, false, true, false, false).Verdict; got != NotServed {
+		t.Fatalf("holds a role (or unknown): got %s, want %s", got, NotServed)
+	}
+	if obs := Observe([]Checked{{SignIn: s, Verdict: NothingToDeliver}}); len(obs) != 2 || obs[0].Fail || obs[1].Fail {
+		t.Fatalf("nothing to deliver must count clean: %+v", obs)
+	}
+}
