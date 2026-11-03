@@ -106,12 +106,15 @@ describe("the home queue and a target nobody can read", () => {
     // The reason travels: "unreachable" and "answered and refused" send an
     // operator to different machines.
     expect(screen.getByText(/connection refused/)).toBeTruthy();
+    // The claims line holds its seat whether or not anything needs you.
+    expect(screen.getByText("Claims:")).toBeTruthy();
   });
 
   it("says nothing needs you when every target has been read", () => {
     renderHome();
     expect(screen.queryAllByText(/Nothing here needs you/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/could not check/i)).toBeNull();
+    expect(screen.getByText("Claims:")).toBeTruthy();
   });
 });
 

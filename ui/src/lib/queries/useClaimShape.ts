@@ -102,7 +102,7 @@ export interface Check {
   facts: Record<string, unknown>;
 }
 
-/** One person's five checks; `token` keeps Syndra's key order. */
+/** One person's six checks; `token` keeps Syndra's key order. */
 export interface Explanation {
   user_id: string;
   checks: Check[];

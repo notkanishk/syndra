@@ -18,7 +18,7 @@ export interface TrailCheck {
 }
 
 /**
- * The five-check trail (A-11, A-14 §1): one dot and one sentence a check, in
+ * The six-check trail (A-11, A-14 §1, S3): one dot and one sentence a check, in
  * the order a token is made, each step joined to the next by a quiet line.
  * `compact` is debug mode's form: details only where a check didn't pass.
  */
