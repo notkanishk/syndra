@@ -706,6 +706,10 @@ func newZitadelSourceForTest(c zitadel.ZitadelClient) *zitadelSource {
 
 // Zitadel's event log is not what this fake is about. Present so the type still
 // satisfies the client interface; a test that cares stubs it explicitly.
+func (fake *mockDirClient) TokenSettings(context.Context, string, string) (*zitadel.TokenSettings, error) {
+	return &zitadel.TokenSettings{}, nil
+}
+
 func (fake *mockDirClient) GrantOriginByID(context.Context, string) (*zitadel.GrantOrigin, error) {
 	return nil, nil
 }

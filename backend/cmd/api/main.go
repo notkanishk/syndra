@@ -251,6 +251,13 @@ func main() {
 	})
 	go warmSched.Start(ctx)
 
+	// Claims seed (A-14): every app that existed under Actions v1 gets v1's
+	// exact shape as version 1, so turning v1 off changes nothing. Apps live in
+	// Zitadel, so this can't be SQL; it is idempotent, so hourly catches an app
+	// a partial directory read missed. Reading an app's claims also seeds it.
+	seedSched := periodic.New("CLAIM-SEED", time.Hour, time.Hour, handlers.SeedClaimShapes)
+	go seedSched.Start(ctx)
+
 	// Grant-expiry scheduler: periodic sweep of expired direct grants to
 	// emit LLDAP removal intents, hard-delete rows, invalidate cache, and
 	// cascade-revoke derived Zitadel grants. sched is nil when disabled;
@@ -492,6 +499,11 @@ func main() {
 	case <-warmSched.Done():
 	case <-shutdownCtx.Done():
 		log.Println("[CACHE] Shutdown deadline exceeded waiting for the warm-up; closing anyway")
+	}
+	select {
+	case <-seedSched.Done():
+	case <-shutdownCtx.Done():
+		log.Println("[CLAIM-SEED] Shutdown deadline exceeded waiting for the seed; closing anyway")
 	}
 
 	if revokeSched != nil {

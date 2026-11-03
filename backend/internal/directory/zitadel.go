@@ -503,6 +503,7 @@ func (z *zitadelSource) Applications(ctx context.Context) ([]models.ApplicationC
 				ProjectID:   p.ID,
 				Description: "",
 				ClientID:    app.ClientID,
+				Created:     app.Created,
 				Consumer:    zitadel.HumanizeAppType(app.Type),
 				ClaimName:   claimName,
 				FormatType:  formatType,
@@ -625,15 +626,18 @@ func toUserProfile(u zitadel.ZitadelUser) models.UserProfile {
 		kind = models.UserKindMachine
 	}
 	return models.UserProfile{
-		Kind:   kind,
-		Joined: joined,
-		ID:     u.ID,
-		Name:   name,
-		Email:  u.Email,
-		Title:  "",
-		Team:   "",
-		Status: normalizeUserState(u.State),
-		Avatar: nameToAvatar(name),
+		Kind:       kind,
+		Joined:     joined,
+		ID:         u.ID,
+		Name:       name,
+		GivenName:  u.GivenName,
+		FamilyName: u.FamilyName,
+		Username:   u.Username,
+		Email:      u.Email,
+		Title:      "",
+		Team:       "",
+		Status:     normalizeUserState(u.State),
+		Avatar:     nameToAvatar(name),
 	}
 }
 

@@ -92,8 +92,19 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/v1/claim-attributes", withCORS(withOperatorAuth(handleGetClaimAttributes)))
 	mux.HandleFunc("GET /api/v1/projects/{id}/claim-shape", withCORS(withOperatorAuth(handleGetProjectClaimShape)))
 	mux.HandleFunc("PUT /api/v1/projects/{id}/claim-profile", withCORS(withOperatorAuth(handleSetProjectClaimProfile)))
-	mux.HandleFunc("PUT /api/v1/applications/{id}/claim-profile", withCORS(withOperatorAuth(handleSetApplicationClaimProfile)))
-	mux.HandleFunc("DELETE /api/v1/applications/{id}/claim-profile", withCORS(withOperatorAuth(handleDeleteApplicationClaimProfile)))
+	// One shape per app (A-14, ADR-003): versions, the explain step, drafts.
+	mux.HandleFunc("GET /api/v1/claim-templates", withCORS(withOperatorAuth(handleGetClaimTemplates)))
+	mux.HandleFunc("GET /api/v1/applications/{id}/claim-shape", withCORS(withOperatorAuth(handleGetAppClaimShape)))
+	mux.HandleFunc("PUT /api/v1/applications/{id}/claim-shape", withCORS(withOperatorAuth(handleSaveAppClaimShape)))
+	mux.HandleFunc("POST /api/v1/applications/{id}/claim-shape/preview", withCORS(withOperatorAuth(handlePreviewAppClaimShape)))
+	mux.HandleFunc("POST /api/v1/applications/{id}/claim-shape/draft-from", withCORS(withOperatorAuth(handleDraftFromAppClaimShape)))
+	mux.HandleFunc("GET /api/v1/applications/{id}/claim-shape/versions", withCORS(withOperatorAuth(handleGetAppClaimShapeVersions)))
+	mux.HandleFunc("POST /api/v1/applications/{id}/claim-shape/versions/{n}/restore", withCORS(withOperatorAuth(handleRestoreAppClaimShape)))
+	// Debug mode: one chosen account's sign-ins, 15 minutes, in memory only.
+	mux.HandleFunc("GET /api/v1/applications/{id}/debug", withCORS(withOperatorAuth(handleGetAppDebug)))
+	mux.HandleFunc("PUT /api/v1/applications/{id}/debug", withCORS(withOperatorAuth(handlePutAppDebug)))
+	mux.HandleFunc("DELETE /api/v1/applications/{id}/debug", withCORS(withOperatorAuth(handleDeleteAppDebug)))
+	mux.HandleFunc("GET /api/v1/applications/{id}/debug/sign-ins", withCORS(withOperatorAuth(handleGetAppDebugSignIns)))
 
 	// Batch UID→name resolver. Powers <UserName/>/<ProjectName/>/<RoleName/>/<BundleName/>
 	// components in the dashboard so raw UUIDs never reach the visible layer.

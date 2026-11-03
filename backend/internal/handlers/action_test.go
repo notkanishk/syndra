@@ -13,6 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"syndra/internal/claims"
+	"syndra/internal/services"
 )
 
 // resetActionDeps restores the injectable vars used by HandleActionInject and
@@ -21,23 +22,17 @@ import (
 // dbGetClaimFailureMode keep flowing through to the DB stub.
 //
 // The claim-shape read-through is stubbed the same way: Redis always misses
-// and dbResolveClaimProfiles returns the built-in default profile, so tests
-// that care about degraded behaviour rather than shaping stay short.
+// and dbResolveProjectShapes returns the built-in default, so tests that care
+// about degraded behaviour rather than shaping stay short.
 func resetActionDeps(t *testing.T, origRedis func(context.Context, string) (string, error), origMode func(context.Context, string) (string, map[string]interface{}, error)) {
 	t.Helper()
 	origGetMode, origSetMode := redisGetClaimMode, redisSetClaimMode
-	origGetKey, origSetKey, origResolve := redisGetKey, redisSetKey, dbResolveClaimProfiles
+	origGetKey, origSetKey, origResolve := redisGetKey, redisSetKey, dbResolveProjectShapes
 	redisGetClaimMode = func(context.Context, string) (string, error) { return "", redis.Nil }
 	redisSetClaimMode = func(context.Context, string, string, int) error { return nil }
 	redisGetKey = func(context.Context, string) (string, error) { return "", redis.Nil }
 	redisSetKey = func(context.Context, string, string, int) error { return nil }
-	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
-		return []claims.Profile{{
-			ProjectID:  projectID,
-			ClaimName:  claims.DefaultClaimName,
-			FormatType: claims.DefaultFormat,
-		}}, nil
-	}
+	stubProjectShapes(services.ProjectShapes{Default: claims.Builtin(), DefaultSource: services.SourceBuiltin})
 	t.Cleanup(func() {
 		redisGetClaims = origRedis
 		dbGetClaimFailureMode = origMode
@@ -45,8 +40,13 @@ func resetActionDeps(t *testing.T, origRedis func(context.Context, string) (stri
 		redisSetClaimMode = origSetMode
 		redisGetKey = origGetKey
 		redisSetKey = origSetKey
-		dbResolveClaimProfiles = origResolve
+		dbResolveProjectShapes = origResolve
 	})
+}
+
+// stubProjectShapes makes every project resolve to ps.
+func stubProjectShapes(ps services.ProjectShapes) {
+	dbResolveProjectShapes = func(context.Context, string) (services.ProjectShapes, error) { return ps, nil }
 }
 
 // factsJSON builds the cache body the compiler writes: facts, not claims.
@@ -208,13 +208,7 @@ func TestHandleActionInject_CacheHit_UsesConfiguredClaimNameAndFormat(t *testing
 		t.Error("GetClaimFailureMode called on cache hit — should not happen")
 		return "fail_closed", nil, nil
 	}
-	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
-		return []claims.Profile{{
-			ProjectID:  projectID,
-			ClaimName:  "x-groups",
-			FormatType: claims.FormatCSV,
-		}}, nil
-	}
+	stubProjectShapes(services.ProjectShapes{Default: claims.FromFlat("x-groups", claims.FormatCSV, nil, nil)})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
 		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "p1", Roles: []string{"admin"}})))
@@ -249,15 +243,8 @@ func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
 		t.Error("GetClaimFailureMode called on cache hit — should not happen")
 		return "fail_closed", nil, nil
 	}
-	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
-		return []claims.Profile{{
-			ProjectID:       projectID,
-			ClaimName:       "syndra.laser.roles",
-			FormatType:      claims.FormatArray,
-			AttributeClaims: map[string]string{"syndra.laser.team": claims.AttrTeam},
-			StaticClaims:    map[string]any{"syndra.tenant": "makerspace"},
-		}}, nil
-	}
+	stubProjectShapes(services.ProjectShapes{Default: claims.FromFlat("syndra.laser.roles", claims.FormatArray,
+		map[string]string{"syndra.laser.team": claims.AttrTeam}, map[string]any{"syndra.tenant": "makerspace"})})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
 		strings.NewReader(v2Body("u1", ActionV2UserGrantRef{ProjectID: "pLaser", Roles: []string{"trained"}})))
@@ -283,21 +270,21 @@ func TestHandleActionInject_EmitsAttributeAndStaticClaims(t *testing.T) {
 	}
 }
 
-// A project's token carries the project default AND every application
-// override, because the Actions v2 payload does not say which application the
-// token is for. Each app reads its own key.
-func TestHandleActionInject_EmitsProjectDefaultAndAppOverrides(t *testing.T) {
+// A failed shape lookup still sends the roles under the built-in key (a
+// degraded token, not a locked door), and that fallback is never cached.
+func TestHandleActionInject_ShapeLookupFailureUsesBuiltinUncached(t *testing.T) {
 	origRedis, origMode := redisGetClaims, dbGetClaimFailureMode
 	resetActionDeps(t, origRedis, origMode)
 
 	redisGetClaims = func(ctx context.Context, key string) (string, error) {
-		return factsJSON("u1", "pLaser", "trained", "maintainer"), nil
+		return factsJSON("u1", "pLaser", "trained"), nil
 	}
-	dbResolveClaimProfiles = func(_ context.Context, projectID string) ([]claims.Profile, error) {
-		return []claims.Profile{
-			{ProjectID: projectID, ClaimName: "syndra.laser.roles", FormatType: claims.FormatArray},
-			{ProjectID: projectID, ApplicationID: "app_badge", ClaimName: "badge.roles", FormatType: claims.FormatCSV},
-		}, nil
+	dbResolveProjectShapes = func(context.Context, string) (services.ProjectShapes, error) {
+		return services.ProjectShapes{}, errors.New("db down")
+	}
+	redisSetKey = func(context.Context, string, string, int) error {
+		t.Error("the fallback shape was cached")
+		return nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/action/inject",
@@ -306,12 +293,8 @@ func TestHandleActionInject_EmitsProjectDefaultAndAppOverrides(t *testing.T) {
 	HandleActionInject(rr, req)
 
 	got := decodeActionResponse(t, rr)
-	if len(got.AppendClaims) != 2 {
-		t.Fatalf("expected both the default and the override key, got %v", got.AppendClaims)
-	}
-	badge, ok := claimByKey(got.AppendClaims, "badge.roles")
-	if !ok || badge.Value != "trained,maintainer" {
-		t.Fatalf("expected the override to apply its own csv format, got %v", got.AppendClaims)
+	if roles, ok := claimByKey(got.AppendClaims, "roles"); !ok || !rolesEqual(roles.Value, "trained") {
+		t.Fatalf("expected roles=[trained], got %v", got.AppendClaims)
 	}
 }
 

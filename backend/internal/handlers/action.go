@@ -1,17 +1,22 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
+	"syndra/internal/claimdebug"
 	"syndra/internal/claims"
+	"syndra/internal/services"
 )
 
 // ActionV2UserRef is the subset of the Zitadel Actions v2 user block Syndra reads.
@@ -28,7 +33,8 @@ type ActionV2UserGrantRef struct {
 }
 
 // ActionV2ApplicationRef names the client the token is for (Zitadel v4+).
-// Syndra only logs it.
+// It picks the app's own shape (ADR-003); absent or unknown, the project's
+// default applies.
 type ActionV2ApplicationRef struct {
 	ClientID string `json:"client_id"`
 }
@@ -84,14 +90,24 @@ const redisTimeout = 50 * time.Millisecond
 // Degraded behavior is resolved per-project via dbGetClaimFailureMode:
 //   - fail_closed (default): empty append_claims for that project
 //   - minimal_safe: the configured minimal claim set, wrapped in the envelope
+//
+// Debug mode (claimdebug) is asked once, after the answer is written: only the
+// one account being watched on that client is captured, by a non-blocking
+// send, so the latency path is untouched.
 func HandleActionInject(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	if r.Method != http.MethodPost {
 		jsonErrorResponse(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST is supported")
 		return
 	}
 
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
+		return
+	}
 	var req ActionV2Request
-	if err := decodeJSONLenient(r.Body, &req); err != nil {
+	if err := decodeJSONLenient(bytes.NewReader(body), &req); err != nil {
 		jsonValidationErrorResponse(w, "Invalid JSON payload", map[string]string{"body": err.Error()})
 		return
 	}
@@ -100,6 +116,21 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resp, projectID := answerAction(r.Context(), req)
+	jsonResponse(w, http.StatusOK, resp)
+
+	if claimDebug.Wants(req.Application.ClientID, req.User.ID) {
+		answer, _ := json.Marshal(resp)
+		claimDebug.Record(claimdebug.Capture{
+			At: start, Function: req.Function, ClientID: req.Application.ClientID, UserID: req.User.ID,
+			ProjectID: projectID, Grants: req.UserGrants, Request: body, Response: answer, Duration: time.Since(start),
+		})
+	}
+}
+
+// answerAction is the token's answer and the one project it is for ("" when
+// the grants name none, or several and it is refused).
+func answerAction(ctx context.Context, req ActionV2Request) (ActionV2Response, string) {
 	grantProjects := make([]string, len(req.UserGrants))
 	for i, g := range req.UserGrants {
 		grantProjects[i] = g.ProjectID
@@ -108,36 +139,39 @@ func HandleActionInject(w http.ResponseWriter, r *http.Request) {
 
 	if len(projectIDs) == 0 {
 		log.Printf("[DATA PLANE] No project grants in request for user=%s function=%s", req.User.ID, req.Function)
-		jsonResponse(w, http.StatusOK, ActionV2Response{AppendClaims: []ActionV2Claim{}})
-		return
+		return ActionV2Response{AppendClaims: []ActionV2Claim{}}, ""
 	}
 
 	if len(projectIDs) > 1 {
 		log.Printf("[DATA PLANE] Refusing cross-project claims for user=%s client=%q function=%s: the token spans projects %v. "+
 			"Syndra delivers one project per token; drop the extra :aud scopes, or give the role in the app's own project with a rule.",
 			req.User.ID, req.Application.ClientID, req.Function, projectIDs)
-		jsonResponse(w, http.StatusOK, ActionV2Response{AppendClaims: []ActionV2Claim{}})
-		return
+		return ActionV2Response{AppendClaims: []ActionV2Claim{}}, ""
 	}
 
-	jsonResponse(w, http.StatusOK, claimsForProject(r.Context(), req.User.ID, projectIDs[0]))
+	return claimsForProject(ctx, req.User.ID, projectIDs[0], req.Application.ClientID, req.Function), projectIDs[0]
 }
 
 // claimsForProject reads the compiled access facts for a (user, project) pair
-// from Redis, shapes them through the project's operator-configured claim
-// profiles, and converts the result into the Zitadel Actions v2 append_claims
-// envelope.
+// from Redis, shapes them through the signing-in app's shape (its own, else the
+// project's default), and converts the result into the Actions v2
+// append_claims envelope.
 //
-// Shaping happens HERE, on read, not at compile time. A claim-name or format
-// edit therefore lands on the very next token for every user, instead of only
-// for those whose cache happened to be rebuilt afterwards.
+// Shaping happens HERE, on read, not at compile time. An edit therefore lands
+// on the very next token for every user, instead of only for those whose
+// cache happened to be rebuilt afterwards.
 //
-// There is no key namespacing: a token carries one project, and keys are
-// validated unique within it at save time.
+// A shape that doesn't land in this function (an access-token-only shape asked
+// for userinfo, say) answers nothing, before any facts are read.
 //
-// Degraded paths (Redis miss/timeout, malformed cache, DB lookup failure) fall
-// through to degradedResponse for that project.
-func claimsForProject(ctx context.Context, userID, projectID string) ActionV2Response {
+// Degraded paths (Redis miss/timeout, malformed cache) fall through to
+// degradedResponse for that project.
+func claimsForProject(ctx context.Context, userID, projectID, clientID, function string) ActionV2Response {
+	shape := claimShapeFor(ctx, projectID, clientID)
+	if !shape.Profile.LandsIn(function) {
+		return ActionV2Response{AppendClaims: []ActionV2Claim{}}
+	}
+
 	cacheKey := fmt.Sprintf("mapping:%s:%s", userID, projectID)
 
 	redisCtx, cancel := context.WithTimeout(ctx, redisTimeout)
@@ -166,13 +200,22 @@ func claimsForProject(ctx context.Context, userID, projectID string) ActionV2Res
 	}
 
 	log.Printf("[DATA PLANE] Cache hit for key=%s", cacheKey)
-	profiles := claimProfilesRead(ctx, projectID)
-	return ActionV2Response{AppendClaims: claimsToEnvelope(claims.Shape(profiles, facts))}
+	return ActionV2Response{AppendClaims: objectToEnvelope(claims.Shape(shape.Profile, facts))}
 }
 
-// claimsToEnvelope converts a shaped claim map into the append_claims list,
-// key-sorted so a token's claim order is stable across issues (it makes
-// diffing two captured tokens during an incident possible).
+// objectToEnvelope converts a shaped token into the append_claims list in row
+// order: the token keeps the order the operator added the rows in.
+func objectToEnvelope(shaped *claims.Object) []ActionV2Claim {
+	out := make([]ActionV2Claim, 0, len(shaped.Keys()))
+	for _, k := range shaped.Keys() {
+		v, _ := shaped.Get(k)
+		out = append(out, ActionV2Claim{Key: k, Value: v})
+	}
+	return out
+}
+
+// claimsToEnvelope converts a claim map (the operator's minimal-safe set) into
+// the append_claims list, key-sorted so the order is stable across issues.
 func claimsToEnvelope(shaped map[string]interface{}) []ActionV2Claim {
 	keys := make([]string, 0, len(shaped))
 	for k := range shaped {
@@ -187,59 +230,70 @@ func claimsToEnvelope(shaped map[string]interface{}) []ActionV2Claim {
 	return out
 }
 
-// claimShapeCacheKey is the Redis read-through key for a project's resolved
-// claim profiles. Written by claimProfilesRead, deleted by the claim-shaping
-// handlers on every save so an operator's edit is visible immediately rather
+// claimShapeCacheKey is the Redis read-through key for a project's shapes
+// (services.ProjectShapes). Written by projectShapesRead, deleted by the
+// claim-shaping handlers on every save so an edit is visible at once rather
 // than up to one TTL later.
 func claimShapeCacheKey(projectID string) string {
-	return "claim_shape:" + projectID
+	return "claim_shapes:" + projectID
 }
 
-// claimProfilesRead resolves the profile set for a project — the project
-// default plus every application override on it — via a Redis read-through
+// unmatchedClients remembers which clients have been logged as using their
+// project's default, so the log says it once per client, not once per token.
+var unmatchedClients sync.Map
+
+// claimShapeFor is the shape for one sign-in: the app's own when the client id
+// maps to an app with a shape on this project, else the project's default
+// (then the built-in). An absent client id (Zitadel before v4) or one with no
+// shape of its own gets the default, which is logged once per client.
+func claimShapeFor(ctx context.Context, projectID, clientID string) services.AppShape {
+	shape, own := projectShapesRead(ctx, projectID).For(clientID)
+	if !own {
+		if _, seen := unmatchedClients.LoadOrStore(projectID+"\x00"+clientID, true); !seen {
+			if clientID == "" {
+				log.Printf("[DATA PLANE] Project %s: a request named no application.client_id; using the project's default shape", projectID)
+			} else {
+				log.Printf("[DATA PLANE] Project %s: client %q has no shape of its own; using the project's default shape", projectID, clientID)
+			}
+		}
+	}
+	return shape
+}
+
+// projectShapesRead resolves a project's shapes via a Redis read-through
 // cache, so the data plane does not hit Postgres per token.
 //
-// Every failure path returns the built-in default profile rather than an empty
-// set: emitting the roles under the default key is a degraded token, emitting
-// nothing is a locked door.
-func claimProfilesRead(ctx context.Context, projectID string) []claims.Profile {
-	fallback := []claims.Profile{{
-		ProjectID:  projectID,
-		ClaimName:  claims.DefaultClaimName,
-		FormatType: claims.DefaultFormat,
-	}}
+// A failed read returns the built-in default rather than nothing: the roles
+// under the default key is a degraded token, no claims is a locked door. That
+// fallback is never cached.
+func projectShapesRead(ctx context.Context, projectID string) services.ProjectShapes {
+	fallback := services.ProjectShapes{Default: claims.Builtin(), DefaultSource: services.SourceBuiltin}
 
 	redisCtx, cancel := context.WithTimeout(ctx, redisTimeout)
 	defer cancel()
 
 	if raw, err := redisGetKey(redisCtx, claimShapeCacheKey(projectID)); err == nil {
-		var cached []claims.Profile
-		if jerr := json.Unmarshal([]byte(raw), &cached); jerr == nil {
-			if len(cached) == 0 {
-				return fallback
-			}
+		var cached services.ProjectShapes
+		if jerr := json.Unmarshal([]byte(raw), &cached); jerr == nil && cached.Default.Lands != "" {
 			return cached
 		}
-		log.Printf("[DATA PLANE] Malformed claim shape cache for project=%s: %v", projectID, err)
+		log.Printf("[DATA PLANE] Malformed claim shape cache for project=%s", projectID)
 	}
 
-	profiles, err := dbResolveClaimProfiles(ctx, projectID)
+	shapes, err := dbResolveProjectShapes(ctx, projectID)
 	if err != nil {
-		log.Printf("[DATA PLANE] Claim profile lookup failed for project=%s, using default shape: %v", projectID, err)
+		log.Printf("[DATA PLANE] Claim shape lookup failed for project=%s, using the built-in shape: %v", projectID, err)
 		return fallback
 	}
-	if len(profiles) == 0 {
-		profiles = fallback
-	}
 
-	if encoded, jerr := json.Marshal(profiles); jerr == nil {
+	if encoded, jerr := json.Marshal(shapes); jerr == nil {
 		writeCtx, writeCancel := context.WithTimeout(context.WithoutCancel(ctx), redisTimeout)
 		defer writeCancel()
 		if serr := redisSetKey(writeCtx, claimShapeCacheKey(projectID), string(encoded), claimFailureModeCacheTTL()); serr != nil {
 			log.Printf("[DATA PLANE] Claim shape cache write failed for project=%s: %v", projectID, serr)
 		}
 	}
-	return profiles
+	return shapes
 }
 
 // claimFailureModeCacheTTL returns the Redis TTL for the read-through cache
