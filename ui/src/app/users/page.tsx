@@ -396,7 +396,7 @@ export default function PeoplePage() {
         </div>
       )}
 
-      <Card>
+      <Card stale={readState.current === false}>
         <CardColumns>
           {bulkMode && <span className="w-11 shrink-0 desktop:w-[26px]" />}
           <span className="w-[250px] min-w-[180px]">
@@ -539,8 +539,9 @@ function PersonRow({
   const selected = selection.isSelected(entry.user.id);
   const touch = useIsTouch();
   // A departed account still belongs in the list — it is often exactly who you
-  // came looking for — but it reads at reduced contrast so a live person is
-  // never mistaken for one who left.
+  // came looking for — and its name steps down to muted so a live person is
+  // never mistaken for one who left. A shade, never an opacity: a dimmed row
+  // takes its quiet lines under 4.5:1 (A-09 §2).
   const departed = isDeparted(entry.user.status);
   // Who they are, in the words they hold: title, then team. The email is only
   // the fallback for someone with no title, never a second line of its own.
@@ -569,12 +570,14 @@ function PersonRow({
             <Link
               href={`/users/${entry.user.id}`}
               onClick={(event) => event.stopPropagation()}
-              className="block truncate text-[15px] font-semibold link-hover"
+              className={`block truncate text-[15px] font-semibold link-hover ${departed ? "text-muted" : ""}`}
             >
               {entry.user.name}
             </Link>
           ) : (
-            <span className="block truncate text-[15px] font-semibold">{entry.user.name}</span>
+            <span className={`block truncate text-[15px] font-semibold ${departed ? "text-muted" : ""}`}>
+              {entry.user.name}
+            </span>
           )}
           <span className="block truncate text-[12.5px] text-faint" title={subtitle}>
             {subtitle}
@@ -622,9 +625,7 @@ function PersonRow({
   // anything about them needs doing — plus the sentence explaining why they
   // are in the list. Team and bundles fold away: both are one tap deeper, on
   // the person's own page, and neither is what this screen is scanned for.
-  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px] ${
-    departed ? "opacity-60" : ""
-  }`;
+  const shared = `row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]`;
 
   if (!bulkMode) {
     return (
