@@ -16,6 +16,9 @@ const (
 	KindEventsMissing = "SIGNIN_EVENTS_MISSING" // subject: "-"
 	KindConfigDrift   = "CONFIG_DRIFT"          // subject: "R1:endpoint", "R5:<app id>", …
 	KindCannotCheck   = "CANNOT_CHECK"          // subject: the check that could not read, "R1"
+	KindProbeL1       = "PROBE_L1"              // subject: why it failed, "dns", "claims", …
+	KindProbeL2       = "PROBE_L2"              // subject: why it failed, "token", "claims", …
+	KindCertExpiring  = "CERT_EXPIRING"         // subject: "L1"; sample.not_after
 )
 
 // ResolveAfter is how many clean observations in a row settle a finding. A
@@ -106,7 +109,7 @@ func Observe(checked []Checked) []Observation {
 // not read, and the detector going blind.
 func FindingSeverity(kind string, sample map[string]any) Severity {
 	switch kind {
-	case KindNotCalled, KindConfigDrift:
+	case KindNotCalled, KindConfigDrift, KindProbeL1, KindProbeL2:
 		return Hard
 	case KindNotServed:
 		if o, _ := sample["outcome"].(string); Outcome(o).Severity() == Hard {
@@ -120,6 +123,9 @@ func FindingSeverity(kind string, sample map[string]any) Severity {
 // FindingReason names an open finding in /healthz/claims without any id: the
 // kind, and for a configuration finding its check ("CONFIG_DRIFT:R2").
 func FindingReason(kind, subject string) string {
+	if kind == KindProbeL1 || kind == KindProbeL2 {
+		return kind + ":" + subject // a failure class, never an id
+	}
 	if kind == KindConfigDrift || kind == KindCannotCheck {
 		check, _, _ := strings.Cut(subject, ":")
 		return kind + ":" + check

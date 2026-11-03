@@ -34,3 +34,11 @@ Zitadel calls Syndra's Actions v2 target on every token, with a 3s timeout and i
 
 - The keyring is part of the snapshot: the write side reads the claims target's key from Zitadel every minute (and at once, at most every 10s, after a call matches no key), publishes `claims:keyring` `{current, previous until +15 min}` and moves `claims:gen`. The data plane verifies with current, then previous, then the env key, which stays the bootstrap and the fallback. Each call records which (`key_slot`: current, previous, env). A denied read leaves the env key verifying and raises `CANNOT_CHECK`.
 - Detection reads, never writes Zitadel: the correlator (sign-ins against the recorder's per-(person, client) spans), the reconciler (`internal/claimcheck`, pure over recorded JSON), and the dead-man ping share one findings table (`claim_findings`, migration 000074). `/healthz/claims` reads the open findings from memory, so the data plane's door still never touches Postgres.
+
+### As built (S6 and S7, 3 Nov 2026)
+
+- The data plane is its own process (`cmd/claims`, the `claims` container on `:8090`), built from a narrow Dockerfile, so a backend deploy does not recreate it. The route's code lives in `claimserve` (`Door`), and the backend's fallback on `:8080` serves the same code with its own hooks.
+- The claims process has no Postgres: its telemetry, its calls (for the correlator) and its requests (recompile, keyring read, debug capture) go to Redis, and the backend folds and acts on them. The backend keeps its own snapshot for the detectors.
+- The L1 probe exercises the whole public path every minute with a canary that exists only in Redis (published and compiled by the same code as everyone), counted apart from every SLI. L2, a real Zitadel token, is built and stays off until the owner creates its canary.
+- Not yet: a Redis ACL user for the claims process.
+

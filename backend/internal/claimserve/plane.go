@@ -266,6 +266,11 @@ func (p *Plane) load(ctx context.Context, gen int64) (*Config, error) {
 		cfg.Keys = Keyring{}
 		log.Printf("[DATA PLANE] the signing keyring in Redis is unreadable; verifying with the env key alone")
 	}
+	if dw, err := p.rdb.Get(ctx, DebugKey).Result(); err == nil {
+		_ = json.Unmarshal([]byte(dw), &cfg.Debug) // unreadable: nothing is watched
+	} else if !errors.Is(err, redis.Nil) {
+		return nil, fmt.Errorf("read %s: %w", DebugKey, err)
+	}
 	if len(ids) == 0 {
 		return cfg, nil
 	}
@@ -344,6 +349,9 @@ func (p *Plane) Status() Status {
 	st := Status{Failures: p.failures.Load(), Reloads: p.reloads.Load(), LKG: p.lkg.len()}
 	if cfg := p.cfg.Load(); cfg != nil {
 		st.Loaded, st.Gen, st.Projects = true, cfg.Gen, len(cfg.Projects)
+		if _, ok := cfg.Projects[CanaryProjectID]; ok {
+			st.Projects-- // the probe's, not an app's
+		}
 		s := int64(now.Sub(cfg.BuiltAt).Seconds())
 		st.BuiltAgo = &s
 	}

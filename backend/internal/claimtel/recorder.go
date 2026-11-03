@@ -228,6 +228,10 @@ func (r *Recorder) Window(userID, clientID string, from, to time.Time) (worst ma
 	if ps == nil {
 		return nil, false
 	}
+	return ps.window(from, to)
+}
+
+func (ps *pairState) window(from, to time.Time) (worst map[string]Outcome, overflowed bool) {
 	f, t := from.UnixMilli(), to.UnixMilli()
 	names := [...]string{"", FnPreAccessToken, FnPreUserinfo}
 	worst = map[string]Outcome{}
@@ -244,6 +248,30 @@ func (r *Recorder) Window(userID, clientID string, from, to time.Time) (worst ma
 		}
 	}
 	return worst, ps.n == spansPerPair && oldest > f
+}
+
+// CallRecord is one call as the claims process relays it to the backend's
+// correlator (S7): through which function, when, and what it came to.
+type CallRecord struct {
+	At       time.Time
+	Function string
+	Outcome  Outcome
+}
+
+// WindowOf is Window over relayed calls, oldest first, folded into spans by
+// the same rules the recorder uses. truncated says older calls were dropped
+// from the relay, so a window reaching before the first one cannot say "not
+// called".
+func WindowOf(calls []CallRecord, truncated bool, from, to time.Time) (map[string]Outcome, bool) {
+	if len(calls) == 0 {
+		return nil, truncated
+	}
+	var ps pairState
+	for _, c := range calls {
+		ps.add(c.At, c.Function, c.Outcome)
+	}
+	worst, overflowed := ps.window(from, to)
+	return worst, overflowed || (truncated && calls[0].At.After(from))
 }
 
 // FingerprintSeen is a payload shape this process had not seen.
@@ -296,6 +324,7 @@ type Recorder struct {
 	shards [shards]shard
 
 	recent     [recentMinutes]minuteTally
+	probes     [len(Outcomes)]atomic.Int64
 	lastServed atomic.Int64 // unix nanoseconds
 	lastCalled atomic.Int64 // unix nanoseconds of the last call that named a person
 
@@ -335,6 +364,10 @@ func (r *Recorder) Record(c Call) {
 	}
 	if c.At.IsZero() {
 		c.At = r.now()
+	}
+	if c.Probe {
+		r.probes[outcomeIndex[c.Outcome]].Add(1)
+		return
 	}
 	key := Key{
 		Bucket: c.At.UTC().Truncate(BucketWidth), ProjectID: orNone(c.ProjectID), ClientID: orNone(c.ClientID),
@@ -444,6 +477,18 @@ func (r *Recorder) Recent(minutes int) map[Outcome]int64 {
 					out[o] += n
 				}
 			}
+		}
+	}
+	return out
+}
+
+// Probes is the L1 canary's calls by outcome since this process started:
+// labelled probe, kept out of every SLI.
+func (r *Recorder) Probes() map[Outcome]int64 {
+	out := map[Outcome]int64{}
+	for i, o := range Outcomes {
+		if n := r.probes[i].Load(); n > 0 {
+			out[o] = n
 		}
 	}
 	return out

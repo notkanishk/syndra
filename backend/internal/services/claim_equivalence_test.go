@@ -135,7 +135,7 @@ func TestSnapshotAnswerEqualsThePreview(t *testing.T) {
 			t.Fatal(err)
 		}
 		raw, _ := json.Marshal(facts)
-		r.HSet(claimserve.FactsKey("u1"), "pEq", string(raw))
+		r.SetField(claimserve.FactsKey("u1"), "pEq", string(raw))
 		plane := claimserve.New(r, nil)
 		if err := plane.Poll(ctx); err != nil {
 			t.Fatal(err)

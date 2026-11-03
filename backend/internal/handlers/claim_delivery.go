@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,27 +24,6 @@ var claimDelivery = claimtel.New(time.Now)
 // recordClaimCall is where a finished call goes. Tests swap it to see the
 // outcome a request came to.
 var recordClaimCall = claimDelivery.Record
-
-// withClaimDelivery wraps the WHOLE data-plane route, signature check
-// included, so every call is counted exactly once whatever stops it: a
-// refused signature, an undecodable body, a degraded answer, or a panic. A
-// panic is answered 500 here and counted as one; Zitadel issues the token
-// without Syndra's claims either way, and the count is what makes it loud.
-func withClaimDelivery(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		call := &claimtel.Call{Outcome: claimtel.BadRequest, At: time.Now()}
-		defer func() {
-			if rec := recover(); rec != nil {
-				call.Outcome = claimtel.Panic
-				log.Printf("[PANIC] data plane %s %s: %v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
-				jsonErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Something went wrong handling that request.")
-			}
-			call.Elapsed = time.Since(call.At)
-			recordClaimCall(*call)
-		}()
-		next(w, r.WithContext(claimtel.With(r.Context(), call)))
-	}
-}
 
 // FlushClaimDelivery folds the counters into Postgres. Run every minute; a
 // failed flush keeps them for the next one.
@@ -150,28 +128,26 @@ func (q *repairQueue) stats() repairStats {
 // of problem, and ages. No ids, no names, nothing about a person.
 // ---------------------------------------------------------------------------
 
-// healthWindowMinutes is how far back an outcome counts as "now".
-const healthWindowMinutes = 10
-
 // warmStaleAfter is past one missed 12h warm.
 const warmStaleAfter = 13 * time.Hour
 
+// claimsHealth is the data plane's half (claimserve.Health, shared with the
+// claims container's own /healthz/claims) and the detectors' half.
 type claimsHealth struct {
-	Status          string           `json:"status"` // ok | degraded | failing
-	Reasons         []string         `json:"reasons"`
-	Calls10m        int64            `json:"calls_10m"`
-	Outcomes10m     map[string]int64 `json:"outcomes_10m"`
-	LastServedAgeS  *int64           `json:"last_served_age_s"`
-	Redis           string           `json:"redis"`
-	WarmAgeS        *int64           `json:"warm_age_s"`
-	WarmRefreshed   *int             `json:"warm_refreshed,omitempty"`
-	WarmOf          *int             `json:"warm_of,omitempty"`
-	WarmFailed      *int             `json:"warm_failed,omitempty"`
-	TelemetryFailed int              `json:"telemetry_flush_failures"`
-	BackgroundPanic int64            `json:"background_panics"`
-	// Snapshot is the data plane's config: its generation, how long since
-	// Redis last confirmed it current, and the last-known-good copy's size.
-	Snapshot claimserve.Status `json:"snapshot"`
+	claimserve.Health
+	WarmAgeS        *int64 `json:"warm_age_s"`
+	WarmRefreshed   *int   `json:"warm_refreshed,omitempty"`
+	WarmOf          *int   `json:"warm_of,omitempty"`
+	WarmFailed      *int   `json:"warm_failed,omitempty"`
+	TelemetryFailed int    `json:"telemetry_flush_failures"`
+	BackgroundPanic int64  `json:"background_panics"`
+	// ProbeL1 is the last L1 probe: pass, fail, or off (no SYNDRA_EXTERNAL_URL)
+	// and not_run before the first. ProbeL2 the same for the canary token.
+	ProbeL1      string `json:"probe_l1"`
+	ProbeL1AgeS  *int64 `json:"probe_l1_age_s"`
+	CertDaysLeft *int   `json:"cert_days_left,omitempty"`
+	ProbeL2      string `json:"probe_l2"`
+	ProbeL2AgeS  *int64 `json:"probe_l2_age_s"`
 	// Notes are worth knowing and change no status: no external alert is
 	// configured, or its last ping did not get through.
 	Notes []string `json:"notes"`
@@ -179,17 +155,7 @@ type claimsHealth struct {
 	CheckingSince time.Time `json:"checking_since"`
 }
 
-// snapshotStaleAfter is ten missed polls: the snapshot still answers, but an
-// edit made since may not have reached it.
-const snapshotStaleAfter = 10 * time.Second
-
-func ageS(now, t time.Time) *int64 {
-	if t.IsZero() {
-		return nil
-	}
-	s := int64(now.Sub(t).Seconds())
-	return &s
-}
+func ageS(now, t time.Time) *int64 { return claimserve.AgeS(now, t) }
 
 func handleClaimsHealth(w http.ResponseWriter, r *http.Request) {
 	h, status := claimsHealthNow(r.Context())
@@ -198,31 +164,25 @@ func handleClaimsHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // claimsHealthNow is /healthz/claims' answer and its status code. It reads
-// memory and pings Redis; never Postgres (it is served on the data plane's
-// door). Open findings come from the detectors' in-memory copy.
+// memory and Redis, never Postgres: this process's calls and the claims
+// container's (relayed through Redis), the snapshot, the detectors' open
+// findings (an in-memory copy) and the probes.
 func claimsHealthNow(ctx context.Context) (claimsHealth, int) {
 	now := time.Now()
-	h := claimsHealth{Reasons: []string{}, Outcomes10m: map[string]int64{}, Redis: "ok", Notes: deadmanNotes(), CheckingSince: claimCorrelator.Since().UTC()}
-	hard, soft := []string{}, []string{}
-
-	for o, n := range claimDelivery.Recent(healthWindowMinutes) {
-		h.Calls10m += n
-		h.Outcomes10m[string(o)] = n
-		switch o.Severity() {
-		case claimtel.Hard:
-			hard = append(hard, "OUTCOME:"+string(o))
-		case claimtel.Soft:
-			soft = append(soft, "OUTCOME:"+string(o))
+	recent, lastServed := claimDelivery.Recent(claimserve.HealthWindowMinutes), claimDelivery.LastServed()
+	pingCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	pingErr := redisPing(pingCtx)
+	if rr := claimRelayRedis(); rr != nil && pingErr == nil {
+		if remote, err := claimserve.RemoteRecent(pingCtx, rr, now, claimserve.HealthWindowMinutes); err == nil {
+			recent = claimserve.MergeRecent(recent, remote)
+		}
+		if served, _, err := claimserve.RemoteLast(pingCtx, rr); err == nil && served.After(lastServed) {
+			lastServed = served
 		}
 	}
-	h.LastServedAgeS = ageS(now, claimDelivery.LastServed())
-
-	pingCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-	if err := redisPing(pingCtx); err != nil {
-		h.Redis = "down"
-		hard = append(hard, "REDIS_DOWN")
-	}
 	cancel()
+	base, hard, soft := claimserve.Assess(now, recent, lastServed, pingErr, claimPlane.Status())
+	h := claimsHealth{Health: base, Notes: deadmanNotes(), CheckingSince: claimCorrelator.Since().UTC()}
 
 	if wr, ok := cacheLastWarm(); ok {
 		h.WarmAgeS = ageS(now, wr.At)
@@ -244,44 +204,16 @@ func claimsHealthNow(ctx context.Context) (claimsHealth, int) {
 	if h.BackgroundPanic = backgroundPanics(); h.BackgroundPanic > 0 {
 		soft = append(soft, "BACKGROUND_PANIC")
 	}
-	h.Snapshot = claimPlane.Status()
-	switch {
-	case !h.Snapshot.Loaded:
-		hard = append(hard, "SNAPSHOT_NOT_LOADED") // every call answers fail closed
-	case h.Snapshot.Projects == 0:
-		soft = append(soft, "SNAPSHOT_EMPTY")
-	}
-	if c := h.Snapshot.CheckedAgo; h.Snapshot.Loaded && (c == nil || time.Duration(*c)*time.Second > snapshotStaleAfter) {
-		soft = append(soft, "SNAPSHOT_STALE")
-	}
+	hard, soft = probeHealth(now, &h, hard, soft)
 
-	seen := map[string]bool{}
 	for _, f := range openClaimFindings() {
-		reason := claimtel.FindingReason(f.Kind, f.Subject)
-		if seen[reason] {
-			continue
-		}
-		seen[reason] = true
 		if claimtel.FindingSeverity(f.Kind, f.Sample) == claimtel.Hard {
-			hard = append(hard, reason)
+			hard = append(hard, claimtel.FindingReason(f.Kind, f.Subject))
 		} else {
-			soft = append(soft, reason)
+			soft = append(soft, claimtel.FindingReason(f.Kind, f.Subject))
 		}
 	}
-
-	sort.Strings(hard)
-	sort.Strings(soft)
-	h.Reasons = append(hard, soft...)
-	status := http.StatusOK
-	switch {
-	case len(hard) > 0:
-		h.Status, status = "failing", http.StatusServiceUnavailable
-	case len(soft) > 0:
-		h.Status = "degraded"
-	default:
-		h.Status = "ok"
-	}
-	return h, status
+	return h, h.Verdict(hard, soft)
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +439,9 @@ func handleClaimDelivery(w http.ResponseWriter, r *http.Request) {
 			"flush":        claimDelivery.Status(),
 			"active_pairs": claimDelivery.ActivePairs(),
 			"repair":       claimRepair.stats(),
+			"probe":        claimDelivery.Probes(),
 		},
+		"probes": probesSnapshot(),
 	})
 }
 
