@@ -5,24 +5,29 @@ import { useRef, useState } from "react";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
+import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CheckTrail } from "@/components/ui/CheckTrail";
 import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
+import { Crossfade } from "@/components/ui/Crossfade";
 import { Select } from "@/components/ui/Select";
 import { Ticks, TokenBlock } from "@/components/ui/TokenBlock";
+import { Unfold } from "@/components/ui/Unfold";
 import { clockOf, diffLines, tokenLines } from "@/lib/claims";
 import { selectContents, useClipboardAvailable } from "@/lib/clipboard";
 import type { CatalogUser } from "@/lib/queries/useCatalogUsers";
 import type { Explanation, Preview } from "@/lib/queries/useClaimShape";
 
-import { check5, checkWords, type CheckContext } from "./claim-words";
+import { check5, checkWords, verdictOf, type CheckContext } from "./claim-words";
 
 /**
- * The preview (A-11, A-14 §1): the five checks for one person, ending in the
- * token Zitadel receives. With a draft, the checks run on the draft and the
- * token marks what leaves (−) and joins (+). Every word is read off the
- * backend's explain step, which runs the one shaper.
+ * The preview (A-11, A-14 §1, A-15 §5): "Preview for <person>", one verdict
+ * line, the five checks one step away, then the token. When every check
+ * passes the trail waits behind Show the checks; a failure or a warning opens
+ * it by itself, compact, so only what didn't pass carries its detail. With a
+ * draft the checks run on the draft and the token marks what leaves (−) and
+ * joins (+). Every word is read off the backend's explain step.
  */
 export function ClaimPreview({
   preview,
@@ -33,7 +38,6 @@ export function ClaimPreview({
   personId,
   onPerson,
   ctx,
-  lede,
 }: {
   preview?: Preview;
   isLoading: boolean;
@@ -43,7 +47,6 @@ export function ClaimPreview({
   personId: string;
   onPerson: (id: string) => void;
   ctx: CheckContext;
-  lede: string;
 }) {
   const one = preview?.people[0];
   const shown: Explanation | undefined = one?.draft ?? one?.now;
@@ -54,21 +57,23 @@ export function ClaimPreview({
   const ref = useRef<HTMLDivElement>(null);
 
   const lines = asDraft ? diffLines(one!.now.token, one!.draft!.token) : tokenLines(shown?.token);
-  const changed = new Set(lines.filter((l) => l.mark !== " ").map((l) => l.key)).size;
   const c5 = shown ? check5(shown, ctx, asDraft) : null;
-  const note = asDraft
-    ? changed === 0
-      ? `Nothing changes for ${ctx.person} yet.`
-      : `${changed === 1 ? "One difference" : `${changed} differences`} for ${ctx.person}. A line marked − leaves the token; a line marked + joins it.`
-    : undefined;
+  const checks = shown && c5 ? [...checkWords(shown, ctx), c5] : [];
+  const verdict = verdictOf(checks, asDraft);
+
+  // Shown on demand it is the whole trail; opened by a failure it is compact.
+  // A choice holds until whether anything is wrong changes, then the page decides again.
+  const bad = verdict.tone !== "healthy";
+  const [choice, setChoice] = useState<{ bad: boolean; open: boolean } | null>(null);
+  const chosen = choice?.bad === bad ? choice.open : null;
+  const open = chosen ?? bad;
+
+  const foot = asDraft ? draftFoot(lines, preview, shown, ctx.person) : c5?.foot;
 
   return (
     <Card className="w-full">
-      <div className="px-[22px] pb-3.5 pt-5">
-        <h2 className="type-card-title">Preview</h2>
-        <p className="mt-1 text-[14px] leading-[1.5] text-faint">{lede}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2.5 px-[22px] pb-[18px]">
+      <div className="flex flex-wrap items-center gap-2.5 px-[22px] pb-3.5 pt-[18px]">
+        <h2 className="type-card-title m-0">Preview</h2>
         <span className="text-[13.5px] text-faint">for</span>
         <span className="flex items-center gap-2 rounded-pill border border-line-strong py-1 pl-1.5 pr-3">
           <Avatar name={ctx.person} size="row" />
@@ -76,7 +81,7 @@ export function ClaimPreview({
             aria-label="Preview for"
             value={personId}
             onChange={(e) => onPerson(e.target.value)}
-            className="w-[180px] border-0 px-1 py-0 text-[14px]"
+            className="w-[160px] border-0 px-1 py-0 text-[14px]"
           >
             {people.map((u) => (
               <option key={u.id} value={u.id}>
@@ -85,53 +90,91 @@ export function ClaimPreview({
             ))}
           </Select>
         </span>
-        <span className="flex-1" />
-        {shown && <span className="text-[12.5px] text-faint">Checked {clockOf(shown.read_at)}</span>}
-        <Button size="sm" onClick={onRetry}>
-          Check again
-        </Button>
+        <span className="ml-auto flex items-center gap-2.5">
+          {shown && <span className="text-[12.5px] text-faint">Checked {clockOf(shown.read_at)}</span>}
+          <Button size="sm" onClick={onRetry}>
+            Check again
+          </Button>
+        </span>
       </div>
-      <div className="px-[22px] pb-5">
-        <ReadGate loading={isLoading && !preview} skeleton={<RowSkeleton rows={4} avatar={false} label="Running the checks" />}>
-          {error && !preview ? (
+      <ReadGate
+        loading={isLoading && !preview}
+        skeleton={
+          <div className="px-[22px] pb-5">
+            <RowSkeleton rows={3} avatar={false} label="Running the checks" />
+          </div>
+        }
+      >
+        {error && !preview ? (
+          <div className="px-[22px] pb-5">
             <ErrorState title="Couldn't run the checks." error={error} onRetry={onRetry} />
-          ) : shown && c5 ? (
-            <CheckTrail
-              checks={[
-                ...checkWords(shown, ctx),
-                {
-                  tone: c5.tone,
-                  sentence: c5.sentence,
-                  children: (
-                    <div ref={ref} className="flex flex-col gap-2.5">
-                      <TokenBlock lines={lines} empty={<span className="text-muted">{"{}"}</span>} />
-                      {shown.would_receive && (
-                        <TokenBlock lines={tokenLines(shown.would_receive)} comment="once their claims are built" />
-                      )}
-                      <p className="max-w-[62ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
-                        <Ticks text={[note, ...(c5.faint ?? [])].filter(Boolean).join(" ")} />
-                      </p>
-                      <span>
-                        <Button
-                          size="sm"
-                          onClick={async () => {
-                            const text = JSON.stringify(shown.token ?? {}, null, 2);
-                            if (canCopy) await navigator.clipboard.writeText(text);
-                            else selectContents(ref.current);
-                            confirmFor(setCopied);
-                          }}
-                        >
-                          <CopiedSeat done={copied} idle={canCopy ? "Copy preview" : "Select preview"} word={canCopy ? "Copied" : "Selected"} dot={canCopy} />
-                        </Button>
-                      </span>
-                    </div>
-                  ),
-                },
-              ]}
-            />
-          ) : null}
-        </ReadGate>
-      </div>
+          </div>
+        ) : shown ? (
+          <>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-[22px] pb-3">
+              <StatusDot tone={verdict.tone} />
+              <Crossfade id={verdict.text} inline>
+                <span className="text-[14.5px] font-semibold text-ink">{verdict.text}</span>
+              </Crossfade>
+              <span className="-ml-1 inline-flex">
+                <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => setChoice({ bad, open: !open })}>
+                  {open ? "Hide the checks" : "Show the checks"}
+                </Button>
+              </span>
+            </div>
+            <Unfold open={open}>
+              <div className="px-[22px] pb-4 pt-0.5">
+                <CheckTrail checks={checks} compact={chosen === null} />
+              </div>
+            </Unfold>
+            <div ref={ref} className="flex flex-col gap-2.5 px-[22px]">
+              <TokenBlock lines={lines} empty={<span className="text-muted">{"{}"}</span>} className="[overflow-wrap:anywhere]" />
+              {shown.would_receive && <TokenBlock lines={tokenLines(shown.would_receive)} comment="once their claims are built" />}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-[22px] pb-5 pt-2.5">
+              <span className="min-w-0 flex-[1_1_260px] text-[13px] leading-[1.55] text-faint [text-wrap:pretty]">
+                {foot && <Ticks text={foot} />}
+              </span>
+              <span className="ml-auto inline-flex flex-none whitespace-nowrap">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const text = JSON.stringify(shown.token ?? {}, null, 2);
+                    if (canCopy) await navigator.clipboard.writeText(text);
+                    else selectContents(ref.current);
+                    confirmFor(setCopied);
+                  }}
+                >
+                  <CopiedSeat done={copied} idle={canCopy ? "Copy preview" : "Select preview"} word={canCopy ? "Copied" : "Selected"} dot={canCopy} />
+                </Button>
+              </span>
+            </div>
+          </>
+        ) : null}
+      </ReadGate>
     </Card>
   );
+}
+
+/**
+ * The faint line under a draft's token: "One difference for Ada Lovelace:
+ * `staff` becomes `netbird-staff`, in both claims." when the draft's one change
+ * is a rename of a role they hold; otherwise how many lines differ.
+ */
+function draftFoot(
+  lines: { key: string; mark: string }[],
+  preview: Preview | undefined,
+  shown: Explanation | undefined,
+  person: string,
+): string {
+  const keys = new Set(lines.filter((l) => l.mark !== " ").map((l) => l.key)).size;
+  if (keys === 0) return `Nothing changes for ${person} yet.`;
+  const held = (shown?.checks[1]?.facts?.roles as string[] | undefined) ?? [];
+  const changes = preview?.changes ?? [];
+  const rename = changes.length === 1 && changes[0].kind === "rename" && changes[0].role && held.includes(changes[0].role) ? changes[0] : null;
+  if (rename) {
+    const where = keys === 1 ? "" : keys === 2 ? ", in both claims" : `, in all ${keys} claims`;
+    return `One difference for ${person}: \`${rename.from}\` becomes \`${rename.to}\`${where}.`;
+  }
+  return `${keys === 1 ? "One difference" : `${keys} differences`} for ${person}.`;
 }

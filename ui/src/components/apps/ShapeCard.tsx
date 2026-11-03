@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { RolePicker } from "@/components/bundles/RolePicker";
 import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
@@ -15,15 +15,16 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { RoleWordsTable, type RoleWordRow } from "@/components/ui/RoleWordsTable";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Ticks } from "@/components/ui/TokenBlock";
+import { Unfold } from "@/components/ui/Unfold";
 import {
   ATTRIBUTE_LABEL,
-  BASIC_ATTRIBUTES,
   breakingLine,
-  changesSince,
-  isAdvancedRow,
+  CLAIM_ROWS,
+  foldNote,
+  fromTemplate,
   KIND_LABEL,
   LANDS_LABEL,
-  pathKey,
+  landsIn,
   READS_LABEL,
   roleWords,
   rowProblems,
@@ -31,8 +32,10 @@ import {
   sentAs,
   setRole,
   sharedWordOwner,
+  summaryLines,
   TEMPLATE_CAPTION,
   wordOf,
+  type SummaryLine,
 } from "@/lib/claims";
 import { formatShortDate } from "@/lib/format";
 import type {
@@ -48,10 +51,13 @@ import { ShapeChooser } from "./ShapeChooser";
 import type { ShapeDraft } from "./shape-draft";
 
 /**
- * "What <app> is told" (A-14 §1–5): the template line, the roles it sees in
- * its words, one row per claim, where they land, and Save. An app with no
- * shape of its own shows what its project's default sends now, and the offer
- * on top: start from a template, or copy another app's shape.
+ * "What <app> is told" (A-14 §1–5, laid out by A-15 §1–4): the summary, one
+ * line per top-level claim in words, then the roles it sees in its words, the
+ * one thing edited most. In Advanced only, Roles added later and one folded
+ * line, Claim rows, holding every row's form, Add a claim and Lands in. Save
+ * unfolds with the first edit. An app with no shape of its own shows what its
+ * project's default sends now, and the offer on top: start from a template,
+ * or copy another app's shape.
  */
 export function ShapeCard({
   shape,
@@ -61,7 +67,7 @@ export function ShapeCard({
   person,
   preview,
   previewRowError,
-  checkOneFailsReads,
+  unreached,
   templates,
   advanced,
   projectName,
@@ -78,7 +84,8 @@ export function ShapeCard({
   preview?: Preview;
   /** The backend refused the draft at this row (400 VALIDATION_FAILED details.row). */
   previewRowError?: { row: number; message: string };
-  checkOneFailsReads: boolean;
+  /** Check 1 fails because the claims don't reach where the app reads (its `reads` key). */
+  unreached?: string;
   templates: ClaimTemplate[];
   advanced: boolean;
   projectName: string;
@@ -91,11 +98,18 @@ export function ShapeCard({
   return (
     <Card className="w-full">
       <div className="px-[22px] pb-3 pt-5">
-        <h2 className="type-card-title">What {app} is told</h2>
-        {isNew && <NewLede shape={shape} project={projectName} />}
+        <h2 className="type-card-title m-0">What {app} is told</h2>
       </div>
       {isNew ? (
-        <NewAppOffer shape={shape} draft={draft} setDraft={setDraft} token={token} person={person} templates={templates} project={projectName} onOpenTemplate={onOpenTemplate} />
+        <>
+          <Summary lines={summaryLines(shape.profile, shape.project_roles, { app, project: projectName })} unreached={unreached}>
+            <span className="text-[13.5px] leading-[1.5] text-faint">In {landsIn(shape.profile.lands)}.</span>
+            <ArrowLink href={`/projects/${shape.application.project_id}#claims-default`} className="text-[13.5px]">
+              {projectName}&rsquo;s default
+            </ArrowLink>
+          </Summary>
+          <NewAppOffer shape={shape} draft={draft} setDraft={setDraft} templates={templates} project={projectName} onOpenTemplate={onOpenTemplate} />
+        </>
       ) : (
         <ShapeForm
           shape={shape}
@@ -105,7 +119,7 @@ export function ShapeCard({
           person={person}
           preview={preview}
           previewRowError={previewRowError}
-          checkOneFailsReads={checkOneFailsReads}
+          unreached={unreached}
           templates={templates}
           advanced={advanced}
           project={projectName}
@@ -118,21 +132,39 @@ export function ShapeCard({
   );
 }
 
-function NewLede({ shape, project }: { shape: AppClaimShape; project: string }) {
-  const app = shape.application.name;
+/**
+ * The summary (A-15 §2): the key in mono in a 150px seat, what it carries in
+ * words beside it (under it, when they don't fit), then one faint line of
+ * where it lands and where it came from. A roles claim sent as text keeps its
+ * warning here, and a check 1 that fails says so, so neither hides behind a fold.
+ */
+function Summary({ lines, unreached, children }: { lines: SummaryLine[]; unreached?: string; children: ReactNode }) {
   return (
-    <p className="mt-1 max-w-[64ch] text-[14px] leading-[1.5] text-faint [text-wrap:pretty]">
-      {shape.source === "builtin" ? (
-        <Ticks
-          text={`${app} uses ${project}'s default shape. Nobody has set one for ${project}, so it's Syndra's built-in: \`roles\`, every role in Syndra's words, as a list, in the access token and userinfo.`}
-        />
+    <div className="flex flex-col gap-2 px-[22px] pb-4">
+      {lines.length === 0 ? (
+        <span className="text-[14.5px] leading-[1.5] text-ink">Nothing of its own. Zitadel&rsquo;s standard claims do the work.</span>
       ) : (
-        `${app} uses ${project}'s default shape, set on ${project}'s page.`
-      )}{" "}
-      <ArrowLink href={`/projects/${shape.application.project_id}#claims-default`} className="text-[14px]">
-        {project}&rsquo;s default
-      </ArrowLink>
-    </p>
+        lines.map((l) => (
+          <div key={l.key} className="flex flex-col gap-0.5">
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+              <span className="min-w-0 flex-[0_0_150px] [overflow-wrap:anywhere]">
+                <Mono className="text-[14px]">{l.key}</Mono>
+              </span>
+              <span className="min-w-0 flex-[1_1_220px] text-[14.5px] leading-[1.5] text-ink [text-wrap:pretty]">
+                <Ticks text={l.words} />
+              </span>
+            </div>
+            {l.warn && <span className="text-[13px] leading-[1.5] text-warn-text [text-wrap:pretty]">{l.warn}</span>}
+          </div>
+        ))
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5">{children}</div>
+      {unreached && (
+        <span className="text-[13px] leading-[1.5] text-danger-text">
+          Doesn&rsquo;t reach {READS_LABEL[unreached] ?? "the app"}. Check 1 in the preview says why.
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -140,8 +172,6 @@ function NewAppOffer({
   shape,
   draft,
   setDraft,
-  token,
-  person,
   templates,
   project,
   onOpenTemplate,
@@ -149,16 +179,12 @@ function NewAppOffer({
   shape: AppClaimShape;
   draft: ShapeDraft | null;
   setDraft: (d: ShapeDraft | null) => void;
-  token: Record<string, unknown> | null;
-  person: string;
   templates: ClaimTemplate[];
   project: string;
   onOpenTemplate: (id: string) => void;
 }) {
   const app = shape.application.name;
   const [mode, setMode] = useState<"template" | "copy">("template");
-  // The token "Sends now" reads is what applies now, never the chooser's draft.
-  const nowToken = draft ? null : token;
   if (/truenas/i.test(app)) {
     return (
       <div className="row-divider flex flex-col gap-2 px-[22px] py-4 text-[14px] text-muted">
@@ -169,24 +195,9 @@ function NewAppOffer({
   }
   return (
     <>
-      <div className="row-divider flex flex-col gap-1 px-[22px] py-3.5">
-        <span className="type-label">Sends now</span>
-        {shape.profile.claims.map((c) => (
-          <div key={pathKey(c.path)} className="flex flex-col gap-1">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <Mono>{c.path.join(" › ")}</Mono>
-              <span className="text-[14px] text-muted">{carriesLabel(c, project)}</span>
-            </div>
-            {nowToken && (
-              <span className="text-[12.5px] leading-[1.5] text-faint [overflow-wrap:anywhere]">
-                <Ticks text={sentAs(c, nowToken, person, { app })} />
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="row-divider flex flex-col gap-2.5 px-[22px] pb-1.5 pt-4">
+      <div className="row-divider flex flex-wrap items-center gap-x-2.5 gap-y-2 px-[22px] pb-1.5 pt-4">
         <span className="type-label">Shape it for {app}</span>
+        <span className="flex-1" />
         <Segmented<"template" | "copy">
           label="Shape it from"
           size="sm"
@@ -225,17 +236,6 @@ function NewAppOffer({
   );
 }
 
-function carriesLabel(c: Claim, project: string): string {
-  switch (c.kind) {
-    case "roles":
-      return `Every role in ${project}, in Syndra's words`;
-    case "attribute":
-      return ATTRIBUTE_LABEL[c.source ?? ""] ?? c.source ?? "";
-    default:
-      return KIND_LABEL[c.kind];
-  }
-}
-
 // ---------------------------------------------------------------------------
 
 function ShapeForm({
@@ -246,7 +246,7 @@ function ShapeForm({
   person,
   preview,
   previewRowError,
-  checkOneFailsReads,
+  unreached,
   templates,
   advanced,
   project,
@@ -261,7 +261,7 @@ function ShapeForm({
   person: string;
   preview?: Preview;
   previewRowError?: { row: number; message: string };
-  checkOneFailsReads: boolean;
+  unreached?: string;
   templates: ClaimTemplate[];
   advanced: boolean;
   project: string;
@@ -274,6 +274,7 @@ function ShapeForm({
   const profile = draft?.profile ?? shape.profile;
   const templateId = draft?.templateId ?? shape.version?.template_id ?? "";
   const template = templates.find((t) => t.id === templateId);
+  const suggested = templates.find((t) => t.id === shape.suggested_template);
   const [picking, setPicking] = useState<number | null>(null);
 
   // The first edit makes a draft of what's saved; nothing changes until Save.
@@ -301,12 +302,23 @@ function ShapeForm({
   const words = roleWords(profile, shape.project_roles);
   const savedWords = saved ? new Map(roleWords(saved, shape.project_roles).map((w) => [w.role.key, w])) : null;
 
+  // Claim rows: closed on every arrival, as you left it while you're here, and
+  // open by itself when a row inside stops Save, so the reason is never folded away.
+  const [foldOpen, setFoldOpen] = useState(false);
+  if (advanced && (firstProblem >= 0 || previewRowError) && !foldOpen) setFoldOpen(true);
+
   const rows: RoleWordRow[] = words.map((w, i) => {
     const notes: string[] = [];
     const was = savedWords?.get(w.role.key);
     const word = wordOf({ key: w.role.key, as: w.as });
-    if (was?.included && !w.included) notes.push(`Was sent as \`${wordOf({ key: w.role.key, as: was.as })}\`.`);
-    else if (was?.included && w.included && wordOf({ key: w.role.key, as: was.as }) !== word) notes.push(`Was \`${wordOf({ key: w.role.key, as: was.as })}\`.`);
+    let changed = false;
+    if (was?.included && !w.included) {
+      notes.push(`Was sent as \`${wordOf({ key: w.role.key, as: was.as })}\`.`);
+      changed = true;
+    } else if (was?.included && w.included && wordOf({ key: w.role.key, as: was.as }) !== word) {
+      notes.push(`Was \`${wordOf({ key: w.role.key, as: was.as })}\`.`);
+      changed = true;
+    }
     const owner = sharedWordOwner(words, i);
     if (owner) notes.push(`Also ${owner.role.label}'s word.`);
     if (w.added) {
@@ -318,17 +330,16 @@ function ShapeForm({
           : "New. Left out until you include it.",
       );
     }
-    return { key: w.role.key, name: w.role.label || w.role.key, word: w.as, included: w.included, notes };
+    return { key: w.role.key, name: w.role.label || w.role.key, word: w.as, included: w.included, changed, notes };
   });
   const included = words.filter((w) => w.included).length;
-  const ownWords = words.some((w) => w.as);
 
   const tplLine = (() => {
     if (draft?.committed && draft.origin === "copy") return null; // drawn with its link below
     if (draft?.committed && draft.origin === "template") return `From the ${template?.name ?? "chosen"} template, as a draft. Not saved yet.`;
-    if (shape.version?.copied_from_application_id && !draft) return null;
+    if (shape.version?.copied_from_application_id && !draft) return `Copied from another app on ${formatShortDate(shape.version?.saved_at)}.`;
     if (shape.template) {
-      return `From the ${shape.template.name} template. ${changesSince(shape.template.changes.length)}${
+      return `${fromTemplate(shape.template.name, shape.template.changes.length)}${
         shape.template.updated ? ` The ${shape.template.name} template has changed since ${formatShortDate(shape.version?.saved_at)}.` : ""
       }`;
     }
@@ -338,79 +349,75 @@ function ShapeForm({
     draft?.origin === "copy" && draft.copiedName
       ? `${draft.copiedName}'s shape, on ${project}'s roles. What doesn't fit ${project} is said where it stops fitting.`
       : TEMPLATE_CAPTION[templateId];
+  // The app's own template, one click away when it's on another (a seeded NetBird on Custom).
+  const seeTemplate =
+    draft?.origin === "copy"
+      ? null
+      : suggested && suggested.id !== templateId
+        ? { id: suggested.id, label: `See the ${suggested.name} template` }
+        : template
+          ? { id: template.id, label: "See the template" }
+          : null;
 
   const reads = template?.reads;
   const landsNote = [
     reads ? `${app} reads ${READS_LABEL[reads]}.` : "",
-    !advanced && template ? `Set by the ${template.name} template.` : "",
     draft?.origin === "copy" && draft.copiedName ? `Copied from ${draft.copiedName}.` : "",
+    "ID token and userinfo is one choice: the ID token carries it only while User Info inside ID Token is on.",
   ]
     .filter(Boolean)
     .join(" ");
 
+  const problemPath = firstProblem >= 0 ? profile.claims[firstProblem].path.join(" › ") || "the unnamed claim" : "";
   const beforeLine = !dirty
-    ? { warn: false, text: "Nothing to save yet." }
+    ? { warn: false, text: "" }
     : firstProblem >= 0
-      ? { warn: false, text: `Fix \`${profile.claims[firstProblem].path.join(" › ") || "the unnamed claim"}\` to save.` }
+      ? { warn: false, text: advanced ? `Fix \`${problemPath}\` to save.` : `Fix \`${problemPath}\` in Advanced to save.` }
       : breaking.length > 0
         ? { warn: true, text: breakingLine(breaking, { app, roles: shape.project_roles, reach: preview?.reach, templateId: appTemplateId(shape, draft) }) }
         : { warn: false, text: `Takes effect at each person's next sign-in to ${app}.` };
 
   return (
     <>
-      <div className="flex flex-col gap-1.5 px-[22px] pb-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="text-[13.5px] leading-[1.5] text-faint">
-            {tplLine ? (
-              tplLine
-            ) : draft?.origin === "copy" ? (
-              <>
-                Copied from{" "}
-                <Link href={`/applications/${draft.copiedFrom?.application_id}`} className="text-muted link-hover">
-                  {draft.copiedName}
-                </Link>
-                , as a draft. Not saved yet.
-              </>
-            ) : (
-              `Copied from another app on ${formatShortDate(shape.version?.saved_at)}.`
-            )}
-          </span>
-          <span className="-ml-2.5 inline-flex flex-wrap">
-            {template && draft?.origin !== "copy" && (
-              <Button variant="ghost" size="sm" onClick={() => onOpenTemplate(template.id)}>
-                See the template
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" onClick={onOpenCopy}>
-              Copy another app&rsquo;s shape
+      <Summary lines={summaryLines(profile, shape.project_roles, { app, project })} unreached={unreached}>
+        <span className="text-[13.5px] leading-[1.5] text-faint">
+          In {landsIn(profile.lands)}.{" "}
+          {tplLine ?? (
+            <>
+              Copied from{" "}
+              <Link href={`/applications/${draft?.copiedFrom?.application_id}`} className="text-muted link-hover">
+                {draft?.copiedName}
+              </Link>
+              , as a draft. Not saved yet.
+            </>
+          )}
+        </span>
+        <span className="-ml-2.5 inline-flex flex-none flex-wrap gap-1 whitespace-nowrap">
+          {seeTemplate && (
+            <Button variant="ghost" size="sm" onClick={() => onOpenTemplate(seeTemplate.id)}>
+              {seeTemplate.label}
             </Button>
-          </span>
-        </div>
+          )}
+          <Button variant="ghost" size="sm" onClick={onOpenCopy}>
+            Copy another app&rsquo;s shape
+          </Button>
+        </span>
         {caption && (
-          <p className="max-w-[64ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+          <p className="m-0 w-full max-w-[64ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
             <Ticks text={caption} />
           </p>
         )}
-      </div>
+      </Summary>
 
       {/* Roles NetBird sees (§3) */}
-      <div className="row-divider flex flex-col gap-1 px-[22px] pb-3 pt-4">
-        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <span className="type-label">Roles {app} sees</span>
-          <span className="flex-1" />
-          {sendsRoles && (
-            <span className="text-[12.5px] text-faint">
-              {included} of {words.length} included{ownWords ? "" : " · Syndra's words"}
-            </span>
-          )}
-        </div>
-        <p className="text-[13.5px] leading-[1.5] text-faint">
-          Which of{" "}
-          <Link href={`/projects/${shape.application.project_id}`} className="text-muted link-hover">
-            {project}
-          </Link>
-          &rsquo;s roles {app} sees, and the word it sees for each.
-        </p>
+      <div className="row-divider flex flex-wrap items-baseline gap-x-2.5 gap-y-1 px-[22px] pb-2.5 pt-4">
+        <span className="type-label">Roles {app} sees</span>
+        <span className="flex-1" />
+        {sendsRoles && (
+          <span className="text-[12.5px] text-faint">
+            {included} of {words.length} included
+          </span>
+        )}
       </div>
       {sendsRoles ? (
         <RoleWordsTable
@@ -440,102 +447,112 @@ function ShapeForm({
           <Ticks text={`Not in this project, so not copied: ${draft.notCopied.map((r) => `${r.name} (\`${r.role_key}\`)`).join(", ")}.`} />
         </p>
       ) : null}
-      {advanced && sendsRoles && (
-        <SettingRow label="Roles added later" note={laterNote(profile.include_new, app, project, templateId)}>
-          <Segmented<"out" | "in">
-            label="Roles added later"
-            size="sm"
-            value={profile.include_new ? "in" : "out"}
-            onChange={(v) => edit({ ...profile, include_new: v === "in" })}
-            options={[
-              { value: "out", label: "Left out" },
-              { value: "in", label: "Included" },
-            ]}
-          />
-        </SettingRow>
+
+      {advanced && (
+        <>
+          {sendsRoles && (
+            <SettingRow label="Roles added later" note={laterNote(profile.include_new, app, project, templateId)}>
+              <Segmented<"out" | "in">
+                label="Roles added later"
+                size="sm"
+                value={profile.include_new ? "in" : "out"}
+                onChange={(v) => edit({ ...profile, include_new: v === "in" })}
+                options={[
+                  { value: "out", label: "Left out" },
+                  { value: "in", label: "Included" },
+                ]}
+              />
+            </SettingRow>
+          )}
+
+          {/* Claim rows, folded (§4): the 28px round chevron of a grouped list, in a 44px touch seat. */}
+          <div className="row-divider">
+            <button
+              type="button"
+              aria-expanded={foldOpen}
+              onClick={() => setFoldOpen(!foldOpen)}
+              className="group flex w-full flex-wrap items-center gap-x-3 gap-y-1 py-2 pl-[11px] pr-[22px] text-left"
+            >
+              <span className="flex size-11 flex-none items-center justify-center">
+                <span
+                  aria-hidden
+                  className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn group-hover:bg-[var(--hover)] ${
+                    foldOpen ? "rotate-90" : ""
+                  }`}
+                >
+                  ›
+                </span>
+              </span>
+              <span className="text-[14.5px] font-semibold text-ink">{CLAIM_ROWS}</span>
+              <span className="min-w-0 flex-[1_1_240px] text-[13px] leading-[1.5] text-faint">
+                <Ticks text={foldNote(profile)} />
+              </span>
+            </button>
+          </div>
+          <Unfold open={foldOpen}>
+            <div className="flex flex-col pt-1">
+              {profile.claims.map((c, i) => (
+                <ClaimEditor
+                  key={i}
+                  claim={c}
+                  app={app}
+                  token={token}
+                  person={person}
+                  sameObject={profile.claims.slice(0, i).some((o) => o.path.length > 1 && o.path[0] === c.path[0])}
+                  leftOut={preview?.left_out.includes(i) ?? false}
+                  error={problems[i]?.message ?? (previewRowError?.row === i ? previewRowError.message : undefined)}
+                  roles={shape.project_roles}
+                  onChange={(next) => editClaim(i, next)}
+                  onRemove={() => edit({ ...profile, claims: profile.claims.filter((_, j) => j !== i) })}
+                  onPickRoles={() => setPicking(i)}
+                />
+              ))}
+              <div className="px-3 pb-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => edit({ ...profile, claims: [...profile.claims, { path: [""], kind: "attribute", source: "email" }] })}
+                >
+                  Add a claim
+                </Button>
+              </div>
+              <SettingRow label="Lands in" value={LANDS_LABEL[profile.lands]} note={landsNote}>
+                <Segmented<Lands>
+                  label="Lands in"
+                  size="sm"
+                  value={profile.lands}
+                  onChange={(lands) => edit({ ...profile, lands })}
+                  options={[
+                    { value: "both", label: "Both" },
+                    { value: "access_token", label: "Access token" },
+                    { value: "userinfo", label: "ID token and userinfo" },
+                  ]}
+                />
+              </SettingRow>
+            </div>
+          </Unfold>
+        </>
       )}
 
-      {/* Claims (§4) */}
-      <div className="row-divider px-[22px] pb-1 pt-4">
-        <span className="type-label">Claims</span>
-      </div>
-      {profile.claims.length === 0 && (
-        <p className="px-[22px] pb-2 text-[13.5px] text-muted">Sends nothing of its own. Zitadel&rsquo;s standard claims do the work.</p>
-      )}
-      {profile.claims.map((c, i) => (
-        <ClaimEditor
-          key={i}
-          claim={c}
-          index={i}
-          app={app}
-          advanced={advanced}
-          token={token}
-          person={person}
-          sameObject={profile.claims.slice(0, i).some((o) => o.path.length > 1 && o.path[0] === c.path[0])}
-          leftOut={preview?.left_out.includes(i) ?? false}
-          error={problems[i]?.message ?? (previewRowError?.row === i ? previewRowError.message : undefined)}
-          roles={shape.project_roles}
-          onChange={(next) => editClaim(i, next)}
-          onRemove={() => edit({ ...profile, claims: profile.claims.filter((_, j) => j !== i) })}
-          onPickRoles={() => setPicking(i)}
-        />
-      ))}
-      <div className="px-3 pb-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => edit({ ...profile, claims: [...profile.claims, { path: [""], kind: "attribute", source: "email" }] })}
-        >
-          Add a claim
-        </Button>
-      </div>
-
-      {/* Lands in (§5) */}
-      <SettingRow
-        label="Lands in"
-        value={LANDS_LABEL[profile.lands]}
-        note={landsNote}
-        bad={checkOneFailsReads && reads ? `Doesn't reach ${READS_LABEL[reads]}. Check 1 in the preview says why.` : undefined}
-      >
-        {advanced && (
-          <span className="flex flex-col items-end gap-1">
-            <Segmented<Lands>
-              label="Lands in"
-              size="sm"
-              value={profile.lands}
-              onChange={(lands) => edit({ ...profile, lands })}
-              options={[
-                { value: "both", label: "Both" },
-                { value: "access_token", label: "Access token" },
-                { value: "userinfo", label: "ID token and userinfo" },
-              ]}
-            />
-            <span className="max-w-[340px] text-right text-[12.5px] leading-[1.45] text-faint">
-              ID token and userinfo is one choice: Syndra answers userinfo, and the ID token carries it only while User Info inside ID Token is on.
-            </span>
-          </span>
-        )}
-      </SettingRow>
-
-      {/* Save, with its before-line (A-11 §4) */}
-      <div className="row-divider flex flex-wrap items-center gap-x-3.5 gap-y-2.5 px-[22px] pb-5 pt-4">
-        <span className="flex flex-none gap-2 whitespace-nowrap">
-          <Button variant="accent" disabled={!dirty || firstProblem >= 0} onClick={onSave}>
-            Save
-          </Button>
-          {draft?.committed && (
+      {/* Save comes with the first edit, under the table, where you are looking (A-11 §4, A-15 §3). */}
+      <Unfold open={Boolean(draft?.committed)}>
+        <div className="row-divider flex flex-wrap items-center gap-x-3.5 gap-y-2.5 px-[22px] pb-5 pt-4">
+          <span className="flex flex-none gap-2 whitespace-nowrap">
+            <Button variant="accent" disabled={!dirty || firstProblem >= 0} onClick={onSave}>
+              Save
+            </Button>
             <Button variant="ghost" onClick={() => setDraft(null)}>
               Discard the draft
             </Button>
-          )}
-        </span>
-        <span className={`flex min-w-0 flex-[1_1_220px] items-start gap-2 text-[13px] leading-[1.5] ${beforeLine.warn ? "text-warn-text" : "text-faint"}`}>
-          {beforeLine.warn && <StatusDot tone="warn" className="mt-[7px]" />}
-          <span>
-            <Ticks text={beforeLine.text} />
           </span>
-        </span>
-      </div>
+          <span className={`flex min-w-0 flex-[1_1_240px] items-start gap-2 text-[13px] leading-[1.5] ${beforeLine.warn ? "text-warn-text" : "text-faint"}`}>
+            {beforeLine.warn && <StatusDot tone="warn" className="mt-[7px]" />}
+            <span>
+              <Ticks text={beforeLine.text} />
+            </span>
+          </span>
+        </div>
+      </Unfold>
 
       {picking !== null && (
         <PickRoles
@@ -567,14 +584,12 @@ function SettingRow({
   label,
   value,
   note,
-  bad,
   children,
 }: {
   label: string;
   value?: string;
   note?: string;
-  bad?: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <div className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-2 px-[22px] py-3.5">
@@ -582,7 +597,6 @@ function SettingRow({
       <span className="flex min-w-0 flex-[1_1_160px] flex-col gap-0.5">
         {value && <span className="text-[14.5px]">{value}</span>}
         {note && <span className={`${value ? "text-[13px] text-faint" : "text-[13.5px] text-muted"} leading-[1.5] [text-wrap:pretty]`}>{note}</span>}
-        {bad && <span className="text-[13px] leading-[1.5] text-danger-text">{bad}</span>}
       </span>
       {children && <span className="ml-auto flex justify-end">{children}</span>}
     </div>
@@ -617,9 +631,7 @@ const typeOf = (v: unknown): FixedType =>
 
 function ClaimEditor({
   claim: c,
-  index,
   app,
-  advanced,
   token,
   person,
   sameObject,
@@ -631,9 +643,7 @@ function ClaimEditor({
   onPickRoles,
 }: {
   claim: Claim;
-  index: number;
   app: string;
-  advanced: boolean;
   token: Record<string, unknown> | null;
   person: string;
   sameObject: boolean;
@@ -647,8 +657,6 @@ function ClaimEditor({
   const leaf = c.path[c.path.length - 1] ?? "";
   const setLeaf = (name: string) => onChange({ ...c, path: [...c.path.slice(0, -1), name] });
   const nested = c.path.length > 1;
-  // "More claims" waits behind Advanced, unless this row already is one.
-  const more = advanced || isAdvancedRow(c);
   const text = c.kind === "roles" && (c.format ?? "array") !== "array";
   const name = leaf || "this claim";
 
@@ -722,7 +730,7 @@ function ClaimEditor({
         </span>
       </>
     );
-  } else if (c.kind === "roles" && (advanced || text)) {
+  } else if (c.kind === "roles") {
     second = (
       <>
         Sent as
@@ -748,7 +756,7 @@ function ClaimEditor({
           <Input
             aria-label="Inside"
             value={c.path.slice(0, -1).join(" › ")}
-            readOnly={c.path.length > 2 || !advanced}
+            readOnly={c.path.length > 2}
             spellCheck={false}
             onChange={(e) => onChange({ ...c, path: [e.target.value, leaf] })}
             className="py-2 font-mono text-[13.5px]"
@@ -769,7 +777,7 @@ function ClaimEditor({
         <Select aria-label="Carries" value={carriesOf(c)} onChange={(e) => onChange(withCarries(c, e.target.value))} className="py-2 text-[14px]">
           <optgroup label="From the person">
             <option value="roles">Roles {app} sees</option>
-            {(more ? Object.keys(ATTRIBUTE_LABEL) : BASIC_ATTRIBUTES).map((a) => (
+            {Object.keys(ATTRIBUTE_LABEL).map((a) => (
               <option key={a} value={`attr:${a}`}>
                 {ATTRIBUTE_LABEL[a]}
               </option>
@@ -778,13 +786,11 @@ function ClaimEditor({
           <optgroup label="The same for everyone">
             <option value="static">A fixed value</option>
           </optgroup>
-          {more && (
-            <optgroup label="More claims">
-              <option value="if_role">{KIND_LABEL.if_role}</option>
-              <option value="bundles">{KIND_LABEL.bundles}</option>
-              <option value="role_ends">{KIND_LABEL.role_ends}</option>
-            </optgroup>
-          )}
+          <optgroup label="More claims">
+            <option value="if_role">{KIND_LABEL.if_role}</option>
+            <option value="bundles">{KIND_LABEL.bundles}</option>
+            <option value="role_ends">{KIND_LABEL.role_ends}</option>
+          </optgroup>
         </Select>
       }
       onRemove={onRemove}
@@ -804,7 +810,7 @@ function ClaimEditor({
       }
       error={error}
       footer={
-        advanced && !nested && index >= 0 ? (
+        !nested ? (
           <Button variant="ghost" size="sm" onClick={() => onChange({ ...c, path: ["", ...c.path] })}>
             Put it inside another claim
           </Button>
