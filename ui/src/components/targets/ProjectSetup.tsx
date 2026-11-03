@@ -150,7 +150,16 @@ export function ProjectSet({ target, project }: { target: string; project: strin
  * right seat. The only link to the mappings, and the one place the home
  * location is chosen.
  */
-export function SetupStrip({ target, project }: { target: string; project: { id: string; name: string } }) {
+export function SetupStrip({
+  target,
+  project,
+  lastKnown = false,
+}: {
+  target: string;
+  project: { id: string; name: string };
+  /** The system isn't answering: choosing a folder lists its folders, so it waits (A-13 §1.5). */
+  lastKnown?: boolean;
+}) {
   const name = targetLabel(target);
   const mappings = useMappings(target);
   const history = useMappingHistory(target);
@@ -160,6 +169,7 @@ export function SetupStrip({ target, project }: { target: string; project: { id:
   const roles = new Set((mappings.data ?? []).map((m) => m.role_key)).size;
   const version = history.data?.current_version;
   const home = settings.data?.settings?.find((x) => x.name === HOME_ROOT);
+  const verb = home?.value ? "Change folder" : "Choose folder";
 
   return (
     <Card>
@@ -188,23 +198,31 @@ export function SetupStrip({ target, project }: { target: string; project: { id:
         <SettingRow
           label="Home folders"
           action={
-            <Button variant="outline" size="sm" onClick={() => setChoosing(true)}>
-              {home.value ? "Change folder" : "Choose folder"}
+            <Button variant="outline" size="sm" disabled={lastKnown} onClick={() => setChoosing(true)}>
+              {verb}
             </Button>
           }
         >
-          {home.value ? (
-            <span className="text-[15px] text-ink">
-              In <span className="type-mono text-[14px]">{home.labels?.[home.value] ?? home.value}</span>
-            </span>
-          ) : (
-            <span className="flex flex-col gap-0.5">
-              <span className="text-[15px] text-muted">Not chosen yet</span>
-              <span className="text-[13px] text-faint">
-                Mappings work without it; none can give a home folder until it is chosen.
+          <span className="flex flex-col gap-0.5">
+            {home.value ? (
+              <span className="text-[15px] text-ink">
+                In <span className="type-mono text-[14px]">{home.labels?.[home.value] ?? home.value}</span>
               </span>
-            </span>
-          )}
+            ) : (
+              <>
+                <span className="text-[15px] text-muted">Not chosen yet</span>
+                <span className="text-[13px] text-faint">
+                  Mappings work without it; none can give a home folder until it is chosen.
+                </span>
+              </>
+            )}
+            {/* The value's second line, as the board draws it: one reason, no tooltip. */}
+            {lastKnown && (
+              <span className="text-[13px] text-faint">
+                {verb} waits too: it lists the folders on {name}.
+              </span>
+            )}
+          </span>
         </SettingRow>
       )}
       {choosing && home && <HomeLocationDialog target={target} setting={home} onClose={() => setChoosing(false)} />}

@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
+import { expectFullStrength } from "@/test-utils/fullStrength";
 import type {
   AccountHome,
   TargetHealth,
@@ -518,11 +519,14 @@ describe("one target's page", () => {
     renderTarget();
 
     // The age is always given — "stale" without a number is not something an
-    // operator can act on — and the affordance is GONE rather than disabled
-    // with a tooltip, with its reason as text beside the row.
+    // operator can act on — and the control is off with its reason said once
+    // for the card, as text, never a tooltip and never under every row (A-13).
     expect(screen.getByText(/last state seen/i)).toBeInTheDocument();
-    expect(screen.getByText(/Refresh the list above first/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Assign to a person" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Assign to a person" })).toBeDisabled();
+    expect(screen.getAllByText(/Assigning waits for a current read of TrueNAS/)).toHaveLength(1);
+    // A mirror read: the card recedes, its words at full strength.
+    const card = screen.getByText("Not created by Syndra").closest(".card") as HTMLElement;
+    expect(card).toHaveAttribute("data-stale");
   });
 
   // 1.19 — the inventory is reported, never triaged. Nothing on this page calls
@@ -1092,5 +1096,80 @@ describe("where home folders go", () => {
     expect(within(dialog).getByText("No folder to offer")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Read again" })).toBeInTheDocument();
     expect(within(dialog).getByText(/Nothing to choose until/)).toBeInTheDocument();
+  });
+});
+
+// A-13 (d): while TrueNAS isn't answering, its own cards are its last read.
+// They recede to the page and keep every word at full strength; the controls
+// that need it live are off with one reason each; Syndra's own cards stay
+// raised. The 0.62 dim shipped twice before this rule replaced it.
+describe("while TrueNAS isn't answering", () => {
+  function openStale() {
+    state.roster = [summary([])];
+    state.health = { reachable: false, lifecycle: "active" } as TargetHealth;
+    state.inventory = {
+      target: "truenas",
+      bound: 1,
+      accounts: [{ subject_id: "s-99", username: "sai", since: "2026-10-01T00:00:00Z" }],
+      unmanaged: [{ username: "kiosk", uid: 1001 }, { username: "lab", uid: 1002 }],
+      current: false,
+      read_at: new Date().toISOString(),
+    } as TargetInventory;
+    state.settings = {
+      read: true,
+      settings: [
+        {
+          name: "home_root",
+          label: "Where home folders go",
+          value: "/mnt/p/main/homes",
+          values: ["/mnt/p/main/homes"],
+          labels: { "/mnt/p/main/homes": "main › homes" },
+          values_read: true,
+        },
+      ],
+    };
+    renderTarget();
+  }
+  const card = (title: string) => screen.getByText(title).closest(".card") as HTMLElement;
+
+  it("recedes its account cards and dims none of them", () => {
+    openStale();
+    for (const title of ["Accounts Syndra manages", "Not created by Syndra", "No longer needed"]) {
+      expect(card(title), title).toHaveAttribute("data-stale");
+      expectFullStrength(card(title));
+    }
+    // Syndra's own knowledge is current, so it stays raised.
+    expect(card("Check for differences")).not.toHaveAttribute("data-stale");
+  });
+
+  it("turns off what needs it live, with one reason per card, and leaves what only queues", () => {
+    openStale();
+    const assign = screen.getAllByRole("button", { name: "Assign to a person" });
+    expect(assign).toHaveLength(2);
+    for (const b of assign) expect(b).toBeDisabled();
+    expect(screen.getAllByText(/Assigning waits for a current read of TrueNAS/)).toHaveLength(1);
+
+    expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
+    expect(screen.getByText("Check now waits too: it reads TrueNAS first.")).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "Change folder" })).toBeDisabled();
+    expect(screen.getByText("Change folder waits too: it lists the folders on TrueNAS.")).toBeInTheDocument();
+  });
+
+  it("is back to normal the moment it answers", () => {
+    state.roster = [summary([])];
+    state.health = { reachable: true, lifecycle: "active" };
+    state.inventory = {
+      target: "truenas",
+      bound: 0,
+      unmanaged: [{ username: "kiosk", uid: 1001 }],
+      current: true,
+      read_at: new Date().toISOString(),
+    };
+    renderTarget();
+    expect(card("Not created by Syndra")).not.toHaveAttribute("data-stale");
+    expect(screen.getByRole("button", { name: "Assign to a person" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Check now" })).toBeEnabled();
+    expect(screen.queryByText(/waits too/)).toBeNull();
   });
 });
