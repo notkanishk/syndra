@@ -67,5 +67,5 @@ Departed:
 - Touch is "below the desktop breakpoint" (1080px), the product's one definition, not `pointer: coarse`. A tablet in landscape gets the 16px seat.
 - Ten text-styled buttons that sit beside links also take `link-hover`, so a link and its neighbour hover alike.
 - An inline Advanced id (in a sentence or a header line) tints in and out (`Tinted`): it has no height to unfold.
-- Home's calm panel and its block grid still swap at once when the view changes on a quiet day; animating it would also animate the data-driven swap, which A-08 doesn't settle.
+- ~~Home's calm panel and its block grid still swap at once when the view changes on a quiet day; animating it would also animate the data-driven swap, which A-08 doesn't settle.~~ Closed by A-12 §1 (reconcile-build 6.104): both swap by Unfold for every cause.
 
