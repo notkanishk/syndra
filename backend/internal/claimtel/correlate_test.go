@@ -362,3 +362,17 @@ func TestClassify_NoGrantsIsOnlyAFailureWhenThePersonHoldsRoles(t *testing.T) {
 		t.Fatalf("nothing to deliver must count clean: %+v", obs)
 	}
 }
+
+// Syndra's own service account logs in to Zitadel's API under a client that is
+// no app; Zitadel calls the claims target with no grants. Nothing to deliver,
+// not a failure, or the alarm would never clear (prod, 4 Nov 2026).
+func TestClassify_NoGrantsForAClientThatIsNoApp(t *testing.T) {
+	s := SignIn{UserID: "sa", ClientID: "syndra-service"}
+	worst := map[string]Outcome{FnPreAccessToken: NoGrants}
+	if got := Classify(s, worst, false, false, false, false, false).Verdict; got != NothingToDeliver {
+		t.Fatalf("unknown client, no grants: got %s", got)
+	}
+	if got := Classify(s, map[string]Outcome{FnPreAccessToken: DegradedNoFacts}, false, false, false, false, false).Verdict; got != NotServed {
+		t.Fatalf("a real failure for an unknown client must still alarm: got %s", got)
+	}
+}

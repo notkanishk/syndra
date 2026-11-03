@@ -272,7 +272,11 @@ func Classify(s SignIn, worst map[string]Outcome, overflowed, jwt, known, newPer
 		ch.Verdict = Delivered
 	case ch.Outcome == NoGrants && newPerson:
 		ch.Verdict = FirstSignIn
-	case ch.Outcome == NoGrants && holdsNone:
+	case ch.Outcome == NoGrants && (holdsNone || !known):
+		// No grants for a person with no role in the app's project, or for a
+		// client that is no app Syndra shapes (Syndra's own service account
+		// logging in to Zitadel's API, seen on prod 4 Nov 2026): nothing to
+		// send. A new app reaches the snapshot within a minute.
 		ch.Verdict = NothingToDeliver
 	default:
 		ch.Verdict = NotServed
