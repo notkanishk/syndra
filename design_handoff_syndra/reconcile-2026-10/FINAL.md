@@ -263,7 +263,7 @@ Light leads shape by 40ms. Closing fades first, then folds, and is quicker. Coun
 - Sheets and dialogs appear and leave together with their scrim.
 - 7a doesn't move; its sentence tints.
 
-## Answers of 3 Nov 2026 (A-09 to A-14)
+## Answers of 3 Nov 2026 (A-09 to A-15)
 
 Answered on this canvas after Claude Design was retired (`design_handoff_syndra/BRIDGE.md` in the repo). Where any of these touches a choice above, the dated answer wins.
 
@@ -275,5 +275,6 @@ Answered on this canvas after Claude Design was retired (`design_handoff_syndra/
 | `from-design/A-12-three-loose-ends.md` | `a12-phone-bulk-bar` | Home's calm line swaps by Unfold for data changes too; phone bulk bar is one primary verb plus "More changes"; two copy lines. |
 | `from-design/A-13-stale-and-self-settling-passwords.md` | `a13-stale-and-passwords` | Revises A-09. Stale data: the Notice, the age once per read, rings in their own colour, live-only controls off; no amber outline; no text dim. A member's lost password reply is resent once at once, "Changed" only on a confirmed done, logged as "Sent again automatically"; passwords leave Waiting on you. |
 | `from-design/A-14-claims-shaping-rescoped.md` | `a14-claims-shaping` | **Replaces A-11** (kept for the record). Per-app shaping: templates from the app research, one roles table (rename, include), one claim-row form, where claims land per app, breaking-change warnings, and Debug mode on the claims part only. No Actions v1 card. Owner, 3 Nov: stale data uses A-13 (d). |
+| `from-design/A-15-claims-page-calm.md` | `a15-claims-page` | **The claims page layout, replacing A-14 §1** (owner, 3 Nov: calm by default). Summary and roles beside the preview's one-line verdict and token; claim rows folded in Advanced; Sign-ins, Debug mode and History as one quiet tools card. A-14's behaviour stands. |
 
 Owner's calls in these answers are listed in each file and are settled in chat.

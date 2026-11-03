@@ -117,7 +117,9 @@ says so in its lede, in the same breath as what the page is.
 
 The lede lives in `PageHeader`'s `lede` prop. `meta` is for metadata — a
 count, an email, an identifier — and never for a sentence. A page with no lede
-fails the guard.
+fails the guard, unless its first content already answers the lede's
+questions better, argued in the guard's `LEDELESS` list. One page is there: an
+app's page, whose summary says what the app gets (A-15 §1, owner, 3 Nov).
 
 Every **section** has a heading of five words or fewer that names the thing
 listed, not the mechanism that produced it. "Not created by Syndra", not
@@ -261,6 +263,14 @@ A page's title names **everything** the page shows, never one of its parts.
 If a filter offers a source the title does not admit, the title is wrong —
 that is how *Incoming events* spent a release called *Zitadel events* while
 carrying onboarding triggers Zitadel never sent.
+
+### An app's claims page (A-15)
+
+| Say | For |
+|---|---|
+| **Claim rows** | the Advanced fold holding every row's form, Add a claim and Lands in. Not "Custom claims": it collides with the `custom_claims` key. One constant, `CLAIM_ROWS` in `lib/claims.ts`, should the owner choose 4b |
+| **Show the checks** / **Hide the checks** | the preview's trail, one step away while everything passes |
+| **All five checks pass** · **Check 1 fails** · **Checks 1 and 5 fail** · **Check 4 needs a look** | the verdict line, each with " on this draft" when a draft is previewed (`verdictOf`) |
 
 ### Still never on screen
 

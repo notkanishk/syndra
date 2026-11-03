@@ -22,13 +22,6 @@ export const LANDS_LABEL: Record<Lands, string> = {
   userinfo: "The ID token and userinfo",
 };
 
-/** "Sent in NetBird's access token and in userinfo." */
-export const LANDS_SENTENCE: Record<Lands, string> = {
-  both: "access token and in userinfo",
-  access_token: "access token",
-  userinfo: "ID token and userinfo",
-};
-
 export const READS_LABEL: Record<string, string> = {
   access_token: "the access token",
   id_token: "the ID token",
@@ -169,11 +162,6 @@ export const ATTRIBUTE_LABEL: Record<string, string> = {
   project_id: "The project's id",
 };
 
-/** Basic offers these attributes; the rest wait behind "More claims". */
-export const BASIC_ATTRIBUTES = ["given_name", "family_name", "name", "username", "email", "is_service_account"];
-
-export const MORE_KINDS: ClaimKind[] = ["if_role", "bundles", "role_ends"];
-
 export const KIND_LABEL: Record<ClaimKind, string> = {
   roles: "Roles",
   attribute: "",
@@ -182,16 +170,6 @@ export const KIND_LABEL: Record<ClaimKind, string> = {
   bundles: "Bundles they hold",
   role_ends: "Each role's end date",
 };
-
-/** Whether a row needs Advanced to be made (it always shows once saved). */
-export function isAdvancedRow(c: Claim): boolean {
-  return (
-    MORE_KINDS.includes(c.kind) ||
-    c.path.length > 1 ||
-    (c.kind === "roles" && (c.format ?? "array") !== "array") ||
-    (c.kind === "attribute" && !BASIC_ATTRIBUTES.includes(c.source ?? ""))
-  );
-}
 
 // ---------------------------------------------------------------------------
 // What a change will do (§3, §7). One Diff from the backend feeds the draft
@@ -274,10 +252,95 @@ export function understandLine(breaking: Change[], ctx: SayContext): string {
   return `I understand ${ctx.app} will act on ${breaking.length === 1 ? "this change" : "these changes"}.`;
 }
 
-/** "2 changes since" / "Same as the template" (shape only: roles never count). */
-export function changesSince(n: number): string {
-  return n === 0 ? "Same as the template." : `${n === 1 ? "1 change" : `${n} changes`} since.`;
+/** "From the Custom template, 5 changes since." (shape only: roles never count). */
+export function fromTemplate(name: string, changes: number): string {
+  return `From the ${name} template${changes === 0 ? "" : `, ${changes === 1 ? "1 change" : `${changes} changes`} since`}.`;
 }
+
+// ---------------------------------------------------------------------------
+// The summary (A-15 §2): one line per top-level claim, in the token's order,
+// the key beside what it carries in words. Not a paraphrase of the token: the
+// shape's own rows, said, so the token beside it reads across.
+
+export interface SummaryLine {
+  key: string;
+  words: string;
+  /** A roles claim sent as text keeps its warning here, in both views. */
+  warn?: string;
+}
+
+const joinWith = (xs: string[], word: string) =>
+  xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} ${word} ${xs[xs.length - 1]}`;
+
+const TEXT_FORMAT: Record<string, string> = { csv: "As text, with commas", space_delimited: "As text, with spaces" };
+
+/** "All 7 of Network's roles, 1 in NetBird's words." */
+export function rolesWords(p: Profile, roles: ProjectRole[], ctx: { app: string; project: string }): string {
+  if (!p.roles?.length && p.include_new) return `Every role in ${ctx.project}, in Syndra's words`;
+  const words = roleWords(p, roles);
+  const inc = words.filter((w) => w.included);
+  const own = inc.filter((w) => w.as && w.as !== w.role.key).length;
+  if (inc.length === 0) return `None of ${ctx.project}'s ${words.length} roles`;
+  const head = inc.length === words.length ? `All ${words.length} of ${ctx.project}'s roles` : `${inc.length} of ${ctx.project}'s ${words.length} roles`;
+  const tail = own === 0 ? "in Syndra's words" : own === inc.length ? `in ${ctx.app}'s words` : `${own} in ${ctx.app}'s words`;
+  return `${head}, ${tail}`;
+}
+
+function carriesWords(c: Claim, p: Profile, roles: ProjectRole[], ctx: { app: string; project: string }): string {
+  switch (c.kind) {
+    case "roles":
+      return rolesWords(p, roles, ctx);
+    case "static":
+      return `The same for everyone: \`${literal(c.value)}\``;
+    case "if_role":
+      return c.roles?.length
+        ? `\`true\` if they hold ${joinWith(c.roles.map((k) => labelOf(roles, k)), "or")}, else \`false\``
+        : "`false` for everyone, until it has a role";
+    case "bundles":
+    case "role_ends":
+      return KIND_LABEL[c.kind];
+    default:
+      return ATTRIBUTE_LABEL[c.source ?? ""] ?? c.source ?? "";
+  }
+}
+
+export function summaryLines(p: Profile, roles: ProjectRole[], ctx: { app: string; project: string }): SummaryLine[] {
+  const tops = Array.from(new Set(p.claims.map((c) => c.path[0])));
+  return tops.map((key) => {
+    const rows = p.claims.filter((c) => c.path[0] === key);
+    const text = rows.find((c) => c.kind === "roles" && (c.format ?? "array") !== "array");
+    const warn = text ? `${TEXT_FORMAT[text.format!]}. No app Syndra has a template for reads roles as text.` : undefined;
+    const top = rows.find((c) => c.path.length === 1);
+    const words = top
+      ? carriesWords(top, p, roles, ctx)
+      : `An object holding ${joinWith(Array.from(new Set(rows.map((c) => `\`${c.path[1]}\``))), "and")}`;
+    return { key, words, warn };
+  });
+}
+
+/**
+ * The Advanced fold's name (A-15 §4, 4a). "Custom claims" (4b) would collide
+ * with the `custom_claims` key; the owner may still choose it, here only.
+ */
+export const CLAIM_ROWS = "Claim rows";
+
+const LANDS_SHORT: Record<Lands, string> = { both: "both places", access_token: "access token", userinfo: "ID token and userinfo" };
+
+/** The Claim rows fold's closed note: "5 rows · `groups` · `custom_claims` holding 4 · both places". */
+export function foldNote(p: Profile): string {
+  const n = p.claims.length;
+  const tops = Array.from(new Set(p.claims.map((c) => c.path[0]))).map((key) => {
+    const inside = p.claims.filter((c) => c.path[0] === key && c.path.length > 1).length;
+    return inside ? `\`${key}\` holding ${inside}` : `\`${key}\``;
+  });
+  return [n === 1 ? "1 row" : `${n} rows`, ...tops, LANDS_SHORT[p.lands]].join(" · ");
+}
+
+/** "the access token and userinfo", for "In … ." */
+export const landsIn = (lands: Lands) => {
+  const l = LANDS_LABEL[lands];
+  return l[0].toLowerCase() + l.slice(1);
+};
 
 // ---------------------------------------------------------------------------
 // Each template's main truth, said once under the template line (§2).
@@ -289,7 +352,6 @@ export const TEMPLATE_CAPTION: Record<string, string> = {
   "supabase-keycloak": "Supabase copies every key it doesn't know into `custom_claims`.",
   "home-assistant": "Home Assistant sets someone's role only when their user is first made.",
   "sign-in-only": "Zitadel's standard claims do the work. Who may sign in is Zitadel's role check.",
-  custom: "Every role, in Syndra's words.",
 };
 
 /** One line of a template sheet; `warn` is something the app will act on (amber dot). */

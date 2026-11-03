@@ -196,13 +196,154 @@ describe("a save NetBird will act on", () => {
     expect((put?.body as { profile: Profile }).profile.roles?.[0]).toEqual({ key: "staff", as: "network-staff", included: true });
   });
 
-  it("previews the draft with − and + lines, not colour alone", async () => {
+  it("previews the draft with − and + lines, not colour alone, and says the one difference", async () => {
     renderScreen();
     fireEvent.change(await screen.findByLabelText("NetBird calls Staff"), { target: { value: "network-staff" } });
-    await screen.findByText(/Zitadel would receive this once you save:/);
+    await screen.findByText("All five checks pass on this draft");
     expect(screen.getByText("Removed:", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Added:", { exact: false })).toBeInTheDocument();
     expect(screen.getByText(/"groups": \["network-staff", "netbird-admins"\]/)).toBeInTheDocument();
+    expect(screen.getByText(/One difference for Kanishk Singh/)).toHaveTextContent(
+      "One difference for Kanishk Singh: netbird-staff becomes network-staff.",
+    );
+    // The summary describes the draft.
+    expect(screen.getByText("2 of Network's 3 roles, in NetBird's words")).toBeInTheDocument();
+  });
+
+  it("shows Save only after the first edit, and folds it away on Discard", async () => {
+    renderScreen();
+    const staff = await screen.findByLabelText("NetBird calls Staff");
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByText("Nothing to save yet.")).toBeNull();
+    fireEvent.change(staff, { target: { value: "network-staff" } });
+    expect(await screen.findByRole("button", { name: "Save" })).toBeInTheDocument();
+    // The field keeps its border while it differs from what's saved.
+    expect(staff.className).not.toContain("border-transparent!");
+    fireEvent.click(screen.getByRole("button", { name: "Discard the draft" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).toBeNull());
+    expect(screen.getByLabelText("NetBird calls Staff").className).toContain("border-transparent!");
+  });
+});
+
+describe("the page, calm by default (A-15)", () => {
+  it("opens on the summary: one line per top-level claim, where it lands and the template", async () => {
+    renderScreen();
+    expect(await screen.findByText("2 of Network's 3 roles, in NetBird's words")).toBeInTheDocument();
+    expect(screen.getByText("groups", { selector: ".type-mono" })).toBeInTheDocument();
+    expect(screen.getByText("In the access token and userinfo. From the NetBird template.")).toBeInTheDocument();
+    // Cut: the header lede, the roles lede, the preview's lede.
+    expect(screen.queryByText(/is told about a person when they sign in/)).toBeNull();
+    expect(screen.queryByText(/and the word it sees for each/)).toBeNull();
+    expect(screen.queryByText(/Exactly what NetBird receives/)).toBeNull();
+  });
+
+  it("offers the app's own template when it's on another (a seeded NetBird on Custom)", async () => {
+    routes(
+      shapeOf({
+        version: { ...shapeOf({}).version!, template_id: "custom" },
+        template: { id: "custom", version: 1, name: "Custom", changes: [{ kind: "add", path: ["custom_claims"] }], updated: false },
+        suggested_template: "netbird",
+      }),
+    );
+    renderScreen();
+    expect(await screen.findByRole("button", { name: "See the NetBird template" })).toBeInTheDocument();
+    expect(screen.getByText(/From the Custom template, 1 change since\./)).toBeInTheDocument();
+    expect(screen.queryByText("Every role, in Syndra's words.")).toBeNull();
+  });
+
+  it("never shows a claim row, Add a claim or Lands in in Basic", async () => {
+    renderScreen();
+    await screen.findByLabelText("NetBird calls Staff");
+    expect(screen.queryByRole("button", { name: /Claim rows/ })).toBeNull();
+    expect(screen.queryByLabelText("Claim name")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add a claim" })).toBeNull();
+    expect(screen.queryByText("Lands in")).toBeNull();
+  });
+
+  it("folds the claim rows in Advanced, closed on arrival, with the count and keys", async () => {
+    api.view.advanced = true;
+    renderScreen();
+    const fold = await screen.findByRole("button", { name: /Claim rows/ });
+    expect(fold).toHaveAttribute("aria-expanded", "false");
+    expect(fold).toHaveTextContent("1 row · groups · both places");
+    expect(screen.queryByLabelText("Claim name")).toBeNull();
+    fireEvent.click(fold);
+    expect(fold).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByLabelText("Claim name")).toHaveValue("groups");
+    expect(screen.getByRole("button", { name: "Add a claim" })).toBeInTheDocument();
+    expect(screen.getByText("Lands in")).toBeInTheDocument();
+  });
+
+  it("keeps the checks to one line when all pass, and shows them on demand, whole", async () => {
+    renderScreen();
+    expect(await screen.findByText("All five checks pass")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Checks" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show the checks" }));
+    expect(await screen.findByRole("list", { name: "Checks" })).toBeInTheDocument();
+    expect(screen.getByText("Staff and Admins, as Zitadel shows them.")).toBeInTheDocument();
+    expect(screen.getByText(/Syndra answers with/)).toHaveTextContent("Syndra answers with groups, below.");
+    fireEvent.click(screen.getByRole("button", { name: "Hide the checks" }));
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Checks" })).toBeNull());
+  });
+
+  it("opens the checks by itself on a failure, compact, and says it under the summary", async () => {
+    const failing = (token: Record<string, unknown>): Explanation => {
+      const e = explanation(token);
+      e.checks[0] = { state: "fail", facts: { project_role_assertion: true, access_token_type: "BEARER", lands: "both", reads: "access_token", reached: { userinfo: true } } };
+      e.checks[4] = { state: "fail", facts: { lands: "both" } };
+      return e;
+    };
+    routes(shapeOf({}));
+    api.routes["POST /applications/a1/claim-shape/preview"] = () => ({
+      people: [{ user_id: "ada", now: failing({ groups: ["netbird-staff"] }) }],
+      changes: [],
+      breaking: [],
+      left_out: [],
+    });
+    renderScreen();
+    expect(await screen.findByText("Checks 1 and 5 fail")).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Checks" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide the checks" })).toHaveAttribute("aria-expanded", "true");
+    // Compact: a check that passed keeps its sentence but not its detail.
+    expect(screen.getByText(/holds 2 roles in Network/)).toBeInTheDocument();
+    expect(screen.queryByText("Staff and Admins, as Zitadel shows them.")).toBeNull();
+    expect(screen.getByText("NetBird's token type in Zitadel is Bearer. Only a JWT access token carries claims.")).toBeInTheDocument();
+    expect(screen.getByText(/Syndra answers with/)).toHaveTextContent("Syndra answers with groups, but only for userinfo.");
+    expect(screen.getByText("NetBird reads its access token, so it sees none of this, and empties every group it made from a token.")).toBeInTheDocument();
+    expect(screen.getByText("Doesn’t reach the access token. Check 1 in the preview says why.")).toBeInTheDocument();
+  });
+});
+
+describe("history", () => {
+  const v = (version: number, note = "") => ({
+    application_id: "a1",
+    version,
+    project_id: "pNet",
+    profile: netbird,
+    template_id: "netbird",
+    template_version: 1,
+    note,
+    saved_by: "me",
+    saved_at: "2026-11-03T09:00:00Z",
+    changes: [],
+  });
+
+  it("shows only the version in use while there is one, with nothing to go back to", async () => {
+    api.routes["GET /applications/a1/claim-shape/versions"] = () => ({ versions: [v(1, "As Actions v1 sent it")] });
+    renderScreen();
+    expect(await screen.findByText("Version 1, as Actions v1 sent it")).toBeInTheDocument();
+    expect(screen.getByText(/^Saved 3 Nov by/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Go back to this version" })).toBeNull();
+  });
+
+  it("unfolds every version behind Show all N once there are two", async () => {
+    api.routes["GET /applications/a1/claim-shape/versions"] = () => ({ versions: [v(2), v(1, "As Actions v1 sent it")] });
+    renderScreen();
+    expect(await screen.findByText("Version 2")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Go back to this version" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Show all 2/ }));
+    expect(await screen.findByRole("button", { name: "Go back to this version" })).toBeInTheDocument();
   });
 });
 
@@ -244,7 +385,7 @@ describe("copying another app's shape", () => {
     });
   });
 
-  it("lists what didn't copy, and a row whose role isn't here stops Save", async () => {
+  async function copyInventory() {
     renderScreen("aud");
     fireEvent.click(await screen.findByRole("radio", { name: "Copy another app's shape" }));
     fireEvent.click(await screen.findByText("Inventory"));
@@ -255,13 +396,25 @@ describe("copying another app's shape", () => {
     const copy = await screen.findByRole("button", { name: "Copy Inventory's shape" });
     await waitFor(() => expect(copy).toBeEnabled());
     fireEvent.click(copy);
-
     expect(await screen.findByText(/as a draft\. Not saved yet\./)).toBeInTheDocument();
+  }
+
+  it("lists what didn't copy, and a row whose role isn't here stops Save, opening the claim rows by itself", async () => {
+    api.view.advanced = true;
+    await copyInventory();
+    expect(screen.getByRole("button", { name: /Claim rows/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("alert")).toHaveTextContent("Admin isn't in Audio. Choose a role from Audio, or remove this row.");
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(screen.getByText(/to save\./)).toHaveTextContent("Fix is_admin to save.");
     // The roles table says it again, under the rows.
     expect(screen.getAllByText(/Not in this project, so not copied/).length).toBeGreaterThan(0);
+  });
+
+  it("in Basic, says where the row that stops Save is, without showing it", async () => {
+    await copyInventory();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByText(/to save\./)).toHaveTextContent("Fix is_admin in Advanced to save.");
   });
 });
 
@@ -284,7 +437,8 @@ describe("an app with no shape of its own", () => {
       missing_roles: [],
     });
     renderScreen("gl");
-    expect(await screen.findByText(/GitLab uses Code's default shape/)).toBeInTheDocument();
+    expect(await screen.findByText("Every role in Code, in Syndra's words")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Code’s default/ })).toHaveAttribute("href", "/projects/pCode#claims-default");
     expect(await screen.findByText("Suggested: this app is called GitLab")).toBeInTheDocument();
     await waitFor(() => expect(api.calls.find((c) => c.path.endsWith("draft-from"))?.body).toEqual({ template_id: "gitlab" }));
     // The preview runs the draft before anything is committed.
@@ -293,8 +447,8 @@ describe("an app with no shape of its own", () => {
     const start = screen.getByRole("button", { name: "Start from GitLab" });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
-    expect(await screen.findByText("From the GitLab template, as a draft. Not saved yet.")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("groups")).toBeInTheDocument();
+    expect(await screen.findByText("In the ID token and userinfo. From the GitLab template, as a draft. Not saved yet.")).toBeInTheDocument();
+    expect(screen.getByText("groups", { selector: ".type-mono" })).toBeInTheDocument();
     // A first shape on the default is never breaking: Save needs no tick.
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     const dialog = await screen.findByRole("dialog");
