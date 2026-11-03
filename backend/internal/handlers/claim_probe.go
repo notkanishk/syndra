@@ -72,9 +72,20 @@ var lastProbeL1, lastProbeL2 atomic.Pointer[probeResult]
 // ProbeL1Enabled is whether there is a public URL to probe.
 func ProbeL1Enabled() bool { return os.Getenv("SYNDRA_EXTERNAL_URL") != "" }
 
-// ProbeL2Enabled is whether the owner has set up the canary in Zitadel.
+// ProbeL2Enabled is whether L2 can run: a project to ask for, and a machine
+// key to ask with. The key defaults to Syndra's own service account (owner,
+// 3 Nov 2026: one probe role in an existing project, no dummy account).
 func ProbeL2Enabled() bool {
-	return os.Getenv(canaryKeyPathEnv) != "" && os.Getenv(canaryProjectIDEnv) != "" && os.Getenv(canaryClientIDEnv) != ""
+	return os.Getenv(canaryProjectIDEnv) != "" && canaryKeyPath() != ""
+}
+
+// canaryKeyPath is SYNDRA_CANARY_KEY_PATH, else Syndra's own service-account
+// key (ZITADEL_MACHINE_KEY_PATH), which already has JWT access tokens.
+func canaryKeyPath() string {
+	if p := os.Getenv(canaryKeyPathEnv); p != "" {
+		return p
+	}
+	return os.Getenv("ZITADEL_MACHINE_KEY_PATH")
 }
 
 // RunProbeL1 runs L1 once, records it, and raises or settles its findings.
@@ -234,6 +245,14 @@ func probeL2Once(ctx context.Context, projectID, clientID string) probeResult {
 	userID, _ := payload["sub"].(string)
 	if userID == "" {
 		return done("token", "the canary's token names no subject")
+	}
+	if clientID == "" {
+		// Unset: the client Zitadel names in the token is the one it sends
+		// Syndra as application.client_id for this grant.
+		clientID, _ = payload["client_id"].(string)
+		if clientID == "" {
+			clientID, _ = payload["azp"].(string)
+		}
 	}
 
 	want := claimPlane.Answer(pctx, userID, projectID, clientID, claims.FunctionPreAccessToken)
