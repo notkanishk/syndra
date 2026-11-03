@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 
+import { verdictOf } from "@/components/apps/claim-words";
+import type { StatusTone } from "@/components/ui/Badge";
 import {
   breakingLine,
   diffLines,
+  foldNote,
+  fromTemplate,
   literal,
   roleWords,
   rowProblems,
   sentAs,
   setRole,
+  summaryLines,
   understandLine,
 } from "@/lib/claims";
 import type { Profile } from "@/lib/queries/useClaimShape";
@@ -131,5 +136,72 @@ describe("Sent as", () => {
     expect(sentAs({ path: ["roles"], kind: "roles" }, token, "Rohan Mehta", { app: "Inventory" })).toBe(
       "Sent as `[]` for Rohan Mehta, and `[]` for anyone who holds none.",
     );
+  });
+});
+
+describe("the summary (A-15 §2)", () => {
+  const ctx = { app: "NetBird", project: "Network" };
+  const base: Profile = { claims: [{ path: ["groups"], kind: "roles", format: "array" }], roles: [], include_new: true, lands: "both" };
+  const words = (p: Profile) => summaryLines(p, roles, ctx).map((l) => `${l.key}: ${l.words}`);
+
+  it("counts renames and left-out roles in the roles line", () => {
+    const mapped = (as: Record<string, string>, out: string[] = []): Profile => ({
+      ...base,
+      include_new: false,
+      roles: roles.map((r) => ({ key: r.key, ...(as[r.key] ? { as: as[r.key] } : {}), included: !out.includes(r.key) })),
+    });
+    expect(words(base)).toEqual(["groups: Every role in Network, in Syndra's words"]);
+    expect(words(mapped({}))).toEqual(["groups: All 3 of Network's roles, in Syndra's words"]);
+    expect(words(mapped({ staff: "netbird-staff" }))).toEqual(["groups: All 3 of Network's roles, 1 in NetBird's words"]);
+    expect(words(mapped({ staff: "s", admin: "a", guest: "g" }))).toEqual(["groups: All 3 of Network's roles, in NetBird's words"]);
+    expect(words(mapped({ staff: "s" }, ["guest"]))).toEqual(["groups: 2 of Network's 3 roles, 1 in NetBird's words"]);
+    // A word that is the key itself is Syndra's word.
+    expect(words(mapped({ staff: "staff" }))).toEqual(["groups: All 3 of Network's roles, in Syndra's words"]);
+  });
+
+  it("says an object by its keys, one line per top-level claim, in order", () => {
+    const p: Profile = {
+      ...base,
+      claims: [
+        { path: ["groups"], kind: "roles" },
+        { path: ["custom_claims", "groups"], kind: "roles" },
+        { path: ["custom_claims", "given_name"], kind: "attribute", source: "given_name" },
+        { path: ["custom_claims", "name"], kind: "attribute", source: "name" },
+        { path: ["org"], kind: "static", value: "makerspace" },
+        { path: ["is_admin"], kind: "if_role", roles: ["admin", "staff"] },
+      ],
+    };
+    expect(words(p)).toEqual([
+      "groups: Every role in Network, in Syndra's words",
+      "custom_claims: An object holding `groups`, `given_name` and `name`",
+      'org: The same for everyone: `"makerspace"`',
+      "is_admin: `true` if they hold Admins or Staff, else `false`",
+    ]);
+    expect(foldNote(p)).toBe("6 rows · `groups` · `custom_claims` holding 3 · `org` · `is_admin` · both places");
+    expect(foldNote({ ...base, lands: "userinfo" })).toBe("1 row · `groups` · ID token and userinfo");
+  });
+
+  it("keeps a text-format warning on its line, nested or not, and says nothing for none", () => {
+    const lines = summaryLines({ ...base, claims: [{ path: ["custom_claims", "groups"], kind: "roles", format: "csv" }] }, roles, ctx);
+    expect(lines[0].warn).toBe("As text, with commas. No app Syndra has a template for reads roles as text.");
+    expect(summaryLines(base, roles, ctx)[0].warn).toBeUndefined();
+    expect(summaryLines({ ...base, claims: [] }, roles, ctx)).toEqual([]);
+  });
+
+  it("names the template and the changes since in one line", () => {
+    expect(fromTemplate("Custom", 5)).toBe("From the Custom template, 5 changes since.");
+    expect(fromTemplate("NetBird", 1)).toBe("From the NetBird template, 1 change since.");
+    expect(fromTemplate("NetBird", 0)).toBe("From the NetBird template.");
+  });
+});
+
+describe("the preview's verdict (A-15 §5)", () => {
+  const t = (...tones: StatusTone[]) => tones.map((tone) => ({ tone }));
+  it("says what passed, failed or needs a look, on the draft when there is one", () => {
+    expect(verdictOf(t("healthy", "healthy", "neutral", "healthy", "healthy"), false)).toEqual({ tone: "healthy", text: "All five checks pass" });
+    expect(verdictOf(t("healthy", "healthy", "healthy", "healthy", "healthy"), true).text).toBe("All five checks pass on this draft");
+    expect(verdictOf(t("danger", "healthy", "healthy", "healthy", "healthy"), false)).toEqual({ tone: "danger", text: "Check 1 fails" });
+    expect(verdictOf(t("danger", "healthy", "healthy", "warn", "danger"), false)).toEqual({ tone: "danger", text: "Checks 1 and 5 fail" });
+    expect(verdictOf(t("healthy", "healthy", "healthy", "warn", "healthy"), false)).toEqual({ tone: "warn", text: "Check 4 needs a look" });
   });
 });

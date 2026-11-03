@@ -344,8 +344,14 @@ describe("plain language", () => {
   });
 
   it("gives every page a lede", () => {
+    // A page whose first content already says what the lede would, argued one by one.
+    const LEDELESS: Record<string, string> = {
+      "components/apps/AppTokenScreen.tsx":
+        "A-15 §1 (owner, 3 Nov): the summary under the header says what the app gets, so a lede would only repeat it",
+    };
     const offenders: string[] = [];
     for (const { path, source } of sources()) {
+      if (LEDELESS[path]) continue;
       const clean = stripComments(source);
       for (const m of clean.matchAll(/<PageHeader\b/g)) {
         const tag = tagAt(clean, m.index);

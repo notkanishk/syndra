@@ -7,10 +7,11 @@ import { ErrorState, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { CardColumns } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Choice";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Ticks } from "@/components/ui/TokenBlock";
+import { Unfold } from "@/components/ui/Unfold";
 import { ApiError } from "@/lib/api-client";
 import { changeLine, type SayContext } from "@/lib/claims";
 import { formatShortDate } from "@/lib/format";
@@ -25,7 +26,12 @@ import {
 
 const SEED = "As Actions v1 sent it";
 
-/** History (A-11 §5, A-14 §7): every save of what the app is told, kept as it was; Go back saves one again. */
+/**
+ * History (A-11 §5, A-14 §7): every save of what the app is told, kept as it
+ * was; Go back saves one again. A settings row of the tools card (A-15 §6):
+ * the version in use in one line, and with two or more, Show all N unfolds
+ * the table. With one there is nothing to go back to, so no button.
+ */
 export function ClaimHistory({
   appId,
   ctx,
@@ -40,6 +46,7 @@ export function ClaimHistory({
   const versions = useClaimShapeVersions(appId);
   const apps = useApplications();
   const [restoring, setRestoring] = useState<HistoryEntry | null>(null);
+  const [all, setAll] = useState(false);
   const list = versions.data ?? [];
 
   const what = (v: HistoryEntry): string => {
@@ -57,23 +64,45 @@ export function ClaimHistory({
     return lines.length > 3 ? `${lines.slice(0, 2).join(" ")} And ${lines.length - 2} more changes.` : lines.join(" ");
   };
 
+  const current = list[0];
   return (
-    <Card>
-      <div className="px-[22px] pb-3.5 pt-5">
-        <h2 className="type-card-title">History</h2>
-        <p className="mt-1 max-w-[76ch] text-[14px] leading-[1.5] text-faint">
-          Every save of what {ctx.app} is told, kept as it was. Going back saves an old version again, as a new one.
-        </p>
+    <>
+      <div className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-[22px] pb-4 pt-3.5">
+        <span className="w-[170px] flex-none text-[14px] font-semibold">History</span>
+        <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
+          {versions.isLoading ? (
+            <RowSkeleton rows={1} avatar={false} label="Loading history" />
+          ) : versions.error ? (
+            <ErrorState title="Couldn't load the history." error={versions.error} onRetry={() => versions.refetch()} />
+          ) : !current ? (
+            <>
+              <span className="text-[14.5px]">Nothing saved for {ctx.app} yet</span>
+              <span className="text-[13px] text-faint">It uses {project}&rsquo;s default.</span>
+            </>
+          ) : (
+            <>
+              <span className="text-[14.5px]">
+                Version {current.version}
+                {current.note.startsWith(SEED) ? ", as Actions v1 sent it" : ""}
+              </span>
+              <span className="text-[13px] text-faint">
+                Saved {formatShortDate(current.saved_at)} by <UserName id={current.saved_by} fallback="Syndra" />.
+              </span>
+            </>
+          )}
+        </span>
+        {list.length > 1 && (
+          <span className="ml-auto flex justify-end whitespace-nowrap">
+            <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll(!all)}>
+              Show all {list.length}
+              <span aria-hidden className={`motion-turn ml-1.5 inline-block ${all ? "rotate-90" : ""}`}>
+                ›
+              </span>
+            </Button>
+          </span>
+        )}
       </div>
-      {versions.isLoading ? (
-        <RowSkeleton rows={2} avatar={false} label="Loading history" />
-      ) : versions.error ? (
-        <ErrorState title="Couldn't load the history." error={versions.error} onRetry={() => versions.refetch()} />
-      ) : list.length === 0 ? (
-        <p className="row-divider px-[22px] pb-[18px] pt-3.5 text-[14px] text-faint">
-          Nothing saved for {ctx.app} yet. It uses {project}&rsquo;s default.
-        </p>
-      ) : (
+      <Unfold open={all && list.length > 1}>
         <>
           <CardColumns>
             <span className="w-[130px] flex-none">Version ↓</span>
@@ -112,11 +141,11 @@ export function ClaimHistory({
             </div>
           ))}
         </>
-      )}
+      </Unfold>
       {restoring && (
         <GoBack appId={appId} entry={restoring} next={(list[0]?.version ?? 0) + 1} app={ctx.app} onClose={() => setRestoring(null)} />
       )}
-    </Card>
+    </>
   );
 }
 

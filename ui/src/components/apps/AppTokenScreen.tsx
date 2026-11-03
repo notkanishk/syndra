@@ -41,10 +41,11 @@ import { draftFrom, type ShapeDraft } from "./shape-draft";
 import { CopySheet, SaveSummary, TemplateSheet } from "./ShapeSheets";
 
 /**
- * An app, and what it's told (A-14). One job: make sure this app is told the
- * right thing about people. The shape and its preview sit side by side; every
- * edit is a draft the preview runs at once, through the same shaper the token
- * path uses, and nothing changes until Save.
+ * An app, and what it's told (A-14, laid out by A-15). One job: make sure this
+ * app is told the right thing about people. The page opens on the answer: what
+ * it gets, in a few lines, beside whether it works, in one. Every edit is a
+ * draft the preview runs at once, through the same shaper the token path uses,
+ * and nothing changes until Save. Under them, one quiet card of tools.
  */
 export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   const shape = useAppClaimShape(applicationId);
@@ -102,6 +103,8 @@ function AppClaims({ applicationId }: { applicationId: string }) {
     setPersonId(users.data.some((u) => u.id === selfId) ? selfId! : users.data[0].id);
   }, [users.data, selfId, personId]);
   const person = users.data.find((u) => u.id === personId)?.name ?? "this person";
+  // You first, then everyone (A-15 §5).
+  const people = [...users.data.filter((u) => u.id === selfId), ...users.data.filter((u) => u.id !== selfId)];
 
   const [draft, setDraft] = useState<ShapeDraft | null>(null);
   const [sheet, setSheet] = useState<{ kind: "template"; id: string } | { kind: "copy" } | { kind: "save" } | null>(null);
@@ -148,16 +151,6 @@ function AppClaims({ applicationId }: { applicationId: string }) {
   };
   const say: SayContext = { app, roles: shape.project_roles, reach: preview.data?.reach, templateId: appTemplateId(shape, draft) };
 
-  const roleWord = shape.profile.claims.some((c) => c.path[c.path.length - 1] === "groups") ? "groups" : "roles";
-  const signInOnly = shape.source === "app" && shape.profile.claims.length === 0;
-  const lede = !draft
-    ? `Exactly what ${app} receives when this person signs in, and each check on the way.`
-    : shape.source !== "app" && draft.origin === "template"
-      ? `What ${app} receives now, on ${project}'s default, and from the ${ctx.draft?.name ?? "chosen"} template as a draft. Nothing changes until you save.`
-      : draft.origin === "copy"
-        ? `What ${app} receives now${shape.source === "app" ? "" : `, on ${project}'s default`}, and with ${draft.copiedName}'s shape as a draft. Nothing changes until you save.`
-        : `What ${app} receives now, and once you save this draft. Nothing changes until you save.`;
-
   const tpl = sheet?.kind === "template" ? templates.find((t) => t.id === sheet.id) : undefined;
 
   return (
@@ -166,11 +159,6 @@ function AppClaims({ applicationId }: { applicationId: string }) {
         <PageHeader
           eyebrow="Apps"
           title={app}
-          lede={
-            signInOnly
-              ? `What ${app} is told about a person when they sign in. It needs only Zitadel's own claims; who may sign in is Zitadel's role check.`
-              : `What ${app} is told about a person when they sign in. Come here when it isn't seeing the ${roleWord} it should, or before you change what it's told.`
-          }
           meta={
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
               {kindOf(shape.application.consumer)} · roles from{" "}
@@ -207,7 +195,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
             person={person}
             preview={preview.data}
             previewRowError={rowError}
-            checkOneFailsReads={checkOneFailsReads}
+            unreached={checkOneFailsReads ? reads : undefined}
             templates={templates}
             advanced={advanced}
             projectName={project}
@@ -226,18 +214,20 @@ function AppClaims({ applicationId }: { applicationId: string }) {
             isLoading={preview.isLoading}
             error={preview.error}
             onRetry={() => preview.refetch()}
-            people={users.data}
+            people={people}
             personId={personId}
             onPerson={setPersonId}
             ctx={ctx}
-            lede={lede}
           />
         </div>
       </div>
 
-      <DebugMode appId={applicationId} ctx={{ ...ctx, profile: shape.profile, draft: undefined }} />
-      <ClaimHistory appId={applicationId} ctx={say} project={project} templates={templates} />
-      {signIns.data?.receiving && signIns.data.last_at && <AppSignInStrip name={app} usage={signIns.data} />}
+      {/* Quiet tools (A-15 §6): one card, a settings row each; nothing happens without a named button. */}
+      <Card className="[&>.row-divider:first-child]:border-t-0">
+        {signIns.data?.receiving && signIns.data.last_at && <AppSignInStrip usage={signIns.data} />}
+        <DebugMode appId={applicationId} ctx={{ ...ctx, profile: shape.profile, draft: undefined }} />
+        <ClaimHistory appId={applicationId} ctx={say} project={project} templates={templates} />
+      </Card>
 
       {tpl && (
         <TemplateSheet

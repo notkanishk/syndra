@@ -1,10 +1,9 @@
 "use client";
 
-import { Card } from "@/components/ui/Card";
 import type { AppSignIns } from "@/lib/queries/useSignIns";
 
 const DAYS = 30;
-const TALL = 56;
+const TALL = 20;
 
 /** The last 30 calendar days, oldest first, as YYYY-MM-DD. */
 export function lastDays(now: Date = new Date(), n = DAYS): string[] {
@@ -17,36 +16,31 @@ export function lastDays(now: Date = new Date(), n = DAYS): string[] {
 }
 
 /**
- * An app's sign-ins per day, last 30 days, naming nobody (A-10 §7, `app-b`;
- * owner, 3 Nov: "1a with statistics"). One bar a day; a day with none is a
- * hairline, never a gap.
+ * An app's sign-ins per day, last 30 days, naming nobody (A-10 §7; owner,
+ * 3 Nov: "1a with statistics"), as the first row of the app page's tools card
+ * (A-15 §6). One bar a day; a day with none is a hairline, never a gap.
  */
-export function AppSignInStrip({ name, usage }: { name: string; usage: AppSignIns }) {
+export function AppSignInStrip({ usage }: { usage: AppSignIns }) {
   const byDay = new Map((usage.days ?? []).map((d) => [d.day, d.count]));
   const counts = lastDays().map((day) => byDay.get(day) ?? 0);
   const max = Math.max(1, ...counts);
   const total = counts.reduce((a, b) => a + b, 0);
   const people = usage.people_30d ?? 0;
   return (
-    <Card>
-      <div className="flex flex-col gap-3 px-[22px] pb-5 pt-[18px]">
-        <div className="flex flex-col gap-1">
-          <h2 className="type-card-title m-0">Sign-ins</h2>
-          <p className="m-0 text-[13.5px] text-faint">Every sign-in to {name}, per day, last 30 days. Nobody is named.</p>
-        </div>
-        <span aria-hidden className="flex h-14 max-w-[560px] items-end gap-1">
-          {counts.map((n, i) => (
-            <span
-              key={i}
-              className={`flex-1 rounded-[2px] ${n === 0 ? "bg-line" : "bg-muted"}`}
-              style={{ height: n === 0 ? 2 : Math.max(3, Math.round((n / max) * TALL)) }}
-            />
-          ))}
-        </span>
-        <p className="m-0 text-[14px] text-muted">
-          {total} {total === 1 ? "sign-in" : "sign-ins"} in 30 days, by {people} {people === 1 ? "person" : "people"}.
-        </p>
-      </div>
-    </Card>
+    <div className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-[22px] py-4">
+      <span className="w-[170px] flex-none text-[14px] font-semibold">Sign-ins</span>
+      <span aria-hidden className="flex h-5 w-[178px] flex-none items-end gap-0.5">
+        {counts.map((n, i) => (
+          <span
+            key={i}
+            className={`flex-1 rounded-[1px] ${n === 0 ? "bg-line" : "bg-muted"}`}
+            style={{ height: n === 0 ? 2 : Math.max(3, Math.round((n / max) * TALL)) }}
+          />
+        ))}
+      </span>
+      <span className="min-w-0 flex-[1_1_200px] text-[14px] text-muted">
+        {total} in 30 days, by {people} {people === 1 ? "person" : "people"}
+      </span>
+    </div>
   );
 }
