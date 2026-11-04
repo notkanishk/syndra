@@ -100,7 +100,6 @@
     "StatCard": "src/components/ui/StatCard.tsx",
     "StatusSeat": "src/components/ui/StatusSeat.tsx",
     "CheckTrail": "src/components/ui/CheckTrail.tsx",
-    "ClaimRow": "src/components/ui/ClaimRow.tsx",
     "RoleWordsTable": "src/components/ui/RoleWordsTable.tsx",
     "SignInRow": "src/components/ui/SignInRow.tsx",
     "TokenBlock": "src/components/ui/TokenBlock.tsx",

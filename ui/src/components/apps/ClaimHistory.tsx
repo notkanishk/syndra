@@ -93,7 +93,7 @@ export function ClaimHistory({
         </span>
         {list.length > 1 && (
           <span className="ml-auto flex justify-end whitespace-nowrap">
-            <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll(!all)}>
+            <Button size="sm" aria-expanded={all} onClick={() => setAll(!all)}>
               Show all {list.length}
               <span aria-hidden className={`motion-turn ml-1.5 inline-block ${all ? "rotate-90" : ""}`}>
                 ›

@@ -199,8 +199,8 @@ func TestAnswer_RolesAreZitadelsFactsEnrich(t *testing.T) {
 
 	res := p.Answer(ctx, "u1", "p1", "", pre, listed, claims.Identity{})
 	got, _ := json.Marshal(res.Claims)
-	want := `[{"key":"roles","value":["boss","ended","zitadel-only"]},{"key":"ends","value":{"boss":"2026-12-01","ended":"2026-11-01"}},` +
-		`{"key":"bundles","value":["Makers"]},{"key":"name","value":"Ada"},{"key":"svc","value":false},{"key":"uid","value":"u1"},{"key":"is_boss","value":true}]`
+	want := `[{"key":"roles","value":["boss","ended","zitadel-only"]},{"key":"bundles","value":["Makers"]},{"key":"ends","value":{"boss":"2026-12-01","ended":"2026-11-01"}},` +
+		`{"key":"is_boss","value":true},{"key":"name","value":"Ada"},{"key":"svc","value":false},{"key":"uid","value":"u1"}]`
 	if res.Outcome != claimtel.Served || string(got) != want {
 		t.Fatalf("with facts, %s:\n got %s\nwant %s", res.Outcome, got, want)
 	}
@@ -208,14 +208,14 @@ func TestAnswer_RolesAreZitadelsFactsEnrich(t *testing.T) {
 	r.HDel(FactsKey("u1"), "p1")
 	res = p.Answer(ctx, "u1", "p1", "", pre, listed, claims.Identity{})
 	got, _ = json.Marshal(res.Claims)
-	want = `[{"key":"roles","value":["boss","ended","zitadel-only"]},{"key":"uid","value":"u1"},{"key":"is_boss","value":true}]`
+	want = `[{"key":"roles","value":["boss","ended","zitadel-only"]},{"key":"is_boss","value":true},{"key":"uid","value":"u1"}]`
 	if res.Outcome != claimtel.ServedRolesOnly || !res.Miss || string(got) != want {
 		t.Fatalf("no facts, %s miss=%v:\n got %s\nwant %s", res.Outcome, res.Miss, got, want)
 	}
 
 	// Zitadel listing none is none, whatever Syndra's facts hold.
 	r.SetField(FactsKey("u1"), "p1", string(b))
-	if res = p.Answer(ctx, "u1", "p1", "", pre, nil, claims.Identity{}); fmt.Sprint(rolesOf(t, res)) != "[]" || res.Claims[6].Value != false {
+	if res = p.Answer(ctx, "u1", "p1", "", pre, nil, claims.Identity{}); fmt.Sprint(rolesOf(t, res)) != "[]" || res.Claims[3].Value != false { // is_boss, A to Z after the roles
 		t.Fatalf("no roles listed: %+v", res)
 	}
 }
@@ -407,7 +407,7 @@ func TestAnswer_IdentityFromThePayload(t *testing.T) {
 		return string(b), res
 	}
 	v1Token := func(given, family, name string) string {
-		return fmt.Sprintf(`[{"key":"groups","value":["admin"]},{"key":"custom_claims","value":{"groups":["admin"],"given_name":%q,"family_name":%q,"name":%q}}]`, given, family, name)
+		return fmt.Sprintf(`[{"key":"groups","value":["admin"]},{"key":"custom_claims","value":{"family_name":%q,"given_name":%q,"groups":["admin"],"name":%q}}]`, family, given, name)
 	}
 
 	// No facts: the names are the payload's, and the token is whole.

@@ -95,8 +95,8 @@ export function ShapeChooser({
                   <div className="flex flex-col gap-[7px] pb-2 pl-11 pr-3.5 pt-2.5">
                     {words?.chooser.map((line) => <DotLine key={line} text={line} />)}
                     {onOpenTemplate && (
-                      <span className="-ml-2.5 inline-flex">
-                        <Button variant="ghost" size="sm" onClick={() => onOpenTemplate(t.id)}>
+                      <span className="inline-flex">
+                        <Button size="sm" onClick={() => onOpenTemplate(t.id)}>
                           See the whole template
                         </Button>
                       </span>

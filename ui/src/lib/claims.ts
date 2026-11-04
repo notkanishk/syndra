@@ -8,6 +8,7 @@ import type {
   Reach,
   RoleMap,
 } from "@/lib/queries/useClaimShape";
+import { sortByName } from "@/lib/sort";
 
 /**
  * Words and small reads for the claims part (A-14). Nothing here shapes a
@@ -265,15 +266,37 @@ export function fromTemplate(name: string, changes: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// The summary (A-15 §2): one line per top-level claim, in the token's order,
-// the key beside what it carries in words. Not a paraphrase of the token: the
-// shape's own rows, said, so the token beside it reads across.
+// The list of claims (A-16 §1): one line per top-level key, the key beside
+// what it carries in words. The roles claim comes first, the rest A to Z, and
+// A to Z inside an object. The shaper writes the token in the same order
+// (`ordered` in internal/claims), so the list and the token read across.
 
-export interface SummaryLine {
+/** A to Z for claim keys, case aside: byte for byte the shaper's `keyLess` (keys are ASCII). */
+export function compareKeys(a: string, b: string): number {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  if (x !== y) return x < y ? -1 : 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** The roles claim's row: the first top-level roles row, else the first nested one, else -1 (the shaper's `RolesKey`). */
+export function rolesIndex(p: Profile): number {
+  const top = p.claims.findIndex((c) => c.kind === "roles" && c.path.length === 1);
+  return top >= 0 ? top : p.claims.findIndex((c) => c.kind === "roles");
+}
+
+export interface ClaimLine {
   key: string;
+  /** The rows under this key, in saved order. The first is the line's id: it holds while the key is retyped. */
+  rows: number[];
   words: string;
-  /** A roles claim sent as text keeps its warning here, in both views. */
+  /** The faint line: the roles' state, "New in this draft.", or what an object's roles row is. */
+  sub?: string;
+  /** A roles claim sent as text keeps its warning on its line, in both views. */
   warn?: string;
+  /** The roles claim's line, first and the hero. */
+  roles: boolean;
+  object: boolean;
 }
 
 const joinWith = (xs: string[], word: string) =>
@@ -281,27 +304,42 @@ const joinWith = (xs: string[], word: string) =>
 
 const TEXT_FORMAT: Record<string, string> = { csv: "As text, with commas", space_delimited: "As text, with spaces" };
 
-/** "All 7 of Network's roles, 1 in NetBird's words." */
-export function rolesWords(p: Profile, roles: ProjectRole[], ctx: { app: string; project: string }): string {
-  if (!p.roles?.length && p.include_new) return `Every role in ${ctx.project}, in Syndra's words`;
-  const words = roleWords(p, roles);
-  const inc = words.filter((w) => w.included);
-  const own = inc.filter((w) => w.as && w.as !== w.role.key).length;
-  if (inc.length === 0) return `None of ${ctx.project}'s ${words.length} roles`;
-  const head = inc.length === words.length ? `All ${words.length} of ${ctx.project}'s roles` : `${inc.length} of ${ctx.project}'s ${words.length} roles`;
-  const tail = own === 0 ? "in Syndra's words" : own === inc.length ? `in ${ctx.app}'s words` : `${own} in ${ctx.app}'s words`;
-  return `${head}, ${tail}`;
+/** What a roles claim's line says it carries. */
+export const rolesCarry = (c: Claim, project: string) =>
+  `The roles each person holds in ${project}, as ${(c.format ?? "array") === "array" ? "a list" : "text"}`;
+
+/**
+ * The roles line's faint line (A-16 §2): the state, so the common case never
+ * needs opening. Named roles are the table's order, A to Z by name.
+ */
+export function rolesState(p: Profile, roles: ProjectRole[], ctx: { app: string }): string {
+  const words = sortByName(roleWords(p, roles), (w) => w.role.label || w.role.key, (w) => w.role.key);
+  const n = words.length;
+  if (n === 0) return "No roles yet.";
+  const renamed = words.filter((w) => w.included && w.as && w.as !== w.role.key);
+  const out = words.filter((w) => !w.included);
+  const all = n === 1 ? "Its one role" : n === 2 ? "Both roles" : `All ${n} roles`;
+  if (out.length === 0 && renamed.length === 0) return `${all}, in Syndra's words.`;
+  if (out.length === 0 && renamed.length === n) return `${all}, in ${ctx.app}'s words.`;
+  if (out.length === n) return n === 1 ? "Its one role is left out." : `None of the ${n} roles. All left out.`;
+  const head = out.length === 0 ? `${all}.` : `${n - out.length} of ${n} roles.`;
+  const name = (w: RoleWord) => w.role.label || w.role.key;
+  const tail =
+    renamed.length + out.length <= 2
+      ? [...renamed.map((w) => `${name(w)} as \`${w.as}\``), ...out.map((w) => `${name(w)} left out`)].join("; ")
+      : [renamed.length ? `${renamed.length} renamed` : "", out.length ? `${out.length} left out` : ""].filter(Boolean).join(", ");
+  return `${head} ${tail}.`;
 }
 
-function carriesWords(c: Claim, p: Profile, roles: ProjectRole[], ctx: { app: string; project: string }): string {
+function carriesWords(c: Claim, roles: ProjectRole[], project: string): string {
   switch (c.kind) {
     case "roles":
-      return rolesWords(p, roles, ctx);
+      return rolesCarry(c, project);
     case "static":
       return `The same for everyone: \`${literal(c.value)}\``;
     case "if_role":
       return c.roles?.length
-        ? `\`true\` if they hold ${joinWith(c.roles.map((k) => labelOf(roles, k)), "or")}, else \`false\``
+        ? `\`true\` if they hold ${joinWith(c.roles.map((k) => labelOf(roles, k)), "or")}, otherwise \`false\``
         : "`false` for everyone, until it has a role";
     case "bundles":
     case "role_ends":
@@ -311,54 +349,128 @@ function carriesWords(c: Claim, p: Profile, roles: ProjectRole[], ctx: { app: st
   }
 }
 
-export function summaryLines(p: Profile, roles: ProjectRole[], ctx: { app: string; project: string }): SummaryLine[] {
-  const tops = Array.from(new Set(p.claims.map((c) => c.path[0])));
-  return tops.map((key) => {
-    const rows = p.claims.filter((c) => c.path[0] === key);
-    const text = rows.find((c) => c.kind === "roles" && (c.format ?? "array") !== "array");
-    const warn = text ? `${TEXT_FORMAT[text.format!]}. No app Syndra has a template for reads roles as text.` : undefined;
-    const top = rows.find((c) => c.path.length === 1);
-    const words = top
-      ? carriesWords(top, p, roles, ctx)
-      : `An object holding ${joinWith(Array.from(new Set(rows.map((c) => `\`${c.path[1]}\``))), "and")}`;
-    return { key, words, warn };
+/**
+ * The list: one line per top-level key, the roles claim's first, the rest A
+ * to Z. `saved` is what's saved, so a line it lacks says "New in this draft.".
+ */
+export function claimLines(
+  p: Profile,
+  roles: ProjectRole[],
+  ctx: { app: string; project: string; saved?: Profile | null },
+): ClaimLine[] {
+  const hero = rolesIndex(p);
+  const savedKeys = ctx.saved ? new Set(ctx.saved.claims.map((c) => c.path[0])) : null;
+  // A top-level row is a line of its own, even while its name repeats another's
+  // (its editor says so); the rows inside one object are one line.
+  const groups = new Map<string, number[]>();
+  p.claims.forEach((c, i) => {
+    const g = c.path.length === 1 ? `row:${i}` : `obj:${c.path[0]}`;
+    groups.set(g, [...(groups.get(g) ?? []), i]);
   });
+  const lines = Array.from(groups.values(), (rows): ClaimLine => {
+    const claims = rows.map((i) => p.claims[i]);
+    const key = claims[0].path[0];
+    const top = claims[0].path.length === 1 ? claims[0] : undefined;
+    const text = claims.find((c) => c.kind === "roles" && (c.format ?? "array") !== "array");
+    const inner = Array.from(new Set(claims.map((c) => c.path[1]))).sort(compareKeys);
+    const isRoles = rows.includes(hero);
+    const nestedRoles = claims.find((c) => c.kind === "roles" && c.path.length > 1);
+    return {
+      key,
+      rows,
+      words: top ? carriesWords(top, roles, ctx.project) : `An object holding ${joinWith(inner.map((k) => `\`${k}\``), "and")}`,
+      sub: isRoles
+        ? rolesState(p, roles, ctx)
+        : savedKeys && !savedKeys.has(key)
+          ? "New in this draft."
+          : nestedRoles
+            ? `Its \`${nestedRoles.path[nestedRoles.path.length - 1]}\` is the same list of roles.`
+            : undefined,
+      warn: text ? `${TEXT_FORMAT[text.format!]}. No app Syndra has a template for reads roles as text.` : undefined,
+      roles: isRoles,
+      object: !top,
+    };
+  });
+  return lines.sort((a, b) => Number(b.roles) - Number(a.roles) || compareKeys(a.key, b.key));
 }
+
+// ---------------------------------------------------------------------------
+// Adding a claim (A-16 §3, option a): a menu of finished claims, named the way
+// apps expect, A to Z within each of the Carries groups.
+
+/** Keys Zitadel sends itself (A-15's token line). Greyed at the top level of the menu, choosable inside an object. */
+export const ZITADEL_SENDS = ["email", "name", "preferred_username"];
 
 /**
- * The Advanced fold's name (A-15 §4, 4a). "Custom claims" (4b) would collide
- * with the `custom_claims` key; the owner may still choose it, here only.
+ * Keys Zitadel never lets an action set (the shaper's `ZitadelOwns`): its
+ * registered claims and its own `urn:zitadel:iam` namespace. Refused at the top level.
  */
-export const CLAIM_ROWS = "Claim rows";
+export const zitadelOwns = (key: string) =>
+  ["sub", "aud", "iss", "exp", "iat", "nbf", "jti", "client_id"].includes(key) || key.startsWith("urn:zitadel:iam");
 
-const LANDS_SHORT: Record<Lands, string> = { both: "both places", access_token: "access token", userinfo: "ID token and userinfo" };
-
-/** The Claim rows fold's closed note: "5 rows · `groups` · `custom_claims` holding 4 · both places". */
-export function foldNote(p: Profile): string {
-  const n = p.claims.length;
-  const tops = Array.from(new Set(p.claims.map((c) => c.path[0]))).map((key) => {
-    const inside = p.claims.filter((c) => c.path[0] === key && c.path.length > 1).length;
-    return inside ? `\`${key}\` holding ${inside}` : `\`${key}\``;
-  });
-  return [n === 1 ? "1 row" : `${n} rows`, ...tops, LANDS_SHORT[p.lands]].join(" · ");
+export interface AddEntry {
+  /** "{app}" stands for the app's name. */
+  label: string;
+  /** The conventional key a finished entry gets. */
+  key?: string;
+  claim?: Omit<Claim, "path">;
+  /** Needs one choice first: the roles (the role picker), or a name and value (its editor, opened). */
+  then?: "roles" | "value";
 }
+
+export const ADD_MENU: Array<{ group: string; entries: AddEntry[] }> = [
+  {
+    group: "From the person",
+    entries: [
+      { label: "Bundles they hold", key: "bundles", claim: { kind: "bundles" } },
+      { label: "Each role's end date", key: "role_ends", claim: { kind: "role_ends" } },
+      { label: "Email", key: "email", claim: { kind: "attribute", source: "email" } },
+      { label: "Family name", key: "family_name", claim: { kind: "attribute", source: "family_name" } },
+      { label: "Full name", key: "name", claim: { kind: "attribute", source: "name" } },
+      { label: "Given name", key: "given_name", claim: { kind: "attribute", source: "given_name" } },
+      { label: "Is a service account", key: "is_service_account", claim: { kind: "attribute", source: "is_service_account" } },
+      // `groups` is the default (owner, 4 Nov): five of the six templates that send roles use it.
+      { label: "Roles {app} sees", key: "groups", claim: { kind: "roles", format: "array" } },
+      { label: "Username", key: "preferred_username", claim: { kind: "attribute", source: "username" } },
+      { label: "Yes if they hold a role", then: "roles" },
+    ],
+  },
+  { group: "The same for everyone", entries: [{ label: "A fixed value", then: "value" }] },
+];
+
+/**
+ * Why an entry can't be added here, said in place, or undefined. At the top
+ * level: Zitadel's own keys, a key already sent, and a second roles claim.
+ * Inside an object only its own keys are taken.
+ */
+export function addMuted(e: AddEntry, taken: ReadonlySet<string>, at: { inside: boolean; rolesKey?: string }): string | undefined {
+  if (!e.key) return undefined;
+  if (!at.inside && ZITADEL_SENDS.includes(e.key)) return `Zitadel sends \`${e.key}\``;
+  if (!at.inside && e.claim?.kind === "roles" && at.rolesKey) return `Sent as \`${at.rolesKey}\``;
+  return taken.has(e.key) ? `Sent as \`${e.key}\`` : undefined;
+}
+
+/** Where the app reads the roles claim's name, from its template's "Set in …" (A-16 §2). */
+export const NAME_SET_IN: Record<string, string> = {
+  netbird: "NetBird reads the name set in its Settings › Groups › JWT claim.",
+  gitlab: "GitLab reads the name set as `groups_attribute` in `gitlab.rb`.",
+  "home-assistant": "Home Assistant reads the name set as `claims.groups`.",
+};
+
+/** How a roles claim is sent, beside its Sent as switch. */
+export const SENT_AS_WORDS: Record<string, string> = {
+  array: "A list, and `[]` for anyone who holds none.",
+  csv: "Text, with commas.",
+  space_delimited: "Text, with spaces.",
+};
+
+/** Lands in's ID token option says this on hover and focus (A-16 §1), so it costs no line at rest. */
+export const ID_TOKEN_TITLE = "One choice: the ID token carries them only while User Info inside ID Token is on.";
 
 /** "the access token and userinfo", for "In … ." */
 export const landsIn = (lands: Lands) => {
   const l = LANDS_LABEL[lands];
   return l[0].toLowerCase() + l.slice(1);
-};
-
-// ---------------------------------------------------------------------------
-// Each template's main truth, said once under the template line (§2).
-
-export const TEMPLATE_CAPTION: Record<string, string> = {
-  netbird: "Each value becomes a NetBird group. NetBird moves people between groups on every sign-in.",
-  gitlab: "If `admin_groups` is set, GitLab makes and unmakes admins on every sign-in.",
-  "supabase-oidc": "Supabase keeps the top-level `custom_claims` object and drops other unknown keys.",
-  "supabase-keycloak": "Supabase copies every key it doesn't know into `custom_claims`.",
-  "home-assistant": "Home Assistant sets someone's role only when their user is first made.",
-  "sign-in-only": "Zitadel's standard claims do the work. Who may sign in is Zitadel's role check.",
 };
 
 /** One line of a template sheet; `warn` is something the app will act on (amber dot). */
@@ -575,7 +687,15 @@ export function rowProblems(
 ): Array<{ message: string; blocksPreview: boolean } | null> {
   const keys = p.claims.map((c) => pathKey(c.path));
   return p.claims.map((c, i) => {
-    if (c.path.some((seg) => !seg.trim())) return { message: "Name this claim.", blocksPreview: true };
+    const valueless = c.kind === "static" && (c.value === "" || c.value === undefined || (Array.isArray(c.value) && c.value.length === 0));
+    const nameless = c.path.some((seg) => !seg.trim());
+    // A fixed value lands opened, unnamed and empty (A-16 §3): the line says which is missing.
+    if (nameless && valueless) return { message: "Name it and give it a value.", blocksPreview: true };
+    if (nameless) return { message: "Name this claim.", blocksPreview: true };
+    if (zitadelOwns(c.path[0])) {
+      return { message: `\`${c.path[0]}\` is Zitadel's own claim, so Zitadel drops this one. Name it something else, or put it inside an object.`, blocksPreview: true };
+    }
+    if (valueless) return { message: "Give it a value.", blocksPreview: false };
     if (keys.indexOf(keys[i]) !== i) return { message: `\`${pathLabel(c.path)}\` is sent by another row too.`, blocksPreview: true };
     const child = p.claims.find((o) => o.path.length > c.path.length && c.path.every((seg, j) => o.path[j] === seg));
     if (child) {
