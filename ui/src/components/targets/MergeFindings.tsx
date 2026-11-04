@@ -301,7 +301,8 @@ function DecisionForm({
           </Button>
         )}
         <span className="flex-1" />
-        <Button variant="ghost" size="sm" onClick={onCancel}>
+        {/* Beside outline acts, Cancel is outline too: ghost only defers to a primary (G1). */}
+        <Button size="sm" onClick={onCancel}>
           Cancel
         </Button>
       </div>

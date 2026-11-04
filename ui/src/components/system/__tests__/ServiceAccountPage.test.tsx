@@ -138,7 +138,7 @@ describe("a service account's page", () => {
     expect(within(card).getByRole("link", { name: "Laser Lab" })).toHaveAttribute("href", "/projects/pLaser");
     expect(within(card).getByText("Trained")).toBeInTheDocument();
     fireEvent.click(within(card).getByRole("button", { name: /^Revoke Trained in Laser Lab/ }));
-    expect(screen.getByRole("dialog")).toHaveTextContent("Revoke direct access to Laser Lab / trained?");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Revoke direct access to Laser Lab / Trained?");
   });
 
   it("lists what it holds by project name, A to Z, whatever order the read came in", () => {

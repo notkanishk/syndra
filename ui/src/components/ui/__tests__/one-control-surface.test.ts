@@ -225,13 +225,12 @@ describe("a control states its role in the vocabulary the product already has", 
    * A button on its own is outline sm; ghost is only the quieter half of a
    * pair, beside the accent or the destructive confirm it defers to (A-16 §4,
    * owner 4 Nov). A lone ghost reads as bare text, which is what made the
-   * claims page look inconsistent. Pinned where it has been swept; widen
-   * `SWEPT` as the rest of Syndra follows (openspec/NEXT.md).
+   * claims page look inconsistent. App-wide since the A-17 sweep; a dialog's
+   * Cancel is ModalFooter's ghost `cancel` slot, and PaginationRow's own
+   * controls live in components/ui.
    */
   it("keeps ghost for the quieter half of a pair", () => {
-    const SWEPT = ["components/apps/"];
     const offenders = relevant()
-      .filter(({ path }) => SWEPT.some((prefix) => path.startsWith(prefix)))
       .flatMap(({ path, source }) =>
         [...source.matchAll(/variant="ghost"/g)]
           .filter((m) => !/variant="(accent|dangerConfirm)"/.test(source.slice(Math.max(0, m.index! - 400), m.index! + 400)))
@@ -374,10 +373,14 @@ function stripLineComments(source: string): string {
  * shared part now carries the rule, and these keep the copies from coming back.
  */
 describe("the refinement sweep's rules (A-17)", () => {
+  // A-16's claims card landed while this sweep ran and was kept as it was merged
+  // (owner's instruction); its chevron and footer join these rules when it reopens.
+  const PARKED = new Set(["components/apps/ShapeCard.tsx"]);
   const all = () =>
     tsxFiles(join(SRC, "components"))
       .concat(tsxFiles(join(SRC, "app")))
-      .map((path) => ({ path: path.slice(SRC.length + 1), source: stripLineComments(readFileSync(path, "utf8")) }));
+      .map((path) => ({ path: path.slice(SRC.length + 1), source: stripLineComments(readFileSync(path, "utf8")) }))
+      .filter(({ path }) => !PARKED.has(path));
   const lineAt = (source: string, at: number) => source.slice(0, at).split("\n").length;
 
   // G3: six hand copies of the fold chevron, in two border tones, before it was a part.
