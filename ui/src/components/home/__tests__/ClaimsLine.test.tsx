@@ -17,7 +17,7 @@ const status = (over: Record<string, unknown> = {}) => ({
   waiting: 0,
   ...over,
 });
-const line = () => screen.getByText("Claims:").parentElement!;
+const line = () => screen.getByRole("button", { name: "Claims" }).closest("div")!;
 
 beforeEach(() => {
   q.value = { data: status(), error: null, isLoading: false, dataUpdatedAt: Date.now() };
@@ -26,7 +26,7 @@ beforeEach(() => {
 describe("Home's claims line", () => {
   it("says delivery is whole in the owner's words", () => {
     render(<ClaimsLine />);
-    expect(line()).toHaveTextContent("Claims: delivered to every sign-in in the last 24h");
+    expect(line()).toHaveTextContent("delivered to every sign-in in the last 24h");
     expect(screen.queryByRole("link")).toBeNull();
   });
 
@@ -53,7 +53,7 @@ describe("Home's claims line", () => {
       const since = new Date(Date.now() - 2 * 3600_000);
       q.value = { ...q.value, data: status({ checking_since: since.toISOString() }) };
       render(<ClaimsLine />);
-      expect(line()).toHaveTextContent(/^Claims: delivered to every sign-in since \d\d:\d\d$/);
+      expect(line()).toHaveTextContent(/delivered to every sign-in since \d\d:\d\d$/);
     } finally {
       vi.useRealTimers();
     }
@@ -62,20 +62,20 @@ describe("Home's claims line", () => {
   it("says there was nothing to check when nobody signed in", () => {
     q.value = { ...q.value, data: status({ sign_ins_24h: { unchecked: 3 } }) };
     render(<ClaimsLine />);
-    expect(line()).toHaveTextContent("Claims: no sign-ins to check in the last 24h");
+    expect(line()).toHaveTextContent("no sign-ins to check in the last 24h");
   });
 
   it("claims nothing about health while loading", () => {
     q.value = { data: undefined, error: null, isLoading: true, dataUpdatedAt: 0 };
     render(<ClaimsLine />);
-    expect(line()).toHaveTextContent("Claims: checking");
+    expect(line()).toHaveTextContent("checking");
     expect(line().textContent).not.toMatch(/delivered|problem|\d/);
   });
 
   it("says one quiet line on a failed read, with no state", () => {
     q.value = { data: undefined, error: new Error("boom"), isLoading: false, dataUpdatedAt: 0 };
     render(<ClaimsLine />);
-    expect(line()).toHaveTextContent("Claims: couldn't check how delivery is going.");
+    expect(line()).toHaveTextContent("Couldn't check how delivery is going.");
     expect(screen.queryByRole("link")).toBeNull();
   });
 

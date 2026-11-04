@@ -147,7 +147,7 @@ describe("Home's calm line and grid hand over", () => {
     home.reread();
     later(TINT_MS * 4);
     expect(gridPhase()).toBe("open");
-    expect(screen.getByRole("link", { name: "Review them" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Review on Drift" })).toBeTruthy();
     expect(calmPhase()).toBeNull();
     // The headline stays with what is on screen.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("One thing needs you.");

@@ -10,12 +10,12 @@ import { ClaimsLine } from "@/components/home/ClaimsLine";
 import { Makerspace } from "@/components/home/Makerspace";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Owner } from "@/components/system/ServiceAccountOwner";
-import { ErrorState, RowSkeleton } from "@/components/states";
+import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { Card, CardHeader, CardHeaderLink, CardRow } from "@/components/ui/Card";
-import { usePageHead } from "@/components/ui/PageHeader";
+import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import { Term } from "@/components/ui/Term";
 import { RoleRef, UserAvatar, UserName } from "@/components/names";
 import {
@@ -40,6 +40,7 @@ import { useIsAdvanced } from "@/lib/ui-view";
 import { targetLabel } from "@/lib/nav";
 import { ArriveList } from "@/components/ui/ArriveList";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { StatusDot } from "@/components/ui/Badge";
 import { NO_BUNDLE, peopleHref } from "@/lib/people-filters";
 import { useIsPhone } from "@/lib/useViewport";
 import { stillMotion, TINT_MS } from "@/lib/motion";
@@ -297,9 +298,7 @@ export function Home({ session }: { session: SessionUser }) {
           Unfold as everything else the switch moves. */}
       <Unfold open={!advanced} gap={24}>
         <p className="max-w-[820px] text-[14px] leading-[1.55] text-faint">
-          In Basic these blocks are your whole queue. Pending changes and unexplained access
-          aren&rsquo;t hidden from you — they belong to the machine, and the machine lives in
-          Advanced.
+          Pending changes and Drift are in Advanced.
         </p>
       </Unfold>
     </div>
@@ -307,8 +306,8 @@ export function Home({ session }: { session: SessionUser }) {
   if (!calm) held.current = { grid, blocks };
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className={head.className} data-settled={head["data-settled"]}>
+    <div className="flex flex-col gap-4">
+      <div className={head.className} data-settled={head["data-settled"]} style={BELOW_HEADER}>
         {/* max-w in characters, not pixels: the greeting is a sentence, and a
             sentence that runs the full width of a wide window is read in
             sweeps rather than at a glance. It wraps rather than clipping, and
@@ -342,12 +341,12 @@ export function Home({ session }: { session: SessionUser }) {
         {!error && !loading && (
           <Unfold open={swap.gridOpen && clear.length > 0}>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[13.5px] text-muted">
-            <span aria-hidden className="h-[7px] w-[7px] rounded-pill bg-healthy" />
+            <StatusDot tone="healthy" />
             <span>Checked, nothing waiting:</span>
             {clear.map(([name, href], index) => (
               <span key={href} className="inline-flex items-center gap-2">
                 {index > 0 && <span aria-hidden>·</span>}
-                <Link href={href} className="text-ink link-hover">
+                <Link href={href} className="inline-flex min-h-[44px] items-center text-ink link-hover desktop:min-h-0">
                   {name}
                 </Link>
               </span>
@@ -383,20 +382,16 @@ export function Home({ session }: { session: SessionUser }) {
         {/* The last decided row is still on its beat: the empty state waits for it.
             One calm line, not a full-page card: the page continues below, and a
             hero-sized empty state would read as the end of it. */}
-        <Unfold open={swap.calmOpen} gap={24}>
-        <div className="panel flex items-center gap-3 px-5 py-4">
-          {/* Healthy, not accent. Violet is what you can act on, and the whole
-              statement of this row is that there is nothing to act on. */}
-          <span aria-hidden className="h-2.5 w-2.5 rounded-pill bg-healthy" />
-          <span className="text-[14.5px]">
-            <strong className="font-semibold">Nothing here needs you.</strong>{" "}
-            <span className="text-muted">
-              No open requests, and no access ending in the next 14 days. Checked <ClockTime at={summary.dataUpdatedAt} />.
-            </span>
-          </span>
+        <Unfold open={swap.calmOpen} gap={16}>
+        <div className="panel">
+          <EmptyState
+            resolved
+            title="Nothing here needs you."
+            guidance="No open requests, and no access ending in the next 14 days."
+          />
         </div>
         </Unfold>
-        <Unfold open={swap.gridOpen} gap={24}>
+        <Unfold open={swap.gridOpen} gap={16}>
           {calm ? held.current.grid : grid}
         </Unfold>
 
@@ -575,11 +570,7 @@ function OpenRequests({
   return (
     <Card {...queue.listProps}>
       {cancelStep}
-      <CardHeader
-        title="Open requests"
-        count={open}
-        action={<CardHeaderLink href="/requests">See all</CardHeaderLink>}
-      />
+      <CardHeader title="Open requests" count={open} />
       {/* `arrive`, the same stagger every list in the product gets from
           `ListStates`. These two lists compose their own rows and so had none:
           the dashboard was the one screen whose rows appeared all at once. */}
@@ -588,10 +579,8 @@ function OpenRequests({
           <LeavingRow key={entry.id} {...queue.props(entry.id)}>
             <CardRow>
               <UserAvatar id={entry.requester_id} size="list" />
-              <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
-                <UserName id={entry.requester_id} />
-            </div>
-            <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
+              <PersonLink id={entry.requester_id} />
+            <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
               <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
             </div>
             <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
@@ -606,7 +595,7 @@ function OpenRequests({
                 outcomes[entry.id] && (
                   <ActionOutcome
                     placement="seat"
-                    word={outcomes[entry.id].word}
+                    word={outcomes[entry.id].word ?? "Decided"}
                     outcome={outcomes[entry.id].outcome}
                   />
                 )
@@ -628,7 +617,7 @@ function OpenRequests({
                   </div>
                   {/* A failed write puts the buttons back and says why under them. */}
                   {outcomes[entry.id] && (
-                    <ActionOutcome placement="seat" className="tint-in" outcome={outcomes[entry.id].outcome} />
+                    <ActionOutcome placement="seat" className="tint-in" word="Not done" outcome={outcomes[entry.id].outcome} />
                   )}
                 </>
               )}
@@ -663,7 +652,7 @@ function ExpiringSoon({
         title="Direct access ending soon"
         count={grants.length}
         tone="warn"
-        note="Extending is the only action — doing nothing lets it lapse."
+        note="Extending is the only action. Doing nothing lets it lapse."
       />
       <Capped items={soonestFirst} href="/review/expiring-access">
         {(grant) => <ExpiringRow key={grant.id} grant={grant} />}
@@ -690,16 +679,14 @@ function ExpiringRow({
   return (
     <CardRow>
       <UserAvatar id={grant.user_id} size="list" />
-      <div className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold">
-        <UserName id={grant.user_id} />
-      </div>
-      <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
+      <PersonLink id={grant.user_id} />
+      <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
         <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
       </div>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <AccessSource kind="direct" />
         <span className="text-[14px] text-muted [text-wrap:pretty]">
-          No action — expires {formatShortDate(grant.expires_at)}
+          Ends {formatShortDate(grant.expires_at)}
         </span>
       </div>
       <div className="w-[66px] shrink-0 text-[13.5px] font-semibold text-warn-text">
@@ -731,7 +718,14 @@ function ExpiringRow({
         Extend
       </Button>
 
-      {outcome && <ActionOutcome outcome={outcome} placement="inline" className="w-full" />}
+      {outcome && (
+        <ActionOutcome
+          outcome={outcome}
+          placement="inline"
+          className="w-full"
+          word={outcomeWord(outcome, "Extended", "Not extended")}
+        />
+      )}
       {step.element}
     </CardRow>
   );
@@ -771,11 +765,9 @@ function OnboardingGaps({
         <CardRow>
           <div className="flex-1 text-[14.5px]">
             No default <Term name="bundle">bundle</Term> is set for new members
-            <span className="text-faint"> — anybody who joins gets nothing until one is set</span>
+            <span className="text-faint">. Anybody who joins gets nothing until one is set.</span>
           </div>
-          <ButtonLink href="/bundles" size="sm">
-            Open bundles
-          </ButtonLink>
+          <ArrowLink href="/bundles">Open bundles</ArrowLink>
         </CardRow>
       )}
       {/* Newest joined first; the line opens People where the same people are
@@ -785,12 +777,7 @@ function OnboardingGaps({
           <LeavingRow key={person.user_id} {...gaps.props(person.user_id)}>
             <CardRow>
               <UserAvatar id={person.user_id} size="list" />
-              <Link
-                href={`/users/${person.user_id}`}
-                className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold link-hover"
-              >
-                <UserName id={person.user_id} />
-              </Link>
+              <PersonLink id={person.user_id} />
               <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
                 Holds no bundle
               </div>
@@ -822,12 +809,7 @@ function OnboardingGaps({
 function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
   return (
     <Card>
-      <CardHeader
-        title="Service accounts to look at"
-        count={accounts.length}
-        tone="warn"
-        action={<CardHeaderLink href="/system/service-accounts">Open Service accounts</CardHeaderLink>}
-      />
+      <CardHeader title="Service accounts to look at" count={accounts.length} tone="warn" />
       <Capped items={accounts} href="/system/service-accounts">
         {(account) => (
           <CardRow key={account.id}>
@@ -837,7 +819,7 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
             >
               {account.name}
             </Link>
-            <div className="w-[170px] shrink-0 text-[14px]">
+            <div className="w-full sm:w-[170px] shrink-0 text-[14px]">
               <Owner id={account.owner_id} />
             </div>
           </CardRow>
@@ -860,7 +842,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           {/* Not "nothing has changed" — that flatly denies the count above it.
               The reassurance is about Zitadel, not the queue: it has not
               received any of this yet, so there is nothing to undo. */}
-          <span className="text-faint"> — none of it has reached Zitadel yet</span>
+          <span className="text-faint">. None of it has reached Zitadel yet.</span>
         </div>
         <Button
           variant="outline"
@@ -886,15 +868,8 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           must not restyle the block around it. */}
       {outcome && (
         <CardRow>
-          <ActionOutcome outcome={outcome} placement="inline" />
+          <ActionOutcome outcome={outcome} placement="inline" word={outcomeWord(outcome, "Sent", "Not sent")} />
         </CardRow>
-      )}
-      {!reachable && (
-        // A disabled action states its reason in the row, not on hover: hover
-        // doesn't exist on touch and doesn't survive a screenshot.
-        <div className="border-t border-dashed border-warn-line bg-warn-soft px-[18px] py-3 text-[13.5px] text-warn-text">
-          Sending waits until Zitadel answers. Changes wait here, in order, and nothing is lost.
-        </div>
       )}
     </Card>
   );
@@ -925,50 +900,49 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
       <CardHeader title="Sent, and not seen back yet" count={count} tone="warn" />
       <CardRow>
         <div className="flex-1 text-[14.5px]">
-          Syndra sent {count === 1 ? "this change" : "these changes"} and Zitadel accepted{" "}
-          {count === 1 ? "it" : "them"}
-          <span className="text-faint">
-            {" "}
-            — not a failed change, and not one still waiting for you to send. A later look at Zitadel
-            just hasn&rsquo;t been able to see {count === 1 ? "it" : "them"} yet.
-          </span>
+          Zitadel accepted {count === 1 ? "this change" : "these changes"} and hasn&rsquo;t shown{" "}
+          {count === 1 ? "it" : "them"} back yet.
         </div>
       </CardRow>
-      <ArriveList>
-        {rows.map((row, i) => (
-          <CardRow key={row.id} first={i === 0}>
+      <Capped items={rows} href="/users">
+        {(row) => (
+          <CardRow key={row.id}>
             <UserAvatar id={row.user_id} size="list" />
-            <Link
-              href={`/users/${row.user_id}`}
-              className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold link-hover"
-            >
-              <UserName id={row.user_id} />
-            </Link>
-            <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] text-ink/80 [text-wrap:pretty]">
-              {row.role_keys && row.role_keys.length > 0 ? (
-                sortByName(row.role_keys, (key) => names.roleRef(row.project_id ?? "", key), (key) => key).map((key) => (
+            <PersonLink id={row.user_id} />
+            {row.role_keys && row.role_keys.length > 0 && (
+              <div className="w-full sm:w-[250px] shrink-0 text-[14.5px] [text-wrap:pretty]">
+                {sortByName(row.role_keys, (key) => names.roleRef(row.project_id ?? "", key), (key) => key).map((key) => (
                   <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-2" />
-                ))
-              ) : (
-                <span className="text-faint">—</span>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
             <div className="min-w-0 flex-1 text-[14px] text-muted [text-wrap:pretty]">
               {writeNoun(row.op_type)}, accepted <Relative iso={row.applied_at} />
             </div>
-            <ButtonLink href={`/users/${row.user_id}`} size="sm">
-              Look at their access
-            </ButtonLink>
           </CardRow>
-        ))}
-      </ArriveList>
+        )}
+      </Capped>
     </Card>
   );
 }
 
+/** A person's name, linking to their page (G14). */
+function PersonLink({ id }: { id: string }) {
+  return (
+    <Link href={`/users/${id}`} className="w-full sm:w-[170px] shrink-0 truncate text-[15px] font-semibold link-hover">
+      <UserName id={id} />
+    </Link>
+  );
+}
+
+/** The result's word: the act's own past tense, or "Not …" when it did not happen. */
+function outcomeWord(outcome: Outcome, done: string, not: string): string {
+  return outcome.kind === "failed" || outcome.kind === "refused" ? not : done;
+}
+
 /** The write, in the word a reader uses for it — never the raw op_type. */
 function writeNoun(opType: string): string {
-  if (opType === "revoke") return "A withdrawal";
+  if (opType === "revoke") return "A revocation";
   if (opType === "replace") return "A change";
   return "A grant";
 }
@@ -990,7 +964,7 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
   return (
     <Card>
       <CardHeader title="Systems Syndra could not check" count={targets.length} tone="danger" />
-      <Capped items={targets} href="/system/targets">
+      <Capped items={sortByName(targets, (t) => targetLabel(t.target), (t) => t.target)} href="/system/targets">
         {(t) => (
           <CardRow key={t.target} className="flex-wrap">
             <div className="flex-1 text-[14.5px]">
@@ -998,15 +972,13 @@ function UnvouchedTargets({ targets }: { targets: UnreconciledTarget[] }) {
               read since <Relative iso={t.since} />.
               <span className="text-faint">
                 {" "}
-                Nothing found on it means nothing was looked at — not that it is clean.
+                Nothing found on it means nothing was looked at, not that it is clean.
               </span>
               {t.reason && (
                 <div className="mt-1 text-[13px] text-faint">{whyNotChecked(t.reason)}</div>
               )}
             </div>
-            <ButtonLink href={`/system/targets/${t.target}`} size="sm">
-              Open {targetLabel(t.target)}
-            </ButtonLink>
+            <ArrowLink href={`/system/targets/${t.target}`}>{`Open ${targetLabel(t.target)}`}</ArrowLink>
           </CardRow>
         )}
       </Capped>
@@ -1036,17 +1008,16 @@ function MergeFindingsWaiting({ count }: { count: number }) {
       <CardHeader title="Waiting on a decision" count={count} tone="warn" />
       <CardRow className="flex-wrap">
         <div className="flex-1 text-[14.5px]">
-          {count} {count === 1 ? "difference" : "differences"} the reconciliation found and
-          can&rsquo;t resolve on its own
+          {count} {count === 1 ? "difference" : "differences"} Syndra found and can&rsquo;t
+          resolve on its own
           <span className="text-faint">
-            {" "}
-            — each one is somebody&rsquo;s access sitting disputed until a person decides.
+            . Each one is somebody&rsquo;s access sitting disputed until a person decides.
           </span>
         </div>
         {rows.map((row) => (
-          <ButtonLink key={row.target} href={`/system/targets/${row.target}`} size="sm">
+          <ArrowLink key={row.target} href={`/system/targets/${row.target}`}>
             {`Open ${targetLabel(row.target)}`}
-          </ButtonLink>
+          </ArrowLink>
         ))}
       </CardRow>
     </Card>
@@ -1065,10 +1036,12 @@ function NotConfirmed({ count, bySystem }: { count: number; bySystem: Record<str
     .sort(([a], [b]) => compareNames(targetLabel(a), targetLabel(b)));
   return (
     <Card>
-      <CardHeader title="Not confirmed" count={count} tone="warn" />
-      <p className="px-5 pb-3 text-[13.5px] leading-[1.55] text-muted">
-        Changes sent to a connected system that never answered. They are kept with each system.
-      </p>
+      <CardHeader
+        title="Not confirmed"
+        count={count}
+        tone="warn"
+        note="Changes sent to a connected system that never answered. They are kept with each system."
+      />
       {systems.map(([target, n]) => (
         <CardRow key={target} className="flex-wrap">
           <span className="flex-1 text-[14.5px]">
@@ -1089,9 +1062,7 @@ function UnexplainedAccess({ count }: { count: number }) {
         <div className="flex-1 text-[14.5px]">
           {count} {count === 1 ? "grant" : "grants"} Syndra can&rsquo;t explain
         </div>
-        <ButtonLink href="/governance/drift" size="sm">
-          Review them
-        </ButtonLink>
+        <ArrowLink href="/governance/drift">Review on Drift</ArrowLink>
       </CardRow>
     </Card>
   );

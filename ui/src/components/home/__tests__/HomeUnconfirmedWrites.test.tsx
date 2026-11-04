@@ -133,15 +133,13 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
     renderHome();
 
     expect(await screen.findByText("Sent, and not seen back yet")).toBeTruthy();
-    // What happened.
-    expect(screen.getByText(/Syndra sent this change and Zitadel accepted it/)).toBeTruthy();
-    // What it is NOT.
-    expect(screen.getByText(/not a failed change/)).toBeTruthy();
-    expect(screen.getByText(/not one still waiting for you to send/)).toBeTruthy();
+    // What happened, in one sentence.
+    expect(screen.getByText(/Zitadel accepted this change and hasn.t shown it back yet/)).toBeTruthy();
     // The age — the reason it is on screen at all.
     expect(screen.getByText(/45 min ago/)).toBeTruthy();
-    // A next move, not a dead end.
-    expect(screen.getByRole("link", { name: "Look at their access" })).toBeTruthy();
+    // The name is the one link to their page; no second button to the same place.
+    expect(screen.getByRole("link", { name: "u-pending" })).toHaveAttribute("href", "/users/u-pending");
+    expect(screen.queryByRole("link", { name: "Look at their access" })).toBeNull();
   });
 
   it("keeps the header count and the list in agreement", async () => {
@@ -169,7 +167,28 @@ describe("Home shows a write Zitadel accepted and has not confirmed", () => {
     renderHome();
 
     await screen.findByText("Sent, and not seen back yet");
-    expect(screen.getAllByRole("link", { name: "Look at their access" })).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "u-a" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "u-b" })).toBeTruthy();
+    expect(screen.getByText(/A revocation, accepted/)).toBeTruthy();
+  });
+
+  it("draws no roles seat for a row with no roles, and caps the rows at five", async () => {
+    state.unconfirmed = {
+      count: 7,
+      top: Array.from({ length: 7 }, (_, i) => ({
+        id: `outbox-${i}`,
+        op_type: "grant",
+        user_id: `u-${i}`,
+        project_id: "p1",
+        applied_at: new Date().toISOString(),
+      })),
+    };
+    renderHome();
+
+    await screen.findByText("Sent, and not seen back yet");
+    expect(screen.queryByText("—")).toBeNull();
+    expect(screen.getAllByRole("link", { name: /^u-\d$/ })).toHaveLength(5);
+    expect(screen.getByRole("link", { name: "and 2 more" })).toHaveAttribute("href", "/users");
   });
 
   it("counts toward the headline in Advanced", async () => {

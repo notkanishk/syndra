@@ -201,20 +201,20 @@ describe("Home's two columns", () => {
       );
       const view = render(home());
       const requests = screen.getByText("Open requests");
-      expect(screen.queryByRole("link", { name: "Review them" })).toBeNull();
-      const footnote = screen.getByText(/In Basic these blocks are your whole queue/);
+      expect(screen.queryByRole("link", { name: "Review on Drift" })).toBeNull();
+      const footnote = screen.getByText(/Pending changes and Drift are in Advanced/);
       expect(footnote.closest(".unfold")).toHaveAttribute("data-phase", "open");
 
       state.advanced = true;
       view.rerender(home());
 
       expect(screen.getByText("Open requests")).toBe(requests);
-      expect(screen.getByRole("link", { name: "Review them" }).closest(".unfold")).toHaveAttribute(
+      expect(screen.getByRole("link", { name: "Review on Drift" }).closest(".unfold")).toHaveAttribute(
         "data-phase",
         "opening",
       );
       // Folding, not gone: it fades first and its gap closes after.
-      expect(screen.getByText(/In Basic these blocks are your whole queue/).closest(".unfold")).toHaveAttribute(
+      expect(screen.getByText(/Pending changes and Drift are in Advanced/).closest(".unfold")).toHaveAttribute(
         "data-phase",
         "closing",
       );
