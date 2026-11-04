@@ -46,7 +46,7 @@ function tree() {
   );
 }
 
-const LINE = "Everything has reached Zitadel";
+const LINE = "Everything has reached Zitadel.";
 const sendButton = () => screen.queryByRole("button", { name: /^Send / });
 
 beforeEach(() => {
@@ -63,7 +63,7 @@ describe("Everything sent (S13), with the page still", () => {
     expect(screen.getByText("Nothing is waiting for you to send.")).toBeInTheDocument();
   });
 
-  it("this operator's send says what went, when, and that nothing waits, with the dot blooming", async () => {
+  it("this operator's send says what went, when, and that nothing waits", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-19T11:20:00"));
     const view = render(tree());
@@ -72,20 +72,20 @@ describe("Everything sent (S13), with the page still", () => {
     view.rerender(tree());
 
     expect(screen.getByText(LINE)).toBeInTheDocument();
-    expect(screen.getByText("3 changes sent at 11:20 · nothing is waiting for you")).toBeInTheDocument();
+    expect(screen.getByText("3 changes sent at 11:20. Nothing is waiting for you.")).toBeInTheDocument();
     expect(screen.getByText(LINE).previousElementSibling).toHaveClass("bloom");
     expect(screen.getByText(LINE).closest("[role=status]")).not.toBeNull();
     expect(sendButton()).toBeNull();
     vi.useRealTimers();
   });
 
-  it("a queue someone else sent shows the line without the bloom, and claims no count or time", () => {
+  it("a queue someone else sent says the line, and claims no count or time", () => {
     const view = render(tree());
     pending.data = [];
     view.rerender(tree());
     expect(screen.getByText(LINE)).toBeInTheDocument();
     expect(screen.getByText(LINE).previousElementSibling).not.toHaveClass("bloom");
-    expect(screen.getByText("Nothing is waiting for you to send")).toBeInTheDocument();
+    expect(screen.getByText("Nothing is waiting for you to send.")).toBeInTheDocument();
     expect(screen.queryByText(/sent at/)).not.toBeInTheDocument();
   });
 
@@ -95,7 +95,8 @@ describe("Everything sent (S13), with the page still", () => {
     await act(async () => void fireEvent.click(sendButton()!));
     pending.data = [];
     view.rerender(tree());
-    expect(screen.getByText(LINE).previousElementSibling).not.toHaveClass("bloom");
+    expect(screen.getByText(LINE)).toBeInTheDocument();
+    expect(screen.queryByText(/sent at/)).not.toBeInTheDocument();
   });
 
   it("goes away when changes are waiting again", () => {

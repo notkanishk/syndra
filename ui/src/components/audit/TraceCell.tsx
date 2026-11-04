@@ -1,48 +1,21 @@
 "use client";
 
-import Link from "next/link";
-
-import { Mono } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { traceFor } from "@/lib/audit-vocabulary";
 import type { AuditEntry } from "@/lib/queries/useAudit";
 
 /**
- * The Trace column, in the two places it appears — the audit log and a person's
- * Activity tab. Shared rather than duplicated for the same reason the action
- * vocabulary is: an operator comparing the two screens must not find the same
- * row tracing to two different things.
- *
- * Three states, and the distinction between them is the whole point (see
- * `traceFor`): a real cascade links, a pre-lineage row names its object without
- * pretending to be one, and everything else is a dash.
+ * Where a row's edit led, in the two places it appears: the audit log and a
+ * person's Activity tab. One link, only for a row the backend recorded a
+ * cascade for (see `traceFor`); every other row says nothing, and no raw
+ * handle is ever shown (A-17 G10, G17).
  */
 export function TraceCell({ entry, className }: { entry: AuditEntry; className?: string }) {
   const trace = traceFor(entry);
-
+  if (trace.kind !== "cascade") return null;
   return (
     <span className={className}>
-      {trace.kind === "cascade" ? (
-        <Link
-          href={trace.href}
-          aria-label="See what this change set off, in Change history"
-          className="text-[13px] font-semibold text-accent-text link-hover"
-        >
-          <Mono>{trace.label}</Mono>
-        </Link>
-      ) : trace.kind === "object" ? (
-        // The identity is shown, not hovered. It lived in a `title` — which
-        // touch cannot open, screenshots do not carry, and this product
-        // forbids everywhere else — and it is the only thing that says WHAT
-        // this row traced to when there is no cascade to link.
-        <span className="flex flex-col gap-0.5">
-          <Mono className="text-[13px] text-faint">{trace.label}</Mono>
-          {trace.title && (
-            <span className="text-[12.5px] leading-[1.4] text-faint">{trace.title}</span>
-          )}
-        </span>
-      ) : (
-        <span className="text-[13px] text-faint">—</span>
-      )}
+      <ArrowLink href={trace.href}>What it set off</ArrowLink>
     </span>
   );
 }

@@ -106,6 +106,8 @@ describe("Pending changes", () => {
       screen.getByText(/These 2 changes come from one edit/),
     ).toBeInTheDocument();
     expect(screen.getByText(/They are sent together or not at all\./)).toBeInTheDocument();
+    // One link for the batch, in its band: not one per row (A-17 G2).
+    expect(screen.getAllByRole("link", { name: /What this set off/ })).toHaveLength(1);
   });
 
   it("does not claim a lone write is a cascade", () => {
@@ -150,13 +152,13 @@ describe("Pending changes", () => {
  * Caused by: a name, never a bare handle standing in for one.
  */
 describe("Pending changes · caused by", () => {
-  it("names the bundle, with the handle kept alongside for tracing", () => {
+  it("names the bundle, and shows no handle", () => {
     bundles.data = [{ id: "bundle-1111-2222", name: "Woodshop access" }];
     pending.data = [row({ source: "bundle", source_ref: "bundle-1111-2222" })];
     renderPending();
 
     expect(screen.getByText("Woodshop access")).toBeInTheDocument();
-    expect(screen.getByText(/b_bund/)).toBeInTheDocument();
+    expect(screen.queryByText(/b_bund/)).not.toBeInTheDocument();
   });
 
   it("names the rule by its mapping when the bundle/rule list has not loaded", () => {
@@ -174,7 +176,8 @@ describe("Pending changes · caused by", () => {
     pending.data = [row({ source: "rule", source_ref: "rule-1111-2222" })];
     renderPending();
 
-    expect(screen.getByText("trained → door")).toBeInTheDocument();
+    expect(screen.getByText("Trained gives Door")).toBeInTheDocument();
+    expect(screen.queryByText(/R_rule/)).not.toBeInTheDocument();
   });
 
   it("never leaves the handle as the only label, even before the lookup resolves", () => {
@@ -182,14 +185,15 @@ describe("Pending changes · caused by", () => {
     renderPending();
 
     expect(screen.getByText("Bundle")).toBeInTheDocument();
-    expect(screen.getByText(/b_bund/)).toBeInTheDocument();
+    expect(screen.queryByText(/b_bund/)).not.toBeInTheDocument();
   });
 
-  it("links a c_ handle to Change history", () => {
+  it("links What this set off to Change history, never showing the c_ handle", () => {
     pending.data = [row({ cascade_id: "cas-8841-aaaa" })];
     renderPending();
 
-    const link = screen.getByRole("link", { name: /Change history/i });
+    const link = screen.getByRole("link", { name: /What this set off/ });
+    expect(screen.queryByText(/c_8841/)).not.toBeInTheDocument();
     expect(link).toHaveAttribute("href", "/operations/cascades?cascade=cas-8841-aaaa");
   });
 
@@ -393,9 +397,10 @@ describe("Pending changes · board layout", () => {
       expect(screen.queryByText("Nothing is waiting for you to send.")).not.toBeInTheDocument();
     });
 
-    it("says they are sent in order when nothing is searched", () => {
+    it("keeps the read line, and says nothing about order, when nothing is searched", () => {
       renderPending();
-      expect(screen.getByText("They are sent in this order.")).toBeInTheDocument();
+      expect(screen.queryByText("They are sent in this order.")).not.toBeInTheDocument();
+      expect(screen.queryByText(/changes match/)).not.toBeInTheDocument();
     });
   });
 

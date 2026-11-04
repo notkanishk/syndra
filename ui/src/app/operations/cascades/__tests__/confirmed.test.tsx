@@ -20,7 +20,12 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/names", () => ({
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
-  ProjectName: ({ id }: { id: string }) => <span>{id}</span>,
+  BundleName: ({ id }: { id: string }) => <span>{id}</span>,
+  RoleRef: ({ roleKey }: { roleKey: string }) => <span>{roleKey}</span>,
+}));
+
+vi.mock("@/lib/queries/useMappingRules", () => ({
+  useMappingRules: () => ({ data: [] }),
 }));
 
 let groups: CascadeGroupRow[] = [];
@@ -79,8 +84,17 @@ describe("Change history: sent vs. confirmed", () => {
 
     expect(screen.getByText("3 sent, 1 confirmed")).toBeInTheDocument();
     expect(
-      screen.getByText(/Sent; Zitadel has not yet been read back for 2\./),
+      screen.getByText(/Sent; Zitadel has not yet confirmed 2\./),
     ).toBeInTheDocument();
     expect(screen.queryByText(/all of them went through/)).not.toBeInTheDocument();
+  });
+
+  it("titles a cascade by what was edited, with no c_ handle, and links Pending changes only while changes wait", () => {
+    groups = [group({ cascade_id: "cas-8841-aaaa", waiting: 2 }), group({ cascade_id: "cas-9999-bbbb", applied: 1, confirmed: 1 })];
+    renderPage();
+
+    expect(screen.queryByText(/c_[0-9a-f]{4}/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("A bundle edit reached one person")).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: /Pending changes/ })).toHaveLength(1);
   });
 });

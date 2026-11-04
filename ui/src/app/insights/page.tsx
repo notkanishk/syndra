@@ -16,21 +16,16 @@ export default function InsightsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3.5 pb-3">
-        <PageHeader
-          title="Insights"
-          lede="How access travels through the makerspace, and how that is changing."
-        />
-        <Tabs
-          label="Views of the makerspace’s access"
-          value={url.tab}
-          onSelect={(tab) => url.set({ tab: tab === "trends" ? "trends" : null })}
-          options={[
-            { value: "map", label: "Map" },
-            { value: "trends", label: "Trends" },
-          ]}
-        />
-      </div>
+      <PageHeader title="Insights" lede="How access travels through the makerspace, and how that is changing." />
+      <Tabs
+        label="Views of the makerspace’s access"
+        value={url.tab}
+        onSelect={(tab) => url.set({ tab: tab === "trends" ? "trends" : null })}
+        options={[
+          { value: "map", label: "Map" },
+          { value: "trends", label: "Trends" },
+        ]}
+      />
 
       {url.tab === "trends" ? <TrendsTab url={url} /> : <MapTab url={url} />}
     </div>

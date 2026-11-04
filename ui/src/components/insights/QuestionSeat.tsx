@@ -63,7 +63,7 @@ export function QuestionSeat({
         className="flex min-h-10 min-w-0 flex-[1_1_320px] flex-wrap items-center gap-2 rounded-inner border border-accent-line bg-surface-1 py-1 pl-3.5 pr-1.5"
       >
         <Parts parts={sentence(question, node, person)} />
-        <Button variant="ghost" size="sm" aria-label="Clear the question" onClick={onClear} className="ml-auto">
+        <Button variant="outline" size="sm" aria-label="Clear the question" onClick={onClear} className="ml-auto">
           ×
         </Button>
       </div>
@@ -94,7 +94,7 @@ export function QuestionSeat({
             setActive((at - 1 + options.length) % options.length);
           }
         }}
-        placeholder="Ask about a person, a door, a role, or find anything"
+        placeholder="Ask about a person, a project, a role, or find anything"
         aria-label="Ask the map"
         aria-expanded={options.length > 0}
         aria-controls="insights-questions"
