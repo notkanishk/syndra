@@ -60,7 +60,7 @@ describe("given to everyone who joins", () => {
     state.bundles = [bundle({ is_welcome: true })];
     render(<BundlePage bundleId="b1" />);
 
-    expect(screen.getByText("Lab Tech is given to new members now. One bundle at a time.")).toBeInTheDocument();
+    expect(screen.getByText("Lab Tech is given to new members now.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Give Lab Tech/ })).toBeNull();
   });
 
@@ -68,7 +68,7 @@ describe("given to everyone who joins", () => {
     state.bundles = [bundle(), bundle({ id: "b2", name: "Mill Certified", is_welcome: true })];
     render(<BundlePage bundleId="b1" />);
 
-    expect(screen.getByText("Mill Certified is given to new members now. One bundle at a time.")).toBeInTheDocument();
+    expect(screen.getByText("Mill Certified is given to new members now.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Give Lab Tech instead" }));
 
     await waitFor(() => expect(state.setWelcome).toHaveBeenCalledWith("b1"));

@@ -89,18 +89,24 @@ describe("a retired bundle's page", () => {
     expect(screen.queryByText("Current")).toBeNull();
     expect(screen.queryByRole("button", { name: /Move/ })).toBeNull();
     expect(screen.queryByText(/still on this version/)).toBeNull();
-    expect(screen.getByText(/lost what it gave when it was retired/)).toBeInTheDocument();
+    expect(screen.getByText("Kept as they were when it was retired")).toBeInTheDocument();
   });
 
-  it("reads what it gave in its last version, and says nobody has it", () => {
+  it("reads what it gave in its last version, and has no People tab to say nobody has it", () => {
     render(<RetiredBundlePage bundleId="b1" />);
 
     fireEvent.click(screen.getByRole("button", { name: /What it gave/ }));
     expect(screen.getByText("door")).toBeInTheDocument();
     expect(screen.getByText("In v2, its last version")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /People/ }));
-    expect(screen.getByText("Nobody has it.")).toBeInTheDocument();
+    // Nobody has it: the tab that would always read 0 is not there.
+    expect(screen.queryByRole("button", { name: /People/ })).toBeNull();
+    expect(screen.queryByText("Nobody has it.")).toBeNull();
+  });
+
+  it("has no eyebrow naming its nav section", () => {
+    render(<RetiredBundlePage bundleId="b1" />);
+    expect(screen.queryByText("Bundles")).toBeNull();
   });
 
   it("is the same 'no bundle here' as ever for an id that never existed", () => {
@@ -133,6 +139,18 @@ describe("the retired bundles fold", () => {
     expect(screen.getByRole("link", { name: /Old Door Access/ })).toHaveAttribute("href", "/bundles/b%209");
     expect(screen.getByText("Retired 4 Mar 2020")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Spring Intake/ })).toBeInTheDocument();
+  });
+
+  it("lists them A to Z, each with the same Retired status chip", () => {
+    state.retired = [
+      { id: "b9", name: "Spring Intake", retired_at: "2020-01-02T09:00:00Z" },
+      { id: "b8", name: "Old Door Access", retired_at: "2020-03-04T09:00:00Z" },
+    ];
+    render(<RetiredBundlesFold />);
+    fireEvent.click(screen.getByRole("button", { name: /Retired bundles/ }));
+    const links = screen.getAllByRole("link").map((l) => l.textContent ?? "");
+    expect(links[0]).toMatch(/^Old Door Access/);
+    expect(links[1]).toMatch(/^Spring Intake/);
   });
 
   it("is not there at all when nothing has been retired", () => {

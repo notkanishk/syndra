@@ -3,14 +3,18 @@
 import { useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { DirectWriteWarning, UpstreamShell } from "@/components/upstream/UpstreamShell";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import {
+  DirectWriteWarning,
+  UpstreamShell,
+  WriteFooter,
+  WriteResult,
+} from "@/components/upstream/UpstreamShell";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Modal, ModalHeader } from "@/components/ui/Modal";
 import {
   useUpstreamCreateRole,
   useUpstreamDeleteRole,
@@ -48,9 +52,9 @@ export default function UpstreamProjectsPage() {
       syndraHref="/projects"
       syndraLabel="See the same projects as Syndra understands them"
     >
-      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap tablet:items-start">
-        <Card className="w-[280px] min-w-[240px] flex-none">
-          <CardHeader title="Projects" count={rows.length} />
+      <div className="flex flex-col items-stretch gap-4 tablet:flex-row tablet:flex-wrap tablet:items-start">
+        <Card className="w-full tablet:w-[280px] tablet:min-w-[240px] tablet:flex-none">
+          <CardHeader title="Projects" count={projects.isLoading ? undefined : rows.length} />
           <ListStates
             isLoading={projects.isLoading}
             error={projects.error}
@@ -78,8 +82,8 @@ export default function UpstreamProjectsPage() {
                   activeId === project.id ? "bg-accent-soft/60" : "hover-tint"
                 }`}
               >
-                <span className="truncate text-[14.5px] font-semibold">{project.name}</span>
-                <Mono className="truncate text-faint">{project.id}</Mono>
+                <span className="text-[14.5px] font-semibold [overflow-wrap:anywhere]">{project.name}</span>
+                <Mono className="text-faint [overflow-wrap:anywhere]">{project.id}</Mono>
               </button>
             ))}
           </ListStates>
@@ -91,9 +95,7 @@ export default function UpstreamProjectsPage() {
             count={roles.data?.items.length}
             action={
               activeId ? (
-                // Creating a role grants and revokes nothing — same action as
-                // CreateRoleDialog's "Create role", which uses accent.
-                <Button size="sm" variant="accent" onClick={() => setEditing("new")}>
+                <Button size="sm" variant="outline" onClick={() => setEditing("new")}>
                   New role in Zitadel
                 </Button>
               ) : undefined
@@ -116,7 +118,7 @@ export default function UpstreamProjectsPage() {
             empty={
               <EmptyState
                 title="This project has no roles in Zitadel."
-                guidance="Create one here, or — better — create it in Syndra under Access › Roles, so Syndra keeps track of it."
+                guidance="Create one here, or better, create it in Syndra under Access › Roles, so Syndra keeps track of it."
               />
             }
           >
@@ -156,15 +158,16 @@ function RoleRow({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const done = outcome?.kind === "applied";
 
   return (
     <>
       <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
-        <span className="min-w-[200px] flex-1 truncate text-[14.5px]">
+        <span className="min-w-[200px] flex-1 text-[14.5px] [overflow-wrap:anywhere]">
           {role.displayName || role.key} <Mono className="text-faint">{role.key}</Mono>
         </span>
-        <span className="w-[160px] truncate text-[13.5px] text-muted">{role.group || "—"}</span>
-        <span className="flex w-[160px] justify-end gap-2">
+        <span className="text-[13.5px] text-muted [overflow-wrap:anywhere] tablet:w-[160px]">{role.group || "—"}</span>
+        <span className="flex justify-end gap-2 tablet:w-[160px]">
           <Button size="sm" onClick={onEdit} aria-label={`Edit ${role.displayName || role.key}`}>
             Edit
           </Button>
@@ -183,64 +186,42 @@ function RoleRow({
         <Modal open onClose={() => setConfirming(false)} busy={remove.isPending} size="sm">
           <ModalHeader
             title={`Delete ${role.displayName || role.key} in Zitadel?`}
-            lede="The role disappears from Zitadel, and everybody who holds it loses it at once."
+            lede={done ? undefined : "The role disappears from Zitadel, and everybody who holds it loses it at once."}
           />
-          <div className="px-6">
-            <DirectWriteWarning
-              // Unconditional read as still-imminent after the delete has
-              // already run — "the moment you press the button" describes a
-              // click that already happened.
-              what={
-                outcome?.kind === "applied"
-                  ? `${role.key} is deleted. Everyone who held it has already lost it.`
-                  : "Deleting a role revokes it (ends access) for everyone who holds it, the moment you press the button."
-              }
-              acknowledged={acknowledged}
-              onAcknowledge={setAcknowledged}
-            />
-          </div>
-          {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+          {/* Once it has run, "the moment you press the button" describes a click that already
+              happened, and the result says the rest: the warning leaves. */}
+          {!done && (
+            <div className="px-6">
+              <DirectWriteWarning
+                what="Deleting a role revokes it (ends access) for everyone who holds it, the moment you press the button."
+                acknowledged={acknowledged}
+                onAcknowledge={setAcknowledged}
+              />
+            </div>
+          )}
+          {outcome && <WriteResult outcome={outcome} word="Deleted" />}
 
-      <ModalFooter>
+          <WriteFooter outcome={outcome} onClose={() => setConfirming(false)}>
             {/* Retires on success, same as the sibling RoleDialog's submit in
-                this file — left armed, a second click deleted the same role
+                this file: left armed, a second click deleted the same role
                 again. A FAILED attempt keeps the button so there is a retry. */}
-            {outcome?.kind !== "applied" && (
-              <Button
-                variant="dangerConfirm"
-                disabled={!acknowledged}
-                reason={
-                  !acknowledged
-                    ? "Check the box above to confirm you understand the consequence."
-                    : undefined
-                }
-                isPending={remove.isPending}
-                onClick={async () => {
-                  try {
-                    await remove.mutateAsync({ projectId, key: role.key });
-                    // "Applied", and it means it here in a way it does not
-                    // anywhere else in the product: this write went straight to
-                    // Zitadel with no plan, no queue and no ledger row behind it.
-                    setOutcome({
-                      kind: "applied",
-                      message: `${role.key} deleted in Zitadel`,
-                      detail: AUDIT_ONLY,
-                    });
-                  } catch (error) {
-                    setOutcome(outcomeFromError(error));
-                  }
-                }}
-              >
-                Delete role in Zitadel
-              </Button>
-            )}
             <Button
-              variant={outcome?.kind === "applied" ? "outline" : "ghost"}
-              onClick={() => setConfirming(false)}
+              variant="dangerConfirm"
+              disabled={!acknowledged}
+              reason={!acknowledged ? "Check the box above to confirm you understand the consequence." : undefined}
+              isPending={remove.isPending}
+              onClick={async () => {
+                try {
+                  await remove.mutateAsync({ projectId, key: role.key });
+                  setOutcome({ kind: "applied", message: `${role.key} deleted in Zitadel`, detail: AUDIT_ONLY });
+                } catch (error) {
+                  setOutcome(outcomeFromError(error));
+                }
+              }}
             >
-              {outcome?.kind === "applied" ? "Close" : "Cancel"}
+              Delete role in Zitadel
             </Button>
-          </ModalFooter>
+          </WriteFooter>
         </Modal>
       )}
     </>
@@ -263,6 +244,7 @@ function RoleDialog({
   const [displayName, setDisplayName] = useState(role?.displayName ?? "");
   const [group, setGroup] = useState(role?.group ?? "");
   const [acknowledged, setAcknowledged] = useState(false);
+  const done = outcome?.kind === "applied";
 
   const busy = create.isPending || update.isPending;
 
@@ -270,84 +252,73 @@ function RoleDialog({
     <Modal open onClose={onClose} busy={busy} size="sm">
       <ModalHeader
         title={role ? `Edit ${role.key} in Zitadel` : "New role in Zitadel"}
-        lede="Syndra will not know about this role until someone adds it under Access › Roles."
+        lede={done ? undefined : "Syndra will not know about this role until someone adds it under Access › Roles."}
       />
-      <div className="flex flex-col gap-3.5 px-6">
-        <div>
-          <FieldLabel htmlFor="upstream-role-key">Role key</FieldLabel>
-          <Input
-            id="upstream-role-key"
-            value={key}
-            disabled={Boolean(role)}
-            onChange={(event) => setKey(event.target.value)}
-            placeholder="trained"
+      {!done && (
+        <div className="flex flex-col gap-3.5 px-6">
+          <div>
+            <FieldLabel htmlFor="upstream-role-key">Role key</FieldLabel>
+            <Input
+              id="upstream-role-key"
+              value={key}
+              disabled={Boolean(role)}
+              onChange={(event) => setKey(event.target.value)}
+              placeholder="trained"
+            />
+            <FieldHint>The short name other systems see, e.g. trained. Lowercase, no spaces.</FieldHint>
+          </div>
+          <div>
+            <FieldLabel htmlFor="upstream-role-name">Display name</FieldLabel>
+            <Input
+              id="upstream-role-name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Trained on the laser cutter"
+            />
+          </div>
+          <div>
+            <FieldLabel htmlFor="upstream-role-group">Group</FieldLabel>
+            <Input
+              id="upstream-role-group"
+              value={group}
+              onChange={(event) => setGroup(event.target.value)}
+              placeholder="Safety-gated"
+            />
+            <FieldHint>Optional. A label Zitadel uses to group related roles; Syndra ignores it.</FieldHint>
+          </div>
+          <DirectWriteWarning
+            what="Creating or renaming a role here happens outside Syndra's record."
+            acknowledged={acknowledged}
+            onAcknowledge={setAcknowledged}
           />
-          <FieldHint>The short name other systems see, e.g. trained. Lowercase, no spaces.</FieldHint>
         </div>
-        <div>
-          <FieldLabel htmlFor="upstream-role-name">Display name</FieldLabel>
-          <Input
-            id="upstream-role-name"
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="Trained on the laser cutter"
-          />
-        </div>
-        <div>
-          <FieldLabel htmlFor="upstream-role-group">Group</FieldLabel>
-          <Input
-            id="upstream-role-group"
-            value={group}
-            onChange={(event) => setGroup(event.target.value)}
-            placeholder="Safety-gated"
-          />
-          <FieldHint>Optional. A label Zitadel uses to group related roles; Syndra ignores it.</FieldHint>
-        </div>
-        <DirectWriteWarning
-          what="Creating or renaming a role here happens outside Syndra's record."
-          acknowledged={acknowledged}
-          onAcknowledge={setAcknowledged}
-        />
-      </div>
-      {/* The dialog reports its own result and stays open to do it, the same
-          way the role dialog on Syndra's own side does. Here it matters more:
-          the sentence this reports is that Syndra has no record of what just
-          happened, and a dialog that closes itself takes that sentence with
-          it. */}
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1 mt-3" />}
+      )}
+      {/* The dialog reports its own result and stays open to do it: the sentence
+          this reports is that Syndra has no record of what just happened, and a
+          dialog that closes itself takes that sentence with it. */}
+      {outcome && <WriteResult outcome={outcome} word={role ? "Saved" : "Created"} className="mx-6 mb-1 mt-3" />}
 
-      <ModalFooter>
+      <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
-          // Saving a display name grants and revokes nothing — same non-
-          // destructive action as "New role in Zitadel" above.
+          // Saving a display name grants and revokes nothing: non-destructive, so accent.
           variant="accent"
-          disabled={!key.trim() || !acknowledged || outcome?.kind === "applied"}
+          disabled={!key.trim() || !acknowledged}
           reason={
             !key.trim()
               ? "Enter a role key first."
               : !acknowledged
                 ? "Check the box above to confirm you understand this happens outside Syndra's record."
-                : outcome?.kind === "applied"
-                  ? "Already sent to Zitadel — close and reopen to make another change."
-                  : undefined
+                : undefined
           }
           isPending={busy}
           onClick={async () => {
             try {
               if (role) {
                 await update.mutateAsync({ projectId, key: role.key, displayName, group });
-                setOutcome({
-                  kind: "applied",
-                  message: `${role.key} updated in Zitadel`,
-                  detail: AUDIT_ONLY,
-                });
+                setOutcome({ kind: "applied", message: `${role.key} updated in Zitadel`, detail: AUDIT_ONLY });
               } else {
                 await create.mutateAsync({ projectId, key: key.trim(), displayName, group });
-                setOutcome({
-                  kind: "applied",
-                  message: `${key.trim()} created in Zitadel`,
-                  detail: AUDIT_ONLY,
-                });
+                setOutcome({ kind: "applied", message: `${key.trim()} created in Zitadel`, detail: AUDIT_ONLY });
               }
             } catch (error) {
               setOutcome(outcomeFromError(error));
@@ -356,8 +327,7 @@ function RoleDialog({
         >
           {role ? "Save in Zitadel" : "Create in Zitadel"}
         </Button>
-        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Close" : "Cancel"}</Button>
-      </ModalFooter>
+      </WriteFooter>
     </Modal>
   );
 }

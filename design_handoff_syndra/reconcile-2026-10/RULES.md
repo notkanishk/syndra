@@ -47,3 +47,27 @@ Every board follows these. Where a board is silent, build to them.
 - A Home block shows at most 5 rows (3 on a phone), newest or soonest first, then one violet "and N more →" to the full list, filtered. No block can be taller than its cap (A-07 §32).
 - Service accounts are not people. They never count as people and leave every people flow (new without a bundle, welcome bundle, asking, People counts); they stay wherever access is checked (Drift, Expiring, Holds, system tables), with "Service account" in the description seat. They live in System › Service accounts; a human-type account is marked once, in its page's Kind row (A-07 §26–31).
 - Every board's header label says the date it was settled; an undated board loses to any dated answer.
+
+## Refinement sweep (A-17, 4 Nov 2026)
+
+Each tightens or adds to the rules above; `from-design/A-17-refinement-sweep.md` §1 says what each fixes at the source. Questions Q1–Q7 there are the owner's to answer; until then the code keeps today's behaviour behind one constant each (see `openspec/changes/refinement-sweep/tasks.md`).
+
+- G1 **Buttons.** A button on its own is outline sm. Ghost is only the quieter half of a pair beside a primary (Cancel, Discard) and PaginationRow's own controls. No control is text styled as a button: `link-tint` and the `accentSoft` variant are retired.
+- G2 **Going vs doing.** A control that only opens a page is an ArrowLink. ButtonLink stays only where the page it opens starts the act its label names (Give a bundle, Ask to keep it). One link per destination per block: no header "See all →" beside an "and N more →".
+- G3 **Showing more.** More of the same row is one control. A row with no buttons of its own opens itself (CardRow onToggle). Otherwise use Button outline sm "Show X" / "Hide X", with no chevron. A section folds by the 28px round chevron, one part (FoldChevron). No ›, and no muted text toggles.
+- G4 **Dialog footer.** Cancel is the ghost half of the pair, the act is accent or dangerConfirm; the footer's `cancel` slot places it (order: owner's Q1). After the result, one outline Close. The result is ActionOutcome with its word, never the "Applied" fallback; a dialog never closes onto the row.
+- G5 **Page rhythm lives in one place.** PageHeader owns the space below it (Q5: 28 or 18, one constant); a page never sets its own header gap. Content stacks at 16. The read line is ReadFreshness, 10 under a FilterBar (its `read` slot), never placed by a negative margin.
+- G6 **Eyebrow.** An eyebrow names a parent thing (the project above a role page), never a nav section: the breadcrumb already says that.
+- G7 **Notice.** A Notice sits under the PageHeader, never above it. A fact a Notice states is not restated by the card that holds it.
+- G8 **Dots.** Every status dot is StatusDot (6px); a dot with its word is StatusSeat. Nav tone dots are the only other dot.
+- G9 **Empty.** Every empty, quiet or all-clear state is EmptyState (resolved = lime dot), inside its card, under no column headings. Its title is a sentence with a full stop. Its action is an ArrowLink or a Button outline sm, never a second copy of the header's action.
+- G10 **Ids.** A raw id never appears in a heading, a meta line, a sentence or a table cell. In Advanced it lives once, in the lineage or evidence fold, as CopyableValue. An actor or rule Syndra can name is shown by name.
+- G11 **Em dash.** On screen, an em dash never joins a sentence or makes "WORD — fragment". Use a full stop, comma or colon. (`plain-language.test.ts` checks it.)
+- G12 **Said once.** A fact is said once per screen: lede, card note or row, never two. A lede is at most two sentences.
+- G13 **No alpha text.** Quiet text is `--muted` or `--faint`; `text-ink/NN` is not used, whatever its value. (Tightens the quiet-text rule above.)
+- G14 **Names link.** UserName, ProjectName and BundleName link to their page by default (ink, accent on hover); only the page's own subject passes `link={false}`.
+- G15 **One choice card, one chosen chip.** A card you choose is ChoiceRow. A chosen thing with × is one part, ChosenChip.
+- G16 **Seats.** Inside a card or row a button is sm; md only in a page header and a dialog footer. A number seat is 110.
+- G17 **Silence for normal.** When a count is all as expected, nothing more is written (no "confirmed", no "none"); only the exception is.
+- G18 **FilterBar** (amends 9b to match `FilterBar.tsx`). A pill set that chooses which list you are reading (Requests' status, Expiring's window) leads; search follows; Filters and Select sit right.
+- G19 **Boxes.** Added to "A box means something is wrong": `accent-note`, `bg-tint-1` and `bg-accent-soft` panels never hold explanation. Dashed means NotOpenYet and nothing else.

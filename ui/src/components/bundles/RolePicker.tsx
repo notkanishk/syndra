@@ -5,8 +5,7 @@ import { projectLabel } from "@/components/names/Unresolved";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { useMemo, useState } from "react";
 
-import { Mono } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { ChosenChip, Mono } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FoldHeading } from "@/components/bundles/FoldHeading";
 import { RolePickerOne, type RolePickerOneProps } from "@/components/bundles/RolePickerOne";
@@ -189,6 +188,20 @@ function Picker({
     return r ? r.display_name || humanizeKey(r.role_key) : humanizeKey(splitRoleId(id)[1]);
   };
 
+  // Bundles and roles together, A to Z, not in the order they were ticked.
+  const chips = sortByName(
+    [
+      ...chosenBundles.map((b) => ({
+        key: b.id,
+        name: b.name,
+        note: `bundle · ${plural(b.roleIds.length, "role", "roles")}`,
+        onRemove: () => bundles?.onToggle(b.id),
+      })),
+      ...chosen.map((id) => ({ key: id, name: label(id), note: "", onRemove: () => onToggle(id) })),
+    ],
+    (chip) => chip.name,
+  );
+
   return (
     <>
       <Input
@@ -201,42 +214,11 @@ function Picker({
       {chosen.length + chosenBundles.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Chosen">
           <span className="type-label mr-1">Chosen</span>
-          {chosenBundles.map((b) => (
-            <span
-              key={b.id}
-              className="chip-in inline-flex items-center gap-1 rounded-pill border border-accent-line bg-accent-soft py-1 pl-3 pr-1 text-[13px] font-semibold"
-            >
-              {b.name}
-              <span className="font-normal text-muted"> · bundle · {plural(b.roleIds.length, "role", "roles")}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={disabled}
-                onClick={() => bundles?.onToggle(b.id)}
-                aria-label={`Remove ${b.name}`}
-                className="-my-1.5 -mr-0.5 px-2.5"
-              >
-                <span aria-hidden>×</span>
-              </Button>
-            </span>
-          ))}
-          {chosen.map((id) => (
-            <span
-              key={id}
-              className="chip-in inline-flex items-center gap-1 rounded-pill border border-line-strong bg-surface-2 py-1 pl-3 pr-1 text-[13px] font-semibold"
-            >
-              {label(id)}
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={disabled}
-                onClick={() => onToggle(id)}
-                aria-label={`Remove ${label(id)}`}
-                className="-my-1.5 -mr-0.5 px-2.5"
-              >
-                <span aria-hidden>×</span>
-              </Button>
-            </span>
+          {chips.map((chip) => (
+            <ChosenChip key={chip.key} disabled={disabled} onRemove={chip.onRemove} removeLabel={`Remove ${chip.name}`}>
+              {chip.name}
+              {chip.note && <span className="font-normal text-muted"> · {chip.note}</span>}
+            </ChosenChip>
           ))}
         </div>
       )}
@@ -288,7 +270,7 @@ function Picker({
         {groups.length === 0 && (!bundles || bundleMatches.length === 0) ? (
           <p className="px-4 py-6 text-[14px] text-muted">
             No role matches “{query}”. A role created directly in Zitadel may not be listed here
-            yet — check there, or create it in Syndra.
+            yet. Check there, or create it in Syndra.
           </p>
         ) : (
           groups.map((group) => {

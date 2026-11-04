@@ -178,7 +178,7 @@ describe("Expiring access — search", () => {
     renderPage();
     fireEvent.change(box(), { target: { value: "zzz" } });
     expect(screen.queryByText(/every one decided/)).toBeNull();
-    expect(screen.getByText("Nothing that ends matches those filters.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing that ends matches that search.")).toBeInTheDocument();
   });
 
   it("says it of the whole window, and only when the whole window is decided", () => {
@@ -198,10 +198,10 @@ describe("Expiring access — search", () => {
   it("says nothing matches, and clearing is the way back", () => {
     renderPage();
     fireEvent.change(box(), { target: { value: "zzz" } });
-    expect(screen.getByText("Nothing that ends matches those filters.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing that ends matches that search.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: UNDECIDED })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear the search" }));
     expect(screen.getByText("Meera Pillai")).toBeInTheDocument();
   });
 
@@ -215,10 +215,41 @@ describe("Expiring access — search", () => {
 
   it("moves the amber to the soonest row that is still shown", () => {
     renderPage();
-    const amber = () => document.querySelectorAll(".bg-warn-soft").length;
+    const amber = () => document.querySelectorAll("[data-soonest]").length;
     expect(amber()).toBe(1);
     fireEvent.change(box(), { target: { value: "tomas" } });
     expect(amber()).toBe(1);
+  });
+});
+
+// A-17 §2.20: the variant never follows the data. The soonest row is marked by its edge and its
+// words, and its buttons are the same outline sm as every other row's.
+describe("Expiring access — one button style on every row", () => {
+  it("draws Extend and Let it lapse as outline on the soonest row and on every other", () => {
+    state.rows = mixed();
+    renderPage();
+    const buttons = [
+      ...screen.getAllByRole("button", { name: /Extend 90 days/ }),
+      ...screen.getAllByRole("button", { name: "Let it lapse" }),
+    ];
+    expect(buttons).toHaveLength(7);
+    for (const button of buttons) {
+      expect(button).toHaveClass("border-line-strong");
+      expect(button).not.toHaveClass("bg-accent-dense");
+    }
+  });
+
+  it("says when direct access shows here for the window it is reading, not 'a month before'", () => {
+    state.rows = [];
+    renderPage();
+    expect(screen.getByText("Direct access shows here once it ends within 14 days.")).toBeInTheDocument();
+  });
+
+  it("gives the Let lapse chip a dot like Undecided's", () => {
+    state.rows = mixed();
+    renderPage();
+    const chips = within(screen.getByRole("navigation", { name: "Sections of expiring access" }));
+    expect(chips.getAllByRole("link").map((chip) => chip.querySelectorAll("[data-dot]").length)).toEqual([1, 1]);
   });
 });
 
@@ -285,7 +316,7 @@ describe("Expiring access — sort", () => {
     renderPage();
     const card = screen.getByRole("region", { name: UNDECIDED });
     fireEvent.click(within(card).getByRole("button", { name: "Sort by who" }));
-    const amber = card.querySelector(".bg-warn-soft") as HTMLElement;
+    const amber = card.querySelector("[data-soonest]") as HTMLElement;
     expect(amber).toHaveTextContent("Meera Pillai");
   });
 });

@@ -26,6 +26,7 @@ vi.mock("@/lib/queries/useCatalogUsers", () => ({
   useCatalogProjects: () => ({ data: [], isLoading: false, error: null, refetch: () => {} }),
 }));
 vi.mock("@/components/names", () => ({
+  UserAvatar: () => null,
   ProjectName: () => null,
   RoleRef: () => null,
   UserName: ({ id }: { id: string }) => <span>{id}</span>,

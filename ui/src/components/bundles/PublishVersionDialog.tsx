@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 
-import { IncludeChangeLine } from "@/components/bundles/IncludeChangeLine";
-import { RoleRef } from "@/components/names";
+import { ChangeLines } from "@/components/bundles/IncludeChangeLine";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { RehearsalDialog } from "@/components/ui/RehearsalDialog";
 import { formatList } from "@/lib/format";
+import { sortByName, sortNames } from "@/lib/sort";
 import {
   useApplyPublish,
   useRehearsePublish,
@@ -73,6 +73,7 @@ export function PublishVersionDialog({
     ? { includers: includers.map((i) => ({ bundle_id: i.bundle_id, action: answers[i.bundle_id] })) }
     : {};
   const through = includers.reduce((n, i) => n + i.people, 0);
+  const byName = sortByName(includers, (i) => i.name, (i) => i.bundle_id); // A to Z
 
   const holders = draft.holder_count;
   // With nobody holding it there is no question to ask, so there is no question
@@ -93,7 +94,7 @@ export function PublishVersionDialog({
       lede={
         includers.length > 0
           ? `${name} reaches ${people(holders + through)}: ${holders} directly, and ${through} through ${formatList(
-              includers.map((i) => i.name),
+              sortNames(includers.map((i) => i.name)),
             )}, which ${includers.length === 1 ? "includes" : "include"} it. Nobody moves unless you say so.`
           : holders === 0
           ? "Nobody holds this bundle yet, so publishing changes nothing for anyone."
@@ -103,12 +104,10 @@ export function PublishVersionDialog({
       ready={decided && answered}
       notReadyReason={
         includers.length === 0
-          ? `Choose what happens to the ${holders} ${
-              holders === 1 ? "person who already holds" : "people who already hold"
-            } it. Both answers are real, so there is no default.`
+          ? `Choose what happens to the ${people(holders)}.`
           : holders > 0
-            ? `Choose what happens to the ${people(holders)} and to each bundle. Every answer is real, so there are no defaults.`
-            : "Choose what happens to each bundle that includes it. Every answer is real, so there are no defaults."
+            ? `Choose what happens to the ${people(holders)} and to each bundle.`
+            : "Choose what happens to each bundle that includes it."
       }
       // Publishing is an act on the BUNDLE. Two publishes move nobody and are
       // both legitimate — one where nothing holds it yet, and one where the
@@ -121,37 +120,10 @@ export function PublishVersionDialog({
         <div className="flex flex-col gap-4">
           <div>
             <FieldLabel>What changes in v{draft.next_version}</FieldLabel>
-            <div className="mt-1.5 flex flex-col gap-1.5 rounded-inner border border-line-strong px-4 py-3 text-[14px]">
-              {(draft.include_changes ?? []).map((change) => (
-                <div key={`i${change.child_bundle_id}`} className="flex items-baseline gap-2">
-                  <IncludeChangeLine change={change} />
-                </div>
-              ))}
-              {draft.added.map((role) => (
-                <div
-                  key={`+${role.zitadel_project_id}:${role.zitadel_role_key}`}
-                  className="flex items-baseline gap-2"
-                >
-                  <span className="font-semibold text-accent-text">+</span>
-                  <RoleRef
-                    projectId={role.zitadel_project_id}
-                    roleKey={role.zitadel_role_key}
-                  />
-                </div>
-              ))}
-              {draft.removed.map((role) => (
-                <div
-                  key={`-${role.zitadel_project_id}:${role.zitadel_role_key}`}
-                  className="flex items-baseline gap-2"
-                >
-                  <span className="font-semibold text-warn-text">−</span>
-                  <RoleRef
-                    projectId={role.zitadel_project_id}
-                    roleKey={role.zitadel_role_key}
-                  />
-                </div>
-              ))}
-            </div>
+            <ChangeLines
+              draft={draft}
+              className="mt-1.5 rounded-inner border border-line-strong px-4 py-3"
+            />
             <FieldHint>
               Everything else in v{draft.latest_version} carries over unchanged.
             </FieldHint>
@@ -165,17 +137,21 @@ export function PublishVersionDialog({
                 aria-label={holdersPhrase}
                 className="mt-1.5 flex flex-col gap-2"
               >
-                <Choice
+                <ChoiceRow
+                  single
+                  name="publish-migrate"
                   selected={migrate === true}
-                  onSelect={() => setMigrate(true)}
+                  onToggle={() => setMigrate(true)}
                   title={`Move everyone to v${draft.next_version}`}
-                  detail="Their access changes to match the new version. The preview below lists what that does to each of them."
+                  description="Their access changes to match the new version. The preview below lists what that does to each of them."
                 />
-                <Choice
+                <ChoiceRow
+                  single
+                  name="publish-migrate"
                   selected={migrate === false}
-                  onSelect={() => setMigrate(false)}
-                  title={`Leave them on the version they are on`}
-                  detail={`v${draft.next_version} goes only to people given this bundle from now on. Nobody's access changes, and you can move them later.`}
+                  onToggle={() => setMigrate(false)}
+                  title="Leave them on the version they are on"
+                  description={`v${draft.next_version} goes only to people given this bundle from now on. Nobody's access changes, and you can move them later.`}
                 />
               </div>
             </div>
@@ -186,8 +162,8 @@ export function PublishVersionDialog({
               <FieldLabel>
                 The {includers.length} {includers.length === 1 ? "bundle that includes" : "bundles that include"} it
               </FieldLabel>
-              <div className="mt-1.5 rounded-inner border border-dashed border-line-strong px-4">
-                {includers.map((includer) => (
+              <div className="mt-1.5 rounded-inner border border-line-strong px-4">
+                {byName.map((includer) => (
                   <div key={includer.bundle_id} className="flex flex-wrap items-center gap-3 border-t border-line py-2.5 first:border-t-0">
                     <span className="flex min-w-[min(200px,100%)] flex-1 flex-col gap-px">
                       <span className="text-[14.5px] font-semibold">{includer.name}</span>
@@ -228,7 +204,7 @@ export function PublishVersionDialog({
             />
             <FieldHint>
               Sits on the version forever. &ldquo;v3&rdquo; means nothing in six months;
-              &ldquo;v3 — laser sign-off moved in&rdquo; does.
+              &ldquo;v3: laser sign-off moved in&rdquo; does.
             </FieldHint>
           </div>
         </div>
@@ -252,37 +228,5 @@ export function PublishVersionDialog({
       }
       onClose={onClose}
     />
-  );
-}
-
-/**
- * A radio in everything but markup. Both answers are real, so neither is
- * pre-selected: a default here would be the product making the decision the
- * operator opened this dialog to make.
- */
-function Choice({
-  selected,
-  onSelect,
-  title,
-  detail,
-}: {
-  selected: boolean;
-  onSelect: () => void;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className={`rounded-inner border px-4 py-3 text-left motion-tint ${
-        selected ? "border-accent bg-accent-soft" : "border-line-strong hover-tint"
-      }`}
-    >
-      <span className="block text-[14.5px] font-semibold">{title}</span>
-      <span className="mt-0.5 block text-[13px] leading-[1.5] text-muted">{detail}</span>
-    </button>
   );
 }

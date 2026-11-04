@@ -8,7 +8,7 @@ const queued = { kind: "queued" as const, message: "Given in Syndra", detail: "I
 
 describe("ActionOutcome", () => {
   it("says a queued block outcome as the link to send it, never as 'Waiting to be sent'", () => {
-    render(<ActionOutcome outcome={queued} />);
+    render(<ActionOutcome word="Given" outcome={queued} />);
     expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute(
       "href",
       "/governance/pending",
@@ -36,7 +36,7 @@ describe("ActionOutcome", () => {
     expect(container.querySelector(".bloom")).not.toBeNull();
     rerender(<ActionOutcome placement="seat" word="Approved" outcome={queued} />);
     expect(container.querySelector(".bloom")).toBeNull();
-    rerender(<ActionOutcome placement="seat" outcome={{ kind: "failed", message: "Nope" }} />);
+    rerender(<ActionOutcome placement="seat" word="Not approved" outcome={{ kind: "failed", message: "Nope" }} />);
     expect(container.querySelector(".bloom")).toBeNull();
   });
 
@@ -44,6 +44,7 @@ describe("ActionOutcome", () => {
     render(
       <ActionOutcome
         placement="seat"
+        word="Not approved"
         outcome={{ kind: "refused", message: "That plan is no longer current" }}
       />,
     );
@@ -122,9 +123,11 @@ describe("block form with a word", () => {
     expect(screen.getByText("req-1")).toBeInTheDocument();
   });
 
-  it("without a word it is the block it was", () => {
-    render(<ActionOutcome outcome={done} />);
-    expect(screen.getByText("Applied")).toBeInTheDocument();
+  it("inline: a dot and the act's own word, never a generic pill", () => {
+    const { container } = render(<ActionOutcome placement="inline" word="Removed" outcome={done} />);
+    expect(screen.getByText("Removed")).toBeInTheDocument();
+    expect(container.querySelector("[data-dot]")).not.toBeNull();
+    expect(screen.queryByText("Applied")).not.toBeInTheDocument();
   });
 });
 
@@ -133,6 +136,7 @@ describe("a session that ended before the action ran", () => {
   it("offers to sign in again in a new tab, and says this tab stays", () => {
     render(
       <ActionOutcome
+        word="Not done"
         outcome={{ kind: "refused", message: "Your session ended before this ran", sessionEnded: true }}
       />,
     );

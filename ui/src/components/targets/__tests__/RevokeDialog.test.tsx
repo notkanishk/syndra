@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HoldDialog } from "@/components/review/HoldDialog";
-import { TakeAwayDialog } from "@/components/targets/TakeAwayDialog";
+import { RevokeDialog } from "@/components/targets/RevokeDialog";
 import type { RevocationResult } from "@/lib/queries/useHolds";
 
 /**
@@ -42,11 +42,11 @@ vi.mock("@/lib/queries/useHolds", async () => {
   };
 });
 
-function renderTakeAway() {
+function renderRevoke() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <TakeAwayDialog target="truenas" subjectId="u1" subjectName="Ada Rivera" onClose={() => {}} />
+      <RevokeDialog target="truenas" subjectId="u1" subjectName="Ada Rivera" onClose={() => {}} />
     </QueryClientProvider>,
   );
 }
@@ -57,12 +57,12 @@ beforeEach(() => {
   state.result = null;
 });
 
-describe("taking access away on a target", () => {
+describe("revoking access on a target", () => {
   // The sentence is fixed by the backend and shown verbatim. A UI implying the
   // access is gone the moment the button is pressed is the exact failure that
   // endpoint's whole design exists to prevent.
   it("says what it cannot do, before the form", () => {
-    renderTakeAway();
+    renderRevoke();
     expect(
       screen.getByText(/they stay connected until they disconnect/),
     ).toBeInTheDocument();
@@ -72,14 +72,14 @@ describe("taking access away on a target", () => {
   // What it does, not what it means. Everything on these screens queues, and
   // this button says so rather than claiming the access is gone.
   it("names the queue in the button", () => {
-    renderTakeAway();
+    renderRevoke();
     expect(screen.getByRole("button", { name: /revoke access for Ada Rivera/i })).toBeInTheDocument();
   });
 
   // Rung 3, the same gesture as every other revocation: muscle memory must not
   // depend on which one an operator is doing.
   it("will not fire until the name is typed and a reason given", () => {
-    renderTakeAway();
+    renderRevoke();
     // Re-queried at every step rather than held. `Button` wraps itself in a
     // span to carry a `reason`, so the button is a DIFFERENT DOM node once the
     // reason clears — a held reference goes stale and reads as never enabling.
@@ -107,7 +107,7 @@ describe("taking access away on a target", () => {
   // disclosure, below, that a revocation drains on its own. One dialog must
   // not tell the operator both.
   it("does not claim the hold needs a manual send from Pending changes", () => {
-    renderTakeAway();
+    renderRevoke();
     expect(screen.getByText(/revocations send on their own, every few minutes/i)).toBeInTheDocument();
     expect(screen.queryByText(/sends it from Pending changes/i)).toBeNull();
   });
@@ -122,7 +122,7 @@ describe("taking access away on a target", () => {
         "The credential is already replaced. The account lock drains on its own — revocations do not wait for an operator, because a queued one is access somebody still has.",
       detail: "New connections are refused now and the credential has been replaced.",
     };
-    renderTakeAway();
+    renderRevoke();
 
     fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
@@ -145,7 +145,7 @@ describe("taking access away on a target", () => {
       detail: "New connections are refused now — that half is recorded and queued.",
       outstanding: "password.rotate",
     };
-    renderTakeAway();
+    renderRevoke();
 
     fireEvent.change(screen.getByLabelText("Why"), { target: { value: "offboarding" } });
     fireEvent.change(screen.getByRole("textbox", { name: /type the person's name/i }), {
@@ -190,7 +190,7 @@ describe("putting a hold on", () => {
     renderHold();
     // Re-queried, not held: carrying a `reason` wraps the button in a span, so
     // it is a different DOM node once the reason clears.
-    const confirm = () => screen.getByRole("button", { name: /hold access to TrueNAS/i });
+    const confirm = () => screen.getByRole("button", { name: /put access to TrueNAS on hold/i });
     expect(confirm()).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/Remind us on/), { target: { value: "2026-12-01" } });
@@ -207,13 +207,13 @@ describe("putting a hold on", () => {
   // by the resolver.
   it("sends the resolver's value and shows the operator's words", () => {
     renderHold();
-    expect(screen.getByText(/Hold access to TrueNAS for Ada Rivera/)).toBeInTheDocument();
+    expect(screen.getByText(/Put access to TrueNAS on hold for Ada Rivera/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Remind us on/), { target: { value: "2026-12-01" } });
     fireEvent.change(screen.getByLabelText(/shown to Ada Rivera/i), {
       target: { value: "safety review" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /hold access to TrueNAS/i }));
+    fireEvent.click(screen.getByRole("button", { name: /put access to TrueNAS on hold/i }));
 
     expect(state.held[0]).toMatchObject({ field: "enabled", value: "true", reason: "safety review" });
     // "It stays" is the default, so the date is a review date and not an expiry:

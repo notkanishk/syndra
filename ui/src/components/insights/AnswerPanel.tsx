@@ -13,7 +13,7 @@ import { useClipboardAvailable } from "@/lib/clipboard";
 
 export interface Panel {
   tone: "accent" | "warn" | "danger" | "neutral";
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   meta?: string;
   /** A line may open with a bold lead: "By hand:", a person's name. */
@@ -28,7 +28,7 @@ export interface Panel {
 }
 
 const BOX = {
-  accent: "border-accent-line bg-accent-soft",
+  accent: "border-line bg-surface-1",
   warn: "border-warn-line bg-warn-soft",
   danger: "border-danger-line bg-danger-soft",
   neutral: "border-line bg-surface-1",
@@ -87,7 +87,7 @@ export function AnswerPanel({
       className={`tint-in flex flex-col gap-4 rounded-panel border px-5 py-[18px] tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-x-6 ${BOX[panel.tone]}`}
     >
       <div className="flex min-w-0 flex-col gap-1.5 tablet:min-w-[240px] tablet:flex-[0_1_320px]">
-        <span className="type-label text-label">{panel.eyebrow}</span>
+        {panel.eyebrow && <span className="type-label text-label">{panel.eyebrow}</span>}
         <h2 className="font-display text-[24px] font-semibold leading-[1.15] [text-wrap:pretty]">{panel.title}</h2>
         {panel.meta && <span className="text-[13.5px] text-muted">{panel.meta}</span>}
       </div>
@@ -122,7 +122,7 @@ export function AnswerPanel({
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 tablet:flex-col tablet:items-end">
         {onBack && (
-          <Button variant="ghost" size="sm" onClick={onBack}>
+          <Button variant="outline" size="sm" onClick={onBack}>
             Back
           </Button>
         )}
@@ -145,17 +145,17 @@ export function AnswerPanel({
         )}
         <span className="flex-1" />
         {onPin && (
-          <Button variant={phone ? "outline" : "ghost"} size="sm" onClick={onPin}>
+          <Button variant="outline" size="sm" onClick={onPin}>
             {phone ? "Pin this" : "Pin"}
           </Button>
         )}
         {onlyPinned && (
-          <Button variant={phone ? "outline" : "ghost"} size="sm" onClick={onlyPinned}>
+          <Button variant="outline" size="sm" onClick={onlyPinned}>
             Show pinned only
           </Button>
         )}
         {clipboard && (
-          <Button variant={phone ? "outline" : "ghost"} size="sm" onClick={copy}>
+          <Button variant="outline" size="sm" onClick={copy}>
             <CopiedSeat done={copied} idle="Copy as sentences" word="Copied" />
           </Button>
         )}

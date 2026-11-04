@@ -67,11 +67,17 @@ describe("EventSentence", () => {
   });
 
   // An action nobody has written a template for still has to name its target;
-  // dropping it would be worse than the dash.
-  it("keeps the dash for an action with no template", () => {
+  // dropping it would be worse than the colon.
+  it("joins the target with a colon, never a dash, for an action with no template", () => {
     render(<EventSentence entry={entry({ action: "bundle.updated", target_id: "u1" })} />);
-    expect(document.body.textContent).toContain("—");
-    expect(document.body.textContent).toContain("Gurasheesh Paul Singh");
+    expect(document.body.textContent).not.toContain("—");
+    expect(document.body.textContent).toContain(": Gurasheesh Paul Singh");
+  });
+
+  it("names a rule or a retired bundle in words, never by its handle", () => {
+    render(<EventSentence entry={entry({ action: "mapping_rule.created", target_id: "0123abcd-0000-0000-0000-000000000000" })} />);
+    expect(document.body.textContent).toContain("an automatic rule");
+    expect(document.body.textContent).not.toMatch(/R_[0-9a-f]{4}/);
   });
 
   it("marks a destructive action, and only that", () => {

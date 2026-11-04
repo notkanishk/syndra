@@ -33,7 +33,7 @@ export const AUDIT_ACTIONS: Record<
   string,
   { verb: string; template?: string; passive?: string; destructive?: boolean }
 > = {
-  "direct_grant.upserted": { verb: "Gave direct access", template: "Gave {} direct access", passive: "Given direct access" },
+  "direct_grant.upserted": { verb: "Gave a role", template: "Gave {} a role", passive: "Given a role" },
   "direct_grant.replaced": { verb: "Replaced somebody's direct access", template: "Replaced {}'s direct access", passive: "Their direct access was replaced" },
   "direct_grant.revoked": { verb: "Revoked direct access", template: "Revoked {}'s direct access", passive: "Their direct access was revoked", destructive: true },
   // The record itself was deleted by hand, as opposed to a revoke that a rule,

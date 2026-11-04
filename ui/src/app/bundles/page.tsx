@@ -46,7 +46,7 @@ export default function BundlesPage() {
   const leaving = useLeavingRows(rows, (bundle) => bundle.id, !bundles.isLoading && !bundles.error);
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Bundles"
         lede="A bundle is a set of roles given together. Give someone a bundle and they get every role in it. Publish a new version and you choose whether they move to it."
@@ -61,13 +61,13 @@ export default function BundlesPage() {
         <ReadFreshness
           state={readStateOfQuery(bundles)}
           subject="Bundles and who has them"
-          className="-mb-3.5 px-5"
+          className="px-5"
         />
       )}
 
       <Card {...leaving.listProps}>
         <CardColumns>
-          <span className="w-[min(260px,40%)]">Bundle ↑</span>
+          <span className="w-[min(260px,40%)]">Bundle</span>
           <span className="hidden flex-1 tablet:block">What it&rsquo;s for</span>
           <span className="w-[110px] text-right">Roles</span>
           <span className="w-[110px] text-right">People</span>
@@ -83,7 +83,6 @@ export default function BundlesPage() {
             <EmptyState
               title="No bundles yet."
               guidance="A bundle is how a set of roles gets handed out as one unit."
-              action={{ label: "Create the first one", onClick: () => setCreating(true) }}
             />
           }
         >
@@ -184,7 +183,7 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
   const blocked = !trimmed
     ? "A bundle needs a name."
     : chosen.length === 0 && included.size === 0
-      ? "Pick at least one role. A bundle that grants nothing has nothing to hand out, and its first version would describe nothing."
+      ? "Pick at least one role."
       : undefined;
 
   return (
@@ -231,13 +230,16 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
           />
         </div>
       </div>
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={succeeded(outcome) ? "Created" : "Not created"} className="mx-6 mb-1" />}
 
-      <ModalFooter note={succeeded(outcome) ? undefined : footNote}>
+      <ModalFooter
+        note={succeeded(outcome) ? undefined : footNote}
+        cancel={succeeded(outcome) ? undefined : { onClick: onClose, disabled: create.isPending }}
+      >
         {/* Closing on success used to fire alongside `setOutcome`, which
             unmounts this dialog before "X created" is ever painted — same
             fix as the rename dialog: hold it open, let Close close it. */}
-        {!succeeded(outcome) && (
+        {!succeeded(outcome) ? (
           <Button
             variant="accent"
             disabled={Boolean(blocked)}
@@ -266,21 +268,21 @@ function CreateBundleDialogOpen({ onClose }: { open: boolean; onClose: () => voi
           >
             {total === 0 ? "Create bundle" : `Create with ${roles(total)}`}
           </Button>
-        )}
-        <Button
-          onClick={() => {
-            onClose();
-            if (succeeded(outcome)) {
+        ) : (
+          <Button
+            variant="outline"
+            onClick={() => {
+              onClose();
               setName("");
               setDescription("");
               setSelected(new Set());
               setIncluded(new Set());
               setOutcome(null);
-            }
-          }}
-        >
-          {succeeded(outcome) ? "Close" : "Cancel"}
-        </Button>
+            }}
+          >
+            Close
+          </Button>
+        )}
       </ModalFooter>
     </Modal>
   );
@@ -415,20 +417,18 @@ function StartFrom({
       )}
 
       {ready && copied === key && (
-        <p className="tint-in flex flex-wrap items-baseline gap-x-2 rounded-inner border border-accent-line bg-accent-soft px-3.5 py-2.5 text-[13.5px]">
-          <span>
-            <strong className="font-semibold text-accent-text">
-              {source === "bundle"
-                ? `Copied ${from?.name ?? "the bundle"}${from?.latest_version ? ` v${from.latest_version}` : ""}`
-                : `Copied ${person?.name ?? "their"}${person ? "'s" : ""} access`}
-              :
-            </strong>{" "}
-            {source === "bundle" ? "its" : "their"} {n} {n === 1 ? "role is" : "roles are"} ticked below. This is a copy.
-            Later changes to {source === "bundle" ? from?.name ?? "it" : "their access"} don&rsquo;t reach {newName}.
-          </span>
-          <button
-            type="button"
-            className="font-semibold text-accent-text link-tint"
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <p className="text-[13px] text-faint">
+            {source === "bundle"
+              ? `Copied ${from?.name ?? "the bundle"}${from?.latest_version ? ` v${from.latest_version}` : ""}`
+              : `Copied ${person?.name ?? "their"}${person ? "'s" : ""} access`}
+            : {source === "bundle" ? "its" : "their"} {n} {n === 1 ? "role is" : "roles are"} ticked below. This is a
+            copy. Later changes to {source === "bundle" ? from?.name ?? "it" : "their access"} don&rsquo;t reach{" "}
+            {newName}.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => {
               setSource("none");
               setCopied(null);
@@ -438,8 +438,8 @@ function StartFrom({
             }}
           >
             Start empty
-          </button>
-        </p>
+          </Button>
+        </div>
       )}
     </div>
   );

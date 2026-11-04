@@ -118,7 +118,7 @@ describe("the three states", () => {
     state.targets = [view({ account: undefined, storage: undefined, recorded_at: "2026-10-12T09:00:00Z" })];
     renderStorage();
     expect(screen.getByText("Your account is on its way")).toBeTruthy();
-    expect(screen.getByText(/it waits on staff/)).toBeTruthy();
+    expect(screen.getByText(/it waits on makerspace staff/)).toBeTruthy();
     expect(passwordField()).toBeNull();
   });
 
@@ -139,13 +139,13 @@ describe("the three states", () => {
     expect(preview?.hasAttribute("inert")).toBe(true);
   });
 
-  it("ready: home first, then each folder with what you can do there", () => {
+  it("ready: each folder by its name, none pinned first, with what you can do there", () => {
     state.targets = [view()];
     renderStorage();
     expect(screen.getByText("Your account is ready")).toBeTruthy();
     expect(screen.getByText(/Online and accepting sign-ins/)).toBeTruthy();
     const names = screen.getAllByText(/^(Your home folder|waddle_share|quack_share)$/).map((n) => n.textContent);
-    expect(names).toEqual(["Your home folder", "waddle_share", "quack_share"]);
+    expect(names).toEqual(["quack_share", "waddle_share", "Your home folder"]);
     expect(screen.getByText("In main › home_dir · private to you")).toBeTruthy();
     expect(screen.getAllByText("In main · from your Fabrication lead role")).toHaveLength(2);
     expect(screen.getAllByText("Read only")).toHaveLength(1);
@@ -159,7 +159,7 @@ describe("usage", () => {
     renderStorage();
     expect(screen.getByText("Nothing saved here yet")).toBeTruthy();
     expect(screen.getByText(/46\.0 GiB of 50\.0 GiB · nearly full/)).toBeTruthy();
-    const quack = screen.getByText("quack_share").closest("div.rounded-inner") as HTMLElement;
+    const quack = screen.getByText("quack_share").closest(".row-divider") as HTMLElement;
     expect(within(quack).queryByText(/GiB|Nothing saved/)).toBeNull();
   });
 
@@ -273,7 +273,7 @@ describe("when changes can't happen", () => {
   it("an account on its way while paused waits on staff, said inside the state", () => {
     state.targets = [view({ account: undefined, storage: undefined, lifecycle: "read_only" })];
     renderStorage();
-    expect(screen.getByText("Your account is waiting on staff, not on you")).toBeTruthy();
+    expect(screen.getByText("Your account is waiting on makerspace staff, not on you")).toBeTruthy();
   });
 
   it("held: switched off for now, since when, no addresses, and the password row says why", () => {
@@ -305,6 +305,7 @@ describe("the connection guide", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "First time? How to connect" })[0]);
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Connect to TrueNAS, step by step")).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText("Folder"), { target: { value: "2" } });
     fireEvent.click(within(dialog).getByRole("radio", { name: "Android" }));
     expect(within(dialog).getByText(/Android has no built-in way/)).toBeTruthy();
     expect(within(dialog).getByText(/share: main\. Then open home_dir › ada inside it/)).toBeTruthy();

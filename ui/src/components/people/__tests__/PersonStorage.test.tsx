@@ -205,4 +205,13 @@ describe("a person's network storage (A-10 Part 1)", () => {
     render(<PersonStorage userId="u1" name="Aanya" />);
     expect(screen.getByText("Couldn't load Aanya's storage on TrueNAS.")).toBeInTheDocument();
   });
+
+  it("lists folders A to Z, and says the write place once per row, not in a caption too", () => {
+    const folder = (name: string) => ({ ...renders, folder: `projects/${name}`, path: `/mnt/main/projects/${name}` });
+    const base = view();
+    show(view({ storage: { ...base.storage!, places: [folder("zine"), homePlace, folder("assets")] } }));
+    const names = within(rowOf("Folders")).getAllByText(/^(zine|assets)$/).map((el) => el.textContent);
+    expect(names).toEqual(["assets", "zine"]);
+    expect(screen.queryByText(/Limits, holds and folders are set on/)).toBeNull();
+  });
 });

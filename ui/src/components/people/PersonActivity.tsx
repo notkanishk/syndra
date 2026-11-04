@@ -1,14 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Badge } from "@/components/ui/Badge";
 import { UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Notice } from "@/components/ui/Notice";
 import { SignInLookup } from "@/components/people/SignInLookup";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { TraceCell } from "@/components/audit/TraceCell";
@@ -57,13 +58,12 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
   const [lookingUp, setLookingUp] = useState(false);
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
     {/* Sign-ins aren't history Syndra keeps (A-10 §6); they're read on demand
         from Zitadel's own log, with a reason (owner, 3 Nov). */}
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5">
       <p className="m-0 min-w-0 flex-1 basis-[280px] text-[13.5px] leading-[1.5] text-faint [text-wrap:pretty]">
-        Sign-ins aren&apos;t listed here. Syndra keeps only {name}&apos;s last sign-in to each app; Look up sign-ins
-        reads the rest from Zitadel&apos;s own log.
+        Sign-ins aren&apos;t listed here. Look up sign-ins reads them from Zitadel&apos;s own log.
       </p>
       <Button variant="outline" size="sm" onClick={() => setLookingUp(true)}>
         Look up sign-ins
@@ -107,13 +107,9 @@ export function PersonActivity({ userId, name }: { userId: string; name: string 
           />
         )}
         {atCap && (
-          <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
-            Showing the most recent 200 entries — this is not their whole history. The full log is
-            in{" "}
-            <Link href={`/audit?user=${encodeURIComponent(userId)}`} className="font-semibold text-accent-text link-hover">
-              Review › Audit
-            </Link>
-            .
+          <div className="flex flex-wrap items-center justify-between gap-x-4 border-t border-line px-5 py-3 text-[13px] text-faint">
+            <span>Showing the most recent 200 entries, not their whole history.</span>
+            <ArrowLink href={`/audit?user=${encodeURIComponent(userId)}`}>Audit</ArrowLink>
           </div>
         )}
       </ListStates>
@@ -179,6 +175,7 @@ function TargetActivityCard({
 }) {
   const activity = useTargetActivity(target, userId);
   const data = activity.data;
+  const label = targetLabel(target);
 
   // Nothing at all rather than an empty card: a person with no account on a
   // target has no activity to be missing, and a card saying so on every target
@@ -191,25 +188,25 @@ function TargetActivityCard({
   return (
     <Card>
       <div className="row-divider flex flex-wrap items-baseline gap-2 px-5 py-3">
-        <span className="text-[14.5px] font-semibold">On {target}</span>
+        <span className="text-[14.5px] font-semibold">On {label}</span>
         <span className="text-[13px] text-muted">
-          Read from {target}&rsquo;s own audit log, not from Syndra&rsquo;s record.
+          Read from {label}&rsquo;s own audit log, not from Syndra&rsquo;s record.
         </span>
       </div>
 
       <ListStates
         isLoading={activity.isLoading}
         error={null}
-        errorTitle={`Couldn't read ${target}'s audit log.`}
+        errorTitle={`Couldn't read ${label}'s audit log.`}
         isEmpty={data?.readable === true && events.length === 0}
-        skeleton={<RowSkeleton rows={3} avatar={false} label={`Reading ${target}`} />}
+        skeleton={<RowSkeleton rows={3} avatar={false} label={`Reading ${label}`} />}
         empty={
           <EmptyState
-            title={`No recorded activity for ${name} on ${target}.`}
+            title={`No recorded activity for ${name} on ${label}.`}
             guidance={
               uncovered.length > 0
-                ? "Some shares were not auditing this account, so this is not the same as nothing having happened — see below."
-                : `${targetLabel(target)} has no activity for this account.`
+                ? "Some shares were not auditing this account, so this is not the same as nothing having happened. See below."
+                : `${label} has no activity for this account.`
             }
           />
         }
@@ -227,13 +224,14 @@ function TargetActivityCard({
           `detail`). */}
       {data && !data.readable && data.reason === "no_account" ? (
         <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
-          {targetLabel(target)} has no account for this person, so there is nothing to read
+          {label} has no account for this person, so there is nothing to read
           there.
         </div>
       ) : data && !data.readable ? (
-        <div className="border-t border-line px-5 py-3 text-[13px] text-warn-text">
-          {target}&rsquo;s audit log could not be read, so this is not a claim that nothing
-          happened.{data.detail ? ` ${data.detail}` : ""}
+        <div className="border-t border-line p-5">
+          <Notice tone="warn" title={`${label}\u2019s audit log could not be read.`}>
+            This is not a claim that nothing happened.{data.detail ? ` ${data.detail}` : ""}
+          </Notice>
         </div>
       ) : null}
 
@@ -259,7 +257,7 @@ function TargetEventRow({ event }: { event: TargetActivityEvent }) {
       <span className="w-[64px] shrink-0 text-[12.5px] text-faint">{formatClock(event.at)}</span>
       <span className="min-w-[200px] flex-1 text-[14px]">
         <span className="font-semibold">{event.event}</span>
-        {event.share ? <span className="text-muted"> — {event.share}</span> : null}
+        {event.share ? <span className="text-muted"> · {event.share}</span> : null}
         {/* The reason, in the target's own vocabulary rather than a
             translation of it. `NT_STATUS_NO_SUCH_USER` is the string an
             operator searches for, and inventing friendlier wording would make
@@ -293,7 +291,7 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
         {formatClock(entry.created_at)}
       </span>
 
-      {/* The sentence changes with direction, because "Gave direct access"
+      {/* The sentence changes with direction, because "Gave a role"
           beside somebody's name means two opposite things depending on whether
           they were the hand or the recipient.
 
@@ -318,10 +316,10 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
               {passive ?? verb}
             </span>
             {direction === "both" ? (
-              <span className="text-muted"> — by themselves</span>
+              <span className="text-muted">, by themselves</span>
             ) : (
               <span className="text-muted">
-                {" — by "}
+                {", by "}
                 <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
               </span>
             )}
@@ -342,7 +340,7 @@ function SendRow({ entry }: { entry: AuditEntry }) {
       <span>
         <span className="font-semibold">{headline}</span>
         <span className="text-muted">
-          {" — by "}
+          {", by "}
           <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
         </span>
       </span>

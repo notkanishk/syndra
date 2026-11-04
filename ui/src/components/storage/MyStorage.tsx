@@ -18,6 +18,7 @@ import { Withheld } from "@/components/ui/Withheld";
 import type { GuideFolder } from "@/components/storage/ConnectionGuide";
 import { deviceFrom, type Device } from "@/components/storage/device";
 import { describeFailure, sentence } from "@/lib/outcome";
+import { sortByName } from "@/lib/sort";
 import { formatAt, formatBytes, formatClock, formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
@@ -51,7 +52,7 @@ export function MyStorage() {
   const targets = useMyStorage();
 
   return (
-    <>
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Network storage"
         lede="Your account on the makerspace's shared storage, and how to connect to it. Your access follows the roles you hold."
@@ -61,7 +62,7 @@ export function MyStorage() {
         error={targets.error}
         isEmpty={(targets.data ?? []).length === 0}
         onRetry={() => targets.refetch()}
-        errorTitle="Your storage access could not be read"
+        errorTitle="Couldn't read your storage access."
         empty={
           <EmptyState
             title="No shared storage yet."
@@ -75,7 +76,7 @@ export function MyStorage() {
           ))}
         </div>
       </ListStates>
-    </>
+    </div>
   );
 }
 
@@ -151,7 +152,7 @@ function TargetCard({ view }: { view: MyTargetView }) {
 
   return (
     <Card>
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2.5 px-5 pt-5">
+      <div className="flex flex-col gap-2 px-5 pt-5">
         <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
           <span className="type-card-title">{label}</span>
           <SystemStatus view={view} state={state} />
@@ -162,9 +163,8 @@ function TargetCard({ view }: { view: MyTargetView }) {
       <Unfold open={Boolean(offline)}>
         <Notice tone="warn" title={`${label} is offline`} blocking live className="mx-5 mt-[18px]">
           It stopped answering{view.reachable_since ? ` at ${formatClock(view.reachable_since)}` : ""}, so your
-          folders won&apos;t open until it&apos;s back. Your account and files are safe, and your access
-          hasn&apos;t changed. Makerspace staff can see this too, and this page updates on its own when{" "}
-          {label} returns.
+          folders won&apos;t open until it&apos;s back. Your account, files and access are safe, and this page
+          updates on its own when {label} returns.
         </Notice>
       </Unfold>
 
@@ -182,7 +182,7 @@ function TargetCard({ view }: { view: MyTargetView }) {
       </div>
 
       {passwordStep && (
-        <div className="mx-5 mb-[22px] flex flex-col gap-3 rounded-panel border border-accent-line bg-accent-soft px-[22px] pb-[22px] pt-5">
+        <div className="mx-5 mb-[22px] flex flex-col gap-3">
           {passwordBlocked ? (
             <Blocked view={view} label={label} />
           ) : (
@@ -273,10 +273,10 @@ function copyFor(state: State, label: string, view: MyTargetView): [string, stri
         "Your access is recorded. Makerspace staff create the account itself, and nothing is needed from you in the meantime.",
         view.recorded_at ? (
           <>
-            Recorded <Relative iso={view.recorded_at} /> · there&apos;s no set time, it waits on staff
+            Recorded <Relative iso={view.recorded_at} /> · there&apos;s no set time, it waits on makerspace staff
           </>
         ) : (
-          "There's no set time, it waits on staff"
+          "There's no set time, it waits on makerspace staff"
         ),
       ];
     case "needs-password":
@@ -331,8 +331,8 @@ function copyFor(state: State, label: string, view: MyTargetView): [string, stri
 function pausedNotice(view: MyTargetView, label: string): { title: string; body: string; person: boolean } | null {
   if (!view.account && paused(view) && view.entitled) {
     return {
-      title: "Your account is waiting on staff, not on you",
-      body: `Staff are working on ${label}, so Syndra has paused creating accounts, yours included. ${label} itself is online. Your account is first in line, and nothing has been lost.`,
+      title: "Your account is waiting on makerspace staff, not on you",
+      body: `Makerspace staff are working on ${label}, so Syndra has paused creating accounts, yours included. ${label} itself is online. Your account is first in line, and nothing has been lost.`,
       person: true,
     };
   }
@@ -346,8 +346,8 @@ function pausedNotice(view: MyTargetView, label: string): { title: string; body:
   }
   if (view.lifecycle === "read_only") {
     return {
-      title: `Account changes are paused while staff work on ${label}`,
-      body: `${label} is online and your access hasn't changed, so you can connect and use your files now. Syndra has stopped changing accounts until staff are done.`,
+      title: `Account changes are paused while makerspace staff work on ${label}`,
+      body: `${label} is online and your access hasn't changed, so you can connect and use your files now. Syndra has stopped changing accounts until makerspace staff are done.`,
       person: true,
     };
   }
@@ -379,8 +379,8 @@ function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
     </>
   ) : null;
   return (
-    <span role="status" className={`tint-in inline-flex items-center gap-[7px] text-[13px] leading-[1.4] motion-tint ${offline ? "text-warn-text" : "text-muted"}`}>
-      <span aria-hidden className={`h-[7px] w-[7px] flex-none rounded-pill motion-tint ${offline ? "bg-warn" : held ? "bg-line-strong" : "bg-healthy"}`} />
+    <span role="status" className={`tint-in inline-flex items-center gap-2 text-[13px] leading-[1.4] motion-tint ${offline ? "text-warn-text" : "text-muted"}`}>
+      <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
         <>Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
       ) : held ? (
@@ -396,58 +396,22 @@ function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
 
 const STEPS = ["A role gives you access", "Your account is created", "You set a password"];
 
-/** The three-step line; a segmented bar with one line under it on a phone. */
+/** The three steps, one muted line under the title: a filled dot is done, a ring is not yet. */
 function Steps({ reached, state }: { reached: number; state: State }) {
   const inert = state === "none" || state === "held";
   const tone = (i: number) => (i <= reached ? "done" : i === reached + 1 && !inert ? "now" : "later");
-  const word =
-    state === "waiting"
-      ? "Step 2 of 3 · your account is being created"
-      : state === "restored"
-        ? "Step 3 of 3 · you set a new password"
-        : PASSWORD_STEP.has(state)
-          ? "Step 3 of 3 · you set a password"
-          : "All three steps done";
   return (
-    <>
-      <ol aria-label="Your progress" className="m-0 hidden list-none flex-wrap items-center gap-x-2.5 gap-y-1.5 p-0 tablet:flex">
-        {STEPS.map((step, i) => {
-          const t = tone(i);
-          return (
-            <li key={step} className="flex items-center gap-2.5">
-              {i > 0 && <span aria-hidden className="h-px w-[18px] bg-line-strong" />}
-              <span
-                className={`inline-flex items-center gap-[7px] whitespace-nowrap text-[13px] ${
-                  t === "now" ? "font-semibold text-ink" : t === "done" ? "text-muted" : "text-faint"
-                }`}
-              >
-                <span
-                  aria-hidden
-                  className={`h-[7px] w-[7px] rounded-pill ${t === "done" ? "bg-healthy" : t === "now" ? "bg-accent" : "bg-line-strong"}`}
-                />
-                {step}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-      {!inert && (
-        <div aria-hidden className="w-full tablet:hidden">
-          <span className="mb-[7px] flex gap-1">
-            {STEPS.map((step, i) => {
-              const t = tone(i);
-              return (
-                <span
-                  key={step}
-                  className={`h-1 flex-1 rounded-pill ${t === "done" ? "bg-healthy" : t === "now" ? "bg-accent" : "bg-line-strong"}`}
-                />
-              );
-            })}
-          </span>
-          <span className="text-[13px] text-muted">{word}</span>
-        </div>
-      )}
-    </>
+    <ol aria-label="Your progress" className="m-0 flex list-none flex-wrap items-center gap-x-5 gap-y-1 p-0 text-[13.5px] text-muted">
+      {STEPS.map((step, i) => {
+        const t = tone(i);
+        return (
+          <li key={step} className="inline-flex items-center gap-2">
+            <StatusDot tone={t === "done" ? "healthy" : t === "now" ? "accent" : "neutral"} ring={t === "later"} />
+            <span className={t === "now" ? "font-semibold text-ink" : ""}>{step}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -473,15 +437,16 @@ function Folders({
   useEffect(() => setDevice(deviceFrom(navigator.userAgent)), []);
 
   const storage = view.storage;
-  const places = storage?.places ?? [];
   const offline = view.health === "offline";
   const locked = PASSWORD_STEP.has(state);
   const withheld = (view.suspended ?? []).filter((s) => s.field !== "enabled");
   const host = view.connection?.host;
+  // Nothing is pinned: the home folder sorts by its name like the rest.
+  const places = sortByName(storage?.places ?? [], placeName, (p) => p.path);
   const guideFolders: GuideFolder[] = places
     .filter((p) => p.smb_address && p.unc_address)
     .map((p) => ({
-      label: p.home ? "Your home folder" : nameOf(p),
+      label: placeName(p),
       share: p.share,
       folder: p.folder ?? "",
       smb: p.smb_address!,
@@ -493,15 +458,10 @@ function Folders({
     <div className="row-divider flex flex-col gap-3.5 px-5 pb-5 pt-[18px]">
       <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
         <span className="type-label text-label">Your folders</span>
-        {!locked && offline && (
-          <span className="text-[13px] text-faint">As last known · they open again when {label} is back</span>
-        )}
         {guide && (
-          <span className="ml-auto hidden flex-none whitespace-nowrap tablet:flex">
-            <Button variant="ghost" size="sm" onClick={() => setGuideOpen(true)}>
-              First time? How to connect
-            </Button>
-          </span>
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => setGuideOpen(true)}>
+            First time? How to connect
+          </Button>
         )}
       </div>
 
@@ -511,16 +471,14 @@ function Folders({
           page reads it again on your next visit.
         </p>
       ) : state === "opens-nothing" ? (
-        <div className="flex items-start gap-2.5 rounded-inner border border-dashed border-line-strong px-4 py-3.5 text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
-          <span aria-hidden className="mt-[7px] h-[7px] w-[7px] flex-none rounded-pill border-[1.5px] border-line-strong" />
-          <span>
-            None yet.{" "}
-            {roles.length > 0
+        <EmptyState
+          title="No folder is open to you yet."
+          guidance={`${
+            roles.length > 0
               ? `Your ${joinNames(roles)} ${roles.length === 1 ? "role reaches" : "roles reach"} ${label}, but no folder there is open to ${roles.length === 1 ? "it" : "them"}.`
-              : `Your access reaches ${label}, but no folder there is open to it.`}{" "}
-            Makerspace staff open folders on {label} itself; this list fills in by itself when they do.
-          </span>
-        </div>
+              : `Your access reaches ${label}, but no folder there is open to it.`
+          } Makerspace staff open folders on ${label} itself; this list fills in by itself when they do.`}
+        />
       ) : (
         <NotOpenYet
           open={!locked}
@@ -528,7 +486,7 @@ function Folders({
           why={`Until then, ${label} turns every sign-in away.`}
           step={passwordBlocked ? undefined : { label: "Set it above ↑", href: `#${passwordFieldId(view)}` }}
         >
-          <div className="flex flex-col gap-3.5">
+          <div className="flex flex-col">
             {places.map((place) => (
               <PlaceBlock
                 key={place.path}
@@ -543,13 +501,6 @@ function Folders({
         </NotOpenYet>
       )}
 
-      {guide && (
-        <div className="tablet:hidden">
-          <Button variant="outline" size="sm" className="w-full" onClick={() => setGuideOpen(true)}>
-            First time? How to connect
-          </Button>
-        </div>
-      )}
       {withheld.length > 0 && <Withheld items={withheld} />}
 
       {guide && host && view.account && (
@@ -573,6 +524,9 @@ function nameOf(place: StoragePlace) {
   const parts = place.folder.split("/");
   return parts[parts.length - 1];
 }
+
+/** What a place is called on screen, and what it sorts by. */
+const placeName = (place: StoragePlace) => (place.home ? "Your home folder" : nameOf(place));
 
 function PlaceBlock({
   place,
@@ -617,12 +571,12 @@ function PlaceBlock({
   }
 
   return (
-    <div className="flex flex-col gap-2.5 rounded-inner border border-line bg-surface-0 px-4 py-3.5">
+    <div className="row-divider flex flex-col gap-2.5 py-3.5 first:border-t-0 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
         <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
           <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
             <span className="text-[15.5px] font-semibold [overflow-wrap:anywhere]">
-              {place.home ? "Your home folder" : nameOf(place)}
+              {placeName(place)}
             </span>
             <span className="whitespace-nowrap text-[13px] text-muted">{can ? "Can change files" : "Read only"}</span>
           </span>
@@ -684,17 +638,38 @@ export const SLOW_ANSWER_MS = 4000;
  */
 function UnconfirmedChange({ view, label, offline }: { view: MyTargetView; label: string; offline?: boolean }) {
   return (
-    <div role="status" className="flex max-w-[68ch] items-start gap-2.5">
-      <StatusDot tone="warn" className="mt-2" />
+    <Result
+      tone="warn"
+      title={`Your password change ${formatAt(view.password_change?.at)} may not have reached ${label}.`}
+      body={
+        offline
+          ? `You can set it again here once ${label} is back. If your new password doesn't work then, your old one still does.`
+          : "If your new password doesn't work, your old one still does. Set it again below to be sure."
+      }
+    />
+  );
+}
+
+/** What happened to a password change: one shape for done, unanswered and refused. A dot, the fact, then what it means. */
+function Result({
+  tone,
+  title,
+  body,
+  bloom = false,
+  alert = false,
+}: {
+  tone: "healthy" | "warn" | "danger";
+  title: string;
+  body?: string;
+  bloom?: boolean;
+  alert?: boolean;
+}) {
+  return (
+    <div role={alert ? "alert" : "status"} className={`${bloom ? "lift-in " : ""}flex max-w-[66ch] items-start gap-2.5`}>
+      <StatusDot tone={tone} bloom={bloom} className="mt-2" />
       <span className="flex min-w-0 flex-col gap-1">
-        <span className="text-[14.5px] font-semibold leading-[1.55] text-ink [text-wrap:pretty]">
-          Your password change {formatAt(view.password_change?.at)} may not have reached {label}.
-        </span>
-        <span className="text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
-          {offline
-            ? `You can set it again here once ${label} is back. If your new password doesn't work then, your old one still does.`
-            : "If your new password doesn't work, your old one still does. Set it again below to be sure."}
-        </span>
+        <span className="text-[14.5px] font-semibold leading-[1.55] text-ink [text-wrap:pretty]">{title}</span>
+        {body && <span className="text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">{body}</span>}
       </span>
     </div>
   );
@@ -769,35 +744,28 @@ function PasswordForm({
       </Unfold>
       {noAnswer && !set.isPending && (
         // Step 2: a failure appears still; it never lifts.
-        <div role="status" className="flex max-w-[66ch] items-start gap-2.5">
-          <StatusDot tone="warn" className="mt-2" />
-          <span className="flex min-w-0 flex-col gap-1">
-            <span className="text-[14.5px] font-semibold leading-[1.55] text-ink [text-wrap:pretty]">
-              {label} didn&apos;t answer, so your password may not have changed.
-            </span>
-            <span className="text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
-              Try again in a minute: press {submitLabel}. Sending the same password twice is safe, and {label} then
-              has the one you set.
-            </span>
-          </span>
-        </div>
+        <Result
+          tone="warn"
+          title={`${label} didn't answer, so your password may not have changed.`}
+          body={`Try again in a minute: press ${submitLabel}. Sending the same password twice is safe, and ${label} then has the one you set.`}
+        />
       )}
       {changed && !set.isPending && (
         // Only a confirmed done says this, on either send (owner, 3 Nov).
-        <p role="status" className="lift-in inline-flex items-center gap-2 text-[14px] leading-[1.5]">
-          <StatusDot tone="healthy" bloom />
-          <span className="font-semibold text-ink">Changed</span>
-          <span className="text-muted">{label} has your new password.</span>
-        </p>
+        <Result tone="healthy" bloom title="Changed" body={`${label} has your new password.`} />
       )}
       {refused && !set.isPending && (
-        <p role="alert" className="text-[13.5px] text-danger-text">
-          {status === "rejected"
-            ? `${label} refused the change. Nothing was changed.`
-            : `The change didn't reach ${label}. Nothing was changed. Try again in a minute.`}
-        </p>
+        <Result
+          alert
+          tone="danger"
+          title={
+            status === "rejected"
+              ? `${label} refused the change. Nothing was changed.`
+              : `The change didn't reach ${label}. Nothing was changed. Try again in a minute.`
+          }
+        />
       )}
-      <p className={`max-w-[62ch] leading-[1.55] [text-wrap:pretty] ${accent ? "text-[14px] text-ink" : "text-[13.5px] text-muted"}`}>
+      <p className="max-w-[62ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
         {accent ? (
           <>{scope} Syndra passes it to {label} and doesn&apos;t keep a copy.</>
         ) : changed ? (
@@ -811,7 +779,7 @@ function PasswordForm({
           scope
         )}
       </p>
-      {set.error && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error))}</p>}
+      {set.error && <Result alert tone="danger" title={sentence(describeFailure(set.error))} />}
     </form>
   );
 }

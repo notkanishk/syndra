@@ -3,12 +3,13 @@
 import Link from "next/link";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
+import { StatusDot } from "@/components/ui/Badge";
 import { ReadingWord, targetReading, type Reading } from "@/components/targets/TargetReading";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Card, CardColumns } from "@/components/ui/Card";
+import { Card, CardColumns, CardRow } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { formatClock, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
@@ -43,7 +44,7 @@ export default function ConnectedSystemsPage() {
   );
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Connected systems"
         lede={
@@ -57,6 +58,8 @@ export default function ConnectedSystemsPage() {
             : undefined
         }
       />
+
+      {targets.data && <ReadFreshness state={readStateOfQuery(targets)} subject="This list" />}
 
       {/* A fault is said once, above the card, and the row keeps its dot and
           word. Where to look is the sentence's job: two of these are faults on
@@ -86,12 +89,9 @@ export default function ConnectedSystemsPage() {
             <EmptyState
               title="No system is connected."
               guidance={
-                "Syndra manages accounts on a system outside itself — network storage, a door " +
-                "controller — through an add-on running in its own container. For whoever runs " +
-                "the Syndra server: one appears here after the deployment names it in " +
-                "ADDON_TARGETS and starts its container; see DEPLOY.md, “Bringing up the " +
-                "TrueNAS add-on”. Until then Syndra manages sign-in only, and no outside " +
-                "system is being kept in step."
+                "Syndra manages accounts on a system outside itself, such as network storage or a " +
+                "door controller, through an add-on. Whoever runs the Syndra server connects one " +
+                "(see DEPLOY.md). Until then Syndra manages sign-in only."
               }
             />
           }
@@ -194,9 +194,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
   const unread = Boolean(ask) && (health.isError || inventory.isError || findings.isError);
 
   return (
-    <div
-      className={`flex flex-col items-start gap-2 px-5 py-4 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px] ${first ? "" : "row-divider"}`}
-    >
+    <CardRow first={first}>
       <span className="flex min-w-[min(220px,100%)] flex-1 flex-col gap-0.5">
         <Link href={href} className="text-[15.5px] font-semibold link-hover">
           {name}
@@ -216,7 +214,6 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
         ) : row.project === null ? (
           <span className="text-[13px] text-faint">No Zitadel project yet</span>
         ) : null}
-        <Mono className="truncate text-faint">{row.target}</Mono>
       </span>
 
       {/* A dot and a word, the same idiom the target's own page uses — never
@@ -281,7 +278,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           {reading.detail}
         </span>
       )}
-    </div>
+    </CardRow>
   );
 }
 
@@ -302,7 +299,7 @@ function NeedsNote({
   if (unread) return <span className="text-faint">Not read just now</span>;
   return (
     <span className="inline-flex items-center gap-2 text-muted">
-      <span aria-hidden className="size-1.5 rounded-pill bg-healthy" />
+      <StatusDot tone="healthy" />
       Nothing waiting
     </span>
   );

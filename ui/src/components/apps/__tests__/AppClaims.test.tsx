@@ -151,17 +151,18 @@ beforeEach(() => {
 });
 
 describe("an app's header", () => {
-  it("names the app and links its project; the client id only in Advanced", async () => {
+  it("names the app and links its project; the client id is not in the meta", async () => {
     renderScreen();
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("NetBird");
     for (const link of screen.getAllByRole("link", { name: /Network/ })) expect(link).toHaveAttribute("href", "/projects/pNet");
-    expect(screen.queryByText("301928374650192837")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).not.toHaveTextContent("301928374650192837");
   });
 
-  it("keeps the client id in Advanced", async () => {
-    api.view.advanced = true;
+  it("gives the client id its own copyable row in the tools card, in either view", async () => {
     renderScreen();
-    expect(await screen.findByText("301928374650192837")).toBeInTheDocument();
+    const row = (await screen.findByText("Client ID")).parentElement!;
+    expect(within(row).getByText("301928374650192837")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /Copy client id|Select client id/i })).toBeInTheDocument();
   });
 
   it("puts people in 7 days and the last sign-in in the meta", async () => {
@@ -479,6 +480,21 @@ describe("history", () => {
     expect(screen.queryByRole("button", { name: "Go back to this version" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Show all 2/ }));
     expect(await screen.findByRole("button", { name: "Go back to this version" })).toBeInTheDocument();
+    // Show all is an outline button with no chevron; it says Hide all when open.
+    expect(screen.getByRole("button", { name: "Hide all 2" }).textContent).not.toMatch(/[›↓]/);
+  });
+
+  it("ends going back on its result, Restored, with Close", async () => {
+    api.routes["GET /applications/a1/claim-shape/versions"] = () => ({ versions: [v(2), v(1)] });
+    api.routes["POST /applications/a1/claim-shape/versions/1/restore"] = () => ({});
+    renderScreen();
+    fireEvent.click(await screen.findByRole("button", { name: /Show all 2/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Go back to this version" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Go back to version 1" }));
+    expect(await within(dialog).findByText("Restored")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });
 
@@ -612,7 +628,7 @@ describe("debug mode", () => {
     expect(within(dialog).getByRole("radio", { name: /You, Kanishk Singh/ })).toBeChecked();
     expect(within(dialog).getByText(/15 minutes from now/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Turn on debug mode" }));
-    await within(dialog).findByText("On");
+    await within(dialog).findByText("Turned on");
     expect(api.calls.find((c) => c.method === "PUT" && c.path === "/applications/a1/debug")?.body).toEqual({});
   });
 

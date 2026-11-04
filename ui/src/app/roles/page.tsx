@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { ProjectName } from "@/components/names";
-import { projectLabel } from "@/components/names/Unresolved";
+import { projectLabel, UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -19,7 +19,7 @@ import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Select } from "@/components/ui/Select";
-import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
+import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
@@ -40,9 +40,10 @@ const ROLE_SORT: Record<RoleSort, (role: CatalogRole) => string | number> = {
  * E2 index · /roles — the cross-project role index, and the landing target for
  * the rail's Roles item.
  *
- * Project is the FIRST column and never collapses: the same key in two projects
- * means two different things, and a list that leads with the key invites
- * treating them as one role.
+ * Project is the FIRST column: the same key in two projects means two different
+ * things, and a list that leads with the key invites treating them as one role.
+ * Sorted by it, a project's roles gather under one quiet label instead of
+ * repeating its name row after row.
  */
 export default function RolesPage() {
   const roles = useGlobalRoleCatalog();
@@ -59,7 +60,11 @@ export default function RolesPage() {
   // unfiltered index and left the reader to find them.
   const unusedOnly = params.get("unused") === "1";
 
-  const all = useMemo(() => roles.data ?? [], [roles.data]);
+  // Alphabetical by role first: every sort keeps ties in this order, so a project's roles read A to Z.
+  const all = useMemo(
+    () => sortByName(roles.data ?? [], (role) => role.display_name || humanizeKey(role.role_key), (role) => role.role_key),
+    [roles.data],
+  );
 
   // Keyed by id, labelled by name: two projects Syndra could not name are two
   // projects, not one "Unknown project", and an id is never the label.
@@ -91,6 +96,16 @@ export default function RolesPage() {
   const leaving = useLeavingRows(rows, (role) => `${role.project_id}:${role.role_key}`, !roles.isLoading && !roles.error, {
     narrowedBy: `${project}|${group}|${unusedOnly}|${needle}`,
   });
+  // Runs: under Project, a project's roles gather under its name (RULES: sort lives on the headings).
+  // The count is the run's whole size, drawn from every row still in place.
+  const runAt = useMemo(
+    () =>
+      runStarts(
+        leaving.rows,
+        view.sort.key === "project" ? (role) => projectLabel(role.project_name, role.project_id) : null,
+      ),
+    [leaving.rows, view.sort.key],
+  );
   const unusedCount = all.filter((role) => role.is_unused).length;
   const filtered = Boolean(project || group || unusedOnly || needle);
 
@@ -111,10 +126,10 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Roles"
-        lede="Every role in every project — one named kind of access each. Open a role to see who holds it."
+        lede="Every role in every project, one named kind of access each. Open a role to see who holds it."
         actions={
           <Button variant="accent" onClick={() => setCreating(true)}>
             New role
@@ -187,29 +202,25 @@ export default function RolesPage() {
             </FilterField>
           </FilterPanel>
         }
+        /* The read line, and under it the one thing a reader must know about the list: it is not
+           exhaustive. A caption, not a box (A-04 §7.1a). A role made straight in Zitadel on a project
+           Syndra cannot read is missing, and a silently partial list is how somebody concludes a role
+           doesn't exist and creates a duplicate. People is what Syndra decided, not what Zitadel has
+           confirmed, so the freshness is stated once for the whole page. */
+        read={
+          all.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              <ReadFreshness state={readState} subject="What Zitadel confirmed" />
+              <p className="max-w-[92ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
+                Roles made straight in Zitadel, on a project Syndra cannot read, are not listed.{" "}
+                <ArrowLink href="/zitadel/projects" className="whitespace-nowrap">
+                  Check a project&rsquo;s roles in Zitadel
+                </ArrowLink>
+              </p>
+            </div>
+          ) : undefined
+        }
       />
-
-      {/*
-        The read line, and under it the one thing a reader must know about the
-        list: it is not exhaustive. A caption, not a box (A-04 §7.1a; board,
-        Cohesion choice 7). GET /api/v1/roles returns roles Syndra created plus
-        whatever the directory reports; a role made directly upstream in a
-        project Syndra cannot currently read is still missing, and a silently
-        partial list is how somebody concludes a role doesn't exist and creates
-        a duplicate. People is what Syndra decided, not what Zitadel has
-        confirmed, so the freshness is stated once for the whole page.
-      */}
-      {all.length > 0 && (
-        <div className="-mt-1.5 flex flex-col gap-1 px-[2px]">
-          <ReadFreshness state={readState} subject="What Zitadel confirmed" />
-          <p className="max-w-[92ch] text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
-            Roles made straight in Zitadel, on a project Syndra cannot read, are not listed.{" "}
-            <ArrowLink href="/zitadel/projects" className="whitespace-nowrap">
-              Check a project&rsquo;s roles in Zitadel
-            </ArrowLink>
-          </p>
-        </div>
-      )}
 
       <Card stale={readState.current === false}>
         <CardColumns>
@@ -246,19 +257,18 @@ export default function RolesPage() {
                       ? "No roles match that."
                       : "No roles match those filters."
                 }
-                guidance="Clear a filter, or check Zitadel for roles Syndra didn't create."
                 action={{ label: "Clear filters", onClick: clearFilters }}
+                resolved={unusedOnly}
               />
             ) : (
-              <EmptyState
-                title="No roles yet."
-                guidance="Create one here, or check Zitadel for roles Syndra didn't create."
-                action={{ label: "Create a role", onClick: () => setCreating(true) }}
-              />
+              <EmptyState title="No roles yet." />
             )
           }
         >
-          {leaving.rows.map((role) => {
+          {leaving.rows.map((role, index) => {
+            const run = runAt(index);
+            const underRun =
+              view.sort.key === "project" && projectLabel(role.project_name, role.project_id) !== UNKNOWN_PROJECT;
             const holders = holdersLine(
               role.assigned_user_count,
               role.confirmed_user_count,
@@ -269,13 +279,20 @@ export default function RolesPage() {
               key={`${role.project_id}:${role.role_key}`}
               {...leaving.props(`${role.project_id}:${role.role_key}`)}
             >
+            {run && <RunLabel {...run} />}
             <Link
               href={`/projects/${role.project_id}/roles/${encodeURIComponent(role.role_key)}`}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1 px-5 py-3 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
-              <span className="w-full text-[12.5px] text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-[14.5px]">
-                <ProjectName id={role.project_id} name={role.project_name} />
-              </span>
+              {/* Under the project's own label the name is not said again, unless Syndra could not
+                  name it: then the id beside "Unknown project" is all there is to tell two apart. */}
+              {underRun ? (
+                <span aria-hidden className="hidden tablet:block tablet:w-[180px] tablet:shrink-0" />
+              ) : (
+                <span className="w-full text-[12.5px] text-muted [text-wrap:pretty] tablet:w-[180px] tablet:shrink-0 tablet:text-[14.5px]">
+                  <ProjectName id={role.project_id} name={role.project_name} />
+                </span>
+              )}
               <span className="w-full min-w-0 tablet:min-w-[200px] tablet:flex-1">
                 <span className="block text-[15px] font-semibold [text-wrap:pretty]">
                   {role.display_name || humanizeKey(role.role_key)}
@@ -290,7 +307,7 @@ export default function RolesPage() {
                 {/* Between tablet and desktop the group and what uses the role
                     fold into a line under it, so the role keeps its room. */}
                 <span className="block text-[12.5px] text-faint [text-wrap:pretty] desktop:hidden">
-                  {[role.group, role.is_unused ? "Used by nothing" : usedBy(role)]
+                  {[role.group, role.is_unused ? "Unused" : usedBy(role)]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
@@ -330,11 +347,6 @@ export default function RolesPage() {
         </ListStates>
         </div>
       </Card>
-
-      <p className="max-w-[900px] text-[14px] leading-[1.55] text-faint">
-        Same key, two projects, two different things — which is why the project column is first and
-        never collapses.
-      </p>
 
       {creating && <CreateRoleDialog onClose={() => setCreating(false)} />}
     </div>

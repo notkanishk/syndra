@@ -153,6 +153,10 @@ describe("Incoming events — plain titles and outcomes", () => {
     expect(screen.getByText("Another event from Zitadel")).toBeTruthy();
     expect(screen.queryByText("something_new")).toBeNull();
     expect(screen.queryByText("zitadel.grant_added", { selector: "span:not(.type-mono)" })).toBeNull();
+    // The raw type is not on the row: it is in the details, one press away.
+    expect(screen.queryByText("zitadel.grant_added")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show details" })[0]);
+    expect(screen.getAllByText(/^zitadel\./).length).toBe(1);
   });
 
   it("says who and what in the sentence, naming the bundle a new person was given", () => {
@@ -182,6 +186,10 @@ describe("Incoming events — plain titles and outcomes", () => {
     state.triggers = [trigger({ status: "unconfigured", bundle_id: undefined })];
     renderPage();
 
+    // The system's own message is not on the row; the details hold it.
+    expect(screen.queryByText(/role wood\.lead is not in the catalog/)).toBeNull();
+    const failed = screen.getByText("Access given in Zitadel").closest("[data-event-row]") as HTMLElement;
+    fireEvent.click(within(failed).getByRole("button", { name: "Show details" }));
     expect(screen.getByText(/role wood\.lead is not in the catalog/)).toBeTruthy();
     const joined = screen.getByText("Person joined").closest("[data-event-row]") as HTMLElement;
     expect(within(joined).getAllByText("Not acted on").length).toBeGreaterThan(0);
@@ -209,7 +217,7 @@ describe("Incoming events — search", () => {
     expect(screen.getAllByText(/Access (given|removed) in Zitadel/)).toHaveLength(2);
   });
 
-  it("says nothing matched, how many events there are, and offers the way back", () => {
+  it("says nothing matched, and offers the way back", () => {
     state.events = [webhook({ id: "w1" })];
     state.triggers = [];
     renderPage();
@@ -218,7 +226,6 @@ describe("Incoming events — search", () => {
       target: { value: "zzz" },
     });
     expect(screen.getByText("No events match those filters.")).toBeTruthy();
-    expect(screen.getByText("1 event is in the timeline.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(screen.getByText("Access given in Zitadel")).toBeTruthy();

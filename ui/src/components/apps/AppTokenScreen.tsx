@@ -9,11 +9,10 @@ import { SignInLookup } from "@/components/people/SignInLookup";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { Tinted } from "@/components/ui/Unfold";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { BELOW_HEADER, PageHeader } from "@/components/ui/PageHeader";
 import { ApiError, request } from "@/lib/api-client";
 import { rowProblems, type SayContext } from "@/lib/claims";
 import { describeFailure } from "@/lib/outcome";
@@ -36,6 +35,7 @@ import type { CheckContext } from "./claim-words";
 import { ClaimHistory } from "./ClaimHistory";
 import { ClaimPreview } from "./ClaimPreview";
 import { DebugMode } from "./DebugMode";
+import { ToolRow } from "./ToolRow";
 import { appTemplateId, ShapeCard } from "./ShapeCard";
 import { draftFrom, type ShapeDraft } from "./shape-draft";
 import { CopySheet, SaveSummary, TemplateSheet } from "./ShapeSheets";
@@ -53,9 +53,13 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
     <ReadGate
       loading={shape.isLoading}
       skeleton={
-        <Card>
-          <RowSkeleton rows={4} avatar={false} label="Loading app" />
-        </Card>
+        // The header's seat, so the card doesn't jump down when the name lands.
+        <div className="flex flex-col gap-4">
+          <div aria-hidden className="h-[58px]" style={BELOW_HEADER} />
+          <Card>
+            <RowSkeleton rows={4} avatar={false} label="Loading app" />
+          </Card>
+        </div>
       }
     >
       {shape.error ? (
@@ -152,38 +156,32 @@ function AppClaims({ applicationId }: { applicationId: string }) {
   const tpl = sheet?.kind === "template" ? templates.find((t) => t.id === sheet.id) : undefined;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="pb-2">
-        <PageHeader
-          eyebrow="Apps"
-          title={app}
-          meta={
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
-              {kindOf(shape.application.consumer)} · roles from{" "}
-              <ArrowLink href={`/projects/${projectId}`} className="text-[14px]">
-                <ProjectName id={projectId} />
-              </ArrowLink>
-              {signInMeta && (
-                <span className="tint-in">
-                  <span aria-hidden>·</span> {signInMeta}
-                </span>
-              )}
-              <Tinted show={advanced && Boolean(shape.client_id)}>
-                <span aria-hidden>·</span> client <Mono>{shape.client_id}</Mono>
-              </Tinted>
-            </span>
-          }
-          actions={
-            <Button variant="outline" onClick={() => setLookingUp(true)}>
-              Look up sign-ins
-            </Button>
-          }
-        />
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={app}
+        meta={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
+            {kindOf(shape.application.consumer)} · roles from{" "}
+            <ArrowLink href={`/projects/${projectId}`}>
+              <ProjectName id={projectId} />
+            </ArrowLink>
+            {signInMeta && (
+              <span className="tint-in">
+                <span aria-hidden>·</span> {signInMeta}
+              </span>
+            )}
+          </span>
+        }
+        actions={
+          <Button variant="outline" onClick={() => setLookingUp(true)}>
+            Look up sign-ins
+          </Button>
+        }
+      />
       {lookingUp && <SignInLookup appId={applicationId} name={app} onClose={() => setLookingUp(false)} />}
 
       {/* What the app is told | Preview: two halves; on a phone the shape comes first (#90). */}
-      <div className="flex flex-wrap items-start gap-5">
+      <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[1_1_460px]">
           <ShapeCard
             shape={shape}
@@ -206,7 +204,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
           />
         </div>
         {/* The preview stays in view while the shape scrolls, so every edit is seen beside its effect. */}
-        <div className="flex min-w-0 flex-[1_1_440px] tablet:sticky tablet:top-5">
+        <div className="flex min-w-0 flex-[1_1_440px] desktop:sticky desktop:top-5">
           <ClaimPreview
             preview={preview.data}
             isLoading={preview.isLoading}
@@ -222,6 +220,11 @@ function AppClaims({ applicationId }: { applicationId: string }) {
 
       {/* Quiet tools (A-15 §6): one card, a settings row each; nothing happens without a named button. */}
       <Card className="[&>.row-divider:first-child]:border-t-0">
+        {shape.client_id && (
+          <ToolRow label="Client ID">
+            <CopyableValue value={shape.client_id} label="Client ID" />
+          </ToolRow>
+        )}
         {signIns.data?.receiving && signIns.data.last_at && <AppSignInStrip usage={signIns.data} />}
         <DebugMode appId={applicationId} ctx={{ ...ctx, profile: shape.profile, draft: undefined }} />
         <ClaimHistory appId={applicationId} ctx={say} project={project} templates={templates} />

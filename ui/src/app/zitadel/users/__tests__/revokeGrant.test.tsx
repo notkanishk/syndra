@@ -51,13 +51,18 @@ describe("revoking a person's roles in Zitadel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revoke this role in Zitadel" }));
 
     await waitFor(() => expect(state.remove).toHaveBeenCalledWith({ userId: "u1", grantId: "g1" }));
-    await waitFor(() => expect(document.body.textContent).toMatch(/Roles revoked in Zitadel/));
+    // The result is in the sheet, in the act's word, and the sheet stays until Close.
+    await waitFor(() => expect(screen.getByText("Revoked")).toBeTruthy());
+    expect(document.body.textContent).toMatch(/Roles revoked in Zitadel/);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("keeps the roles when backed out of", () => {
     render(<UpstreamUsersPage />);
     fireEvent.click(screen.getByRole("button", { name: "Revoke roles" }));
-    fireEvent.click(screen.getByRole("button", { name: "Keep the roles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(state.remove).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
   });

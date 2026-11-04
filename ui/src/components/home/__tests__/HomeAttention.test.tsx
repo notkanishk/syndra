@@ -145,7 +145,8 @@ describe("Service accounts to look at", () => {
     renderHome();
 
     expect(await screen.findByText("Service accounts to look at")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open Service accounts →" })).toHaveAttribute("href", "/system/service-accounts");
+    // One link per destination: no header "Open Service accounts" beside the row's own.
+    expect(screen.queryByRole("link", { name: /Open Service accounts/ })).toBeNull();
     expect(screen.getByRole("link", { name: "door panel" })).toHaveAttribute(
       "href",
       "/system/service-accounts/s2",

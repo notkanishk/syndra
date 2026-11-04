@@ -58,14 +58,14 @@ export function SignInLookup({
       <ModalHeader
         title={forPerson ? `Look up ${name}'s sign-ins` : `Look up sign-ins to ${name}`}
         titleId={`${ids}-title`}
-        lede="Syndra keeps only each person's last sign-in. This reads who signed in, and when, from Zitadel's own log, once, and shows it here."
+        lede="Syndra keeps only each person's last sign-in. This reads who signed in, and when, from Zitadel's own log."
       />
       <div className="flex flex-col gap-4 px-6">
         {result ? (
           <>
             <ActionOutcome
               word="Looked up"
-              outcome={{ kind: "applied", message, detail: "It's in Change history with your reason. Nothing here is kept." }}
+              outcome={{ kind: "applied", message, detail: "It's in Change history with your reason." }}
             />
             {found.length > 0 && (
               <ul className="m-0 flex max-h-[320px] list-none flex-col overflow-auto rounded-inner border border-line p-0">
@@ -121,24 +121,24 @@ export function SignInLookup({
           </>
         )}
       </div>
-      <ModalFooter note={result ? undefined : "This finishes now. Zitadel's log is read once, and the lookup is recorded with your reason."}>
+      <ModalFooter
+        note={result ? undefined : "This finishes now. Zitadel's log is read once, and the lookup is recorded with your reason."}
+        cancel={result ? undefined : { onClick: onClose, disabled: lookup.isPending }}
+      >
         {result ? (
-          <Button onClick={onClose}>Close</Button>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
         ) : (
-          <>
-            <Button disabled={lookup.isPending} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              variant="accent"
-              isPending={lookup.isPending}
-              disabled={reason.trim() === ""}
-              reason={reason.trim() === "" ? "Say why first." : undefined}
-              onClick={run}
-            >
-              Look up sign-ins
-            </Button>
-          </>
+          <Button
+            variant="accent"
+            isPending={lookup.isPending}
+            disabled={reason.trim() === ""}
+            reason={reason.trim() === "" ? "Say why first." : undefined}
+            onClick={run}
+          >
+            Look up sign-ins
+          </Button>
         )}
       </ModalFooter>
     </Modal>

@@ -53,11 +53,11 @@ beforeEach(() => {
 });
 
 describe("the mappings header", () => {
-  it("links back to the target it belongs to", () => {
+  // The breadcrumb is the way back; the page draws no second one (A-17 §2.24).
+  it("draws no hand-made back link above the title", () => {
     render(<MappingScreen target="truenas" />);
 
-    const back = screen.getByRole("link", { name: /TrueNAS/ });
-    expect(back.getAttribute("href")).toBe("/system/targets/truenas");
+    expect(screen.queryByRole("link", { name: /TrueNAS/ })).toBeNull();
   });
 
   it("says the system, the project it serves, the mapping count and the version in force", () => {

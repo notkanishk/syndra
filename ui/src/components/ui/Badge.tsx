@@ -9,10 +9,11 @@ import React from "react";
  * occupies its seat rather than disappearing.
  */
 
+export type BadgeTone = Tone;
 type Tone = "neutral" | "accent" | "warn" | "danger" | "dangerSoft" | "warnSoft";
 
 const TONES: Record<Tone, string> = {
-  neutral: "bg-tint-2 text-ink/80",
+  neutral: "bg-tint-2 text-ink",
   accent: "bg-accent-dense text-accent-ink",
   warn: "bg-warn text-warn-ink",
   danger: "bg-danger text-danger-ink",
@@ -59,6 +60,44 @@ export function Chip({
       {...props}
     >
       {children}
+    </span>
+  );
+}
+
+/**
+ * A chosen thing you can put back (A-17 G15): one shape for every picker's
+ * "Chosen" row. The chip is 36px with the chosen tint; its × reaches 44px on
+ * touch by extending past it, invisibly.
+ */
+export function ChosenChip({
+  children,
+  onRemove,
+  removeLabel,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  onRemove: () => void;
+  /** "Remove Laser cutter": says what goes. */
+  removeLabel: string;
+  disabled?: boolean;
+}) {
+  return (
+    <span className="chip-in inline-flex h-9 items-center gap-1 rounded-pill border border-accent-line bg-accent-soft pl-3 pr-1 text-[13px] font-semibold">
+      {children}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onRemove}
+        aria-label={removeLabel}
+        className="group -my-1 -mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center desktop:m-0 desktop:min-h-0 desktop:min-w-0"
+      >
+        <span
+          aria-hidden
+          className="flex size-7 items-center justify-center rounded-pill text-muted motion-tint group-hover:bg-[var(--hover)]"
+        >
+          ×
+        </span>
+      </button>
     </span>
   );
 }

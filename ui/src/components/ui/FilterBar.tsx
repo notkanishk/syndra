@@ -35,14 +35,21 @@ export function FilterBar({
   search,
   filters,
   trailing,
+  read,
 }: {
   leading?: React.ReactNode;
   search?: React.ReactNode;
   /** A `<FilterPanel>`, or nothing when a screen narrows by search alone. */
   filters?: React.ReactNode;
   trailing?: React.ReactNode;
+  /**
+   * The read line (RULES 9b, A-17 G5): ReadFreshness, and a section's chips at
+   * its right. It sits 10 under the bar, placed here so no page sets that
+   * distance itself (it was 12, 14 and 18, by negative margins).
+   */
+  read?: React.ReactNode;
 }) {
-  return (
+  const bar = (
     <div className="flex flex-wrap items-center gap-2.5">
       {leading}
       {search && <div className="min-w-[220px] flex-1 sm:max-w-[340px]">{search}</div>}
@@ -52,5 +59,13 @@ export function FilterBar({
       {filters}
       {trailing}
     </div>
+  );
+  return read ? (
+    <div className="flex flex-col gap-2.5">
+      {bar}
+      {read}
+    </div>
+  ) : (
+    bar
   );
 }

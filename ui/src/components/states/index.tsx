@@ -1,11 +1,13 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api-client";
 import { ArriveList } from "@/components/ui/ArriveList";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { StatusDot } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 // The prose a failure wears lives in one place, shared with every surface that
 // reports a mutation. A read that fails and a write that fails were describing
@@ -101,38 +103,38 @@ export function EmptyState({
   guidance,
   action,
   resolved = false,
+  bloom = false,
+  lift = false,
 }: {
   title: string;
   guidance?: string;
   action?: { label: string; href: string } | { label: string; onClick: () => void };
   resolved?: boolean;
+  /** The reader's own act just emptied it (S13): the lime dot blooms once. */
+  bloom?: boolean;
+  /** The list just emptied in front of the reader: the line rises into its place. */
+  lift?: boolean;
 }) {
   return (
-    <div role="status" className="tint-in flex flex-col justify-center gap-2.5 px-6 py-8">
+    <div role="status" className={`${lift ? "lift-in" : "tint-in"} flex flex-col justify-center gap-2.5 px-6 py-8`}>
       <div className="flex items-center gap-2.5">
         {resolved && (
-          <span aria-hidden className="h-2 w-2 flex-none rounded-pill bg-healthy" />
+          <StatusDot tone="healthy" bloom={bloom} />
         )}
         <div className="type-empty-title">{title}</div>
       </div>
       {guidance && <p className="max-w-[60ch] text-[14px] text-muted">{guidance}</p>}
-      {action &&
-        ("href" in action ? (
-          <Link
-            href={action.href}
-            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text link-hover"
-          >
-            {action.label}
-          </Link>
-        ) : (
-          <button
-            type="button"
-            onClick={action.onClick}
-            className="mt-1 inline-flex min-h-[44px] items-center self-start text-[13.5px] font-semibold text-accent-text link-tint"
-          >
-            {action.label}
-          </button>
-        ))}
+      {action && (
+        <div className="mt-1">
+          {"href" in action ? (
+            <ArrowLink href={action.href}>{action.label}</ArrowLink>
+          ) : (
+            <Button size="sm" onClick={action.onClick}>
+              {action.label}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

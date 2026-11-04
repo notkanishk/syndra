@@ -4,18 +4,18 @@ import { useState } from "react";
 
 import { askHref } from "@/components/member/RecentChanges";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { ButtonLink } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Input } from "@/components/ui/Input";
 import { Unfold } from "@/components/ui/Unfold";
-import { ErrorState, RowSkeleton } from "@/components/states";
+import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import type { ProjectCatalog } from "@/lib/types";
 
 /**
  * What else is here (route-me 52b) — the half of a member's page that isn't
- * about them. One search, and every room as a fold: closed, it says how much
+ * about them. One search, and every project as a fold: closed, it says how much
  * of it you have; open, its roles with what each lets you do, then "Ask for
  * this →" or "You have this". A search opens the rooms with a match, tints
  * the match, and folds the rest with "No match".
@@ -88,7 +88,7 @@ function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>
   const nothingFound = q !== "" && projects.every((project) => matchesOf(project)!.size === 0);
 
   return (
-    <div className="mt-1.5 flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
       {/* Stacked: a row here squeezed the heading and its caption side by side. */}
       <div>
         <h2 className="type-section-title">What else is here</h2>
@@ -102,22 +102,18 @@ function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>
           type="search"
           value={query}
           onChange={(event) => search(event.target.value)}
-          placeholder="Search everything on offer: a machine, a room, a door"
+          placeholder="Search a machine or a project"
           aria-label="Search everything on offer"
         />
       </div>
 
       <Card>
         {nothingFound && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5">
-            <span className="flex-1 text-[14px] text-muted">
-              Nothing you can ask for matches &ldquo;{query.trim()}&rdquo;. Ask for access, and say what
-              you need in Why.
-            </span>
-            <ButtonLink href="/requests?ask" size="sm">
-              Ask for access
-            </ButtonLink>
-          </div>
+          <EmptyState
+            title={`Nothing you can ask for matches “${query.trim()}”.`}
+            guidance="Ask for access, and say what you need in Why."
+            action={{ label: "Ask for access", href: "/requests?ask" }}
+          />
         )}
         {projects.map((project, i) => {
           const held = heldByProject.get(project.id) ?? new Set<string>();
@@ -144,24 +140,7 @@ function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>
                 onClick={() => toggle(project.id)}
                 className="hover-tint flex min-h-[52px] w-full items-center gap-3 px-5 py-2.5 text-left"
               >
-                <span
-                  aria-hidden
-                  className="inline-flex size-7 flex-none items-center justify-center rounded-pill border border-line text-muted"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className={`motion-turn ${isOpen ? "" : "-rotate-90"}`}
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </span>
+                <FoldChevron open={isOpen} />
                 <span className="flex min-w-0 flex-1 flex-col gap-px">
                   <span className="text-[15px] font-semibold">{project.name}</span>
                   {project.description && <span className="text-[13px] text-muted">{project.description}</span>}

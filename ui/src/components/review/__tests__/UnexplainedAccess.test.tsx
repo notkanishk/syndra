@@ -8,6 +8,18 @@ import type { DriftTriageItem } from "@/lib/queries/useDrift";
 
 const drift = vi.hoisted(() => ({ data: [] as DriftTriageItem[] }));
 
+// Who Syndra can name. An actor it cannot name is dropped from the sentence, never shown as an id.
+const NAMES = vi.hoisted(() => ({ current: {} as Record<string, string> }));
+vi.mock("@/lib/queries/useNameResolver", () => ({
+  useNameResolver: () => ({
+    resolveUser: (id: string) => ({
+      value: NAMES.current[id] ? { display_name: NAMES.current[id] } : undefined,
+      resolved: true,
+    }),
+    resolveProject: () => ({ value: undefined, resolved: true }),
+  }),
+}));
+
 // The per-row origin read, asked only when somebody clicks.
 const origin = vi.hoisted(() => ({
   data: undefined as Record<string, unknown> | undefined,
@@ -145,6 +157,7 @@ beforeEach(() => {
   bulk.applies = 0;
   revokeCtl.calls = 0;
   revokeCtl.fails = false;
+  NAMES.current = {};
 });
 
 describe("Unexplained access — triage", () => {
@@ -249,17 +262,41 @@ describe("Unexplained access — triage", () => {
     renderTriage();
 
     // Drift arrives in clusters — one rule, one person, one project — and no
-    // amount of shift-clicking finds the cluster as reliably as asking for it.
-    fireEvent.click(screen.getAllByRole("button", { name: "Select similar rows" })[0]);
+    // amount of shift-clicking finds the cluster as reliably as asking for it. The ask is in the
+    // selection bar, from the row that is ticked, not a text button on every row.
+    expect(screen.queryByRole("button", { name: "Select similar rows" })).toBeNull();
+    enterSelect();
+    fireEvent.click(screen.getAllByRole("checkbox", { name: /Select the operator row/ })[0]);
+    fireEvent.click(
+      within(screen.getByRole("region", { name: "Selection" })).getByRole("button", { name: "Select similar rows" }),
+    );
     expect(screen.getByText(/3 items selected/)).toBeInTheDocument();
   });
 
   it("names the upstream actor and date when the detector knew them", () => {
+    NAMES.current = { "svc-badge-sync": "Badge sync" };
     drift.data = [
       item({ upstream_actor: "svc-badge-sync", upstream_created_at: "2026-07-21T14:12:04Z" }),
     ];
     renderTriage();
-    expect(screen.getByText(/by svc-badge-sync/)).toBeInTheDocument();
+    expect(screen.getByText(/Created in Zitadel on 21 \w+ by Badge sync\./)).toBeInTheDocument();
+  });
+
+  // A raw id is never a name (A-17 G10): an actor Syndra cannot name is dropped with its "by".
+  it("drops the 'by' for an actor it cannot name, and never shows the id", () => {
+    drift.data = [
+      item({ upstream_actor: "365914614526903302", upstream_created_at: "2026-07-21T14:12:04Z" }),
+    ];
+    renderTriage();
+    expect(screen.getByText(/^Created in Zitadel on 21 \w+\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/365914614526903302/)).toBeNull();
+  });
+
+  // What Syndra gives nothing for is said once, as the section's note, not on every row.
+  it("says what nothing in Syndra gives once, in the section's note", () => {
+    drift.data = [item({ id: "a" }), item({ id: "b", user_id: "u2" })];
+    renderTriage();
+    expect(screen.getAllByText(/no direct access, no bundle, no automatic rule/)).toHaveLength(1);
   });
 
   it("admits it does not know the actor rather than naming a plausible one", () => {
@@ -273,6 +310,9 @@ describe("Unexplained access — triage", () => {
     drift.data = [item({ user_is_service_account: true })];
     renderTriage();
     expect(screen.getByRole("button", { name: "Adopt" })).toBeDisabled();
+    // Still the accent act, with its reason beside it, never a ghost that looks like nothing.
+    expect(screen.getByRole("button", { name: "Adopt" })).toHaveClass("bg-accent-dense/25");
+    expect(screen.getByText(/re-creates its own access on every deploy/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Owned elsewhere" })).toBeEnabled();
   });
 
@@ -448,6 +488,7 @@ it("does not call an add-on role retired", () => {
 // sentence every syndra_only row used to get — it reads as a stranger, and
 // the operator's next move is wrong.
 it("tells a removal as the history of the grant Syndra applied", () => {
+  NAMES.current = { "op-ada": "Ada Rivera", "op-marta": "Marta Reyes" };
   drift.data = [
     item({
       drift_type: "syndra_only",
@@ -462,10 +503,10 @@ it("tells a removal as the history of the grant Syndra applied", () => {
   ];
   renderTriage();
 
-  expect(screen.getByText(/Granted by op-ada/i)).toBeTruthy();
+  expect(screen.getByText(/Given by Ada Rivera/i)).toBeTruthy();
   expect(screen.getByText(/inducted on the laser/i)).toBeTruthy();
   expect(screen.getByText(/does not now, so somebody removed it there/i)).toBeTruthy();
-  expect(screen.getByText(/Removed by op-marta/i)).toBeTruthy();
+  expect(screen.getByText(/Removed by Marta Reyes/i)).toBeTruthy();
 });
 
 // And one nobody ever saw the target holding keeps the old reading, which is
@@ -657,7 +698,9 @@ describe("the revoke confirm, once it has run", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).queryByText(/removed from Zitadel as you confirm/i)).toBeNull();
-    expect(within(dialog).getByText(/send on their own/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/send on their own/i)).toBeNull();
+    // "Queues the removal" is said once, in the lede, and the result says the rest.
+    expect(within(dialog).getAllByText(/queues removal|queues the removal/i)).toHaveLength(1);
   });
 });
 

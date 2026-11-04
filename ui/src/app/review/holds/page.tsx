@@ -27,7 +27,7 @@ export default function HoldsDuePage() {
     .sort()[0];
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Holds due"
         meta={
@@ -43,9 +43,8 @@ export default function HoldsDuePage() {
         lede={
           <>
             <Term name="hold">Holds</Term> whose review date has passed. Doing nothing keeps the
-            access blocked: being listed here ends nothing. Lifting clears the block in Syndra at
-            once, and the access returns when the connected system is next brought in line. To keep
-            a hold with a later date, lift it and place a new one from the person&apos;s page.
+            access blocked; lifting one clears the block in Syndra at once, and the access returns
+            when the connected system is next brought in line.
           </>
         }
       />

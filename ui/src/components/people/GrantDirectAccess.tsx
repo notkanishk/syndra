@@ -12,6 +12,7 @@ import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedSte
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
+import { WaitsMark } from "@/components/ui/WaitsMark";
 import { waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
@@ -22,7 +23,7 @@ import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 /**
- * E5 · Grant direct access. Project → role → expiry.
+ * E5 · Give a role. Project → role → expiry.
  *
  * Expiry gets presets before the picker, because "end of term" is what people
  * actually mean and a date field alone makes them count weeks. The consequence
@@ -33,6 +34,12 @@ import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
  * Operator-only. Members get 403 by design, so the affordance is never
  * rendered for them.
  */
+
+/**
+ * What giving a role by hand is called, on the person page's button and this
+ * dialog's title. One constant: the owner's rename (A-17 Q7) is this line.
+ */
+export const GIVE_ROLE_LABEL = "Give a role";
 
 type Preset = "30" | "term" | "date" | "never";
 
@@ -106,7 +113,7 @@ function GrantDirectAccessOpen({
   return (
     <Modal open onClose={onClose} busy={grant.isPending} size="md" labelledBy="grant-title">
       <PushedStep step={step}>
-      <ModalHeader title="Grant direct access" titleId="grant-title" />
+      <ModalHeader title={GIVE_ROLE_LABEL} titleId="grant-title" />
       <div className="-mt-2 px-6 pb-3 text-[13px] text-faint">{userName}</div>
 
       <div className="flex flex-col gap-3.5 px-6">
@@ -159,12 +166,10 @@ function GrantDirectAccessOpen({
               {resolved.date ? (
                 <>
                   {formatShortDate(resolved.date)}
-                  <span className="text-[14px] text-faint">
-                    — {expiryLabel(resolved.date)}
-                  </span>
+                  <span className="text-[14px] text-faint">· {expiryLabel(resolved.date)}</span>
                 </>
               ) : (
-                <span className="text-muted">No end date — this access does not end on its own</span>
+                <span className="text-muted">No end date</span>
               )}
             </div>
           )}
@@ -183,24 +188,6 @@ function GrantDirectAccessOpen({
         )}
       </div>
 
-      {!done && (
-        // An explanation, not a fault: a caption under the date, not a box.
-        <p className="mx-6 mt-4 max-w-[72ch] text-[13.5px] leading-[1.55] text-muted">
-          {resolved.date ? (
-            <>
-              It ends on {formatShortDate(resolved.date)}, and the sweep removes it automatically. They&rsquo;ll
-              show up under <strong className="font-semibold text-ink">Expiring access</strong> two
-              weeks before, where the only action is to extend.
-            </>
-          ) : (
-            <>
-              This access will not end on its own. It stays until someone removes it — which is
-              what &ldquo;Never&rdquo; means here.
-            </>
-          )}
-        </p>
-      )}
-
       {/* The sheet becomes its own result rather than handing it to a corner,
           in the act's own word. It stays open on success too: what an operator
           wants next is to read what happened to the person they just acted on,
@@ -208,19 +195,32 @@ function GrantDirectAccessOpen({
       {result && <ActionOutcome outcome={result.outcome} word={result.word} className="mx-6 mb-1" />}
       {result && step.after}
 
+      {/* One note for the date (said once, here: the control above is the date)
+          and for whether they can use it yet. */}
       <ModalFooter
+        cancel={done ? undefined : { onClick: onClose }}
         note={
           step.note ??
-          (result || !selectedRole
-            ? undefined
-            : (waits ??
-              (selectedRole.waits_for_send ? (
-                <span className="rounded-inner bg-warn-soft px-2.5 py-1.5 text-warn-text">
-                  {roleName} always waits for you, so {first} gets it once you send it.
-                </span>
-              ) : (
-                `${first} can use it as soon as you give it.`
-              ))))
+          (result ? undefined : (
+            <>
+              <span className="block">
+                {resolved.date
+                  ? "The sweep removes it on that date. Two weeks before, it shows under Expiring access, where the only action is to extend."
+                  : "It stays until someone removes it."}
+              </span>
+              {selectedRole &&
+                (waits ? (
+                  <span className="block">{waits}</span>
+                ) : selectedRole.waits_for_send ? (
+                  <span className="block">
+                    <WaitsMark className="mr-1.5" />
+                    {roleName} always waits for you, so {first} gets it once you send it.
+                  </span>
+                ) : (
+                  <span className="block">{first} can use it as soon as you give it.</span>
+                ))}
+            </>
+          ))
         }
       >
         {done ? (
@@ -228,8 +228,7 @@ function GrantDirectAccessOpen({
             Close
           </Button>
         ) : (
-          <>
-            <Button
+          <Button
               variant="accent"
               disabled={!ready}
               // The date case is the invisible one: pick "until a date", leave
@@ -284,10 +283,8 @@ function GrantDirectAccessOpen({
                 }
               }}
             >
-              Grant access
+              Give role
             </Button>
-            <Button onClick={onClose}>Cancel</Button>
-          </>
         )}
       </ModalFooter>
       </PushedStep>

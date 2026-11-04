@@ -4,10 +4,11 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { Mono, StatusDot } from "@/components/ui/Badge";
-import { armArrive, ArriveList } from "@/components/ui/ArriveList";
+import { ArriveList } from "@/components/ui/ArriveList";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";
+import { PaginationRow } from "@/components/ui/PaginationRow";
 import { WouldCancelQueued } from "@/lib/api-client";
 import { armAck, type QueuedChange } from "@/lib/cancel-confirm";
 import { formatAgoShort, humanizeKey } from "@/lib/format";
@@ -337,21 +338,15 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
           </section>
         ))}
         </ArriveList>
-        {capped && (
-          <p className="flex items-center gap-2 border-t border-line px-4 py-2.5 text-[13px] text-muted">
-            Showing {CAP} of {n} <span aria-hidden>·</span>
-            <button
-              type="button"
-              onClick={() => {
-                armArrive();
-                setShowAll(true);
-              }}
-              className="font-semibold text-accent-text link-tint"
-            >
-              Show all {n}
-            </button>
-          </p>
-        )}
+        <PaginationRow
+          shown={showAll ? n : Math.min(CAP, n)}
+          total={n}
+          initial={CAP}
+          step={n}
+          onMore={() => setShowAll(true)}
+          onBack={() => setShowAll(false)}
+          anchor={root}
+        />
       </div>
       <ModalFooter
         note={

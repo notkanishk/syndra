@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { UserName } from "@/components/names";
-import { RowSkeleton } from "@/components/states";
+import { EmptyState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { StatCard } from "@/components/ui/StatCard";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
@@ -21,6 +22,7 @@ import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useUsers } from "@/lib/queries/useUsers";
+import { useIsPhone } from "@/lib/useViewport";
 
 /**
  * The makerspace, below the work.
@@ -39,11 +41,8 @@ import { useUsers } from "@/lib/queries/useUsers";
 export function Makerspace() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-baseline gap-3 pt-2">
+      <div className="pt-2">
         <h2 className="type-section-title">The makerspace</h2>
-        <span className="text-[13.5px] text-faint">
-          Not your queue — the shape of the place. Every number opens what it counts.
-        </span>
       </div>
 
       <Tiles />
@@ -134,7 +133,7 @@ function Tiles() {
         detail={
           !rolesKnown
             ? rolesLoading
-              ? "Reading the catalogue."
+              ? "Reading roles."
               : "Not read just now."
             : `Across ${projects} ${projects === 1 ? "project" : "projects"} and ${bundleCount} ${bundleCount === 1 ? "bundle" : "bundles"}`
         }
@@ -167,7 +166,7 @@ function Gaps() {
       <ReadGate loading={users.isLoading} skeleton={<RowSkeleton rows={3} label="Loading gaps" />}>
         {/* Neither "still reading" nor "couldn't read" is an answer about anybody. */}
         {users.error || !users.data ? (
-          <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
+          <EmptyState title="Not read just now." />
         ) : (
           <>
             <GapRow
@@ -267,7 +266,7 @@ function AccessShape() {
       {/* One hand-over (S7): a skeleton only if the read is slow, then the rows arrive. */}
       <ReadGate loading={loading} skeleton={<RowSkeleton rows={3} label="Loading where access lives" />}>
       {failed ? (
-        <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
+        <EmptyState title="Not read just now." />
       ) : (
         <>
           {top.length > 0 && (
@@ -276,7 +275,7 @@ function AccessShape() {
             </div>
           )}
           {top.length === 0 ? (
-            <div className="px-5 py-3.5 text-[14px] text-faint">Nobody holds a role yet.</div>
+            <EmptyState title="Nobody holds a role yet." />
           ) : (
             top.map((role) => {
               const holders = holdersLine(
@@ -334,21 +333,15 @@ function AccessShape() {
           ) : (
             <>
               {unused > 0 && (
-                <Link
-                  href="/roles?unused=1"
-                  className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 link-hover"
-                >
+                <ArrowLink href="/roles?unused=1">
                   {unused} {unused === 1 ? "role" : "roles"} nobody holds
-                </Link>
+                </ArrowLink>
               )}
               {unused > 0 && emptyBundles > 0 && <span aria-hidden>·</span>}
               {emptyBundles > 0 && (
-                <Link
-                  href="/bundles"
-                  className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 link-hover"
-                >
+                <ArrowLink href="/bundles">
                   {emptyBundles} empty {emptyBundles === 1 ? "bundle" : "bundles"}
-                </Link>
+                </ArrowLink>
               )}
             </>
           )}
@@ -360,25 +353,21 @@ function AccessShape() {
 }
 
 /**
- * Proof the place is alive on a day when nothing needs you. Eight lines, names
- * resolved, and a way into the full log.
+ * Proof the place is alive on a day when nothing needs you. Five lines (three on
+ * a phone, as every block above), names resolved, and a way into the full log.
  */
 function RecentActivity() {
-  const entries = useAuditEntries({ limit: 8 });
-  const rows = entries.data ?? [];
+  const entries = useAuditEntries({ limit: 5 });
+  const rows = (entries.data ?? []).slice(0, useIsPhone() ? 3 : 5);
   // Nothing is "recorded" until the log has been read.
-  const empty = entries.error ? (
-    <div className="px-5 py-3.5 text-[14px] text-faint">Not read just now.</div>
-  ) : (
-    <div className="px-5 py-3.5 text-[14px] text-faint">Nothing recorded yet.</div>
-  );
+  const empty = <EmptyState title={entries.error ? "Not read just now." : "Nothing recorded yet."} />;
 
   return (
     <Card>
       <CardHeader
         title="Lately"
         action={
-          <CardHeaderLink href="/audit">Full audit log →</CardHeaderLink>
+          <CardHeaderLink href="/audit">Full audit log</CardHeaderLink>
         }
       />
       {/* One hand-over (S7): a skeleton only if the read is slow, then the lines arrive. */}

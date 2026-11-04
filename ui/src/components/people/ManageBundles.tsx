@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import { Badge } from "@/components/ui/Badge";
+import { StatusDot } from "@/components/ui/Badge";
+import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { RoleRef } from "@/components/names";
 import { Button } from "@/components/ui/Button";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -141,7 +142,7 @@ function ManageBundlesOpen({
                 waiting === 1 ? "One change waits" : `${waiting} changes wait`
               } under Pending changes${
                 revoking === waiting
-                  ? " — revocations send on their own within a few minutes, or send them now."
+                  ? ". Revocations send on their own within a few minutes, or send them now."
                   : revoking > 0
                     ? `; the ${revoking === 1 ? "revocation sends" : `${revoking} revocations send`} on their own within a few minutes, the rest until you send them.`
                     : " until you send them."
@@ -165,17 +166,15 @@ function ManageBundlesOpen({
       <ModalHeader title="Manage bundles" titleId="manage-bundles-title" />
       <div className="-mt-2 px-6 pb-1 text-[13px] text-faint">{userName}</div>
 
-      <div className="flex flex-col gap-2.5 px-6">
+      <div className="flex flex-col gap-1.5 px-6">
         {(bundles.data ?? []).map((bundle) => {
           const isSelected = selected.has(bundle.id);
           const roleCount = (bundleRoles[bundle.id] ?? []).length;
           return (
-            <button
+            <ChoiceRow
               key={bundle.id}
-              type="button"
-              role="checkbox"
-              aria-checked={isSelected}
-              onClick={() =>
+              selected={isSelected}
+              onToggle={() =>
                 setStaged((prev) => {
                   const next = new Set(prev);
                   if (next.has(bundle.id)) next.delete(bundle.id);
@@ -183,33 +182,16 @@ function ManageBundlesOpen({
                   return next;
                 })
               }
-              className={`flex items-center gap-3 rounded-inner border px-[15px] py-3 text-left motion-tint ${
-                isSelected
-                  ? "border-accent-line bg-accent-soft/70"
-                  : "border-line-strong hover-tint"
-              }`}
-            >
-              <span
-                aria-hidden
-                className={`h-[18px] w-[18px] flex-none rounded-[6px] ${
-                  isSelected ? "bg-accent" : "border-[1.5px] border-ink/35"
-                }`}
-              />
-              <span className="flex-1 text-[15px] font-semibold">{bundle.name}</span>
-              <span className="text-[13.5px] text-muted">
-                {roleCount} {roleCount === 1 ? "role" : "roles"}
-                {assignedIds.has(bundle.id) ? " · assigned" : ""}
-              </span>
-              {bundle.is_welcome && (
-                <Badge>Default for new members</Badge>
-              )}
-            </button>
+              title={bundle.name}
+              meta={`${roleCount} ${roleCount === 1 ? "role" : "roles"}${assignedIds.has(bundle.id) ? " · assigned" : ""}`}
+              description={bundle.is_welcome ? "Given to new members" : undefined}
+            />
           );
         })}
       </div>
 
       {previewBundle && (
-        <div className="mx-6 mt-5 rounded-block border border-line bg-tint-1 px-[18px] py-4">
+        <div className="mx-6 mt-5 border-t border-line pt-4">
           <div className="mb-2.5 type-label">
             {previewAdding ? `Adding ${previewBundle.name} would grant` : `Removing ${previewBundle.name} would revoke`}
           </div>
@@ -235,23 +217,15 @@ function ManageBundlesOpen({
                       previewAdding && alreadyHeld ? "text-faint" : ""
                     }`}
                   >
-                    <span
-                      aria-hidden
-                      className={`h-1.5 w-1.5 rounded-pill ${
-                        previewAdding && alreadyHeld ? "bg-ink/30" : "bg-accent"
-                      }`}
-                    />
+                    <StatusDot tone={previewAdding && alreadyHeld ? "neutral" : "accent"} />
                     <RoleRef projectId={projectId} roleKey={roleKey} />
                     {previewAdding && alreadyHeld && (
-                      <span className="text-[13px]">— already held, no change</span>
+                      <span className="text-[13px]">already held, no change</span>
                     )}
                   </div>
                   {cascade && (
                     <div className="flex items-center gap-2.5 text-muted">
-                      <span
-                        aria-hidden
-                        className="h-1.5 w-1.5 rounded-pill border border-dashed border-ink/60"
-                      />
+                      <StatusDot tone="neutral" />
                       and, through an automatic rule, <RoleRef projectId={cascade.target_project} roleKey={cascade.target_role} />
                     </div>
                   )}
@@ -272,14 +246,14 @@ function ManageBundlesOpen({
             <p className="mt-3 border-t border-line pt-2.5 text-[13px] leading-[1.5] text-muted">
               {previewBundle.name} has {previewBundle.unpublished_changes} unpublished{" "}
               {previewBundle.unpublished_changes === 1 ? "change" : "changes"}. Those are not part
-              of this — an assignment gives v{previewBundle.latest_version}, and publishing is
+              of this. An assignment gives v{previewBundle.latest_version}, and publishing is
               what decides whether the people holding it move.
             </p>
           )}
         </div>
       )}
 
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word="Recorded" outcome={outcome} className="mx-6 mb-1" />}
       {outcome && step.after}
 
       {/* The footer follows the state of the work, because the work has three
@@ -297,8 +271,11 @@ function ManageBundlesOpen({
           ((!outcome && waits) ||
             (changes.length > 1
               ? "Each change is applied in order. Any that fail stay unapplied and are reported."
-              : undefined))
+              : undefined)) ??
+          // Only where it is true: this button records the change and sends nothing.
+          (staging > 0 ? "Recorded in Syndra first, not sent yet." : undefined)
         }
+        cancel={done ? undefined : { onClick: onClose }}
       >
         {done ? (
           // The work is recorded and the outcome above says so. The next action
@@ -307,43 +284,24 @@ function ManageBundlesOpen({
             Close
           </Button>
         ) : (
-          <>
-            <Button
-              variant="accent"
-              disabled={staging === 0}
-              isPending={busy}
-              onClick={apply}
-              // Never a bare disabled control. The label stays an ACTION at
-              // every count — a button labelled with its own emptiness reads
-              // as broken rather than as waiting for you.
-              reason={
-                staging === 0
-                  ? outcome
-                    ? "Recorded. Tick another bundle to make a further change."
-                    : "Tick a bundle above to add or remove it."
-                  : undefined
-              }
-            >
-              {staging === 0
-                ? "Apply changes"
-                : `Apply ${staging} ${staging === 1 ? "change" : "changes"}`}
-            </Button>
-            <Button onClick={onClose}>Cancel</Button>
-          </>
-        )}
-        <span className="flex-1" />
-        {staging > 0 && (
-          // Only where it is true: this button records the change and sends
-          // nothing. With nothing staged it was describing an act that was not
-          // on offer.
-          //
-          // "Queues for confirmation" used to sit here, and it isn't always
-          // true — a change that reaches nobody's effective access is
-          // reported as `applied` with nothing queued at all (see `apply()`
-          // above), so a caption promising a queue every time contradicted
-          // that outcome. "Recorded" is true in both cases; the outcome
-          // above states which one this was.
-          <span className="text-[13px] text-faint">Recorded in Syndra first, not sent yet</span>
+          <Button
+            variant="accent"
+            disabled={staging === 0}
+            isPending={busy}
+            onClick={apply}
+            // Never a bare disabled control. The label stays an ACTION at
+            // every count: a button labelled with its own emptiness reads
+            // as broken rather than as waiting for you.
+            reason={
+              staging === 0
+                ? outcome
+                  ? "Recorded. Tick another bundle to make a further change."
+                  : "Tick a bundle above to add or remove it."
+                : undefined
+            }
+          >
+            {staging === 0 ? "Apply changes" : `Apply ${staging} ${staging === 1 ? "change" : "changes"}`}
+          </Button>
         )}
       </ModalFooter>
       </PushedStep>

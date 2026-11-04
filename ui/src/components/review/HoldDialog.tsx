@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Radio } from "@/components/ui/Choice";
-
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
+import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { targetLabel } from "@/lib/nav";
@@ -80,45 +79,29 @@ export function HoldDialog({
     >
       <ModalHeader
         titleId="hold-title"
-        title={`Hold ${spoken} for ${subjectName}`}
+        title={`Put ${spoken} on hold for ${subjectName}`}
         lede={`They keep every role they have. This blocks ${spoken} on ${targetLabel(target)}, and nothing else.`}
       />
 
       <div className="grid gap-4 px-6">
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-[14px]">What happens if nobody comes back to this</legend>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] motion-tint has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
-            <Radio
-              name="hold-ending"
-              className="mt-1"
-              checked={ending === "stays"}
-              onChange={() => setEnding("stays")}
-            />
-            <span>
-              <span className="font-semibold">It stays until somebody decides.</span>
-              <span className="block text-[13.5px] text-muted">
-                Doing nothing keeps the access blocked. On the date below it appears under
-                Review › Holds due as a reminder, and stays blocked until somebody lifts it.
-              </span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] motion-tint has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft">
-            <Radio
-              name="hold-ending"
-              className="mt-1"
-              checked={ending === "lifts"}
-              onChange={() => setEnding("lifts")}
-            />
-            <span>
-              <span className="font-semibold">It lifts itself on a date.</span>
-              <span className="block text-[13.5px] text-muted">
-                Doing nothing gives the access back. Use this when the reason has an end
-                you already know — a hold to the end of term.
-              </span>
-            </span>
-          </label>
+          <ChoiceRow
+            single
+            name="hold-ending"
+            selected={ending === "stays"}
+            onToggle={() => setEnding("stays")}
+            title="It stays until somebody decides."
+            description="Doing nothing keeps the access blocked. On the date below it appears under Holds due as a reminder, and stays blocked until somebody lifts it."
+          />
+          <ChoiceRow
+            single
+            name="hold-ending"
+            selected={ending === "lifts"}
+            onToggle={() => setEnding("lifts")}
+            title="It lifts itself on a date."
+            description="Doing nothing gives the access back. Use this when the reason has an end you already know, such as a hold to the end of term."
+          />
         </fieldset>
 
         <div>
@@ -140,7 +123,7 @@ export function HoldDialog({
         </div>
 
         <div>
-          <FieldLabel htmlFor="hold-reason">Why — shown to {subjectName}</FieldLabel>
+          <FieldLabel htmlFor="hold-reason">Why (shown to {subjectName})</FieldLabel>
           <Input
             id="hold-reason"
             value={reason}
@@ -153,10 +136,13 @@ export function HoldDialog({
           </FieldHint>
         </div>
 
-        {outcome && <ActionOutcome outcome={outcome} />}
+        {outcome && <ActionOutcome outcome={outcome} word={succeeded ? "On hold" : "Couldn't put it on hold"} />}
       </div>
 
-      <ModalFooter note={`Holding ${spoken} does not remove the role that gives it.`}>
+      <ModalFooter
+        note={`Holding ${spoken} does not remove the role that gives it.`}
+        cancel={succeeded ? undefined : { onClick: onClose, disabled: create.isPending }}
+      >
         {!succeeded && (
           <Button
             variant="accent"
@@ -165,7 +151,7 @@ export function HoldDialog({
             reason={
               !ready
                 ? !reason.trim()
-                  ? "Say why this is on hold — it is recorded against the hold."
+                  ? "Say why this is on hold. It is recorded against the hold."
                   : "Choose the date the hold should be looked at again."
                 : undefined
             }
@@ -186,10 +172,10 @@ export function HoldDialog({
                 // still shows the access until it is next brought in line.
                 setOutcome({
                   kind: "applied",
-                  message: `Hold placed on ${spoken} for ${subjectName}.`,
+                  message: `${spoken.charAt(0).toUpperCase()}${spoken.slice(1)} is on hold for ${subjectName}.`,
                   detail:
                     ending === "stays"
-                      ? `It appears under Review › Holds due on the date you set. ${targetLabel(target)} catches up on its next pass.`
+                      ? `It appears under Holds due on the date you set. ${targetLabel(target)} catches up on its next pass.`
                       : `It lifts itself on the date you set. ${targetLabel(target)} catches up on its next pass.`,
                 });
               } catch (error) {
@@ -197,16 +183,14 @@ export function HoldDialog({
               }
             }}
           >
-            {`Hold ${spoken}`}
+            {`Put ${spoken} on hold`}
           </Button>
         )}
-        <Button
-          variant={succeeded ? "outline" : "ghost"}
-          onClick={onClose}
-          disabled={create.isPending}
-        >
-          {succeeded ? "Close" : "Cancel"}
-        </Button>
+        {succeeded && (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        )}
       </ModalFooter>
     </Modal>
   );

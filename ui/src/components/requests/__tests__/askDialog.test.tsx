@@ -96,6 +96,7 @@ vi.mock("@/lib/queries/useUsers", () => ({
   }),
 }));
 vi.mock("@/components/names", () => ({
+  UserAvatar: () => null,
   ProjectName: () => null,
   RoleRef: () => null,
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
@@ -128,7 +129,9 @@ beforeEach(() => {
 });
 
 const dialog = () => screen.getByRole("dialog");
-const sendButton = () => screen.getByRole("button", { name: "Send request" });
+// The page header has its own "Ask for access", so the dialog's is found inside the dialog.
+const inDialog = () => within(screen.getByRole("dialog"));
+const sendButton = () => inDialog().getByRole("button", { name: "Ask for access" });
 
 describe("Ask for access", () => {
   it("offers every place in the catalogue as a fold, the one a link named open first", () => {
@@ -259,7 +262,7 @@ describe("Ask for access · only what they lack, once", () => {
       screen.getByText("Makerspace staff decide. The answer appears on this page, and nothing else is needed from you."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Send request" })).not.toBeInTheDocument();
+    expect(inDialog().queryByRole("button", { name: "Ask for access" })).not.toBeInTheDocument();
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(create.calls).toBe(1);
@@ -355,14 +358,14 @@ describe("Ask for access · asking to keep a role that ends", () => {
     renderAs(false);
     expect(screen.getByRole("heading", { name: "Ask for access" })).toBeInTheDocument();
     expect(
-      screen.getByText("You have this until 18 Dec. Ask to keep it longer, and makerspace staff decide."),
+      screen.getByText("You have this until 18 Dec. Ask to keep it longer."),
     ).toBeInTheDocument();
     expect(screen.getByText("How much longer?", { selector: "label" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Another month" })).toBeChecked();
     expect(screen.getByText(/^If it[’']s approved, you keep it to 17 Jan 2027 instead of 18 Dec\.$/)).toBeInTheDocument();
-    expect(screen.getByText("Makerspace staff decide. Until they do, it still ends 18 Dec.")).toBeInTheDocument();
+    expect(screen.getByText("Until it's decided, it still ends 18 Dec.")).toBeInTheDocument();
     expect(screen.queryByText("How long do you need it?")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Send request" })).not.toBeInTheDocument();
+    expect(inDialog().queryByRole("button", { name: "Ask for access" })).not.toBeInTheDocument();
   });
 
   it("To the end of next term counts the days from the current end, and moves the hint", () => {

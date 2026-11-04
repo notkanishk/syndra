@@ -108,7 +108,7 @@ function sheetOf(onClose: () => void, busy = false) {
   const panel = dialog.firstElementChild as HTMLElement;
   vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({ height: 600 } as DOMRect);
   const grabber = busy
-    ? screen.getByText(/this sheet can't be closed/).parentElement!
+    ? screen.getByText(/sheet can't be closed/).parentElement!
     : screen.getByRole("button", { name: "Close this sheet" });
   return { ...view, dialog, panel, grabber };
 }
@@ -232,7 +232,7 @@ describe("Modal as a phone sheet (S3)", () => {
     setMediaQuery("(prefers-reduced-motion: reduce)", true);
     const onClose = vi.fn();
     const { panel, grabber } = sheetOf(onClose, true);
-    const sentence = screen.getByText(/this sheet can't be closed/);
+    const sentence = screen.getByText(/sheet can't be closed/);
     expect(sentence).toHaveClass("text-faint");
     drag(grabber, 200);
     expect(panel.style.transform).toBe("");

@@ -153,7 +153,7 @@ describe("Modal", () => {
     );
     // Silently ignoring a drag or a tap reads as a frozen app, and the
     // operator's next move is to reload the page mid-mutation.
-    expect(screen.getByText("Applying your change — this sheet can't be closed until it finishes.")).toBeTruthy();
+    expect(screen.getByText("Applying your change. This sheet can't be closed until it finishes.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Close this sheet" })).toBeNull();
   });
 
@@ -279,5 +279,19 @@ describe("sheets push, they do not stack", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(page).not.toHaveBeenCalled();
     window.removeEventListener("keydown", page);
+  });
+
+  it("puts Cancel first and the act last, and the first focus lands on the safe half (A-17 Q1)", () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <ModalFooter cancel={{ onClick: () => {} }}>
+          <button type="button">Revoke it</button>
+        </ModalFooter>
+      </Modal>,
+    );
+    const names = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(names.indexOf("Cancel")).toBeGreaterThan(-1);
+    expect(names.indexOf("Cancel")).toBeLessThan(names.indexOf("Revoke it"));
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "Revoke it" }));
   });
 });

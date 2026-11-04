@@ -122,7 +122,8 @@ describe("the rail's stable structure", () => {
   it("renders Advanced as an append: Basic's rows, in order, then more", () => {
     const basicRail = renderRail();
     const basic = railOrder();
-    expect(screen.getByText("Basic")).toBeInTheDocument();
+    // A-17 §2.1: no view pill beside the logo; the top bar's ViewSwitch says it once.
+    expect(screen.queryByText("Basic")).toBeNull();
     basicRail.unmount();
 
     view.audience = "advanced";
@@ -160,7 +161,7 @@ describe("the rail's stable structure", () => {
 
     expect(railOrder()).toEqual(["My access", "Requests", "Network storage"]);
     expect(screen.queryByText("Bundles")).toBeNull();
-    expect(screen.getByText("Member")).toBeInTheDocument();
+    expect(screen.queryByText("Member")).toBeNull();
   });
 });
 

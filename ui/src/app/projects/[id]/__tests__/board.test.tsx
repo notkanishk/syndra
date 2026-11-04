@@ -82,7 +82,7 @@ describe("a project's page, as drawn", () => {
   it("says no app reads it when none does, with nothing to link", async () => {
     state.apps = [];
     await renderPage();
-    expect(screen.getByText(/no app reads this yet/)).toBeInTheDocument();
+    expect(screen.getByText("No app reads this yet.")).toBeInTheDocument();
   });
 
   it("writes the description under the role, in full and in the muted ink", async () => {
@@ -102,10 +102,42 @@ describe("a project's page, as drawn", () => {
     expect(within(straight).getByText("Straight away")).toBeInTheDocument();
   });
 
-  it("explains When given under the card, with the way to where it is set", async () => {
+  it("points at where When given is set, with no caption repeating the mark", async () => {
     await renderPage();
-    expect(screen.getByText(/When given says whether a change to a role goes straight to Zitadel/)).toBeInTheDocument();
+    expect(screen.queryByText(/When given says/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Set in Roles that wait/ })).toHaveAttribute("href", "/changes/roles-that-wait");
+  });
+
+  // The header: meta is the two counts, "Read by" is the lede's second line, the read line sits under it.
+  it("puts the counts in meta, Read by in the lede, and no eyebrow", async () => {
+    await renderPage();
+    expect(screen.getByText("3 people · 2 roles")).toBeInTheDocument();
+    expect(screen.queryByText("Projects")).not.toBeInTheDocument();
+    expect(screen.getByText("Read by")).toBeInTheDocument();
+    expect(screen.queryByText(/unexplained/)).not.toBeInTheDocument();
+  });
+
+  it("lists apps and roles A to Z", async () => {
+    await renderPage();
+    const apps = screen.getAllByRole("link", { name: /^Laser b/ }).map((a) => a.textContent?.replace("→", "").trim());
+    expect(apps).toEqual(["Laser badge reader", "Laser bookings"]);
+    const roles = screen.getAllByRole("link", { name: /^Laser cutter/ }).map((a) => a.textContent);
+    expect(roles).toEqual(["Laser cutter · Member", "Laser cutter · Operator"]);
+  });
+
+  it("links the role's name to its page and leaves the count plain", async () => {
+    await renderPage();
+    expect(screen.getByRole("link", { name: "Laser cutter · Member" })).toHaveAttribute(
+      "href",
+      "/projects/p1/roles/laser.member",
+    );
+    expect(screen.queryByText(/\d+ →/)).not.toBeInTheDocument();
+  });
+
+  it("offers New role once when the project has no roles", async () => {
+    state.roles = [];
+    await renderPage();
+    expect(screen.getAllByRole("button", { name: /New role|Create a role/ })).toHaveLength(1);
   });
 
   it("reads Role, Group, When given, People, and never cuts a group name", async () => {

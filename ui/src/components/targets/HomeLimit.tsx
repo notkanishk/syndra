@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
@@ -154,6 +155,8 @@ export function LimitDialog({
   const from = roleLabel(home.roles_limit_from);
   const rolesWords = home.roles_limit === undefined ? "no limit" : `up to ${gbWords(home.roles_limit)}`;
   const busy = set.isPending || lift.isPending;
+  // The dialog ends on its result, with Close; it never closes onto the row.
+  const [done, setDone] = useState<{ word: string; message: string } | null>(null);
 
   // The server replaces the limit in force with this one in a single step, so
   // there is nothing left to end afterwards.
@@ -166,7 +169,13 @@ export function LimitDialog({
         endsOn: until === "ends" ? endOfDay(date) : undefined,
         reviewOn: until === "review" ? endOfDay(date) : undefined,
       },
-      { onSuccess: onClose },
+      {
+        onSuccess: () =>
+          setDone({
+            word: reviewing ? "Kept" : "Given",
+            message: `${name} has their own limit of ${kind === "none" ? "no limit" : gbWords(bytes)}, and ${system} gets it now.`,
+          }),
+      },
     );
 
   return (
@@ -176,6 +185,11 @@ export function LimitDialog({
         titleId="limit-title"
         lede={`Their roles give them ${rolesWords}${from ? `, from ${from}` : ""}. Their own limit takes the place of that, larger or smaller, until it ends.`}
       />
+      {done ? (
+        <div className="px-6">
+          <ActionOutcome word={done.word} outcome={{ kind: "applied", message: done.message }} />
+        </div>
+      ) : (
       <div className="flex flex-col gap-4 px-6">
         <div className="flex flex-col gap-1.5">
           <span className="type-label text-label">Limit</span>
@@ -233,18 +247,39 @@ export function LimitDialog({
           <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error ?? lift.error))}</p>
         )}
       </div>
-      <ModalFooter note={`Syndra sends it to ${system} as soon as you save.`}>
-        <Button onClick={onClose}>
-          Cancel
-        </Button>
-        {own && (
-          <Button variant="outline" disabled={busy} onClick={() => lift.mutate(own.allowance_id, { onSuccess: onClose })}>
-            End it
+      )}
+      <ModalFooter
+        cancel={done ? undefined : { onClick: onClose }}
+        note={done ? undefined : `Syndra sends it to ${system} as soon as you save.`}
+      >
+        {done ? (
+          <Button variant="outline" onClick={onClose}>
+            Close
           </Button>
+        ) : (
+          <>
+            {own && (
+              <Button
+                variant="danger"
+                disabled={busy}
+                onClick={() =>
+                  lift.mutate(own.allowance_id, {
+                    onSuccess: () =>
+                      setDone({
+                        word: "Ended",
+                        message: `${name}'s own limit has ended. Their roles' ${rolesWords} applies again.`,
+                      }),
+                  })
+                }
+              >
+                End it
+              </Button>
+            )}
+            <Button variant="accent" disabled={!ready || busy} onClick={save}>
+              {reviewing ? "Keep it" : `Give them ${kind === "none" ? "no limit" : gbWords(bytes)}`}
+            </Button>
+          </>
         )}
-        <Button variant="accent" disabled={!ready || busy} onClick={save}>
-          {reviewing ? "Keep it" : `Give them ${kind === "none" ? "no limit" : gbWords(bytes)}`}
-        </Button>
       </ModalFooter>
     </Modal>
   );

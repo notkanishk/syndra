@@ -844,25 +844,21 @@ describe("design system", () => {
     expect(found, `A link's hover is link-hover:\n${describeOffenders(found)}`).toEqual([]);
   });
 
-  // A button is an action: it tints on hover (link-tint) and never underlines.
-  it("never gives a <button> `link-hover`: its tint is `link-tint`", () => {
+  // A-17 G1: no control is text styled as a button. A <button> never wears a
+  // link's hover, and the `link-tint` utility that dressed text buttons is gone.
+  it("never styles a <button> as a link, and link-tint stays retired", () => {
     const found: Array<{ file: string; matches: string[] }> = [];
     for (const file of Array.from(walk(SRC_ROOT))) {
       if (!file.endsWith(".tsx")) continue;
       const source = readFileSync(file, "utf8");
       const matches = openingTags(source, "button")
-        .filter((tag) => /link-hover/.test(tag.text))
-        .map((tag) => `button line ${source.slice(0, tag.at).split("\n").length}: link-hover, use link-tint`);
+        .filter((tag) => /link-hover|link-tint/.test(tag.text))
+        .map((tag) => `button line ${source.slice(0, tag.at).split("\n").length}: use Button outline sm`);
+      if (/\blink-tint\b/.test(source)) matches.push("link-tint is retired");
       if (matches.length > 0) found.push({ file: file.replace(SRC_ROOT, "src"), matches });
     }
-    expect(found, `A button's hover is link-tint:\n${describeOffenders(found)}`).toEqual([]);
-  });
-
-  it("tints link-tint on hover without drawing a line", () => {
-    const body = atRuleBody(readFileSync(GLOBALS_CSS, "utf8"), "@utility link-tint");
-    expect(body).toContain("var(--accent-text)");
-    expect(body).not.toContain("text-decoration");
-    expect(body).toContain("var(--duration-tint)");
+    expect(found, `A button is Button:\n${describeOffenders(found)}`).toEqual([]);
+    expect(readFileSync(GLOBALS_CSS, "utf8")).not.toContain("@utility link-tint");
   });
 
   it("draws link-hover's underline from transparent and keeps a resting underline", () => {

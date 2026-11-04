@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { FoldHeading } from "@/components/bundles/FoldHeading";
 import { RetiredStatus } from "@/components/bundles/RetiredBundle";
@@ -9,7 +9,9 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Unfold } from "@/components/ui/Unfold";
+import { useShownNames } from "@/components/names/shownNames";
 import { useRetiredMappingRules } from "@/lib/queries/useMappingRules";
+import { sortByName } from "@/lib/sort";
 
 /**
  * The end of the Automatic rules list: a quiet fold of the rules that stopped being given. Closed,
@@ -34,7 +36,16 @@ export function RetiredRulesFold() {
 
 function RetiredRuleRows() {
   const retired = useRetiredMappingRules();
-  const rows = retired.data ?? [];
+  const names = useShownNames();
+  // A to Z by the rule as it reads, the same as the live list.
+  const rows = useMemo(
+    () =>
+      sortByName(
+        retired.data ?? [],
+        (r) => `${names.roleRef(r.source_project, r.source_role)} ⇒ ${names.roleRef(r.target_project, r.target_role)}`,
+      ),
+    [retired.data, names],
+  );
   return (
     <ListStates
       isLoading={retired.isLoading}

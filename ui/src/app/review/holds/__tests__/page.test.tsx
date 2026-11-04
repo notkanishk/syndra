@@ -37,9 +37,8 @@ describe("Holds due, the title block", () => {
     expect(screen.queryByText(/the oldest due/)).toBeNull();
   });
 
-  it("explains lifting and how to keep a hold with a later date", () => {
+  it("says what doing nothing means and what lifting does, in two sentences", () => {
     render(<HoldsDuePage />);
-    expect(screen.getByText(/being listed here ends nothing/)).toBeTruthy();
-    expect(screen.getByText(/To keep a hold with a later date, lift it and place a new one from the person's page\./)).toBeTruthy();
+    expect(screen.getByText(/Doing nothing keeps the access blocked; lifting one clears the block in Syndra at once/)).toBeTruthy();
   });
 });

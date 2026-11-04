@@ -107,14 +107,14 @@ describe("the home queue and a target nobody can read", () => {
     // operator to different machines.
     expect(screen.getByText(/connection refused/)).toBeTruthy();
     // The claims line holds its seat whether or not anything needs you.
-    expect(screen.getByText("Claims:")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Claims" })).toBeTruthy();
   });
 
   it("says nothing needs you when every target has been read", () => {
     renderHome();
     expect(screen.queryAllByText(/Nothing here needs you/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/could not check/i)).toBeNull();
-    expect(screen.getByText("Claims:")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Claims" })).toBeTruthy();
   });
 });
 
@@ -161,7 +161,7 @@ describe("pending changes says one true thing, once", () => {
     state.governance.pending_propagation = { count: 4, zitadel_reachable: true };
     renderHome();
     expect(screen.getByText(/4 changes are waiting for you to send to Zitadel/)).toBeTruthy();
-    expect(screen.getByText(/none of it has reached Zitadel yet/)).toBeTruthy();
+    expect(screen.getByText(/None of it has reached Zitadel yet/)).toBeTruthy();
     expect(screen.queryByText(/nothing (there )?has changed/i)).toBeNull();
   });
 });

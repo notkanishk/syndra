@@ -32,6 +32,7 @@ import { useAnswer } from "@/components/insights/useAnswer";
 import { FINDINGS, LENSES, MAX_PINS, type Finding, type InsightsUrl, type Lens } from "@/components/insights/useInsightsUrl";
 import { useFindings } from "@/components/insights/useFindings";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
+import { Chip, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button, PILL } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
@@ -43,7 +44,7 @@ import { useTopology } from "@/lib/queries/useTopology";
 import { useIsPhone, useIsTouch } from "@/lib/useViewport";
 import { UNKNOWN_ACCOUNT } from "@/components/names/Unresolved";
 
-const DOT: Record<Finding, string> = { drift: "bg-danger", send: "bg-warn", single: "bg-warn", unused: "bg-muted", overlap: "bg-muted" };
+const DOT: Record<Finding, StatusTone> = { drift: "danger", send: "warn", single: "warn", unused: "neutral", overlap: "neutral" };
 const CHIP_WORDS: Record<Finding, [string, string]> = {
   drift: ["drift", "drift"],
   send: ["waiting for you to send", "waiting for you to send"],
@@ -329,14 +330,14 @@ export function MapTab({ url }: { url: InsightsUrl }) {
               <span className={`rounded-pill border border-accent-line bg-accent-soft font-semibold ${PILL.sm}`}>
                 Showing {dayLabel(url.asof!)}
               </span>
-              <Button variant="ghost" size="sm" onClick={toToday}>
+              <Button variant="outline" size="sm" onClick={toToday}>
                 Back to now
               </Button>
               <span className="text-[13px] text-faint">{AS_OF_LENS}</span>
             </>
           ) : (
             !phone && (
-              <Button variant="ghost" size="sm" onClick={earlier}>
+              <Button variant="outline" size="sm" onClick={earlier}>
                 Earlier date
               </Button>
             )
@@ -350,10 +351,12 @@ export function MapTab({ url }: { url: InsightsUrl }) {
                 type="button"
                 aria-pressed={finding === f}
                 onClick={() => url.set({ ...toParams(null), ...NO_LENS, finding: finding === f ? null : f })}
-                className={`control press-scale inline-flex items-center gap-2 rounded-pill font-semibold ${PILL.sm} ${finding === f ? "bg-tint-3" : "bg-tint-2"}`}
+                className="control press-scale inline-flex min-h-[44px] items-center desktop:min-h-0"
               >
-                <span aria-hidden className={`size-1.5 rounded-pill ${DOT[f]}`} />
-                {findings.counts[f]} {CHIP_WORDS[f][findings.counts[f] === 1 ? 0 : 1]}
+                <Chip className={`gap-2 ${finding === f ? "!bg-tint-3" : ""}`}>
+                  <StatusDot tone={DOT[f]} />
+                  {findings.counts[f]} {CHIP_WORDS[f][findings.counts[f] === 1 ? 0 : 1]}
+                </Chip>
               </button>
             ))}
         </div>

@@ -40,7 +40,7 @@ export default function UpstreamGrantsPage() {
     );
     if (!search) return all;
     return all.filter((grant) =>
-      [grant.userId, grant.projectId, grant.roleKeys.join(" ")]
+      [names.user(grant.userId), names.project(grant.projectId), grant.userId, grant.projectId, grant.roleKeys.join(" ")]
         .join(" ")
         .toLowerCase()
         .includes(search),
@@ -56,21 +56,18 @@ export default function UpstreamGrantsPage() {
       syndraHref="/governance/drift?tab=reconciliation"
       syndraLabel="See where the two sides disagree"
     >
-      {grants.data && (
-        <div className="px-5 py-3">
-          <ReadFreshness
-            subject="This list"
-            state={{ readAt: grants.data.observedAt, truncated: grants.data.truncated }}
-            onRefresh={() => grants.refetch()}
-            refreshing={grants.isFetching}
-          />
-        </div>
-      )}
-
-      {/* The same row every other list narrows itself from. This search used
-          to sit inside the card's own header, which is the one place in the
-          product a search lived below the card line rather than above it. */}
+      {/* The same row every other list narrows itself from, with the read line 10 under it. */}
       <FilterBar
+        read={
+          grants.data && (
+            <ReadFreshness
+              subject="This list"
+              state={{ readAt: grants.data.observedAt, truncated: grants.data.truncated }}
+              onRefresh={() => grants.refetch()}
+              refreshing={grants.isFetching}
+            />
+          )
+        }
         search={
           <Input
             value={query}
@@ -78,8 +75,8 @@ export default function UpstreamGrantsPage() {
               setQuery(event.target.value);
               paging.back();
             }}
-            placeholder="Role key or id"
-            aria-label="Filter roles held by role key or id"
+            placeholder="Name, project or role key"
+            aria-label="Filter roles held by person, project or role key"
           />
         }
       />
@@ -87,7 +84,7 @@ export default function UpstreamGrantsPage() {
       <Card>
         <CardHeader
           title="Every role Zitadel has given"
-          count={grants.data?.total ?? rows.length}
+          count={grants.isLoading ? undefined : (grants.data?.total ?? rows.length)}
         />
 
         <CardColumns>
@@ -112,28 +109,30 @@ export default function UpstreamGrantsPage() {
               title={search ? "Nothing matches that." : "Nobody holds any roles in Zitadel."}
               guidance={
                 search
-                  ? "Try a role key, such as trained, or an id. Names are not searched here."
+                  ? "Try a person, a project or a role key, such as trained."
                   : "Zitadel has given no roles to anyone."
               }
             />
           }
         >
           {visible.map((grant) => (
-            <div key={grant.id} className="row-divider flex flex-wrap items-center gap-4 px-5 py-2.5">
-              <span className="w-[230px] shrink-0 truncate text-[14px] font-semibold">
+            <div key={grant.id} className="row-divider flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5">
+              <span className="w-full text-[14px] font-semibold [overflow-wrap:anywhere] tablet:w-[230px] tablet:shrink-0">
                 <UserName id={grant.userId} />
               </span>
-              <span className="w-[200px] shrink-0 truncate text-[14px] text-muted">
+              <span className="w-full text-[14px] text-muted [overflow-wrap:anywhere] tablet:w-[200px] tablet:shrink-0">
                 <ProjectName id={grant.projectId} />
               </span>
-              <span className="min-w-0 flex-1 truncate">
+              <span className="min-w-0 flex-1 basis-full tablet:basis-0">
                 {sortNames(grant.roleKeys).map((key) => (
-                  <Mono key={key} className="mr-2 text-muted">
+                  <Mono key={key} className="mr-2 text-muted [overflow-wrap:anywhere]">
                     {key}
                   </Mono>
                 ))}
               </span>
-              <Mono className="w-[190px] shrink-0 truncate text-right text-faint">{grant.id}</Mono>
+              <Mono className="max-w-full text-faint [overflow-wrap:anywhere] tablet:w-[190px] tablet:shrink-0 tablet:text-right">
+                {grant.id}
+              </Mono>
             </div>
           ))}
 

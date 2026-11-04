@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
+import { GIVE_ROLE_LABEL, GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ApiError } from "@/lib/api-client";
 
 /**
@@ -99,8 +99,8 @@ function choose(role: string) {
 async function grant(role = "Operator") {
   choose(role);
   fireEvent.change(screen.getByPlaceholderText(/Capstone build/), { target: { value: "test" } });
-  fireEvent.click(screen.getByRole("button", { name: "Grant access" }));
-  // "Close" only replaces "Grant access"/"Cancel" once an outcome (either kind)
+  fireEvent.click(screen.getByRole("button", { name: "Give role" }));
+  // "Close" only replaces "Give role"/"Cancel" once an outcome (either kind)
   // is set — a wait condition that holds regardless of which message the
   // outcome carries.
   await screen.findByRole("button", { name: "Close" });
@@ -125,7 +125,7 @@ describe("GrantDirectAccess · choosing the role", () => {
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
     expect(screen.getByText("Has this")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Operator/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Grant access" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Give role" })).toBeDisabled();
   });
 
   it("a role given and not yet sent says so, with the way to send it", () => {
@@ -235,16 +235,16 @@ describe("GrantDirectAccess · its result", () => {
     expect(screen.getByText("Given")).toBeInTheDocument();
     expect(screen.getByText("Ada can use Operator on their own now.")).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Grant access" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Give role" })).not.toBeInTheDocument();
   });
 
   it("a refusal is Not given, and keeps the form", async () => {
     state.mutateAsync.mockRejectedValue(new ApiError(409, { error: "ALREADY_HELD", message: "They already have this." }));
     open();
     choose("Operator");
-    fireEvent.click(screen.getByRole("button", { name: "Grant access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Give role" }));
     expect(await screen.findByText("Not given")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Grant access" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Give role" })).toBeEnabled();
   });
 });
 
@@ -260,6 +260,25 @@ describe("GrantDirectAccess · while Zitadel is not answering", () => {
       within(dialog).getByText("Zitadel isn't answering, so this will wait for you to send it once it does."),
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/as soon as you give it/)).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Grant access" })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: "Give role" })).toBeEnabled();
+  });
+});
+
+// A-17 Q7: the owner's rename is one line, so the dialog title reads the constant.
+describe("GrantDirectAccess · wording and the end date", () => {
+  it("titles itself with the one exported label", () => {
+    open();
+    expect(screen.getByRole("heading", { name: GIVE_ROLE_LABEL })).toBeInTheDocument();
+  });
+
+  it("says the end date once: the control, and one footer note (no caption above it)", () => {
+    open();
+    choose("Operator");
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getAllByText(/Expiring access/)).toHaveLength(1);
+    expect(within(dialog).queryByText(/It ends on/)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Never" }));
+    expect(within(dialog).getByText("It stays until someone removes it.")).toBeInTheDocument();
+    expect(within(dialog).getByText("No end date")).toBeInTheDocument();
   });
 });

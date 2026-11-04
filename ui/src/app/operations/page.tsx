@@ -6,8 +6,9 @@ import { useMemo, useState } from "react";
 import { ONBOARDING_TITLE, zitadelTitle } from "@/app/operations/event-words";
 import { PlaceRole } from "@/components/audit/EventLine";
 import { BundleName, ProjectName, UserName } from "@/components/names";
+import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { StatusDot } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterChip } from "@/components/ui/FilterChip";
@@ -19,11 +20,22 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { FilterPills } from "@/components/ui/Select";
-import { RunLabel, SortHead, runStarts, useSort } from "@/components/ui/SortHead";
+import {
+  RunLabel,
+  SortHead,
+  runStarts,
+  useSort,
+} from "@/components/ui/SortHead";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { Term } from "@/components/ui/Term";
 import { LogTime } from "@/components/ui/Time";
-import { outcomeLabel, outcomeOf, type EventOutcome } from "@/lib/event-outcome";
+import {
+  outcomeLabel,
+  outcomeOf,
+  type EventOutcome,
+} from "@/lib/event-outcome";
 import { formatShortDate, formatWhen } from "@/lib/format";
+import { compareNames } from "@/lib/sort";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
   LOG_LIMIT,
@@ -77,21 +89,26 @@ export default function EventActivityPage() {
   // Search reads the same names the rows show, so what is typed is what is seen.
   const needle = query.trim().toLowerCase();
   const stream = useMemo(() => {
-    const names = (row: StreamRow) =>
-      [
-        resolver.resolveUser(row.userId).value?.display_name,
-        row.projectId && resolver.resolveProject(row.projectId).value?.name,
-        row.bundleId && resolver.resolveBundle(row.bundleId).value?.name,
-      ];
+    const names = (row: StreamRow) => [
+      resolver.resolveUser(row.userId).value?.display_name,
+      row.projectId && resolver.resolveProject(row.projectId).value?.name,
+      row.bundleId && resolver.resolveBundle(row.bundleId).value?.name,
+    ];
     return all
       .filter(
         (row) =>
           (source === "all" || row.source === source) &&
           (outcome === "all" || row.outcome === outcome) &&
-          (!needle || names(row).some((name) => name && name.toLowerCase().includes(needle))),
+          (!needle ||
+            names(row).some(
+              (name) => name && name.toLowerCase().includes(needle),
+            )),
       )
       .sort((a, b) => {
-        let order = view.sort.key === "time" ? b.ts - a.ts : runOf(a, view.sort.key).localeCompare(runOf(b, view.sort.key));
+        let order =
+          view.sort.key === "time"
+            ? b.ts - a.ts
+            : compareNames(runOf(a, view.sort.key), runOf(b, view.sort.key));
         if (view.sort.dir < 0) order = -order;
         return order || b.ts - a.ts;
       });
@@ -101,7 +118,10 @@ export default function EventActivityPage() {
   // Runs: under Time, one per calendar day; under Event or Outcome, equal values
   // gathered under a quiet label (RULES: sort lives on the headings). The count is
   // the run's whole size, not how much of it is on screen yet.
-  const runAt = useMemo(() => runStarts(stream, (row) => runOf(row, view.sort.key)), [stream, view.sort.key]);
+  const runAt = useMemo(
+    () => runStarts(stream, (row) => runOf(row, view.sort.key)),
+    [stream, view.sort.key],
+  );
   const visible = stream.slice(0, paging.limit);
 
   const isLoading = events.isLoading || triggers.isLoading;
@@ -111,9 +131,16 @@ export default function EventActivityPage() {
   const triggersDown = Boolean(triggers.error) && !triggers.data;
   const bothDown = eventsDown && triggersDown;
   // A read that failed AFTER one had landed: the rows are what had arrived by then.
-  const lastReadMs = Math.max(events.dataUpdatedAt || 0, triggers.dataUpdatedAt || 0);
+  const lastReadMs = Math.max(
+    events.dataUpdatedAt || 0,
+    triggers.dataUpdatedAt || 0,
+  );
   const readAt = lastReadMs ? new Date(lastReadMs).toISOString() : undefined;
-  const stale = !bothDown && Boolean(events.error ?? triggers.error) && !eventsDown && !triggersDown;
+  const stale =
+    !bothDown &&
+    Boolean(events.error ?? triggers.error) &&
+    !eventsDown &&
+    !triggersDown;
   const retry = () => {
     events.refetch();
     triggers.refetch();
@@ -125,107 +152,133 @@ export default function EventActivityPage() {
   };
 
   return (
-    <div className="flex flex-col gap-[18px]">
-      {/* A notice that can come and go while the page is open leaves by fading,
-          then folding (A-08 §5): the Unfold opens it, and closes it. */}
-      <Unfold open={Boolean(stale)} gap={18}>
-        <Notice tone="warn" live title={`Events haven't been read since ${formatWhen(readAt)}.`}>
-          Syndra&apos;s server stopped answering this page. The list below is what had arrived by
-          then; anything newer will appear when it answers again.
-        </Notice>
-      </Unfold>
-
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Incoming events"
         lede={
           <>
-            Things that happened outside Syndra and reached it: access changed in{" "}
-            <Term name="zitadel">Zitadel</Term>, and people joining. Nothing here needs a decision.
+            Things that happened outside Syndra and reached it: access changed
+            in <Term name="zitadel">Zitadel</Term>, and people joining. Nothing
+            here needs a decision.
           </>
         }
       />
 
+      {/* A notice that can come and go while the page is open leaves by fading,
+          then folding (A-08 §5): the Unfold opens it, and closes it. */}
+      <Unfold open={Boolean(stale)} gap={16}>
+        <Notice
+          tone="warn"
+          live
+          title={`Events haven't been read since ${formatWhen(readAt)}.`}
+        >
+          Syndra&apos;s server stopped answering this page. The list below is
+          what had arrived by then; anything newer will appear when it answers
+          again.
+        </Notice>
+      </Unfold>
+
       {/* The bar waits for the list: no search, read line or count until there is
           something to search. */}
       {!isLoading && !bothDown && (
-        <>
-          <FilterBar
-            search={
-              <Input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search person, project or bundle…"
-                aria-label="Search events by person, project or bundle"
-              />
-            }
-            filters={
-              <FilterPanel
-                resultCount={stream.length}
-                noun={["event", "events"]}
-                activeCount={[source !== "all", outcome !== "all"].filter(Boolean).length}
-                onClear={() => {
-                  setSource("all");
-                  setOutcome("all");
-                }}
-              >
-                <FilterField label="Source">
-                  <FilterPills<Source>
-                    label="Filter by source"
-                    value={source}
-                    onChange={setSource}
-                    options={[
-                      { value: "all", label: "All sources" },
-                      { value: "provider", label: SOURCE_WORD.provider },
-                      { value: "onboarding", label: SOURCE_WORD.onboarding },
-                    ]}
-                  />
-                </FilterField>
-                <FilterField label="Outcome">
-                  <FilterPills<EventOutcome>
-                    label="Filter by outcome"
-                    value={outcome}
-                    onChange={setOutcome}
-                    options={[
-                      { value: "all", label: "Any outcome" },
-                      ...(["done", "waiting", "failed", "dropped"] as const).map((value) => ({
+        <FilterBar
+          search={
+            <Input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search person, project or bundle…"
+              aria-label="Search events by person, project or bundle"
+            />
+          }
+          filters={
+            <FilterPanel
+              resultCount={stream.length}
+              noun={["event", "events"]}
+              activeCount={
+                [source !== "all", outcome !== "all"].filter(Boolean).length
+              }
+              onClear={() => {
+                setSource("all");
+                setOutcome("all");
+              }}
+            >
+              <FilterField label="Source">
+                <FilterPills<Source>
+                  label="Filter by source"
+                  value={source}
+                  onChange={setSource}
+                  options={[
+                    { value: "all", label: "All sources" },
+                    { value: "provider", label: SOURCE_WORD.provider },
+                    { value: "onboarding", label: SOURCE_WORD.onboarding },
+                  ]}
+                />
+              </FilterField>
+              <FilterField label="Outcome">
+                <FilterPills<EventOutcome>
+                  label="Filter by outcome"
+                  value={outcome}
+                  onChange={setOutcome}
+                  options={[
+                    { value: "all", label: "Any outcome" },
+                    ...(["done", "waiting", "failed", "dropped"] as const).map(
+                      (value) => ({
                         value,
                         label: outcomeLabel(value).word,
-                      })),
-                    ]}
-                  />
-                </FilterField>
-              </FilterPanel>
-            }
-          />
-          <div className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <ReadFreshness state={{ readAt, current: !stale }} subject="The timeline" />
-            {((events.data?.length ?? 0) >= LOG_LIMIT || (triggers.data?.length ?? 0) >= LOG_LIMIT) && (
-              <span className="text-[13px] text-faint">The newest {LOG_LIMIT} of each log</span>
-            )}
-            {source !== "all" && (
-              <FilterChip onClear={() => setSource("all")} clearLabel="Show every source">
-                {SOURCE_WORD[source]}
-              </FilterChip>
-            )}
-            {outcome !== "all" && (
-              <FilterChip onClear={() => setOutcome("all")} clearLabel="Show every outcome">
-                {outcomeLabel(outcome).word}
-              </FilterChip>
-            )}
-          </div>
-        </>
+                      }),
+                    ),
+                  ]}
+                />
+              </FilterField>
+            </FilterPanel>
+          }
+          read={
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <ReadFreshness
+                state={{ readAt, current: !stale }}
+                subject="The timeline"
+              />
+              {((events.data?.length ?? 0) >= LOG_LIMIT ||
+                (triggers.data?.length ?? 0) >= LOG_LIMIT) && (
+                <span className="text-[13px] text-faint">
+                  The newest {LOG_LIMIT} of each log
+                </span>
+              )}
+              {source !== "all" && (
+                <FilterChip
+                  onClear={() => setSource("all")}
+                  clearLabel="Show every source"
+                >
+                  {SOURCE_WORD[source]}
+                </FilterChip>
+              )}
+              {outcome !== "all" && (
+                <FilterChip
+                  onClear={() => setOutcome("all")}
+                  clearLabel="Show every outcome"
+                >
+                  {outcomeLabel(outcome).word}
+                </FilterChip>
+              )}
+            </div>
+          }
+        />
       )}
 
-      <Unfold open={eventsDown !== triggersDown} gap={18}>
+      <Unfold open={eventsDown !== triggersDown} gap={16}>
         <Notice
           tone="danger"
           blocking
-          title={eventsDown ? "Events from Zitadel could not be read." : "People joining could not be read."}
+          title={
+            eventsDown
+              ? "Events from Zitadel could not be read."
+              : "People joining could not be read."
+          }
           action={{ label: "Try again", onClick: retry }}
         >
-          The list below has only what {eventsDown ? "new people" : "Zitadel"} sent, and that part
-          is current. Nothing was changed.
+          The list below has only what {eventsDown ? "new people" : "Zitadel"}{" "}
+          sent, and that part is current. Nothing was changed.
         </Notice>
       </Unfold>
 
@@ -236,14 +289,15 @@ export default function EventActivityPage() {
           isEmpty={stream.length === 0}
           onRetry={retry}
           errorTitle="Couldn't load the events."
-          skeleton={<RowSkeleton rows={6} avatar={false} label="Loading events" />}
+          skeleton={
+            <RowSkeleton rows={6} avatar={false} label="Loading events" />
+          }
           empty={
             // An emptied filter and an empty log are different facts, and only
             // one of them means nothing has happened.
             filtered ? (
               <EmptyState
                 title="No events match those filters."
-                guidance={`${all.length} ${all.length === 1 ? "event is" : "events are"} in the timeline.`}
                 action={{ label: "Clear filters", onClick: clearAll }}
               />
             ) : (
@@ -257,14 +311,29 @@ export default function EventActivityPage() {
           {/* Headings only over rows: an empty list is a bare card (route-events, empty). */}
           <CardColumns>
             <span className="w-[200px] shrink-0">
-              <SortHead label="Event" name="event" sort={sort} onSort={flipOrSet} />
+              <SortHead
+                label="Event"
+                name="event"
+                sort={sort}
+                onSort={flipOrSet}
+              />
             </span>
             <span className="min-w-0 flex-1">What happened</span>
             <span className="hidden w-[150px] shrink-0 desktop:block">
-              <SortHead label="Outcome" name="outcome" sort={sort} onSort={flipOrSet} />
+              <SortHead
+                label="Outcome"
+                name="outcome"
+                sort={sort}
+                onSort={flipOrSet}
+              />
             </span>
             <span className="w-[110px] shrink-0 text-right">
-              <SortHead label="Time" name="time" sort={sort} onSort={flipOrSet} />
+              <SortHead
+                label="Time"
+                name="time"
+                sort={sort}
+                onSort={flipOrSet}
+              />
             </span>
           </CardColumns>
           {visible.map((row, index) => {
@@ -276,7 +345,9 @@ export default function EventActivityPage() {
                   row={row}
                   sortKey={view.sort.key}
                   open={openDetails === row.id}
-                  onToggle={() => setOpenDetails((cur) => (cur === row.id ? null : row.id))}
+                  onToggle={() =>
+                    setOpenDetails((cur) => (cur === row.id ? null : row.id))
+                  }
                 />
               </div>
             );
@@ -310,16 +381,7 @@ function EventRow({
   // other order the headings have gone and the time has to carry its own date.
   const when =
     sortKey === "time" ? <LogTime iso={row.at} /> : <>{formatWhen(row.at)}</>;
-  const outcomeWord = (
-    <span
-      className={`inline-flex items-center gap-2 font-semibold ${
-        row.failed ? "text-danger-text" : row.outcome === "done" ? "text-ink" : "text-muted"
-      }`}
-    >
-      <StatusDot tone={tone} />
-      {word}
-    </span>
-  );
+  const outcomeWord = <StatusSeat tone={tone} word={word} />;
   return (
     <>
       <div
@@ -330,8 +392,9 @@ function EventRow({
         }`}
       >
         <span className="flex min-w-0 flex-col gap-[3px] tablet:w-[200px] tablet:shrink-0">
-          <span className="text-[14px] font-semibold leading-[1.4] [text-wrap:pretty]">{row.title}</span>
-          <span className="type-mono text-[12.5px] text-faint">{row.type}</span>
+          <span className="text-[14px] font-semibold leading-[1.4] [text-wrap:pretty]">
+            {row.title}
+          </span>
         </span>
         <span className="flex w-full min-w-0 flex-1 flex-col items-start gap-1.5">
           <span
@@ -344,26 +407,35 @@ function EventRow({
           {/* Outcome has its own column from desktop up; below it, it sits under the sentence. */}
           <span className="inline-flex items-center gap-2 text-[13px] desktop:hidden">
             {outcomeWord}
-            <span className="font-normal text-faint tablet:hidden">· {formatWhen(row.at)}</span>
+            <span className="font-normal text-faint tablet:hidden">
+              · {formatWhen(row.at)}
+            </span>
           </span>
-          <button
-            type="button"
+          {/* The row holds links of its own, so it cannot also be the control (G3). */}
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onToggle}
             aria-expanded={open}
-            className="inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-tint desktop:min-h-6"
           >
             {open ? "Hide details" : "Show details"}
-          </button>
+          </Button>
         </span>
-        <span className="hidden w-[150px] shrink-0 pt-px text-[13.5px] desktop:block">{outcomeWord}</span>
+        <span className="hidden w-[150px] shrink-0 pt-px text-[13.5px] desktop:block">
+          {outcomeWord}
+        </span>
         <span className="type-mono hidden w-[110px] shrink-0 pt-0.5 text-right text-[12.5px] text-muted tablet:block">
           {when}
         </span>
       </div>
       {open && (
-        <pre className="row-divider overflow-x-auto bg-surface-0 px-5 py-3.5 font-mono text-[12.5px] leading-[1.7] text-muted">
-          {JSON.stringify(row.details, null, 2)}
-        </pre>
+        <div className="row-divider bg-surface-0 px-5 py-3.5">
+          {/* The raw type, for whoever matches it against Zitadel: kept out of the row. */}
+          <span className="type-mono text-[12.5px] text-faint">{row.type}</span>
+          <pre className="mt-1.5 overflow-x-auto font-mono text-[12.5px] leading-[1.7] text-muted">
+            {JSON.stringify(row.details, null, 2)}
+          </pre>
+        </div>
       )}
     </>
   );
@@ -371,7 +443,11 @@ function EventRow({
 
 /** The label a run of rows sits under, for the order the list is in. */
 function runOf(row: StreamRow, key: SortKey): string {
-  return key === "time" ? dayLabel(row.at) : key === "event" ? row.title : row.word;
+  return key === "time"
+    ? dayLabel(row.at)
+    : key === "event"
+      ? row.title
+      : row.word;
 }
 
 /**
@@ -383,7 +459,9 @@ function dayLabel(iso: string, now: Date = new Date()): string {
   const date = formatShortDate(iso, now);
   if (date === formatShortDate(now.toISOString(), now)) return "Today";
   const yesterday = new Date(now.getTime() - 864e5);
-  return date === formatShortDate(yesterday.toISOString(), now) ? "Yesterday" : date;
+  return date === formatShortDate(yesterday.toISOString(), now)
+    ? "Yesterday"
+    : date;
 }
 
 interface StreamRow {
@@ -410,8 +488,9 @@ interface StreamRow {
 }
 
 function Person({ id }: { id: string }) {
+  const href = useAccountHref();
   return (
-    <Link href={`/users/${id}`} className="text-ink link-hover">
+    <Link href={href(id)} className="text-ink link-hover">
       <UserName id={id} />
     </Link>
   );
@@ -440,12 +519,22 @@ function webhookSentence(event: WebhookEventRow): React.ReactNode {
   );
   switch (event.event_type) {
     case "grant_added":
-      return <>{who} was given {place}.</>;
+      return (
+        <>
+          {who} was given {place}.
+        </>
+      );
     case "grant_removed":
-      return <>{who} no longer has {place}.</>;
+      return (
+        <>
+          {who} no longer has {place}.
+        </>
+      );
     case "grant_changed":
       return event.source_project ? (
-        <>{who}&apos;s access on <Project id={event.source_project} /> changed.</>
+        <>
+          {who}&apos;s access on <Project id={event.source_project} /> changed.
+        </>
       ) : (
         <>{who}&apos;s access changed.</>
       );
@@ -467,10 +556,14 @@ function fromWebhook(event: WebhookEventRow): StreamRow {
   // What Syndra did about it, in the same breath as what happened.
   const tail =
     outcome === "failed" ? (
-      <> Syndra could not record it{event.error_message ? `: ${event.error_message}` : "."}</>
+      <> Syndra could not record it.</>
     ) : outcome === "dropped" ? (
       event.status === "dropped_enrichment_incomplete" ? (
-        <> Zitadel did not say which project or role this was about, so Syndra could not act on it.</>
+        <>
+          {" "}
+          Zitadel did not say which project or role this was about, so Syndra
+          could not act on it.
+        </>
       ) : (
         <> Syndra chose not to act.</>
       )
@@ -510,15 +603,17 @@ function fromTrigger(trigger: OnboardingTriggerRow): StreamRow {
   // nothing, which reads as nothing having been given.
   const bundle = trigger.bundle_id ? (
     <>
-      <BundleName id={trigger.bundle_id} fallback="a bundle since retired" />, the default{" "}
-      <Term name="bundle">bundle</Term> for new members
+      <BundleName id={trigger.bundle_id} fallback="a bundle since retired" />,
+      the default <Term name="bundle">bundle</Term> for new members
     </>
   ) : (
-    <>the default <Term name="bundle">bundle</Term> for new members</>
+    <>
+      the default <Term name="bundle">bundle</Term> for new members
+    </>
   );
   const tail =
     outcome === "failed" ? (
-      <> Syndra could not welcome them{trigger.error_message ? `: ${trigger.error_message}` : "."}</>
+      <> Syndra could not welcome them.</>
     ) : outcome === "dropped" ? (
       <> Nothing was given: no default bundle for new members is set.</>
     ) : outcome === "waiting" ? (

@@ -22,14 +22,11 @@ describe("holdersLine", () => {
     });
   });
 
-  it("says confirmed when observed matches what's recorded", () => {
-    expect(holdersLine(5, 5, 5)).toEqual({ headline: "5", note: "confirmed", tone: "ok" });
+  it("says nothing when observed matches what's recorded", () => {
+    expect(holdersLine(5, 5, 5)).toEqual({ headline: "5", note: "", tone: "ok" });
   });
 
   it("says nothing extra for a quiet zero", () => {
-    // observed = 0, nothing recorded to explain either — not "confirmed",
-    // just silent. Mutation-sensitive: a `>= 0` in place of `> 0` would push
-    // "confirmed" here.
     expect(holdersLine(0, 0, 0)).toEqual({ headline: "0", note: "", tone: "ok" });
   });
 
@@ -65,8 +62,7 @@ describe("holdersLine", () => {
   it("never lets a negative unexplained or missing count leak into the note", () => {
     // observed and given both fall below what's confirmed — a stale
     // confirmation, not new access. Mutation-sensitive: dropping the `> 0`
-    // guards would print negative counts instead of falling through to
-    // "confirmed".
-    expect(holdersLine(1, 3, 1)).toEqual({ headline: "1", note: "confirmed", tone: "ok" });
+    // guards would print negative counts instead of falling through to silence.
+    expect(holdersLine(1, 3, 1)).toEqual({ headline: "1", note: "", tone: "ok" });
   });
 });

@@ -26,6 +26,7 @@ vi.mock("@/lib/queries/useCatalogUsers", () => ({
 }));
 
 vi.mock("@/components/names", () => ({
+  UserAvatar: () => null,
   ProjectName: () => null,
   RoleRef: () => null,
   UserName: () => null,

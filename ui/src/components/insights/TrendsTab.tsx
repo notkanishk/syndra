@@ -6,10 +6,10 @@ import { useMemo, type ReactNode } from "react";
 import { buildModel } from "@/components/insights/model";
 import { projectLabel } from "@/components/names/Unresolved";
 import type { InsightsUrl } from "@/components/insights/useInsightsUrl";
-import { ListStates, RowSkeleton } from "@/components/states";
+import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
-import { Segmented } from "@/components/ui/Select";
+import { FilterPills } from "@/components/ui/Select";
 import { useInsightsTrends, useInsightsUsage, type InsightsTrends, type TrendPeriod } from "@/lib/queries/useInsights";
 import { useTopology } from "@/lib/queries/useTopology";
 import { formatShortDate } from "@/lib/format";
@@ -46,11 +46,9 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-const ENDING_ROW = "row-divider grid grid-cols-[1fr_72px_72px] items-baseline gap-4 px-5 py-3";
+const ENDING_ROW = "row-divider grid grid-cols-[1fr_110px_110px] items-baseline gap-4 px-5 py-3";
 
-const Quiet = ({ children }: { children: ReactNode }) => (
-  <p className="row-divider px-5 py-3.5 text-[13.5px] text-muted [text-wrap:pretty]">{children}</p>
-);
+const Quiet = ({ children }: { children: string }) => <EmptyState title={children} />;
 
 /** Weeks as columns: given in the accent, revoked beneath in warn. The words carry it; the bars show the shape. */
 function Weeks({ weekly }: { weekly: InsightsTrends["weekly"] }) {
@@ -83,7 +81,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Segmented
+        <FilterPills
           label="Period"
           options={PERIODS}
           value={url.period}
@@ -213,7 +211,7 @@ export function TrendsTab({ url }: { url: InsightsUrl }) {
               ) : !usage.holders_observed ? (
                 <Quiet>Syndra hasn&apos;t read who holds what from Zitadel yet.</Quiet>
               ) : usage.held_not_used.length === 0 ? (
-                <Quiet>Every role someone holds has been used in {usage.window_days} days.</Quiet>
+                <Quiet>{`Every role someone holds has been used in ${usage.window_days} days.`}</Quiet>
               ) : (
                 [...usage.held_not_used]
                   .sort((a, b) => b.people - a.people)

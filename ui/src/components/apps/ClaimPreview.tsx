@@ -4,10 +4,9 @@ import { useRef, useState } from "react";
 
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
-import { Avatar } from "@/components/ui/Avatar";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Card, CardHeader } from "@/components/ui/Card";
 import { CheckTrail } from "@/components/ui/CheckTrail";
 import { CopiedSeat, useConfirmFor } from "@/components/ui/CopiedSeat";
 import { Crossfade } from "@/components/ui/Crossfade";
@@ -78,55 +77,56 @@ export function ClaimPreview({
 
   return (
     <Card className="w-full">
-      <div className="flex flex-wrap items-center gap-2.5 px-[22px] pb-3.5 pt-[18px]">
-        <h2 className="type-card-title m-0">Preview</h2>
-        <span className="text-[13.5px] text-faint">for</span>
-        <span className="flex items-center gap-2 rounded-pill border border-line-strong py-1 pl-1.5 pr-3">
-          <Avatar name={ctx.person} size="row" />
-          <Select
-            aria-label="Preview for"
-            value={personId}
-            onChange={(e) => onPerson(e.target.value)}
-            className="w-[160px] border-0 px-1 py-0 text-[14px]"
-          >
-            {humans.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-            {machines.length > 0 && (
-              <optgroup label="Service accounts">
-                {machines.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </Select>
-        </span>
-        <span className="ml-auto flex items-center gap-2.5">
-          {shown && <span className="text-[12.5px] text-faint">Checked {clockOf(shown.read_at)}</span>}
+      <CardHeader
+        title={
+          <span className="flex flex-wrap items-center gap-2.5">
+            Preview
+            <span className="text-[13.5px] font-normal text-faint">for</span>
+            <Select
+              aria-label="Preview for"
+              value={personId}
+              onChange={(e) => onPerson(e.target.value)}
+              className="w-[200px] py-2 text-[14px]"
+            >
+              {humans.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
+              {machines.length > 0 && (
+                <optgroup label="Service accounts">
+                  {machines.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </Select>
+          </span>
+        }
+        note={shown && `Checked ${clockOf(shown.read_at)}`}
+        action={
           <Button size="sm" onClick={onRetry}>
             Check again
           </Button>
-        </span>
-      </div>
+        }
+      />
       <ReadGate
         loading={isLoading && !preview}
         skeleton={
-          <div className="px-[22px] pb-5">
+          <div className="px-5 pb-5">
             <RowSkeleton rows={3} avatar={false} label="Running the checks" />
           </div>
         }
       >
         {error && !preview ? (
-          <div className="px-[22px] pb-5">
+          <div className="px-5 pb-5">
             <ErrorState title="Couldn't run the checks." error={error} onRetry={onRetry} />
           </div>
         ) : shown ? (
           <>
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-[22px] pb-3">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 pb-3">
               <StatusDot tone={verdict.tone} />
               <Crossfade id={verdict.text} inline>
                 <span className="text-[14.5px] font-semibold text-ink">{verdict.text}</span>
@@ -138,15 +138,15 @@ export function ClaimPreview({
               </span>
             </div>
             <Unfold open={open}>
-              <div className="px-[22px] pb-4 pt-0.5">
+              <div className="px-5 pb-4 pt-0.5">
                 <CheckTrail checks={checks} compact={chosen === null} />
               </div>
             </Unfold>
-            <div ref={ref} className="flex flex-col gap-2.5 px-[22px]">
+            <div ref={ref} className="flex flex-col gap-2.5 px-5">
               <TokenBlock lines={lines} empty={<span className="text-muted">{"{}"}</span>} className="[overflow-wrap:anywhere]" />
               {shown.would_receive && <TokenBlock lines={tokenLines(shown.would_receive)} comment="once their claims are built" />}
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-[22px] pb-5 pt-2.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 pb-5 pt-2.5">
               <span className="min-w-0 flex-[1_1_260px] text-[13px] leading-[1.55] text-faint [text-wrap:pretty]">
                 {foot && <Ticks text={foot} />}
               </span>

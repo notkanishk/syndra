@@ -6,8 +6,6 @@ import { CopyableValue } from "@/components/ui/CopyableValue";
 import { NextStep } from "@/components/ui/NextStep";
 import {
   NOTHING_CHANGED,
-  OUTCOME_LABEL,
-  OUTCOME_TONE,
   sentence,
   statesNothingChanged,
   type ActionOutcome as Outcome,
@@ -57,10 +55,10 @@ export function ActionOutcome({
   placement?: "inline" | "block" | "seat";
   /**
    * The decision in the act's own vocabulary ("Approved", "Given", "Given to 12 people").
-   * Seat: required in practice. Block: given, the result is dot + word + one sentence + one
-   * faint line (A-04 §11); omitted, the block keeps its "Applied" pill so callers can migrate.
+   * Required (A-17 G4): the result is dot + word + one sentence + one faint line (A-04 §11),
+   * never a generic "Applied" for something the reader did in their own words.
    */
-  word?: string;
+  word: string;
   className?: string;
 }) {
   const grave = outcome.kind === "failed" || outcome.kind === "refused";
@@ -74,7 +72,7 @@ export function ActionOutcome({
         <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink">
           {/* It went well, because of you, and you are looking: the one dot that blooms (S4). */}
           <StatusDot tone={SEAT_DOT[outcome.kind]} bloom={outcome.kind === "applied"} />
-          {word ?? OUTCOME_LABEL[outcome.kind]}
+          {word}
         </span>
         {/* Queued: why it waits, then the step left — the word above already
             wears the amber dot, so the link doesn't repeat it (route-requests). */}
@@ -101,77 +99,47 @@ export function ActionOutcome({
         role="status"
         className={`tint-in inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 ${className}`}
       >
-        <OutcomeMark kind={outcome.kind} />
+        {outcome.kind === "queued" ? (
+          <NextStep />
+        ) : (
+          <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink">
+            <StatusDot tone={SEAT_DOT[outcome.kind]} />
+            {word}
+          </span>
+        )}
         <span className="text-[13px] text-muted">{sentence(outcome.message)}</span>
       </span>
     );
   }
 
-  if (word) {
-    // Done now lifts and blooms once (S6). Everything else appears in place and
-    // stays steady: a failure is under control, and a queued change has not
-    // happened yet, so neither celebrates.
-    const celebrates = outcome.kind === "applied";
-    return (
-      <div
-        role={grave ? "alert" : "status"}
-        className={`${celebrates ? "lift-in" : "tint-in"} flex flex-col gap-2.5 rounded-inner border px-5 py-4 ${
-          grave ? "border-danger-line bg-surface-1" : "border-line-strong bg-surface-1"
-        } ${className}`}
-      >
-        <div className="flex items-center gap-2.5">
-          <StatusDot tone={SEAT_DOT[outcome.kind]} bloom={celebrates} />
-          <span className="font-display text-[22px] font-semibold leading-[1.2] text-ink">
-            {word}
-          </span>
-        </div>
-        <p className="text-[15px] leading-[1.55] text-ink">
-          {sentence(outcome.message)}
-          {statesNothingChanged(outcome.kind) ? ` ${NOTHING_CHANGED}` : ""}
-        </p>
-        {outcome.detail && (
-          <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
-        )}
-        {outcome.kind === "queued" && <NextStep dot={false} />}
-        {outcome.sessionEnded && <SignInAgain />}
-        {outcome.requestId && <QuoteThis id={outcome.requestId} />}
-      </div>
-    );
-  }
-
+  // Done now lifts and blooms once (S6). Everything else appears in place and
+  // stays steady: a failure is under control, and a queued change has not
+  // happened yet, so neither celebrates.
+  const celebrates = outcome.kind === "applied";
   return (
     <div
       role={grave ? "alert" : "status"}
-      className={`tint-in flex flex-col gap-2.5 rounded-inner border px-5 py-4 ${
+      className={`${celebrates ? "lift-in" : "tint-in"} flex flex-col gap-2.5 rounded-inner border px-5 py-4 ${
         grave ? "border-danger-line bg-surface-1" : "border-line-strong bg-surface-1"
       } ${className}`}
     >
-      <div className="flex flex-wrap items-center gap-2.5">
-        <OutcomeMark kind={outcome.kind} />
+      <div className="flex items-center gap-2.5">
+        <StatusDot tone={SEAT_DOT[outcome.kind]} bloom={celebrates} />
+        <span className="font-display text-[22px] font-semibold leading-[1.2] text-ink">
+          {word}
+        </span>
       </div>
-
-      <p className="text-[14px] leading-[1.55] text-muted">
+      <p className="text-[15px] leading-[1.55] text-ink">
         {sentence(outcome.message)}
         {statesNothingChanged(outcome.kind) ? ` ${NOTHING_CHANGED}` : ""}
       </p>
-
       {outcome.detail && (
         <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
       )}
-
+      {outcome.kind === "queued" && <NextStep dot={false} />}
       {outcome.sessionEnded && <SignInAgain />}
       {outcome.requestId && <QuoteThis id={outcome.requestId} />}
     </div>
-  );
-}
-
-/** The pill, or for queued the step left in its place. */
-function OutcomeMark({ kind }: { kind: Outcome["kind"] }) {
-  if (kind === "queued") return <NextStep />;
-  return (
-    <span className={`rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${OUTCOME_TONE[kind]}`}>
-      {OUTCOME_LABEL[kind]}
-    </span>
   );
 }
 
