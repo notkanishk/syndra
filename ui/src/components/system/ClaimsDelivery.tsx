@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
 import { ErrorState, RowSkeleton } from "@/components/states";
-import { ArrowLink } from "@/components/ui/ArrowLink";
+import { ARROW_LINK, ArrowLink } from "@/components/ui/ArrowLink";
 import { Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
+import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Unfold } from "@/components/ui/Unfold";
 import { LANDS_LABEL, outcomePhrase } from "@/lib/claims";
 import { formatClock, formatList, formatSignIn, formatWhen } from "@/lib/format";
+import { sortByName } from "@/lib/sort";
 import {
   useClaimsDelivery,
   type ClaimApp,
@@ -59,16 +61,17 @@ export function ClaimsDelivery({ domain, connected }: { domain?: string; connect
         <FindingNotice key={group[0].kind} group={group} names={names} />
       ))}
       <Card stale={Boolean(d && delivery.error)}>
-        <CardHeader
-          title="Claims delivery"
-          note={
-            d
-              ? delivery.error
-                ? `From the last read, at ${formatClock(new Date(delivery.dataUpdatedAt).toISOString())}`
-                : `Read ${formatClock(new Date(delivery.dataUpdatedAt).toISOString())}`
-              : undefined
-          }
-        />
+        <CardHeader title="Claims delivery" />
+        {d && (
+          <div className="px-5 pb-3">
+            <ReadFreshness
+              subject="This section"
+              state={readStateOfQuery({ dataUpdatedAt: delivery.dataUpdatedAt, isError: Boolean(delivery.error) })}
+              onRefresh={() => delivery.refetch()}
+              refreshing={delivery.isFetching}
+            />
+          </div>
+        )}
         {!d ? (
           delivery.error ? (
             <div className="px-5 pb-5">
@@ -84,7 +87,7 @@ export function ClaimsDelivery({ domain, connected }: { domain?: string; connect
             <Live d={d} open={open} />
             <Configuration d={d} connected={connected} names={names} />
             {settled.length > 0 && (
-              <p className="row-divider px-5 py-3 text-[13px] text-faint">
+              <p className="row-divider px-5 py-3 text-[13px] text-muted">
                 Settled in the last 24h: {settled.length === 1 ? "1 problem" : `${settled.length} problems`}, the last at{" "}
                 {formatWhen(settled.map((f) => f.resolved_at!).sort().at(-1))}.
               </p>
@@ -130,7 +133,7 @@ function AppName({ clientID, names }: { clientID: string; names: Names }) {
 function AppList({ findings, names }: { findings: ClaimFinding[]; names: Names }) {
   return (
     <>
-      {findings.map((f, i) => (
+      {sortByName(findings, (f) => names.app(f.subject)?.name ?? f.subject, (f) => f.subject).map((f, i) => (
         <span key={f.subject}>
           {i > 0 && (i === findings.length - 1 ? " and " : ", ")}
           <AppName clientID={f.subject} names={names} />
@@ -184,7 +187,7 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
       title = `Syndra answered ${plural(apps, "app")} without people's claims`;
       body = (
         <>
-          {group.map((f, i) => (
+          {sortByName(group, (f) => names.app(f.subject)?.name ?? f.subject, (f) => f.subject).map((f, i) => (
             <span key={f.subject}>
               {i > 0 && " "}
               <AppName clientID={f.subject} names={names} />: {outcomePhrase(f.sample?.outcome as string) || "no reason was recorded"}.
@@ -231,11 +234,11 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
   );
 }
 
-/** A round chevron and its words: the one fold control in this section. */
+/** "Show X" / "Hide X": the one fold control in this section (A-17 G3). */
 function Fold({ open, onToggle, show, hide }: { open: boolean; onToggle: () => void; show: string; hide: string }) {
   return (
     <span className="ml-auto inline-flex flex-none">
-      <Button variant="ghost" size="sm" aria-expanded={open} onClick={onToggle}>
+      <Button variant="outline" size="sm" aria-expanded={open} onClick={onToggle}>
         {open ? hide : show}
       </Button>
     </span>
@@ -252,7 +255,7 @@ function useFold(bad: boolean): [boolean, () => void] {
 function PartHead({ label, tone, sentence, fold }: { label: string; tone: StatusTone; sentence: ReactNode; fold: ReactNode }) {
   return (
     <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3.5">
-      <span className="type-label w-full">{label}</span>
+      <span className="w-full text-[14.5px] font-semibold">{label}</span>
       <StatusDot tone={tone} />
       <span className="min-w-0 flex-[1_1_320px] text-[14px] leading-[1.55] text-ink [text-wrap:pretty]">{sentence}</span>
       {fold}
@@ -290,7 +293,7 @@ function Live({ d, open }: { d: Delivery; open: ClaimFinding[] }) {
           <>
             {sentence}
             {restarted && (
-              <span className="block text-[13px] text-faint">
+              <span className="block text-[13px] text-muted">
                 Syndra started checking at {formatClock(since)}. Sign-ins before that aren&rsquo;t checked, and none is counted as failed.
               </span>
             )}
@@ -304,10 +307,10 @@ function Live({ d, open }: { d: Delivery; open: ClaimFinding[] }) {
             <span className="tablet:w-[220px] tablet:shrink-0">App</span>
             <span className="tablet:w-[130px] tablet:shrink-0">Last sign-in</span>
             <span className="tablet:w-[130px] tablet:shrink-0">Last delivered</span>
-            <span className="min-w-0 flex-1">Answers, 24h</span>
+            <span className="min-w-0 flex-1">Answers in the last day</span>
             <span className="w-[110px] shrink-0 text-right">Answer time</span>
           </CardColumns>
-          {d.apps.map((app) => (
+          {sortByName(d.apps, (a) => a.name ?? a.client_id, (a) => a.client_id).map((app) => (
             <AppRow key={app.client_id} app={app} />
           ))}
         </Unfold>
@@ -434,7 +437,6 @@ function ConfigLine({ row, names }: { row: ConfigRow; names: Names }) {
         <StatusDot tone={STATE_TONE[row.state]} />
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="text-[14px] text-ink [text-wrap:pretty]">
-            <span className="text-faint">{row.check} · </span>
             {labelOf(row, names)}
           </span>
           {row.state === "cannot" ? (
@@ -552,8 +554,9 @@ function note(row: ConfigRow): string | null {
 
 function External({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-accent-text link-hover">
-      {children} →
+    <a href={href} target="_blank" rel="noreferrer" className={ARROW_LINK}>
+      {children}
+      <span aria-hidden>→</span>
     </a>
   );
 }
@@ -587,14 +590,14 @@ function fixFor(row: ConfigRow, names: Names): ReactNode {
 function AlertNote({ notes }: { notes: string[] }) {
   if (notes.includes("EXTERNAL_ALERT_UNREACHABLE")) {
     return (
-      <p className="row-divider px-5 py-3 text-[13px] text-faint">
+      <p className="row-divider px-5 py-3 text-[13px] text-muted">
         Syndra couldn&rsquo;t reach the alert outside it on its last try, so a silence there may be Syndra&rsquo;s, not delivery&rsquo;s.
       </p>
     );
   }
   if (notes.includes("NO_EXTERNAL_ALERT")) {
     return (
-      <p className="row-divider px-5 py-3 text-[13px] text-faint">
+      <p className="row-divider px-5 py-3 text-[13px] text-muted">
         No alert outside Syndra is set up, so if Syndra itself stops, nobody is told. Set <Mono>SYNDRA_DEADMAN_URL</Mono> in the
         server&rsquo;s .env to have one.
       </p>

@@ -75,7 +75,7 @@ describe("connected systems", () => {
     expect(screen.getByText("No system is connected.")).toBeTruthy();
     // And says what would connect one, because the operator's next question is
     // not "is it empty" but "what do I do about it".
-    expect(screen.getByText(/ADDON_TARGETS/)).toBeTruthy();
+    expect(screen.getByText(/Whoever runs the Syndra server connects one/)).toBeTruthy();
   });
 
   it("does not claim a count it does not have", () => {

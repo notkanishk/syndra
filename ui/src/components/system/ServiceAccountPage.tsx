@@ -13,7 +13,7 @@ import { Owner } from "@/components/system/ServiceAccountOwner";
 import { ServiceAccountDialog, UnmarkDialog } from "@/components/system/ServiceAccountDialogs";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
-import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { ApiError } from "@/lib/api-client";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { useCrumb } from "@/lib/page-crumb";
@@ -89,7 +89,7 @@ function ServiceAccountView({
   const machine = account.zitadel_type === "machine";
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         eyebrow={
           <Link href="/system/service-accounts" className="link-hover">
@@ -97,8 +97,7 @@ function ServiceAccountView({
           </Link>
         }
         title={account.name}
-        meta={<MetaRow>{[kindLabel(account.kind), machine ? "Machine key" : "Signs in"]}</MetaRow>}
-        lede={account.purpose || undefined}
+        lede="Made for one purpose, not one person. It never asks for access."
       />
 
       <Card>
@@ -191,7 +190,7 @@ function Holds({ userId, name }: { userId: string; name: string }) {
   const grantsByRole = new Map((grants.data ?? []).map((grant) => [`${grant.project_id}::${grant.role_key}`, grant]));
   const grantsResolved = !grants.isLoading && !grants.error;
 
-  const rows = (access.data?.projects ?? []).flatMap((project) =>
+  const rows = sortByName(access.data?.projects ?? [], (p) => p.project_name, (p) => p.project_id).flatMap((project) =>
     sortByName(project.effective_role_keys, humanizeKey, (k) => k).map((roleKey) => {
       const reasons: RoleReason[] = [...project.source_roles, ...project.derived_roles]
         .filter((role) => role.role_key === roleKey)

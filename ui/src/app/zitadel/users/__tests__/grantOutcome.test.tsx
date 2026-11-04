@@ -39,16 +39,20 @@ function submitEdit() {
   fireEvent.click(within(dialog).getByRole("button", { name: "Replace roles in Zitadel" }));
 }
 
-// A success closed the dialog and took its outcome with it: the operator saw
-// nothing say the change had happened.
+// A success used to close the dialog onto the row; the sheet now becomes its result (A-17 G4).
 describe("replacing roles in Zitadel", () => {
-  it("keeps its outcome visible on the page after the dialog closes", async () => {
+  it("ends on its result in the sheet, with the act's word and one Close", async () => {
     state.update.mockResolvedValue(undefined);
     render(<UpstreamUsersPage />);
     submitEdit();
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(document.body.textContent).toMatch(/Roles replaced in Zitadel/);
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByText("Replaced")).toBeTruthy());
+    expect(dialog.textContent).toMatch(/Roles replaced in Zitadel/);
+    expect(within(dialog).queryByRole("button", { name: "Replace roles in Zitadel" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("keeps a failure in the dialog, beside the retry", async () => {

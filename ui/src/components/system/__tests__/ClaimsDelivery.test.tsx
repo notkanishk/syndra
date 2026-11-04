@@ -82,6 +82,25 @@ const renderIt = () => render(<ClaimsDelivery domain="auth.example.org" connecte
 
 beforeEach(() => set(delivery()));
 
+describe("Claims delivery, A-17", () => {
+  // The roster arrives in the server's order; every list of names is A to Z.
+  it("lists apps A to Z, whatever order the server sent", () => {
+    const d = delivery();
+    d.apps = [d.apps[1], d.apps[0]]; // Wiki, then NetBird
+    set(d);
+    renderIt();
+    fireEvent.click(screen.getByRole("button", { name: "Show each app" }));
+    const links = screen.getAllByRole("link").map((a) => a.textContent);
+    expect(links.indexOf("NetBird")).toBeLessThan(links.indexOf("Wiki"));
+  });
+
+  it("says when it was read with the shared read line, and the toggle is an outline button", () => {
+    renderIt();
+    expect(screen.getByText("This section was read just now")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show each app" }).className).toMatch(/border-line-strong/);
+  });
+});
+
 describe("Claims delivery, calm", () => {
   it("is one sentence a part, with no Notice and the detail folded", () => {
     renderIt();

@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 
 import { UserName } from "@/components/names/UserName";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ChosenChip } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
@@ -159,19 +160,17 @@ export function ServiceAccountDialog({
         )}
       </div>
       <ModalFooter
+        cancel={done ? undefined : { onClick: onClose, disabled: save.isPending }}
         note={done ? undefined : marking ? "This finishes now. It leaves People, the people counts and the welcome bundle; nothing about its access changes." : undefined}
       >
         {done ? (
-          <Button onClick={onClose}>Close</Button>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
         ) : (
-          <>
-            <Button disabled={save.isPending} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button variant="accent" isPending={save.isPending} disabled={Boolean(reason)} reason={reason} onClick={send}>
-              {marking ? "Mark as a service account" : "Save"}
-            </Button>
-          </>
+          <Button variant="accent" isPending={save.isPending} disabled={Boolean(reason)} reason={reason} onClick={send}>
+            {marking ? "Mark as a service account" : "Save"}
+          </Button>
         )}
       </ModalFooter>
     </Modal>
@@ -202,20 +201,17 @@ function OwnerPicker({
 
   if (value) {
     return (
-      <span className="inline-flex max-w-full items-center gap-2 rounded-pill border border-line-strong py-1 pl-3.5 pr-1">
-        <span className="min-w-0 text-[14.5px] [overflow-wrap:anywhere]">
-          <span className="font-semibold">{value.name || <UserName id={value.id} />}</span>
+      <ChosenChip removeLabel="Clear owner" onRemove={() => onChange(null)}>
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          {value.name || <UserName id={value.id} />}
           {value.title && (
             <>
-              <span aria-hidden className="text-faint"> · </span>
-              <span className="text-faint">{value.title}</span>
+              <span aria-hidden className="font-normal text-faint"> · </span>
+              <span className="font-normal text-faint">{value.title}</span>
             </>
           )}
         </span>
-        <Button variant="ghost" size="sm" aria-label="Clear owner" onClick={() => onChange(null)}>
-          <span aria-hidden>×</span>
-        </Button>
-      </span>
+      </ChosenChip>
     );
   }
 
@@ -290,18 +286,18 @@ export function UnmarkDialog({ account, onClose }: { account: { id: string; name
           </Unfold>
         )}
       </div>
-      <ModalFooter note={done ? undefined : "This finishes now."}>
+      <ModalFooter
+        cancel={done ? undefined : { onClick: onClose, disabled: unmark.isPending }}
+        note={done ? undefined : "This finishes now."}
+      >
         {done ? (
-          <Button onClick={onClose}>Close</Button>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
         ) : (
-          <>
-            <Button disabled={unmark.isPending} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button variant="accent" isPending={unmark.isPending} onClick={send}>
-              Mark as a person
-            </Button>
-          </>
+          <Button variant="accent" isPending={unmark.isPending} onClick={send}>
+            Mark as a person
+          </Button>
         )}
       </ModalFooter>
     </Modal>
