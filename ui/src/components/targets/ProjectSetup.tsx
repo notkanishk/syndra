@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { StatusDot } from "@/components/ui/Badge";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeaderLink } from "@/components/ui/Card";
+import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
 import { FieldHint, FieldLabel } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Notice } from "@/components/ui/Notice";
 import { Select } from "@/components/ui/Select";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { targetLabel } from "@/lib/nav";
@@ -35,18 +36,6 @@ import { sortByName } from "@/lib/sort";
  * listed, disabled and named, rather than hidden.
  */
 
-function StepBar({ step }: { step: 1 | 2 }) {
-  return (
-    <span className="inline-flex items-center gap-2.5 text-[12.5px] font-semibold text-accent-text">
-      Step {step} of 2
-      <span aria-hidden className="flex w-[72px] gap-1">
-        <span className="h-1 flex-1 rounded-pill bg-accent" />
-        <span className={`h-1 flex-1 rounded-pill ${step === 2 ? "bg-accent" : "bg-accent-line"}`} />
-      </span>
-    </span>
-  );
-}
-
 export function ProjectStep({ target, onSet }: { target: string; onSet: (name: string) => void }) {
   const name = targetLabel(target);
   const projects = useProjects();
@@ -58,61 +47,56 @@ export function ProjectStep({ target, onSet }: { target: string; onSet: (name: s
   for (const t of roster.data ?? []) {
     if (t.target !== target && t.project) usedBy.set(t.project.id, targetLabel(t.target));
   }
-  const rows = projects.data ?? [];
+  const rows = sortByName(projects.data ?? [], (r) => r.project.name, (r) => r.project.id);
 
   return (
-    <section
-      id="project"
-      aria-labelledby="project-title"
-      className="flex scroll-mt-4 flex-col gap-3.5 rounded-panel border border-accent-line bg-accent-soft px-6 pb-6 pt-[22px]"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
-        <h2 id="project-title" className="flex items-center gap-2.5 font-display text-[19px] font-semibold text-accent-text">
-          <StatusDot tone="accent" />
-          Choose {name}&apos;s Zitadel project
-        </h2>
-        <StepBar step={1} />
-      </div>
-      <div className="flex flex-col gap-4 tablet:pl-[18px]">
-        <p className="max-w-[72ch] text-[14.5px] leading-[1.55] text-ink [text-wrap:pretty]">
-          Its roles decide who gets an account on {name}, so nothing below can give anyone access until it
-          is set. Next, you map those roles to {name} groups.
-        </p>
-        <form
-          className="flex flex-wrap items-center gap-x-3 gap-y-2.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const project = rows.find((r) => r.project.id === chosen)?.project;
-            if (project) set.mutate(project.id, { onSuccess: () => onSet(project.name) });
-          }}
-        >
-          <div className="min-w-[220px] flex-[0_1_360px]">
-            <Select aria-label="Zitadel project" value={chosen} onChange={(e) => setChosen(e.target.value)}>
-              <option value="">{projects.isLoading ? "Reading Zitadel's projects…" : "Choose a project…"}</option>
-              {rows.map(({ project }) => {
-                const user = usedBy.get(project.id);
-                const roles = project.roles.length;
-                return (
-                  <option key={project.id} value={project.id} disabled={Boolean(user)}>
-                    {project.name} ·{" "}
-                    {user ? `used by ${user}` : roles === 0 ? "no roles yet" : `${roles} role${roles === 1 ? "" : "s"}`}
-                  </option>
-                );
-              })}
-            </Select>
-          </div>
-          <span className="flex-none whitespace-nowrap">
-            <Button type="submit" variant="accent" disabled={!chosen} isPending={set.isPending}>
-              Use this project
-            </Button>
+    <section id="project" aria-labelledby="project-title" className="scroll-mt-4">
+      <Card>
+        <CardHeader
+          title={<span id="project-title">Choose {name}&apos;s Zitadel project</span>}
+          note="Step 1 of 2"
+        />
+        <div className="flex flex-col gap-4 px-5 pb-5">
+          <p className="max-w-[72ch] text-[14.5px] leading-[1.55] text-ink [text-wrap:pretty]">
+            Its roles decide who gets an account on {name}, so nothing below can give anyone access until it
+            is set. Next, you map those roles to {name} groups.
+          </p>
+          <form
+            className="flex flex-wrap items-center gap-x-3 gap-y-2.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const project = rows.find((r) => r.project.id === chosen)?.project;
+              if (project) set.mutate(project.id, { onSuccess: () => onSet(project.name) });
+            }}
+          >
+            <div className="min-w-[220px] flex-[0_1_360px]">
+              <Select aria-label="Zitadel project" value={chosen} onChange={(e) => setChosen(e.target.value)}>
+                <option value="">{projects.isLoading ? "Reading Zitadel's projects…" : "Choose a project…"}</option>
+                {rows.map(({ project }) => {
+                  const user = usedBy.get(project.id);
+                  const roles = project.roles.length;
+                  return (
+                    <option key={project.id} value={project.id} disabled={Boolean(user)}>
+                      {project.name} ·{" "}
+                      {user ? `used by ${user}` : roles === 0 ? "no roles yet" : `${roles} role${roles === 1 ? "" : "s"}`}
+                    </option>
+                  );
+                })}
+              </Select>
+            </div>
+            <span className="flex-none whitespace-nowrap">
+              <Button type="submit" variant="accent" size="sm" disabled={!chosen} isPending={set.isPending}>
+                Use this project
+              </Button>
+            </span>
+          </form>
+          <span className="text-[13px] leading-[1.5] text-muted [text-wrap:pretty]">
+            A project serves one system, so one already in use can&apos;t be picked. Changing it later means
+            removing its mappings first.
           </span>
-        </form>
-        <span className="-mt-1.5 text-[13px] leading-[1.5] text-muted [text-wrap:pretty]">
-          A project serves one system, so one already in use can&apos;t be picked. Changing it later means
-          removing its mappings first.
-        </span>
-        {set.error && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error))}</p>}
-      </div>
+          {set.error && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(set.error))}</p>}
+        </div>
+      </Card>
     </section>
   );
 }
@@ -121,27 +105,19 @@ export function ProjectStep({ target, onSet }: { target: string; onSet: (name: s
 export function ProjectSet({ target, project }: { target: string; project: string }) {
   const name = targetLabel(target);
   return (
-    <section
-      role="status"
-      className="lift-in flex flex-col gap-3.5 rounded-panel border border-accent-line bg-accent-soft px-6 pb-6 pt-[22px]"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
-        <h2 className="flex items-center gap-2.5 font-display text-[19px] font-semibold text-ink">
-          <StatusDot tone="healthy" bloom />
-          {name} uses {project}.
-        </h2>
-        <StepBar step={2} />
-      </div>
-      <div className="flex flex-col gap-4 tablet:pl-[18px]">
-        <p className="max-w-[72ch] text-[14.5px] leading-[1.55] text-ink [text-wrap:pretty]">
-          Nobody&apos;s access changed: no role reaches {name} yet. Map {project}&apos;s roles to {name} groups to
-          give people accounts there.
-        </p>
-        <ArrowLink href={`/system/targets/${target}/mappings`} className="self-start whitespace-nowrap">
-          Map its roles to {name} groups
-        </ArrowLink>
-      </div>
-    </section>
+    <div className="flex flex-col gap-3">
+      <ActionOutcome
+        word="Chosen"
+        outcome={{
+          kind: "applied",
+          message: `${name} uses ${project}.`,
+          detail: `Nobody's access changed: no role reaches ${name} yet. Map ${project}'s roles to ${name} groups to give people accounts there.`,
+        }}
+      />
+      <ArrowLink href={`/system/targets/${target}/mappings`} className="self-start whitespace-nowrap">
+        Map its roles to {name} groups
+      </ArrowLink>
+    </div>
   );
 }
 
@@ -273,6 +249,8 @@ function HomeLocationDialog({
   const share = (label(setting.values[0] ?? current).split(" › ")[0] || "the share").trim();
   const none = setting.values_read && setting.values.length === 0;
   const changing = Boolean(current) && chosen !== "" && chosen !== current;
+  // The dialog ends on its result, with Close; it never closes onto the row.
+  const [done, setDone] = useState<{ word: string; message: string } | null>(null);
   const already = homes.data?.read
     ? homes.data.accounts.filter((a) => a.home?.startsWith(`${current}/`)).length
     : undefined;
@@ -284,6 +262,11 @@ function HomeLocationDialog({
         titleId="home-title"
         lede={`Everyone whose role gives a home folder gets one of their own in it, named after their account and private to them. It's one folder for every role on ${name}.`}
       />
+      {done ? (
+        <div className="px-6">
+          <ActionOutcome word={done.word} outcome={{ kind: "applied", message: done.message }} />
+        </div>
+      ) : (
       <div className="flex flex-col gap-4 px-6">
         <div className="flex flex-col gap-1.5">
           <FieldLabel htmlFor="home-folder">Folder in {share}</FieldLabel>
@@ -305,18 +288,14 @@ function HomeLocationDialog({
           </FieldHint>
         </div>
         {none && (
-          <div role="status" className="tint-in panel flex flex-col gap-1.5 px-4 py-3.5 text-[14px] leading-[1.55]">
-            <span className="font-semibold">{share} has no folder to make homes in.</span>
-            <span className="text-muted [text-wrap:pretty]">
-              Homes go inside a folder at the top of the {share} share, and {share} has none yet. Make one on {name},
-              then read again. Mappings work without it; none can give a home folder until one is chosen.
-            </span>
-            <span className="mt-1 flex">
-              <Button variant="outline" size="sm" onClick={() => void settings.refetch()}>
-                Read again
-              </Button>
-            </span>
-          </div>
+          <Notice
+            tone="neutral"
+            title={`${share} has no folder to make homes in.`}
+            action={{ label: "Read again", onClick: () => void settings.refetch() }}
+          >
+            Homes go inside a folder at the top of the {share} share, and {share} has none yet. Make one on {name},
+            then read again. Mappings work without it; none can give a home folder until one is chosen.
+          </Notice>
         )}
         {changing && (
           <div className="flex flex-col rounded-inner border border-line-strong">
@@ -338,25 +317,43 @@ function HomeLocationDialog({
         )}
         {save.error && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(save.error))}</p>}
       </div>
+      )}
       <ModalFooter
+        cancel={done ? undefined : { onClick: onClose }}
         note={
-          none
-            ? `Nothing to choose until ${share} has a folder.`
-            : current
-              ? "Takes effect now. Nothing is moved, and nobody's access changes."
-              : "Takes effect now. Nothing is made until a mapping gives home folders."
+          done
+            ? undefined
+            : none
+              ? `Nothing to choose until ${share} has a folder.`
+              : current
+                ? "Takes effect now. Nothing is moved, and nobody's access changes."
+                : "Takes effect now. Nothing is made until a mapping gives home folders."
         }
       >
-        <Button onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          variant="accent"
-          disabled={none || !chosen || chosen === current || save.isPending}
-          onClick={() => save.mutate({ name: HOME_ROOT, value: chosen }, { onSuccess: onClose })}
-        >
-          {current ? `Make new homes in ${label(chosen)}` : `Use ${label(chosen)}`}
-        </Button>
+        {done ? (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        ) : (
+          <Button
+            variant="accent"
+            disabled={none || !chosen || chosen === current || save.isPending}
+            onClick={() =>
+              save.mutate(
+                { name: HOME_ROOT, value: chosen },
+                {
+                  onSuccess: () =>
+                    setDone({
+                      word: current ? "Changed" : "Chosen",
+                      message: `New home folders go in ${label(chosen)}. Nothing was moved.`,
+                    }),
+                },
+              )
+            }
+          >
+            {current ? `Make new homes in ${label(chosen)}` : `Use ${label(chosen)}`}
+          </Button>
+        )}
       </ModalFooter>
     </Modal>
   );

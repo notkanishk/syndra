@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { EmptyState, ListStates } from "@/components/states";
 import { HoldDialog } from "@/components/review/HoldDialog";
 import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
-import { TakeAwayDialog } from "@/components/targets/TakeAwayDialog";
+import { RevokeDialog } from "@/components/targets/RevokeDialog";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
@@ -75,7 +75,7 @@ export function PeopleOnTarget({ target, stale = false }: { target: string; stal
       <CardHeader
         title="Accounts Syndra manages"
         count={inventory.data?.bound}
-        note="Put what a role gives them on hold, or revoke it (end their access)"
+        note="Put what a role gives them on hold, or revoke it"
       />
       <ListStates
         isLoading={inventory.isLoading}
@@ -135,7 +135,7 @@ function PersonRow({
   /** Their home folder limit and where it comes from; absent until read. */
   home?: AccountHome;
 }) {
-  const [dialog, setDialog] = useState<"hold" | "takeaway" | "limit" | null>(null);
+  const [dialog, setDialog] = useState<"hold" | "revoke" | "limit" | null>(null);
   const verb = limitVerb(home);
   // The name, because both dialogs speak to and about a person — and rung 3
   // asks the operator to type it. Through the same resolver every other surface
@@ -175,7 +175,7 @@ function PersonRow({
           <Button variant="outline" size="sm" onClick={() => setDialog("hold")}>
             Put on hold
           </Button>
-          <Button variant="danger" size="sm" onClick={() => setDialog("takeaway")}>
+          <Button variant="danger" size="sm" onClick={() => setDialog("revoke")}>
             Revoke
           </Button>
         </span>
@@ -207,8 +207,8 @@ function PersonRow({
           onClose={() => setDialog(null)}
         />
       )}
-      {dialog === "takeaway" && (
-        <TakeAwayDialog
+      {dialog === "revoke" && (
+        <RevokeDialog
           target={target}
           subjectId={account.subject_id}
           subjectName={name}

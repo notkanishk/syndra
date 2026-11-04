@@ -364,7 +364,7 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
       compose={
         <div>
           <FieldLabel htmlFor="mapping-new-value">New value for {mapping.field}</FieldLabel>
-          {/* Same reason as the take-away dialog: on touch, focusing on mount
+          {/* Same reason as the revoke dialog: on touch, focusing on mount
               raises the keyboard over the lede saying that everybody holding
               this role moves with the change. */}
           <Input
@@ -374,7 +374,7 @@ function EditMappingDialog({ mapping, onClose }: { mapping: RoleMapping; onClose
             autoFocus={!touch}
           />
           <FieldHint>
-            Checked against {targetLabel(mapping.target)} before you go further — a group
+            Checked against {targetLabel(mapping.target)} before you go further. A group
             that does not exist there is refused now, not later.
           </FieldHint>
         </div>
@@ -495,19 +495,7 @@ function VersionHistory({ target }: { target: string }) {
       />
 
       {/* The note and the Publish control live in the version band above, and
-          only there. Two of each on one screen was two things that could
-          disagree — and they did: this one refused a blank note and the band
-          did not. A reader working out which is authoritative has already
-          lost. What stays here is the list, and the sentence saying what a
-          version is for. */}
-      <div className="px-5 pb-4">
-        <p className="text-[13.5px] text-muted">
-          A version is a snapshot of which roles are mapped here, so a later change can be
-          rolled back to it. The note is the only record of why this set was the right one — it is
-          what somebody reads when they are deciding whether to come back.
-        </p>
-      </div>
-
+          only there, with what a version is for. What stays here is the list. */}
       <ListStates
         isLoading={history.isLoading}
         error={history.error}
@@ -552,6 +540,7 @@ function VersionRow({
   const [rehearsing, setRehearsing] = useState(false);
   const [rehearsed, setRehearsed] = useState<BulkPlan | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const names = useShownNames();
 
   return (
     <div className={`row-divider px-5 py-3.5 ${current ? "bg-accent-soft" : ""}`}>
@@ -587,7 +576,7 @@ function VersionRow({
             {" · "}
             {version.entries
               .slice(0, 3)
-              .map((e) => `${e.role_key} → ${e.value}`)
+              .map((e) => `${names.role(e.project_id, e.role_key)}: ${e.value}`)
               .join(", ")}
             {version.entries.length > 3 && `, and ${version.entries.length - 3} more`}
           </>
@@ -596,7 +585,7 @@ function VersionRow({
 
       {/* On the version row that was rolled back to, which is the row the
           operator is looking at and the thing that changed. */}
-      {outcome && <ActionOutcome outcome={outcome} className="mt-3" />}
+      {outcome && <ActionOutcome outcome={outcome} word="Rolled back" className="mt-3" />}
 
       {rehearsing && (
         <RehearsalDialog
@@ -624,10 +613,10 @@ function VersionRow({
                 onSuccess: (result) => {
                   setOutcome({
                     kind: "queued",
-                    message: `Rolled back to version ${version.version} — account changes for ${
+                    message: `Rolled back to version ${version.version}. Account changes for ${
                       result.queued_convergences
                     } ${result.queued_convergences === 1 ? "person are" : "people are"} waiting for you to send`,
-                    detail: `Nothing has reached ${targetLabel(target)} yet — send them from Pending changes.`,
+                    detail: `Nothing has reached ${targetLabel(target)} yet. Send them from Pending changes.`,
                   });
                   // The plan the dialog showed is the one being reported back,
                   // with every row now queued — `asPlan` carries the outcomes

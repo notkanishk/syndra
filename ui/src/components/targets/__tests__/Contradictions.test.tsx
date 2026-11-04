@@ -36,6 +36,10 @@ vi.mock("@/components/names", () => ({
   UserName: ({ id, fallback }: { id: string; fallback?: string }) => <span>{id || fallback}</span>,
 }));
 
+vi.mock("@/components/system/ServiceAccountTag", () => ({
+  useAccountHref: () => (id: string) => `/users/${id}`,
+}));
+
 function conflict(): MergeFinding {
   return {
     id: "f_2210",
