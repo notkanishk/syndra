@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { Seat } from "@/components/ui/Choice";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { LIGHT_LEAD_MS, TINT_MS, stillMotion, useExitPhase } from "@/lib/motion";
@@ -177,16 +177,11 @@ function SelectionBarBody({
         </>
       )}
       {canNarrow && !overCeiling ? (
-        <>
-          {" — "}
-          <button
-            type="button"
-            onClick={onSelectVisibleOnly}
-            className="font-semibold text-accent-text link-tint"
-          >
-            select only the {visibleCount} {noun[1]} shown
-          </button>
-        </>
+        <span className="ml-2.5 inline-flex align-middle">
+          <Button size="sm" onClick={onSelectVisibleOnly}>
+            Select only the {visibleCount} shown
+          </Button>
+        </span>
       ) : null}
     </span>
   );
@@ -324,23 +319,16 @@ export function SelectionAction({
   sheet?: boolean;
   children: React.ReactNode;
 }) {
-  const size =
-    wide === undefined
-      ? "px-3.5 text-[13px] desktop:min-h-0 desktop:py-1.5"
-      : wide
-        ? "min-w-0 flex-1 px-3.5 text-[14px]"
-        : "flex-none px-4 text-[14px]";
+  // The phone bar's second row is 14px and shares its width (A-12 §2); the desktop row is the sm pill as it is.
+  const phone = wide === undefined ? "" : wide ? "min-w-0 flex-1 text-[14px]" : "flex-none text-[14px]";
+  // The button's own surface, not `<Button>`: its reason wrapper would keep `flex-1` from reaching the row.
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       aria-haspopup={sheet ? "dialog" : undefined}
-      className={`min-h-[44px] rounded-pill border font-semibold control press-scale disabled:cursor-not-allowed disabled:opacity-50 ${size} ${
-        tone === "danger"
-          ? "border-danger-line text-danger-text hover:bg-danger-soft"
-          : "border-line-strong hover:bg-[var(--hover)]"
-      }`}
+      className={buttonClasses({ variant: tone === "danger" ? "danger" : "outline", size: "sm", disabled, className: phone })}
     >
       {children}
     </button>

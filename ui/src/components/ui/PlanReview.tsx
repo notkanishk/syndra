@@ -3,8 +3,9 @@
 import Link from "next/link";
 import type { BulkOutcome, BulkPlan } from "@/lib/queries/useBulkGrants";
 import { OUTCOME_LABEL, PLAN_EFFECT_LABEL, PLAN_EFFECT_TONE } from "@/lib/outcome";
-import { StatusDot } from "@/components/ui/Badge";
+import { Badge, StatusDot } from "@/components/ui/Badge";
 import { UserName } from "@/components/names/UserName";
+import { sortByName } from "@/lib/sort";
 
 /**
  * The rehearsal, rendered.
@@ -97,14 +98,14 @@ export function PlanReview({
           <p className="px-4 py-3 text-[13.5px] text-muted">{emptyNote(plan.op)}</p>
         ) : (
           <>
-            {outcomes.map((outcome) => (
+            {sortByName(outcomes, (o) => o.name || o.email || o.user_id, (o) => o.user_id).map((outcome) => (
               <PlanRow key={outcome.user_id} outcome={outcome} applied={plan.applied} />
             ))}
             {/* #32: the requester, left out of anything that takes access away. */}
             {plan.excluded?.map((left) => (
               <div key={left.user_id} className="row-divider flex items-start gap-4 px-4 py-3">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14.5px] font-semibold">
+                  <span className="block text-[14.5px] font-semibold">
                     <UserName id={left.user_id} />
                   </span>
                   <span className="block text-[13px] text-muted">
@@ -147,7 +148,7 @@ function PlanRow({ outcome, applied }: { outcome: BulkOutcome; applied: boolean 
   return (
     <div className="row-divider flex items-start gap-4 px-4 py-3">
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14.5px] font-semibold">
+        <span className="block text-[14.5px] font-semibold">
           {/* A plan names people when its backend surface could; otherwise the
               resolver does, from the id every outcome carries. Never a dead
               "Name not available": that read as a broken group or person. */}
@@ -168,14 +169,12 @@ function PlanRow({ outcome, applied }: { outcome: BulkOutcome; applied: boolean 
           ) : null}
         </span>
       </span>
-      <span
-        className={`inline-flex shrink-0 items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12.5px] font-semibold ${tone}`}
-      >
+      <Badge tone={tone} className="shrink-0 gap-1.5">
         {/* A change that will wait wears the amber dot and says so in the future
             tense. No link: nothing is queued yet, so there is nothing to send. */}
         {forecast && <StatusDot tone="warn" />}
         {label}
-      </span>
+      </Badge>
     </div>
   );
 }

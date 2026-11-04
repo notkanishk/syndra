@@ -24,7 +24,7 @@ export function Avatar({
   return (
     <span
       aria-hidden
-      className={`avatar-fill flex flex-none items-center justify-center rounded-pill font-display font-semibold text-ink/75 ${SIZES[size]} ${className}`}
+      className={`avatar-fill flex flex-none items-center justify-center rounded-pill font-display font-semibold text-muted ${SIZES[size]} ${className}`}
     >
       {initials(name)}
     </span>

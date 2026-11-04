@@ -1100,13 +1100,10 @@ function RoleGroup({
           {/* No dead ends: Basic names the cause and offers one scoped jump. It
               leaves the way the lineage arrives, when Advanced opens. */}
           <Unfold open={!advanced && strongest?.kind === "mapping"}>
-            <div className="px-5 pb-3 pt-2.5">
-              <Button
-                variant="accentSoft"
-                size="sm"
-                onClick={() => onReveal(`role-${projectId}-${role.role_key}`)}
-              >
-                This came from an automatic rule — Open automation details →
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 pb-3 pt-2.5">
+              <span className="text-[13px] text-muted">This came from an automatic rule.</span>
+              <Button size="sm" onClick={() => onReveal(`role-${projectId}-${role.role_key}`)}>
+                Show the rule
               </Button>
             </div>
           </Unfold>

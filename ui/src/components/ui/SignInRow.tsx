@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Unfold } from "@/components/ui/Unfold";
 
 /**
@@ -42,11 +43,9 @@ export function SignInRow({
           aria-expanded={open}
           aria-label={open ? `Close the sign-in at ${time}` : `Open the sign-in at ${time}`}
           onClick={onToggle}
-          className="flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[12.5px] text-muted control press-scale"
+          className="flex-none rounded-pill control press-scale"
         >
-          <span aria-hidden className={`inline-block motion-tint ${open ? "rotate-90" : ""}`}>
-            ›
-          </span>
+          <FoldChevron open={open} />
         </button>
         <span className="type-mono w-[96px] flex-none text-[13px]">{time}</span>
         <span className="ml-auto tablet:hidden">{check}</span>

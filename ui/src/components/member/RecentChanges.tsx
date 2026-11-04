@@ -38,7 +38,7 @@ export function RecentChanges({
       <CardHeader
         title="Recent changes"
         note="Last 30 days"
-        action={<CardHeaderLink href="/requests">All your requests →</CardHeaderLink>}
+        action={<CardHeaderLink href="/requests">All your requests</CardHeaderLink>}
       />
       {items.map((change, i) => (
         <ChangeRow

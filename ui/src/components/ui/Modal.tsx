@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { Button } from "@/components/ui/Button";
 import { FLASH_MS } from "@/lib/useFlashOnChange";
 import { LIGHT_LEAD_MS, SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 
@@ -595,13 +596,30 @@ export function ModalHeader({
   );
 }
 
+/**
+ * Where a dialog's Cancel sits beside its act (A-17 G4, owner's question Q1).
+ * Every footer with a Cancel passes it as `cancel`, so this one line orders
+ * them all. `false` keeps what most dialogs did when the question was asked:
+ * the act first, Cancel after it.
+ */
+export const CANCEL_FIRST = false;
+
 export function ModalFooter({
   children,
   note,
+  cancel,
 }: {
+  /** The act (accent, or dangerConfirm), or after the result one outline Close. */
   children: React.ReactNode;
   note?: React.ReactNode;
+  /** The quieter half of the pair: always ghost (owner, 4 Nov), placed by `CANCEL_FIRST`. */
+  cancel?: { onClick: () => void; label?: string; disabled?: boolean };
 }) {
+  const quiet = cancel && (
+    <Button variant="ghost" onClick={cancel.onClick} disabled={cancel.disabled}>
+      {cancel.label ?? "Cancel"}
+    </Button>
+  );
   // Sticky to the panel's own bottom edge, and opaque, so a dialog long enough
   // to scroll keeps its actions in reach instead of burying them under the
   // fold. On a dialog short enough not to scroll this is inert — sticky only
@@ -615,7 +633,11 @@ export function ModalFooter({
   // clipped while typing. The margin is transparent, so the ring shows.
   return (
     <div className="sticky bottom-0 mt-2 flex flex-none flex-col gap-2.5 bg-surface-2 px-6 pb-[22px] pt-5">
-      <div className="flex flex-wrap items-center gap-2.5">{children}</div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        {CANCEL_FIRST && quiet}
+        {children}
+        {!CANCEL_FIRST && quiet}
+      </div>
       {note && <div className="text-[12.5px] leading-[1.5] text-faint">{note}</div>}
     </div>
   );

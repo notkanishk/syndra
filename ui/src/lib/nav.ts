@@ -144,7 +144,8 @@ export const ADVANCED_NAV: NavEntry[] = [
     // The LLDAP bridge's row. Gone with the bridge: it named a service that no
     // longer exists, and a nav entry for a deleted subsystem is worse than a
     // missing one — an operator clicks it before they read anything.
-    leaf("Incoming events", "/operations"),
+    // Exact: a prefix would light this row on Change history (/operations/cascades) too.
+    leaf("Incoming events", "/operations", { pattern: /^\/operations$/ }),
   ]),
   // Last, and a leaf of its own: settings that belong to the whole makerspace
   // rather than to one connected system (the term dates, today). Appended, so

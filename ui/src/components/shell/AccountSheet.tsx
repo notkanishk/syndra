@@ -46,7 +46,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
       >
         <span
           aria-hidden
-          className="avatar-fill flex h-[34px] w-[34px] flex-none items-center justify-center rounded-pill text-[12.5px] font-semibold text-ink/70"
+          className="avatar-fill flex h-[34px] w-[34px] flex-none items-center justify-center rounded-pill text-[12.5px] font-semibold text-muted"
         >
           {session.avatar}
         </span>
@@ -66,7 +66,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
           <div className="flex items-center gap-3">
             <span
               aria-hidden
-              className="avatar-fill flex h-[44px] w-[44px] flex-none items-center justify-center rounded-pill text-[15px] font-semibold text-ink/70"
+              className="avatar-fill flex h-[44px] w-[44px] flex-none items-center justify-center rounded-pill text-[15px] font-semibold text-muted"
             >
               {session.avatar}
             </span>
@@ -91,7 +91,9 @@ export function AccountSheet({ session }: { session: SessionUser }) {
                   onClick={() => setOpen(false)}
                   className="-mx-2 flex min-h-[44px] flex-col justify-center gap-0.5 rounded-inner px-2 py-1.5 hover-tint"
                 >
-                  <span className="text-[14.5px] font-semibold text-accent-text">{item.label} →</span>
+                  <span className="text-[14.5px] font-semibold text-accent-text">
+                    {item.label} <span aria-hidden>→</span>
+                  </span>
                   <span className="text-[13px] text-muted">{OWN_NOTES[item.href]}</span>
                 </Link>
               ))}
@@ -131,14 +133,9 @@ export function AccountSheet({ session }: { session: SessionUser }) {
               are thinking about the app rather than about a machine they want
               to book. Absent entirely when there is nothing to offer. */}
           {installer && (
-            <button
-              type="button"
-              onClick={() => void installer.install()}
-              className="flex min-h-[44px] items-center justify-between rounded-inner border border-line px-4 text-[14.5px] control press-scale hover:bg-[var(--hover)]"
-            >
-              <span>Install as an app</span>
-              <span className="text-muted">Adds a home-screen icon</span>
-            </button>
+            <Button size="sm" className="w-full" onClick={() => void installer.install()}>
+              Install as an app
+            </Button>
           )}
         </div>
 
@@ -151,8 +148,7 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             </Button>
           </form>
           <p className="mt-2.5 text-[12.5px] leading-[1.5] text-faint">
-            Signing out signs you out in every open tab. You stay signed in for weeks otherwise,
-            so there is no need to do this at the end of each visit.
+            Signing out signs you out in every open tab.
           </p>
         </div>
       </Modal>
