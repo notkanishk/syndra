@@ -696,7 +696,9 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 	if allowanceErr != nil {
 		hints = append(hints, "Carve-outs could not be read, so this view may not show every restriction in force.")
 	}
-	if len(bundles) == 0 {
+	// Said only of somebody who holds something: for a person who holds nothing
+	// "everything they hold was given directly" contradicts the empty view.
+	if len(bundles) == 0 && len(roleMap) > 0 {
 		hints = append(hints, "No bundle yet: everything they hold was given directly.")
 	}
 	if len(roleMap) >= 5 {

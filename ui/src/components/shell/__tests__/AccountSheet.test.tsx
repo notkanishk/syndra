@@ -126,3 +126,24 @@ describe("the account sheet", () => {
     expect(screen.queryByRole("link", { name: /Network storage|My access/ })).toBeNull();
   });
 });
+
+describe("About Syndra", () => {
+  it("is closed by default, above Sign out, and opens in place", () => {
+    open();
+    const row = screen.getByRole("button", { name: /About Syndra/ });
+    expect(row).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/keeps the door of the hall/)).toBeNull();
+    const out = screen.getByRole("button", { name: "Sign out" });
+    expect(row.compareDocumentPosition(out) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(row);
+    expect(row).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/keeps the door of the hall/)).toBeTruthy();
+    expect(screen.queryByText(/Frigg/)).toBeNull();
+    expect(screen.getByText(/the reason for every name on it/)).toBeTruthy();
+    expect(screen.getByText("Built in the lab it runs. Powered by Zitadel.")).toBeTruthy();
+
+    fireEvent.click(row);
+    expect(row).toHaveAttribute("aria-expanded", "false");
+  });
+});

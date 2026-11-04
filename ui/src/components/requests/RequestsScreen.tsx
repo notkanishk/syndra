@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -180,6 +181,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
     narrowedBy: needle,
   });
   const drawn = leaving.rows;
+  const clearedByMe = useQueueCleared(rows, !requests.isLoading && !requests.error, true).cleared?.mine != null;
   // The columns belong to the list as drawn: they stay while a decided row is
   // still showing its outcome, or the outcome would move under the reader.
   const anyPending = drawn.some((entry) => entry.status === "pending");
@@ -300,6 +302,9 @@ function OperatorQueue({ userId }: { userId?: string }) {
                     ? "No open requests."
                     : `No ${status} requests match those filters.`
               }
+              // The all-clear rises and blooms only after this operator's own act.
+              lift={clearedByMe && !needle && status === "pending"}
+              bloom={clearedByMe && !needle && status === "pending"}
               guidance={
                 needle
                   ? "Try part of a name, or a role."
