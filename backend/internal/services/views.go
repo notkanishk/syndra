@@ -697,7 +697,7 @@ func ExplainUserAccess(ctx context.Context, userID string) (models.UserAccessVie
 		hints = append(hints, "Carve-outs could not be read, so this view may not show every restriction in force.")
 	}
 	if len(bundles) == 0 {
-		hints = append(hints, "No Syndra bundle is assigned yet, so this user depends entirely on direct platform grants.")
+		hints = append(hints, "No bundle yet: everything they hold was given directly.")
 	}
 	if len(roleMap) >= 5 {
 		hints = append(hints, "This user spans several systems; review whether every downstream permission is still required.")
@@ -1465,7 +1465,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 			key := roleKey{projectID: role.ProjectID, roleKey: role.RoleKey}
 			reason := models.RoleReason{
 				Kind:        "bundle",
-				Description: fmt.Sprintf("Granted by bundle %s v%d", bundle.Name, bundle.PinnedVersion),
+				Description: fmt.Sprintf("Given by bundle %s v%d", bundle.Name, bundle.PinnedVersion),
 				BundleID:    bundle.ID,
 				BundleName:  bundle.Name,
 			}

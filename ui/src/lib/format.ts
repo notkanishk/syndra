@@ -310,7 +310,7 @@ export function whyNotChecked(reason: string): string {
     case "target_unreachable":
       return "It did not answer when Syndra last tried.";
     case "read_refused":
-      return "It answered and would not serve the read — something to fix rather than wait out.";
+      return "It answered and would not serve the read: something to fix rather than wait out.";
     case "read_stale":
       return "It served an older copy of itself, which cannot be compared against what Syndra expects.";
     case "read_truncated":

@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
+import { sortNames } from "@/lib/sort";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects, type ProjectSummaryRow } from "@/lib/queries/useProjects";
 
@@ -47,6 +48,7 @@ export default function ProjectsPage() {
       list.push(entry.application.name);
       map.set(entry.application.project_id, list);
     }
+    map.forEach((names, id) => map.set(id, sortNames(names)));
     return map;
   }, [apps.data]);
 
@@ -77,6 +79,8 @@ export default function ProjectsPage() {
   // One basis for the whole page — every row carries an identical copy, so
   // the freshness is stated here once rather than once per row.
   const basis = all[0]?.observation;
+  // People is what Syndra decided, not what Zitadel has confirmed: stated once
+  // here rather than once per row (one-truth-many-checks).
   const readState: ReadState = {
     readAt: basis?.read_at,
     current: basis ? basis.current : undefined,
@@ -84,10 +88,10 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Projects"
-        lede="A project is a machine or area with its own set of roles — the Laser Cutter, the Studio. Each app checks a person's roles against one project. Open one to see its roles and who holds them."
+        lede="A project is a machine or area with its own set of roles, like the Laser Cutter or the Studio. Open one to see its roles and who holds them."
         meta={
           all.length > 0
             ? `${all.length} ${all.length === 1 ? "project" : "projects"} · ${servedCount} apps served`
@@ -104,15 +108,8 @@ export default function ProjectsPage() {
             aria-label="Search projects by name or app"
           />
         }
+        read={all.length > 0 ? <ReadFreshness state={readState} subject="What Zitadel confirmed" /> : undefined}
       />
-
-      {/*
-        People is what Syndra decided, not what Zitadel has confirmed — stated
-        once here rather than once per row. See one-truth-many-checks.
-      */}
-      {all.length > 0 && (
-        <ReadFreshness state={readState} subject="What Zitadel confirmed" className="-mt-1.5 px-[2px]" />
-      )}
 
       <Card stale={readState.current === false}>
         <CardColumns>
@@ -175,7 +172,7 @@ export default function ProjectsPage() {
                 </span>
                 {roleCount === 0 ? (
                   <span className="text-[13px] text-faint [text-wrap:pretty]">
-                    No roles yet — nothing here can be granted
+                    No roles yet.
                   </span>
                 ) : (
                   <span className="text-[13px] text-faint desktop:hidden">

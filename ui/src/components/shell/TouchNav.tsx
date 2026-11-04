@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
-import { VIEW_EXPLANATION, ViewSwitch } from "@/components/shell/ViewSwitch";
+import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
 import { Unfold } from "@/components/ui/Unfold";
 import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavLeaf } from "@/lib/nav";
@@ -374,9 +374,6 @@ function NavSheet({
             <ViewSwitch fill />
           </div>
         )}
-        {isOperator && (
-          <p className="mb-3 px-3.5 text-[12.5px] leading-[1.5] text-faint">{VIEW_EXPLANATION}</p>
-        )}
 
         {/* No `gap`: each row carries its own 2px above it (`mt-0.5`), so a part
             that folds takes its gap with it. */}
@@ -540,7 +537,7 @@ function SheetRow({
       aria-current={active ? "page" : undefined}
       className={`mt-0.5 flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
-      } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-ink/80"}`}
+      } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-muted"}`}
     >
       <span className="flex-1 truncate">{label}</span>
 

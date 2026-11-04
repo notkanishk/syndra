@@ -198,7 +198,7 @@ describe("after a bundle is retired", () => {
     // Nothing left to destroy, so nothing offers to.
     expect(screen.queryByRole("button", { name: "Retire and revoke" })).toBeNull();
     // And the way out stops being a refusal, because there is nothing to refuse.
-    expect(screen.queryByRole("button", { name: "Keep it" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
@@ -223,7 +223,7 @@ describe("after a bundle is retired", () => {
     // Nothing was deleted, so the offer stands and the way out is still a
     // refusal. Relabelling here would tell the operator it worked.
     expect(screen.getByRole("button", { name: "Retire and revoke" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Keep it" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     expect(state.push).not.toHaveBeenCalled();
   });

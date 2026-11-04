@@ -96,8 +96,8 @@ export function HoldingNote({ request }: { request: AccessRequest }) {
   }
   if (!holding || holding.kind === "none") return null;
   return (
-    <span className="flex w-full items-baseline gap-2 text-[13px] text-warn-text">
-      <StatusDot tone="warn" />
+    <span className="flex w-full items-baseline gap-2 text-[13px] text-muted">
+      <StatusDot tone="neutral" />
       {holding.kind === "until"
         ? `Already has this, until ${formatShortDate(holding.until)}.`
         : "Already has this, with no end."}{" "}

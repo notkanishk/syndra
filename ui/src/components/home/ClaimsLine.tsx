@@ -2,6 +2,7 @@
 
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { Term } from "@/components/ui/Term";
 import { formatClock, formatWhen } from "@/lib/format";
 import { useClaimsStatus, type ClaimsStatus } from "@/lib/queries/useClaimsDelivery";
 
@@ -22,9 +23,11 @@ export function ClaimsLine() {
   return (
     <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[13.5px] text-muted">
       {tone && <StatusDot tone={tone} />}
-      <span>Claims:{" "}</span>
+      <span>
+        <Term name="claim">Claims</Term>:
+      </span>
       {!s ? (
-        <span className="text-faint">{status.error ? "couldn't check how delivery is going." : "checking"}</span>
+        <span className="text-faint">{status.error ? "Couldn't check how delivery is going." : "checking"}</span>
       ) : s.status === "ok" ? (
         <span>{calmWords(s)}</span>
       ) : (

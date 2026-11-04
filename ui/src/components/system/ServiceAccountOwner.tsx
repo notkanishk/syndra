@@ -3,8 +3,8 @@
 import Link from "next/link";
 
 import { UserName } from "@/components/names/UserName";
-import { StatusDot } from "@/components/ui/Badge";
 import { Crossfade } from "@/components/ui/Crossfade";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 
 /** The person who answers for it, linked; or a warn dot and "No owner" (A-07 §31). */
 export function Owner({ id }: { id: string }) {
@@ -16,10 +16,7 @@ export function Owner({ id }: { id: string }) {
           <UserName id={id} />
         </Link>
       ) : (
-        <span className="inline-flex items-center gap-2 font-semibold text-warn-text">
-          <StatusDot tone="warn" />
-          No owner
-        </span>
+        <StatusSeat tone="warn" word="No owner" />
       )}
     </Crossfade>
   );

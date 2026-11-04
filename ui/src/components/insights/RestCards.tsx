@@ -1,8 +1,10 @@
 import type { RestCard } from "@/components/insights/useFindings";
+import { EmptyState } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
 
-const DOT = { drift: "bg-danger", send: "bg-warn", single: "bg-warn", unused: "bg-muted", overlap: "bg-muted" } as const;
+const DOT: Record<RestCard["finding"], StatusTone> = { drift: "danger", send: "warn", single: "warn", unused: "neutral", overlap: "neutral" };
 
 /**
  * Below tablet the answer is the page (N20, 20a). At rest the map lists what
@@ -13,13 +15,11 @@ export function RestCards({ cards }: { cards: RestCard[] }) {
   return (
     <Card>
       <CardHeader title="Worth a look" count={cards.length} />
-      {cards.length === 0 && (
-        <p className="row-divider px-5 py-3.5 text-[13.5px] text-muted">Nothing needs a look right now.</p>
-      )}
+      {cards.length === 0 && <EmptyState resolved title="Nothing needs a look right now." />}
       {cards.map((card) => (
         <div key={card.finding} className="row-divider flex flex-col gap-[5px] px-5 py-3.5">
           <span className="flex items-center gap-2 text-[12.5px] font-semibold text-muted">
-            <span aria-hidden className={`size-2 flex-none rounded-pill ${DOT[card.finding]}`} />
+            <StatusDot tone={DOT[card.finding]} />
             {card.kind}
           </span>
           <span className="text-[15px] font-semibold [text-wrap:pretty]">{card.title}</span>

@@ -9,6 +9,7 @@ import { ProjectClaimDefault } from "@/components/projects/ProjectClaimDefault";
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ErrorState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
+import { CopyableValue } from "@/components/ui/CopyableValue";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -17,6 +18,7 @@ import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useCrumb } from "@/lib/page-crumb";
+import { sortByName } from "@/lib/sort";
 import { useApplications } from "@/lib/queries/useApplications";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
@@ -51,11 +53,18 @@ export default function ProjectDetailPage({
   const titleTint = useTintAfterSkeleton(projects.isLoading && !project);
 
   const projectRoles = useMemo(
-    () => (roles.data ?? []).filter((role) => role.project_id === id),
+    () =>
+      sortByName(
+        (roles.data ?? []).filter((role) => role.project_id === id),
+        (role) => role.display_name || humanizeKey(role.role_key),
+        (role) => role.role_key,
+      ),
     [roles.data, id],
   );
-  const served = (apps.data ?? []).filter(
-    (entry) => entry.application.project_id === id,
+  const served = sortByName(
+    (apps.data ?? []).filter((entry) => entry.application.project_id === id),
+    (entry) => entry.application.name,
+    (entry) => entry.application.id,
   );
   const [creating, setCreating] = useState(false);
 
@@ -88,9 +97,8 @@ export default function ProjectDetailPage({
   }
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
-        eyebrow="Projects"
         // Never the id: while the list loads the title is a skeleton, and a project the
         // list doesn't carry is said so in words.
         title={
@@ -102,59 +110,51 @@ export default function ProjectDetailPage({
             "That project isn't listed"
           )
         }
-        lede="The roles this project offers, the apps that check them, and who holds each."
-        // Nothing until the project is in hand: "0 roles · no app reads this yet" is a
-        // count of nothing, said as though it were a fact about the project.
+        lede={
+          <>
+            The roles this project offers and who holds each.
+            {/* Each app it reads is a link to the app (RULES: every name with a page of its own links there). */}
+            <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {served.length > 0 ? (
+                <>
+                  <span>Read by</span>
+                  {served.map((entry) => (
+                    <ArrowLink key={entry.application.id} href={`/applications/${entry.application.id}`}>
+                      {entry.application.name}
+                    </ArrowLink>
+                  ))}
+                </>
+              ) : (
+                <span>No app reads this yet.</span>
+              )}
+            </span>
+          </>
+        }
+        // Nothing until the project is in hand: "0 roles" would be a count of nothing, said as
+        // though it were a fact about the project. The project id stays (owner Q6).
         meta={
           !project ? undefined : (
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>
-              {people
-                ? `${people.headline} ${people.headline === "1" ? "person" : "people"} · `
-                : ""}
-              {projectRoles.length}{" "}
-              {projectRoles.length === 1 ? "role" : "roles"}
-              {served.length > 0 ? " · serves" : " · no app reads this yet"}
-            </span>
-            {/* Each app it serves is a link to the app (RULES: every name with
-                a page of its own links there). */}
-            {served.map((entry) => (
-              <ArrowLink key={entry.application.id} href={`/applications/${entry.application.id}`}>
-                {entry.application.name}
-              </ArrowLink>
-            ))}
-            {people?.note && (
-              <span
-                className={`text-[13.5px] ${holdersToneClass[people.tone]}`}
-              >
-                {people.note}
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                {people ? `${people.headline} ${people.headline === "1" ? "person" : "people"} · ` : ""}
+                {projectRoles.length} {projectRoles.length === 1 ? "role" : "roles"}
               </span>
-            )}
-            <Tinted show={advanced}>
-              <Mono className="text-faint">{id}</Mono>
-            </Tinted>
-            {/* Its own line, as the board draws it. */}
-            <span className="basis-full">
-              <ReadFreshness state={readState} subject="What Zitadel confirmed" />
+              <Tinted show={advanced}>
+                <CopyableValue inline value={id} label="Project ID" />
+              </Tinted>
             </span>
-          </span>
           )
         }
         actions={
-          <>
-            {/*
-              The natural place to add a role to this project is this page. It
-              used to exist only on the cross-project index, so the closest
-              affordance here was "Check upstream" — which creates the role in
-              the identity provider with no local row, and it comes back as
-              unexplained access.
-            */}
+          project && (
             <Button variant="accent" onClick={() => setCreating(true)}>
               New role
             </Button>
-          </>
+          )
         }
       />
+
+      {project && <ReadFreshness state={readState} subject="What Zitadel confirmed" />}
 
       <Card stale={readState.current === false}>
         <CardColumns>
@@ -176,11 +176,7 @@ export default function ProjectDetailPage({
           empty={
             <EmptyState
               title="No roles listed in this project."
-              guidance="Create one here, or check Zitadel — roles created directly there may not be listed yet."
-              action={{
-                label: "Create a role",
-                onClick: () => setCreating(true),
-              }}
+              guidance="Roles created directly in Zitadel may not be listed yet."
             />
           }
         >
@@ -197,7 +193,12 @@ export default function ProjectDetailPage({
               >
                 <div className="min-w-[min(220px,100%)] flex-1">
                   <div className="text-[15px] font-semibold">
-                    {role.display_name || humanizeKey(role.role_key)}
+                    <Link
+                      href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
+                      className="link-hover"
+                    >
+                      {role.display_name || humanizeKey(role.role_key)}
+                    </Link>
                     {/* Below tablet the When given column is gone; the mark
                         stays, after the name, and says it on tap or focus. */}
                     {role.waits_for_send && (
@@ -238,11 +239,8 @@ export default function ProjectDetailPage({
                   )}
                 </span>
 
-                <Link
-                  href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
-                  className="flex min-h-11 w-[110px] shrink-0 flex-col items-end justify-center gap-0.5 text-[15px] font-semibold text-accent-text desktop:min-h-6 link-hover"
-                >
-                  <span>{members.headline} →</span>
+                <span className="flex w-[110px] shrink-0 flex-col items-end gap-0.5 text-[15px]">
+                  <span>{members.headline}</span>
                   {members.note && (
                     <span
                       className={`text-[12.5px] font-normal ${holdersToneClass[members.tone]}`}
@@ -250,7 +248,7 @@ export default function ProjectDetailPage({
                       {members.note}
                     </span>
                   )}
-                </Link>
+                </span>
               </div>
             );
           })}
@@ -258,13 +256,9 @@ export default function ProjectDetailPage({
       </Card>
 
       {projectRoles.length > 0 && (
-        <p className="-mt-1 px-5 text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
-          When given says whether a change to a role goes straight to Zitadel or waits for you to
-          send it.{" "}
-          <ArrowLink href="/changes/roles-that-wait" className="inline-flex">
-            Set in Roles that wait
-          </ArrowLink>
-        </p>
+        <div className="px-5">
+          <ArrowLink href="/changes/roles-that-wait">Set in Roles that wait</ArrowLink>
+        </div>
       )}
 
       {/* The project default's one write place (A-14 §7); each app page reads it. */}

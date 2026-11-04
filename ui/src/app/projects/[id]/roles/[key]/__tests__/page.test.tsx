@@ -19,6 +19,11 @@ function fulfilled<T>(value: T): Promise<T> {
 
 const state = vi.hoisted(() => ({ data: undefined as RoleMembersView | undefined }));
 
+vi.mock("@/lib/queries/useNameResolver", () => ({
+  useNameResolver: () => ({
+    resolveProject: () => ({ value: undefined, resolved: true }),
+  }),
+}));
 vi.mock("@/lib/queries/useRoleMembers", () => ({
   useRoleMembers: () => ({ data: state.data, isLoading: false, error: null, refetch: () => {} }),
   useRemoveDirectGrant: () => ({ mutate: vi.fn(), isPending: false }),
@@ -59,7 +64,7 @@ describe("role members — holding is observed", () => {
     renderPage();
 
     expect(screen.getByText("2 people hold this role")).toBeInTheDocument();
-    expect(screen.getByText("In Zitadel without Syndra giving it")).toBeInTheDocument();
+    expect(screen.getByText("In Zitadel only")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Nina Roy/ })).toHaveAttribute("href", "/users/u2");
     expect(screen.getByRole("link", { name: /Review in drift/ })).toHaveAttribute(
       "href",
@@ -80,7 +85,7 @@ describe("role members — holding is observed", () => {
     renderPage();
 
     expect(screen.getByText("1 person holds this role")).toBeInTheDocument();
-    expect(screen.queryByText("In Zitadel without Syndra giving it")).not.toBeInTheDocument();
+    expect(screen.queryByText("In Zitadel only")).not.toBeInTheDocument();
   });
 
   it("flags a member Syndra granted it to but Zitadel doesn't show holding it", () => {

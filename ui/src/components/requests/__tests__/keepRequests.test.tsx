@@ -54,6 +54,7 @@ vi.mock("@/lib/queries/useNameResolver", () => ({
   }),
 }));
 vi.mock("@/components/names", () => ({
+  UserAvatar: () => null,
   ProjectName: () => <span>Laser Lab</span>,
   RoleRef: () => <span>Laser Lab · Operator</span>,
   UserName: ({ id }: { id: string }) => <span>{id === "u9" ? "Ada Lovelace" : "Kanishk Singh"}</span>,
@@ -104,7 +105,7 @@ describe("The queue · a request to keep a role", () => {
     const row = screen.getByText(/^Keep/).closest(".row-divider") as HTMLElement;
     expect(within(row).getByText(/^Keep/)).toHaveTextContent("Keep Laser Lab · Operator");
     expect(within(row).getByText(/^Another month · to 17 Jan( 2027)? instead of 18 Dec$/)).toBeInTheDocument();
-    expect(within(row).getByText(/^“Capstone build\.”$/)).toBeInTheDocument();
+    expect(within(row).getByText(/^Capstone build\.$/)).toBeInTheDocument();
     expect(
       within(row).getByText(/^Approving moves Ada[’']s end date to 17 Jan( 2027)?\. Nothing else changes\.$/),
     ).toBeInTheDocument();

@@ -88,7 +88,7 @@ describe("ManageBundles", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
 
     expect(screen.getByText(/2 unpublished changes/)).toBeInTheDocument();
-    expect(screen.getByText(/an assignment gives v2/)).toBeInTheDocument();
+    expect(screen.getByText(/an assignment gives v2/i)).toBeInTheDocument();
   });
 
   // The pre-apply hint used to promise "Queues for confirmation" every time
@@ -99,17 +99,19 @@ describe("ManageBundles", () => {
     open();
     fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
 
-    expect(screen.getByText("Recorded in Syndra first, not sent yet")).toBeInTheDocument();
+    expect(screen.getByText("Recorded in Syndra first, not sent yet.")).toBeInTheDocument();
     expect(screen.queryByText(/queues for confirmation/i)).not.toBeInTheDocument();
   });
 
-  it("reports Applied — not queued — when the assignment reaches nobody yet", async () => {
+  it("reports Recorded, not queued, when the assignment reaches nobody yet", async () => {
     state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 0 } });
     open();
     fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
 
-    expect(await screen.findByText("Applied")).toBeInTheDocument();
+    // The act's own word, never the "Applied" fallback.
+    expect(await screen.findByText("Recorded")).toBeInTheDocument();
+    expect(screen.queryByText("Applied")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
     expect(screen.getByText(/nothing is waiting for you to send/i)).toBeInTheDocument();
   });

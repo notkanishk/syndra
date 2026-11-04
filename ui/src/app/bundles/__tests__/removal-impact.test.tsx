@@ -66,10 +66,10 @@ describe("dropping a role from a bundle's working copy", () => {
     render(<BundlePage bundleId="b1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    fireEvent.click(screen.getByRole("button", { name: "Drop it from the working copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove from the next version" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: "Drop it from the working copy" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove from the next version" })).toBeNull();
     expect(state.remove).toHaveBeenCalledTimes(1);
   });
 
@@ -78,10 +78,10 @@ describe("dropping a role from a bundle's working copy", () => {
     render(<BundlePage bundleId="b1" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    fireEvent.click(screen.getByRole("button", { name: "Drop it from the working copy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove from the next version" }));
 
     await waitFor(() => expect(screen.getByText(/Nothing was changed/i)).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Drop it from the working copy" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove from the next version" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
   });
 });

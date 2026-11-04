@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BulkDialog } from "@/components/people/BulkDialog";
@@ -110,9 +110,17 @@ describe("BulkDialog", () => {
     expect(screen.getByRole("button", { name: "Preview the change" })).toBeDisabled();
   });
 
+  // The role picker, never a native select: a project's roles sit in its fold.
+  function chooseRole() {
+    const dialog = screen.getByRole("dialog");
+    if (!within(dialog).queryByRole("radio", { name: /Trained/ })) {
+      fireEvent.click(within(dialog).getByRole("button", { name: /Laser Lab/ }));
+    }
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Trained/ }));
+  }
+
   async function rehearse() {
-    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pLaser" } });
-    fireEvent.change(screen.getByLabelText("Role"), { target: { value: "trained" } });
+    chooseRole();
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview the change" }));
     await screen.findByText("Ada Lovelace");
@@ -178,18 +186,9 @@ describe("BulkDialog", () => {
   // the only control on screen and says nothing about which of five gaps is
   // open. Each is checked with the others satisfied, so the visible reason
   // names the one gap actually left.
-  describe("says which of the five gaps is open", () => {
-    it("no project chosen", () => {
+  describe("says which of the four gaps is open", () => {
+    it("no role chosen (a role is picked with its project, so one gap covers both)", () => {
       open();
-      fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
-      // Exact text: the select's own "Choose a project…" option is a substring
-      // match away from the reason under the button.
-      expect(screen.getByText("Choose a project.")).toBeInTheDocument();
-    });
-
-    it("no role chosen", () => {
-      open();
-      fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pLaser" } });
       fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "New cohort" } });
       expect(screen.getByText("Choose a role.")).toBeInTheDocument();
     });
@@ -209,9 +208,10 @@ describe("BulkDialog", () => {
 
     it("reason left blank", () => {
       open();
-      fireEvent.change(screen.getByLabelText("Project"), { target: { value: "pLaser" } });
-      fireEvent.change(screen.getByLabelText("Role"), { target: { value: "trained" } });
+      chooseRole();
       expect(screen.getByText(/Say why/)).toBeInTheDocument();
+      // The log is named as the page names it, never "audit log".
+      expect(screen.getByText(/Change history/)).toBeInTheDocument();
     });
   });
 

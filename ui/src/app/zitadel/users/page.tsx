@@ -4,15 +4,21 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { DirectWriteWarning, UpstreamShell } from "@/components/upstream/UpstreamShell";
+import {
+  DirectWriteWarning,
+  UpstreamShell,
+  WriteFooter,
+  WriteResult,
+} from "@/components/upstream/UpstreamShell";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { FilterBar } from "@/components/ui/FilterBar";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
-import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Modal, ModalHeader } from "@/components/ui/Modal";
+import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { Select } from "@/components/ui/Select";
 import { ProjectName } from "@/components/names";
 import {
@@ -37,6 +43,29 @@ function userStateLabel(state: string): string {
 const AUDIT_ONLY =
   "Syndra recorded one line in Audit and nothing else; it will not explain this access anywhere.";
 
+/** A grant's roles, wrapping: a role key is never cut short. */
+function RoleKeys({ keys }: { keys: string[] }) {
+  return (
+    <>
+      {sortNames(keys).map((key) => (
+        <Mono key={key} className="mr-1.5 text-muted [overflow-wrap:anywhere]">
+          {key}
+        </Mono>
+      ))}
+    </>
+  );
+}
+
+/** The comma-separated role keys a person typed, as a list. */
+function parseKeys(keys: string): string[] {
+  return keys
+    .split(",")
+    .map((key) => key.trim())
+    .filter(Boolean);
+}
+
+type GrantRef = { grantId: string; roleKeys: string[]; projectId: string };
+
 /**
  * Users and their grants, as the identity provider holds them.
  *
@@ -50,6 +79,7 @@ export default function UpstreamUsersPage() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const search = useDebounce(query, 200).trim().toLowerCase();
+  const paging = usePaging();
 
   const rows = useMemo(() => {
     const all = sortByName(users.data?.items ?? [], (user) => user.displayName || user.userName);
@@ -59,6 +89,7 @@ export default function UpstreamUsersPage() {
     );
   }, [users.data, search]);
 
+  const visible = rows.slice(0, paging.limit);
   const activeId = selected ?? rows[0]?.id ?? null;
   const active = rows.find((user) => user.id === activeId);
 
@@ -69,17 +100,23 @@ export default function UpstreamUsersPage() {
       syndraHref="/users"
       syndraLabel="See the same people as Syndra understands them"
     >
-      <div className="flex flex-col items-stretch gap-5 tablet:flex-row tablet:flex-wrap tablet:items-start">
+      <FilterBar
+        search={
+          <Input
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              paging.back();
+            }}
+            placeholder="Name, username or email"
+            aria-label="Search people by name, username or email"
+          />
+        }
+      />
+
+      <div className="flex flex-col items-stretch gap-4 tablet:flex-row tablet:flex-wrap tablet:items-start">
         <Card className="w-full tablet:w-[320px] tablet:min-w-[260px] tablet:flex-none">
-          <CardHeader title="People" count={rows.length} />
-          <div className="row-divider px-4 py-3">
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Name, username or email"
-              aria-label="Search people by name, username or email"
-            />
-          </div>
+          <CardHeader title="People" count={users.isLoading ? undefined : rows.length} />
           <ListStates
             isLoading={users.isLoading}
             error={users.error}
@@ -101,7 +138,7 @@ export default function UpstreamUsersPage() {
               />
             }
           >
-            {rows.slice(0, 100).map((user) => (
+            {visible.map((user) => (
               <button
                 key={user.id}
                 type="button"
@@ -117,11 +154,13 @@ export default function UpstreamUsersPage() {
                 <span className="truncate text-[12.5px] text-faint">{user.email}</span>
               </button>
             ))}
-            {rows.length > 100 && (
-              <div className="row-divider px-4 py-2.5 text-[13px] text-faint">
-                and {rows.length - 100} more — narrow the search
-              </div>
-            )}
+            <PaginationRow
+              shown={visible.length}
+              total={rows.length}
+              onMore={paging.more}
+              onAll={() => paging.all(rows.length)}
+              onBack={paging.back}
+            />
           </ListStates>
         </Card>
 
@@ -141,16 +180,9 @@ export default function UpstreamUsersPage() {
 
 function UserGrants({ userId, name, state }: { userId: string; name: string; state: string }) {
   const grants = useUpstreamUserGrants(userId);
-  const remove = useUpstreamRemoveGrant();
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [assigning, setAssigning] = useState(false);
-  const [editing, setEditing] = useState<{ grantId: string; roleKeys: string[]; projectId: string } | null>(
-    null,
-  );
-  const [revoking, setRevoking] = useState<{ grantId: string; roleKeys: string[]; projectId: string } | null>(
-    null,
-  );
-  const [acknowledged, setAcknowledged] = useState(false);
+  const [editing, setEditing] = useState<GrantRef | null>(null);
+  const [revoking, setRevoking] = useState<GrantRef | null>(null);
 
   const rows = grants.data?.items ?? [];
 
@@ -158,12 +190,10 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
     <Card>
       <CardHeader
         title={name}
-        count={rows.length}
+        count={grants.isLoading ? undefined : rows.length}
         note={userStateLabel(state)}
         action={
-          // Granting, not revoking — `danger` here made this indistinguishable
-          // from the "Revoke roles" button on the same row below.
-          <Button size="sm" variant="accent" onClick={() => setAssigning(true)}>
+          <Button size="sm" variant="outline" onClick={() => setAssigning(true)}>
             Give roles in Zitadel
           </Button>
         }
@@ -181,159 +211,110 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
         onRetry={() => grants.refetch()}
         errorTitle="Couldn't read this person's roles from Zitadel."
         skeleton={<RowSkeleton rows={3} avatar={false} label="Reading roles" />}
-        empty={
-          <EmptyState
-            title="No roles in Zitadel."
-            guidance="Zitadel has given this person no roles."
-          />
-        }
+        empty={<EmptyState title="No roles in Zitadel." />}
       >
-        {rows.map((grant) => (
-          <div key={grant.id} className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
-            <span className="min-w-[200px] flex-1 truncate text-[14.5px]">
-              <ProjectName id={grant.projectId} />{" "}
-              {sortNames(grant.roleKeys).map((key) => (
-                <Mono key={key} className="mr-1.5 text-muted">
-                  {key}
-                </Mono>
-              ))}
-            </span>
-            <Mono className="w-[170px] shrink-0 truncate text-faint">{grant.id}</Mono>
-            <span className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() =>
-                  setEditing({
-                    grantId: grant.id,
-                    roleKeys: grant.roleKeys,
-                    projectId: grant.projectId,
-                  })
-                }
-              >
-                Change roles
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => {
-                  setAcknowledged(false);
-                  setRevoking({
-                    grantId: grant.id,
-                    roleKeys: grant.roleKeys,
-                    projectId: grant.projectId,
-                  });
-                }}
-              >
-                Revoke roles
-              </Button>
-            </span>
-          </div>
-        ))}
+        {rows.map((grant) => {
+          const ref: GrantRef = { grantId: grant.id, roleKeys: grant.roleKeys, projectId: grant.projectId };
+          return (
+            <div
+              key={grant.id}
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4"
+            >
+              <span className="min-w-[200px] flex-1 text-[14.5px] [overflow-wrap:anywhere]">
+                <ProjectName id={grant.projectId} /> <RoleKeys keys={grant.roleKeys} />
+              </span>
+              <Mono className="max-w-full shrink-0 text-faint [overflow-wrap:anywhere] tablet:w-[170px]">
+                {grant.id}
+              </Mono>
+              <span className="flex gap-2">
+                <Button size="sm" onClick={() => setEditing(ref)}>
+                  Change roles
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => setRevoking(ref)}>
+                  Revoke roles
+                </Button>
+              </span>
+            </div>
+          );
+        })}
       </ListStates>
 
-      {outcome && <ActionOutcome outcome={outcome} className="mx-5 mb-4" />}
-
-      {revoking && (
-        <Modal
-          open
-          onClose={() => setRevoking(null)}
-          busy={remove.isPending}
-          size="sm"
-          labelledBy="revoke-grant-title"
-        >
-          <ModalHeader
-            title={`Revoke ${revoking.roleKeys.length === 1 ? "this role" : "these roles"} from ${name} in Zitadel?`}
-            titleId="revoke-grant-title"
-            lede="Revoking ends their access. It happens the moment you press the button, with no preview, and Syndra keeps no record of why."
-          />
-          <div className="flex flex-col gap-3.5 px-6">
-            <div className="text-[14.5px]">
-              <ProjectName id={revoking.projectId} />{" "}
-              {sortNames(revoking.roleKeys).map((key) => (
-                <Mono key={key} className="mr-1.5 text-muted">
-                  {key}
-                </Mono>
-              ))}
-            </div>
-            <AcknowledgeCount
-              checked={acknowledged}
-              onChange={setAcknowledged}
-              count={revoking.roleKeys.length}
-              noun="roles"
-              verb="revokes"
-              consequence={`${name} loses these roles once the change reaches Zitadel — revocations send on their own, every few minutes. Syndra records the revocation as its own, so it is explained afterwards.`}
-            />
-          </div>
-          <ModalFooter>
-            <Button
-              variant="dangerConfirm"
-              disabled={!acknowledged}
-              reason={
-                !acknowledged
-                  ? "Check the box above to confirm you understand the consequence."
-                  : undefined
-              }
-              isPending={remove.isPending}
-              onClick={async () => {
-                try {
-                  await remove.mutateAsync({ userId, grantId: revoking.grantId });
-                  setOutcome({
-                    kind: "applied",
-                    message: "Roles revoked in Zitadel",
-                    detail: AUDIT_ONLY,
-                  });
-                  setRevoking(null);
-                } catch (error) {
-                  setOutcome(outcomeFromError(error));
-                  setRevoking(null);
-                }
-              }}
-            >
-              {revoking.roleKeys.length === 1
-                ? "Revoke this role in Zitadel"
-                : `Revoke these ${revoking.roleKeys.length} roles in Zitadel`}
-            </Button>
-            <Button onClick={() => setRevoking(null)}>Keep the roles</Button>
-          </ModalFooter>
-        </Modal>
-      )}
-
-      {/* A dialog that succeeds closes, so its outcome is said here, where the
-          revoke's already is; a failure stays in the dialog, beside the retry. */}
-      {assigning && (
-        <AssignDialog
-          userId={userId}
-          onClose={() => setAssigning(false)}
-          onApplied={(applied) => {
-            setOutcome(applied);
-            setAssigning(false);
-          }}
-        />
-      )}
-      {editing && (
-        <EditRolesDialog
-          userId={userId}
-          grant={editing}
-          onClose={() => setEditing(null)}
-          onApplied={(applied) => {
-            setOutcome(applied);
-            setEditing(null);
-          }}
-        />
-      )}
+      {revoking && <RevokeDialog userId={userId} name={name} grant={revoking} onClose={() => setRevoking(null)} />}
+      {assigning && <AssignDialog userId={userId} onClose={() => setAssigning(false)} />}
+      {editing && <EditRolesDialog userId={userId} grant={editing} onClose={() => setEditing(null)} />}
     </Card>
   );
 }
 
-function AssignDialog({
+function RevokeDialog({
   userId,
+  name,
+  grant,
   onClose,
-  onApplied,
 }: {
   userId: string;
+  name: string;
+  grant: GrantRef;
   onClose: () => void;
-  onApplied: (outcome: Outcome) => void;
 }) {
+  const remove = useUpstreamRemoveGrant();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const done = outcome?.kind === "applied";
+
+  return (
+    <Modal open onClose={onClose} busy={remove.isPending} size="sm" labelledBy="revoke-grant-title">
+      <ModalHeader
+        title={`Revoke ${grant.roleKeys.length === 1 ? "this role" : "these roles"} from ${name} in Zitadel?`}
+        titleId="revoke-grant-title"
+        lede={
+          done
+            ? undefined
+            : "Revoking ends their access. It happens the moment you press the button, with no preview, and Syndra keeps no record of why."
+        }
+      />
+      {!done && (
+        <div className="flex flex-col gap-3.5 px-6">
+          <div className="text-[14.5px]">
+            <ProjectName id={grant.projectId} /> <RoleKeys keys={grant.roleKeys} />
+          </div>
+          <AcknowledgeCount
+            checked={acknowledged}
+            onChange={setAcknowledged}
+            count={grant.roleKeys.length}
+            noun="roles"
+            verb="revokes"
+            consequence={`${name} loses these roles once the change reaches Zitadel. Revocations send on their own, every few minutes. Syndra records the revocation as its own, so it is explained afterwards.`}
+          />
+        </div>
+      )}
+      {outcome && <WriteResult outcome={outcome} word="Revoked" />}
+
+      <WriteFooter outcome={outcome} onClose={onClose}>
+        <Button
+          variant="dangerConfirm"
+          disabled={!acknowledged}
+          reason={!acknowledged ? "Check the box above to confirm you understand the consequence." : undefined}
+          isPending={remove.isPending}
+          onClick={async () => {
+            try {
+              await remove.mutateAsync({ userId, grantId: grant.grantId });
+              setOutcome({ kind: "applied", message: "Roles revoked in Zitadel", detail: AUDIT_ONLY });
+            } catch (error) {
+              setOutcome(outcomeFromError(error));
+            }
+          }}
+        >
+          {grant.roleKeys.length === 1
+            ? "Revoke this role in Zitadel"
+            : `Revoke these ${grant.roleKeys.length} roles in Zitadel`}
+        </Button>
+      </WriteFooter>
+    </Modal>
+  );
+}
+
+function AssignDialog({ userId, onClose }: { userId: string; onClose: () => void }) {
   const projects = useUpstreamProjects();
   const [projectId, setProjectId] = useState("");
   const roles = useUpstreamProjectRoles(projectId || null);
@@ -341,65 +322,63 @@ function AssignDialog({
   const assign = useUpstreamAssignGrant();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  const done = outcome?.kind === "applied";
 
-  const parsed = keys
-    .split(",")
-    .map((key) => key.trim())
-    .filter(Boolean);
+  const parsed = parseKeys(keys);
+  const available = sortNames(roles.data?.items.map((role) => role.key) ?? []);
 
   return (
     <Modal open onClose={onClose} busy={assign.isPending} size="sm">
       <ModalHeader
         title="Give roles in Zitadel"
-        lede="This gives the roles in Zitadel directly, skipping Syndra."
+        lede={done ? undefined : "This gives the roles in Zitadel directly, skipping Syndra."}
       />
-      <div className="flex flex-col gap-3.5 px-6">
-        <div>
-          <FieldLabel htmlFor="assign-project">Project</FieldLabel>
-          <Select
-            id="assign-project"
-            value={projectId}
-            onChange={(event) => setProjectId(event.target.value)}
-          >
-            <option value="">Choose…</option>
-            {sortByName(projects.data?.items ?? [], (p) => p.name).map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <FieldLabel htmlFor="assign-roles">Role keys</FieldLabel>
-          <Input
-            id="assign-roles"
-            value={keys}
-            onChange={(event) => setKeys(event.target.value)}
-            placeholder="trained, maintainer"
+      {!done && (
+        <div className="flex flex-col gap-3.5 px-6">
+          <div>
+            <FieldLabel htmlFor="assign-project">Project</FieldLabel>
+            <Select
+              id="assign-project"
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+            >
+              <option value="">Choose…</option>
+              {sortByName(projects.data?.items ?? [], (p) => p.name).map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <FieldLabel htmlFor="assign-roles">Role keys</FieldLabel>
+            <Input
+              id="assign-roles"
+              value={keys}
+              onChange={(event) => setKeys(event.target.value)}
+              placeholder="trained, maintainer"
+            />
+            <FieldHint>
+              The short name other systems see, e.g. trained. Pick from the list below, comma
+              separated.
+            </FieldHint>
+            {available.length > 0 && (
+              <p className="mt-1.5 text-[12.5px] text-faint">Available: {available.join(", ")}</p>
+            )}
+          </div>
+          <DirectWriteWarning
+            traced
+            what="Syndra records this grant as its own, so it is explained afterwards rather than surfacing under Drift."
+            acknowledged={acknowledged}
+            onAcknowledge={setAcknowledged}
           />
-          <FieldHint>
-            The short name other systems see, e.g. trained. Pick from the list below, comma
-            separated.
-          </FieldHint>
-          {roles.data && (
-            <p className="mt-1.5 text-[12.5px] text-faint">
-              Available: {sortNames(roles.data.items.map((role) => role.key)).join(", ") || "none"}
-            </p>
-          )}
         </div>
-        <DirectWriteWarning
-          traced
-          what="Syndra records this grant as its own, so it is explained afterwards rather than surfacing under Drift."
-          acknowledged={acknowledged}
-          onAcknowledge={setAcknowledged}
-        />
-      </div>
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      )}
+      {outcome && <WriteResult outcome={outcome} word="Given" />}
 
-      <ModalFooter>
+      <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
-          // Granting, not revoking — see the header button above for the same
-          // fix; this is its dialog's submit.
+          // Granting, not revoking: accent, so it cannot be mistaken for "Revoke roles".
           variant="accent"
           disabled={!projectId || parsed.length === 0 || !acknowledged}
           reason={
@@ -415,11 +394,7 @@ function AssignDialog({
           onClick={async () => {
             try {
               await assign.mutateAsync({ userId, projectId, roleKeys: parsed });
-              onApplied({
-                kind: "applied",
-                message: "Roles given in Zitadel",
-                detail: AUDIT_ONLY,
-              });
+              setOutcome({ kind: "applied", message: "Roles given in Zitadel", detail: AUDIT_ONLY });
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -427,8 +402,7 @@ function AssignDialog({
         >
           Give roles in Zitadel
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
-      </ModalFooter>
+      </WriteFooter>
     </Modal>
   );
 }
@@ -437,51 +411,45 @@ function EditRolesDialog({
   userId,
   grant,
   onClose,
-  onApplied,
 }: {
   userId: string;
-  grant: { grantId: string; roleKeys: string[]; projectId: string };
+  grant: GrantRef;
   onClose: () => void;
-  onApplied: (outcome: Outcome) => void;
 }) {
   const update = useUpstreamUpdateGrant();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [keys, setKeys] = useState(grant.roleKeys.join(", "));
   const [acknowledged, setAcknowledged] = useState(false);
+  const done = outcome?.kind === "applied";
 
-  const parsed = keys
-    .split(",")
-    .map((key) => key.trim())
-    .filter(Boolean);
+  const parsed = parseKeys(keys);
 
   return (
     <Modal open onClose={onClose} busy={update.isPending} size="sm">
       <ModalHeader
         title="Replace this person's roles in Zitadel"
-        lede="The new set replaces the old one entirely — any role you leave out is revoked."
+        lede={done ? undefined : "The new set replaces the old one entirely. Any role you leave out is revoked."}
       />
-      <div className="flex flex-col gap-3.5 px-6">
-        <div>
-          <FieldLabel htmlFor="edit-roles">Role keys</FieldLabel>
-          <Input
-            id="edit-roles"
-            value={keys}
-            onChange={(event) => setKeys(event.target.value)}
+      {!done && (
+        <div className="flex flex-col gap-3.5 px-6">
+          <div>
+            <FieldLabel htmlFor="edit-roles">Role keys</FieldLabel>
+            <Input id="edit-roles" value={keys} onChange={(event) => setKeys(event.target.value)} />
+            <FieldHint>The short name other systems see, e.g. trained, comma separated.</FieldHint>
+          </div>
+          <DirectWriteWarning
+            traced
+            what="Replacing the roles revokes any this person holds that you leave out."
+            acknowledged={acknowledged}
+            onAcknowledge={setAcknowledged}
           />
-          <FieldHint>The short name other systems see, e.g. trained, comma separated.</FieldHint>
         </div>
-        <DirectWriteWarning
-          traced
-          what="Replacing the roles revokes any this person holds that you leave out."
-          acknowledged={acknowledged}
-          onAcknowledge={setAcknowledged}
-        />
-      </div>
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      )}
+      {outcome && <WriteResult outcome={outcome} word="Replaced" />}
 
-      <ModalFooter>
+      <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
-          variant="danger"
+          variant="dangerConfirm"
           disabled={parsed.length === 0 || !acknowledged}
           reason={
             parsed.length === 0
@@ -494,11 +462,7 @@ function EditRolesDialog({
           onClick={async () => {
             try {
               await update.mutateAsync({ userId, grantId: grant.grantId, roleKeys: parsed });
-              onApplied({
-                kind: "applied",
-                message: "Roles replaced in Zitadel",
-                detail: AUDIT_ONLY,
-              });
+              setOutcome({ kind: "applied", message: "Roles replaced in Zitadel", detail: AUDIT_ONLY });
             } catch (error) {
               setOutcome(outcomeFromError(error));
             }
@@ -506,8 +470,7 @@ function EditRolesDialog({
         >
           Replace roles in Zitadel
         </Button>
-        <Button onClick={onClose}>Cancel</Button>
-      </ModalFooter>
+      </WriteFooter>
     </Modal>
   );
 }

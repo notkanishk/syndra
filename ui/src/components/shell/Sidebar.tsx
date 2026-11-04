@@ -52,8 +52,6 @@ export default function Sidebar() {
     ) : (
       part
     );
-  const viewLabel =
-    audience === "member" ? "Member" : audience === "advanced" ? "Advanced" : "Basic";
 
   return (
     // Hidden below tablet rather than unmounted. It keeps polling there, which
@@ -64,13 +62,6 @@ export default function Sidebar() {
       <div className="flex items-center gap-2.5 px-2">
         <SyndraMark />
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
-        <span className="flex-1" />
-        <span
-          title={`${viewLabel} view`}
-          className="rounded-pill border border-line-strong px-2 py-0.5 text-[12.5px] text-faint"
-        >
-          {viewLabel}
-        </span>
       </div>
 
       {/* No `gap`: each row carries its own 3px above it (`mt-[3px]`), so a part
@@ -160,7 +151,7 @@ function NavRow({
       } ${
         active
           ? "bg-accent-soft font-semibold text-accent-text"
-          : `${nested ? "text-muted" : "text-ink/75"} hover:bg-[var(--hover)]`
+          : "text-muted hover:bg-[var(--hover)]"
       }`}
     >
       {!nested && (

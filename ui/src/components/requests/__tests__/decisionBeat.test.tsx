@@ -38,6 +38,7 @@ vi.mock("@/lib/queries/useCatalogUsers", () => ({
   useCatalogProjects: () => ({ data: [], isLoading: false, error: null, refetch: () => {} }),
 }));
 vi.mock("@/components/names", () => ({
+  UserAvatar: () => null,
   ProjectName: () => null,
   RoleRef: () => null,
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
@@ -83,7 +84,7 @@ const flush = () => act(async () => {});
 const tick = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
 
 /** The row's wrapper: it carries the leaving state, the fade and the gap. */
-const rowOf = (text: string) => screen.getByText(text).closest("[class*=row-divider]")!.parentElement!.parentElement!;
+const rowOf = (text: string | RegExp) => screen.getByText(text).closest("[class*=row-divider]")!.parentElement!.parentElement!;
 const fadeOf = rowOf;
 const list = () => document.querySelector("[data-selection-scope]")!;
 
@@ -233,7 +234,7 @@ describe("a bulk decision from Select mode", () => {
     const view = render(<Screen />);
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     for (const box of screen.getAllByRole("checkbox", { name: "Select this request" })) fireEvent.click(box);
-    fireEvent.click(screen.getByRole("button", { name: "Review approving these" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve these…" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     await flush();
     data = [];

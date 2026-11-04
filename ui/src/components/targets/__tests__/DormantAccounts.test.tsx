@@ -89,12 +89,14 @@ describe("dormant accounts", () => {
 
   // The bulk count can never include them, so the one bulk action in the
   // product can only ever touch accounts that grant nobody anything.
-  it("makes a still-a-member row unselectable, with the reason in the row", () => {
+  it("makes a still-a-member row unselectable, with the reason said once in its heading", () => {
     renderDormant();
 
     expect(screen.getByLabelText("Select former-member")).toBeInTheDocument();
+    expect(screen.getByText("locked-out")).toBeInTheDocument();
     expect(screen.queryByLabelText("Select locked-out")).toBeNull();
-    expect(screen.getByText(/they are still a member/i)).toBeInTheDocument();
+    // Not repeated under every row.
+    expect(screen.queryByText(/they are still a member/i)).toBeNull();
   });
 
   it("will not remove anything until the number is ticked and a credential is given", () => {

@@ -21,6 +21,7 @@ import {
   type SweepResult,
 } from "@/lib/queries/useDormant";
 import { targetLabel } from "@/lib/nav";
+import { sortByName } from "@/lib/sort";
 import { oneShot } from "@/lib/secret";
 
 /**
@@ -53,8 +54,9 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
 
   const accounts = dormant.data?.accounts ?? [];
   const name = targetLabel(target);
-  const safe = accounts.filter((a) => !a.subject_still_member);
-  const lockouts = accounts.filter((a) => a.subject_still_member);
+  const byName = (list: DormantAccount[]) => sortByName(list, (a) => a.account, (a) => a.account);
+  const safe = byName(accounts.filter((a) => !a.subject_still_member));
+  const lockouts = byName(accounts.filter((a) => a.subject_still_member));
   const chosen = safe.filter((a) => selected.has(a.account));
 
   function toggle(account: string) {
@@ -131,26 +133,15 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
             <>
               <GroupHeading
                 title="Still a member, but no role gives them access here"
-                blurb="Not housekeeping. Removing one of these locks the person out rather than tidying up — give them a role that is mapped here, or revoke their access deliberately from the list above."
+                blurb="Not housekeeping. Removing one of these locks the person out rather than tidying up. Give them a role that is mapped here, or revoke their access deliberately from the list above."
               />
               {lockouts.map((account) => (
-                // Dashed and unselectable, and the reason is in the row. The
-                // bulk count never includes these, so the one bulk action in
-                // the product can only ever touch accounts that grant nobody
-                // anything.
-                <div
-                  key={account.account}
-                  className="row-divider flex flex-wrap items-center gap-[18px] px-5 py-3.5"
-                >
-                  <span
-                    aria-hidden
-                    className="size-4 shrink-0 rounded-[4px] border border-dashed border-line-strong"
-                  />
+                // Unselectable, and the heading above says why. The bulk count
+                // never includes these, so the one bulk action in the product
+                // can only ever touch accounts that grant nobody anything.
+                <CardRow key={account.account}>
                   <AccountLine account={account} />
-                  <span className="w-full pl-[34px] text-[13px] text-warn-text">
-                    Cannot be removed here — they are still a member.
-                  </span>
-                </div>
+                </CardRow>
               ))}
             </>
           )}
@@ -193,7 +184,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
           </div>
           <div className="flex gap-2">
             <Button
-              variant="dangerConfirm"
+              variant="danger"
+              size="sm"
               disabled={!acknowledged || !elevatedKey}
               isPending={remove.isPending}
               reason={
@@ -222,7 +214,8 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
               {`Remove ${chosen.length} ${chosen.length === 1 ? "account" : "accounts"}`}
             </Button>
             <Button
-              variant="ghost"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setSelected(new Set());
                 setAcknowledged(false);
@@ -269,7 +262,7 @@ function filesSentence(chosen: DormantAccount[], name: string): string {
 
 function GroupHeading({ title, blurb }: { title: string; blurb: string }) {
   return (
-    <div className="row-divider bg-tint-1 px-5 py-2.5">
+    <div className="row-divider px-5 py-2.5">
       <p className="text-[13px] font-semibold text-ink">{title}</p>
       <p className="text-[13px] text-muted">{blurb}</p>
     </div>
@@ -313,9 +306,9 @@ function SweepOutcomes({
   const unresolved = result.outcomes.filter((o) => o.outcome !== "removed");
   const done = result.removed > 0 && unresolved.length === 0;
   const fallback: Record<string, string> = {
-    refused: "refused — it gained a role since you loaded this list, so it was left alone",
+    refused: "refused. It gained a role since you loaded this list, so it was left alone",
     unreached: `${name} did not answer, so it was not removed`,
-    indeterminate: `not confirmed — check ${name} before trying again`,
+    indeterminate: `not confirmed. Check ${name} before trying again`,
   };
   return (
     <div
@@ -329,7 +322,7 @@ function SweepOutcomes({
       </p>
       {unresolved.map((outcome) => (
         <p key={outcome.account} className="text-warn-text">
-          <Mono>{outcome.account}</Mono> —{" "}
+          <Mono>{outcome.account}</Mono>:{" "}
           {outcome.detail ?? fallback[outcome.outcome] ?? "recorded"}
         </p>
       ))}

@@ -89,7 +89,7 @@ describe("an error becomes an outcome", () => {
       "You don't have permission to do this.",
     );
     expect(outcomeFromError(new ApiError(404, { message: "nope" })).message).toBe(
-      "That item no longer exists — someone may have removed it.",
+      "That item no longer exists. Someone may have removed it.",
     );
   });
 

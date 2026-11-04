@@ -6,7 +6,6 @@ import { roleCount } from "@/lib/role-mapping-plan";
 
 import { ProjectName } from "@/components/names";
 import { EmptyState } from "@/components/states";
-import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Card } from "@/components/ui/Card";
 import { ApiError } from "@/lib/api-client";
 import { MappingManagement } from "@/components/targets/MappingManagement";
@@ -48,41 +47,31 @@ export function MappingScreen({ target }: { target: string }) {
   const noProject = mappings.error instanceof ApiError && mappings.error.code === "PROJECT_REQUIRED";
 
   return (
-    <div className="flex flex-col gap-[18px]">
-      <div className="flex flex-col gap-1">
-        <Link
-          href={`/system/targets/${target}`}
-          className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 link-hover"
-        >
-          <span aria-hidden>←&nbsp;</span>
-          {name}
-        </Link>
-        <PageHeader
-          title="Mappings"
-          meta={
-            <MetaRow>
-              {[
-                name,
-                project ? (
-                  <span key="project">
-                    Zitadel project{" "}
-                    <Link
-                      href={`/projects/${project.id}`}
-                      className="font-semibold text-ink link-hover"
-                    >
-                      <ProjectName id={project.id} name={project.name} />
-                    </Link>
-                  </span>
-                ) : null,
-                reach === undefined ? null : reach === 0 ? "no mappings" : `${reach} ${reach === 1 ? "mapping" : "mappings"}`,
-                version ? `version ${version}` : null,
-              ]}
-            </MetaRow>
-          }
-          lede={`A mapping gives everyone who holds one of ${owner} roles an account on ${name}, in a group. Changing one moves access for all of them, so every change is previewed before anything is sent.`}
-        />
-      </div>
-
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title="Mappings"
+        meta={
+          <MetaRow>
+            {[
+              name,
+              project ? (
+                <span key="project">
+                  Zitadel project{" "}
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className="font-semibold text-ink link-hover"
+                  >
+                    <ProjectName id={project.id} name={project.name} />
+                  </Link>
+                </span>
+              ) : null,
+              reach === undefined ? null : reach === 0 ? "no mappings" : `${reach} ${reach === 1 ? "mapping" : "mappings"}`,
+              version ? `version ${version}` : null,
+            ]}
+          </MetaRow>
+        }
+        lede={`A mapping gives everyone who holds one of ${owner} roles an account on ${name}, in a group. Changing one moves access for all of them, so every change is previewed before anything is sent.`}
+      />
       {noProject ? (
         // Reached by a link before the system has a project: why the project
         // comes first, and the way to choose it. Nothing else renders.
@@ -90,10 +79,8 @@ export function MappingScreen({ target }: { target: string }) {
           <EmptyState
             title={`${name} has no Zitadel project yet.`}
             guidance={`A mapping ties one of that project's roles to a ${name} group, so the project comes first. It is chosen on ${name}'s own page.`}
+            action={{ label: `Choose it on ${name}'s page`, href: `/system/targets/${target}` }}
           />
-          <div className="px-5 pb-[18px]">
-            <ArrowLink href={`/system/targets/${target}`}>Choose it on {name}&apos;s page</ArrowLink>
-          </div>
         </Card>
       ) : (
         <>

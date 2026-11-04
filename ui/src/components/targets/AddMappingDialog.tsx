@@ -154,7 +154,7 @@ export function RoleMappingDialog({
               <FieldLabel htmlFor="m-role">Role in {project?.name || "its project"}</FieldLabel>
               <Select id="m-role" value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
                 <option value="">{roles.length ? "Choose a role" : "No role left to map"}</option>
-                {roles.map((r) => (
+                {sortByName(roles, (r) => r.label || r.key, (r) => r.key).map((r) => (
                   <option key={r.key} value={r.key}>
                     {r.label || r.key}
                   </option>
@@ -175,23 +175,17 @@ export function RoleMappingDialog({
                 </Select>
                 <FieldHint>{neverRead ? "Not read yet." : list ? <>Read from {name} <Relative iso={list.read_at} />.</> : " "}</FieldHint>
                 {(neverRead || noGroups) && (
-                  <div role="status" className="tint-in panel flex flex-col gap-1.5 px-4 py-3.5 text-[14px] leading-[1.55]">
-                    <span className="font-semibold">
-                      {neverRead ? `${name} hasn't listed its groups yet.` : `${name} has no groups of its own yet.`}
-                    </span>
-                    <span className="text-muted [text-wrap:pretty]">
-                      {neverRead
-                        ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
-                            row?.health?.started_at ? ` since Syndra restarted at ${formatClock(row.health.started_at)}` : " yet"
-                          }. This usually clears within a minute and a half.`
-                        : builtinSentence(name, list)}
-                    </span>
-                    <span className="mt-1 flex">
-                      <Button variant="outline" size="sm" onClick={() => void values.refetch()}>
-                        Read again
-                      </Button>
-                    </span>
-                  </div>
+                  <Notice
+                    tone="neutral"
+                    title={neverRead ? `${name} hasn't listed its groups yet.` : `${name} has no groups of its own yet.`}
+                    action={{ label: "Read again", onClick: () => void values.refetch() }}
+                  >
+                    {neverRead
+                      ? `Syndra asks for the list when this opens, and ${name} hasn't answered${
+                          row?.health?.started_at ? ` since Syndra restarted at ${formatClock(row.health.started_at)}` : " yet"
+                        }. This usually clears within a minute and a half.`
+                      : builtinSentence(name, list)}
+                  </Notice>
                 )}
               </>
             ) : (
@@ -368,7 +362,7 @@ function builtinSentence(name: string, list: MappableValues | undefined): string
   const count = list?.builtin_count ?? 0;
   const examples = list?.builtin_examples ?? [];
   const like = examples.length ? `, like ${examples.join(" and ")}` : "";
-  return `It lists ${count} group${count === 1 ? "" : "s"}, all of them built in${like}. Syndra never offers those: a role mapped to one would give everyone who holds it the NAS's administration or its default share access. Make a group on ${name}, under Credentials → Groups, then read again.`;
+  return `It lists ${count} group${count === 1 ? "" : "s"}, all of them built in${like}. Syndra never offers those: a role mapped to one would give everyone who holds it ${name}'s administration or its default share access. Make a group on ${name}, under Credentials → Groups, then read again.`;
 }
 
 /**
@@ -414,24 +408,21 @@ export function placeName(p: ReachPlace): string {
  */
 export function RefusedFields({ target }: { target: string }) {
   return (
-    <div className="grid gap-1.5 rounded-inner border border-line px-4 py-3">
-      <p className="text-[13.5px] font-semibold">Two settings you cannot map, on purpose</p>
-      <p className="text-[13.5px] leading-[1.55] text-muted">
-        <span className="type-mono">enabled</span> and{" "}
-        <span className="type-mono">smb_enabled</span> follow from whether the person has any
-        access to {targetLabel(target)} at all. If a role could set them, one role could switch
-        an account off while another still gave that person access — so Syndra refuses them.
-      </p>
-    </div>
+    <p className="px-1 text-[13.5px] leading-[1.55] text-muted">
+      Two settings cannot be mapped, on purpose: <span className="type-mono">enabled</span> and{" "}
+      <span className="type-mono">smb_enabled</span> follow from whether the person has any access to{" "}
+      {targetLabel(target)} at all. If a role could set them, one role could switch an account off while
+      another still gave that person access.
+    </p>
   );
 }
 
-/** The one violet fill on this screen. */
+/** Outline: the one violet fill on this screen is Publish, in the version band. */
 export function AddMappingButton({ target, first }: { target: string; first: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="accent" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         {first ? "Add the first mapping" : "Add a mapping"}
       </Button>
       {open && <AddMappingDialog target={target} onClose={() => setOpen(false)} />}

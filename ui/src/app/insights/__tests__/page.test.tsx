@@ -184,7 +184,7 @@ describe("tabs and the link", () => {
     renderPage();
     expect(screen.getByRole("heading", { name: "Insights" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Map" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByPlaceholderText("Ask about a person, a door, a role, or find anything")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Ask about a person, a project, a role, or find anything")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Trends" }));
     expect(nav.state.search).toBe("tab=trends");
@@ -605,8 +605,8 @@ describe("at rest", () => {
     };
     renderPage();
     const panel = panelOf("How access travels today");
-    expect(panel).toHaveTextContent("The makerspace at a glance");
-    expect(panel).toHaveTextContent("Three things worth knowing");
+    expect(panel).not.toHaveTextContent("The makerspace at a glance");
+    expect(panel).not.toHaveTextContent("worth knowing");
     expect(panel).toHaveTextContent("Widest reach: Laser Lab · Operator, 51 people, through Lab Tech and New members.");
     expect(panel).toHaveTextContent("Nothing reaches: Textiles. It has 1 role and nobody has it.");
     expect(panel).toHaveTextContent("Most given automatically: Laser Lab · Door, 51 people, by rule from Laser Lab · Operator.");
@@ -782,7 +782,7 @@ describe("the answers", () => {
     expect(within(panel).getByRole("link", { name: /Change it on Lab Tech/ })).toHaveAttribute("href", "/bundles/b1");
   });
 
-  it("What if it also gave is violet, and names who would gain", () => {
+  it("What if it also gave is a plain panel, and names who would gain", () => {
     insights.whatIf = {
       data: { gains: [{ user_id: "u9", name: "Dev Patel", roles: [{ project_id: "p1", role_key: "door" }] }], losses: [], unchanged: 3 },
       isError: false,
@@ -794,7 +794,7 @@ describe("the answers", () => {
     const panel = panelOf("New members also gave Laser Lab · Door");
     expect(panel).toHaveTextContent("a preview, nothing changes");
     expect(panel).toHaveTextContent("Dev Patel would gain Laser Lab · Door.");
-    expect(panel.className).toContain("border-accent-line");
+    expect(panel.className).not.toContain("bg-accent-soft");
   });
 
   it("What if with nothing to move says so", () => {

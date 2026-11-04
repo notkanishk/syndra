@@ -61,7 +61,8 @@ describe("PersonAccess — audience", () => {
     expect(screen.getByRole("button", { name: "Access" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Requests" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Full audit trail" })).toBeInTheDocument();
+    // The Activity tab is the audit trail; the header carries no second link to it.
+    expect(screen.queryByRole("link", { name: "Full audit trail" })).not.toBeInTheDocument();
   });
 
   it("never offers a member a control that can only fail", () => {

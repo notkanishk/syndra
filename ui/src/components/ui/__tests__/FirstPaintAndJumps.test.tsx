@@ -1,13 +1,10 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import NotFound from "@/app/not-found";
-import { UpstreamShell } from "@/components/upstream/UpstreamShell";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
-import { ARRIVE_SETTLED_MS } from "@/components/ui/ArriveList";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
-import { TINT_MS } from "@/lib/motion";
 
 const glide = vi.hoisted(() => ({ to: [] as HTMLElement[] }));
 vi.mock("@/lib/motion", async (original) => ({
@@ -18,36 +15,13 @@ vi.mock("@/lib/motion", async (original) => ({
   },
 }));
 
-/** S11: the screens that are not a `PageHeader` still tint in, then what follows arrives. */
+/** S11: the screens that are not a `PageHeader` still tint in (the upstream pages are PageHeaders now, A-17). */
 describe("a screen's first paint without a PageHeader", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     window.history.replaceState({}, "", "/somewhere");
   });
   afterEach(() => vi.useRealTimers());
-
-  it("the upstream pages wear the arrival on their title block, then hold still", () => {
-    render(
-      <UpstreamShell title="Zitadel users" lede="Who Zitadel has." syndraHref="/users" syndraLabel="People">
-        <p>the list</p>
-      </UpstreamShell>,
-    );
-    const head = screen.getByRole("heading", { level: 1 }).parentElement!;
-    expect(head).toHaveClass("page-head");
-    expect(head).not.toHaveAttribute("data-settled");
-    act(() => void vi.advanceTimersByTime(TINT_MS + ARRIVE_SETTLED_MS));
-    expect(head).toHaveAttribute("data-settled");
-  });
-
-  it("a Back to the page finds it already there", () => {
-    act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
-    render(
-      <UpstreamShell title="Zitadel users" lede="Who Zitadel has." syndraHref="/users" syndraLabel="People">
-        <p>the list</p>
-      </UpstreamShell>,
-    );
-    expect(screen.getByRole("heading", { level: 1 }).parentElement).toHaveAttribute("data-settled");
-  });
 
   it("the address that matches no page tints in", () => {
     render(<NotFound />);

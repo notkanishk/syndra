@@ -6,12 +6,14 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Mono, type StatusTone } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CommandBlock } from "@/components/ui/CommandBlock";
+import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { Unfold } from "@/components/ui/Unfold";
 import { ClaimsDelivery } from "@/components/system/ClaimsDelivery";
 import { request } from "@/lib/api-client";
@@ -61,13 +63,6 @@ export default function IdentityProviderPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
-        <Notice tone="warn" title={`The action signing key is ${rotation.data?.age_days} days old.`} live>
-          It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works. How to
-          replace it, below, walks through it; sign-ins carry on while you do.
-        </Notice>
-      </Unfold>
-
       <PageHeader
         title="Zitadel"
         lede={
@@ -85,6 +80,13 @@ export default function IdentityProviderPage() {
           </MetaRow>
         }
       />
+
+      <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
+        <Notice tone="warn" title={`The action signing key is ${rotation.data?.age_days} days old.`} live>
+          It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works. How to
+          replace it, below, walks through it; sign-ins carry on while you do.
+        </Notice>
+      </Unfold>
 
       {health.isLoading ? (
         <Card>
@@ -111,32 +113,7 @@ export default function IdentityProviderPage() {
       <SigningKey status={rotation.data} loading={rotation.isLoading} error={rotation.error} keyring={keyring} />
       <UpstreamInspection reachable={live} />
       <UpstreamWrites reachable={live} />
-      <TheName />
     </div>
-  );
-}
-
-/**
- * The one place the name is explained to somebody who is already inside.
- *
- * It lives here rather than on its own page because this screen is about the
- * relationship it describes: Zitadel is the door, Syndra is the list. An
- * operator reading "is the provider reachable" is the one person for whom the
- * split is not decoration — it is the reason there are two systems.
- *
- * Deliberately last, deliberately quiet: no accent fill, no badge. Nothing on
- * this page is more important than the health sentence at the top.
- */
-function TheName() {
-  return (
-    <Card className="px-5 py-4">
-      <p className="type-card-title">Syn keeps the door. Syndra keeps the list.</p>
-      <p className="mt-2 max-w-[68ch] text-[14px] leading-[1.6] text-muted">
-        Syn keeps the door of Frigg&rsquo;s hall and bars it against those who should not enter.
-        Zitadel is that door: it decides whether you are who you say you are. Syndra decides what
-        that gets you, and keeps the record of why.
-      </p>
-    </Card>
   );
 }
 
@@ -178,16 +155,10 @@ function SigningKey({
         <div className="flex min-w-0 flex-[1_1_360px] flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
             <span className="type-card-title">Action signing key</span>
-            {!loading && (
-              <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold">
-                <StatusDot tone={tone} />
-                {word}
-              </span>
-            )}
+            {!loading && <StatusSeat tone={tone} word={word} />}
           </div>
           <p className="max-w-[80ch] text-[14px] leading-[1.55] text-muted">
-            {loading ? "Checking when the key was last replaced…" : rotationSentence(status, error)}{" "}
-            Zitadel signs every sign-in request with it, so Syndra can tell they are genuine.
+            {loading ? "Checking when the key was last replaced…" : rotationSentence(status, error)}
           </p>
           {!loading && keyring && (
             <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{keyringSentence(keyring)}</p>
@@ -195,7 +166,7 @@ function SigningKey({
         </div>
         <Button
           size="sm"
-          variant={tone === "warn" ? "accent" : "outline"}
+          variant="outline"
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
         >
@@ -206,8 +177,7 @@ function SigningKey({
       <Unfold open={open}>
         <div className="row-divider flex flex-col gap-4 px-5 py-4">
           <p className="max-w-[84ch] text-[13.5px] leading-[1.55] text-muted">
-            This is for the person who runs the Syndra server. It never expires on its own;
-            someone has to decide to replace it.
+            This is for the person who runs the Syndra server.
           </p>
 
           {notSetUp ? (
@@ -311,33 +281,17 @@ function rotationSentence(status: RotationStatus | undefined, error: unknown): s
     return `The key works, but Syndra does not know when it was last replaced, so it cannot warn you when the ${threshold}-day limit is reached. Set ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT to the date the rotate command printed.`;
   }
   if (status.status === "stale") {
-    return `The key is ${age} days old — more than twice the ${threshold}-day limit. Replace it now.`;
+    return `The key is more than twice the ${threshold}-day limit. Replace it now.`;
   }
-  if (status.status === "warn") {
-    return `The key is ${age} days old, over the ${threshold}-day limit. Plan to replace it.`;
-  }
+  // The Notice above the page already says how old it is; a warn key says nothing more here.
+  if (status.status === "warn") return "";
   return `The key is ${age} days old, within the ${threshold}-day limit. Nothing to do.`;
 }
 
-/** A round chevron that turns when its fold opens; the one fold control on this page. */
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn ${
-        open ? "rotate-90" : ""
-      }`}
-    >
-      ›
-    </span>
-  );
-}
-
 /**
- * Health as one line, with the detail folded. Reachability is the only fact the
- * backend can answer today, so that is all the fold holds; when it can't be
- * answered there is nothing to fold and the Notice says why. The line is still
- * a sentence with a cause, never a dot on its own.
+ * Health as one line. Reachability is the only fact the backend can answer
+ * today; when it can't be answered the Notice says why. The line is still a
+ * sentence with a cause, never a dot on its own.
  */
 function HealthLine({
   live,
@@ -352,16 +306,12 @@ function HealthLine({
   detail?: string;
   projectCount: number;
 }) {
-  const [open, setOpen] = useState(false);
   const word = live ? "Answering" : notConfigured ? "Not connected" : "Not answering";
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 text-[13.5px]">
-        <span className="inline-flex items-center gap-2 font-semibold">
-          <StatusDot tone={live ? "healthy" : "warn"} />
-          {word}
-        </span>
+        <StatusSeat tone={live ? "healthy" : "warn"} word={word} />
         <span className="text-muted">
           {live
             ? `in ${latency ?? 0} ms, and sees ${projectCount} project${projectCount === 1 ? "" : "s"}`
@@ -369,40 +319,7 @@ function HealthLine({
               ? "Syndra is not set up to talk to Zitadel"
               : "the projects check waits for it"}
         </span>
-        <span className="flex-1" />
-        {live && (
-          <button
-            type="button"
-            aria-expanded={open}
-            onClick={() => setOpen((value) => !value)}
-            className="inline-flex min-h-11 items-center gap-2 font-semibold text-muted link-tint desktop:min-h-6"
-          >
-            {open ? "Hide checks" : "Show checks"}
-            <Chevron open={open} />
-          </button>
-        )}
       </div>
-
-      {live && (
-        <Unfold open={open}>
-          <Card>
-            <div className="row-divider flex flex-col gap-1 px-5 py-3.5 tablet:flex-row tablet:items-baseline tablet:gap-[18px]">
-              <span className="text-[14px] font-semibold tablet:w-[180px] tablet:shrink-0">Reachable</span>
-              <span className="text-[13.5px] leading-[1.55] text-muted">
-                Replied in {latency ?? 0} ms. Syndra is talking to Zitadel normally, and changes you
-                send from Pending changes reach it as soon as you send them.
-              </span>
-            </div>
-            <div className="row-divider flex flex-col gap-1 px-5 py-3.5 tablet:flex-row tablet:items-baseline tablet:gap-[18px]">
-              <span className="text-[14px] font-semibold tablet:w-[180px] tablet:shrink-0">Projects</span>
-              <span className="text-[13.5px] leading-[1.55] text-muted">
-                Syndra&apos;s own Zitadel account can read the {projectCount} project{projectCount === 1 ? "" : "s"} it
-                manages.
-              </span>
-            </div>
-          </Card>
-        </Unfold>
-      )}
 
       <Unfold open={!live} gap={16}>
         <Notice
@@ -450,10 +367,7 @@ function UpstreamInspection({ reachable }: { reachable: boolean }) {
 
   return (
     <Card>
-      <CardHeader
-        title="Look inside Zitadel"
-        note="What Zitadel holds, read straight from it. These pages only read: nothing on them changes anything."
-      />
+      <CardHeader title="Look inside Zitadel" note="What Zitadel holds, read straight from it." />
       {rows.map((row) => (
         <div key={row.href} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-1.5 px-5 py-3.5">
           <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
@@ -523,49 +437,32 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
   ];
 
   return (
-    <div className="rounded-card border border-dashed border-danger-line">
+    <Card>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4 text-left"
+        className="flex min-h-11 w-full flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4 text-left"
       >
-        <Chevron open={open} />
+        <FoldChevron open={open} />
         <span className="type-card-title text-danger-text">Change Zitadel directly</span>
         <span className="text-[13.5px] text-faint">last resort</span>
       </button>
 
       <Unfold open={open}>
-        <div className="danger-note mx-5 mb-4 px-4 py-3.5">
-          <div className="text-[14.5px] font-semibold text-danger-text">
-            Do not use these unless nothing else will do.
-          </div>
-          <p className="mt-1 max-w-[86ch] text-[14px] leading-[1.55] text-muted">
-            Everything here can be done inside Syndra, with a reason and a record kept. Each control
-            below says what it skips.
-          </p>
-        </div>
-
         {doors.map((door) => (
           <div key={door.href} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2.5 px-5 py-3.5">
             <span className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
               <span className="text-[14.5px] font-semibold">{door.label}</span>
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{door.warning}</span>
               <span className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
-                {door.instead}{" "}
-                <a href={door.syndraHref} className="font-semibold text-accent-text link-hover">
-                  {door.syndra} →
-                </a>
+                {door.instead} <ArrowLink href={door.syndraHref}>{door.syndra}</ArrowLink>
               </span>
             </span>
             {reachable ? (
-              <ButtonLink href={door.href} variant="danger" size="sm">
-                {door.door} →
-              </ButtonLink>
+              <ArrowLink href={door.href}>{door.door}</ArrowLink>
             ) : (
-              <Button variant="danger" size="sm" disabled>
-                {door.door} →
-              </Button>
+              <span className="text-[13.5px] font-semibold text-faint">{door.door}</span>
             )}
           </div>
         ))}
@@ -576,6 +473,6 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
           </div>
         )}
       </Unfold>
-    </div>
+    </Card>
   );
 }

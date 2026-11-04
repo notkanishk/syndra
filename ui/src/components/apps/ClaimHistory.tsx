@@ -5,11 +5,11 @@ import { useState } from "react";
 import { UserName } from "@/components/names";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { CardColumns } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Choice";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { Ticks } from "@/components/ui/TokenBlock";
 import { Unfold } from "@/components/ui/Unfold";
 import { ApiError } from "@/lib/api-client";
@@ -23,6 +23,8 @@ import {
   type ClaimTemplate,
   type HistoryEntry,
 } from "@/lib/queries/useClaimShape";
+
+import { ToolRow } from "./ToolRow";
 
 const SEED = "As Actions v1 sent it";
 
@@ -67,8 +69,7 @@ export function ClaimHistory({
   const current = list[0];
   return (
     <>
-      <div className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-[22px] pb-4 pt-3.5">
-        <span className="w-[170px] flex-none text-[14px] font-semibold">History</span>
+      <ToolRow label="History">
         <span className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
           {versions.isLoading ? (
             <RowSkeleton rows={1} avatar={false} label="Loading history" />
@@ -94,18 +95,15 @@ export function ClaimHistory({
         {list.length > 1 && (
           <span className="ml-auto flex justify-end whitespace-nowrap">
             <Button size="sm" aria-expanded={all} onClick={() => setAll(!all)}>
-              Show all {list.length}
-              <span aria-hidden className={`motion-turn ml-1.5 inline-block ${all ? "rotate-90" : ""}`}>
-                ›
-              </span>
+              {all ? `Hide all ${list.length}` : `Show all ${list.length}`}
             </Button>
           </span>
         )}
-      </div>
+      </ToolRow>
       <Unfold open={all && list.length > 1}>
         <>
           <CardColumns>
-            <span className="w-[130px] flex-none">Version ↓</span>
+            <span className="w-[130px] flex-none">Version</span>
             <span className="min-w-[220px] flex-1">What changed</span>
             <span className="w-[150px] flex-none text-right">Saved</span>
             <span className="w-[210px] flex-none" />
@@ -128,10 +126,7 @@ export function ClaimHistory({
               </span>
               <span className="flex w-[210px] flex-none justify-end whitespace-nowrap">
                 {i === 0 ? (
-                  <span className="inline-flex items-center gap-2 text-[13.5px] font-semibold">
-                    <StatusDot tone="healthy" />
-                    In use
-                  </span>
+                  <StatusSeat tone="healthy" word="In use" />
                 ) : (
                   <Button size="sm" onClick={() => setRestoring(v)}>
                     Go back to this version
@@ -171,16 +166,14 @@ function GoBack({ appId, entry, next, app, onClose }: { appId: string; entry: Hi
       <ModalHeader title={`Go back to version ${entry.version}`} lede={done ? undefined : `Saves version ${entry.version} again, as version ${next}. Nothing in between is lost.`} />
       <div className="flex flex-col gap-3 px-6 pb-2">
         {done ? (
-          <div role="status" className="lift-in flex flex-col gap-2">
-            <span className="flex items-center gap-2.5">
-              <StatusDot tone="healthy" bloom />
-              <span className="font-display text-[22px] font-semibold">Went back</span>
-            </span>
-            <p className="text-[15px]">
-              {app}&rsquo;s claims are now version {next}, as version {entry.version} had them.
-            </p>
-            <p className="text-[13px] text-faint">It reaches {app} at each person&rsquo;s next sign-in.</p>
-          </div>
+          <ActionOutcome
+            word="Restored"
+            outcome={{
+              kind: "applied",
+              message: `${app}'s claims are now version ${next}, as version ${entry.version} had them.`,
+              detail: `It reaches ${app} at each person's next sign-in.`,
+            }}
+          />
         ) : (
           breaking && (
             <label className="flex items-start gap-2.5 text-[14.5px] leading-[1.5]">
@@ -189,18 +182,18 @@ function GoBack({ appId, entry, next, app, onClose }: { appId: string; entry: Hi
             </label>
           )
         )}
-        {outcome && <ActionOutcome outcome={outcome} />}
+        {outcome && <ActionOutcome outcome={outcome} word="Not restored" />}
       </div>
-      <ModalFooter note={done ? undefined : `Takes effect at each person's next sign-in to ${app}.`}>
+      <ModalFooter
+        cancel={done ? undefined : { onClick: onClose }}
+        note={done ? undefined : breaking && !understood ? "Tick the box above to go back." : `Takes effect at each person's next sign-in to ${app}.`}
+      >
         {done ? (
           <Button onClick={onClose}>Close</Button>
         ) : (
-          <>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button variant="accent" isPending={restore.isPending} disabled={breaking && !understood} onClick={go}>
-              Go back to version {entry.version}
-            </Button>
-          </>
+          <Button variant="accent" isPending={restore.isPending} disabled={breaking && !understood} onClick={go}>
+            Go back to version {entry.version}
+          </Button>
         )}
       </ModalFooter>
     </Modal>

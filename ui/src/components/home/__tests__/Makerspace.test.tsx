@@ -410,6 +410,19 @@ describe("Home › The makerspace", () => {
     });
   });
 
+  it("holds Lately to five rows, as every block above it", () => {
+    state.audit = Array.from({ length: 8 }, (_, i) => ({
+      id: `a${i}`,
+      actor_id: "u1",
+      action: "grant",
+      target_id: "-",
+      created_at: new Date().toISOString(),
+    }));
+    renderMakerspace();
+    const lately = screen.getByText("Lately").closest(".card")!;
+    expect(lately.querySelectorAll(".row-divider")).toHaveLength(5);
+  });
+
   it("prints a bare clock for today and a dated one for anything older, in Lately", () => {
     const today = new Date();
     const lastWeek = new Date(today.getTime() - 7 * 86_400_000);

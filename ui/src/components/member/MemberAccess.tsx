@@ -7,8 +7,8 @@ import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { ButtonLink } from "@/components/ui/Button";
 import { StatusDot } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
-import { usePageHead } from "@/components/ui/PageHeader";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
 import {
   givenAt,
   nothingSentYet,
@@ -139,8 +139,8 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const unread = !observation?.read_at;
 
   return (
-    <div className="flex flex-col gap-[22px]">
-      <div className={`${head.className} flex flex-col gap-2`} data-settled={head["data-settled"]}>
+    <div className="flex flex-col gap-4">
+      <div className={`${head.className} flex flex-col gap-2`} data-settled={head["data-settled"]} style={BELOW_HEADER}>
         <h1 className="type-page-title">
           Hi {firstName(session.name)}.{" "}
           <span className="text-faint">Here&rsquo;s what you can use.</span>
@@ -192,12 +192,12 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               this says what it can do instead of who to find. */}
           <EmptyState
             title="You don't have access to anything yet."
-            guidance="If there's a machine or a space you need, ask for it and makerspace staff will decide. Everything the makerspace offers is listed below."
+            guidance="If there's a machine or a space you need, ask for it. Everything the makerspace offers is listed below."
             action={{ label: "Ask for access", href: "/requests?ask" }}
           />
         </Card>
       ) : (
-        <div className="flex flex-wrap gap-[18px]">
+        <div className="flex flex-wrap gap-4">
           {projects.map((project) => {
             const roles = [...project.source_roles, ...project.derived_roles]
               .map((role) => ({
@@ -211,13 +211,15 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               });
             return (
               <Card key={project.project_id} className="min-w-[min(420px,100%)] flex-1">
-                <div className="px-5 py-4 type-card-title">
-                  <ResolvedProjectName
-                    name={project.project_name}
-                    resolved={project.project_name_resolved}
-                    id={project.project_id}
-                  />
-                </div>
+                <CardHeader
+                  title={
+                    <ResolvedProjectName
+                      name={project.project_name}
+                      resolved={project.project_name_resolved}
+                      id={project.project_id}
+                    />
+                  }
+                />
                 {!unread && roles.map((role) => (
                   <RoleRow
                     key={role.role_key}
@@ -239,11 +241,8 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                   (roleKey) => roleName(project.project_id, roleKey),
                   (roleKey) => roleKey,
                 ).map((roleKey) => (
-                    <div key={`held-${roleKey}`} className="row-divider flex flex-col gap-0.5 px-5 py-3">
+                    <div key={`held-${roleKey}`} className="row-divider px-5 py-3">
                       <span className="text-[15px] font-semibold">{roleName(project.project_id, roleKey)}</span>
-                      <span className="text-[13.5px] text-muted">
-                        You can use this. Nobody wrote down who gave it to you.
-                      </span>
                     </div>
                   ))}
               </Card>
@@ -284,8 +283,8 @@ function StandingMark({ standing }: { standing: Standing }) {
 }
 
 /**
- * One role: its name, then why you have it. A role given until a date is
- * tinted and offers a way to keep it; an approval still on its way says why
+ * One role: its name, then why you have it. A role given until a date
+ * offers a way to keep it; an approval still on its way says why
  * (N19), in the member's words — never the operator's "Waiting for you to
  * send", which a member can't do.
  */
@@ -313,7 +312,7 @@ function RoleRow({
   const ends = Boolean(expiresAt) && strongest?.kind === "direct" && !waiting;
   return (
     <div
-      className={`row-divider flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 ${ends ? "bg-warn-soft" : ""}`}
+      className="row-divider flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3"
       data-ends={ends || undefined}
     >
       <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">

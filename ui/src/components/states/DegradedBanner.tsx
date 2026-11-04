@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import { CommandBlock } from "@/components/ui/CommandBlock";
 import { Notice } from "@/components/ui/Notice";
 import { Relative } from "@/components/ui/Time";
@@ -127,20 +128,11 @@ export function DegradedBanner() {
             People and projects are real. Some bundles, rules, access and history are sample data,
             and nothing else on screen tells them apart, so treat anything you can&apos;t confirm
             as sample until it&apos;s cleared.
-            <button
-              type="button"
-              aria-expanded={serverOpen}
-              onClick={() => setServerOpen((v) => !v)}
-              className="mt-2 flex min-h-[44px] items-center gap-1.5 text-[13.5px] font-semibold text-ink link-tint desktop:min-h-[32px]"
-            >
-              <span
-                aria-hidden
-                className={`inline-block motion-turn ${serverOpen ? "rotate-90" : ""}`}
-              >
-                ›
-              </span>
-              For whoever runs the Syndra server
-            </button>
+            <div className="mt-2">
+              <Button size="sm" aria-expanded={serverOpen} onClick={() => setServerOpen((v) => !v)}>
+                {serverOpen ? "Hide" : "Show"} the steps for the Syndra server
+              </Button>
+            </div>
             <Unfold open={serverOpen}>
               <div className="flex max-w-[86ch] flex-col gap-2 pt-1">
                 <p className="text-[13.5px] text-muted">

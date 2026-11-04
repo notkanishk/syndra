@@ -1,15 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
 import { ArriveList } from "@/components/ui/ArriveList";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Mono, StatusDot } from "@/components/ui/Badge";
+import { StatusDot } from "@/components/ui/Badge";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { FoldChevron } from "@/components/ui/FoldChevron";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
 import { Input } from "@/components/ui/Input";
@@ -22,9 +21,8 @@ import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/Lea
 import { RunLabel, SortHead, orderBy, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
 import { Relative } from "@/components/ui/Time";
 import { Unfold } from "@/components/ui/Unfold";
-import { ProjectName, UserAvatar, UserName } from "@/components/names";
+import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { request } from "@/lib/api-client";
-import { shortId } from "@/lib/audit-vocabulary";
 import { formatShortDate, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -82,19 +80,18 @@ type SectionKey = "spent" | "queued";
  * is not allowed to do. A section at zero is also the answer to a real question, "is anything
  * stuck?", and reads better as a hollow zero than as a card that is not there.
  */
-const SECTIONS: Record<SectionKey, { id: string; label: string; hint: string; tone?: "danger"; empty: string }> = {
+const SECTIONS: Record<SectionKey, { id: string; label: string; tone: "danger" | "neutral"; empty: string }> = {
   spent: {
     id: "given-up",
     label: "Given up",
-    hint: "They still have it until somebody ends it",
     tone: "danger",
-    empty: "Nothing has been given up on. Every revocation still has a way through.",
+    empty: "Nothing has been given up on.",
   },
   queued: {
     id: "on-the-way",
     label: "Still on the way",
-    hint: "Syndra keeps trying by itself",
-    empty: "Nothing is on the way. Every revocation has gone through or been given up on.",
+    tone: "neutral",
+    empty: "Nothing is on the way.",
   },
 };
 
@@ -166,31 +163,35 @@ export function WithdrawnAccess() {
     () => (query.dataUpdatedAt ? new Date(query.dataUpdatedAt).toISOString() : null),
     [query.dataUpdatedAt],
   );
+  // The read line is always there once there is a read, empty or not; the section chips only with rows.
+  const read = !query.isLoading && !query.error && (
+    <ReadLine sections={showRows ? sections : []} label="Sections of unfinished revocations" onOpen={openSection}>
+      <ReadFreshness state={{ readAt, current: true }} subject="This list" onRefresh={() => query.refetch()} />
+    </ReadLine>
+  );
 
   return (
     <div className="flex flex-col gap-4">
-      {/* The intro keeps 12px of its own below it, so the first card never reads as attached to it. */}
-      <div className="pb-3">
-        <PageHeader
-          title="Unfinished revocations"
-          meta={
-            showRows ? (
-              <MetaRow>
-                {[
-                  `${givenUp} given up`,
-                  `${onTheWay} on the way`,
-                  ...(people === null ? [] : [`${people} ${people === 1 ? "person" : "people"}`]),
-                ]}
-              </MetaRow>
-            ) : undefined
-          }
-          lede="Access somebody revoked that has not gone away yet. Revocations still on the way clear themselves. The ones Syndra has given up on do not, and those people still have the access until somebody ends it."
-        />
-      </div>
+      <PageHeader
+        title="Unfinished revocations"
+        meta={
+          showRows ? (
+            <MetaRow>
+              {[
+                `${givenUp} given up`,
+                `${onTheWay} on the way`,
+                ...(people === null ? [] : [`${people} ${people === 1 ? "person" : "people"}`]),
+              ]}
+            </MetaRow>
+          ) : undefined
+        }
+        lede="Access somebody revoked that has not gone away yet. Revocations still on the way clear themselves; the ones Syndra has given up on do not, and those people keep the access until somebody ends it."
+      />
 
-      <div className="flex flex-col gap-3.5">
-        {showRows && (
+      {showRows ? (
+        <>
           <FilterBar
+            read={read}
             search={
               <Input
                 value={search}
@@ -219,21 +220,6 @@ export function WithdrawnAccess() {
               </FilterPanel>
             }
           />
-        )}
-
-        {/* How current the list is on the left, a chip per section at the right end. Not while the
-            read is out. */}
-        {showRows && (
-          <ReadLine sections={sections} label="Sections of unfinished revocations" onOpen={openSection} className="-mt-1">
-            <ReadFreshness
-              state={{ readAt, current: true }}
-              subject="Syndra’s send queue"
-              onRefresh={() => query.refetch()}
-            />
-          </ReadLine>
-        )}
-
-        {showRows ? (
           <div className="flex flex-col gap-4" {...leaving.listProps}>
             <SectionPill sections={sections} label="Sections of unfinished revocations" onOpen={openSection} />
             {/* The two sections are the page's cards: they arrive on first paint (S11). */}
@@ -248,6 +234,7 @@ export function WithdrawnAccess() {
                   view={view}
                   // A search that finds nothing here does not say nothing has been given up on.
                   empty={filtered ? "Nothing here matches." : SECTIONS[key].empty}
+                  resolved={!filtered}
                   open={open[key]}
                   onToggle={() => setOpen((cur) => ({ ...cur, [key]: !cur[key] }))}
                   sort={sort}
@@ -256,7 +243,10 @@ export function WithdrawnAccess() {
               ))}
             </ArriveList>
           </div>
-        ) : (
+        </>
+      ) : (
+        <>
+          {read}
           <Card>
             <ListStates
               isLoading={query.isLoading}
@@ -267,7 +257,7 @@ export function WithdrawnAccess() {
               skeleton={<RowSkeleton rows={4} label="Loading unfinished revocations" />}
               empty={
                 <EmptyState
-                  title="Nothing outstanding"
+                  title="Nothing is unfinished."
                   guidance="Every revocation has reached the system it was sent to."
                   resolved
                 />
@@ -276,8 +266,8 @@ export function WithdrawnAccess() {
               {null}
             </ListStates>
           </Card>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -291,9 +281,9 @@ function whatText(row: UnconfirmedRevocation, project: string) {
 function RevocationSection({
   id,
   label,
-  hint,
   tone,
   empty,
+  resolved,
   rows,
   count,
   leave,
@@ -305,9 +295,10 @@ function RevocationSection({
 }: {
   id: string;
   label: string;
-  hint: string;
-  tone?: "danger";
+  tone: "danger" | "neutral";
   empty: string;
+  /** Nothing here because all is well, not because a search found none. */
+  resolved: boolean;
   rows: UnconfirmedRevocation[];
   /** The live rows: the ones going are still drawn, but not counted. */
   count: number;
@@ -336,9 +327,8 @@ function RevocationSection({
       <Card>
         <div ref={anchor}>
           <CardHeader
-            tone={tone}
+            tone={tone === "danger" ? "danger" : undefined}
             count={count}
-            note={hint}
             title={
               <button
                 type="button"
@@ -347,14 +337,7 @@ function RevocationSection({
                 onClick={onToggle}
                 className="inline-flex items-center gap-3 text-left"
               >
-                <span
-                  aria-hidden
-                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-turn ${
-                    open ? "rotate-90" : ""
-                  }`}
-                >
-                  ›
-                </span>
+                <FoldChevron open={open} />
                 <span id={`${id}-title`}>{label}</span>
               </button>
             }
@@ -363,14 +346,11 @@ function RevocationSection({
         <Unfold open={open}>
           <div id={`${id}-body`}>
             {rows.length === 0 ? (
-              <div className="row-divider flex items-center gap-2.5 px-5 py-4 text-[14px] text-muted">
-                <StatusDot tone="healthy" />
-                {empty}
-              </div>
+              <EmptyState title={empty} resolved={resolved} />
             ) : (
               <>
                 <CardColumns>
-                  <span className="w-[190px] flex-none">
+                  <span className="w-[180px] flex-none">
                     <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -416,60 +396,29 @@ function RevocationSection({
 
 function Row({ row }: { row: UnconfirmedRevocation }) {
   const resolver = useNameResolver();
-  const accountHref = useAccountHref();
   const first = resolver.resolveUser(row.user_id).value?.display_name?.split(" ")[0];
   const where = targetLabel(row.target);
   return (
     <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-start tablet:gap-[18px]">
-      <span className="flex w-full items-center gap-3 tablet:w-[190px] tablet:shrink-0">
-        <UserAvatar id={row.user_id} />
-        <span className="min-w-0">
-          <Link href={accountHref(row.user_id)} className="text-[15px] font-semibold link-hover">
-            <UserName id={row.user_id} />
-          </Link>
-          <ServiceAccountTag id={row.user_id} />
-        </span>
-      </span>
+      <WhoSeat id={row.user_id} />
 
-      <span className="flex w-full min-w-0 flex-col gap-[3px] pt-0.5 tablet:flex-1">
-        <span className="text-[14.5px] leading-[1.45]">
-          {row.project_id ? (
-            <>
-              <ProjectName id={row.project_id} />
-              {row.role_keys.length > 0 && " / "}
-              {row.role_keys.map(humanizeKey).join(", ")}
-            </>
-          ) : (
-            (row.reason ?? `Access on ${where}`)
-          )}
-        </span>
-        <span className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-faint">
-          {row.role_keys.map((key) => (
-            <Mono key={key}>{key}</Mono>
-          ))}
-          {row.cascade_id && (
-            // The join key, as a link, exactly as it appears in the audit log and on a person's
-            // activity. A finding an operator cannot trace back to the change that caused it is a
-            // mystery.
-            <Link
-              href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
-              aria-label="See the edit that set off this revocation, in Change history"
-              className="link-hover"
-            >
-              <Mono>{shortId(row.cascade_id, "c")}</Mono>
-            </Link>
-          )}
-          <span className="desktop:hidden">· {where}</span>
-        </span>
-        {row.last_error && (
-          // The reason, not a status. A given-up row an operator can see and not act on is the
-          // whole difference between a finding and a mystery.
-          <span className="mt-1 flex items-baseline gap-2 text-[13.5px] leading-[1.5] text-danger-text">
-            <StatusDot tone="danger" />
-            {row.last_error}
-          </span>
+      <WhatSeat
+        projectId={row.project_id || undefined}
+        roleKeys={row.role_keys}
+        fallback={row.reason ?? `Access on ${where}`}
+        className="tablet:flex-1"
+      >
+        <span className="text-[12.5px] text-faint desktop:hidden">{where}</span>
+        {row.cascade_id && (
+          // The join key, as a link, exactly as it appears in the audit log and on a person's
+          // activity. A finding an operator cannot trace back to the change that caused it is a
+          // mystery.
+          <ArrowLink href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}>
+            See it in Change history
+          </ArrowLink>
         )}
-      </span>
+        <LastError row={row} />
+      </WhatSeat>
 
       <span className="hidden w-[130px] flex-none pt-0.5 text-[14px] text-muted desktop:block">{where}</span>
 
@@ -496,10 +445,23 @@ function Row({ row }: { row: UnconfirmedRevocation }) {
             {row.attempts === 0
               ? "Not tried yet"
               : `Tried ${row.attempts} ${row.attempts === 1 ? "time" : "times"}`}
-            {" · Tries again by itself"}
           </span>
         )}
       </span>
     </div>
+  );
+}
+
+/**
+ * Why Syndra gave up: the reason, for a row that will not clear itself. A row still on the way
+ * retries by itself, so its last error is not something anybody can act on.
+ */
+function LastError({ row }: { row: UnconfirmedRevocation }) {
+  if (!row.spent || !row.last_error) return null;
+  return (
+    <span className="mt-1 flex items-baseline gap-2 text-[12.5px] leading-[1.5] text-faint">
+      <StatusDot tone="danger" />
+      {row.last_error}
+    </span>
   );
 }

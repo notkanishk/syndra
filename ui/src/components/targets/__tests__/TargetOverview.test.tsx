@@ -872,17 +872,14 @@ describe("what roles reach here · the census and its handoff", () => {
     expect(through.getAttribute("href")).toBe("/system/targets/truenas/mappings");
   });
 
-  // The sentence is the reason somebody clicks, and it is repeated verbatim at
-  // the top of the screen it leads to.
-  it("keeps the sentence that explains why the mappings left", () => {
+  // The setup strip is the one place that says it; the Accounts region repeats nothing.
+  it("does not repeat the setup strip in a census card", () => {
     state.roster = [summary([])];
     state.health = { reachable: true, lifecycle: "active" };
     state.inventory = { target: "truenas", bound: 0, unmanaged: [], current: true };
     renderTarget();
 
-    expect(
-      screen.getByText(/Editing one changes access for everybody holding that role/),
-    ).toBeTruthy();
+    expect(screen.queryByText(/Editing one changes access for everybody holding that role/)).toBeNull();
   });
 });
 
@@ -950,22 +947,21 @@ describe("adopting an account", () => {
     openAdoptForSai();
     fireEvent.change(screen.getByLabelText("Search people by name or email"), { target: { value: "a" } });
 
-    const sana = screen.getByRole("radio", { name: /Sana Kohli/ });
+    const sana = screen.getByRole("radio", { name: /Sana Kohli/ }).closest("label")!;
     expect(sana.textContent).toContain("Lab technician · Design");
     expect(sana.textContent).toContain("sana@example.edu");
-    const kabir = screen.getByRole("radio", { name: /Kabir Rao/ });
-    expect(kabir.hasAttribute("disabled")).toBe(true);
+    const kabirRadio = screen.getByRole("radio", { name: /Kabir Rao/ });
+    const kabir = kabirRadio.closest("label")!;
+    expect(kabirRadio).toBeDisabled();
     expect(kabir.textContent).toContain("Already has kabir.r on TrueNAS");
-    // No team: the line is the title alone, never a dangling "·" or a "—".
-    expect(kabir.textContent).toContain("Studentkabir@example.edu");
-    expect(kabir.textContent).not.toMatch(/Student ·|—/);
+    expect(kabir.textContent).not.toMatch(/—/);
   });
 
   it("says what changes and what stays, once someone is chosen", () => {
     openAdoptForSai();
     expect(screen.queryByText("Changes")).toBeNull();
     chooseSai();
-    expect(screen.getByRole("radio", { name: /Sana Kohli/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("radio", { name: /Sana Kohli/ })).toBeChecked();
     expect(screen.getByText("Changes")).toBeInTheDocument();
     expect(screen.getByText(/belongs to/).textContent).toContain("Sana Kohli");
     expect(screen.getByText(/Its home folder, its shares and its group memberships/)).toBeInTheDocument();
@@ -984,7 +980,8 @@ describe("adopting an account", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     const outcome = screen.getByText(/bound to that person/).closest("[role=status]")!;
     expect(outcome.closest(".unfold")!.parentElement!.textContent).toContain("sana");
-    expect(screen.getByText(/Assigned to/)).toBeInTheDocument();
+    expect(screen.getByText("Assigned")).toBeInTheDocument();
+    expect(outcome.textContent).toContain("sana is now Sana Kohli");
   });
 });
 

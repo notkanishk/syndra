@@ -43,7 +43,7 @@ export class ErrorBoundary extends React.Component<
         >
           <div className="type-empty-title">This page couldn&rsquo;t render.</div>
           <p className="max-w-[60ch] text-[14px] text-muted">
-            Something went wrong while drawing it. Nothing was changed — try again, or reload if it
+            Something went wrong while drawing it. Nothing was changed. Try again, or reload if it
             keeps happening.
           </p>
           <Button variant="outline" onClick={this.reset}>

@@ -1,5 +1,7 @@
 "use client";
 
+import { FoldChevron } from "@/components/ui/FoldChevron";
+
 /** A place or a group, folded: a round chevron, its name, and what is in it. */
 export function FoldHeading({
   open,
@@ -21,14 +23,7 @@ export function FoldHeading({
       onClick={onClick}
       className="flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left hover-tint"
     >
-      <span
-        aria-hidden
-        className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn ${
-          open ? "rotate-90" : ""
-        }`}
-      >
-        ›
-      </span>
+      <FoldChevron open={open} />
       <span className="min-w-0 flex-1 text-[14.5px] font-semibold">{title}</span>
       <span className={`text-[13px] ${picked ? "font-semibold text-accent-text" : "text-faint"}`}>{count}</span>
     </button>

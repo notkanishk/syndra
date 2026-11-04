@@ -1,10 +1,6 @@
 "use client";
 
 import { describeFailure, sentence } from "@/lib/outcome";
-import { glideTo } from "@/lib/motion";
-import { Radio } from "@/components/ui/Choice";
-import { roleCount } from "@/lib/role-mapping-plan";
-import Link from "next/link";
 import { Fragment, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
@@ -14,9 +10,13 @@ import { MergeFindings } from "@/components/targets/MergeFindings";
 import { Region } from "@/components/targets/Region";
 import { PeopleOnTarget } from "@/components/targets/PeopleOnTarget";
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
-import { Chip, Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
+import { ChoiceRow } from "@/components/ui/ChoiceRow";
+import { ReadLine, SectionPill, type NavSection } from "@/components/ui/SectionNav";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { FieldHint, FieldLabel, Input, Textarea } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
@@ -31,7 +31,6 @@ import { Unfold } from "@/components/ui/Unfold";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
-import { useMappings } from "@/lib/queries/useMappings";
 import { useTargetSystemHealth } from "@/lib/queries/useTargetSystemHealth";
 import {
   useAdoptAccount,
@@ -93,40 +92,37 @@ export function TargetOverview({ target }: { target: string }) {
   const project = registered?.project;
   const gated = registered !== undefined && project === null;
   const [justSet, setJustSet] = useState<string | null>(null);
+  // A count that has not been read is left off. Every region keeps its chip, at
+  // zero too: structure never moves in response to data.
+  const sections: NavSection[] = [
+    {
+      id: "waiting",
+      label: "Waiting on you",
+      count: waitingKnown ? waiting : undefined,
+      tone: waitingKnown && waiting ? "warn" : undefined,
+    },
+    { id: "accounts", label: "Accounts", count: inventory.data?.bound },
+    { id: "runs", label: "What runs here", count: registered?.callable ? registered.operations.length : undefined },
+  ];
+
+  const meta = [
+    health.data?.product ? `${name} ${versionLabel(name, health.data.product_version)}`.trim() : null,
+    gated && !justSet ? "no Zitadel project yet" : null,
+  ];
 
   return (
-    <div className="grid gap-5">
-      <div className="flex flex-col gap-1">
-        <Link
-          href="/system/targets"
-          className="inline-flex min-h-11 items-center self-start text-[13.5px] font-semibold text-accent-text desktop:min-h-6 link-hover"
-        >
-          <span aria-hidden>←&nbsp;</span>
-          Connected systems
-        </Link>
-        <PageHeader
-          title={name}
-          lede={
-            <>
-              Whether Syndra can reach {name} and what it says about itself, who has an account
-              there, and anything waiting on you. Syndra{" "}
-              <Term name="provision">provisions</Term> an account for every person whose roles
-              reach {name}, and keeps it in step.
-            </>
-          }
-          meta={
-            <MetaRow>
-              {[
-                health.data?.product
-                  ? `${name} ${versionLabel(name, health.data.product_version)}`.trim()
-                  : null,
-                gated && !justSet ? "no Zitadel project yet" : null,
-                <Mono key="id">{target}</Mono>,
-              ]}
-            </MetaRow>
-          }
-        />
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={name}
+        lede={
+          <>
+            Whether Syndra can reach {name} and what it says about itself, who has an account
+            there, and anything waiting on you. Syndra <Term name="provision">provisions</Term> an
+            account for every person whose roles reach {name}, and keeps it in step.
+          </>
+        }
+        meta={meta.some(Boolean) ? <MetaRow>{meta}</MetaRow> : undefined}
+      />
 
       {/* The project comes first: its step while unchosen, its result for the
           visit it was chosen in, then a thin strip that is the only link to the
@@ -144,16 +140,13 @@ export function TargetOverview({ target }: { target: string }) {
           end up behind a tab nobody selected. Gone while the project is
           unchosen: there is nowhere to go yet. */}
       {!(gated && !justSet) && (
-        <RegionChips
-          health={health.data}
-          name={name}
-          waiting={waitingKnown ? waiting : null}
-          accounts={inventory.data?.bound}
-          runs={registered?.callable ? registered.operations.length : undefined}
-        />
+        <ReadLine sections={sections} label="Regions of this page">
+          <TargetRead health={health.data} name={name} />
+        </ReadLine>
       )}
 
       <div className="grid gap-8">
+        <SectionPill sections={sections} label="Regions of this page" gap={32} />
         {/* Region 0 · whether changes can land.
 
             Health and maintenance are one question, and they used to sit six
@@ -165,11 +158,7 @@ export function TargetOverview({ target }: { target: string }) {
             Two machines, kept apart (board, A-01): what Syndra can reach, and what
             the system says about itself, each ending by saying which one to look
             at. A fault in either is one Notice above them. */}
-        <Region
-          id="land"
-          title="Whether changes can land"
-          lede={`Two machines, kept apart: what Syndra can reach, and what ${name} says about itself. Each reading ends by saying which one to look at.`}
-        >
+        <Region id="land" title="Whether changes can land">
           {health.error && !health.data ? (
             // Syndra's own server failed, not the target: said so, and that
             // nothing was changed. No reading, count or age until it answers.
@@ -195,11 +184,16 @@ export function TargetOverview({ target }: { target: string }) {
               />
 
               {waitingKnown && anchorFinding + conflicts.length > 0 && (
-                <p className="text-[13.5px] font-semibold text-danger-text">
-                  {anchorFinding + conflicts.length === 1
-                    ? "One item under Waiting on you needs a decision before this can be trusted."
-                    : `${anchorFinding + conflicts.length} items under Waiting on you need a decision before this can be trusted.`}
-                </p>
+                <Notice
+                  tone="danger"
+                  title={
+                    anchorFinding + conflicts.length === 1
+                      ? "One item under Waiting on you needs a decision."
+                      : `${anchorFinding + conflicts.length} items under Waiting on you need a decision.`
+                  }
+                >
+                  Until this is settled, what {name} reports cannot be trusted.
+                </Notice>
               )}
 
               <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-start gap-4">
@@ -269,7 +263,6 @@ export function TargetOverview({ target }: { target: string }) {
           title={`Accounts on ${name}`}
           lede="Three separate lists: accounts Syndra manages, accounts it did not create, and accounts it created that no role needs any more. Each takes a different action."
         >
-          <MappingCensus target={target} project={project?.name} />
           <PeopleOnTarget target={target} stale={lastKnown} />
           <Inventory target={target} stale={lastKnown} />
           <DormantAccounts target={target} stale={lastKnown} />
@@ -418,7 +411,7 @@ function SystemHealth({ target, stale }: { target: string; stale: boolean }) {
           <Reading key={s.service} tone="danger" label={`${serviceName(s.service)} is not running`}>
             Nobody can open their shares while it is stopped
             {s.enable
-              ? `, and it is set to start on boot — so it stopped by itself. Check ${name}.`
+              ? `, and it is set to start on boot, so it stopped by itself. Check ${name}.`
               : ", and it is not set to start on boot."}
           </Reading>
         ))}
@@ -513,7 +506,7 @@ function ReconcileControl({ target, lastKnown }: { target: string; lastKnown: bo
           ) : result.halted ? (
             <span className="text-warn-text">
               The check stopped before it concluded anything
-              {result.reason ? ` — ${result.reason}` : ""}. Nothing was learned about {name}; try
+              {result.reason ? `: ${result.reason}` : ""}. Nothing was learned about {name}; try
               again once it is reachable.
             </span>
           ) : (
@@ -686,7 +679,6 @@ function ReachNotice({
         title={offline ? `${name} isn't answering.` : `Syndra is waiting to retry ${name}.`}
       >
         {reading.sentence} {offline && reading.look}
-        {!health.reachable && <LastKnown name={name} readAt={health.snapshot_taken_at} />}
       </Notice>
     );
   }
@@ -747,7 +739,7 @@ function ReachCard({
         ? holdingOff
           ? `The add-on on the Syndra server is waiting before it calls ${name} again, after repeated failures, and tries again by itself. Changes for ${name} wait, and nothing is lost.`
           : paused
-            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)} — somebody set that on purpose${
+            ? `Syndra can reach ${name}, but it is ${stateLabel(lifecycle)}. Somebody set that on purpose${
                 health.lifecycle_note ? `: ${health.lifecycle_note}.` : "."
               } ${
                 lifecycle === "draining"
@@ -782,22 +774,7 @@ function ReachCard({
         {detail}
       </Reading>
       <ConnectionNotices target={target} health={health} />
-      {/* A missed check is not an outage, but this read did fail: what is on
-          screen is the last copy, and says so. */}
-      {health && !health.reachable && !fault && (
-        <div className="row-divider px-5 py-3">
-          <LastKnown name={name} readAt={health.snapshot_taken_at} />
-        </div>
-      )}
     </Card>
-  );
-}
-
-function LastKnown({ name, readAt }: { name: string; readAt?: string }) {
-  return (
-    <div className="mt-2">
-      <ReadFreshness subject={`${name}'s last known state`} state={{ readAt, current: false }} />
-    </div>
   );
 }
 
@@ -880,66 +857,20 @@ function ConnectionNotices({
 }
 
 /**
- * The way to each region (board, RULES): one chip per section at the right end
- * of the read line, whose left says how current the reading is. A jump rather
- * than a filter: everything stays present, so a finding cannot end up behind a
- * chip nobody pressed. On a phone the chips wrap; there is no separate index.
- *
- * A count that has not been read is left off. Every region keeps its chip, at
- * zero too: structure never moves in response to data.
+ * How current the reading is, said once for the page: the live check while the
+ * target answers, the last copy Syndra holds while it does not.
  */
-function RegionChips({
-  health,
-  name,
-  waiting,
-  accounts,
-  runs,
-}: {
-  health: TargetHealth | undefined;
-  name: string;
-  waiting: number | null;
-  accounts?: number;
-  runs?: number;
-}) {
-  const chips: Array<{ id: string; label: string; count?: number | null; dot?: boolean }> = [
-    { id: "waiting", label: "Waiting on you", count: waiting, dot: !!waiting },
-    { id: "accounts", label: "Accounts", count: accounts },
-    { id: "runs", label: "What runs here", count: runs },
-  ];
+function TargetRead({ health, name }: { health: TargetHealth | undefined; name: string }) {
+  if (health && !health.reachable) {
+    return (
+      <ReadFreshness
+        subject={`${name}'s last known state`}
+        state={{ readAt: health.snapshot_taken_at, current: false }}
+      />
+    );
+  }
   const checkedAt = health?.health?.checked_at;
-
-  return (
-    <div className="-mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-2 pl-5">
-      <div className="min-w-[260px] flex-1">
-        {checkedAt && <ReadFreshness subject={name} state={{ readAt: checkedAt, current: health?.reachable }} />}
-      </div>
-      <nav aria-label="Regions of this page" className="ml-auto flex flex-wrap gap-2">
-        {chips.map((chip) => (
-          <a
-            key={chip.id}
-            href={`#${chip.id}`}
-            // A jump glides there and the region's heading flashes once (8d); the chip is a control.
-            onClick={(event) => {
-              const target = document.getElementById(`${chip.id}-heading`) ?? document.getElementById(chip.id);
-              if (!target) return;
-              event.preventDefault();
-              glideTo(target);
-            }}
-            className="group control press-scale rounded-pill text-ink no-underline"
-          >
-            <Chip className="gap-2 motion-tint group-hover:bg-tint-3">
-              {chip.dot && <StatusDot tone="warn" />}
-              {chip.label}
-              {chip.count != null && <span className="text-faint">{chip.count}</span>}
-              <span aria-hidden className="text-[12px] text-faint">
-                ↓
-              </span>
-            </Chip>
-          </a>
-        ))}
-      </nav>
-    </div>
-  );
+  return checkedAt ? <ReadFreshness subject={name} state={{ readAt: checkedAt, current: health?.reachable }} /> : null;
 }
 
 /**
@@ -979,11 +910,12 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
           </p>
         </div>
       ) : (
-        registered.operations.map((op, i) => (
-          <div
-            key={op.id}
-            className={`flex flex-wrap items-baseline gap-x-3.5 gap-y-1 px-5 py-[11px] ${i === 0 ? "" : "row-divider"}`}
-          >
+        sortByName(
+          registered.operations,
+          (op) => OPERATION_LABEL[op.id] ?? op.id,
+          (op) => op.id,
+        ).map((op, i) => (
+          <CardRow key={op.id} first={i === 0}>
             <span className="flex min-w-0 flex-[1_1_200px] flex-col gap-0.5">
               <span className="text-[14px]">
                 {OPERATION_LABEL[op.id] ?? `Something ${name} can do that Syndra has no name for`}
@@ -994,9 +926,7 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
                 operator can learn that before pressing one. The secret parameters are named in the
                 words of the operation ("never logged"), not listed, and the scope is the
                 manifest's business, not the reader's. */}
-            <span className={`text-[13px] font-semibold ${op.confirm ? "text-warn-text" : "text-muted"}`}>
-              {op.confirm ? "Stops and asks" : "Runs by itself"}
-            </span>
+            <StatusSeat tone={op.confirm ? "warn" : "neutral"} word={op.confirm ? "Stops and asks" : "Runs by itself"} />
             {!op.available && (
               // Shown disabled with its reason rather than omitted: omitted, an
               // operator wonders whether the feature exists.
@@ -1004,7 +934,7 @@ function Capabilities({ registered }: { registered: TargetSummary }) {
                 Not available: {op.unavailable_reason}
               </span>
             )}
-          </div>
+          </CardRow>
         ))
       )}
     </Card>
@@ -1038,60 +968,51 @@ function LogFinding({ anchor }: { anchor: LogAnchor }) {
     reported < seen
       ? "Entries that existed are gone."
       : reported > seen
-        ? "Entries were added, but the log still ends where it did — the new ones do not follow on from anything Syndra has verified."
+        ? "Entries were added, but the log still ends where it did. The new ones do not follow on from anything Syndra has verified."
         : "The number of entries is the same, but their contents changed.";
   return (
-    <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
-      <p className="text-[13.5px] font-semibold text-danger-text">
-        The change log on {name} has been altered
-      </p>
-      <p className="mt-1 text-[13.5px] text-muted">
+    <Notice
+      tone="danger"
+      title={`The change log on ${name} has been altered`}
+      action={{ label: "Resolve this finding", onClick: () => setResolving(true) }}
+    >
+      <p>
         {what} Syndra last saw {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
         <Relative iso={anchor.anchored_at} />; {name} reported {anchor.violation_records ?? 0}{" "}
         <Relative iso={anchor.violation_at} />.
       </p>
-      <p className="mt-1 text-[13.5px] font-semibold text-danger-text">
-        If you do not know why the log changed, do not resolve this — ask the person who runs
-        the Syndra server.
+      <p className="mt-1 font-semibold text-danger-text">
+        If you do not know why the log changed, do not resolve this. Ask the person who runs the
+        Syndra server.
       </p>
       <p className="mt-1 text-[13px] text-faint">
         This stays until somebody resolves it. Syndra&rsquo;s <Term name="logAnchor">log anchor</Term>{" "}
         is the only thing that can notice entries disappearing, and resolving replaces it with a
         new <Term name="baseline">baseline</Term>.
       </p>
-      <div className="mt-1 text-[13px] text-faint">
-        <button
-          type="button"
-          aria-expanded={detail}
-          onClick={() => setDetail(!detail)}
-          className="-mx-1.5 rounded-inner px-1.5 py-1 text-left hover-tint"
-        >
+      <div className="mt-2">
+        <Button variant="outline" size="sm" aria-expanded={detail} onClick={() => setDetail(!detail)}>
           Technical detail
-        </button>
-        <Unfold open={detail}>
-        <p className="mt-1">
-          Syndra&rsquo;s note: {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
-          ending <Mono>{anchor.head.slice(0, 12)}</Mono>, made{" "}
-          <Relative iso={anchor.anchored_at} />. {name} reported{" "}
-          {anchor.violation_records ?? 0}{" "}
-          {anchor.violation_head ? (
-            <>
-              ending <Mono>{anchor.violation_head.slice(0, 12)}</Mono>{" "}
-            </>
-          ) : null}
-          <Relative iso={anchor.violation_at} />.
-        </p>
-        </Unfold>
-      </div>
-      <div className="mt-3">
-        <Button variant="outline" size="sm" onClick={() => setResolving(true)}>
-          Resolve this finding
         </Button>
+        <Unfold open={detail}>
+          <p className="mt-2 text-[13px] text-faint">
+            Syndra&rsquo;s note: {anchor.records} {anchor.records === 1 ? "entry" : "entries"}{" "}
+            ending <Mono>{anchor.head.slice(0, 12)}</Mono>, made{" "}
+            <Relative iso={anchor.anchored_at} />. {name} reported{" "}
+            {anchor.violation_records ?? 0}{" "}
+            {anchor.violation_head ? (
+              <>
+                ending <Mono>{anchor.violation_head.slice(0, 12)}</Mono>{" "}
+              </>
+            ) : null}
+            <Relative iso={anchor.violation_at} />.
+          </p>
+        </Unfold>
       </div>
       {resolving && (
         <ResolveFindingDialog target={anchor.target} anchor={anchor} onClose={() => setResolving(false)} />
       )}
-    </div>
+    </Notice>
   );
 }
 
@@ -1116,27 +1037,22 @@ function BindingConflictFinding({
 }) {
   const [deciding, setDeciding] = useState(false);
   return (
-    <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
-      <p className="text-[13.5px] font-semibold text-danger-text">
-        Two records disagree about who owns{" "}
-        <Mono>{conflict.username}</Mono>
-      </p>
-      <p className="mt-1 text-[13.5px] text-muted">
+    <Notice
+      tone="danger"
+      title={`Two records disagree about who owns ${conflict.username}`}
+      action={{ label: "Decide who owns it", onClick: () => setDeciding(true) }}
+    >
+      <p>
         A change for{" "}
         <UserName id={conflict.converged_subject_id} fallback={conflict.converged_subject_id} /> was
         applied to this account, and Syndra records it as belonging to{" "}
         <UserName id={conflict.bound_subject_id} fallback={conflict.bound_subject_id} />. The change
-        reached {targetLabel(target)} — what could not be recorded is whose account it is.
+        reached {targetLabel(target)}, but whose account it is could not be recorded.
       </p>
       <p className="mt-1 text-[13px] text-faint">
         Noticed <Relative iso={conflict.detected_at} />. Nothing else will resolve this: any
         automatic fix for either person would act on whichever record it happens to read.
       </p>
-      <div className="mt-3">
-        <Button variant="outline" size="sm" onClick={() => setDeciding(true)}>
-          Decide who owns it
-        </Button>
-      </div>
       {deciding && (
         <ResolveConflictDialog
           target={target}
@@ -1144,7 +1060,7 @@ function BindingConflictFinding({
           onClose={() => setDeciding(false)}
         />
       )}
-    </div>
+    </Notice>
   );
 }
 
@@ -1154,7 +1070,7 @@ function BindingConflictFinding({
  * Rung 3, because it takes an account away from somebody who is not in the
  * room. The two names are radio options rather than a free field: an operator
  * assigning it to a third person is not resolving this disagreement, and the
- * backend refuses that — offering a text box would let them try.
+ * backend refuses that, so a text box would let them try.
  */
 function ResolveConflictDialog({
   target,
@@ -1192,30 +1108,22 @@ function ResolveConflictDialog({
             { id: conflict.bound_subject_id, why: "Syndra's ownership record says so." },
             { id: conflict.converged_subject_id, why: "Their account changes were applied to it." },
           ].map((claimant) => (
-            <label
+            <ChoiceRow
               key={claimant.id}
-              className="flex cursor-pointer items-start gap-3 rounded-inner border border-line px-3.5 py-3 text-[14px] motion-tint has-[:checked]:border-accent-line has-[:checked]:bg-accent-soft"
-            >
-              <Radio
-                name="conflict-owner"
-                className="mt-1"
-                checked={owner === claimant.id}
-                onChange={() => setOwner(claimant.id)}
-              />
-              <span>
-                <span className="font-semibold">
-                  <UserName id={claimant.id} fallback={claimant.id} />
-                </span>
-                <span className="block text-[13.5px] text-muted">{claimant.why}</span>
-              </span>
-            </label>
+              single
+              name="conflict-owner"
+              selected={owner === claimant.id}
+              onToggle={() => setOwner(claimant.id)}
+              title={<UserName id={claimant.id} fallback={claimant.id} />}
+              description={claimant.why}
+            />
           ))}
         </fieldset>
 
         <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
           <p className="text-[13.5px] text-danger-text">
             The other person stops holding this account in Syndra, at once and without being
-            told. Their data on {name} is untouched — this changes who Syndra says it belongs
+            told. Their data on {name} is untouched. This changes who Syndra says it belongs
             to, which is what every later action on it goes by. Account fixes for both people
             are recorded as changes waiting for you to send, because the change that caused this
             gave one person the other&rsquo;s settings.
@@ -1248,7 +1156,10 @@ function ResolveConflictDialog({
           </p>
         )}
       </div>
-      <ModalFooter note="Fixes for both people wait in Pending changes. Until they are sent, the account keeps the settings the wrong change gave it.">
+      <ModalFooter
+        cancel={{ onClick: onClose, disabled: resolve.isPending }}
+        note="Fixes for both people wait in Pending changes. Until they are sent, the account keeps the settings the wrong change gave it."
+      >
         <Button
           variant="dangerConfirm"
           disabled={!ready}
@@ -1258,7 +1169,7 @@ function ResolveConflictDialog({
               ? owner === ""
                 ? "Choose who the account belongs to."
                 : note.trim() === ""
-                  ? "Say how you know — this becomes the record."
+                  ? "Say how you know. This becomes the record."
                   : !confirmation.armed
                     ? `Type ${conflict.username} to confirm.`
                     : undefined
@@ -1267,9 +1178,6 @@ function ResolveConflictDialog({
           onClick={() => resolve.mutate({ id: conflict.id, owner, note }, { onSuccess: onClose })}
         >
           Record the owner
-        </Button>
-        <Button onClick={onClose} disabled={resolve.isPending}>
-          Cancel
         </Button>
       </ModalFooter>
     </Modal>
@@ -1314,8 +1222,8 @@ function ResolveFindingDialog({
         <div className="rounded-inner border border-danger-line bg-danger-soft px-4 py-3">
           <p className="text-[13.5px] text-danger-text">
             The records that went missing stay missing, and Syndra stops being able to tell
-            you they did. Do this when you know why the log changed — a rebuilt Syndra server,
-            a replaced volume — and not to clear a warning. If you do not know, ask the person
+            you they did. Do this when you know why the log changed, such as a rebuilt Syndra server
+            or a replaced volume, and not to clear a warning. If you do not know, ask the person
             who runs the Syndra server first.
           </p>
         </div>
@@ -1345,7 +1253,10 @@ function ResolveFindingDialog({
           </p>
         )}
       </div>
-      <ModalFooter note="Syndra takes the log as it is now and compares against that from here on.">
+      <ModalFooter
+        cancel={{ onClick: onClose, disabled: resolve.isPending }}
+        note="Syndra takes the log as it is now and compares against that from here on."
+      >
         {/* Not `dangerConfirm`: irreversible, but it takes nothing from
             anybody — the rule this file states itself further down, at the
             account-assignment button. */}
@@ -1356,7 +1267,7 @@ function ResolveFindingDialog({
           reason={
             !ready && !resolve.isPending
               ? note.trim() === ""
-                ? "Say why the log changed — this is kept with the resolution."
+                ? "Say why the log changed. This is kept with the resolution."
                 : !confirmation.armed
                   ? `Type ${target} to confirm.`
                   : undefined
@@ -1370,9 +1281,6 @@ function ResolveFindingDialog({
           }
         >
           Accept this log and start over
-        </Button>
-        <Button onClick={onClose} disabled={resolve.isPending}>
-          Cancel
         </Button>
       </ModalFooter>
     </Modal>
@@ -1393,72 +1301,17 @@ function Reading({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="row-divider flex gap-3 px-5 py-[13px]">
-      <StatusDot tone={tone} className="mt-[7px]" />
-      <span className="flex min-w-0 flex-col gap-[3px]">
-        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[14.5px] font-semibold">{label}</span>
-        {children && (
-          <span className="text-[13.5px] leading-[1.5] text-muted [text-wrap:pretty]">{children}</span>
-        )}
-      </span>
-    </div>
-  );
-}
-
-/**
- * How many roles reach this target, and how many people hold them.
- *
- * The census, not the mappings. It carries no reading about health and no count
- * of people bound — those are elsewhere on this page — and its control is
- * outline, because the one violet fill here belongs to Reconcile now.
- *
- * The two sentences are repeated verbatim at the top of the screen they lead
- * to. That is deliberate: an operator who clicked because of a sentence should
- * find that sentence at the top of what they clicked into, or the click feels
- * like it went somewhere else.
- */
-function MappingCensus({ target, project }: { target: string; project?: string }) {
-  const mappings = useMappings(target);
-  const rows = mappings.data ?? [];
-  // A role giving a group, a home and a limit is three rows and one role.
-  const roles = roleCount(rows);
-
-  return (
-    <Card>
-      <div className="flex flex-wrap items-start gap-4 px-5 py-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <p className="text-[14.5px]">
-            {mappings.isLoading ? (
-              <span className="text-faint">Reading which roles are mapped to {targetLabel(target)}…</span>
-            ) : rows.length === 0 ? (
-              <>
-                <strong className="font-semibold">No role is mapped to {targetLabel(target)}</strong>,
-                so no role gives anything on it.
-              </>
-            ) : (
-              <>
-                <strong className="font-semibold">
-                  {roles === 1 ? "One role" : `${roles} roles`}
-                  {project ? ` in ${project}` : ""} {roles === 1 ? "reaches" : "reach"}{" "}
-                  {targetLabel(target)} through mappings.
-                </strong>{" "}
-                {/* M6 states how many people hold those roles here. The number
-                    is distinct people across every mapped role, and nothing
-                    returns it: holders are read per mapping, so counting them
-                    here means one request per row and then a union — and two
-                    mappings on one role would otherwise be added together and
-                    overstate it. Deferred rather than approximated; the rule is
-                    that a screen never invents a number. */}
-              </>
-            )}
-          </p>
-          <p className="max-w-[78ch] text-[13.5px] leading-[1.55] text-muted">
-            Editing one changes access for everybody holding that role. Mappings and their
-            published versions have their own screen, linked at the top of this page.
-          </p>
-        </div>
+    <CardRow>
+      <div className="flex min-w-0 flex-1 gap-3">
+        <StatusDot tone={tone} className="mt-[7px]" />
+        <span className="flex min-w-0 flex-col gap-[3px]">
+          <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[14.5px] font-semibold">{label}</span>
+          {children && (
+            <span className="text-[13.5px] leading-[1.5] text-muted [text-wrap:pretty]">{children}</span>
+          )}
+        </span>
       </div>
-    </Card>
+    </CardRow>
   );
 }
 
@@ -1483,7 +1336,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
   // unattributed result at the foot of the card, which on a list of eight
   // accounts said "Adopted." about none of them in particular.
   const [result, setResult] = useState<
-    { username: string; subjectId: string; result: AdoptionResult } | null
+    { username: string; person: string; result: AdoptionResult } | null
   >(null);
 
   const read = {
@@ -1500,7 +1353,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
       <CardHeader
         title="Not created by Syndra"
         count={inventory.data?.unmanaged?.length}
-        note={`Accounts on ${name} that Syndra did not make — root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
+        note={`Accounts on ${name} that Syndra did not make: root, service accounts, anything made by hand. Syndra leaves them alone unless you assign one to a person.`}
       />
       <div className="px-5 pb-2">
         <ReadFreshness
@@ -1534,7 +1387,8 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
                 result?.username === account.username ? (
                   <AdoptionOutcome
                     result={result.result}
-                    subjectId={result.subjectId}
+                    username={result.username}
+                    person={result.person}
                     name={name}
                     onDismiss={() => setResult(null)}
                   />
@@ -1551,7 +1405,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
                 // Syndra reaches this target with. The add-on refuses both; this
                 // says so before anybody meets the refusal.
                 <span className="text-[13px] text-faint">
-                  Syndra&rsquo;s own account on {name} — cannot be assigned to anyone
+                  Syndra&rsquo;s own account on {name}, which cannot be assigned to anyone
                 </span>
               ) : (
                 // Off while the read is too old, with its reason said once for
@@ -1581,12 +1435,12 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
               pending={adopt.isPending}
               error={adopt.error}
               onCancel={() => setAdopting(null)}
-              onAdopt={(subjectId) =>
+              onAdopt={(subjectId, person) =>
                 adopt.mutate(
                   { username: adopting, subjectId },
                   {
                     onSuccess: (res) => {
-                      setResult({ username: adopting, subjectId, result: res });
+                      setResult({ username: adopting, person, result: res });
                       setAdopting(null);
                     },
                   },
@@ -1623,7 +1477,7 @@ function AdoptPanel({
   accounts: BoundAccount[];
   pending: boolean;
   error: unknown;
-  onAdopt: (subjectId: string) => void;
+  onAdopt: (subjectId: string, person: string) => void;
   onCancel: () => void;
 }) {
   const name = targetLabel(target);
@@ -1647,7 +1501,7 @@ function AdoptPanel({
         className="flex flex-col gap-4 px-6"
         onSubmit={(e) => {
           e.preventDefault();
-          if (chosen) onAdopt(chosen.id);
+          if (chosen) onAdopt(chosen.id, chosen.name);
         }}
       >
         <div className="flex flex-col gap-2">
@@ -1666,43 +1520,29 @@ function AdoptPanel({
             <div role="radiogroup" aria-label={`People matching ${q.trim()}`} className="flex flex-col gap-1.5">
               {matches.map(({ user }) => {
                 const already = has.get(user.id);
-                const on = chosen?.id === user.id;
                 const sub = personLine(user);
                 return (
-                  <button
+                  <ChoiceRow
                     key={user.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    aria-disabled={Boolean(already)}
-                    disabled={Boolean(already)}
-                    onClick={() => setChosen({ id: user.id, name: user.name || user.email })}
-                    className={`flex min-h-[52px] items-center gap-3 rounded-[12px] border px-3 py-2 text-left ${
-                      on ? "border-accent-line bg-accent-soft" : "border-transparent hover-tint"
-                    } ${already ? "cursor-default" : ""}`}
-                  >
-                    <span
-                      aria-hidden
-                      className={`inline-flex h-6 w-6 flex-none items-center justify-center rounded-pill border-[1.5px] ${
-                        on ? "border-accent" : "border-line-strong"
-                      }`}
-                    >
-                      <span className={`h-2 w-2 rounded-pill ${on ? "bg-accent" : "bg-transparent"}`} />
-                    </span>
-                    <Avatar name={user.name} />
-                    <span className="flex min-w-0 flex-1 flex-col gap-px [overflow-wrap:anywhere]">
-                      <span className={`text-[14.5px] font-semibold ${already ? "text-muted" : ""}`}>
+                    single
+                    name="adopt-person"
+                    selected={chosen?.id === user.id}
+                    onToggle={() => setChosen({ id: user.id, name: user.name || user.email })}
+                    blocked={Boolean(already)}
+                    blockedReason={already ? `Already has ${already} on ${name}` : undefined}
+                    title={
+                      <span className="inline-flex items-center gap-2.5">
+                        <Avatar name={user.name} />
                         {user.name || user.email}
                       </span>
-                      {sub && <span className="text-[12.5px] text-muted">{sub}</span>}
-                      <span className="text-[12.5px] text-faint">{user.email}</span>
-                    </span>
-                    {already && (
-                      <span className="text-right text-[12.5px] text-faint">
-                        Already has {already} on {name}
-                      </span>
-                    )}
-                  </button>
+                    }
+                    description={
+                      <>
+                        {sub && <span className="block">{sub}</span>}
+                        <span className="block">{user.email}</span>
+                      </>
+                    }
+                  />
                 );
               })}
             </div>
@@ -1733,10 +1573,7 @@ function AdoptPanel({
         <ConfirmByTyping expected={username} noun="account name" value={confirm.typed} onChange={confirm.setTyped} />
         {Boolean(error) && <p className="text-[13.5px] text-danger-text">{sentence(describeFailure(error))}</p>}
       </form>
-      <ModalFooter>
-        <Button type="button" onClick={onCancel}>
-          Cancel
-        </Button>
+      <ModalFooter cancel={{ onClick: onCancel }}>
         {/* Violet, not red: it gives an account to someone, and red is kept
             for taking access away. Rung 3 is the typed name, and the lede
             says there is no undo. */}
@@ -1770,38 +1607,35 @@ function AdoptPanel({
  */
 function AdoptionOutcome({
   result,
-  subjectId,
+  username,
+  person,
   name,
   onDismiss,
 }: {
   result: AdoptionResult;
-  subjectId: string;
+  username: string;
+  person: string;
   name: string;
   onDismiss: () => void;
 }) {
-  const unconfirmed = result.status !== "adopted";
+  const adopted = result.status === "adopted";
+  // The backend's own `detail` never names the person (it is written for the
+  // audit trail, not the row), so the sentence names them here.
+  const said = [
+    adopted ? `${username} is now ${person}'s account.` : `${name} did not confirm it.`,
+    result.detail ?? (adopted ? "" : "Nothing was recorded."),
+    result.warning ?? "",
+  ]
+    .filter(Boolean)
+    .map(sentence)
+    .join(" ");
   return (
-    <div
-      role="status"
-      // Assigned lifts and blooms once; not confirmed appears still, on tint (S6).
-      className={`${unconfirmed ? "tint-in" : "lift-in"} flex flex-wrap items-baseline gap-2 text-[13.5px] ${
-        unconfirmed ? "text-warn-text" : "text-muted"
-      }`}
-    >
-      {!unconfirmed && <StatusDot tone="healthy" bloom className="self-center" />}
-      <span>
-        {/* The backend's own `detail` never names the person — it is written
-            for the audit trail, not the row. Named here so the operator sees
-            who they just handed the account to, not only that something
-            happened. */}
-        {!unconfirmed && (
-          <>
-            Assigned to <UserName id={subjectId} fallback={subjectId} />.{" "}
-          </>
-        )}
-        {result.detail ?? (unconfirmed ? `${name} did not confirm it. Nothing was recorded.` : "Assigned.")}
-      </span>
-      {result.warning && <span className="text-warn-text">{result.warning}</span>}
+    <div className="flex flex-wrap items-center gap-2">
+      <ActionOutcome
+        placement="inline"
+        word={adopted ? "Assigned" : "Not confirmed"}
+        outcome={{ kind: adopted ? "applied" : "failed", message: said }}
+      />
       <span className="flex-1" />
       <Button variant="outline" size="sm" onClick={onDismiss}>
         Dismiss this result
@@ -1866,7 +1700,7 @@ function LifecycleControl({
       id: "active",
       verb: "Make active",
       head: "Takes reads and changes again.",
-      more: "Use it once the work on the key or on the NAS itself is done.",
+      more: `Use it once the work on the key or on ${name} itself is done.`,
     },
     {
       id: "draining",
@@ -1878,14 +1712,14 @@ function LifecycleControl({
       id: "read_only",
       verb: "Set read-only",
       head: "Keeps answering reads and refuses every change.",
-      more: `This page stays current. Use it while you work on the NAS itself; members setting a password are told to try later.`,
+      more: `This page stays current. Use it while you work on ${name} itself; members setting a password are told to try later.`,
     },
   ].filter((a) => a.id !== current);
 
   return (
     <Card>
       <CardHeader title="Maintenance" />
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 pb-3.5">
+      <CardRow first>
         <span className="inline-flex items-center gap-2 text-[15px] font-semibold">
           <StatusDot tone={current === "active" ? "healthy" : "accent"} />
           {current === "active" ? "Active" : stateLabel(current).replace(/^./, (c) => c.toUpperCase())}
@@ -1899,12 +1733,12 @@ function LifecycleControl({
                   : "Refusing every change. Reads keep working."
               }${health?.lifecycle_note ? ` Set on purpose: ${health.lifecycle_note}.` : ""}`}
         </span>
-      </div>
+      </CardRow>
 
       {ACTIONS.map((action) => {
         const open = asking === action.id;
         return (
-          <div key={action.id} className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-2 px-5 py-3.5">
+          <CardRow key={action.id}>
             <span className="w-[150px] flex-none">
               <Button
                 variant="outline"
@@ -1954,15 +1788,9 @@ function LifecycleControl({
                 </div>
               </div>
             )}
-          </div>
+          </CardRow>
         );
       })}
-
-      <div className="row-divider px-5 py-3 text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
-        {current === "active"
-          ? "Neither takes anyone's access away. Each asks why, since the next person to read it is not you, and Make active undoes it."
-          : "Neither takes anyone's access away. Each asks why, since the next person to read it is not you."}
-      </div>
 
       {/* A lifecycle change that did not land (design B2).
 
@@ -1977,28 +1805,22 @@ function LifecycleControl({
           mandatory-reason box that empties itself on a network failure
           teaches people to type "asdf" the second time. */}
       {set.error && (
-        <div className="row-divider px-5 py-3.5">
-          <div className="grid gap-2 rounded-inner border border-warn-line bg-warn-soft px-4 py-3">
-            <p className="text-[13.5px] font-semibold text-warn-text">
-              That did not go through. {name} did not answer the request.
-            </p>
-            <p className="text-[13.5px] text-muted">
-              <span className="font-semibold text-ink">
-                The state is still {stateLabel(current)}
-              </span>{" "}
-              — the one above, unchanged. Nothing about the attempt is recorded as a state,
-              and this message is its only trace.
-            </p>
-            <p className="text-[13px] text-faint">
-              This does not affect the &ldquo;Waiting to retry&rdquo; reading above.
+        <CardRow>
+          <Notice tone="warn" title="That did not go through." className="w-full">
+            <p>{name} did not answer the request.</p>
+            <p className="mt-1">
+              <span className="font-semibold">The state is still {stateLabel(current)}</span>, the
+              one above, unchanged. Nothing about the attempt is recorded as a state, and this
+              message is its only trace. This does not affect the &ldquo;Waiting to retry&rdquo;
+              reading above.
             </p>
             {reason && (
-              <p className="text-[13px] text-muted">
+              <p className="mt-1 text-[13px] text-muted">
                 Your reason was kept. Trying again sends the same request with the same reason.
               </p>
             )}
-          </div>
-        </div>
+          </Notice>
+        </CardRow>
       )}
     </Card>
   );

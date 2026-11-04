@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -21,7 +23,7 @@ import { useAuditPages, type AuditEntry } from "@/lib/queries/useAudit";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { toCsv } from "@/lib/csv";
 import { useDebounce } from "@/lib/useDebounce";
-import { formatShortDate, formatWhen } from "@/lib/format";
+import { formatShortDate, formatWhen, humanizeKey } from "@/lib/format";
 
 type Window = "7" | "30" | "all";
 
@@ -97,7 +99,7 @@ export default function AuditPage() {
   const since = cutoff !== null ? formatShortDate(new Date(cutoff).toISOString()) : oldest ? formatShortDate(oldest) : null;
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Audit"
         lede={
@@ -105,35 +107,36 @@ export default function AuditPage() {
             ? "Everything this person did, and everything done to them, searched across the whole log rather than only what is loaded."
             : "What people did in Syndra, newest first. The filters narrow what is loaded."
         }
-        meta={
-          scopedUser
-            ? undefined
-            : `${all.length} loaded${entries.hasNextPage ? ", more further back" : " — the whole log"}`
+      />
+
+      <FilterBar
+        search={
+          <Input
+            value={actor}
+            onChange={(event) => setActor(event.target.value)}
+            placeholder="Search names or actions"
+            aria-label="Search the loaded entries"
+          />
         }
-        actions={
-          <>
-            <Select
-              value={window}
-              onChange={(event) => setWindow(event.target.value as Window)}
-              aria-label="Date range"
-              className="w-[150px]"
-            >
-              <option value="7">Last 7 days</option>
-              <option value="30">Last 30 days</option>
-              <option value="all">Everything loaded</option>
-            </Select>
-            <Input
-              value={actor}
-              onChange={(event) => setActor(event.target.value)}
-              placeholder="Search names or actions"
-              aria-label="Search the loaded entries"
-              className="w-[220px]"
-            />
-            <Button onClick={() => downloadCsv(rows, resolver)} disabled={rows.length === 0}>
-              Export every matching entry (CSV)
-            </Button>
-          </>
+        filters={
+          <Select
+            value={window}
+            onChange={(event) => setWindow(event.target.value as Window)}
+            aria-label="Date range"
+            className="w-[150px]"
+          >
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="all">All time</option>
+          </Select>
         }
+        trailing={
+          // Exports every entry the filter matches, not just the page showing.
+          <Button variant="outline" size="sm" onClick={() => downloadCsv(rows, resolver)} disabled={rows.length === 0}>
+            Export CSV
+          </Button>
+        }
+        read={<ReadFreshness state={readStateOfQuery(entries)} subject="The audit log" />}
       />
 
       {scopedUser && (
@@ -147,17 +150,11 @@ export default function AuditPage() {
         </FilterChip>
       )}
 
-      <p className="text-[13px] text-faint">
-        Follow-on: a c_ handle links to what an edit set off, in Change history. R_ names an
-        automatic rule, b_ a bundle.
-      </p>
-
       <Card>
         <CardColumns>
-          <span className="w-[110px]">When</span>
+          <span className="w-[124px]">When</span>
           <span className="w-[150px]">Who</span>
           <span className="flex-1">What they did</span>
-          <span className="w-[80px] text-right">Follow-on</span>
         </CardColumns>
 
         <ListStates
@@ -178,7 +175,7 @@ export default function AuditPage() {
                 debounced || window !== "all"
                   ? entries.hasNextPage
                     ? "These filters search what is loaded. Show more to search further back."
-                    : "The whole log is loaded — nothing in it matches."
+                    : "The whole log is loaded, and nothing in it matches."
                   : "Access given, access revoked, and rule changes are written here as they happen."
               }
               action={
@@ -192,18 +189,18 @@ export default function AuditPage() {
           {drawn.map((entry) => (
             <LeavingRow key={entry.id} {...leaving.props(entry.id)}>
             <div
-              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-4"
+              className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:flex-wrap tablet:items-baseline tablet:gap-[18px]"
             >
               <Mono className="text-faint tablet:w-[124px] tablet:shrink-0">
                 {formatWhen(entry.created_at)}
               </Mono>
-              <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
-                <UserName id={entry.actor_id} fallback={machineName(entry.actor_id)} />
+              <span className="w-full text-[14.5px] font-semibold tablet:w-[150px] tablet:shrink-0">
+                <Actor id={entry.actor_id} />
               </span>
-              <span className="w-full text-[14px] text-muted tablet:min-w-[240px] tablet:flex-1">
+              <span className="flex w-full flex-col items-start text-[14px] text-muted tablet:min-w-[240px] tablet:flex-1">
                 <EventSentence entry={entry} />
+                <TraceCell entry={entry} />
               </span>
-              <TraceCell entry={entry} className="tablet:w-[80px] tablet:shrink-0 tablet:text-right" />
             </div>
             </LeavingRow>
           ))}
@@ -223,6 +220,17 @@ export default function AuditPage() {
         </ListStates>
       </Card>
     </div>
+  );
+}
+
+/** Who did it: a person by name, a machine by what it is ("Onboarding", with "Automatic" under it). */
+function Actor({ id }: { id: string }) {
+  if (!id.startsWith("system:")) return <UserName id={id} fallback={machineName(id)} />;
+  return (
+    <>
+      {humanizeKey(id.slice(7))}
+      <span className="block text-[12.5px] font-normal text-faint">Automatic</span>
+    </>
   );
 }
 

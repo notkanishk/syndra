@@ -26,7 +26,7 @@ vi.mock("@/lib/api-client", () => ({
 
 /** The server steps sit behind a disclosure, closed until asked for. */
 function openServerSteps() {
-  const toggle = screen.getByRole("button", { name: /For whoever runs the Syndra server/ });
+  const toggle = screen.getByRole("button", { name: /Show the steps for the Syndra server/ });
   expect(toggle).toHaveAttribute("aria-expanded", "false");
   fireEvent.click(toggle);
   expect(toggle).toHaveAttribute("aria-expanded", "true");

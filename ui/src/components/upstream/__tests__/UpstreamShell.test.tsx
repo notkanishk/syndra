@@ -49,19 +49,18 @@ describe("a write that goes straight to the provider", () => {
   });
 });
 
-describe("the standing line on an upstream console", () => {
-  // A warning beside each button is met at the moment somebody has already
-  // decided, which teaches them to dismiss it. This one is met on arrival.
-  it("says where you are before you decide anything", () => {
+describe("the frame of an upstream console", () => {
+  // A permanent "Syndra keeps no record" under the title was false for grants (they are traced),
+  // so the shell says nothing of it: each write says its own truth beside the write.
+  it("names its parent in the eyebrow and links to Syndra's view, with no standing warning", () => {
     render(
       <UpstreamShell title="Users" lede="Read live." syndraHref="/users" syndraLabel="See Syndra's view">
         <p>rows</p>
       </UpstreamShell>,
     );
-    // Split across a <Term>, whose definition sits in the same paragraph's
-    // textContent — so the sentence is never contiguous in either an element
-    // query or a body match. Assert the halves.
-    expect(document.body.textContent).toMatch(/Changes here go straight to Zitadel/);
-    expect(document.body.textContent).toMatch(/Syndra\s*keeps no record of them\./);
+    expect(screen.getByRole("heading", { level: 1, name: "Users" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Zitadel" })).toHaveAttribute("href", "/zitadel");
+    expect(screen.getByRole("link", { name: "See Syndra's view" })).toHaveAttribute("href", "/users");
+    expect(document.body.textContent).not.toMatch(/keeps no record/);
   });
 });

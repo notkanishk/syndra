@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 
-import { UserName } from "@/components/names/UserName";
 import { ListStates, RowSkeleton } from "@/components/states";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { Segmented } from "@/components/ui/Select";
 import { Unfold } from "@/components/ui/Unfold";
 import { ApiError } from "@/lib/api-client";
-import { formatShortDate } from "@/lib/format";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { useSaveWelcomeClaims, useWelcomeClaims } from "@/lib/queries/useWelcomeClaims";
+
+import { SetByLine } from "./SetByLine";
 
 const LEDE_ID = "welcome-claims-lede";
 
@@ -48,7 +48,7 @@ export function WelcomeClaimsCard() {
         className="row-divider max-w-[86ch] px-5 py-4 text-[14.5px] leading-[1.55] text-muted [text-wrap:pretty]"
       >
         For a new member&apos;s first sign-in only, apps are told the roles the welcome bundle is about to give, so
-        they see the right things straight away. Roles that wait for approval are never sent early.
+        they see the right things straight away. Roles that wait for you are never sent early.
       </p>
       <ListStates
         isLoading={setting.isLoading}
@@ -60,7 +60,6 @@ export function WelcomeClaimsCard() {
         empty={null}
       >
         <div data-welcome-row className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3.5">
-          <span className="w-[170px] shrink-0 text-[14px] text-muted">Welcome roles early</span>
           <Segmented
             size="sm"
             label="Welcome roles early"
@@ -84,15 +83,7 @@ export function WelcomeClaimsCard() {
             </div>
           )}
         </Unfold>
-        <p className="row-divider px-5 py-3 text-[13px] text-faint">
-          {setBy && setAt ? (
-            <>
-              Set by <UserName id={setBy} fallback="Someone" /> on {formatShortDate(setAt)}.
-            </>
-          ) : (
-            "Never set. Off until you turn it on."
-          )}
-        </p>
+        <SetByLine by={setBy} at={setAt} never="Never set. Off until you turn it on." />
       </ListStates>
     </Card>
   );

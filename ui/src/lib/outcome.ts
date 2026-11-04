@@ -57,7 +57,7 @@ export const OUTCOME_TONE: Record<OutcomeKind, string> = {
 };
 
 export const OUTCOME_LABEL: Record<OutcomeKind, string> = {
-  applied: "Applied",
+  applied: "Done",
   queued: "Waiting for you to send",
   no_change: "No change",
   refused: "Refused",
@@ -67,7 +67,7 @@ export const OUTCOME_LABEL: Record<OutcomeKind, string> = {
 /** The same six, as a plan renders them. `apply` reads as the future it is. */
 export const PLAN_EFFECT_LABEL: Record<PlanEffect, string> = {
   apply: "Will change",
-  applied: "Applied",
+  applied: "Done",
   no_change: "No change",
   blocked: "Refused",
   failed: "Failed",
@@ -77,14 +77,15 @@ export const PLAN_EFFECT_LABEL: Record<PlanEffect, string> = {
   queued: "Will wait for you to send",
 };
 
-export const PLAN_EFFECT_TONE: Record<PlanEffect, string> = {
-  apply: OUTCOME_TONE.applied,
-  applied: OUTCOME_TONE.applied,
-  no_change: OUTCOME_TONE.no_change,
-  blocked: OUTCOME_TONE.refused,
-  failed: OUTCOME_TONE.failed,
-  queued: OUTCOME_TONE.queued,
-};
+/** A plan row's Badge: quiet for what will simply happen, a tint for what stops or waits. */
+export const PLAN_EFFECT_TONE = {
+  apply: "neutral",
+  applied: "neutral",
+  no_change: "neutral",
+  blocked: "warnSoft",
+  failed: "dangerSoft",
+  queued: "warnSoft",
+} as const satisfies Record<PlanEffect, string>;
 
 /** Ends a fragment with a full stop so it does not run into the next sentence. */
 export function sentence(text: string): string {
@@ -97,7 +98,7 @@ export function sentence(text: string): string {
 export function describeFailure(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403) return "You don't have permission to do this.";
-    if (error.status === 404) return "That item no longer exists — someone may have removed it.";
+    if (error.status === 404) return "That item no longer exists. Someone may have removed it.";
     return error.message;
   }
   if (error instanceof Error) return error.message;

@@ -1,12 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { useDegraded } from "@/components/states/DegradedBanner";
-import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { isDeparted } from "@/lib/people-filters";
 import { serviceAccountHref } from "@/lib/queries/useServiceAccounts";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -17,7 +15,11 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { FoldChevron } from "@/components/ui/FoldChevron";
+import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness, useRefreshPress } from "@/components/ui/ReadFreshness";
 import { FilterPills, Select } from "@/components/ui/Select";
@@ -29,7 +31,7 @@ import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { useProjects } from "@/lib/queries/useProjects";
-import { ProjectName, UserAvatar, UserName } from "@/components/names";
+import { ProjectName, UserName } from "@/components/names";
 import {
   useAttributeDrift,
   useBulkAttributeDrift,
@@ -78,7 +80,7 @@ import {
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import dynamic from "next/dynamic";
-import { sortByName, sortNames } from "@/lib/sort";
+import { sortByName } from "@/lib/sort";
 
 // Opened on demand, so it stays out of the page's first load.
 const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
@@ -95,7 +97,7 @@ const SECTIONS = [
     id: "sec-z",
     title: "In Zitadel, not given by Syndra",
     label: "Not given by Syndra",
-    hint: "They keep it until you decide",
+    hint: "Nothing in Syndra gives these: no direct access, no bundle, no automatic rule. They keep it until you decide.",
     tone: "danger",
   },
   {
@@ -115,10 +117,6 @@ const SECTIONS = [
   tone: "danger" | "warn";
 }>;
 type SectionKind = (typeof SECTIONS)[number]["kind"];
-
-/** A quiet text control that sits among a row's buttons. */
-const QUIET_LINK =
-  "inline-flex min-h-[44px] items-center text-[12.5px] font-semibold text-muted link-tint desktop:min-h-6";
 
 const isSafety = (item: DriftTriageItem) => (item.role_group ?? "").toLowerCase().includes("safety");
 
@@ -226,10 +224,12 @@ export function UnexplainedAccess() {
   }, [returned, filters, resolver]);
   const roleKeys = useMemo(
     () =>
-      sortNames(
+      sortByName(
         Array.from(
           new Set(applyDriftFilters(returned, filters, new Date(), "role").flatMap((item) => item.role_keys)),
         ),
+        humanizeKey,
+        (key) => key,
       ),
     [returned, filters],
   );
@@ -331,21 +331,17 @@ export function UnexplainedAccess() {
   const selectedIds = useMemo(() => Array.from(selection.selected), [selection.selected]);
 
   /**
-   * Drift arrives in clusters — one misconfigured rule, one person onboarded by
-   * hand, one project nobody told Syndra about. Selecting the cluster is the
-   * actual shape of the work, and no amount of shift-clicking finds it as
-   * reliably as asking for it.
+   * Drift arrives in clusters: one misconfigured rule, one person onboarded by hand, one project
+   * nobody told Syndra about. From what is ticked, take every row for the same person or project.
    */
-  const selectSimilar = useCallback(
-    (item: DriftTriageItem) => {
-      const kin = items.filter(
-        (candidate) =>
-          candidate.user_id === item.user_id || candidate.project_id === item.project_id,
-      );
-      selection.selectOnly(kin.map((candidate) => candidate.id));
-    },
-    [items, selection],
-  );
+  const selectSimilar = useCallback(() => {
+    const picked = items.filter((item) => selection.selected.has(item.id));
+    const users = new Set(picked.map((item) => item.user_id));
+    const projects = new Set(picked.map((item) => item.project_id));
+    selection.selectOnly(
+      items.filter((item) => users.has(item.user_id) || projects.has(item.project_id)).map((item) => item.id),
+    );
+  }, [items, selection]);
 
   /**
    * What the selection is made of, not just how much of it there is.
@@ -476,12 +472,6 @@ export function UnexplainedAccess() {
                   selecting={selecting}
                   item={item}
                   selection={selection}
-                  // Selecting is what this does, so it turns the mode on rather
-                  // than filling a selection nothing on screen is showing.
-                  onSelectSimilar={() => {
-                    setSelecting(true);
-                    selectSimilar(item);
-                  }}
                   expanded={expanded === item.id}
                   onExpand={() => setExpanded((cur) => (cur === item.id ? null : item.id))}
                   onResolve={(resolution) => setPending({ item, resolution })}
@@ -510,11 +500,14 @@ export function UnexplainedAccess() {
         title="Drift"
         lede="Access in Zitadel that nothing in Syndra gave, and access Syndra gave that Zitadel no longer holds. Adopt keeps it and lets Syndra look after it; Revoke ends it; Owned elsewhere means another system manages it and Syndra stops asking."
         meta={
-          items.length > 0
-            ? `${items.length} ${filtered ? "matching these filters" : "to decide"}${
-                oldest ? ` · oldest found ${formatRelative(oldest)}` : ""
-              }`
-            : undefined
+          items.length > 0 ? (
+            <MetaRow>
+              {[
+                `${items.length} ${filtered ? "matching these filters" : "to decide"}`,
+                oldest && `oldest found ${formatRelative(oldest)}`,
+              ]}
+            </MetaRow>
+          ) : undefined
         }
         actions={
           <Button
@@ -536,8 +529,7 @@ export function UnexplainedAccess() {
                   // acted on what it found.
                   setScanOutcome({
                     kind: "no_change",
-                    message: "Checked again",
-                    detail: "The list below is what the check found just now.",
+                    message: "The list below is what the check found just now.",
                   });
                 } catch (error) {
                   setScanOutcome(outcomeFromError(error));
@@ -551,7 +543,9 @@ export function UnexplainedAccess() {
       />
 
       {/* Under the control that ran it, above the queue it describes. */}
-      {scanOutcome && <ActionOutcome outcome={scanOutcome} />}
+      {scanOutcome && (
+        <ActionOutcome outcome={scanOutcome} word={scanOutcome.kind === "no_change" ? "Checked again" : "Couldn’t check"} />
+      )}
 
       {/* The board's sentence for the paused controls, worded as A-01 (14 Oct)
           has it: Syndra's own stops say they wait, never that they are paused.
@@ -563,6 +557,21 @@ export function UnexplainedAccess() {
       </Unfold>
 
       <FilterBar
+        // How current the list is on the left, a way to each section on the right. Only once
+        // there is a list to be current.
+        read={
+          !drift.isLoading &&
+          !drift.error && (
+            <ReadLine sections={sections} label="Sections of drift" onOpen={openSection}>
+              <ReadFreshness
+                state={{ readAt, current: true }}
+                subject="This list"
+                onRefresh={() => drift.refetch()}
+                refresh={refreshed}
+              />
+            </ReadLine>
+          )
+        }
         search={
           <Input
             value={query}
@@ -663,19 +672,6 @@ export function UnexplainedAccess() {
         }
       />
 
-      {/* The read line: how current the list is on the left, a way to each
-          section on the right. Only once there is a list to be current. */}
-      {!drift.isLoading && !drift.error && (
-        <ReadLine sections={sections} label="Sections of drift" onOpen={openSection} className="-mt-1">
-          <ReadFreshness
-            state={{ readAt, current: true }}
-            subject="This list"
-            onRefresh={() => drift.refetch()}
-            refresh={refreshed}
-          />
-        </ReadLine>
-      )}
-
       {/* A system nobody could read says what is missing from the list and why;
           the rows below are still current for the ones that were read. */}
       {unread.map((target) => (
@@ -726,6 +722,9 @@ export function UnexplainedAccess() {
         <SelectionAction disabled={paused} onClick={() => setBulkOp("external")}>
           Preview marking these owned elsewhere
         </SelectionAction>
+        {/* Drift arrives in clusters, so the fastest way to select the ones that belong together
+            is to say so, not to hunt for them. */}
+        <SelectionAction onClick={selectSimilar}>Select similar rows</SelectionAction>
       </SelectionBar>
 
       <ResolutionDialog pending={pending} onClose={() => setPending(null)} />
@@ -816,14 +815,7 @@ function DriftSection({
                 onClick={onToggle}
                 className="inline-flex items-center gap-3 text-left"
               >
-                <span
-                  aria-hidden
-                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-turn ${
-                    open ? "rotate-90" : ""
-                  }`}
-                >
-                  ›
-                </span>
+                <FoldChevron open={open} />
                 <span id={`${section.id}-title`}>{section.title}</span>
               </button>
             }
@@ -868,7 +860,6 @@ function DriftSection({
  * about the row rather than a fault.
  */
 function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) {
-  const accountHref = useAccountHref();
   const inZitadel = row.kind === "target_only";
   const text = inZitadel
     ? row.both
@@ -880,35 +871,11 @@ function ComparedRow({ row, comparedAt }: { row: ReadRow; comparedAt: string }) 
   return (
     <div data-compared-row className="border-l-[3px] border-transparent">
       <div className="row-divider flex flex-wrap items-start gap-x-[18px] gap-y-3 px-5 py-4">
-        <div className="flex w-full min-w-0 items-center gap-3 tablet:w-[180px] tablet:shrink-0">
-          <UserAvatar id={row.userId} size="row" />
-          <Link
-            href={accountHref(row.userId)}
-            className="text-[14.5px] font-semibold link-hover"
-          >
-            <UserName id={row.userId} />
-          </Link>
-        </div>
-        <div className="flex w-full flex-col items-start gap-[3px] tablet:w-[200px] tablet:shrink-0">
-          <Link
-            href={`/projects/${row.projectId}`}
-            className="text-[14px] leading-[1.45] link-hover"
-          >
-            <ProjectName id={row.projectId} /> · {humanizeKey(row.role)}
-          </Link>
-          <Mono className="text-[12.5px] text-faint">{row.role}</Mono>
-        </div>
-        <div className="order-last flex w-full min-w-0 flex-col gap-1 desktop:order-none desktop:w-auto desktop:flex-1">
+        <WhoSeat id={row.userId} />
+        <WhatSeat projectId={row.projectId} roleKeys={[row.role]} />
+        <div className="order-last flex w-full min-w-0 flex-col items-start gap-1 desktop:order-none desktop:w-auto desktop:flex-1">
           <p className="text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">{text}</p>
-          <p className="text-[12.5px] leading-[1.5] text-faint">
-            It is in the comparison and has not been raised as a finding, so there is nothing to
-            resolve here yet.{" "}
-            {!inZitadel && (
-              <Link href="/governance/pending" className="font-semibold text-muted link-hover">
-                Check Pending changes
-              </Link>
-            )}
-          </p>
+          {!inZitadel && <ArrowLink href="/governance/pending">Check Pending changes</ArrowLink>}
         </div>
         <div className="text-[13px] text-faint tablet:ml-auto tablet:w-[110px] tablet:shrink-0 tablet:pt-0.5 tablet:text-right">
           <span className="tablet:hidden">Compared </span>
@@ -923,7 +890,6 @@ function TriageRow({
   item,
   selecting,
   selection,
-  onSelectSimilar,
   expanded,
   onExpand,
   onResolve,
@@ -932,7 +898,6 @@ function TriageRow({
   item: DriftTriageItem;
   selecting: boolean;
   selection: RowSelection;
-  onSelectSimilar: () => void;
   expanded: boolean;
   onExpand: () => void;
   onResolve: (resolution: Resolution) => void;
@@ -940,15 +905,23 @@ function TriageRow({
   paused: boolean;
 }) {
   const role = item.role_keys[0] ?? "";
+  const resolver = useNameResolver();
+  // A name where Syndra can give one; where it cannot the sentence drops "by" rather than show an id.
+  const nameOf = (id?: string) => (id ? resolver.resolveUser(id).value?.display_name : undefined);
   // A machine account is not a person: an integration that provisions itself
   // on every deploy will re-create this tomorrow whatever Syndra records, so
-  // adopting is the wrong verb and is neutralised rather than hidden.
+  // adopting is the wrong verb and says why instead of vanishing.
   // Adopting records access Zitadel has. A grant Syndra records that Zitadel
   // doesn't (syndra_only) has nothing to adopt, and adopting it wrote a second,
   // permanent record of access nobody holds.
   const nothingToAdopt = item.drift_type === "syndra_only";
   const adoptPointless = item.user_is_service_account || nothingToAdopt;
-  const why = explainDrift(item);
+  const adoptReason = nothingToAdopt
+    ? "Zitadel doesn't have this, so there's nothing to adopt."
+    : item.user_is_service_account
+      ? "This account re-creates its own access on every deploy, whatever Syndra records."
+      : undefined;
+  const why = explainDrift(item, nameOf);
 
   return (
     <div
@@ -971,32 +944,19 @@ function TriageRow({
         )}
 
         {/* Who links to the person; the evidence has its own control. */}
-        <div className="order-1 flex w-full min-w-0 items-center gap-3 tablet:w-[180px] tablet:shrink-0">
-          <UserAvatar id={item.user_id} size="row" />
-          <span className="min-w-0">
-            <Link
-              href={item.user_is_service_account ? serviceAccountHref(item.user_id) : `/users/${item.user_id}`}
-              className="block text-[14.5px] font-semibold link-hover"
-            >
-              <UserName id={item.user_id} />
-            </Link>
-            <span className="block text-[12.5px] text-faint">{describeHolder(item)}</span>
-          </span>
-        </div>
+        <WhoSeat
+          id={item.user_id}
+          href={item.user_is_service_account ? serviceAccountHref(item.user_id) : `/users/${item.user_id}`}
+          sub={describeHolder(item)}
+          className="order-1 tablet:w-[180px] tablet:shrink-0"
+        />
 
-        <div className="order-2 flex w-full flex-col items-start gap-[3px] tablet:w-[200px] tablet:shrink-0">
-          <Link
-            href={`/projects/${item.project_id}`}
-            className="text-[14px] leading-[1.45] link-hover"
-          >
-            <ProjectName id={item.project_id} /> · {humanizeKey(role)}
-          </Link>
-          <Mono className="text-[12.5px] text-faint">{role}</Mono>
+        <WhatSeat projectId={item.project_id} roleKeys={role ? [role] : []} className="order-2 tablet:w-[200px] tablet:shrink-0">
           {item.target !== "zitadel" && (
             <span className="text-[12.5px] text-muted">On {targetLabel(item.target)}</span>
           )}
           <RiskPill item={item} />
-        </div>
+        </WhatSeat>
 
         <div className="order-3 text-[13px] text-faint tablet:ml-auto tablet:w-[110px] tablet:shrink-0 tablet:pt-0.5 tablet:text-right desktop:order-4">
           <span className="tablet:hidden">Found </span>
@@ -1005,7 +965,7 @@ function TriageRow({
 
         {/* The reason gets the width, and the answers sit beneath it in the
             same order on every row: Adopt · Revoke · Owned elsewhere. Revoke is
-            a red OUTLINE here — the solid fill exists only on the confirming
+            a red OUTLINE here: the solid fill exists only on the confirming
             button inside its dialog. Below the desktop breakpoint this block
             drops under the line and takes the full width. */}
         <div className="order-4 flex w-full min-w-0 flex-col gap-2.5 desktop:order-3 desktop:w-auto desktop:flex-1">
@@ -1017,12 +977,12 @@ function TriageRow({
             )}
             <WhoMadeIt item={item} />
           </div>
-          <div className="flex flex-wrap items-center gap-3 desktop:gap-2">
+          <div className="flex flex-wrap items-start gap-3 desktop:gap-2">
             <Button
-              variant={adoptPointless ? "ghost" : "accent"}
+              variant="accent"
               size="sm"
               disabled={adoptPointless || paused}
-              reason={nothingToAdopt ? "Zitadel doesn't have this, so there's nothing to adopt." : undefined}
+              reason={adoptReason}
               onClick={() => onResolve("attribute")}
             >
               Adopt
@@ -1033,27 +993,16 @@ function TriageRow({
             <Button variant="outline" size="sm" disabled={paused} onClick={() => onResolve("external")}>
               Owned elsewhere
             </Button>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onExpand}
               aria-expanded={expanded}
               data-testid="drift-row-toggle"
-              className={QUIET_LINK}
             >
               {expanded ? "Hide evidence" : "Show evidence"}
-            </button>
-            {/* Drift arrives in clusters, so the fastest way to select the ones
-                that belong together is to say so, not to hunt for them. */}
-            <button type="button" onClick={onSelectSimilar} className={QUIET_LINK}>
-              Select similar rows
-            </button>
+            </Button>
           </div>
-          {item.user_is_service_account && (
-            <p className="text-[12.5px] leading-[1.5] text-faint">
-              Adopt is off: this account re-creates its own access on every deploy, whatever Syndra
-              records.
-            </p>
-          )}
         </div>
       </div>
 
@@ -1099,7 +1048,7 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
       <div>
         <div className="type-label mb-1.5">If you revoke</div>
         <p className="text-[13.5px] leading-[1.55] text-muted">
-          This queues the removal — revocations send on their own, every few minutes. An app they are already signed in to keeps what it was told until they sign in again.
+          An app they are already signed in to keeps what it was told until they sign in again.
         </p>
       </div>
       <div>
@@ -1113,13 +1062,13 @@ function ExpandedEvidence({ item }: { item: DriftTriageItem }) {
         <div className="type-label mb-1.5">Evidence</div>
         <dl className="type-mono grid grid-cols-[84px_1fr] gap-x-3 gap-y-1 text-[12.5px] text-muted">
           <dt className="text-faint">Zitadel id</dt>
-          <dd className="truncate">{item.zitadel_grant_id || "—"}</dd>
+          <dd>
+            {item.zitadel_grant_id ? <CopyableValue value={item.zitadel_grant_id} label="Zitadel id" /> : "—"}
+          </dd>
           <dt className="text-faint">Created</dt>
           <dd>{item.upstream_created_at ? formatShortDate(item.upstream_created_at) : "unknown"}</dd>
           <dt className="text-faint">Made by</dt>
-          <dd className="truncate">
-            {item.upstream_actor ? <UserName id={item.upstream_actor} /> : "unknown"}
-          </dd>
+          <dd>{item.upstream_actor ? <UserName id={item.upstream_actor} /> : "unknown"}</dd>
           <dt className="text-faint">Last seen</dt>
           <dd>{item.last_seen_at ? formatShortDate(item.last_seen_at) : "—"}</dd>
         </dl>
@@ -1154,18 +1103,21 @@ function ResolutionDialog({
       title: "Adopt this access in Syndra?",
       lede: "Syndra takes ownership of it. The access stays exactly as it is; from now on Syndra explains it and can extend, end or revoke it like any other access.",
       confirm: "Adopt in Syndra",
+      word: "Adopted",
       variant: "accent" as const,
     },
     external: {
       title: "Is this owned by another system?",
       lede: "The access stays and stops being listed here. Use this when a known system legitimately manages it, not to quiet something you have not identified.",
       confirm: "Mark as owned elsewhere",
+      word: "Marked",
       variant: "accent" as const,
     },
     revoke: {
       title: "Revoke this access?",
       lede: "This queues removal of the access in Zitadel and records your decision in Syndra, so the next check will not list it again.",
       confirm: "Revoke access",
+      word: "Revocation recorded",
       variant: "dangerConfirm" as const,
     },
   }[resolution];
@@ -1184,11 +1136,6 @@ function ResolutionDialog({
               <strong className="font-semibold text-danger-text">
                 They will lose this role.
               </strong>
-              <br />
-              <span className="text-[14px] text-muted">
-                This queues the removal in Syndra; revocations send on their own, every few
-                minutes. Until then they still have the access.
-              </span>
             </div>
             <p className="text-[13.5px] leading-[1.55] text-muted">
               If another system adds this access back, it shows up here again after the next
@@ -1211,21 +1158,20 @@ function ResolutionDialog({
       {/* The dialog states what it did, and for a revocation that is that
           nothing has reached the target yet — the access is still there until
           the drain runs. */}
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && (
+        <ActionOutcome
+          outcome={outcome}
+          word={succeeded(outcome) ? copy.word : "Didn’t go through"}
+          className="mx-6 mb-1"
+        />
+      )}
 
-      <ModalFooter>
-        {/* Cancel is first in the DOM — and so is what the dialog's opening
-            focus lands on — so that the destructive fill on Revoke's confirm
-            button is never also the button the Modal focus trap hands the
-            cursor to. `order-2` puts it back on the right, where the confirm
-            action has always sat. */}
-        <Button
-          variant={succeeded(outcome) ? "outline" : "ghost"}
-          className="order-2"
-          onClick={onClose}
-        >
-          {succeeded(outcome) ? "Close" : "Cancel"}
-        </Button>
+      <ModalFooter cancel={succeeded(outcome) ? undefined : { onClick: onClose }}>
+        {succeeded(outcome) && (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        )}
         {/* This is the highest-stakes revoke in the product, and it stayed
             armed after it ran: a second click on the same "Revoke access"
             button revoked an already-revoked grant a second time, on a
@@ -1234,7 +1180,9 @@ function ResolutionDialog({
         {!succeeded(outcome) && (
           <Button
             variant={copy.variant}
-            className="order-1"
+            // The destructive fill never takes the dialog's opening focus, wherever ModalFooter
+            // places Cancel.
+            data-skip-initial-focus={resolution === "revoke" ? "" : undefined}
             isPending={busy}
             onClick={async () => {
               try {
@@ -1249,9 +1197,9 @@ function ResolutionDialog({
                   resolution === "revoke"
                     ? {
                         kind: "queued",
-                        message: "Revocation recorded",
+                        message: "It has not reached Zitadel yet.",
                         detail:
-                          "Not sent to Zitadel yet; revocations send on their own, every few minutes. Until then the person still has the access.",
+                          "Revocations send on their own, every few minutes. Until then the person still has the access.",
                       }
                     : {
                         kind: "applied",
@@ -1306,13 +1254,9 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
 
   if (!asked) {
     return (
-      <button
-        type="button"
-        onClick={() => setAsked(true)}
-        className={QUIET_LINK}
-      >
+      <Button variant="outline" size="sm" onClick={() => setAsked(true)}>
         Who made it?
-      </button>
+      </Button>
     );
   }
   if (origin.isLoading) {
@@ -1366,8 +1310,11 @@ function WhoMadeIt({ item }: { item: DriftTriageItem }) {
   );
 }
 
-function explainDrift(item: DriftTriageItem): { text: string; note?: string } {
-  const text = explainBody(item);
+function explainDrift(
+  item: DriftTriageItem,
+  nameOf: (id?: string) => string | undefined,
+): { text: string; note?: string } {
+  const text = explainBody(item, nameOf);
   // Two separate facts, said separately (owner's requirement): the sentence is
   // what the evidence does not show; this one is a guess about WHY, and only
   // ventured when the event log reaches back far enough to support it
@@ -1384,7 +1331,11 @@ function explainDrift(item: DriftTriageItem): { text: string; note?: string } {
   };
 }
 
-function explainBody(item: DriftTriageItem): string {
+function explainBody(item: DriftTriageItem, nameOf: (id?: string) => string | undefined): string {
+  const by = (id?: string) => {
+    const name = nameOf(id);
+    return name ? ` by ${name}` : "";
+  };
   if (item.drift_type === "syndra_only") {
     // The row used to say "usually a queued write that never landed" for every
     // one of these, which is the wrong half of the story whenever the target was
@@ -1396,38 +1347,36 @@ function explainBody(item: DriftTriageItem): string {
     // removed between two sweeps, the only evidence: nothing ever read it, so
     // the observation below does not exist. Told first for that reason.
     if (p?.applied_at) {
-      const who = p.granted_by ? ` by ${p.granted_by}` : "";
-      const why = p.reason ? ` — ${p.reason}` : "";
+      const who = by(p.granted_by);
+      const why = p.reason ? `: ${p.reason}` : "";
       const held = p.last_observed_at
         ? ` Zitadel was still holding it on ${formatShortDate(p.last_observed_at)}.`
         : "";
-      const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
-      return `Granted${who}${why}. Syndra applied it on ${formatShortDate(
+      const removedBy = nameOf(item.upstream_actor) ? ` Removed${by(item.upstream_actor)}.` : "";
+      return `Given${who}${why}. Syndra applied it on ${formatShortDate(
         p.applied_at,
       )} and Zitadel accepted it.${held} It is not there now, so somebody removed it.${removedBy}`;
     }
     if (p?.last_observed_at) {
-      const who = p.granted_by ? ` by ${p.granted_by}` : "";
+      const who = by(p.granted_by);
       const when = p.granted_at ? ` on ${formatShortDate(p.granted_at)}` : "";
-      const why = p.reason ? ` — ${p.reason}` : "";
-      const removedBy = item.upstream_actor ? ` Removed by ${item.upstream_actor}.` : "";
-      return `Granted${who}${when}${why}. Zitadel was still holding it on ${formatShortDate(
+      const why = p.reason ? `: ${p.reason}` : "";
+      const removedBy = nameOf(item.upstream_actor) ? ` Removed${by(item.upstream_actor)}.` : "";
+      return `Given${who}${when}${why}. Zitadel was still holding it on ${formatShortDate(
         p.last_observed_at,
       )} and does not now, so somebody removed it there.${removedBy}`;
     }
     if (p?.granted_at) {
-      return `Granted${p.granted_by ? ` by ${p.granted_by}` : ""} on ${formatShortDate(
+      return `Given${by(p.granted_by)} on ${formatShortDate(
         p.granted_at,
       )}. Zitadel has never been seen holding it, so the change most likely never went through. Check Pending changes.`;
     }
     return "Syndra expects this access but Zitadel does not have it, and there is no record of it ever being held there.";
   }
+  // What Syndra gives nothing for is the section's note, said once; the row says when and who.
   const when = item.upstream_created_at ? ` on ${formatShortDate(item.upstream_created_at)}` : "";
-  const who = item.upstream_actor ? ` by ${item.upstream_actor}` : "";
-  if (when || who) {
-    return `Created in Zitadel${when}${who}. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.`;
-  }
-  return "Found by the scheduled check, which compares lists and cannot see who made the change. Nothing in Syndra — no direct access, no bundle, no automatic rule — gives it.";
+  if (when || item.upstream_actor) return `Created in Zitadel${when}${by(item.upstream_actor)}.`;
+  return "Found by the scheduled check, which compares lists and cannot see who made the change.";
 }
 
 // The third copy of "is this person gone", now the shared one. It was missing
@@ -1437,7 +1386,7 @@ function explainBody(item: DriftTriageItem): string {
 function describeHolder(item: DriftTriageItem): string {
   if (item.user_is_service_account) return "Service account";
   if (isDeparted(item.user_status)) return "No longer active";
-  return "Member";
+  return "Person";
 }
 
 /**
@@ -1468,7 +1417,7 @@ function BulkResolutionDialog({
   const applyExternal = useBulkMarkExternalDrift();
 
   const adoptBody = { ids, source: "external_backfill" as const };
-  const externalBody = { ids, reason: "Marked as owned elsewhere in bulk from Unexplained access" };
+  const externalBody = { ids, reason: "Marked as owned elsewhere in bulk from Drift" };
 
   return (
     <RehearsalDialog

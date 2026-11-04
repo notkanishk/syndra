@@ -26,7 +26,7 @@ describe("Recent changes rows", () => {
     expect(r.textContent).toContain("Approved");
     expect(r.textContent).toContain("Your request for Laser cutter · Operator was approved, until 20 Oct.");
     expect(r.querySelector("strong")!.textContent).toBe("Laser cutter · Operator");
-    expect(r.textContent).toContain("“Book the evening slots.” — Kanishk Singh");
+    expect(r.textContent).toContain("Kanishk Singh: “Book the evening slots.”");
     expect(r.querySelector(".bg-healthy")).toBeTruthy();
   });
 
@@ -145,9 +145,11 @@ describe("Recent changes rows", () => {
 describe("Recent changes: approved, not there yet", () => {
   it("waits for staff to check the role", () => {
     const r = row({ kind: "request_approved", role_key: "sup", by: "op", waiting: true, wait_reason: "role_waits" });
-    expect(r.querySelector(".bg-warn")).toBeTruthy();
+    // On its way is neutral, as the role's own row says it: nothing is wrong.
+    expect(r.querySelector(".bg-warn")).toBeNull();
+    expect(r.textContent).toContain("On its way");
     expect(r.textContent).toContain(
-      "Your request for Laser cutter · Supervisor was approved. It isn't on your account yet: makerspace staff check this role before it reaches you, and nothing more is needed from you.",
+      "Your request for Laser cutter · Supervisor was approved. Makerspace staff check this role before it reaches you, and nothing more is needed from you.",
     );
     expect(r.textContent).not.toMatch(/Waiting for you to send/);
   });
@@ -155,14 +157,14 @@ describe("Recent changes: approved, not there yet", () => {
   it("says Syndra couldn't reach the sign-in system when the send halted", () => {
     const r = row({ kind: "request_approved", role_key: "sup", waiting: true, wait_reason: "halted:zitadel_offline" });
     expect(r.textContent).toContain(
-      "It isn't on your account yet: Syndra couldn't reach the sign-in system when it was approved; staff will send it.",
+      "Syndra couldn't reach the sign-in system when it was approved; makerspace staff will send it.",
     );
     expect(r.textContent).not.toContain("zitadel_offline");
   });
 
   it("links to all your requests", () => {
     render(<RecentChanges items={[]} roleName={roleName} />);
-    expect(screen.getByText("All your requests →").closest("a")!.getAttribute("href")).toBe("/requests");
+    expect(screen.getByRole("link", { name: "All your requests" }).getAttribute("href")).toBe("/requests");
   });
 
   // A-04 §14.8: a removal cancelled before it was sent. RULES: never "waiting to be sent".

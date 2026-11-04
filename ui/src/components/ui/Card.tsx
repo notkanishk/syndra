@@ -1,6 +1,5 @@
-import Link from "next/link";
 import React from "react";
-import { ARROW_LINK } from "@/components/ui/ArrowLink";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Unfold } from "@/components/ui/Unfold";
 
 /**
@@ -182,14 +181,8 @@ export function CardRow({
  * already disagreed about exactly that: one was a 20px-tall line of text.
  */
 export function CardHeaderLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className={ARROW_LINK}
-    >
-      {children}
-    </Link>
-  );
+  // The ArrowLink itself (A-17 G2): it draws the arrow, so callers never type "→".
+  return <ArrowLink href={href}>{children}</ArrowLink>;
 }
 
 /**
@@ -226,7 +219,7 @@ export function RowField({ label, children }: { label: string; children: React.R
   return (
     <div className="flex flex-col gap-0.5 py-1.5">
       <span className="type-label">{label}</span>
-      <span className="text-[13.5px] text-ink/80">{children}</span>
+      <span className="text-[13.5px] text-ink">{children}</span>
     </div>
   );
 }

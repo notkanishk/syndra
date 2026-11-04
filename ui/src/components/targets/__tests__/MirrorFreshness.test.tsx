@@ -99,7 +99,7 @@ describe("how old the add-on's mirror is", () => {
     };
     renderTarget();
 
-    expect(screen.getByText(/this is the last state seen/)).toBeInTheDocument();
+    expect(screen.getByText(/This is the last state seen/)).toBeInTheDocument();
     // `provisional`, never `stale`: a copy is a copy at any age, and the
     // ten-minute threshold belongs to the adoption gate.
     expect(screen.queryByText(/too old to act on/)).toBeNull();

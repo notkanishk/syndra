@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TargetOverview } from "@/components/targets/TargetOverview";
@@ -136,7 +136,7 @@ describe("the jump chips", () => {
   });
 
   // 8d: a jump glides there, and the heading it lands on flashes once. It is a control, not a hash jump.
-  it("glide to the region's heading instead of jumping, and are controls", () => {
+  it("glide to the region instead of jumping, and are controls", async () => {
     renderTarget();
     glide.to = [];
     const accounts = within(screen.getByRole("navigation", { name: "Regions of this page" })).getByRole("link", {
@@ -146,7 +146,7 @@ describe("the jump chips", () => {
 
     // false: the click's default, the native jump, was prevented.
     expect(fireEvent.click(accounts)).toBe(false);
-    expect(glide.to.map((el) => el.id)).toEqual(["accounts-heading"]);
+    await waitFor(() => expect(glide.to.map((el) => el.id)).toEqual(["accounts"]));
   });
 
   it("leave out a count that has not been read", () => {
@@ -269,7 +269,6 @@ describe("maintenance, as two action rows", () => {
     expect(within(card).getByText("Active")).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Start draining" })).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Set read-only" })).toBeInTheDocument();
-    expect(within(card).getByText(/Neither takes anyone's access away/)).toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: "Make active" })).toBeNull();
     expect(within(card).queryByLabelText("Reason")).toBeNull();
   });
@@ -328,14 +327,11 @@ describe("maintenance, as two action rows", () => {
 // Compare 20 Oct, dev box: the page spoke in raw ids and device text, had no way back, and drew
 // "Unnamed project" where the board draws the project's link.
 describe("the page in plain words (route-system-targets-id)", () => {
-  it("has the way back to Connected systems above the title", () => {
+  // The breadcrumb is the way back; the page draws no second one (A-17 §2.24).
+  it("has no hand-made way back above the title, and no raw id in its meta", () => {
     renderTarget();
-    const back = screen.getByRole("link", { name: /Connected systems/ });
-    expect(back.getAttribute("href")).toBe("/system/targets");
-    expect(
-      back.compareDocumentPosition(screen.getByRole("heading", { name: "TrueNAS" })) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Connected systems/ })).toBeNull();
+    expect(screen.queryByText("truenas")).toBeNull();
   });
 
   it("names each thing it can do in a plain verb, with the id beneath and how it runs", () => {
@@ -359,6 +355,22 @@ describe("the page in plain words (route-system-targets-id)", () => {
     expect(screen.getByText("What it can do").closest(".grid")).toBe(
       screen.getByText("Check for differences").closest(".grid"),
     );
+  });
+
+  // A to Z by what the row says, not by the manifest's own order (A-17 §2.24).
+  it("lists what it can do A to Z by the plain verb", () => {
+    state.roster[0].operations = [
+      { id: "account.purge", scope: "admin", confirm: true, available: true },
+      { id: "account.provision", scope: "member", confirm: false, available: true },
+      { id: "storage.status", scope: "member", confirm: false, available: true },
+    ] as TargetSummary["operations"];
+    renderTarget();
+
+    const said = ["Creates an account", "Deletes an account and its files", "Reads space used and quota"];
+    const at = said.map((text) => screen.getByText(text));
+    for (let i = 1; i < at.length; i++) {
+      expect(at[i - 1].compareDocumentPosition(at[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
 
   it("quotes the device's words as the device's, with when it raised them", () => {

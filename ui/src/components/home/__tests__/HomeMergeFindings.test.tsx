@@ -90,7 +90,7 @@ describe("every count in the Today headline has somewhere to go", () => {
     renderHome();
 
     expect(await screen.findByText("Waiting on a decision")).toBeTruthy();
-    expect(screen.getByText(/2 differences the reconciliation found/)).toBeTruthy();
+    expect(screen.getByText(/2 differences Syndra found/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /^Open / })).toBeTruthy();
   });
 

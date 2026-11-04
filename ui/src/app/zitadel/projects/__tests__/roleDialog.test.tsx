@@ -71,7 +71,7 @@ describe("the upstream role dialog becomes its own result", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create in Zitadel" }));
     await within(screen.getByRole("dialog")).findByRole("status");
 
-    expect(screen.getByRole("button", { name: "Create in Zitadel" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Create in Zitadel" })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
     expect(state.create).toHaveBeenCalledTimes(1);
   });

@@ -37,6 +37,7 @@ const resolver = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/queries/useNameResolver", () => ({ useNameResolver: () => resolver }));
 vi.mock("@/components/names", () => ({
+  UserAvatar: () => null,
   ProjectName: () => <span>Laser Lab</span>,
   RoleRef: ({ roleKey }: { roleKey: string }) => <span>{ROLES[roleKey]}</span>,
   UserName: ({ id }: { id: string }) => <span>{NAMES[id]}</span>,
@@ -103,6 +104,34 @@ describe("the queue's search", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Select these 2 requests/ }));
     expect(document.body.textContent).toMatch(/2 requests selected/);
+  });
+});
+
+describe("the queue's columns", () => {
+  it("are there when nothing is open, so the rows keep one layout", () => {
+    renderQueue([ask("r1", "u1", "operator", "approved")]);
+    expect(screen.getByRole("columnheader", { name: /Who/ })).toBeInTheDocument();
+    expect(screen.getByText("Decision")).toBeInTheDocument();
+  });
+
+  it("sort by who, A to Z and back", () => {
+    renderQueue([
+      { ...ask("r1", "u2", "trained"), created_at: "2026-10-16T08:00:00Z" },
+      { ...ask("r2", "u3", "trained"), created_at: "2026-10-16T07:00:00Z" },
+      { ...ask("r3", "u1", "trained"), created_at: "2026-10-16T06:00:00Z" },
+    ]);
+    const order = () => screen.getAllByText(/^(Ada Lovelace|Grace Hopper|Alan Turing)$/).map((n) => n.textContent);
+    expect(order()).toEqual(["Grace Hopper", "Alan Turing", "Ada Lovelace"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by who" }));
+    expect(order()).toEqual(["Ada Lovelace", "Alan Turing", "Grace Hopper"]);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by who" }));
+    expect(order()).toEqual(["Grace Hopper", "Alan Turing", "Ada Lovelace"]);
+  });
+
+  it("name the person as a link to their page, and show a reason as it was written", () => {
+    renderQueue([ask("r1", "u1", "operator")]);
+    expect(screen.getByRole("link", { name: "Ada Lovelace" }).getAttribute("href")).toBe("/users/u1");
+    expect(screen.getByText("A build.")).toBeInTheDocument();
   });
 });
 

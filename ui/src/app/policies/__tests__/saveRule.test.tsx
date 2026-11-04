@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AutomaticRulesPage from "@/app/policies/page";
@@ -66,7 +66,7 @@ function rule(overrides: Partial<MappingRuleRow> = {}): MappingRuleRow {
 
 async function saveTheOpenRule() {
   render(<AutomaticRulesPage />);
-  fireEvent.click(screen.getByText(/^R-/));
+  fireEvent.click(screen.getByText("member"));
   fireEvent.click(screen.getByRole("button", { name: "Check rule" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: "Save rule" }));
@@ -87,15 +87,11 @@ afterEach(cleanup);
  * changes or applied at once — before the operator ever saw it, and the pill
  * said "Applied" regardless of mode even when it had painted.
  */
-/**
- * The editor's title is only ever the rule's short id ("R-aaaa") — meaningless
- * to the person deciding what they're changing. The chip above it names the
- * actual project/role pair so the id is never the only label in the dialog.
- */
+/** The editor is "Edit this rule", never an id; the chip above it names the project/role pair. */
 describe("opening a rule to edit", () => {
-  it("names the rule by its project/role pair, not only its id", () => {
+  it("names the rule by its project/role pair", () => {
     render(<AutomaticRulesPage />);
-    fireEvent.click(screen.getByText(/^R-/));
+    fireEvent.click(screen.getByText("member"));
 
     expect(document.body.textContent).toMatch(/pDoor\/member/);
     expect(document.body.textContent).toMatch(/pLaser\/trained/);
@@ -118,10 +114,10 @@ describe("after saving a rule", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
-  it("reports Applied when the role does not wait, and closes on Close", async () => {
+  it("reports Saved when the role does not wait, and closes on Close", async () => {
     await saveTheOpenRule();
 
-    await waitFor(() => expect(document.body.textContent).toMatch(/Applied/));
+    await waitFor(() => expect(document.body.textContent).toMatch(/Saved/));
     expect(document.body.textContent).toMatch(/get the second at once/);
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -129,14 +125,37 @@ describe("after saving a rule", () => {
   });
 });
 
+/** Roles are chosen in the picker, never a native select; the choice shows as a chip. */
+describe("choosing the two roles", () => {
+  it("offers no native select, and keeps the two pickers' choices apart", () => {
+    render(<AutomaticRulesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "New rule" }));
+    expect(document.querySelector("select")).toBeNull();
+
+    const source = within(screen.getByRole("radiogroup", { name: "If someone holds" }));
+    fireEvent.click(source.getByRole("button", { name: /Laser Lab/ }));
+    fireEvent.click(source.getByRole("radio", { name: /Trained/ }));
+
+    expect(screen.getAllByRole("button", { name: "Remove Trained" })).toHaveLength(1);
+    // The second picker is still empty: Save stays blocked until both are chosen.
+    expect(screen.getByRole("button", { name: "Create rule" })).toBeDisabled();
+  });
+
+  it("names no rule by an id anywhere in the list", () => {
+    render(<AutomaticRulesPage />);
+    expect(document.body.textContent).not.toMatch(/R-[0-9a-f]{4}/);
+  });
+});
+
 describe("the before-line", () => {
   function pickBothRoles() {
     render(<AutomaticRulesPage />);
     fireEvent.click(screen.getByRole("button", { name: "New rule" }));
-    fireEvent.change(screen.getByLabelText(/If someone holds/), { target: { value: "pLaser" } });
-    fireEvent.change(screen.getByLabelText("Role they hold"), { target: { value: "trained" } });
-    fireEvent.change(screen.getByLabelText(/then also give them/), { target: { value: "pLaser" } });
-    fireEvent.change(screen.getByLabelText("Role to give"), { target: { value: "trained" } });
+    for (const picker of ["If someone holds", "then also give them"]) {
+      const group = within(screen.getByRole("radiogroup", { name: picker }));
+      fireEvent.click(group.getByRole("button", { name: /Laser Lab/ }));
+      fireEvent.click(group.getByRole("radio", { name: /Trained/ }));
+    }
   }
 
   it("is neutral when the role it gives does not wait", () => {
@@ -160,7 +179,7 @@ describe("the rule check's result", () => {
   async function check(result: unknown) {
     state.validate = vi.fn().mockResolvedValue(result);
     render(<AutomaticRulesPage />);
-    fireEvent.click(screen.getByText(/^R-/));
+    fireEvent.click(screen.getAllByText(/^(member|trained)$/)[0]);
     fireEvent.click(screen.getByRole("button", { name: "Check rule" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy());
   }
@@ -177,7 +196,7 @@ describe("the rule check's result", () => {
     state.rules = [rule({ source_project: "pLaser", source_role: "trained" })];
     await check({});
     const notice = screen.getByRole("status");
-    expect(notice).toHaveTextContent("Checked — 1 thing to know");
+    expect(notice).toHaveTextContent("Checked: 1 thing to know");
     expect(notice).toHaveTextContent("3 people already hold the first role");
     expect(notice).toHaveClass("bg-warn-soft");
   });

@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { BundleVersions } from "@/components/bundles/BundleVersions";
 import { FoldHeading } from "@/components/bundles/FoldHeading";
+import { TabLabel } from "@/components/bundles/TabLabel";
 import { RoleRef, UserName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Chip } from "@/components/ui/Badge";
@@ -19,7 +20,7 @@ import { useBundle, useBundleRoles, useRetiredBundles, type BundleRow } from "@/
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
-type Tab = "history" | "gave" | "people";
+type Tab = "history" | "gave";
 
 /** "Retired 19 Oct 2026 by Sam": the one status a retired bundle or rule carries. */
 export function RetiredStatus({ at, by }: { at?: string | null; by?: string }) {
@@ -49,8 +50,8 @@ export function RetiredBundlePage({ bundleId }: { bundleId: string }) {
     // A 404 is the page's own "no bundle here"; any other failure is a failure to retry.
     const failed = one.error && (one.error as { status?: number }).status !== 404 ? one.error : null;
     return (
-      <div className="flex flex-col gap-7">
-        <PageHeader eyebrow="Bundles" title="Bundle" lede="What it gives, who has it, and its history." />
+      <div className="flex flex-col gap-4">
+        <PageHeader title="Bundle" lede="What it gives, who has it, and its history." />
         <Card>
           <ListStates
             isLoading={one.isLoading}
@@ -85,9 +86,8 @@ function RetiredBundleView({ bundleId, bundle }: { bundleId: string; bundle: Bun
   const name = bundle.name;
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-4">
       <PageHeader
-        eyebrow="Bundles"
         title={name}
         meta={<RetiredStatus at={bundle.retired_at} by={bundle.retired_by} />}
         lede={
@@ -96,15 +96,14 @@ function RetiredBundleView({ bundleId, bundle }: { bundleId: string; bundle: Bun
         }
       />
 
-      <div className="flex flex-col gap-[18px]">
+      <>
         <Tabs<Tab>
-          label={`${name}: its history, what it gave, and who had it`}
+          label={`${name}: its history and what it gave`}
           value={tab}
           onSelect={setTab}
           options={[
             { value: "history", label: <TabLabel text="History" n={(versions.data ?? []).length} /> },
             { value: "gave", label: <TabLabel text="What it gave" n={(gave.data ?? []).length} /> },
-            { value: "people", label: <TabLabel text="People" n={0} /> },
           ]}
         />
 
@@ -136,24 +135,8 @@ function RetiredBundleView({ bundleId, bundle }: { bundleId: string; bundle: Bun
             </ListStates>
           </Card>
         )}
-        {tab === "people" && (
-          <Card>
-            <EmptyState
-              title="Nobody has it."
-              guidance="Everyone who had it lost what it gave when it was retired."
-            />
-          </Card>
-        )}
-      </div>
+      </>
     </div>
-  );
-}
-
-function TabLabel({ text, n }: { text: string; n: number }) {
-  return (
-    <>
-      {text} <span className="text-faint">{n}</span>
-    </>
   );
 }
 
@@ -179,7 +162,7 @@ export function RetiredBundlesFold() {
 
 function RetiredBundleRows() {
   const retired = useRetiredBundles();
-  const rows = retired.data ?? [];
+  const rows = sortByName(retired.data ?? [], (b) => b.name, (b) => b.id); // A to Z
   return (
     <ListStates
       isLoading={retired.isLoading}
@@ -197,7 +180,9 @@ function RetiredBundleRows() {
           className="row-divider flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3.5 hover-tint"
         >
           <span className="min-w-0 flex-1 text-[14.5px] font-semibold">{b.name}</span>
-          <span className="text-[13px] text-faint">Retired {formatShortDate(b.retired_at ?? "")}</span>
+          <span className="text-[13px] text-faint">
+            <RetiredStatus at={b.retired_at} />
+          </span>
         </Link>
       ))}
     </ListStates>

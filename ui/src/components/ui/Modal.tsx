@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { Button } from "@/components/ui/Button";
 import { FLASH_MS } from "@/lib/useFlashOnChange";
 import { LIGHT_LEAD_MS, SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 
@@ -298,7 +299,7 @@ export function Modal({
 
   if (open && nested && process.env.NODE_ENV !== "production") {
     console.error(
-      "Modal: a dialog opened inside another dialog. Sheets push, they do not stack — " +
+      "Modal: a dialog opened inside another dialog. Sheets push, they do not stack: " +
         "replace the first sheet's content and make its title a back-line instead.",
     );
   }
@@ -535,7 +536,7 @@ function SheetGrabber({ busy, onClose, drag }: { busy: boolean; onClose: () => v
       <div {...drag.handlers} className="flex flex-none touch-none flex-col items-center gap-1.5 pb-1 pt-3 tablet:hidden">
         <span aria-hidden className="h-1 w-[38px] rounded-pill bg-accent/40" />
         <span className={`motion-tint text-[12.5px] ${drag.answered ? "text-ink" : "text-faint"}`}>
-          Applying your change — this sheet can&apos;t be closed until it finishes.
+          Applying your change. This sheet can&apos;t be closed until it finishes.
         </span>
       </div>
     );
@@ -595,13 +596,30 @@ export function ModalHeader({
   );
 }
 
+/**
+ * Where a dialog's Cancel sits beside its act (A-17 G4, owner's question Q1).
+ * Every footer with a Cancel passes it as `cancel`, so this one line orders
+ * them all. Cancel first, the act last (owner, A-17 Q1, 5 Nov): the focus
+ * trap lands on the safe half and the act is where the eye ends.
+ */
+export const CANCEL_FIRST = true;
+
 export function ModalFooter({
   children,
   note,
+  cancel,
 }: {
+  /** The act (accent, or dangerConfirm), or after the result one outline Close. */
   children: React.ReactNode;
   note?: React.ReactNode;
+  /** The quieter half of the pair: always ghost (owner, 4 Nov), placed by `CANCEL_FIRST`. */
+  cancel?: { onClick: () => void; label?: string; disabled?: boolean; reason?: string };
 }) {
+  const quiet = cancel && (
+    <Button variant="ghost" onClick={cancel.onClick} disabled={cancel.disabled} reason={cancel.reason}>
+      {cancel.label ?? "Cancel"}
+    </Button>
+  );
   // Sticky to the panel's own bottom edge, and opaque, so a dialog long enough
   // to scroll keeps its actions in reach instead of burying them under the
   // fold. On a dialog short enough not to scroll this is inert — sticky only
@@ -615,7 +633,11 @@ export function ModalFooter({
   // clipped while typing. The margin is transparent, so the ring shows.
   return (
     <div className="sticky bottom-0 mt-2 flex flex-none flex-col gap-2.5 bg-surface-2 px-6 pb-[22px] pt-5">
-      <div className="flex flex-wrap items-center gap-2.5">{children}</div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        {CANCEL_FIRST && quiet}
+        {children}
+        {!CANCEL_FIRST && quiet}
+      </div>
       {note && <div className="text-[12.5px] leading-[1.5] text-faint">{note}</div>}
     </div>
   );
