@@ -113,32 +113,7 @@ export default function IdentityProviderPage() {
       <SigningKey status={rotation.data} loading={rotation.isLoading} error={rotation.error} keyring={keyring} />
       <UpstreamInspection reachable={live} />
       <UpstreamWrites reachable={live} />
-      <TheName />
     </div>
-  );
-}
-
-/**
- * The one place the name is explained to somebody who is already inside.
- *
- * It lives here rather than on its own page because this screen is about the
- * relationship it describes: Zitadel is the door, Syndra is the list. An
- * operator reading "is the provider reachable" is the one person for whom the
- * split is not decoration — it is the reason there are two systems.
- *
- * Deliberately last, deliberately quiet: no accent fill, no badge. Nothing on
- * this page is more important than the health sentence at the top.
- */
-function TheName() {
-  return (
-    <Card className="px-5 py-4">
-      <p className="type-card-title">Syn keeps the door. Syndra keeps the list.</p>
-      <p className="mt-2 max-w-[68ch] text-[14px] leading-[1.6] text-muted">
-        Syn keeps the door of Frigg&rsquo;s hall and bars it against those who should not enter.
-        Zitadel is that door: it decides whether you are who you say you are. Syndra decides what
-        that gets you, and keeps the record of why.
-      </p>
-    </Card>
   );
 }
 

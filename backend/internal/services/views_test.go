@@ -469,7 +469,7 @@ func TestUpsertRoleDeduplicatesReason(t *testing.T) {
 	key := roleKey{projectID: "p1", roleKey: "admin"}
 	reason := models.RoleReason{
 		Kind:        "bundle",
-		Description: "Granted by bundle Engineering",
+		Description: "Given by bundle Engineering",
 		BundleID:    "b1",
 		BundleName:  "Engineering",
 	}

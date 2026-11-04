@@ -503,7 +503,7 @@ it("tells a removal as the history of the grant Syndra applied", () => {
   ];
   renderTriage();
 
-  expect(screen.getByText(/Granted by Ada Rivera/i)).toBeTruthy();
+  expect(screen.getByText(/Given by Ada Rivera/i)).toBeTruthy();
   expect(screen.getByText(/inducted on the laser/i)).toBeTruthy();
   expect(screen.getByText(/does not now, so somebody removed it there/i)).toBeTruthy();
   expect(screen.getByText(/Removed by Marta Reyes/i)).toBeTruthy();

@@ -158,7 +158,7 @@ export default function RoleMembersPage({
             filter === "all" ? (
               <EmptyState
                 title="Nobody holds this role yet."
-                guidance="Grant it to someone directly, or add it to a bundle."
+                guidance="Give it to someone directly, or add it to a bundle."
                 action={{ label: "Go to People", href: "/users" }}
               />
             ) : (

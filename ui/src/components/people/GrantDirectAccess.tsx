@@ -23,7 +23,7 @@ import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 
 /**
- * E5 · Grant direct access. Project → role → expiry.
+ * E5 · Give a role. Project → role → expiry.
  *
  * Expiry gets presets before the picker, because "end of term" is what people
  * actually mean and a date field alone makes them count weeks. The consequence
@@ -39,7 +39,7 @@ import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
  * What giving a role by hand is called, on the person page's button and this
  * dialog's title. One constant: the owner's rename (A-17 Q7) is this line.
  */
-export const GIVE_ROLE_LABEL = "Grant direct access";
+export const GIVE_ROLE_LABEL = "Give a role";
 
 type Preset = "30" | "term" | "date" | "never";
 
@@ -283,7 +283,7 @@ function GrantDirectAccessOpen({
                 }
               }}
             >
-              Grant access
+              Give role
             </Button>
         )}
       </ModalFooter>

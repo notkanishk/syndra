@@ -3,7 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ARRIVE_SETTLED_MS } from "@/components/ui/ArriveList";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { BELOW_HEADER, CONTENT_GAP, HEADER_TO_CONTENT, PageHeader } from "@/components/ui/PageHeader";
 import { TINT_MS } from "@/lib/motion";
 
 /**
@@ -16,7 +16,7 @@ import { TINT_MS } from "@/lib/motion";
  */
 describe("PageHeader title block sizing", () => {
   it("gives the title its content-based size instead of starving it next to actions", () => {
-    render(<PageHeader title="Sam Patel" actions={<button>Grant direct access</button>} />);
+    render(<PageHeader title="Sam Patel" actions={<button>Give a role</button>} />);
 
     const heading = screen.getByRole("heading", { level: 1, name: "Sam Patel" });
     const titleBlock = heading.parentElement;
@@ -48,5 +48,14 @@ describe("PageHeader first paint", () => {
     act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
     render(<PageHeader title="Roles" />);
     expect(head()).toHaveAttribute("data-settled");
+  });
+});
+
+describe("PageHeader owns header to content", () => {
+  it("is 28px, made of the page's own gap-4 plus the header's margin", () => {
+    expect(HEADER_TO_CONTENT).toBe(28);
+    expect(BELOW_HEADER.marginBottom + CONTENT_GAP).toBe(28);
+    render(<PageHeader title="Roles" />);
+    expect(screen.getByRole("heading", { level: 1 }).parentElement!.parentElement!.style.marginBottom).toBe("12px");
   });
 });

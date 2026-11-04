@@ -77,11 +77,10 @@ beforeEach(() => {
 });
 
 describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
-  it("shows the id, labelled as Zitadel's rather than Syndra's", () => {
+  it("keeps the id out of the heading: the lineage holds it (A-17 Q6)", () => {
     renderPerson(true);
-    expect(screen.getByText("zg-77")).toBeInTheDocument();
-    // The truth is Zitadel: the primary line states what it showed
-    // ("In Zitadel"), not the raw id — the id survives as a muted suffix.
+    expect(screen.queryByText("zg-77")).not.toBeInTheDocument();
+    // The truth is Zitadel: the heading states what it showed ("In Zitadel").
     expect(document.body.textContent).toMatch(/In Zitadel/);
   });
 

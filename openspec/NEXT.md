@@ -185,7 +185,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
   - The shared parts carry those rules: FoldChevron, EmptyState's action, ArrowLink headers, `accentSoft` and `link-tint` retired, ActionOutcome's word required, ModalFooter's `cancel` slot, PageHeader owning header→content, FilterBar's `read`, ChosenChip.
   - Every screen in §2 was moved onto them; the claims card stays as A-16 merged it.
   - Guards check em dashes, text buttons, lone ghosts, hand-made chevrons, alpha text, Cancel outside the slot, nav eyebrows, negative-margin read lines and raw actor ids.
-  - **Owner's Q1–Q7 [ready-for-human]:** each answer is a one-line change, listed in the tasks' §Q. Today's behaviour stands: act then Cancel, "Send 0 changes", the "rooms" line, both mythology lines, 18px under the header, ids where they were, "Grant direct access".
+  - **Owner's answers, applied 5 Nov:** Cancel first (ghost) in every dialog footer; Pending's empty button is a disabled "Send changes"; 28px under every header; client id in the app tools card, project and person ids as CopyableValue in Advanced meta, grant ids out of headings; "Grant direct access" is now "Give a role" everywhere (audit lines read "Gave a role"); Zitadel's mythology card deleted (text kept for relocation) and the login line has no dash. **Pending A-18:** Q3 ("Nine roles across six rooms", left as it is) and where the mythology text goes [ready-for-human].
   - **Left:** names linking by default (G14) [needs-triage]; a "partly done" outcome kind [needs-triage]; polish listed in the tasks' L4 [ready-for-agent].
 
 ### Audit of 27 Oct — remediation in batches

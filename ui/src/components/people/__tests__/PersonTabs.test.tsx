@@ -91,7 +91,7 @@ describe("PersonActivity", () => {
   it("says who acted when the person was acted upon, in the passive", () => {
     audit.data = [entry({ actor_id: "op", target_id: "u1" })];
     renderIn(<PersonActivity userId="u1" name="Ada" />);
-    expect(screen.getByText("Given direct access")).toBeInTheDocument();
+    expect(screen.getByText("Given a role")).toBeInTheDocument();
     // The person did not do this — the row must not imply they did.
     expect(screen.getByText(/by/)).toBeInTheDocument();
     expect(screen.getByText("Sam Patel")).toBeInTheDocument();
@@ -102,7 +102,7 @@ describe("PersonActivity", () => {
   it("names who was affected when the person acted", () => {
     audit.data = [entry({ actor_id: "u1", target_id: "u2" })];
     renderIn(<PersonActivity userId="u1" name="Ada" />);
-    expect(document.body.textContent).toContain("Gave u2 direct access");
+    expect(document.body.textContent).toContain("Gave u2 a role");
   });
 
   // A bundle edit stores a BUNDLE id in target_id. Handing that to the person
