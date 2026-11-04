@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 
-import { UserName } from "@/components/names/UserName";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
@@ -14,10 +13,11 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { Unfold } from "@/components/ui/Unfold";
 import { ApiError } from "@/lib/api-client";
-import { formatShortDate } from "@/lib/format";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { MAX_NAME, MAX_TERMS, shortDay, termFieldErrors, termStanding, validateTerms } from "@/lib/term-dates";
 import { useSaveTerms, useTermSetting, type Term } from "@/lib/queries/useTerms";
+
+import { SetByLine } from "./SetByLine";
 
 /**
  * The term dates, set once for the whole makerspace (owner, 19 Oct 2026).
@@ -72,15 +72,7 @@ export function TermDatesCard() {
             </span>
           </div>
         ))}
-        <p className="row-divider px-5 py-3 text-[13px] text-faint">
-          {setBy && setAt ? (
-            <>
-              Set by <UserName id={setBy} fallback="Someone" /> on {formatShortDate(setAt)}.
-            </>
-          ) : (
-            "Never set. These are the usual dates until you change them."
-          )}
-        </p>
+        <SetByLine by={setBy} at={setAt} never="Never set. These are the usual dates until you change them." />
       </ListStates>
       {editing && <EditTermDates terms={terms} onClose={() => setEditing(false)} />}
     </Card>
@@ -257,7 +249,6 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
             </div>
             <div className="flex items-center gap-2.5">
               <Button
-                variant="ghost"
                 size="sm"
                 disabled={atMost || save.isPending}
                 onClick={() => {
@@ -275,6 +266,7 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
         )}
       </div>
       <ModalFooter
+        cancel={saved ? undefined : { onClick: onClose, disabled: save.isPending }}
         note={
           saved ? undefined : "Saving changes the dates for everyone. Nothing about anyone's access changes."
         }
@@ -282,14 +274,9 @@ function EditTermDates({ terms, onClose }: { terms: Term[]; onClose: () => void 
         {saved ? (
           <Button onClick={onClose}>Close</Button>
         ) : (
-          <>
-            <Button variant="accent" isPending={save.isPending} disabled={save.isPending} onClick={send}>
-              Save term dates
-            </Button>
-            <Button disabled={save.isPending} onClick={onClose}>
-              Cancel
-            </Button>
-          </>
+          <Button variant="accent" isPending={save.isPending} disabled={save.isPending} onClick={send}>
+            Save term dates
+          </Button>
         )}
       </ModalFooter>
     </Modal>

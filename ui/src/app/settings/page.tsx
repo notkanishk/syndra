@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
  */
 export default function MakerspaceSettingsPage() {
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Makerspace settings"
         lede="Settings that apply to the whole makerspace, not to one person or one connected system."

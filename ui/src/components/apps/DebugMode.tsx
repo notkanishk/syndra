@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { UserAvatar, UserName } from "@/components/names";
+import { EmptyState } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Badge, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -30,9 +31,15 @@ import {
   type DebugSession,
   type SignIn,
 } from "@/lib/queries/useClaimShape";
+import { sortAccounts } from "@/lib/sort";
 import { useUiView } from "@/lib/ui-view";
 
 import { check5, check6, checkWords, verdict, type CheckContext } from "./claim-words";
+import { ToolRow } from "./ToolRow";
+
+/** How long a capture runs; the server enforces it, and the page says it in one voice. */
+const MINUTES = 15;
+const WINDOW = `${MINUTES} minutes`;
 
 const clockSec = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
@@ -79,11 +86,10 @@ export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContex
   const ended = session && !isOn;
   return (
     <>
-      <div className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-[22px] py-3.5">
-        <span className="w-[170px] flex-none text-[14px] font-semibold">Debug mode</span>
+      <ToolRow label="Debug mode">
         <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-1">
           {!session ? (
-            <StatusSeat tone="neutral" word="Off" note="See one account's sign-ins as they happen, for 15 minutes." />
+            <StatusSeat tone="neutral" word="Off" note={`See one account's sign-ins as they happen, for ${WINDOW}.`} />
           ) : isOn ? (
             <StatusSeat tone="healthy" word="On" note={`${whose} sign-ins · ends ${clockOf(session.ends_at)}, ${minutesLeft(session.ends_at, now)} min left`} />
           ) : (
@@ -93,11 +99,11 @@ export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContex
               note={
                 session.ended_by && session.ended_by !== "system"
                   ? `Turned off at ${clockOf(session.ended_at)} by ${session.ended_by === selfId ? "you" : nameOf(session.ended_by)}.`
-                  : `At ${clockOf(session.ends_at)}, after 15 minutes.`
+                  : `At ${clockOf(session.ends_at)}, after ${WINDOW}.`
               }
             />
           )}
-          {stopOutcome && <ActionOutcome outcome={stopOutcome} placement="inline" />}
+          {stopOutcome && <ActionOutcome outcome={stopOutcome} placement="inline" word="Not turned off" />}
         </div>
         <span className="ml-auto flex flex-wrap justify-end gap-2 whitespace-nowrap">
           {isOn ? (
@@ -126,7 +132,7 @@ export function DebugMode({ appId, ctx }: { appId: string; ctx: Omit<CheckContex
             </Button>
           )}
         </span>
-      </div>
+      </ToolRow>
       <Unfold open={Boolean(session)}>
         {session && (
           <LiveList
@@ -190,7 +196,7 @@ function LiveList({
 
   return (
     <div onPointerEnter={() => setInside(true)} onPointerLeave={() => setInside(false)} onFocus={() => setInside(true)} onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setInside(false)}>
-      <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-1 px-[22px] py-2.5">
+      <div className="row-divider flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5">
         <span className="inline-flex items-center gap-2 text-[13.5px] text-muted">
           <StatusDot tone={on ? "healthy" : "neutral"} />
           {on ? "Live · newest on top" : "Seen while it was on · newest on top"}
@@ -202,18 +208,15 @@ function LiveList({
         )}
       </div>
       {shown.length === 0 ? (
-        <div className="flex flex-col gap-1 px-[22px] pb-[22px] pt-4">
-          <span className="inline-flex items-center gap-2.5 text-[14.5px]">
-            {on && <span aria-hidden className="breathe size-2 rounded-pill bg-healthy" />}
-            {on ? `Waiting for ${mine ? "your" : `${nameOf(session.user_id)}'s`} next sign-in to ${ctx.app}.` : "Nothing was seen while it was on."}
-          </span>
-          {on && mine && <span className="pl-[18px] text-[13px] text-faint">Sign in to {ctx.app} in another window to see it here.</span>}
-        </div>
+        <EmptyState
+          title={on ? `Waiting for ${mine ? "your" : `${nameOf(session.user_id)}'s`} next sign-in to ${ctx.app}.` : "Nothing was seen while it was on."}
+          guidance={on && mine ? `Sign in to ${ctx.app} in another window to see it here.` : undefined}
+        />
       ) : (
         <>
           <CardColumns>
             <span className="w-7 flex-none" />
-            <span className="w-[96px] flex-none">Time ↓</span>
+            <span className="w-[96px] flex-none">Time</span>
             <span className="w-[210px] flex-none">Person</span>
             <span className="w-[120px] flex-none">Asked for</span>
             <span className="min-w-[150px] flex-1">Syndra answered</span>
@@ -245,7 +248,7 @@ function LiveList({
         </>
       )}
       {!on && (
-        <p className="row-divider px-[22px] pb-4 pt-3 text-[13px] text-faint">
+        <p className="row-divider px-5 pb-4 pt-3 text-[13px] text-faint">
           What it saw stays here until {clockOf(new Date(new Date(session.ended_at ?? session.ends_at).getTime() + 60 * 60_000).toISOString())}, then Syndra forgets it. It&rsquo;s gone sooner if Syndra restarts.
         </p>
       )}
@@ -365,11 +368,11 @@ function OpenedSignIn({ s, ctx }: { s: SignIn; ctx: CheckContext }) {
           <Badge hollow>Rebuilt, not the signed token</Badge>
         </span>
         <p className="max-w-[70ch] text-[13.5px] leading-[1.55] text-muted">
-          Zitadel adds its own claims, signs the token and hands it to {ctx.app} after Syndra answers, so Syndra never sees the token. This is rebuilt from what Zitadel sent and what Syndra answered.
+          Zitadel adds its own claims, signs the token and hands it to {ctx.app} after Syndra answers, so Syndra never sees the token.
         </p>
         <TokenBlock lines={[...theirs, ...ours]} />
         <span className="text-[12.5px] text-faint">
-          The faded lines are Zitadel&rsquo;s own, rebuilt from what it sent. <Mono>iss</Mono>, <Mono>aud</Mono> and the times are left out.
+          The faded lines are Zitadel&rsquo;s own. <Mono>iss</Mono>, <Mono>aud</Mono> and the times are left out.
         </span>
       </section>
     </>
@@ -404,9 +407,9 @@ function DebugSheet({
   const nameOf = (id: string) => (id === selfId ? "you" : (people.find((u) => u.id === id)?.name ?? "this person"));
   const needle = query.trim().toLowerCase();
   const matches = needle
-    ? people.filter((u) => u.id !== selfId && (u.name.toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle))).slice(0, 5)
+    ? sortAccounts(people.filter((u) => u.id !== selfId && (u.name.toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle)))).slice(0, 5)
     : [];
-  const ends = session?.ends_at ?? new Date(Date.now() + 15 * 60_000).toISOString();
+  const ends = session?.ends_at ?? new Date(Date.now() + MINUTES * 60_000).toISOString();
   const chosenName = chosen ? nameOf(chosen) : "";
   const verb = mode === "on" ? "Turn on debug mode" : chosen ? `Switch to ${chosenName === "you" ? "you" : chosenName}` : "Switch";
 
@@ -428,22 +431,22 @@ function DebugSheet({
           done
             ? undefined
             : mode === "on"
-              ? `See one account's sign-ins to ${app} live: what Zitadel asked, what Syndra answered, and the six checks. It turns itself off after 15 minutes.`
+              ? `See one account's sign-ins to ${app} live: what Zitadel asked, what Syndra answered, and the six checks. It turns itself off after ${WINDOW}.`
               : `Debug mode captures one account at a time. It's showing ${current === selfId ? "your" : `${nameOf(current ?? "")}'s`} sign-ins to ${app} until ${clockOf(ends)}.`
         }
       />
       {done ? (
-        <div role="status" className="lift-in flex flex-col gap-2 px-6 pb-2">
-          <span className="flex items-center gap-2.5">
-            <StatusDot tone="healthy" bloom />
-            <span className="font-display text-[22px] font-semibold">{done.switched ? "Switched" : "On"}</span>
-          </span>
-          <p className="text-[15px] leading-[1.55]">
-            {done.switched
-              ? `Debug mode now shows ${chosenName === "you" ? "your" : `${chosenName}'s`} sign-ins, until ${clockOf(done.ends_at)}.`
-              : `Debug mode is on for ${app} until ${clockOf(done.ends_at)}, for ${chosen === selfId || !chosen ? "your" : `${chosenName}'s`} sign-ins.`}
-          </p>
-          <p className="text-[13px] text-faint">Each sign-in appears under the preview as it happens.</p>
+        <div className="px-6 pb-2">
+          <ActionOutcome
+            word={done.switched ? "Switched" : "Turned on"}
+            outcome={{
+              kind: "applied",
+              message: done.switched
+                ? `Debug mode now shows ${chosenName === "you" ? "your" : `${chosenName}'s`} sign-ins, until ${clockOf(done.ends_at)}.`
+                : `Debug mode is on for ${app} until ${clockOf(done.ends_at)}, for ${chosen === selfId || !chosen ? "your" : `${chosenName}'s`} sign-ins.`,
+              detail: "Each sign-in appears under the preview as it happens.",
+            }}
+          />
         </div>
       ) : (
         <div className="flex flex-col gap-3 px-6 pb-2">
@@ -493,15 +496,16 @@ function DebugSheet({
           <p className="text-[13px] leading-[1.5] text-faint">
             Syndra keeps what it sees in memory for an hour, never in its database. Names and emails show, because this is for you to debug. Signatures and secrets never do.
           </p>
-          {outcome && <ActionOutcome outcome={outcome} />}
+          {outcome && <ActionOutcome outcome={outcome} word={mode === "on" ? "Not turned on" : "Not switched"} />}
         </div>
       )}
       <ModalFooter
+        cancel={done ? undefined : { onClick: onClose }}
         note={
           done
             ? undefined
             : mode === "on"
-              ? `Ends at ${clockOf(ends)}, 15 minutes from now. While it runs, choosing another account moves the capture to them. Change history records each.`
+              ? `Ends at ${clockOf(ends)}, ${WINDOW} from now. While it runs, choosing another account moves the capture to them. Change history records each.`
               : chosen
                 ? `Moves the capture to ${chosenName} from now on. It still ends at ${clockOf(ends)}. ${current === selfId ? "Your" : `${nameOf(current ?? "")}'s`} sign-ins seen so far stay in the list. Change history records the switch.`
                 : `It still ends at ${clockOf(ends)}. A switch never makes a capture longer.`
@@ -510,12 +514,9 @@ function DebugSheet({
         {done ? (
           <Button onClick={onClose}>Close</Button>
         ) : (
-          <>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button variant="accent" isPending={start.isPending} disabled={!chosen || chosen === current} onClick={confirm}>
-              {verb}
-            </Button>
-          </>
+          <Button variant="accent" isPending={start.isPending} disabled={!chosen || chosen === current} onClick={confirm}>
+            {verb}
+          </Button>
         )}
       </ModalFooter>
     </Modal>
