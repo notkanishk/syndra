@@ -4,15 +4,17 @@ import { describeFailure, sentence } from "@/lib/outcome";
 import { useState } from "react";
 
 import { ConfirmByTyping, useTypedConfirmation } from "@/components/ui/Acknowledge";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Notice } from "@/components/ui/Notice";
 import { targetLabel } from "@/lib/nav";
 import { useRevokeTargetAccess, type RevocationResult } from "@/lib/queries/useHolds";
 import { useIsTouch } from "@/lib/useViewport";
 
 /**
- * Taking somebody's access away on a target (6.17; design §27).
+ * Revoking somebody's access on a target (6.17; design §27).
  *
  * This target has no way to end a session. There is no close, no disconnect and
  * no session list — so "revoke" cannot mean what an operator reasonably assumes
@@ -28,22 +30,20 @@ import { useIsTouch } from "@/lib/useViewport";
  *   - It is dressed as a revocation, because it is one: rung 3, typed name, and
  *     the one solid red fill in the product. Muscle memory must not depend on
  *     which revocation an operator is doing.
- *   - The session sentence is AMBER, not red. It is a broken assumption —
- *     *revoked* implies immediate and here it is not — rather than the danger
+ *   - The session sentence is AMBER, not red. It is a broken assumption:
+ *     *revoked* implies immediate and here it is not, rather than the danger
  *     itself. Red is the confirming button.
- *   - The label is "Revoke", despite this component's name. An earlier draft
- *     said "Take away", on the reasoning that *revoke* already means undoing a
- *     grant Syndra itself made — but the copy guard bans "take away" outright,
- *     and the product says "Revoke" on every other screen that ends access.
- *     One word for one action beats a finer distinction only this file draws.
+ *   - The label is "Revoke". The product says it on every other screen that
+ *     ends access, and one word for one action beats a finer distinction only
+ *     this file draws.
  */
 
 /** Held here, not composed, because it is a statement about what the system does. */
 function sessionSentence(name: string): string {
-  return `If they are connected right now, they stay connected until they disconnect — ${name} cannot end a session. Their next connection is refused.`;
+  return `If they are connected right now, they stay connected until they disconnect. ${name} cannot end a session. Their next connection is refused.`;
 }
 
-export function TakeAwayDialog({
+export function RevokeDialog({
   target,
   subjectId,
   subjectName,
@@ -65,47 +65,37 @@ export function TakeAwayDialog({
   const armed = confirm.armed && reason.trim() !== "" && !revoke.isPending;
   const name = targetLabel(target);
 
+  // The sheet becomes its result, and closes only on Close.
   if (result) {
     return (
-      <Modal open onClose={onClose} size="md" labelledBy="takeaway-result">
-        <ModalHeader
-          titleId="takeaway-result"
-          title={
-            result.status === "revoked"
-              ? "Access revoked"
-              : "Partly done — one step is still outstanding"
-          }
-          lede={result.detail}
-        />
-        {result.disclosure && (
-          <div className="px-6">
-            <p className="rounded-inner border border-accent-line bg-accent-soft px-4 py-3 text-[13.5px] text-muted">
-              {result.disclosure}
-            </p>
-          </div>
-        )}
-        {result.outstanding && (
-          // Named so a surface can offer the one remaining action rather than
-          // the whole composition again — and so an operator knows there IS one.
-          <div className="px-6 pt-3">
-            <p className="text-[13.5px] text-warn-text">
-              Still outstanding: {result.outstanding}.
-            </p>
-          </div>
-        )}
+      <Modal open onClose={onClose} size="md" labelledBy="revoke-result">
+        <ModalHeader titleId="revoke-result" title={`Revoke ${subjectName}'s access on ${name}`} />
+        <div className="grid gap-3 px-6">
+          <ActionOutcome
+            word={result.status === "revoked" ? "Revoked" : "Partly done"}
+            outcome={{ kind: "applied", message: result.detail ?? "", detail: result.disclosure }}
+          />
+          {result.outstanding && (
+            // Named so a surface can offer the one remaining action rather than
+            // the whole composition again, and so an operator knows there IS one.
+            <p className="text-[13.5px] text-warn-text">Still outstanding: {result.outstanding}.</p>
+          )}
+        </div>
         <ModalFooter>
-          <Button onClick={onClose}>Close</Button>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
         </ModalFooter>
       </Modal>
     );
   }
 
   return (
-    <Modal open onClose={revoke.isPending ? () => {} : onClose} busy={revoke.isPending} size="md" labelledBy="takeaway-title">
+    <Modal open onClose={revoke.isPending ? () => {} : onClose} busy={revoke.isPending} size="md" labelledBy="revoke-title">
       <ModalHeader
-        titleId="takeaway-title"
+        titleId="revoke-title"
         title={`Revoke ${subjectName}'s access on ${name}`}
-        lede={`Revoke (end their access): ${subjectName} can no longer sign in to ${name}. They keep every role they hold — only what those roles give them on ${name} is put on hold.`}
+        lede={`Revoke ends their access: ${subjectName} can no longer sign in to ${name}.`}
       />
 
       <div className="grid gap-4 px-6">
@@ -122,17 +112,17 @@ export function TakeAwayDialog({
         {/* Amber, and above the form rather than beside the button: it is what
             the reader needs to know BEFORE deciding, not a caveat attached to
             the decision. */}
-        <p className="rounded-inner border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text">
+        <Notice tone="warn" title="Anyone connected stays connected for now.">
           {sessionSentence(name)}
-        </p>
+        </Notice>
 
         <div>
-          <FieldLabel htmlFor="takeaway-reason">Why</FieldLabel>
+          <FieldLabel htmlFor="revoke-reason">Why</FieldLabel>
           <Input
-            id="takeaway-reason"
+            id="revoke-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="What happened — this is what somebody reads six months from now"
+            placeholder="What happened"
             // Not on touch. Focusing on mount opens the keyboard the instant
             // the sheet rises, which covers the sentence saying what this does
             // to somebody's access — and that sentence is the most protected
@@ -146,9 +136,9 @@ export function TakeAwayDialog({
         </div>
 
         <div>
-          <FieldLabel htmlFor="takeaway-review-date">Look at this again by</FieldLabel>
+          <FieldLabel htmlFor="revoke-review-date">Look at this again by</FieldLabel>
           <Input
-            id="takeaway-review-date"
+            id="revoke-review-date"
             type="date"
             value={reviewDate}
             onChange={(e) => setReviewDate(e.target.value)}
@@ -175,7 +165,8 @@ export function TakeAwayDialog({
       </div>
 
       <ModalFooter
-        note={`The storage password is replaced now. The hold is recorded now — revocations send on their own, every few minutes, not from Pending changes.`}
+        cancel={{ onClick: onClose, disabled: revoke.isPending }}
+        note="Revocations send on their own, every few minutes, not from Pending changes."
       >
         <Button
           variant="dangerConfirm"
@@ -184,7 +175,7 @@ export function TakeAwayDialog({
           reason={
             !armed && !revoke.isPending
               ? !reason.trim()
-                ? "Say why — the reason is recorded against the withdrawal."
+                ? "Say why. The reason is recorded with the revoke."
                 : !confirm.armed
                   ? `Type ${subjectName} to confirm.`
                   : undefined
@@ -201,9 +192,6 @@ export function TakeAwayDialog({
           }
         >
           {`Revoke access for ${subjectName}`}
-        </Button>
-        <Button onClick={onClose} disabled={revoke.isPending}>
-          Cancel
         </Button>
       </ModalFooter>
     </Modal>

@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { UserName } from "@/components/names";
-import { StatusDot } from "@/components/ui/Badge";
+import { useAccountHref } from "@/components/system/ServiceAccountTag";
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { formatAt, formatRelative } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
@@ -149,6 +151,7 @@ function UnconfirmedRow({
   const w = wording(op, who, name);
   const [pre, post] = w.asked;
   const today = new Date(op.sent_at).toDateString() === new Date().toDateString();
+  const accountHref = useAccountHref();
 
   return (
     <div className={`${first ? "" : "row-divider "}flex flex-wrap items-start gap-x-[18px] gap-y-2.5 px-5 py-4`}>
@@ -158,17 +161,14 @@ function UnconfirmedRow({
             {pre}
             {post !== null && (
               <>
-                <Link href={`/users/${encodeURIComponent(op.subject_id)}`} className="text-ink link-hover">
+                <Link href={accountHref(op.subject_id)} className="text-ink link-hover">
                   <UserName id={op.subject_id} />
                 </Link>
                 {post}
               </>
             )}
           </span>
-          <span className="inline-flex items-center gap-[7px] whitespace-nowrap text-[13.5px] font-semibold text-warn-text">
-            <StatusDot tone="warn" />
-            Not confirmed
-          </span>
+          <StatusSeat tone="warn" word="Not confirmed" />
         </span>
         <span className="text-[13.5px] leading-[1.55] text-muted [text-wrap:pretty]">
           Sent to {name} {formatAt(op.sent_at)}
@@ -259,40 +259,30 @@ function SayWhatHappened({
             )}
           </>
         ) : (
-          <div role="status" className="flex flex-col gap-1.5 pb-2.5 pt-1.5">
-            <span className={`inline-flex items-center gap-2.5 font-display text-[22px] font-semibold ${result ? "lift-in" : ""}`}>
-              {/* Done lifts and blooms once; Not done appears still (S6). */}
-              <StatusDot tone={result ? "healthy" : "neutral"} bloom={result} />
-              {result ? "Done" : "Not done"}
-            </span>
-            <p className="text-[15px] leading-[1.55] [text-wrap:pretty]">{result ? w.done : w.notDone}</p>
-            <span className="text-[13px] leading-[1.5] text-faint [text-wrap:pretty]">
-              It leaves Waiting on you. Audit keeps your answer, with your name.
-            </span>
-          </div>
+          // Done lifts and blooms once; Not done appears still (S6).
+          <ActionOutcome
+            word={result ? "Done" : "Not done"}
+            outcome={{
+              kind: result ? "applied" : "no_change",
+              message: result ? w.done : w.notDone,
+              detail: "It leaves Waiting on you. Audit keeps your answer, with your name.",
+            }}
+          />
         )}
       </div>
       <ModalFooter
+        cancel={result === null ? { onClick: () => onClose(false), disabled: answer.isPending } : undefined}
         note={result === null ? `Nothing is sent to ${name}. This records what you found, with your name.` : undefined}
       >
         {result === null ? (
-          <>
-            <span className="inline-flex flex-none whitespace-nowrap">
-              <Button variant="outline" onClick={() => onClose(false)} disabled={answer.isPending}>
-                Cancel
-              </Button>
-            </span>
-            <span className="inline-flex flex-none whitespace-nowrap">
-              <Button
-                variant="accent"
-                disabled={happened === null}
-                isPending={answer.isPending}
-                onClick={() => happened !== null && answer.mutate({ id: op.id, happened })}
-              >
-                {happened === null ? "Record what happened" : happened ? "Record it as done" : "Record it as not done"}
-              </Button>
-            </span>
-          </>
+          <Button
+            variant="accent"
+            disabled={happened === null}
+            isPending={answer.isPending}
+            onClick={() => happened !== null && answer.mutate({ id: op.id, happened })}
+          >
+            {happened === null ? "Record what happened" : happened ? "Record it as done" : "Record it as not done"}
+          </Button>
         ) : (
           <Button variant="outline" onClick={() => onClose(true)}>
             Close

@@ -93,7 +93,11 @@ describe("giving one person their own limit", () => {
     fireEvent.change(screen.getByLabelText("Ends on"), { target: { value: "2026-11-30" } });
     fireEvent.click(screen.getByRole("button", { name: "Give them 50 GB" }));
 
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    // The dialog ends on its result, and closes only on Close.
+    await waitFor(() => expect(screen.getByText("Given")).toBeTruthy());
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalled();
     expect(sent[0].path).toBe("/allowances");
     expect(sent[0].body).toMatchObject({
       subject_id: "u-ada",
@@ -113,7 +117,8 @@ describe("giving one person their own limit", () => {
     expect(screen.getByText("Review Ada Rao's own home folder limit")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Review on"), { target: { value: "2027-02-28" } });
     fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText("Kept")).toBeTruthy());
+    expect(onClose).not.toHaveBeenCalled();
     expect(sent.map((s) => s.path)).toEqual(["/allowances"]);
     unmount();
 
@@ -121,5 +126,6 @@ describe("giving one person their own limit", () => {
     wrap(<LimitDialog target="truenas" name="Ada Rao" home={{ ...base, own }} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "End it" }));
     await waitFor(() => expect(sent.map((s) => s.path)).toEqual(["/allowances/a1/lift"]));
+    await waitFor(() => expect(screen.getByText("Ended")).toBeTruthy());
   });
 });

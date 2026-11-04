@@ -78,12 +78,10 @@ export function VersionBand({ target, history }: { target: string; history?: Map
           <p className="pl-[18px] text-[14px] leading-[1.55] text-muted [text-wrap:pretty]">
             {pending ? (
               <>
-                The rows below are live: each change went through its own preview.{" "}
+                The rows below are live.{" "}
                 <strong className="font-semibold text-ink">Publishing applies nothing again.</strong>{" "}
                 It records {nothingPublished ? "them" : "the set"} as version {current + 1}, so a
                 later rollback has something to return to.
-                {!nothingPublished &&
-                  ` Rolling back to version ${current} would undo ${changes.length === 1 ? "it" : `all ${word(changes.length)}`}.`}
               </>
             ) : nothingPublished ? (
               <>
@@ -109,7 +107,7 @@ export function VersionBand({ target, history }: { target: string; history?: Map
               across all three readings. */}
           {/* The band says a note is required and then published without one.
               The note is the whole audit record a rollback operator reads
-              before deciding whether to come back — an empty one makes the
+              before deciding whether to come back; an empty one makes the
               version a date with no argument, which is the state the sentence
               beneath this field exists to prevent. The backend refuses it too;
               this is where somebody is told, not what enforces it. */}
@@ -118,12 +116,11 @@ export function VersionBand({ target, history }: { target: string; history?: Map
             variant={pending ? "accent" : "outline"}
             disabled={!pending || !note.trim() || publish.isPending}
             isPending={publish.isPending}
+            // Nothing to publish is said once, in the line under the button.
             reason={
-              !pending
-                ? "Nothing to publish. This lights up once there's an unpublished edit to save."
-                : !note.trim()
-                  ? "Say why this set is the one to keep. It is what the next person to roll back reads."
-                  : undefined
+              pending && !note.trim()
+                ? "Say why this set is the one to keep. It is what the next person to roll back reads."
+                : undefined
             }
             onClick={() => publish.mutate(note, { onSuccess: () => setNote("") })}
           >
@@ -153,9 +150,6 @@ export function VersionBand({ target, history }: { target: string; history?: Map
               value={note}
               onChange={(event) => setNote(event.target.value)}
             />
-            <p className="mt-[7px] text-[13px] text-faint">
-              A note is required: it is the only record of why this set was right.
-            </p>
           </div>
         </div>
       )}

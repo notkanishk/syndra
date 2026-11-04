@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Term } from "@/components/ui/Term";
 import { useState } from "react";
 
@@ -10,6 +11,8 @@ import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { Notice } from "@/components/ui/Notice";
+import { useAccountHref } from "@/components/system/ServiceAccountTag";
 import { Relative } from "@/components/ui/Time";
 import { targetLabel } from "@/lib/nav";
 import {
@@ -52,8 +55,8 @@ export function MergeFindings({ target }: { target: string }) {
         count={rows.length}
         note={
           <>
-            <Term name="mergeFinding">Merge findings</Term> — differences between Syndra and {name}{" "}
-            that reconciliation will not settle on its own.
+            <Term name="mergeFinding">Merge findings</Term>: differences between Syndra and {name}{" "}
+            that Syndra will not settle on its own.
           </>
         }
       />
@@ -74,7 +77,7 @@ export function MergeFindings({ target }: { target: string }) {
           {rows.map((f, i) => (
             <div key={f.id}>
               <CardRow first={i === 0} className="flex-wrap">
-                <UserName id={f.subject_id} />
+                <Person id={f.subject_id} />
                 {f.field ? <Mono>{f.field}</Mono> : null}
                 <span className="flex-1" />
                 <span className="text-[13px] text-faint">
@@ -130,7 +133,7 @@ export function MergeFindings({ target }: { target: string }) {
                 // difference is over while it is still on the target.
                 <CardRow>
                   <span className="text-[13px] text-faint">
-                    {decisionLabel(f.decision, name)} by <UserName id={f.decided_by ?? ""} /> ·
+                    {decisionLabel(f.decision, name)} by <Person id={f.decided_by ?? ""} /> ·
                     waiting for {name} to match
                   </span>
                 </CardRow>
@@ -173,11 +176,11 @@ function describe(f: MergeFinding, name: string): string {
   const its = f.field ? `Its ${f.field}` : "It";
   switch (f.outcome) {
     case "deleted_upstream":
-      return `This account is no longer on ${name} — somebody deleted it there. Creating it again brings back what they deleted; stopping management leaves ${name} alone and Syndra forgets the account.`;
+      return `This account is no longer on ${name}. Somebody deleted it there. Creating it again brings back what they deleted; stopping management leaves ${name} alone and Syndra forgets the account.`;
     case "theirs_only":
       return `${its} was ${was} when Syndra last saw it, and is ${show(f.theirs)} now. Syndra did not change it, so somebody changed it on ${name}.`;
     case "conflict":
-      return `${its} was ${was} when Syndra last saw it. Syndra now wants ${show(f.ours)} and ${name} has ${show(f.theirs)} — both moved, differently.`;
+      return `${its} was ${was} when Syndra last saw it. Syndra now wants ${show(f.ours)} and ${name} has ${show(f.theirs)}. Both moved, differently.`;
   }
 }
 
@@ -252,7 +255,7 @@ function DecisionForm({
     <div className="row-divider grid gap-3 px-5 py-4">
       <Input
         aria-label="Why"
-        placeholder="Why — this becomes the record of the decision"
+        placeholder="What made you decide this"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
       />
@@ -262,7 +265,7 @@ function DecisionForm({
           variant="outline"
           isPending={pending}
           disabled={!reason.trim()}
-          reason={!reason.trim() ? "Say why — this becomes the record of the decision." : undefined}
+          reason={!reason.trim() ? "Say why. This becomes the record of the decision." : undefined}
           onClick={() => {
             const pick = gone ? "reprovisioned" : "keep_ours";
             setResolution(pick);
@@ -277,7 +280,7 @@ function DecisionForm({
             variant="outline"
             isPending={pending}
             disabled={!reason.trim()}
-            reason={!reason.trim() ? "Say why — this becomes the record of the decision." : undefined}
+            reason={!reason.trim() ? "Say why. This becomes the record of the decision." : undefined}
             onClick={() => {
               const pick = gone ? "unbound" : "take_theirs";
               setResolution(pick);
@@ -298,7 +301,7 @@ function DecisionForm({
           </Button>
         )}
         <span className="flex-1" />
-        <Button onClick={onCancel}>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>
       </div>
@@ -402,31 +405,22 @@ function AlreadyDecided({
   const agree = picked !== null && picked === taken.decision;
 
   return (
-    <div className="grid gap-2.5 rounded-inner border border-accent-line bg-accent-soft px-4 py-3">
-      <p className="text-[13.5px] font-semibold text-accent-text">
-        <UserName id={taken.decided_by} fallback="Somebody" /> decided this
+    <Notice tone="neutral" title="This was decided while the page was open.">
+      <p>
+        <Person id={taken.decided_by} fallback="Somebody" />
         {taken.decided_at ? (
           <>
             {" "}
             <Relative iso={taken.decided_at} />
           </>
-        ) : null}
-        , while this page was open.
-      </p>
-
-      <p className="text-[13.5px] text-muted">
-        They chose <span className="font-semibold text-ink">{decisionLabel(taken.decision, name)}</span>
-        {taken.decision_reason ? (
-          <>
-            {" "}
-            — &ldquo;{taken.decision_reason}&rdquo;
-          </>
-        ) : null}
-        . Your choice was not applied and nothing was changed by pressing.
+        ) : null}{" "}
+        chose <span className="font-semibold">{decisionLabel(taken.decision, name)}</span>
+        {taken.decision_reason ? <>: &ldquo;{taken.decision_reason}&rdquo;</> : null}. Your choice was
+        not applied and nothing was changed by pressing.
       </p>
 
       {picked !== null && (
-        <p className="text-[13.5px] text-muted">
+        <p className="mt-1 text-muted">
           {agree ? (
             <>
               You had picked{" "}
@@ -443,10 +437,20 @@ function AlreadyDecided({
         </p>
       )}
 
-      <p className="text-[13px] text-faint">
-        The finding has not gone anywhere. It stays here as decided-and-waiting until Syndra
-        next checks the account and finds {name} matches.
+      <p className="mt-1 text-[13px] text-faint">
+        The finding has not gone anywhere. It stays here as decided and waiting until Syndra next
+        checks the account and finds {name} matches.
       </p>
-    </div>
+    </Notice>
+  );
+}
+
+/** A person's name, linked to their page like every other name. */
+function Person({ id, fallback }: { id: string; fallback?: string }) {
+  const href = useAccountHref();
+  return (
+    <Link href={href(id)} className="font-semibold text-ink link-hover">
+      <UserName id={id} fallback={fallback} />
+    </Link>
   );
 }

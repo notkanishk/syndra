@@ -1,4 +1,4 @@
-import { STATUS_TONE, type StatusTone } from "@/components/ui/Badge";
+import { STATUS_TONE, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { formatClock } from "@/lib/format";
 import type { HealthState, TargetStatus } from "@/lib/queries/useTargets";
 
@@ -108,15 +108,13 @@ export function CheckPips({ recent }: { recent: HealthState["recent"] }) {
   const said = slots.map((s) => (s === "none" ? "no check yet" : s)).join(", ");
   return (
     <span role="img" aria-label={`Last 3 checks: ${said}`} className="inline-flex items-center gap-[3px]">
-      {slots.map((s, i) => (
-        <span
-          key={i}
-          aria-hidden
-          className={`h-1.5 w-1.5 rounded-pill ${
-            s === "answered" ? "bg-healthy" : s === "missed" ? "border border-warn" : "border border-line-strong"
-          }`}
-        />
-      ))}
+      {slots.map((s, i) =>
+        s === "answered" ? (
+          <StatusDot key={i} tone="healthy" />
+        ) : (
+          <StatusDot key={i} tone={s === "missed" ? "warn" : "neutral"} ring />
+        ),
+      )}
     </span>
   );
 }
@@ -125,7 +123,7 @@ export function CheckPips({ recent }: { recent: HealthState["recent"] }) {
 export function ReadingWord({ reading, recent }: { reading: Reading; recent: HealthState["recent"] }) {
   return (
     <span className="inline-flex items-center gap-2">
-      <span aria-hidden className={`h-2 w-2 flex-none rounded-pill ${STATUS_TONE[reading.tone].dot}`} />
+      <StatusDot tone={reading.tone} />
       <span className={STATUS_TONE[reading.tone].label}>{reading.word}</span>
       {reading.pips && <CheckPips recent={recent} />}
     </span>
