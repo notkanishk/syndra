@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 
@@ -199,6 +200,7 @@ export default function ExpiringAccessPage() {
 
   const people = new Set(matched.map((grant) => grant.user_id)).size;
   const soonest = matched.find((grant) => !grant.acknowledged)?.expires_at;
+  const clearedByMe = useQueueCleared(rows, !grants.isLoading && !grants.error && !grants.isPlaceholderData, true).cleared?.mine != null;
   const showRows = !grants.isLoading && !grants.error && rows.length > 0;
   const section = (key: SectionKey, list: ExpiringGrantRow[], first: boolean) => (
     <ExpiringSection
@@ -346,6 +348,8 @@ export default function ExpiringAccessPage() {
                 title={`Nothing ends in the next ${within} days.`}
                 guidance={`Direct access shows here once it ends within ${within} days.`}
                 resolved
+                lift={clearedByMe}
+                bloom={clearedByMe}
               />
             }
           >

@@ -1091,3 +1091,28 @@ func TestGovernance_UnusedBundleHintUsesOneHolderCount(t *testing.T) {
 		t.Fatalf("hints should name only the unheld bundle, got %v", summary.CleanupHints)
 	}
 }
+
+// "No bundle yet: everything they hold was given directly." is about what a
+// person holds, so a person who holds nothing gets no such hint.
+func TestNoBundleHintIsSaidOnlyOfSomebodyWhoHoldsDirectRoles(t *testing.T) {
+	hintFor := func(grants []models.DirectGrant) string {
+		resetGovernanceDeps(t)
+		svcGetDirectGrantsForUser = func(context.Context, string, bool) ([]models.DirectGrant, error) { return grants, nil }
+		svcGetBundlesForUser = func(context.Context, string) ([]models.Bundle, error) { return nil, nil }
+		svcGetActiveMappingRules = func(context.Context) ([]models.MappingRule, error) { return nil, nil }
+		svcGetUserBundleRolesGrouped = func(context.Context, string) (map[string][]models.BundleRole, error) { return nil, nil }
+		svcGetRolesForBundle = func(context.Context, string) ([]models.BundleRole, error) { return nil, nil }
+		view, err := ExplainUserAccess(context.Background(), "dev_admin")
+		if err != nil {
+			t.Fatalf("ExplainUserAccess: %v", err)
+		}
+		return strings.Join(view.CleanupHints, "|")
+	}
+	if got := hintFor(nil); strings.Contains(got, "No bundle yet") {
+		t.Fatalf("a person who holds nothing must not be told what they hold: %q", got)
+	}
+	got := hintFor([]models.DirectGrant{{UserID: "dev_admin", ProjectID: "p1", RoleKey: "r1"}})
+	if !strings.Contains(got, "No bundle yet") {
+		t.Fatalf("a person with direct roles and no bundle should still get the hint: %q", got)
+	}
+}

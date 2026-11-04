@@ -2,10 +2,13 @@
 
 import { ResolvedProjectName } from "@/components/names";
 import { MemberCatalog } from "@/components/member/MemberCatalog";
+import { headerLine, type NamedRole } from "@/components/member/headerLine";
 import { RecentChanges, askHref } from "@/components/member/RecentChanges";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { ButtonLink } from "@/components/ui/Button";
+import { ARROW_LINK, ArrowLink } from "@/components/ui/ArrowLink";
+import { Crossfade } from "@/components/ui/Crossfade";
 import { StatusDot } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
@@ -21,7 +24,13 @@ import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useMyChanges, type MyChange } from "@/lib/queries/useMyChanges";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
-import { daysUntil, expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
+import { useEffect, useState } from "react";
+import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
+import { greeting } from "@/lib/greeting";
+import { glideTo } from "@/lib/motion";
+import { targetLabel } from "@/lib/nav";
+import { useMyStorage } from "@/lib/queries/useMyStorage";
+import { useRequestsMine } from "@/lib/queries/useRequests";
 import { sortByName } from "@/lib/sort";
 
 /**
@@ -41,6 +50,13 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const grants = useUserGrants(session.id);
   const changes = useMyChanges();
   const catalog = useCatalogProjects();
+  const storage = useMyStorage();
+  const myRequests = useRequestsMine();
+  // The line and the greeting depend on the reader's clock and zone, which the
+  // server doesn't share: they appear on mount, in a seat held by an invisible
+  // stand-in so nothing below moves (same rule as Home).
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => setNow(new Date()), []);
   // What Zitadel holds for this person arrives WITH the records that explain
   // it, in one response. It used to be a second call, which meant this screen
   // could render a headline from Syndra's records against rows marked from
@@ -66,19 +82,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   }
 
   const projects = access.data?.projects ?? [];
-  // The headline counts what they HOLD, not what was decided for them. Summing
-  // effective_role_keys put "You have four roles" above four rows each saying
-  // the role had not reached Zitadel yet.
-  const roleCount = access.data?.observed_role_count;
-  const rooms = projects.filter((project) => (project.observed_role_keys ?? []).length > 0).length;
 
   // An unread grants list is not "nothing ends": the end dates wait for the
   // read, and a role's seat says so rather than "Given to you" (A-08 §3.9).
   const grantsRead = !grants.isLoading && !grants.error;
-  const ending = (grants.data ?? [])
-    .filter((grant) => grant.expires_at && (daysUntil(grant.expires_at) ?? -1) >= 0)
-    .map((grant) => grant.expires_at!)
-    .sort();
 
   // Labels from the catalogue the page already reads below; a role it doesn't
   // list falls back to its key, humanised.
@@ -132,20 +139,113 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   // something they need to read about on the page that answers "what can I
   // use right now". Same object PersonAccess shows an operator, member voice.
   const inForce = (access.data?.allowances ?? []).filter((allowance) => allowance.in_force);
-  const summary = summarySentence(roleCount, rooms, grantsRead ? ending : undefined);
+  const unread = !observation?.read_at;
+
+  // A project's name for the line: the read's own when it resolved, else the
+  // catalogue's. Never an id, so a project with neither is simply not named.
+  const projectName = (projectId: string): string | undefined => {
+    const project = projects.find((p) => p.project_id === projectId);
+    if (project?.project_name_resolved) return project.project_name;
+    return catalog.data.find((p) => p.id === projectId)?.name;
+  };
+  const named = (projectId: string, roleKey: string): NamedRole => {
+    const project = projectName(projectId);
+    const role = roleName(projectId, roleKey);
+    return { label: project ? `${role} in ${project}` : role, projectId, project };
+  };
+  const held = (projectId: string, roleKey: string) =>
+    projects.find((p) => p.project_id === projectId)?.observed_role_keys?.includes(roleKey) ?? false;
+  const today = (iso: string) => now !== null && new Date(iso).toDateString() === now.toDateString();
+  // Roles that are on their way, from either answer: an approval in the feed,
+  // or a grant the row itself says hasn't been sent.
+  const onItsWay = new Map<string, NamedRole>();
+  waiting.forEach((change) => onItsWay.set(`${change.project_id}/${change.role_key}`, named(change.project_id, change.role_key)));
+  const missing = new Map<string, NamedRole>();
+  for (const project of projects) {
+    for (const role of [...project.source_roles, ...project.derived_roles]) {
+      const key = `${project.project_id}/${role.role_key}`;
+      if (waiting.has(key)) continue;
+      if (nothingSentYet(role.reasons)) onItsWay.set(key, named(project.project_id, role.role_key));
+      else if (standing(project, role.role_key) === "missing") missing.set(key, named(project.project_id, role.role_key));
+    }
+  }
+  const line = now
+    ? headerLine({
+        loading: access.isLoading,
+        read: !unread,
+        now,
+        // Only what Zitadel holds, with the grant's end: the record supplies the date, never the count.
+        ending: grantsRead
+          ? (grants.data ?? []).flatMap((grant) =>
+              grant.expires_at && held(grant.project_id, grant.role_key)
+                ? [{ ...named(grant.project_id, grant.role_key), endsAt: grant.expires_at }]
+                : [],
+            )
+          : [],
+        missing: Array.from(missing.values()),
+        storage: (() => {
+          const target = (storage.data ?? []).find(
+            (t) => t.entitled && (!t.credential.set || t.credential.needs_re_enrolment),
+          );
+          return target ? { name: targetLabel(target.target) } : undefined;
+        })(),
+        requests: (myRequests.data ?? [])
+          .filter((r) => r.status === "pending")
+          .map((r) => ({
+            at: r.created_at,
+            label: projectName(r.project_id) ? named(r.project_id, r.role_key).label : undefined,
+          })),
+        onItsWay: Array.from(onItsWay.values()),
+        startedToday: feed.flatMap((change) => {
+          const project = projectName(change.project_id);
+          return (change.kind === "given" || change.kind === "request_approved") &&
+            !change.waiting &&
+            today(change.at) &&
+            held(change.project_id, change.role_key) &&
+            project
+            ? [{ project, projectId: change.project_id }]
+            : [];
+        }),
+      })
+    : null;
   // Zitadel never read (A-06 §2, N23): nothing has been observed, so the cards
   // keep their headers and show no rows. A row would say what Syndra decided
   // as though it were what the person can use.
-  const unread = !observation?.read_at;
 
   return (
     <div className="flex flex-col gap-4">
       <div className={`${head.className} flex flex-col gap-2`} data-settled={head["data-settled"]} style={BELOW_HEADER}>
         <h1 className="type-page-title">
-          Hi {firstName(session.name)}.{" "}
+          {now ? greeting(now) : <span className="invisible">Afternoon</span>}, {firstName(session.name)}.{" "}
           <span className="text-faint">Here&rsquo;s what you can use.</span>
         </h1>
-        {summary && <div className="text-[14.5px] text-faint">{summary}</div>}
+        {/* One line, always there, in the same seat in every state, so nothing below it moves. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0 text-[14.5px] text-muted">
+          {line ? (
+            <>
+              <span className="flex items-center gap-2.5">
+                {line.tone !== "none" && <StatusDot tone={line.tone} />}
+                <Crossfade id={line.text}>{line.text}</Crossfade>
+              </span>
+              {line.link?.href && <ArrowLink href={line.link.href}>{line.link.label}</ArrowLink>}
+              {line.link?.projectId && (
+                <button
+                  type="button"
+                  className={ARROW_LINK}
+                  onClick={() => {
+                    const target = document.getElementById(`card-${line.link!.projectId}`);
+                    if (target) void glideTo(target);
+                  }}
+                >
+                  {line.link.label}
+                  <span aria-hidden>↓</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <span className="invisible">Checking what you can use.</span>
+          )}
+        </div>
       </div>
 
       {/* The read is one hand-over (S7): a skeleton only if it is slow, then the cards arrive. */}
@@ -157,9 +257,10 @@ export function MemberAccess({ session }: { session: SessionUser }) {
           </Card>
         }
       >
-      {/* Leads when there's news; gives up its seat on a quiet month. Not
-          drawn until the read lands, so nothing unread is shown. */}
-      {feed.length > 0 && (
+      {/* Leads, and keeps its seat on a quiet month (structure never moves
+          with data). Not drawn until the read lands, so nothing unread is
+          called quiet. */}
+      {changes.data && (
         <RecentChanges
           items={feed}
           roleName={roleName}
@@ -198,7 +299,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         </Card>
       ) : (
         <div className="flex flex-wrap gap-4">
-          {projects.map((project) => {
+          {sortByName(projects, (p) => p.project_name || "", (p) => p.project_id).map((project) => {
             const roles = [...project.source_roles, ...project.derived_roles]
               .map((role) => ({
                 ...role,
@@ -213,11 +314,14 @@ export function MemberAccess({ session }: { session: SessionUser }) {
               <Card key={project.project_id} className="min-w-[min(420px,100%)] flex-1">
                 <CardHeader
                   title={
-                    <ResolvedProjectName
-                      name={project.project_name}
-                      resolved={project.project_name_resolved}
-                      id={project.project_id}
-                    />
+                    // The id is the target of the header line's jump: its title flashes on landing.
+                    <span id={`card-${project.project_id}`}>
+                      <ResolvedProjectName
+                        name={project.project_name}
+                        resolved={project.project_name_resolved}
+                        id={project.project_id}
+                      />
+                    </span>
                   }
                 />
                 {!unread && roles.map((role) => (
@@ -424,37 +528,4 @@ function expiryFor(
 
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
-}
-
-/**
- * "Four roles across two rooms. One ends on 20 Oct." It counts what
- * Zitadel holds and names the date. `roles` is undefined while nothing has
- * been observed, and then no number is named.
- */
-export function summarySentence(
-  roles: number | undefined,
-  rooms: number,
-  /** Undefined until the grants are read: the sentence then names no end. */
-  ending: string[] | undefined,
-): string | null {
-  if (roles === undefined) return "Checking what you can use.";
-  if (roles === 0) return null;
-  const base = `${capitalise(countWord(roles))} ${roles === 1 ? "role" : "roles"} across ${countWord(rooms)} ${
-    rooms === 1 ? "room" : "rooms"
-  }.`;
-  if (!ending?.length) return base;
-  const first = formatShortDate(ending[0]);
-  return ending.length === 1
-    ? `${base} One ends on ${first}.`
-    : `${base} ${ending.length} roles end, the first on ${first}.`;
-}
-
-const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-
-function countWord(count: number): string {
-  return WORDS[count] ?? String(count);
-}
-
-function capitalise(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }

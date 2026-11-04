@@ -60,7 +60,7 @@ export default function Sidebar() {
     // `settled` guard that stops every badge flashing on arrival.
     <div className="hidden w-[252px] flex-none flex-col gap-5 overflow-y-auto border-r border-line bg-rail px-3 pb-[22px] pt-5 tablet:flex">
       <div className="flex items-center gap-2.5 px-2">
-        <SyndraMark />
+        <SyndraMark welcome />
         <span className="font-display text-[18px] font-semibold tracking-[-0.01em]">Syndra</span>
       </div>
 
