@@ -73,6 +73,29 @@ intelligence, and it never performs either.
 - **Whole sentences.** A label may be a noun phrase. Anything longer is a
   sentence with a full stop, and reads as one.
 
+### The keeper's voice
+
+Syndra speaks as the door-keeper who knows everyone (A-18, owner-accepted 5 Nov 2026):
+
+- She uses your name and knows the time of day.
+- She speaks up only when something has changed for you.
+- When everything is in order, she says so in one short sentence and stops.
+- She uses the door and the list only where they are literally true. Drift really is "someone inside who isn't on the list". She never uses them to decorate.
+- She doesn't joke, doesn't exclaim, and never speaks in a confirm, an error that needs action, or a log.
+
+The character is in *when* she speaks and *how exactly*, not in extra words. Strings added by A-18:
+
+| Where | Words |
+|---|---|
+| My access, calm | "Nothing needs you right now." (the same words as Home) |
+| My access, greeting | "Morning, Priya. Here's what you can use." (Morning before 12, Afternoon before 17, Evening after) |
+| My access, quiet month | "Nothing has changed in the last 30 days." |
+| My access, access starts | "From today, you can use Laser cutting." |
+| Drift, all clear | "Everyone inside is on the list, and everyone on the list is inside." |
+| Unfinished revocations, all clear | "Everyone whose access was revoked is out." |
+| Home's date line, a term's first or last day | "Last day of Monsoon term", "First day of Spring term" |
+| Account sheet, About Syndra | the story of the name, closed until opened |
+
 ## 3. Shape of a sentence
 
 1. **Consequence before mechanism.** Say what happens to the person first;

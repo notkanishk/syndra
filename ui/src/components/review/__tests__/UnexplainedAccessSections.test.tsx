@@ -334,7 +334,7 @@ describe("Drift — states", () => {
   it("says everything is explained when nothing is waiting, with no sections and no Select", () => {
     drift.data = [];
     renderPage();
-    expect(screen.getByText("Everything is explained.")).toBeInTheDocument();
+    expect(screen.getByText("Everyone inside is on the list, and everyone on the list is inside.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: IN_ZITADEL })).toBeNull();
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
   });
@@ -344,21 +344,21 @@ describe("Drift — states", () => {
     drift.data = [];
     drift.isPlaceholderData = true;
     renderPage();
-    expect(screen.queryByText("Everything is explained.")).toBeNull();
+    expect(screen.queryByText("Everyone inside is on the list, and everyone on the list is inside.")).toBeNull();
   });
 
   it("does not say everything is explained while the comparison is still loading", () => {
     drift.data = [];
     diff.isLoading = true;
     renderPage();
-    expect(screen.queryByText("Everything is explained.")).toBeNull();
+    expect(screen.queryByText("Everyone inside is on the list, and everyone on the list is inside.")).toBeNull();
   });
 
   it("does not say everything is explained while the system list is still loading", () => {
     drift.data = [];
     summaryRead.isLoading = true;
     renderPage();
-    expect(screen.queryByText("Everything is explained.")).toBeNull();
+    expect(screen.queryByText("Everyone inside is on the list, and everyone on the list is inside.")).toBeNull();
   });
 
   it("names what was not read, instead of saying everything is explained", () => {
@@ -366,7 +366,7 @@ describe("Drift — states", () => {
     drift.unread = [{ target: "truenas", since: "2026-10-01T22:10:00Z" }];
     diff.error = new Error("boom");
     renderPage();
-    expect(screen.queryByText("Everything is explained.")).toBeNull();
+    expect(screen.queryByText("Everyone inside is on the list, and everyone on the list is inside.")).toBeNull();
     expect(screen.getByText("Nothing is waiting in what was read.")).toBeInTheDocument();
     expect(screen.getByText(/TrueNAS wasn.t read\. The comparison didn.t load\. Anything/)).toBeInTheDocument();
   });
@@ -375,7 +375,7 @@ describe("Drift — states", () => {
     drift.data = [];
     diff.data = { ...emptyDiff(), truncated: true };
     renderPage();
-    expect(screen.queryByText("Everything is explained.")).toBeNull();
+    expect(screen.queryByText("Everyone inside is on the list, and everyone on the list is inside.")).toBeNull();
     expect(screen.getByText("Nothing is waiting in what was read.")).toBeInTheDocument();
   });
 

@@ -188,6 +188,12 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
   - **Owner's answers, applied 5 Nov:** Cancel first (ghost) in every dialog footer; Pending's empty button is a disabled "Send changes"; 28px under every header; client id in the app tools card, project and person ids as CopyableValue in Advanced meta, grant ids out of headings; "Grant direct access" is now "Give a role" everywhere (audit lines read "Gave a role"); Zitadel's mythology card deleted (text kept for relocation) and the login line has no dash. **Pending A-18:** Q3 ("Nine roles across six rooms", left as it is) and where the mythology text goes [ready-for-human].
   - **Left:** names linking by default (G14) [needs-triage]; a "partly done" outcome kind [needs-triage]; polish listed in the tasks' L4 [ready-for-agent].
 
+### Character and soul (A-18) — what the build left open
+
+[`changes/character-and-soul`](changes/character-and-soul/proposal.md) is built. Open:
+
+- **Record a first sign-in** (one timestamp, written once), so the one-time welcome ("Welcome to Syndra. It keeps the makerspace's list of who can use what, and why.") can exist. Backend change, then UI. Q9 of A-18: yes, later.
+
 ### Audit of 27 Oct — remediation in batches
 
 The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/from another side/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 fix partial reads passed off as whole, one answer per fact, keyboard, scale and dead code (`changes/audit-2026-10/tasks.md`). 3.2 is built (A-09 §1–2 tokens and text floors; stale data recedes instead of dimming, A-13 (d)). 2.9 is built in `changes/unconfirmed-and-self-settling` (A-09 §3–5 as revised by A-13 §5).

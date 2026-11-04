@@ -82,3 +82,19 @@ export function termStanding(terms: Term[], now: Date = new Date()): (string | n
     t.start <= today && today <= t.end ? "This term" : i === next ? "Next term" : null,
   );
 }
+
+/**
+ * "First day of Spring term" / "Last day of Monsoon term" on the one day each
+ * is true, else null (A-18 §4 idea 1). Six days a year, read from the terms
+ * setting, said where the date already is. Days are local, as the dates are.
+ */
+export function termDayLine(terms: Term[], now: Date = new Date()): string | null {
+  const today = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+    .map((n, i) => String(n).padStart(i === 0 ? 4 : 2, "0"))
+    .join("-");
+  const named = (term: Term) => (/\bterm$/i.test(term.name.trim()) ? term.name.trim() : `${term.name.trim()} term`);
+  const first = terms.find((term) => term.start === today);
+  if (first) return `First day of ${named(first)}`;
+  const last = terms.find((term) => term.end === today);
+  return last ? `Last day of ${named(last)}` : null;
+}

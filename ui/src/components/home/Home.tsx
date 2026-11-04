@@ -49,6 +49,9 @@ import { Crossfade } from "@/components/ui/Crossfade";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
+import { greeting } from "@/lib/greeting";
+import { useTerms } from "@/lib/queries/useTerms";
+import { termDayLine } from "@/lib/term-dates";
 import { compareNames, sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
 
@@ -203,6 +206,8 @@ export function Home({ session }: { session: SessionUser }) {
   // by an invisible stand-in so nothing below moves (same rule as Relative).
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => setNow(new Date()), []);
+  const terms = useTerms();
+  const termDay = now && terms.data ? termDayLine(terms.data, now) : null;
   const loading = summary.isLoading || requests.isLoading || onboarding.isLoading;
   const error = summary.error ?? requests.error ?? onboarding.error ?? accounts.error;
   // While the load is failing the count is unknown, and "nothing needs you" is
@@ -324,6 +329,7 @@ export function Home({ session }: { session: SessionUser }) {
         </h1>
         <div className="mt-2 text-[14.5px] text-faint">
           {now ? formatWeekday(now) : <span className="invisible">Wednesday 20 Sept</span>}
+          {termDay && ` · ${termDay}`}
           {summary.data && (
             <>
               {" "}
@@ -1066,13 +1072,6 @@ function UnexplainedAccess({ count }: { count: number }) {
       </CardRow>
     </Card>
   );
-}
-
-function greeting(now: Date): string {
-  const hour = now.getHours();
-  if (hour < 12) return "Morning";
-  if (hour < 17) return "Afternoon";
-  return "Evening";
 }
 
 /**

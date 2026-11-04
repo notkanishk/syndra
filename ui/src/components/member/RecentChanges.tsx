@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { BundleName, UserName } from "@/components/names";
+import { EmptyState } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Card, CardHeader, CardHeaderLink } from "@/components/ui/Card";
@@ -12,8 +13,9 @@ import type { MyChange } from "@/lib/queries/useMyChanges";
 
 /**
  * Recent changes (route-me 52c): the last 30 days of your own access, newest
- * first, leading the page. The caller renders it only when there is something
- * in it: on a quiet month the page opens on your access.
+ * first, leading the page. It always has its seat: a quiet month says so in
+ * one line, because structure never moves with data (A-18 Q4). The caller
+ * draws it once the read has landed, so nothing unread is called quiet.
  */
 export function RecentChanges({
   items,
@@ -40,6 +42,7 @@ export function RecentChanges({
         note="Last 30 days"
         action={<CardHeaderLink href="/requests">All your requests</CardHeaderLink>}
       />
+      {items.length === 0 && <EmptyState title="Nothing has changed in the last 30 days." />}
       {items.map((change, i) => (
         <ChangeRow
           key={`${change.kind}-${change.at}-${change.project_id}-${change.role_key}-${i}`}

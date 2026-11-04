@@ -1,4 +1,4 @@
-import { QueryClient, isServer } from "@tanstack/react-query";
+import { MutationCache, QueryClient, isServer } from "@tanstack/react-query";
 import { cache } from "react";
 
 /**
@@ -12,8 +12,20 @@ import { cache } from "react";
  * - refetchOnWindowFocus: false — admin tools are workbench surfaces; tab
  *   focus shouldn't trigger background work.
  */
+let lastOwnAct = 0;
+
+/**
+ * Whether this person's own write landed in this tab within `ms`. A queue that
+ * empties just after one is theirs to celebrate (A-18 idea 5); one that
+ * empties on a later read, or arrives empty, is not.
+ */
+export function ownActWithin(ms: number): boolean {
+  return lastOwnAct > 0 && Date.now() - lastOwnAct < ms;
+}
+
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
+    mutationCache: new MutationCache({ onSuccess: () => void (lastOwnAct = Date.now()) }),
     defaultOptions: {
       queries: {
         staleTime: 30_000,
