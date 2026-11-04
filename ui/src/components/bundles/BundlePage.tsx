@@ -6,14 +6,14 @@ import { useMemo, useState } from "react";
 
 import { AddRolesToBundle } from "@/components/bundles/AddRolesToBundle";
 import { BundlePeople, BundleVersions, ThroughOtherBundles } from "@/components/bundles/BundleVersions";
-import { IncludeChangeLine } from "@/components/bundles/IncludeChangeLine";
+import { ChangeLines } from "@/components/bundles/IncludeChangeLine";
+import { TabLabel } from "@/components/bundles/TabLabel";
 import { RetiredBundlePage } from "@/components/bundles/RetiredBundle";
 import { ProjectName, RoleRef } from "@/components/names";
 import { projectLabel } from "@/components/names/Unresolved";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Chip, Mono } from "@/components/ui/Badge";
+import { Chip, Mono, StatusDot } from "@/components/ui/Badge";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -21,7 +21,7 @@ import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { useLeavingRows } from "@/components/ui/LeavingRows";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
@@ -65,7 +65,7 @@ import {
 import { useMappingRules } from "@/lib/queries/useMappingRules";
 import { useGlobalRoleCatalog, type CatalogRole } from "@/lib/queries/useRoles";
 import dynamic from "next/dynamic";
-import { compareNames, sortByName } from "@/lib/sort";
+import { compareNames, sortByName, sortNames } from "@/lib/sort";
 
 // Opened on demand, so it stays out of the page's first load.
 const PublishVersionDialog = dynamic(() => import("@/components/bundles/PublishVersionDialog").then((m) => m.PublishVersionDialog));
@@ -130,8 +130,8 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
     // its page still opens), or never there.
     if (bundles.isLoading || bundles.error) {
       return (
-        <div className="flex flex-col gap-7">
-          <PageHeader eyebrow="Bundles" title="Bundle" lede="What it gives, who has it, and its history." />
+        <div className="flex flex-col gap-4">
+          <PageHeader title="Bundle" lede="What it gives, who has it, and its history." />
           <Card>
             <ListStates
               isLoading={bundles.isLoading}
@@ -167,22 +167,19 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
   const welcome = (bundles.data ?? []).find((b) => b.is_welcome);
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-4">
       <PageHeader
-        eyebrow={
-          <Link href="/bundles" className="link-hover">
-            Bundles
-          </Link>
-        }
         title={name}
-        meta={[
-          latest ? `v${latest.version} · published ${formatShortDate(latest.published_at)}` : null,
-          `${roleCount} ${roleCount === 1 ? "role" : "roles"}`,
-          people,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-        lede={bundle.description || undefined}
+        meta={
+          <MetaRow>
+            {[
+              latest ? `v${latest.version}, published ${formatShortDate(latest.published_at)}` : null,
+              `${roleCount} ${roleCount === 1 ? "role" : "roles"}`,
+              people,
+            ]}
+          </MetaRow>
+        }
+        lede={bundle.description || "What it gives, who has it, and its history."}
         actions={
           <>
             <Button onClick={() => setRenaming(true)}>Rename</Button>
@@ -202,7 +199,7 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
         </div>
       )}
 
-      <Unfold open={pending > 0 && Boolean(draft.data)}>
+      <Unfold open={pending > 0 && Boolean(draft.data)} gap={16}>
         {draft.data && (
           <UnpublishedPanel
             bundleId={bundleId}
@@ -214,7 +211,7 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
         )}
       </Unfold>
 
-      <div className="flex flex-col gap-[18px]">
+      <>
         <Tabs<Tab>
           label={`${name}: what it gives, who has it, and its history`}
           value={tab}
@@ -251,7 +248,7 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
           </>
         )}
         {tab === "history" && <BundleVersions bundleId={bundleId} name={name} />}
-      </div>
+      </>
 
       <EndCards
         bundleId={bundleId}
@@ -259,7 +256,7 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
         holders={holders}
         isWelcome={bundle.is_welcome ?? false}
         welcomeName={welcome?.name}
-        includedIn={bundle.included_in ?? []}
+        includedIn={sortNames(bundle.included_in ?? [])}
         onRetire={() => setDeleting(true)}
       />
 
@@ -299,14 +296,6 @@ export function BundlePage({ bundleId }: { bundleId: string }) {
   );
 }
 
-function TabLabel({ text, n }: { text: string; n: number }) {
-  return (
-    <>
-      {text} <span className="text-faint">{n}</span>
-    </>
-  );
-}
-
 /**
  * The working copy's changes, in one violet panel above the tabs: each role
  * added or dropped, what dropping it would cost, and the two ways on.
@@ -328,61 +317,44 @@ function UnpublishedPanel({
   const [failure, setFailure] = useState<Outcome | null>(null);
   const n = draftChangeCount(draft);
   return (
-    <section className="flex flex-col gap-3 rounded-panel border border-accent-line bg-accent-soft px-5 py-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="type-card-title min-w-0 flex-1">
-          {n} {n === 1 ? "change" : "changes"}, not published yet
-        </h2>
-        <Button
-          disabled={discard.isPending}
-          isPending={discard.isPending}
-          onClick={async () => {
-            setFailure(null);
-            try {
-              await discard.mutateAsync();
-            } catch (error) {
-              setFailure(outcomeFromError(error));
-            }
-          }}
-        >
-          Discard changes
-        </Button>
-        <Button variant="accent" onClick={onPublish}>
-          Publish v{draft.next_version}
-        </Button>
-      </div>
-      <ul className="flex flex-col gap-1.5 text-[14px]">
-        {(draft.include_changes ?? []).map((change) => (
-          <li key={`i${change.child_bundle_id}`} className="flex items-baseline gap-2">
-            <IncludeChangeLine change={change} />
-          </li>
-        ))}
-        {draft.added.map((role) => (
-          <li key={`+${idOf(role)}`} className="flex items-baseline gap-2">
-            <span aria-label="Adds" className="w-3 font-semibold text-accent-text">
-              +
-            </span>
-            <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} />
-          </li>
-        ))}
-        {draft.removed.map((role) => (
-          <li key={`-${idOf(role)}`} className="flex items-baseline gap-2">
-            <span aria-label="Drops" className="w-3 font-semibold text-warn-text">
-              &minus;
-            </span>
-            <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} />
-          </li>
-        ))}
-      </ul>
-      <p className="text-[13px] text-muted">
+    <Card>
+      <CardHeader
+        title="Not published yet"
+        count={n}
+        action={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={discard.isPending}
+              isPending={discard.isPending}
+              onClick={async () => {
+                setFailure(null);
+                try {
+                  await discard.mutateAsync();
+                } catch (error) {
+                  setFailure(outcomeFromError(error));
+                }
+              }}
+            >
+              Discard changes
+            </Button>
+            <Button variant="accent" size="sm" onClick={onPublish}>
+              Publish v{draft.next_version}
+            </Button>
+          </>
+        }
+      />
+      <ChangeLines draft={draft} className="px-5 pb-3" />
+      <p className="px-5 pb-4 text-[13px] text-muted">
         {holders === 0
-          ? `Nobody's access has changed. Nobody has ${name} yet, so publishing moves nobody.`
-          : `Nobody's access has changed. Publishing asks whether the ${holders} ${
+          ? `Nobody has ${name} yet, so publishing moves nobody.`
+          : `Publishing asks whether the ${holders} ${
               holders === 1 ? "person" : "people"
             } with ${name} move to v${draft.next_version}.`}
       </p>
-      {failure && <ActionOutcome outcome={failure} />}
-    </section>
+      {failure && <ActionOutcome outcome={failure} word="Not discarded" className="mx-5 mb-4" />}
+    </Card>
   );
 }
 
@@ -477,7 +449,7 @@ function WhatItGives({
           </Card>
         }
       >
-        {includes.map((include) => (
+        {sortByName(includes, (i) => i.child_name, (i) => i.child_bundle_id).map((include) => (
           <IncludedBundleCard
             key={include.child_bundle_id}
             parentId={bundleId}
@@ -491,19 +463,14 @@ function WhatItGives({
           <Card key={projectId}>
             <CardHeader
               title={
-                <>
-                  <Link
-                    href={`/projects/${encodeURIComponent(projectId)}`}
-                    className="link-hover"
-                  >
-                    <ProjectName id={projectId} name={project} />
-                  </Link>
-                  <span className="ml-3 text-[13.5px] font-normal text-faint">
-                    {list.filter((role) => live.has(idOf(role))).length}{" "}
-                    {list.filter((role) => live.has(idOf(role))).length === 1 ? "role" : "roles"}
-                  </span>
-                </>
+                <Link
+                  href={`/projects/${encodeURIComponent(projectId)}`}
+                  className="link-hover"
+                >
+                  <ProjectName id={projectId} name={project} />
+                </Link>
               }
+              count={list.filter((role) => live.has(idOf(role))).length}
             />
             {list.map((role) => {
               const id = idOf(role);
@@ -604,14 +571,15 @@ function EndCards({
           <div className="text-[14.5px] font-semibold">Given to everyone who joins</div>
           <p className="mt-0.5 text-[13px] text-muted">
             {isWelcome
-              ? `${name} is given to new members now. One bundle at a time.`
+              ? `${name} is given to new members now.`
               : welcomeName
-                ? `${welcomeName} is given to new members now. One bundle at a time.`
+                ? `${welcomeName} is given to new members now.`
                 : "No bundle is given to new members now. One bundle at a time."}
           </p>
         </div>
         {!isWelcome && (
           <Button
+            size="sm"
             isPending={setWelcome.isPending}
             onClick={async () => {
               try {
@@ -630,7 +598,7 @@ function EndCards({
           </Button>
         )}
       </div>
-      {outcome && <ActionOutcome outcome={outcome} className="mx-5 my-3" />}
+      {outcome && <ActionOutcome outcome={outcome} word="Default set" className="mx-5 my-3" />}
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <div className="min-w-[240px] flex-1">
           <div className="text-[14.5px] font-semibold">Retire {name}</div>
@@ -642,7 +610,7 @@ function EndCards({
           </p>
         </div>
         {/* The line beside it is the reason; Button's own would say it twice. */}
-        <Button variant="danger" disabled={Boolean(refused)} onClick={onRetire}>
+        <Button variant="danger" size="sm" disabled={Boolean(refused)} onClick={onRetire}>
           Retire bundle
         </Button>
       </div>
@@ -678,7 +646,7 @@ function RenameBundleDialog({
       <ModalHeader
         title={`Rename ${name}`}
         titleId="rename-bundle"
-        lede="Nobody's access changes. This is what the bundle is called, not what it grants."
+        lede="This is what the bundle is called, not what it grants."
       />
       <div className="flex flex-col gap-3.5 px-6">
         <div>
@@ -698,14 +666,20 @@ function RenameBundleDialog({
           />
         </div>
       </div>
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && (
+        <ActionOutcome
+          outcome={outcome}
+          word={succeeded(outcome) ? (trimmed === name ? "Saved" : "Renamed") : "Not saved"}
+          className="mx-6 mb-1"
+        />
+      )}
 
-      <ModalFooter>
+      <ModalFooter cancel={succeeded(outcome) ? undefined : { onClick: onClose, disabled: update.isPending }}>
         {/* Closing on success used to fire in the same breath as `setOutcome`,
             which unmounts this dialog before the operator can read what it
             just set — "Now called X" was computed and never shown. Held open
             until Close is pressed instead, same as the delete dialog. */}
-        {!succeeded(outcome) && (
+        {!succeeded(outcome) ? (
           <Button
             variant="accent"
             disabled={!trimmed || unchanged}
@@ -729,10 +703,11 @@ function RenameBundleDialog({
           >
             Save
           </Button>
+        ) : (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
         )}
-        <Button disabled={update.isPending} onClick={onClose}>
-          {succeeded(outcome) ? "Close" : "Cancel"}
-        </Button>
       </ModalFooter>
     </Modal>
   );
@@ -801,7 +776,7 @@ function DeleteBundleDialog({
             {holders > 0 && (
               <li>
                 Everyone holding it loses whichever of its {roleCount}{" "}
-                {roleCount === 1 ? "role" : "roles"} nothing else gives them — a rule or direct
+                {roleCount === 1 ? "role" : "roles"} nothing else gives them. A rule or direct
                 access to the same role keeps it.
               </li>
             )}
@@ -816,36 +791,32 @@ function DeleteBundleDialog({
         </div>
       </div>
 
-      {outcome && <ActionOutcome outcome={outcome} word={gone ? "Retired" : undefined} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={gone ? "Retired" : "Not retired"} className="mx-6 mb-1" />}
       {gone && step.after}
 
       <ModalFooter
         // Static across `gone`, it used to recommend an alternative to a
-        // click that had already happened — "empty it instead" above a
+        // click that had already happened: "empty it instead" above a
         // bundle already deleted, with nothing left to empty.
         note={step.note ?? (gone ? undefined : "Emptying the bundle instead leaves it assignable and grants nothing.")}
+        cancel={gone ? undefined : { onClick: onCancel, disabled: remove.isPending }}
       >
-        {/* `Keep it` precedes the destructive button in DOM order so the
-            focus trap's initial focus (first focusable element) never lands
-            on `Retire and revoke`; `order-1`/`order-2` keep it visually
-            second, matching every other confirm dialog.
-            `onDeleted` clears the parent's selection, and the parent's own
+        {/* `onDeleted` clears the parent's selection, and the parent's own
             comment says why it must: the deleted bundle stays selected
             otherwise, and the list falls back to the first bundle under the
             old id's heading. Called from HERE rather than from the mutation,
-            because clearing the selection unmounts this dialog — and the
+            because clearing the selection unmounts this dialog, and the
             outcome the operator has not read yet goes with it. */}
-        <Button
-          className={gone ? undefined : "order-2"}
-          disabled={remove.isPending}
-          onClick={gone ? onDeleted : onCancel}
-        >
-          {gone ? "Close" : "Keep it"}
-        </Button>
+        {gone && (
+          <Button variant="outline" onClick={onDeleted}>
+            Close
+          </Button>
+        )}
         {!gone && (
         <Button
           variant="dangerConfirm"
-          className="order-1"
+          // A dialog must not open with the cursor on the button that revokes access.
+          data-skip-initial-focus
           isPending={remove.isPending}
           onClick={async () => {
             try {
@@ -858,7 +829,7 @@ function DeleteBundleDialog({
               // event, and it is the half an operator most needs: from now on
               // a new member receives nothing.
               const orphaned = result.was_welcome
-                ? " New members no longer receive a bundle — set another as the default."
+                ? " New members no longer receive a bundle. Set another as the default."
                 : "";
               setOutcome(
                 n === 0
@@ -948,41 +919,37 @@ function RemovalImpact({
   );
 
   return (
-    <div className="rounded-card border border-warn-line bg-warn-soft p-5">
-      <div className="type-label mb-1 text-warn-text">
-        Dropping <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} />{" "}
-        from the working copy
+    <div className="border-t border-line pt-4">
+      <div className="type-label mb-1">
+        Removing <RoleRef projectId={role.zitadel_project_id} roleKey={role.zitadel_role_key} /> from the next
+        version
       </div>
-      <p className="mb-2.5 max-w-[60ch] text-[13.5px] leading-[1.55] text-ink/80">
-        Nobody loses anything today. This is what would happen to the{" "}
-        {holders.length} {holders.length === 1 ? "person" : "people"} holding{" "}
+      <p className="mb-2.5 max-w-[60ch] text-[13.5px] leading-[1.55] text-muted">
+        This is what would happen to the {holders.length} {holders.length === 1 ? "person" : "people"} holding{" "}
         {bundleName} <em>if</em> you publish the next version and move them onto it.
       </p>
 
       <ul className="mb-4 flex flex-col gap-2 text-[14px] leading-[1.5]">
         <li className="flex items-start gap-2.5">
-          <span aria-hidden className="mt-[7px] h-2 w-2 flex-none rounded-pill bg-danger" />
+          <StatusDot tone="danger" className="mt-[7px] flex-none" />
           <span>
             <strong className="font-semibold">
               {holders.length} {holders.length === 1 ? "person would lose" : "people would lose"} it
               through this bundle
             </strong>
             {coveringRule ? (
-              <span className="text-muted"> — unless a rule also gives it to them</span>
+              <span className="text-muted">, unless a rule also gives it to them</span>
             ) : (
-              <span className="text-muted"> — no rule reproduces it</span>
+              <span className="text-muted">. No rule reproduces it</span>
             )}
           </span>
         </li>
 
         {coveringRule && (
           <li className="flex items-start gap-2.5">
-            <span
-              aria-hidden
-              className="mt-[7px] h-2 w-2 flex-none rounded-pill bg-ink/30"
-            />
+            <StatusDot tone="neutral" className="mt-[7px] flex-none" />
             <span className="text-muted">
-              Anybody holding <RoleRef projectId={coveringRule.source_project} roleKey={coveringRule.source_role} /> would keep it — an automatic rule produces it
+              Anybody holding <RoleRef projectId={coveringRule.source_project} roleKey={coveringRule.source_role} /> would keep it, because an automatic rule produces it
               independently.
             </span>
           </li>
@@ -990,31 +957,35 @@ function RemovalImpact({
 
         {cascades.map((rule) => (
           <li key={rule.id} className="flex items-start gap-2.5">
-            <span
-              aria-hidden
-              className="mt-[6px] h-2.5 w-2.5 flex-none rounded-pill border border-dashed border-ink/40"
-            />
+            <StatusDot tone="neutral" className="mt-[7px] flex-none" />
             <span className="text-muted">
-              They would also lose <RoleRef projectId={rule.target_project} roleKey={rule.target_role} /> by <Term name="cascade">cascade</Term> — this role is that rule&rsquo;s input.
+              They would also lose <RoleRef projectId={rule.target_project} roleKey={rule.target_role} /> by <Term name="cascade">cascade</Term>, because this role is that rule&rsquo;s input.
             </span>
           </li>
         ))}
       </ul>
 
-      {outcome && <ActionOutcome outcome={outcome} className="mb-4" />}
+      {outcome && (
+        <ActionOutcome
+          outcome={outcome}
+          word={succeeded(outcome) ? "Removed" : "Not removed"}
+          className="mb-4"
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-2.5">
-        {/* This panel has no `open`/`onClose` of its own — it stays mounted in
+        {/* This panel has no `open`/`onClose` of its own: it stays mounted in
             the workspace column until `onCancel` clears `pendingRemoval`, and
-            nothing did that on success. Without this wrapper "Drop it" stayed
-            live after it had already dropped, and the next click dropped a
-            role already gone from the draft. Not `dangerConfirm`. That
+            nothing did that on success. Without this wrapper the button stayed
+            live after it had already removed, and the next click removed a
+            role already gone from the next version. Not `dangerConfirm`. That
             treatment is for a click that takes access away, and this one
-            edits a draft — dressing it as the destructive act is the same
-            misreading the copy above used to invite. The destructive confirm
-            lives on Publish, where the revocation actually happens. */}
+            edits the next version. The destructive confirm lives on Publish,
+            where the revocation actually happens. */}
         {!succeeded(outcome) && (
           <Button
+            variant="accent"
+            size="sm"
             isPending={remove.isPending}
             onClick={async () => {
               try {
@@ -1023,10 +994,10 @@ function RemovalImpact({
                   roleKey: role.zitadel_role_key,
                 });
                 setOutcome({
-                  // Nobody's access moved: the working copy did. Same distinction
+                  // Nobody's access moved: the next version did. Same distinction
                   // the add-roles panel makes, in the other direction.
                   kind: "no_change",
-                  message: `Dropped from ${bundleName}'s working copy`,
+                  message: `Removed from ${bundleName}'s next version`,
                   detail: "Nobody loses it until you publish a version and move them onto it.",
                 });
               } catch (error) {
@@ -1034,10 +1005,10 @@ function RemovalImpact({
               }
             }}
           >
-            Drop it from the working copy
+            Remove from the next version
           </Button>
         )}
-        <Button variant={succeeded(outcome) ? "outline" : "ghost"} onClick={onCancel}>
+        <Button variant={succeeded(outcome) ? "outline" : "ghost"} size="sm" onClick={onCancel}>
           {succeeded(outcome) ? "Close" : "Cancel"}
         </Button>
       </div>
@@ -1138,8 +1109,12 @@ function IncludedBundleCard({
           </Button>
         </div>
       )}
-      {failure && <ActionOutcome outcome={failure} className="mx-5 my-3" />}
-      {roles.map((role) => {
+      {failure && <ActionOutcome outcome={failure} word="Not changed" className="mx-5 my-3" />}
+      {sortByName(
+        roles,
+        (r) => catalog.get(idOf(r))?.display_name || humanizeKey(r.zitadel_role_key),
+        idOf,
+      ).map((role) => {
         const entry = catalog.get(idOf(role));
         return (
           <div key={idOf(role)} className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-5 py-3">
@@ -1165,9 +1140,6 @@ function IncludedBundleCard({
           </div>
         );
       })}
-      <div className="row-divider px-5 py-3">
-        <ArrowLink href={childHref}>Change what&rsquo;s in {child}</ArrowLink>
-      </div>
     </Card>
   );
 }
@@ -1207,7 +1179,7 @@ function IncludedStats({
       <StatCard
         label="Through bundles"
         value={String(through)}
-        detail={`In ${formatList(includers.map((i) => i.name))}`}
+        detail={`In ${formatList(sortNames(includers.map((i) => i.name)))}`}
         href="#through-bundles"
       />
       <StatCard
@@ -1219,7 +1191,7 @@ function IncludedStats({
             ? `Everyone is on v${latest}`
             : [
                 directBehind ? `${directBehind} directly` : null,
-                throughBehind ? `${throughBehind} through ${formatList(lagging.map((i) => i.name))}` : null,
+                throughBehind ? `${throughBehind} through ${formatList(sortNames(lagging.map((i) => i.name)))}` : null,
               ]
                 .filter(Boolean)
                 .join(" · ")

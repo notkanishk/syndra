@@ -43,6 +43,24 @@ describe("the retired rules fold", () => {
     expect(screen.queryByRole("button", { name: /Edit|Retire rule/ })).toBeNull();
   });
 
+  it("lists the rules A to Z by the sentence they read as", () => {
+    const retired = (id: string, source: string) => ({
+      id,
+      source_project: source,
+      source_role: "operator",
+      target_project: "Laser Lab",
+      target_role: "trained",
+      retired_at: "2020-03-04T09:00:00Z",
+      retired_by: "u0",
+    });
+    state.retired = [retired("r1", "Wood Shop"), retired("r2", "3D Lab")];
+    render(<RetiredRulesFold />);
+    fireEvent.click(screen.getByRole("button", { name: /Retired rules/ }));
+    const order = screen.getAllByText("operator").map((el) => el.parentElement?.textContent ?? "");
+    expect(order[0]).toMatch(/^3D Lab/);
+    expect(order[1]).toMatch(/^Wood Shop/);
+  });
+
   it("is not there at all when nothing has been retired", () => {
     state.retired = [];
     const { container } = render(<RetiredRulesFold />);

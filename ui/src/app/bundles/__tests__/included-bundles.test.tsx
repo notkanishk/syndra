@@ -124,7 +124,9 @@ describe("a bundle that includes another", () => {
     expect(screen.getByText("Included bundle")).toBeInTheDocument();
     expect(screen.getByText("v3 · 2 roles")).toBeInTheDocument();
     expect(screen.getAllByText("Comes with Safety basics")).toHaveLength(2);
-    expect(screen.getByRole("link", { name: /Change what.s in Safety basics/ })).toHaveAttribute("href", "/bundles/sb");
+    // One link to that bundle in its card: the name (no second "Change what's in" link).
+    expect(screen.getAllByRole("link", { name: /Safety basics/ })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: /Safety basics/ })).toHaveAttribute("href", "/bundles/sb");
   });
 
   it("offers the newer version, and adding it writes only the working copy", async () => {
@@ -159,10 +161,11 @@ describe("a bundle that includes another", () => {
       ],
     };
     render(<BundlePage bundleId="nm" />);
-    expect(screen.getByRole("heading", { name: "3 changes, not published yet" })).toBeInTheDocument();
+    const card = screen.getByText("Not published yet").closest("div") as HTMLElement;
+    expect(card.querySelector('[data-testid="card-count"]')).toHaveTextContent("3");
     expect(screen.getByText("Safety basics v3 → v4")).toBeInTheDocument();
     expect(screen.getByText("Wood shop v2").previousSibling).toHaveTextContent("+");
-    expect(screen.getByText("Studio").previousSibling).toHaveAttribute("aria-label", "Drops");
+    expect(screen.getByText("Studio").previousSibling).toHaveAttribute("aria-label", "Removes");
   });
 });
 
@@ -223,7 +226,7 @@ describe("a bundle that others include", () => {
     expect(within(card).getByText("45 people in 2 bundles")).toBeInTheDocument();
     expect(within(card).getByText("Includes v3, one behind")).toBeInTheDocument();
     expect(within(card).getByText("Includes v4")).toBeInTheDocument();
-    expect(within(card).getByText("Bundle · Everyone in their first term")).toBeInTheDocument();
+    expect(within(card).getByText("Everyone in their first term")).toBeInTheDocument();
     expect(within(card).getAllByRole("button", { name: /Update to/ })).toHaveLength(1);
 
     fireEvent.click(within(card).getByRole("button", { name: "Update to v4" }));

@@ -87,10 +87,10 @@ afterEach(cleanup);
 // card is headed by the project, a link, with how many of its roles this
 // bundle gives beside the name rather than off at the far edge.
 describe("a bundle's page follows its board", () => {
-  it("makes the Bundles eyebrow the way back to the list", () => {
+  it("has no eyebrow naming its nav section (the breadcrumb is the way back)", () => {
     render(<BundlePage bundleId="b1" />);
 
-    expect(screen.getByRole("link", { name: "Bundles" })).toHaveAttribute("href", "/bundles");
+    expect(screen.queryByRole("link", { name: "Bundles" })).toBeNull();
   });
 
   it("heads each project's card with a link to the project and its role count", () => {
@@ -100,7 +100,7 @@ describe("a bundle's page follows its board", () => {
     const project = screen.getByRole("link", { name: "Laser Lab" });
     expect(project).toHaveAttribute("href", "/projects/p1");
     // Beside the name, in the same heading seat.
-    expect(project.closest("div")).toHaveTextContent("Laser Lab2 roles");
+    expect(project.closest("div")).toHaveTextContent("Laser Lab2");
   });
 });
 
@@ -108,7 +108,8 @@ describe("a bundle's page", () => {
   it("titles the unpublished panel with the change count and names the next version", () => {
     render(<BundlePage bundleId="b1" />);
 
-    expect(screen.getByRole("heading", { name: "3 changes, not published yet" })).toBeInTheDocument();
+    const card = screen.getByText("Not published yet").closest("div") as HTMLElement;
+    expect(card.querySelector('[data-testid="card-count"]')).toHaveTextContent("3");
     expect(screen.getByRole("button", { name: "Publish v3" })).toBeInTheDocument();
   });
 
@@ -116,7 +117,8 @@ describe("a bundle's page", () => {
     state.draft = { ...(state.draft as object), added: [role("laser")], removed: [] };
     render(<BundlePage bundleId="b1" />);
 
-    expect(screen.getByRole("heading", { name: "1 change, not published yet" })).toBeInTheDocument();
+    const card = screen.getByText("Not published yet").closest("div") as HTMLElement;
+    expect(card.querySelector('[data-testid="card-count"]')).toHaveTextContent("1");
   });
 
   it("shows no unpublished panel when the working copy matches the latest version", () => {
