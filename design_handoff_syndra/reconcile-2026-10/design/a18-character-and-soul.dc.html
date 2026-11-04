@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character and soul</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.container.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/react-cache-shim.js"></script>
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* The jump link (A-18 §2): ArrowLink's look with a down arrow, for a link that glides to a card on this page (8d). Drawn inline; code reuses ARROW_LINK. */
+.a18-jump{display:inline-flex;align-items:center;gap:4px;min-height:44px;font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration:none}
+@container syndra-frame (width >= 67.5rem){.a18-jump{min-height:0}}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Character and soul board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Route · / (My access), the Account sheet, and across the product · Proposed 5 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">A line that knows, and a keeper with a voice</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-18, answering A-17's Q3 and Q4. The member's count line becomes one sentence that always says the one thing worth knowing. The Zitadel page's story moves to About Syndra, at the foot of the Account sheet. The character comes from saying exactly the right thing at the right moment, not from extra words.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you asked</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">"Nine roles across six rooms" is going. Can something better sit under "Hi Priya. Here's what you can use."? And the mythology card leaves the Zitadel page, so where does the story live, and what else would make Syndra feel alive, with a character, without ever slowing an operator down?</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What I recommend</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">(A)</strong> One line under the greeting, picked from a fixed ladder; its calm state is "Nothing needs you right now.", the operator's own words. <strong style="color:var(--ink)">H1</strong>: About Syndra in the Account sheet, with the login line as the short form. <strong style="color:var(--ink)">Ideas 1 to 7</strong>: seven pieces of copy and one bloom, with no new component, route or loop.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · My access · four options, side by side</h2>
+    <div style="display:grid;grid-template-columns:repeat(2,720px);gap:28px">
+      <sc-for list="{{ options }}" as="o" hint-placeholder-count="4">
+        <figure data-screen-label="{{ o.label }}" style="margin:0;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.Badge" hint-size="30px,24px">{{ o.letter }}</x-import><span style="font-size:14.5px;font-weight:600">{{ o.title }}</span><span style="flex:1"></span><sc-if value="{{ o.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Recommended</span></sc-if></div>
+          <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:{{ o.edge }};background:var(--canvas)"><div style="width:1440px;height:1120px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ o.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:6px;max-width:720px">
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ o.how }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted)"><strong style="color:var(--ink)">For:</strong> {{ o.pro }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted)"><strong style="color:var(--ink)">Against:</strong> {{ o.con }}</span>
+          </figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">(A) · light, and phone at 390</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <figure data-screen-label="A light" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:720px;height:560px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1120px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="a18-character-and-soul.dc.html?frame=a-light" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">Desktop · light</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The same page in daylight. The amber dot and the violet jump carry the same meaning in both themes.</span></figcaption>
+      </figure>
+      <sc-for list="{{ phoneFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:390px;height:1500px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:390px;height:1500px"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">(A) · the ladder, every rung as it renders</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:80ch">The first rung that matches speaks; everything lower still shows in its own place. The seat never changes size. A rung changing while you watch crossfades its words on tint, and the dot changes colour where it sits (S4). It never blooms, because nothing here is something the member did.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ ladderFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:820px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+          <figcaption style="font-size:15px;font-weight:600">{{ f.label }}</figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">2 · Where the story lives</h2>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+      <sc-for list="{{ homes }}" as="m" hint-placeholder-count="4">
+        <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px;border:{{ m.edge }}">
+          <div style="display:flex;align-items:center;gap:8px"><span style="font-size:14.5px;font-weight:600">{{ m.title }}</span><span style="flex:1"></span><sc-if value="{{ m.rec }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600;color:var(--accent-text)">Recommended</span></sc-if></div>
+          <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">{{ m.what }}</p>
+          <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">For:</strong> {{ m.pro }}</p>
+          <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">Against:</strong> {{ m.con }}</p>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ aboutFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:480px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:960px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="About Syndra phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><dc-import name="Frame" frame-src="a18-character-and-soul.dc.html?frame=about-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · the sheet from the bottom edge</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The same rows; the story wraps at the sheet's width. This is why the story lives here: a phone has no rail.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">3 · The keeper's voice</h2>
+    <div class="card" style="padding:18px 20px;max-width:960px"><p style="margin:0;font-size:14.5px;line-height:1.65;color:var(--ink)">Syndra speaks as the door-keeper who knows everyone. She uses your name and knows the time of day. She speaks up only when something has changed for you. When all is in order she says so in one short sentence and stops. She uses the door and the list only where they are literally true, never to decorate. She doesn't joke or exclaim, and she never speaks in a confirm, an error that needs action, or a log.</p></div>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ ideas }}" as="i" hint-placeholder-count="10">
+        <div style="display:flex;flex-wrap:wrap;gap:6px 18px;padding:14px 22px;border-top:{{ i.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ i.n }}</span>
+          <span style="flex:0 0 220px;display:flex;flex-direction:column;gap:4px"><span style="font-size:14px;font-weight:600">{{ i.title }}</span><span style="font-size:12.5px;font-weight:600;color:{{ i.verdictColor }}">{{ i.verdict }}</span></span>
+          <span style="flex:1 1 300px;min-width:0;font-size:14px;line-height:1.55;color:var(--ink);text-wrap:pretty">{{ i.copy }}</span>
+          <span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.5;color:var(--muted);text-wrap:pretty"><span>{{ i.where }}</span><span>{{ i.why }}</span></span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch"><strong style="color:var(--ink)">Rejected, so nobody proposes them again:</strong> the mark breathing amber when Zitadel isn't answering (colour alone, and it says what the Notice already says); rotating or random lines; anniversaries; holiday themes; confetti, emoji or a mascot; any lore in an error, a confirm or the audit log.</p>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">The moments, rendered</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ momentFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:1640px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+          <figcaption style="font-size:15px;font-weight:600">{{ f.label }}</figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="9">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPage }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ member }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;flex-direction:column;gap:8px;padding-bottom:12px">
+    <h1 class="type-page-title" style="margin:0">Hi Priya. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+    <sc-if value="{{ vA }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font-size:14.5px;line-height:1.5;color:var(--muted)">
+        <span style="display:inline-flex;align-items:center;gap:9px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" hint-size="6px,6px"></x-import><span>Operator in Laser cutting ends in 7 days.</span></span>
+        <a class="a18-jump" href="#laser">Laser cutting <span aria-hidden="true">↓</span></a>
+      </div>
+    </sc-if>
+    <sc-if value="{{ vB }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 28px;font-size:14.5px;line-height:1.5;color:var(--muted)">
+        <sc-for list="{{ seats }}" as="s" hint-placeholder-count="3"><span style="display:inline-flex;align-items:center;gap:9px"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ s.tone }}" hint-size="6px,6px"></x-import><span>{{ s.text }}</span></span></sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ vC }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:14.5px;line-height:1.5;color:var(--muted)">
+        <span style="display:inline-flex;align-items:center;gap:9px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>Latest: you were given Operator in Laser cutting, on 2 Nov.</span></span>
+        <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="170px,32px">Show the last 30 days</x-import>
+      </div>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{ showRecent }}" hint-placeholder-val="{{ true }}">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,180px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="Recent changes" note="Last 30 days" action="{{ recentLink }}" hint-size="100%,56px"></x-import>
+      <sc-for list="{{ recent }}" as="e" hint-placeholder-count="2">
+        <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px;padding:14px 20px">
+          <span style="width:118px;flex:none;display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:{{ e.wordColor }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ e.tone }}" hint-size="6px,6px"></x-import>{{ e.word }}</span>
+          <span style="flex:1 1 260px;min-width:0;font-size:14.5px;line-height:1.5;text-wrap:pretty">{{ e.text }}</span>
+          <span style="width:110px;flex:none;text-align:right;font-size:13px;color:var(--faint)">{{ e.when }}</span>
+        </div>
+      </sc-for>
+    </x-import>
+  </sc-if>
+
+  <div style="display:flex;flex-wrap:wrap;gap:16px">
+    <sc-for list="{{ cards }}" as="p" hint-placeholder-count="4">
+      <div style="flex:1 1 420px;min-width:0"><x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px">
+        <x-import component-from-global-scope="Syndra.CardHeader" title="{{ p.project }}" hint-size="100%,56px"></x-import>
+        <sc-for list="{{ p.roles }}" as="r" hint-placeholder-count="2">
+          <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;padding:12px 20px">
+            <span style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:15px;font-weight:600">{{ r.name }}</span>
+              <sc-if value="{{ r.plain }}" hint-placeholder-val="{{ true }}"><span style="font-size:13.5px;color:var(--muted)">{{ r.why }}</span></sc-if>
+              <sc-if value="{{ r.warn }}" hint-placeholder-val="{{ false }}"><span style="font-size:13.5px;font-weight:600;color:var(--warn-text)">{{ r.why }}</span></sc-if>
+              <sc-if value="{{ r.onway }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-direction:column;gap:2px"><span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="neutral" hint-size="6px,6px"></x-import>On its way</span><span style="padding-left:15px;font-size:12.5px;color:var(--faint)">Given 4 Nov. It starts working once makerspace staff send it.</span></span></sc-if>
+            </span>
+            <sc-if value="{{ r.ask }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="120px,32px">Ask to keep it</x-import></sc-if>
+          </div>
+        </sc-for>
+      </x-import></div>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+    <h2 class="type-section-title" style="margin:0">What else is here</h2>
+    <div style="max-width:560px"><x-import component-from-global-scope="Syndra.Input" placeholder="Search what's on offer" aria-label="Search what's on offer" hint-size="100%,44px"></x-import></div>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isLadder }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<div style="padding:36px 32px;display:flex;flex-direction:column;gap:0;background:var(--ground);min-height:100vh">
+  <h1 class="type-page-title" style="margin:0 0 20px">Hi Priya. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+  <sc-for list="{{ rungs }}" as="g" hint-placeholder-count="9">
+    <div style="display:flex;flex-direction:column;gap:6px;padding:14px 0;border-top:1px solid var(--divider)">
+      <span style="font-size:12.5px;color:var(--faint)">{{ g.when }}</span>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font-size:14.5px;line-height:1.5;color:var(--muted)">
+        <span style="display:inline-flex;align-items:center;gap:9px"><sc-if value="{{ g.hasDot }}" hint-placeholder-val="{{ true }}"><x-import component-from-global-scope="Syndra.StatusDot" tone="{{ g.tone }}" hint-size="6px,6px"></x-import></sc-if><span>{{ g.text }}</span></span>
+        <sc-if value="{{ g.jump }}" hint-placeholder-val="{{ false }}"><a class="a18-jump" href="#card">{{ g.link }} <span aria-hidden="true">↓</span></a></sc-if>
+        <sc-if value="{{ g.away }}" hint-placeholder-val="{{ false }}"><x-import component-from-global-scope="Syndra.ArrowLink" href="#page" hint-size="140px,20px">{{ g.link }}</x-import></sc-if>
+      </div>
+    </div>
+  </sc-for>
+</div>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isAbout }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:8px">
+  <h1 class="type-greeting" style="margin:0">Morning, Kanishk. <span style="color:var(--faint)">Nothing needs you right now.</span></h1>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="account-sheet-title" hint-size="420px,760px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Account" title-id="account-sheet-title" hint-size="100%,70px"></x-import>
+  <div style="display:flex;flex-direction:column;gap:14px;padding:0 24px 8px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span aria-hidden="true" class="avatar-fill" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);font-size:15px;font-weight:600;color:var(--muted)">KS</span>
+      <span style="min-width:0"><span style="display:block;font-size:15px;font-weight:600">Kanishk Singh</span><span style="display:block;font-size:13px;color:var(--muted)">kanishk@example.edu</span></span>
+    </div>
+    <div style="display:flex;flex-direction:column;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:6px 0">
+      <sc-for list="{{ ownNav }}" as="n" hint-placeholder-count="2">
+        <a href="#own" style="display:flex;flex-direction:column;justify-content:center;gap:2px;min-height:44px;padding:6px 0;text-decoration:none"><span style="font-size:14.5px;font-weight:600;color:var(--accent-text)">{{ n.label }} <span aria-hidden="true">→</span></span><span style="font-size:13px;color:var(--muted)">{{ n.note }}</span></a>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 8px 6px 16px;border:1px solid var(--line);border-radius:var(--radius-inner);font-size:14.5px">
+      <span>Appearance</span>
+      <x-import component-from-global-scope="Syndra.Segmented" label="Appearance" size="sm" value="{{ themeValue }}" options="{{ themeOptions }}" on-change="{{ noop }}" hint-size="140px,32px"></x-import>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding:12px 16px;border:1px solid var(--line);border-radius:var(--radius-inner);font-size:14.5px">
+      <span style="display:flex;flex-direction:column;gap:2px"><span>Sound when drift is found</span><span style="font-size:13px;color:var(--muted)">In this browser only</span></span>
+      <span><x-import component-from-global-scope="Syndra.Segmented" label="Sound when drift is found" size="sm" value="off" options="{{ chimeOptions }}" on-change="{{ noop }}" hint-size="110px,32px"></x-import></span>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:var(--radius-inner);overflow:hidden">
+      <button type="button" aria-expanded="true" style="width:100%;display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px 6px 16px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer">
+        <x-import component-from-global-scope="Syndra.SyndraMark" size="{{ 16 }}" hint-size="16px,16px"></x-import>
+        <span style="flex:1;font-size:14.5px">About Syndra</span>
+        <span aria-hidden="true" style="width:28px;height:28px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--radius-pill);border:1px solid var(--line-strong);color:var(--muted)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(180deg)"><path d="M6 9l6 6 6-6"></path></svg></span>
+      </button>
+      <div style="display:flex;flex-direction:column;gap:10px;padding:2px 16px 16px 42px">
+        <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--ink);text-wrap:pretty">Syndra is named for Syn. In the Norse stories she keeps the door of the hall, and shuts it on those who should not enter. When a case is argued, she speaks for the one who refuses it.</p>
+        <p style="margin:0;font-size:14.5px;line-height:1.6;color:var(--muted);text-wrap:pretty">In the makerspace, Zitadel is the door. It checks that you are who you say you are. Syndra keeps the list of what that lets you use, and the reason for every name on it.</p>
+        <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--faint)">Built in the lab it runs. Powered by Zitadel.</p>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:12px;border-top:1px solid var(--line);padding:16px 24px 22px">
+    <x-import component-from-global-scope="Syndra.Button" variant="outline" class-name="w-full" hint-size="100%,40px">Sign out</x-import>
+    <p style="margin:10px 0 0;font-size:12.5px;line-height:1.5;color:var(--faint)">Signing out signs you out in every open tab.</p>
+  </div>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isMoments }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<div style="padding:36px 32px;display:flex;flex-direction:column;gap:30px;background:var(--ground);min-height:100vh">
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">1 · Term days on Home's weekday line · Recommended</span>
+    <h1 class="type-greeting" style="margin:0">Morning, Kanishk. <span style="color:var(--faint)">Nothing needs you right now.</span></h1>
+    <div style="font-size:14.5px;color:var(--faint)">Thursday 31 Dec · Last day of Monsoon term · last checked 09:14</div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">2 · The time of day on My access · Recommended</span>
+    <h1 class="type-page-title" style="margin:0">Morning, Priya. <span style="color:var(--faint)">Here's what you can use.</span></h1>
+    <div style="display:flex;align-items:center;gap:9px;font-size:14.5px;line-height:1.5;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>Nothing needs you right now.</span></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">4 · The keeper's all-clears · Recommended</span>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px"><x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ true }}" title="Everyone inside is on the list, and everyone on the list is inside." guidance="Every piece of access in Zitadel traces back to something Syndra did, and everything Syndra gave is there." hint-size="100%,130px"></x-import></x-import>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px"><x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ true }}" title="Everyone whose access was revoked is out." guidance="Every revocation has reached the system it was sent to." hint-size="100%,130px"></x-import></x-import>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">5 · The last one, cleared: it rises 6px and its dot blooms once, only because you emptied it · Recommended</span>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,140px"><x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ true }}" bloom="{{ true }}" lift="{{ true }}" title="Everyone inside is on the list, and everyone on the list is inside." guidance="Every piece of access in Zitadel traces back to something Syndra did, and everything Syndra gave is there." hint-size="100%,130px"></x-import></x-import>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">6 · The mark lights once after sign-in: its dot blooms on the first paint, then rests · Recommended</span>
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 20px;width:252px;background:var(--rail);border:1px solid var(--line);border-radius:var(--radius-inner)"><x-import component-from-global-scope="Syndra.SyndraMark" hint-size="22px,22px"></x-import><span style="font-family:var(--font-display);font-size:18px;font-weight:600;letter-spacing:-0.01em">Syndra</span></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">7 · The day access starts (rung 6 of A) · Recommended</span>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;font-size:14.5px;line-height:1.5;color:var(--muted)"><span style="display:inline-flex;align-items:center;gap:9px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>From today, you can use Laser cutting.</span></span><a class="a18-jump" href="#laser">Laser cutting <span aria-hidden="true">↓</span></a></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">8 · A first welcome, once · Later: needs the first sign-in recorded</span>
+    <div style="display:flex;align-items:center;gap:9px;font-size:14.5px;line-height:1.5;color:var(--muted)"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import><span>Welcome to Syndra. It keeps the makerspace's list of who can use what, and why.</span></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">9 · Quiet hours, 22:00 to 05:00, on a calm Home · Optional</span>
+    <div class="panel"><x-import component-from-global-scope="Syndra.EmptyState" resolved="{{ true }}" title="Nothing here needs you." guidance="No open requests, and no access ending in the next 14 days. It will keep until morning." hint-size="100%,120px"></x-import></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <span style="font-size:12.5px;color:var(--faint)">10 · The 404 in voice · Not recommended: a route is not a door</span>
+    <x-import component-from-global-scope="Syndra.EmptyState" title="There's no door at this address." guidance="No page in Syndra has this address. If you followed a link, the link itself is wrong; nothing has been deleted." action="{{ homeAction }}" hint-size="100%,150px"></x-import>
+  </div>
+</div>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":9200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.member = { id: "u2", name: "Priya Nair", email: "priya.nair@example.edu", title: "Student", team: "Design", status: "active", avatar: "PN", role: "user", sessionType: "demo" };
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const S = window.Syndra; const h = React.createElement; const noop = () => {};
+    const kind = this.st.split("-")[0];
+    const light = /-light$/.test(this.st);
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note) => ({ src: "a18-character-and-soul.dc.html?frame=" + frame, label, note });
+
+    // My access, the same data under every option: four projects A to Z, one role ending, one on its way.
+    const cards = [
+      { project: "3D printing", roles: [
+        { name: "Printer user", why: "Because you're in Makerspace members", plain: true },
+        { name: "Resin printer", onway: true },
+      ] },
+      { project: "Electronics", roles: [{ name: "Bench user", why: "Because you're in Makerspace members", plain: true }] },
+      { project: "Laser cutting", roles: [{ name: "Operator", why: "Given to you until 12 Nov · 7 days left", warn: true, ask: true }] },
+      { project: "Wood shop", roles: [{ name: "Hand tools", why: "Comes with Laser cutting, automatically", plain: true }] },
+    ];
+    const recent = [
+      { word: "On its way", tone: "neutral", wordColor: "var(--muted)", text: "Makerspace staff approved Resin printer in 3D printing. It starts working once they send it.", when: "4 Nov" },
+      { word: "Given", tone: "healthy", wordColor: "var(--ink)", text: "You were given Operator in Laser cutting, until 12 Nov.", when: "2 Nov" },
+    ];
+    const seats = [
+      { tone: "warn", text: "Operator in Laser cutting ends in 7 days." },
+      { tone: "neutral", text: "Makerspace staff have your request for Bandsaw in Wood shop." },
+      { tone: "healthy", text: "TrueNAS is ready." },
+    ];
+
+    const O = (letter, title, frame, rec, how, pro, con) => ({ letter, title, src: "a18-character-and-soul.dc.html?frame=" + frame, rec, edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)", how, pro, con, label: "Option " + letter + " · " + title });
+    const options = [
+      O("A", "One line that knows", "a", true,
+        "One sentence under the greeting, picked from a fixed ladder: here, rung 1, an ending role, with a jump to its card. Calm, it reads \"Nothing needs you right now.\"",
+        "One seat, one sentence, the operator's own calm words. It surfaces the one thing a twice-a-term visitor would miss below the fold.",
+        "One thing at a time: the request for Bandsaw waits its turn, though Requests and Recent changes still show it."),
+      O("B", "Three quiet seats", "b", false,
+        "A fixed row of three facts: what ends, what you asked, your storage. Each is a dot and a sentence.",
+        "Everything at a glance, and the structure is fixed.",
+        "Most visits it writes three all-is-well lines (G17). It reads as a dashboard on the one screen a student opens to see what they can use."),
+      O("C", "What changed, in one line", "c", false,
+        "The newest change, with \"Show the last 30 days\" unfolding the Recent changes rows in place. The card folds into the line.",
+        "It fixes the Recent changes card that comes and goes.",
+        "The newest change is not the most important thing when a role ends in 7 days, and the news moves behind a click. \"Since your last visit\" can't be known."),
+      O("D", "The greeting alone", "d", false,
+        "A-17's recommendation: delete the line; \"Here's what you can use.\" is the lede.",
+        "The calmest page.",
+        "Nothing names the ending role sitting in the third card. It isn't the enrichment you asked for."),
+    ];
+
+    const R = (when, tone, text, link, mode) => ({ when, tone, hasDot: !!tone, text, link: link || "", jump: mode === "jump", away: mode === "away" });
+    const rungs = [
+      R("1 · A role Zitadel holds for you ends within 14 days", "warn", "Operator in Laser cutting ends in 7 days.", "Laser cutting", "jump"),
+      R("1 · Two or more end soon", "warn", "Two of your roles end soon. The first, Operator in Laser cutting, ends in 7 days.", "Laser cutting", "jump"),
+      R("2 · Given, and not on your account after a full read", "warn", "Hand tools in Wood shop isn't on your account yet.", "Wood shop", "jump"),
+      R("3 · Network storage needs a step from you", "neutral", "Your TrueNAS account is ready. Set its password to connect.", "Network storage", "away"),
+      R("4 · A request of yours is with makerspace staff", "neutral", "Makerspace staff have your request for Bandsaw in Wood shop. You asked on 3 Nov.", "Your requests", "away"),
+      R("5 · An approval is on its way", "neutral", "Resin printer in 3D printing is on its way to you.", "3D printing", "jump"),
+      R("6 · A role was given today", "healthy", "From today, you can use Laser cutting.", "Laser cutting", "jump"),
+      R("7 · None of the above", "healthy", "Nothing needs you right now.", "", ""),
+      R("Loading: no dot, no number", "", "Checking what you can use.", "", ""),
+      R("Zitadel not read", "neutral", "Zitadel hasn't answered yet, so your roles aren't shown.", "", ""),
+    ];
+
+    const M = (title, rec, what, pro, con) => ({ title, rec, edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line)", what, pro, con });
+    const homes = [
+      M("H1 · About Syndra, in the Account sheet", true,
+        "The last row above Sign out, closed by default. The whole row opens it in place (Unfold, the 28px round chevron): three short paragraphs, the story, what it means here, and the login's credit line.",
+        "Every person reaches it, member or operator, at every width. The sheet is where you think about the app rather than a machine. One line at rest.",
+        "The sheet grows by one row."),
+      M("H2 · The rail's mark opens it", false,
+        "SyndraMark and the word Syndra become a button that opens the same paragraphs in an AnchoredPanel.",
+        "The name explains itself where the name is.",
+        "The rail's top is not a control anywhere else. Below tablet there is no rail, so phones still need H1: two homes for one story."),
+      M("H3 · The sign-in page's fold", false,
+        "The login line opens to the full story.",
+        "Where the name is first met.",
+        "Sign-in is one action. A second control on the stage dilutes the only one, and a person signing in wants to get through the door."),
+      M("H4 · The 404 page", false,
+        "The story sits under the way home.",
+        "A surprise.",
+        "A lost reader wants the way back. Lore on an error page reads as a joke at their expense."),
+    ];
+
+    const I = (n, title, verdict, copy, where, why) => ({ n: String(n), title, verdict, verdictColor: verdict === "Recommended" ? "var(--accent-text)" : "var(--faint)", copy, where, why });
+    const ideas = [
+      I(1, "Term days on Home's weekday line", "Recommended", "\"Thursday 31 Dec · Last day of Monsoon term · last checked 09:14\". On a first day: \"First day of Spring term\".", "Operator Home, the faint line under the greeting. On a term's first and last day, from Makerspace settings.", "Six days a year, a fact Syndra holds, said where a date is already said."),
+      I(2, "The time of day on My access", "Recommended", "\"Morning, Priya. Here's what you can use.\" Afternoon from 12, Evening from 17.", "The member's title, in place of \"Hi\". Always.", "Three fixed words, already the operator's greeting: one keeper greets everyone the same way."),
+      I(3, "About Syndra", "Recommended", "\"Syndra is named for Syn. In the Norse stories she keeps the door of the hall, and shuts it on those who should not enter. When a case is argued, she speaks for the one who refuses it.\"", "The foot of the Account sheet. Only when someone opens it.", "Closed at rest, one line, never pushed at anyone."),
+      I(4, "The keeper's all-clears", "Recommended", "Drift: \"Everyone inside is on the list, and everyone on the list is inside.\" Unfinished revocations: \"Everyone whose access was revoked is out.\"", "Those two queues' resolved EmptyState. Guidance lines unchanged.", "Still one sentence with a full stop, and each says more than the old title. Only where the door is literally true; Home, Pending, Expiring and Holds keep plain titles."),
+      I(5, "The last one, cleared", "Recommended", "No new copy: the queue's own all-clear is the moment.", "Drift, Unfinished revocations, Requests, Expiring, Holds. Only when your act empties the queue on screen.", "The existing rule: a bloom only for something that went well, because of you, on screen. Never on arrival or refresh."),
+      I(6, "The mark lights once after sign-in", "Recommended", "No copy: the SyndraMark's dot blooms once (flash, 900ms), carrying on the login's orb.", "The rail's mark, or the TopBar's on a phone. The first paint after a sign-in only.", "Once per sign-in, for something you did. Reduced motion: nothing."),
+      I(7, "The day access starts", "Recommended", "\"From today, you can use Laser cutting.\"", "My access's line, rung 6, for the whole day the role is first held.", "The ladder's ordinary seat; new happens once."),
+      I(8, "A first welcome", "Later", "\"Welcome to Syndra. It keeps the makerspace's list of who can use what, and why.\"", "My access's line (Home's for an operator), above every rung. The first visit only.", "Once in a lifetime. Needs the first sign-in recorded, which Syndra doesn't keep yet."),
+      I(9, "Quiet hours", "Optional", "Home's calm guidance gains: \"It will keep until morning.\"", "Home's calm panel, 22:00 to 05:00, only when nothing needs you.", "Only when the answer is already \"nothing\", and it gives permission to stop. The closest of these to sentiment."),
+      I(10, "The 404 in voice", "Not recommended", "\"There's no door at this address.\"", "not-found.tsx.", "A route is not a door, so the metaphor stops being exact; an error page is the wrong place for charm."),
+    ];
+    ideas.forEach((x, i) => { x.rule = i === 0 ? "0" : DIV; });
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("My access header: option (A), one line that knows, from the ladder?", "Yes. One quiet sentence that is right on every visit, from parts Syndra already has."),
+      Q("The ladder's order (ending soon first, calm last), with the line jumping to the card it names?", "Yes. An ending is the only rung that costs the member something if missed."),
+      Q("Should the member's title greet by time of day (\"Morning, Priya.\"), like Home?", "Yes."),
+      Q("Should Recent changes keep its seat on a quiet month, saying \"Nothing has changed in the last 30 days.\"?", "Yes. Structure doesn't move with data."),
+      Q("Should the story live in About Syndra at the foot of the Account sheet, with the login line as its short form, and nowhere else?", "Yes."),
+      Q("Should the story be told exactly, \"the door of the hall\", with Syn speaking for the one who refuses?", "Yes; Snorri names no hall. No keeps \"Frigg's hall\"."),
+      Q("Should \"The keeper's voice\" paragraph go into the copy guide, so the voice has a rule as well as examples?", "Yes."),
+      Q("Should the first set be ideas 1 to 7, leaving quiet hours (9) for later?", "Yes."),
+      Q("Should the backend record a person's first sign-in, so the one-time welcome (8) can exist?", "Yes, later. One timestamp, written once."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isPage: ["a", "b", "c", "d"].indexOf(kind) >= 0,
+      isLadder: kind === "ladder", isAbout: kind === "about", isMoments: kind === "moments",
+      vA: kind === "a", vB: kind === "b", vC: kind === "c",
+      showRecent: kind !== "c",
+      member: this.member, operator: this.operator, rootData: this.rootData, noop,
+      cards, recent, seats, rungs, options, homes, ideas, questions,
+      recentLink: h(S.CardHeaderLink, { href: "#requests" }, "All your requests"),
+      homeAction: { label: "Go to the home page", href: "#home" },
+      ownNav: [{ label: "My access", note: "What you can use, and asking for more" }, { label: "Network storage", note: "Your password and folders" }],
+      themeValue: light ? "light" : "dark",
+      themeOptions: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }],
+      chimeOptions: [{ value: "off", label: "Off" }, { value: "on", label: "On" }],
+      phoneFrames: [
+        f("a-phone", "Phone · dark", "The line wraps to two lines at most, the jump on the second. The jump lands the Laser cutting card under the TopBar and its title flashes once (8d)."),
+        f("a-phone-light", "Phone · light", "The same, in daylight."),
+      ],
+      ladderFrames: [f("ladder", "The ladder · dark"), f("ladder-light", "The ladder · light")],
+      aboutFrames: [
+        f("about", "About Syndra, opened · dark", "Last row above Sign out, the same bordered shape as Appearance and Sound. The mark, the words, the round chevron; opened, the story, what it means here, and the login's credit line. No heading inside, no link out."),
+        f("about-light", "About Syndra, opened · light", "The same sheet in daylight."),
+      ],
+      momentFrames: [f("moments", "The moments · dark"), f("moments-light", "The moments · light")],
+    };
+  }
+}
+</script>
+</body>
+</html>
