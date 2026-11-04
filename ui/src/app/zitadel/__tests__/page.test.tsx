@@ -88,23 +88,18 @@ describe("Identity provider · one verdict about reachability", () => {
 });
 
 /**
- * Health is one line with its detail folded (route-zitadel, 7c). The project
- * count sits in the header and names its source: Zitadel's own number once it
- * answers, Syndra's remembered one — marked last known — when it can't.
+ * Health is one line (route-zitadel, 7c), with nothing folded behind it: a fold
+ * that repeated the line above it was deleted (A-17 §2.22). The project count
+ * sits in the header and names its source: Zitadel's own number once it
+ * answers, Syndra's remembered one, marked last known, when it can't.
  */
-describe("Identity provider · health line and its fold", () => {
-  it("is one line with the reply time, and the detail is folded until asked for", async () => {
+describe("Identity provider · health line", () => {
+  it("is one line with the reply time and no fold behind it", async () => {
     health.value = { status: "ok", mode: "live", latency_ms: 42, projects_total: 6 };
     renderPage();
     expect(await screen.findByText("Answering")).toBeInTheDocument();
     expect(screen.getByText(/^in 42 ms, and sees \d+ projects?$/)).toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: "Show checks" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("As Zitadel reported them just now.")).not.toBeInTheDocument();
-
-    fireEvent.click(toggle);
-    expect(screen.getByRole("button", { name: "Hide checks" })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText(/can read the 6 projects it\s+manages/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /checks/ })).not.toBeInTheDocument();
   });
 
   it("counts projects as Zitadel reported them once the connection is healthy", async () => {
@@ -147,8 +142,9 @@ describe("Identity provider · signing key row", () => {
     };
     renderPage();
     expect(await screen.findByText("Past its limit")).toBeInTheDocument();
-    expect(screen.getByText(/104 days old, over the 90-day limit. Plan to replace it./)).toBeInTheDocument();
+    // The age is said once, by the Notice under the header; the card does not repeat it.
     expect(screen.getByText("The action signing key is 104 days old.")).toBeInTheDocument();
+    expect(screen.getAllByText(/104 days old/)).toHaveLength(1);
   });
 
   it("calls a stale key stale rather than reporting a number", async () => {
@@ -282,15 +278,16 @@ describe("Identity provider · Change Zitadel directly", () => {
     expect(projectsLink).toHaveAttribute("href", "/zitadel/projects");
     const projectsRow = projectsLink.closest(".row-divider") as HTMLElement;
     expect(within(projectsRow).getByText(/Goes straight to Zitadel, and Syndra keeps no record of it/)).toBeInTheDocument();
-    expect(within(projectsRow).getByRole("link", { name: "Projects →" })).toHaveAttribute("href", "/projects");
+    expect(within(projectsRow).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects");
   });
 
-  it("disables both controls, with the reason, while Zitadel is not answering", async () => {
+  it("offers no way in, with the reason, while Zitadel is not answering", async () => {
     health.value = { status: "error", mode: "live", error: "dial tcp: connection refused" };
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /Change Zitadel directly/ }));
-    expect(screen.getByRole("button", { name: /Change people.s roles/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Change projects and roles/ })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: /Change people.s roles/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Change people.s roles/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Change projects and roles/ })).not.toBeInTheDocument();
     expect(screen.getByText(/Unavailable while Zitadel isn.t answering: these change it directly/)).toBeInTheDocument();
   });
 });

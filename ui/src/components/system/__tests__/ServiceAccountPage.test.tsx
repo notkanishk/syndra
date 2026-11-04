@@ -74,11 +74,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("a service account's page", () => {
-  it("heads with its name, what it is and how it signs in, and its purpose as the lede", () => {
+  it("heads with its name and a fixed lede; the purpose is said once, in its row", () => {
     renderPage();
     expect(screen.getByRole("heading", { level: 1, name: "netbird" })).toBeInTheDocument();
-    expect(screen.getByText("Machine key")).toBeInTheDocument();
-    expect(screen.getAllByText("Syncs the door list").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Made for one purpose, not one person/)).toBeInTheDocument();
+    expect(screen.getAllByText("Syncs the door list")).toHaveLength(1);
   });
 
   it("is a card of settings: Purpose and Owner you can change, Kind that Zitadel sets for a machine account", () => {
@@ -103,7 +103,6 @@ describe("a service account's page", () => {
     });
     renderPage();
 
-    expect(screen.getByText("Signs in")).toBeInTheDocument();
     expect(screen.getByText(/^Marked by .*, 23 Oct/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mark as a person" }));
     expect(screen.getByRole("heading", { name: "Mark netbird as a person" })).toBeInTheDocument();
@@ -140,6 +139,24 @@ describe("a service account's page", () => {
     expect(within(card).getByText("Trained")).toBeInTheDocument();
     fireEvent.click(within(card).getByRole("button", { name: /^Revoke Trained in Laser Lab/ }));
     expect(screen.getByRole("dialog")).toHaveTextContent("Revoke direct access to Laser Lab / trained?");
+  });
+
+  it("lists what it holds by project name, A to Z, whatever order the read came in", () => {
+    const base = holds.projects[0];
+    read.access = {
+      ...read.access,
+      data: {
+        ...holds,
+        projects: [
+          { ...base, project_id: "pWood", project_name: "Wood Shop" },
+          { ...base, project_id: "pLaser", project_name: "Laser Lab" },
+        ],
+      },
+    };
+    renderPage();
+    const card = screen.getByText("What it holds").closest(".card") as HTMLElement;
+    const names = within(card).getAllByRole("link").map((a) => a.textContent);
+    expect(names.indexOf("Laser Lab")).toBeLessThan(names.indexOf("Wood Shop"));
   });
 
   it("never asks and is never welcomed: no Ask for access, no bundles", () => {

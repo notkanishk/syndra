@@ -90,7 +90,8 @@ describe("upstream role delete", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete role in Zitadel" }));
     await screen.findByText(/deleted in Zitadel/i);
 
+    // The warning leaves with the click; the result says the rest.
     expect(screen.queryByText(/the moment you press the button/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/is deleted\. Everyone who held it has already lost it\./i)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 });

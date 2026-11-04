@@ -1,10 +1,15 @@
 "use client";
 
-import { usePageHead } from "@/components/ui/PageHeader";
-import { Term } from "@/components/ui/Term";
-import { Checkbox } from "@/components/ui/Choice";
-import { Notice } from "@/components/ui/Notice";
 import Link from "next/link";
+
+import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Choice";
+import { ModalFooter } from "@/components/ui/Modal";
+import { Notice } from "@/components/ui/Notice";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { OUTCOME_LABEL, type ActionOutcome as Outcome } from "@/lib/outcome";
 
 /**
  * The frame every upstream-inspection page shares.
@@ -12,8 +17,9 @@ import Link from "next/link";
  * These pages read the identity provider directly rather than Syndra's model
  * of it, which is the whole point of them and also the thing most likely to
  * confuse somebody who wandered in from Access. So each one says what it is
- * before it says anything else, and links back to where the same question is
- * answered in Syndra's own terms.
+ * before it says anything else, and links to where the same question is
+ * answered in Syndra's own terms. What a write skips is said beside the write
+ * (`DirectWriteWarning`), never as a standing line under the title.
  */
 export function UpstreamShell({
   title,
@@ -28,42 +34,75 @@ export function UpstreamShell({
   syndraLabel: string;
   children: React.ReactNode;
 }) {
-  // A screen's first paint (S11): the title block tints in, then what follows it arrives.
-  const head = usePageHead();
   return (
-    <div className="flex flex-col gap-[18px]">
-      <div className={head.className} data-settled={head["data-settled"]}>
-        <Link
-          href="/zitadel"
-          // Standalone navigation, not a link in a sentence: this is the
-          // back affordance on these two screens, and on a phone it is what a
-          // thumb reaches for first.
-          className="inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-accent-text link-hover"
-        >
-          <span aria-hidden="true">← </span>Zitadel
-        </Link>
-        <h1 className="mt-2 type-page-title">{title}</h1>
-        {/* A standing line, not only per-action ceremony. A warning that
-            appears beside each button is met at the moment an operator has
-            already decided, which teaches them to dismiss it. A line under the
-            title tells them where they are before they decide anything. Those
-            are two different jobs and both are wanted. */}
-        <p className="mt-1.5 text-[13.5px] font-semibold text-warn-text">
-          Changes here go straight to <Term name="zitadel">Zitadel</Term>, and Syndra
-          keeps no record of them.
-        </p>
-        <p className="mt-2 max-w-[80ch] text-[14.5px] leading-[1.55] text-muted">
-          {lede}{" "}
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        eyebrow={
           <Link
-            href={syndraHref}
-            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text desktop:min-h-0 link-hover"
+            href="/zitadel"
+            className="inline-flex min-h-11 items-center font-semibold link-hover desktop:min-h-0"
           >
-            {syndraLabel} <span aria-hidden="true">→</span>
+            Zitadel
           </Link>
-        </p>
-      </div>
+        }
+        title={title}
+        lede={
+          <>
+            {lede} <ArrowLink href={syndraHref}>{syndraLabel}</ArrowLink>
+          </>
+        }
+      />
       {children}
     </div>
+  );
+}
+
+/**
+ * A direct write's end, in the sheet (A-17 G4): the act's own word on success,
+ * the outcome's own label ("Failed", "Refused") when it did not go through.
+ * The sheet becomes this; it never closes onto the row.
+ */
+export function WriteResult({
+  outcome,
+  word,
+  className = "mx-6 mb-1",
+}: {
+  outcome: Outcome;
+  /** The act, past tense: "Given", "Revoked", "Replaced". */
+  word: string;
+  className?: string;
+}) {
+  return (
+    <ActionOutcome
+      outcome={outcome}
+      word={outcome.kind === "applied" ? word : OUTCOME_LABEL[outcome.kind]}
+      className={className}
+    />
+  );
+}
+
+/** The footer of a direct-write sheet: Cancel and the act, then after the result one outline Close. */
+export function WriteFooter({
+  outcome,
+  onClose,
+  children,
+}: {
+  outcome: Outcome | null;
+  onClose: () => void;
+  /** The act (accent, or dangerConfirm). */
+  children: React.ReactNode;
+}) {
+  const done = outcome?.kind === "applied";
+  return (
+    <ModalFooter cancel={done ? undefined : { onClick: onClose }}>
+      {done ? (
+        <Button variant="outline" onClick={onClose}>
+          Close
+        </Button>
+      ) : (
+        children
+      )}
+    </ModalFooter>
   );
 }
 
@@ -122,7 +161,7 @@ export function DirectWriteWarning({
         <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
           <strong className="font-semibold text-ink">This writes to Zitadel through Syndra’s record.</strong>{" "}
           {what} The grant, an audit line and the queued change are written together, so it is explained
-          afterwards. It reaches Zitadel when Pending changes is sent — revocations go on their own,
+          afterwards. It reaches Zitadel when Pending changes is sent; revocations go on their own,
           every few minutes.
         </p>
         {tick}
@@ -132,7 +171,7 @@ export function DirectWriteWarning({
   // The other path skips Syndra's record, which is a fault in the making: a box.
   return (
     <Notice tone="warn" title="Changes here go straight to Zitadel, and Syndra keeps no record of them.">
-      {what} The next drift sweep — every six hours — lists what you changed under Drift with nobody’s
+      {what} The next drift sweep, every six hours, lists what you changed under Drift with nobody’s
       name on it, for somebody to resolve by hand. Do this inside Syndra instead unless there is
       genuinely no way to.
       {tick}

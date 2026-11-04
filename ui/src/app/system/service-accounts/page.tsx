@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { Owner } from "@/components/system/ServiceAccountOwner";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Card, CardColumns, CardHeader, CardRow } from "@/components/ui/Card";
+import { Card, CardColumns, CardRow } from "@/components/ui/Card";
 import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
@@ -32,18 +32,15 @@ export default function ServiceAccountsPage() {
   const leaving = useLeavingRows(rows, (account) => account.id, !accounts.isLoading && !accounts.error);
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
-        eyebrow="System"
         title="Service accounts"
         lede="Accounts made for one purpose, not one person: an integration, a device, an agent, or a login the team shares. Each has someone answerable for it."
+        meta={accounts.data ? `${rows.length} service ${rows.length === 1 ? "account" : "accounts"}` : undefined}
       />
-      {accounts.data && (
-        <ReadFreshness state={readStateOfQuery(accounts)} subject="Service accounts" className="-mb-3.5 px-5" />
-      )}
+      {accounts.data && <ReadFreshness state={readStateOfQuery(accounts)} subject="This list" />}
 
       <Card {...leaving.listProps}>
-        <CardHeader title="Service accounts" count={accounts.data ? rows.length : undefined} />
         <CardColumns>
           <span className="w-[220px] shrink-0">
             Account <span aria-hidden>↑</span>
@@ -83,7 +80,7 @@ export default function ServiceAccountsPage() {
                 </span>
               </span>
               <span className="order-3 w-full min-w-0 text-[14px] text-muted [text-wrap:pretty] tablet:order-2 tablet:w-auto tablet:flex-1">
-                {account.purpose}
+                {account.purpose || <span className="text-faint">Nothing written yet</span>}
               </span>
               <span className="order-4 w-full text-[14px] tablet:order-3 tablet:w-[170px] tablet:shrink-0">
                 <Owner id={account.owner_id} />

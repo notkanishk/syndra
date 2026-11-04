@@ -49,11 +49,13 @@ describe("Service accounts list", () => {
     expect(screen.getByText("Intake kiosk")).toBeInTheDocument();
   });
 
-  it("counts the accounts at the top, and shows each one's role count", () => {
+  it("counts the accounts in the header's meta, not in a card title that repeats the page's", () => {
     list.state.data = [account({ role_count: 3 }), account({ id: "b", name: "zed", role_count: 0 })];
     render(<ServiceAccountsPage />);
 
-    expect(screen.getByTestId("card-count")).toHaveTextContent("2");
+    expect(screen.getByText("2 service accounts")).toBeInTheDocument();
+    expect(screen.queryByTestId("card-count")).toBeNull();
+    expect(screen.queryByText("System")).toBeNull();
     const row = screen.getByRole("link", { name: "netbird" }).closest("[data-account-row]") as HTMLElement;
     expect(within(row).getByText("3")).toBeInTheDocument();
   });
@@ -80,7 +82,7 @@ describe("Service accounts list", () => {
     list.state = { data: [], isLoading: false, error: null };
     rerender(<ServiceAccountsPage />);
     expect(screen.getByText("No service accounts.")).toBeInTheDocument();
-    expect(screen.getByTestId("card-count")).toHaveTextContent("0");
+    expect(screen.getByText("0 service accounts")).toBeInTheDocument();
   });
 });
 
@@ -95,7 +97,7 @@ describe("Service accounts list leaving (S5)", () => {
     const gone = screen.getByRole("link", { name: "zed", hidden: true }).closest("[data-account-row]") as HTMLElement;
     expect(gone.closest("[aria-hidden]")).not.toBeNull();
     expect(gone.closest("[data-leaving]")).not.toBeNull();
-    expect(screen.getByTestId("card-count")).toHaveTextContent("1");
+    expect(screen.getByText("1 service account")).toBeInTheDocument();
     motionInTests(false);
   });
 });
