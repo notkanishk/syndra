@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 
@@ -8,6 +7,8 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Crossfade } from "@/components/ui/Crossfade";
+import { FoldChevron } from "@/components/ui/FoldChevron";
+import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -31,8 +32,7 @@ import { useRowSelection, type RowSelection } from "@/lib/useRowSelection";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
-import { RoleRef, UserAvatar, UserName } from "@/components/names";
-import { ServiceAccountTag, useAccountHref } from "@/components/system/ServiceAccountTag";
+import { RoleRef, UserName } from "@/components/names";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import {
   useAcknowledgeExpiry,
@@ -51,6 +51,7 @@ import {
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { compareNames } from "@/lib/sort";
 
 /**
  * S7 · Review › Expiring access.
@@ -90,18 +91,8 @@ type SortKey = "who" | "what" | "given" | "ends";
 
 /** The two cards. `ends` is the clock: soonest first unless a heading says otherwise. */
 const SECTIONS = {
-  undecided: {
-    id: "sec-undecided",
-    label: "Undecided",
-    hint: "Each ends on its date unless you extend it",
-    tone: "warn",
-  },
-  lapse: {
-    id: "sec-lapse",
-    label: "Let lapse",
-    hint: "Somebody looked and decided. Extend still works",
-    tone: undefined,
-  },
+  undecided: { id: "sec-undecided", label: "Undecided", tone: "warn" },
+  lapse: { id: "sec-lapse", label: "Let lapse", tone: "neutral" },
 } as const;
 type SectionKey = keyof typeof SECTIONS;
 
@@ -240,7 +231,7 @@ export default function ExpiringAccessPage() {
   );
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Expiring access"
         meta={
@@ -259,12 +250,26 @@ export default function ExpiringAccessPage() {
             </MetaRow>
           ) : undefined
         }
-        lede={`Direct access that ends in the next ${within} days. Syndra ends each on its date whether or not you visit this page. Extend gives ${EXTEND_DAYS} more days. Let it lapse changes nothing: it records that you looked, and the row asks again if the date changes.`}
+        lede={`Direct access that ends in the next ${within} days. Syndra ends each on its date whether or not you visit; Extend gives ${EXTEND_DAYS} more days, and Let it lapse changes nothing but records that you looked.`}
       />
 
       {/* A filter, not an action, so FilterPills and not a Segmented. Select is an action on the
           list, so it trails. The default window keeps the link clean. */}
       <FilterBar
+        // How current the list is on the left (Syndra's own, until the sweep records its runs), a
+        // chip per card at the right end. Not while the read is out.
+        read={
+          !grants.isLoading &&
+          !grants.error && (
+            <ReadLine sections={sections} label="Sections of expiring access" onOpen={openSection}>
+              <ReadFreshness
+                state={{ readAt, current: true }}
+                subject="Syndra’s own list"
+                onRefresh={() => grants.refetch()}
+              />
+            </ReadLine>
+          )
+        }
         leading={
           <FilterPills
             label="How far ahead"
@@ -297,25 +302,13 @@ export default function ExpiringAccessPage() {
         }
       />
 
-      {/* The read line: how current the list is on the left (Syndra's own, until the sweep
-          records its runs), a chip per card at the right end. Not while the read is out. */}
-      {!grants.isLoading && !grants.error && (
-        <ReadLine sections={sections} label="Sections of expiring access" onOpen={openSection} className="-mt-1">
-          <ReadFreshness
-            state={{ readAt, current: true }}
-            subject="Syndra’s own list"
-            onRefresh={() => grants.refetch()}
-          />
-        </ReadLine>
-      )}
-
       {showRows && matched.length === 0 ? (
         <Card>
           <EmptyState
-            title="Nothing that ends matches those filters."
+            title="Nothing that ends matches that search."
             guidance={`${rows.length} ${rows.length === 1 ? "role ends" : "roles end"} in the next ${within} days.`}
             action={{
-              label: "Clear filters",
+              label: "Clear the search",
               onClick: () => {
                 setQuery("");
               },
@@ -351,7 +344,7 @@ export default function ExpiringAccessPage() {
             empty={
               <EmptyState
                 title={`Nothing ends in the next ${within} days.`}
-                guidance="Direct access appears here a month before it ends."
+                guidance={`Direct access shows here once it ends within ${within} days.`}
                 resolved
               />
             }
@@ -426,7 +419,6 @@ export default function ExpiringAccessPage() {
 function ExpiringSection({
   id,
   label,
-  hint,
   tone,
   rows,
   count,
@@ -444,8 +436,7 @@ function ExpiringSection({
 }: {
   id: string;
   label: string;
-  hint: string;
-  tone?: "warn";
+  tone: "warn" | "neutral";
   rows: ExpiringGrantRow[];
   /** The live rows: the ones going are still drawn, but not counted. */
   count: number;
@@ -479,9 +470,8 @@ function ExpiringSection({
       <Card>
         <div ref={anchor}>
           <CardHeader
-            tone={tone}
+            tone={tone === "warn" ? "warn" : undefined}
             count={count}
-            note={hint}
             title={
               <button
                 type="button"
@@ -490,14 +480,7 @@ function ExpiringSection({
                 onClick={onToggle}
                 className="inline-flex items-center gap-3 text-left"
               >
-                <span
-                  aria-hidden
-                  className={`flex size-7 flex-none items-center justify-center rounded-pill border border-line text-[13px] text-muted motion-turn ${
-                    open ? "rotate-90" : ""
-                  }`}
-                >
-                  ›
-                </span>
+                <FoldChevron open={open} />
                 <span id={`${id}-title`}>{label}</span>
               </button>
             }
@@ -507,7 +490,7 @@ function ExpiringSection({
           <div id={`${id}-body`}>
             <CardColumns>
               {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
-              <span className="w-[190px]">
+              <span className="w-[180px]">
                 <SortHead label="Who" name="who" sort={sort} onSort={onSort} />
               </span>
               <span className="flex-1">
@@ -568,7 +551,6 @@ function ExpiringRow({
   onLetLapse: () => void;
 }) {
   const ack = grant.acknowledged ?? null;
-  const accountHref = useAccountHref();
   // Extending re-submits the grant with a later date: POST upserts on
   // (user, project, role) and overwrites expires_at, so this renews in place
   // rather than creating a duplicate.
@@ -584,9 +566,10 @@ function ExpiringRow({
 
   return (
     <div
+      data-soonest={soonest || undefined}
       className={`row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px] ${
         soonest
-          ? "border-l-[3px] border-warn bg-warn-soft"
+          ? "border-l-[3px] border-warn"
           : selecting && ack
             ? // A row selection cannot reach keeps a dashed edge while the mode
               // is on, so an empty checkbox cell reads as "not eligible" rather
@@ -610,24 +593,9 @@ function ExpiringRow({
           )}
         </span>
       )}
-      <span className="flex w-full min-w-0 items-center gap-3 tablet:w-[190px] tablet:shrink-0">
-        <UserAvatar id={grant.user_id} />
-        <span className="min-w-0">
-          <Link
-            href={accountHref(grant.user_id)}
-            className="text-[15px] font-semibold link-hover"
-          >
-            <UserName id={grant.user_id} />
-          </Link>
-          <ServiceAccountTag id={grant.user_id} />
-        </span>
-      </span>
+      <WhoSeat id={grant.user_id} />
 
-      <div className="flex w-full min-w-0 flex-col gap-[3px] tablet:flex-1">
-        <span className="text-[14.5px] leading-[1.45]">
-          <RoleRef projectId={grant.project_id} roleKey={grant.role_key} />
-        </span>
-        <span className="type-mono text-[12.5px] text-faint">{grant.role_key}</span>
+      <WhatSeat projectId={grant.project_id} roleKeys={[grant.role_key]} className="tablet:flex-1">
         {/* Laptop width only: the Given by column needs a desktop, and a phone has none (#54). */}
         <span className="hidden text-[12.5px] text-faint tablet:block desktop:hidden">
           Given by <UserName id={grant.granted_by} fallback="somebody no longer listed" />,{" "}
@@ -641,10 +609,10 @@ function ExpiringRow({
               <UserName id={ack.by} fallback="somebody no longer listed" />
             </span>{" "}
             let it lapse on {formatShortDate(ack.at)}
-            {ack.note ? ` — ${ack.note}` : ""}
+            {ack.note ? `: ${ack.note}` : ""}
           </span>
         )}
-      </div>
+      </WhatSeat>
 
       <div className="hidden w-[160px] shrink-0 text-[13.5px] leading-[1.45] text-muted desktop:block">
         <UserName id={grant.granted_by} fallback="somebody no longer listed" />
@@ -667,7 +635,7 @@ function ExpiringRow({
             {/* Extend stays on an acknowledged row. Changing your mind toward KEEPING somebody's
                 access is the reversal that must never be harder than the one that lets it go. */}
             <Button
-              variant={soonest ? "accent" : "outline"}
+              variant="outline"
               size="sm"
               isPending={extend.isPending}
               onClick={async () => {
@@ -692,7 +660,7 @@ function ExpiringRow({
             </Button>
             {ack ? (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 isPending={clearAck.isPending}
                 onClick={async () => {
@@ -711,7 +679,7 @@ function ExpiringRow({
                 Undo letting it lapse
               </Button>
             ) : (
-              <Button variant="ghost" size="sm" onClick={onLetLapse}>
+              <Button variant="outline" size="sm" onClick={onLetLapse}>
                 Let it lapse
               </Button>
             )}
@@ -719,7 +687,9 @@ function ExpiringRow({
         )}
         </Crossfade>
         {step.element}
-        {outcome && !reported && <ActionOutcome placement="seat" className="tint-in" outcome={outcome} />}
+        {outcome && !reported && (
+          <ActionOutcome placement="seat" className="tint-in" word="Didn’t go through" outcome={outcome} />
+        )}
       </div>
     </div>
   );
@@ -746,33 +716,20 @@ function LetItLapseDialog({
   return (
     <Modal open onClose={onClose} busy={acknowledge.isPending} size="md" labelledBy="lapse-title">
       <ModalHeader
-        title="Let this lapse?"
+        title="Let it lapse?"
         titleId="lapse-title"
         lede={
           <>
             <RoleRef projectId={grant.project_id} roleKey={grant.role_key} /> for{" "}
-            <UserName id={grant.user_id} />, ending {formatShortDate(expiresAt)}.
+            <UserName id={grant.user_id} />, ending {formatShortDate(expiresAt)}. The access ends on
+            that date as it would have; this records that you looked, and the row asks again if
+            somebody changes the date.
           </>
         }
       />
 
       <div className="px-6">
-        <div className="accent-note px-4 py-3.5 text-[14px] leading-[1.55]">
-          <div className="type-label mb-1">What this does</div>
-          <ul className="flex flex-col gap-1 text-muted">
-            <li>
-              Nothing to the access. It ends on {formatShortDate(expiresAt)}, as it would have; this
-              records that you looked.
-            </li>
-            <li>The list stops asking, and shows your name against the decision.</li>
-            <li>
-              If somebody extends it or gives it again, the row comes back and asks again: you agreed to
-              this date, not a later one.
-            </li>
-          </ul>
-        </div>
-
-        <div className="mt-4">
+        <div>
           <FieldLabel htmlFor="lapse-note">Why (optional)</FieldLabel>
           <Input
             id="lapse-note"
@@ -781,7 +738,7 @@ function LetItLapseDialog({
             placeholder="Cohort ends this term"
           />
           <FieldHint>
-            The next person reading this queue is the audience — they see this instead of asking
+            The next person reading this queue is the audience. They see this instead of asking
             you.
           </FieldHint>
         </div>
@@ -790,15 +747,25 @@ function LetItLapseDialog({
       {/* The dialog states what it did, and this is the one screen where that
           sentence matters most: recording a decision changes nothing about the
           access, and the dialog exists to say so. */}
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && (
+        <ActionOutcome
+          outcome={outcome}
+          word={succeeded(outcome) ? "Recorded" : "Didn’t go through"}
+          className="mx-6 mb-1"
+        />
+      )}
 
-      <ModalFooter note={succeeded(outcome) ? undefined : "Extend instead if the access should continue."}>
-        <Button variant="outline" onClick={onClose} disabled={acknowledge.isPending}>
-          {succeeded(outcome) ? "Close" : "Cancel"}
-        </Button>
-        {/* Cancel first, outline, then Close on the result (A-07). The primary goes once it has
-            run: nothing closed this on success, so a second click recorded the same
-            acknowledgment again, against a grant that had not moved. */}
+      <ModalFooter
+        note={succeeded(outcome) ? undefined : "Extend instead if the access should continue."}
+        cancel={succeeded(outcome) ? undefined : { onClick: onClose, disabled: acknowledge.isPending }}
+      >
+        {/* The act goes once it has run: nothing closed this on success, so a second click
+            recorded the same acknowledgment again, against a grant that had not moved. */}
+        {succeeded(outcome) && (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        )}
         {!succeeded(outcome) && (
           <Button
             variant="accent"
@@ -813,9 +780,9 @@ function LetItLapseDialog({
                 });
                 setOutcome({
                   kind: "applied",
-                  message: "Recorded — it will end on its date",
+                  message: "It will end on its date.",
                   detail:
-                    "Nothing about the access changed — it still ends on its date. What changed is that the queue stops asking your colleagues a question you have answered.",
+                    "Nothing about the access changed. The list stops asking your colleagues a question you have answered.",
                 });
               } catch (error) {
                 // A 409 here is the reopen rule arriving early: the grant was
@@ -826,7 +793,7 @@ function LetItLapseDialog({
               }
             }}
           >
-            Record the decision
+            Let it lapse
           </Button>
         )}
       </ModalFooter>
@@ -851,7 +818,7 @@ function sortExpiring(
 ): ExpiringGrantRow[] {
   return [...rows].sort((a, b) => {
     if (sort.key === "ends") return sortBySoonest(a, b) * sort.dir;
-    const order = text[sort.key](a).localeCompare(text[sort.key](b)) * sort.dir;
+    const order = compareNames(text[sort.key](a), text[sort.key](b)) * sort.dir;
     return order || sortBySoonest(a, b);
   });
 }

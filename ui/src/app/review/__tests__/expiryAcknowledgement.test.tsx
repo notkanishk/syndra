@@ -156,8 +156,8 @@ describe("Expiring access — acknowledgement (C4)", () => {
   it("states the reopen rule in the dialog", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
-    expect(document.body.textContent).toMatch(/extends it or gives it again/i);
-    expect(document.body.textContent).toMatch(/comes back/i);
+    expect(document.body.textContent).toMatch(/asks again if somebody changes the date/i);
+    expect(document.body.textContent).toMatch(/the row asks again/i);
   });
 
   // The date travels. Without it the backend cannot enforce the reopen rule, and an
@@ -168,7 +168,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
     fireEvent.change(screen.getByLabelText("Why (optional)"), {
       target: { value: "  Cohort ends  " },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Let it lapse" }));
 
     await waitFor(() =>
       expect(state.acknowledge).toHaveBeenCalledWith({
@@ -182,7 +182,7 @@ describe("Expiring access — acknowledgement (C4)", () => {
   it("does not require a note", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
-    fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Let it lapse" }));
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
     expect(state.acknowledge.mock.calls[0][0].note).toBe("");
   });
@@ -262,39 +262,38 @@ describe("Expiring access — acknowledgement (C4)", () => {
       .mockRejectedValue(new Error("This grant's expiry changed since you loaded the page."));
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
-    fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Let it lapse" }));
 
     await waitFor(() => expect(state.acknowledge).toHaveBeenCalled());
-    expect(screen.getByRole("button", { name: "Record the decision" })).toBeTruthy();
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Let it lapse" })).toBeTruthy();
   });
 
   // Nothing called `onClose()` on success, so the dialog stayed open with the
-  // same "Record the decision" button live — a second click recorded the same
+  // same "Let it lapse" button live — a second click recorded the same
   // acknowledgment again, against a grant that had not moved.
-  // A-07 FINAL §2 item 8: Cancel is an outline button and comes before the primary; the
-  // result's Close is outline too.
-  it("puts an outline Cancel first, then the primary, and closes with an outline Close", async () => {
+  // A-17 G4: Cancel is the ghost half of the pair beside the act (placed by ModalFooter); after
+  // the result there is one outline Close and nothing else.
+  it("pairs a ghost Cancel with the act, and closes with one outline Close", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
     const dialog = screen.getByRole("dialog");
-    const buttons = within(dialog).getAllByRole("button");
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
-    const record = within(dialog).getByRole("button", { name: "Record the decision" });
-    expect(buttons.indexOf(cancel)).toBeLessThan(buttons.indexOf(record));
-    expect(cancel).toHaveClass("border-line-strong");
+    const record = within(dialog).getByRole("button", { name: "Let it lapse" });
+    expect(cancel).not.toHaveClass("border-line-strong");
 
     fireEvent.click(record);
     const close = await within(dialog).findByRole("button", { name: "Close" });
     expect(close).toHaveClass("border-line-strong");
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("cannot record the same decision twice", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Let it lapse" }));
-    fireEvent.click(screen.getByRole("button", { name: "Record the decision" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Let it lapse" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: "Record the decision" })).toBeNull();
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Let it lapse" })).toBeNull();
     expect(state.acknowledge).toHaveBeenCalledTimes(1);
   });
 });

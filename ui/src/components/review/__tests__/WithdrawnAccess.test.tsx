@@ -91,6 +91,18 @@ describe("what has not gone away yet", () => {
     }
   });
 
+  it("keeps its read line when nothing is unfinished, as a sentence with a full stop", async () => {
+    payload = listing([]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <WithdrawnAccess />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Nothing is unfinished.")).toBeInTheDocument();
+    expect(screen.getByText(/This list/)).toBeInTheDocument();
+  });
+
   it("does not insert a card above the queue when one goes terminal", async () => {
     payload = listing([row("r1", false), row("r2", true, { user_id: "u2" })]);
     await renderPage();
@@ -114,10 +126,12 @@ describe("the board's anatomy", () => {
     expect(screen.getByText("2 on the way")).toBeInTheDocument();
     expect(screen.getByText("3 people")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /Search unfinished revocations/ })).toBeInTheDocument();
-    expect(screen.getByText(/Syndra.s send queue/)).toBeInTheDocument();
+    expect(screen.getByText(/This list/)).toBeInTheDocument();
     const chips = within(screen.getByRole("navigation", { name: "Sections of unfinished revocations" }));
     expect(chips.getByText("Given up")).toBeInTheDocument();
     expect(chips.getByText("Still on the way")).toBeInTheDocument();
+    // Every chip wears a dot: the queued one is neutral, not toneless (A-17 §2.19).
+    expect(chips.getAllByRole("link").map((chip) => chip.querySelectorAll("[data-dot]").length)).toEqual([1, 1]);
   });
 
   it("counts what is outstanding from the endpoint's totals, not from the page it was sent", async () => {
@@ -135,10 +149,11 @@ describe("the board's anatomy", () => {
     expect(screen.queryByText(/\d (person|people)$/)).toBeNull();
   });
 
-  it("puts the first card 12px of padding below the intro, not against it", async () => {
+  it("says nothing about 'Tries again by itself' on every row, and a hint on neither card", async () => {
     await renderPage();
-    const heading = screen.getByRole("heading", { name: "Unfinished revocations" });
-    expect(heading.closest("div.pb-3")).not.toBeNull();
+    expect(screen.queryByText(/Tries again by itself/)).toBeNull();
+    expect(screen.queryByText(/Syndra keeps trying by itself/)).toBeNull();
+    expect(screen.queryByText(/They still have it until somebody ends it/)).toBeNull();
   });
 
   it("is a table with the board's headings and the retry column", async () => {
@@ -151,8 +166,11 @@ describe("the board's anatomy", () => {
     expect(link.getAttribute("href")).toBe("/users/u1");
     expect(screen.getByText("Zitadel says this person no longer exists there.")).toBeInTheDocument();
     // A queued row says how many tries, and claims neither a limit nor a next time.
-    expect(screen.getByText("Tried 2 times · Tries again by itself")).toBeInTheDocument();
-    expect(screen.getByText("Not tried yet · Tries again by itself")).toBeInTheDocument();
+    expect(screen.getByText("Tried 2 times")).toBeInTheDocument();
+    expect(screen.getByText("Not tried yet")).toBeInTheDocument();
+    // The change that set it off is a link in words, never its raw id.
+    expect(screen.getByRole("link", { name: /Change history/ }).getAttribute("href")).toBe("/operations/cascades?cascade=c-abc123");
+    expect(screen.queryByText(/c-abc123/)).toBeNull();
     expect(screen.queryByText(/Next try/)).toBeNull();
     expect(screen.queryByText(/ of 8/)).toBeNull();
     // Names and roles, never the raw ids; an add-on row says its reason.
