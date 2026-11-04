@@ -578,7 +578,7 @@ function OpenRequests({
       <CardHeader
         title="Open requests"
         count={open}
-        action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>}
+        action={<CardHeaderLink href="/requests">See all</CardHeaderLink>}
       />
       {/* `arrive`, the same stagger every list in the product gets from
           `ListStates`. These two lists compose their own rows and so had none:
@@ -826,7 +826,7 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
         title="Service accounts to look at"
         count={accounts.length}
         tone="warn"
-        action={<CardHeaderLink href="/system/service-accounts">Open Service accounts →</CardHeaderLink>}
+        action={<CardHeaderLink href="/system/service-accounts">Open Service accounts</CardHeaderLink>}
       />
       <Capped items={accounts} href="/system/service-accounts">
         {(account) => (

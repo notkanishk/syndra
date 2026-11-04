@@ -378,7 +378,7 @@ function RecentActivity() {
       <CardHeader
         title="Lately"
         action={
-          <CardHeaderLink href="/audit">Full audit log →</CardHeaderLink>
+          <CardHeaderLink href="/audit">Full audit log</CardHeaderLink>
         }
       />
       {/* One hand-over (S7): a skeleton only if the read is slow, then the lines arrive. */}

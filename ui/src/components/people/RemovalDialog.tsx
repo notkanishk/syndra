@@ -10,7 +10,8 @@ import {
 } from "@/components/access/AccessSource";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono } from "@/components/ui/Badge";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { Button } from "@/components/ui/Button";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
 import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
@@ -537,11 +538,11 @@ function AutomaticDialog({
           <span className="text-ink">{input ?? "input role"}</span> — that is the input the rule
           reads.
         </p>
+        <ArrowLink href="/policies" className="self-start">
+          Open the rule
+        </ArrowLink>
       </div>
       <ModalFooter>
-        <ButtonLink href="/policies" variant="accentSoft">
-          Open the rule →
-        </ButtonLink>
         <Button onClick={onClose}>Close</Button>
       </ModalFooter>
     </Modal>

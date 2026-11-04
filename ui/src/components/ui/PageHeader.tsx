@@ -28,6 +28,18 @@ export function usePageHead(): { className: string; "data-settled": string | und
 }
 
 /**
+ * Header → content, in px (RULES 9b, A-17 G5). PageHeader owns it: a page
+ * stacks its content at `CONTENT_GAP` (`flex flex-col gap-4`) and never sets
+ * its own header gap. Owner's question A-17 Q5 (28 or 18) is this one number;
+ * 18 is what most pages rendered when the question was asked.
+ */
+export const HEADER_TO_CONTENT = 18;
+/** The page's own stack, card to card and card to notice: `gap-4`. */
+export const CONTENT_GAP = 16;
+/** For a page head that is not a PageHeader (Home, the member's home): the same space under it. */
+export const BELOW_HEADER = { marginBottom: HEADER_TO_CONTENT - CONTENT_GAP } as const;
+
+/**
  * The page's own title block. The breadcrumb says where you are; this says
  * what you are looking at, with its actions on the right.
  *
@@ -67,6 +79,7 @@ export function PageHeader({
     <div
       className={`${head.className} flex flex-wrap items-end gap-4 ${className}`}
       data-settled={head["data-settled"]}
+      style={BELOW_HEADER}
     >
       {/* `flex-auto` (basis: auto), not `flex-1` (basis: 0%) — with a 0%
           basis this block reports zero size to the wrap decision, so `actions`

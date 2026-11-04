@@ -7,11 +7,13 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import {
   outcomeFromError,
   type ActionOutcome as Outcome,
+  OUTCOME_LABEL,
   type OutcomeKind,
 } from "@/lib/outcome";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
+import { Notice } from "@/components/ui/Notice";
 import { PlanReview, applyLabel, planNote } from "@/components/ui/PlanReview";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 
@@ -562,15 +564,14 @@ export function RehearsalDialog({
       ) : (
         <>
           {stalePlan && (
-            <div
-              // alert, not status: this has to be read BEFORE the next click,
-              // and a polite live region is announced whenever the screen
-              // reader gets round to it.
-              role="alert"
-              className="tint-in mx-6 mb-3 rounded-lg border border-warn-line bg-warn-soft px-4 py-3 text-[13.5px] text-warn-text"
+            <Notice
+              tone="warn"
+              // Blocking: this has to be read BEFORE the next click.
+              blocking
+              title={staleHeadline(stalePlan.code)}
+              className="mx-6 mb-3"
             >
-              <p className="font-medium">{staleHeadline(stalePlan.code)}</p>
-              <p className="mt-1">
+              <p>
                 {STALE_PLAN_CODES.get(stalePlan.code)} The preview below is against the current
                 state. Read it again before you apply.
               </p>
@@ -582,7 +583,7 @@ export function RehearsalDialog({
                   since you last looked: {movedLabels(stalePlan.subjects, plan).join(", ")}.
                 </p>
               )}
-            </div>
+            </Notice>
           )}
           {/* The noun goes down with the plan. This dialog already knows what
               its rows are — accounts, items, requests — and not passing it on
@@ -600,7 +601,7 @@ export function RehearsalDialog({
       {/* The plan's own result, on the step that exists for it. A refusal
           appears on whichever step the operator is standing on, because that
           is where they will look for the reason the button did nothing. */}
-      {outcome && <ActionOutcome outcome={outcome} word={outcome.word} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={outcome.word ?? OUTCOME_LABEL[outcome.kind]} className="mx-6 mb-1" />}
 
       <ModalFooter
         note={

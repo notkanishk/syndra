@@ -183,7 +183,7 @@ export function SetupStrip({
         label="Role mappings"
         action={
           <CardHeaderLink href={`/system/targets/${target}/mappings`}>
-            {roles === 0 ? "Add the first mapping →" : "Mappings →"}
+            {roles === 0 ? "Add the first mapping" : "Mappings"}
           </CardHeaderLink>
         }
       >

@@ -188,16 +188,16 @@ describe("the step pushed inside the host sheet", () => {
     expect(screen.getByText("“duplicate”")).toBeInTheDocument();
   });
 
-  it("past five it shows five, then Show all", async () => {
+  it("past five it shows five, then the rest through the shared paging row", async () => {
     const many = Array.from({ length: 7 }, (_, i) => change({ id: idOf(i + 1), role_keys: [`r${i + 1}`] }));
     render(<Host write={refusedOnce(many)} />);
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByRole("heading", { name: "This cancels 7 removals that are waiting" });
     expect(screen.getAllByText(/Removing/)).toHaveLength(5);
     expect(screen.getByText(/Showing 5 of 7/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show all 7" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more" }));
     expect(screen.getAllByText(/Removing/)).toHaveLength(7);
-    expect(screen.queryByText(/Showing 5 of 7/)).not.toBeInTheDocument();
+    expect(screen.getByText("Showing all 7")).toBeInTheDocument();
   });
 
   it("no reason: says so in faint and tells you whom to ask", async () => {

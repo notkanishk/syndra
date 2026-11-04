@@ -16,7 +16,7 @@ import React from "react";
  * to a colleague. Pass `reason` and it renders beneath the button.
  */
 
-type Variant = "accent" | "accentSoft" | "outline" | "ghost" | "danger" | "dangerConfirm";
+type Variant = "accent" | "outline" | "ghost" | "danger" | "dangerConfirm";
 type Size = "sm" | "md";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -54,7 +54,6 @@ export const PILL: Record<Size, string> = {
  *  is 5.2:1 and passes. */
 const VARIANTS: Record<Variant, string> = {
   accent: "bg-accent-dense text-accent-ink hover:brightness-110",
-  accentSoft: "bg-accent-soft text-accent-text hover:brightness-110",
   outline: "border border-line-strong text-ink hover:bg-[var(--hover)]",
   ghost: "text-muted hover:text-ink hover:bg-[var(--hover)]",
   danger: "border border-danger-line text-danger-text hover:bg-danger-soft",
@@ -65,7 +64,6 @@ const VARIANTS: Record<Variant, string> = {
  *  reduced alpha — it must still read as the destructive action it is. */
 const DISABLED: Record<Variant, string> = {
   accent: "bg-accent-dense/25 text-accent-ink/50",
-  accentSoft: "bg-accent-soft/50 text-accent-text/40",
   outline: "border border-line text-faint",
   ghost: "text-faint",
   danger: "border border-danger/[.16] bg-danger/[.06] text-danger-text/40",
@@ -159,7 +157,7 @@ export function ButtonLink({
 }
 
 /** The shared surface, so a link and a button are visually one control. */
-function buttonClasses({
+export function buttonClasses({
   variant,
   size,
   disabled = false,
