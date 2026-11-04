@@ -1,18 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Mono } from "@/components/ui/Badge";
+import { Mono, StatusDot } from "@/components/ui/Badge";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
 import { Card, CardColumns } from "@/components/ui/Card";
+import { Notice } from "@/components/ui/Notice";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ProjectName } from "@/components/names";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { holdersLine, holdersToneClass } from "@/lib/holders";
 import { useApplications, type ApplicationView } from "@/lib/queries/useApplications";
-import { StatusDot } from "@/components/ui/Badge";
 import { useClaimTemplates, type ClaimTemplate } from "@/lib/queries/useClaimShape";
 
 type AppSort = "app" | "people";
@@ -49,10 +49,10 @@ export default function AppsPage() {
   const unreached = all.filter((entry) => entry.claims?.reaches === false).map((entry) => entry.application.name);
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Apps"
-        lede="An app is something people sign in to: NetBird, GitLab, the inventory. Each is told a person's roles from one project, in its own shape. Open an app when it isn't seeing the roles it should."
+        lede="An app is something people sign in to, like NetBird or GitLab. Each is told a person's roles from one project, in its own shape."
         meta={
           rows.length > 0
             ? `${rows.length} ${rows.length === 1 ? "app" : "apps"}`
@@ -69,12 +69,9 @@ export default function AppsPage() {
         <ReadFreshness state={readState} subject="What Zitadel confirmed" className="px-[2px]" />
       )}
       {unreached.length > 0 && (
-        <p className="max-w-[100ch] px-[2px] text-[13.5px] leading-[1.55] text-muted">
-          <span className="font-semibold text-warn-text">
-            {unreached.join(", ")} {unreached.length === 1 ? "doesn't" : "don't"} get {unreached.length === 1 ? "its" : "their"} claims.
-          </span>{" "}
+        <Notice tone="warn" title={`${unreached.join(", ")} ${unreached.length === 1 ? "doesn't" : "don't"} get ${unreached.length === 1 ? "its" : "their"} claims.`}>
           {unreached.length === 1 ? "Its page says" : "Each page says"} which Zitadel setting to change.
-        </p>
+        </Notice>
       )}
 
       <Card stale={readState.current === false}>
@@ -95,11 +92,11 @@ export default function AppsPage() {
           error={apps.error}
           isEmpty={rows.length === 0}
           onRetry={() => apps.refetch()}
-          errorTitle="Couldn't load applications."
-          skeleton={<RowSkeleton rows={4} avatar={false} label="Loading applications" />}
+          errorTitle="Couldn't load apps."
+          skeleton={<RowSkeleton rows={4} avatar={false} label="Loading apps" />}
           empty={
             <EmptyState
-              title="No applications registered."
+              title="No apps registered."
               guidance="Add an app in Zitadel and it appears here."
               action={{ label: "Open Zitadel", href: "/zitadel" }}
             />
@@ -111,6 +108,7 @@ export default function AppsPage() {
               entry.confirmed_user_count,
               entry.observed_user_count,
             );
+            const subLine = [kindOf(entry), shapeLine(entry, all, templates)].filter(Boolean);
             return (
             <Link
               key={entry.application.id}
@@ -122,8 +120,12 @@ export default function AppsPage() {
                   {entry.application.name}
                 </span>
                 <span className="block text-[13px] text-faint [text-wrap:pretty]">
-                  {kindOf(entry)}
-                  {shapeLine(entry, all, templates)}
+                  {subLine.map((part, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && " · "}
+                      {part}
+                    </Fragment>
+                  ))}
                 </span>
               </span>
 
@@ -158,55 +160,62 @@ export default function AppsPage() {
 
 /**
  * The backend calls it `consumer`; on screen it is the protocol, because that
- * is the word an operator debugging a token already has in their head.
+ * is the word an operator debugging a token already has in their head. OIDC is
+ * the usual, so it is said by saying nothing (A-17 §2.9).
  */
-function kindOf(entry: ApplicationView): string {
+function kindOf(entry: ApplicationView): string | null {
   const raw = (entry.application.consumer || "").toLowerCase();
   if (raw.includes("saml")) return "SAML";
-  if (raw.includes("oidc") || raw.includes("oauth")) return "OIDC";
+  if (raw.includes("oidc") || raw.includes("oauth")) return null;
   if (raw.includes("api")) return "API";
-  return raw ? entry.application.consumer : "—";
+  return raw ? entry.application.consumer : null;
 }
 
 const WHERE: Record<string, string> = {
-  both: "access token, userinfo",
   access_token: "access token",
   userinfo: "ID token, userinfo",
 };
 
-/** The Claims column (A-14 §7): the app's real key, then faint where it lands; amber when it doesn't reach. */
+/**
+ * The Claims column (A-14 §7, A-17 §2.9): the app's real key and "and N more",
+ * on one quiet line. Where they land is said only when it is not the usual
+ * (access token and userinfo); amber when they don't reach.
+ */
 function ClaimsCell({ entry }: { entry: ApplicationView }) {
   const c = entry.claims;
   if (/truenas/i.test(entry.application.name) && !c?.keys.length) return <span className="text-faint">Access goes through the add-on</span>;
   if (!c) return <span className="text-faint">—</span>;
   if (c.keys.length === 0) return <span className="text-faint">Nothing of its own</span>;
+  const where = c.lands === "both" ? null : (WHERE[c.lands] ?? c.lands);
   return (
     <span className="flex flex-col tablet:items-end">
-      <Mono>{c.keys[0]}</Mono>
-      {c.reaches === false ? (
+      <span>
+        <Mono>{c.keys[0]}</Mono>
+        {c.reaches !== false && (
+          <span className="text-faint">
+            {c.keys.length > 1 ? ` and ${c.keys.length - 1} more` : ""}
+            {where ? ` · ${where}` : ""}
+          </span>
+        )}
+      </span>
+      {c.reaches === false && (
         <span className="inline-flex items-center gap-1.5 font-semibold text-warn-text">
           <StatusDot tone="warn" />
           Doesn&rsquo;t reach it
-        </span>
-      ) : (
-        <span className="text-faint">
-          {c.keys.length > 1 ? `and ${c.keys.length - 1} more · ` : ""}
-          {WHERE[c.lands] ?? c.lands}
         </span>
       )}
     </span>
   );
 }
 
-/** The sub-line's shape: " · NetBird template, changed", " · Code's default", " · copied from NetBird". */
+/** The sub-line's shape: "NetBird template, changed", "Code's default", "copied from NetBird". */
 function shapeLine(entry: ApplicationView, all: ApplicationView[], templates: ClaimTemplate[]): React.ReactNode {
   const c = entry.claims;
-  if (/truenas/i.test(entry.application.name) && (!c || c.source !== "app")) return " · no template: TrueNAS can't sign in with Zitadel";
+  if (/truenas/i.test(entry.application.name) && (!c || c.source !== "app")) return "no template: TrueNAS can't sign in with Zitadel";
   if (!c) return null;
   if (c.source !== "app") {
     return (
       <>
-        {" · "}
         <ProjectName id={entry.application.project_id} />
         &rsquo;s default
       </>
@@ -214,10 +223,10 @@ function shapeLine(entry: ApplicationView, all: ApplicationView[], templates: Cl
   }
   if (c.copied_from_application_id) {
     const from = all.find((a) => a.application.id === c.copied_from_application_id)?.application.name;
-    return from ? ` · copied from ${from}` : " · copied from another app";
+    return from ? `copied from ${from}` : "copied from another app";
   }
   const t = templates.find((x) => x.id === c.template_id);
-  if (!t) return " · its own shape";
+  if (!t) return "its own shape";
   const bare = t.id === "custom" || t.id === "sign-in-only";
-  return ` · ${t.name}${bare ? "" : " template"}${c.template_changed ? ", changed" : ""}`;
+  return `${t.name}${bare ? "" : " template"}${c.template_changed ? ", changed" : ""}`;
 }

@@ -345,6 +345,21 @@ describe("history", () => {
     expect(screen.queryByRole("button", { name: "Go back to this version" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Show all 2/ }));
     expect(await screen.findByRole("button", { name: "Go back to this version" })).toBeInTheDocument();
+    // Show all is an outline button with no chevron; it says Hide all when open.
+    expect(screen.getByRole("button", { name: "Hide all 2" }).textContent).not.toMatch(/[›↓]/);
+  });
+
+  it("ends going back on its result, Restored, with Close", async () => {
+    api.routes["GET /applications/a1/claim-shape/versions"] = () => ({ versions: [v(2), v(1)] });
+    api.routes["POST /applications/a1/claim-shape/versions/1/restore"] = () => ({});
+    renderScreen();
+    fireEvent.click(await screen.findByRole("button", { name: /Show all 2/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Go back to this version" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Go back to version 1" }));
+    expect(await within(dialog).findByText("Restored")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });
 
@@ -477,7 +492,7 @@ describe("debug mode", () => {
     expect(within(dialog).getByRole("radio", { name: /You, Kanishk Singh/ })).toBeChecked();
     expect(within(dialog).getByText(/15 minutes from now/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Turn on debug mode" }));
-    await within(dialog).findByText("On");
+    await within(dialog).findByText("Turned on");
     expect(api.calls.find((c) => c.method === "PUT" && c.path === "/applications/a1/debug")?.body).toEqual({});
   });
 

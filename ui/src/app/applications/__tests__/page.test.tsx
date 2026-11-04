@@ -67,16 +67,16 @@ describe("the apps index, as drawn", () => {
 
   it("names where each app's shape comes from under its name", () => {
     render(<AppsPage />);
-    expect(screen.getByRole("link", { name: /Kiosk/ }).children[0].textContent).toBe("KioskOIDC · Studio’s default");
-    expect(screen.getByRole("link", { name: /Bookings/ }).children[0].textContent).toBe("BookingsOIDC · Custom, changed");
-    expect(screen.getByRole("link", { name: /Badge reader/ }).children[0].textContent).toBe("Badge readerOIDC · NetBird template");
+    expect(screen.getByRole("link", { name: /Kiosk/ }).children[0].textContent).toBe("KioskStudio’s default");
+    expect(screen.getByRole("link", { name: /Bookings/ }).children[0].textContent).toBe("BookingsCustom, changed");
+    expect(screen.getByRole("link", { name: /Badge reader/ }).children[0].textContent).toBe("Badge readerNetBird template");
   });
 
   it("shows the real key and where it lands, in the board's order: app, project, claims, people", () => {
     render(<AppsPage />);
     const cells = Array.from(screen.getByRole("link", { name: /Bookings/ }).children).map((c) => c.textContent ?? "");
     expect(cells[1]).toBe("Laser Lab");
-    expect(cells[2]).toBe("rolesand 2 more · access token, userinfo");
+    expect(cells[2]).toBe("roles and 2 more");
     expect(cells[3]).toMatch(/^41/);
   });
 
@@ -87,7 +87,18 @@ describe("the apps index, as drawn", () => {
     expect(cell.querySelector(".text-warn-text")).not.toBeNull();
     expect(screen.getByText("Badge reader doesn't get its claims.")).toBeInTheDocument();
     // An app never read says nothing rather than guess.
-    expect(screen.getByRole("link", { name: /Kiosk/ }).children[2].textContent).toBe("rolesaccess token, userinfo");
+    expect(screen.getByRole("link", { name: /Kiosk/ }).children[2].textContent).toBe("roles");
+  });
+
+  it("says where claims land only when it is not the usual, and the protocol only when it is not OIDC", () => {
+    state.apps = [
+      app("a", "Bookings", "p1", { source: "app", keys: ["groups"], lands: "access_token" }, 1),
+      { ...app("b", "Kiosk", "p2", { source: "builtin", keys: ["roles"], lands: "both" }, 1), application: { id: "b", name: "Kiosk", project_id: "p2", description: "", consumer: "saml", claim_name: "", format_type: "" } },
+    ];
+    render(<AppsPage />);
+    expect(screen.getByRole("link", { name: /Bookings/ }).children[2].textContent).toBe("groups · access token");
+    expect(screen.getByRole("link", { name: /Bookings/ }).children[0].textContent).not.toMatch(/OIDC/);
+    expect(screen.getByRole("link", { name: /Kiosk/ }).children[0].textContent).toBe("KioskSAML · Studio’s default");
   });
 
   it("sorts on App A to Z at first, and on People when asked", () => {

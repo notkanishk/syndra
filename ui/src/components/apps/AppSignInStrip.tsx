@@ -2,6 +2,8 @@
 
 import type { AppSignIns } from "@/lib/queries/useSignIns";
 
+import { ToolRow } from "./ToolRow";
+
 const DAYS = 30;
 const TALL = 20;
 
@@ -27,8 +29,7 @@ export function AppSignInStrip({ usage }: { usage: AppSignIns }) {
   const total = counts.reduce((a, b) => a + b, 0);
   const people = usage.people_30d ?? 0;
   return (
-    <div className="row-divider flex flex-wrap items-center gap-x-[18px] gap-y-2 px-[22px] py-4">
-      <span className="w-[170px] flex-none text-[14px] font-semibold">Sign-ins</span>
+    <ToolRow label="Sign-ins">
       <span aria-hidden className="flex h-5 w-[178px] flex-none items-end gap-0.5">
         {counts.map((n, i) => (
           <span
@@ -41,6 +42,6 @@ export function AppSignInStrip({ usage }: { usage: AppSignIns }) {
       <span className="min-w-0 flex-[1_1_200px] text-[14px] text-muted">
         {total} in 30 days, by {people} {people === 1 ? "person" : "people"}
       </span>
-    </div>
+    </ToolRow>
   );
 }

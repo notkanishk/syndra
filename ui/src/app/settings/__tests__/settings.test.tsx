@@ -173,10 +173,10 @@ describe("Edit term dates", () => {
     expect(d.innerHTML).toContain("max-w-[760px]"); // Modal lg
   });
 
-  it("says what saving does before it happens, with Cancel an outline", async () => {
+  it("says what saving does before it happens, with Cancel the quiet half", async () => {
     const d = await open();
     expect(within(d).getByText("Saving changes the dates for everyone. Nothing about anyone's access changes.")).toBeTruthy();
-    expect(within(d).getByRole("button", { name: "Cancel" }).className).toContain("border-line-strong");
+    expect(within(d).getByRole("button", { name: "Cancel" }).className).toContain("hover:text-ink"); // ghost, beside the act
     expect(within(d).getByRole("button", { name: "Save term dates" })).toBeTruthy();
   });
 
@@ -315,7 +315,7 @@ describe("Edit term dates", () => {
   it("stops at twelve terms: Add a term is off, with the reason beside it, and Remove is outline", async () => {
     const d = await open();
     const add = within(d).getByRole("button", { name: "Add a term" }) as HTMLButtonElement;
-    expect(add.className).toContain("hover:text-ink"); // ghost
+    expect(add.className).toContain("border-line-strong"); // a lone button is outline
     for (let i = 0; i < 9; i++) fireEvent.click(within(dialog()).getByRole("button", { name: "Add a term" }));
     expect(dialog().querySelectorAll("[data-term-row]")).toHaveLength(12);
     expect((within(dialog()).getByRole("button", { name: "Add a term" }) as HTMLButtonElement).disabled).toBe(true);
@@ -347,7 +347,7 @@ describe("Makerspace settings: first sign-in", () => {
     expect(screen.getByText("First sign-in")).toBeTruthy();
     expect(
       screen.getByText(
-        /For a new member's first sign-in only, apps are told the roles the welcome bundle is about to give, so they see the right things straight away\. Roles that wait for approval are never sent early\./,
+        /For a new member's first sign-in only, apps are told the roles the welcome bundle is about to give, so they see the right things straight away\. Roles that wait for you are never sent early\./,
       ),
     ).toBeTruthy();
     expect(radio("Off").getAttribute("aria-checked")).toBe("true");
