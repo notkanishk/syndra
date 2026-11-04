@@ -39,7 +39,7 @@ export function HoldsDueForReview() {
   const leaving = useLeavingRows(rows, (hold) => hold.id, !due.isLoading && !due.error);
 
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-4">
       {/* The page title already says "Holds due" and counts them, so the card has
           no heading of its own. The read line is for a list, not for its absence. */}
       {rows.length > 0 && !due.isLoading && !due.error && (
@@ -47,6 +47,8 @@ export function HoldsDueForReview() {
           <ReadFreshness
             state={{ readAt: new Date(due.dataUpdatedAt).toISOString(), current: true }}
             subject="This list"
+            onRefresh={() => due.refetch()}
+            refreshing={due.isFetching}
           />
         </div>
       )}
@@ -124,7 +126,7 @@ function OwnValueRow({ hold, first }: { hold: Hold; first: boolean }) {
         on {system} · set by <UserName id={hold.actor_id} /> <Relative iso={hold.created_at} />
       </span>
       <span className="flex-1" />
-      <ArrowLink href={`/system/targets/${hold.target}`} className="whitespace-nowrap">
+      <ArrowLink href={`/system/targets/${hold.target}`}>
         Review it on {system}&apos;s page
       </ArrowLink>
       <p className="w-full text-[13.5px] text-muted">
