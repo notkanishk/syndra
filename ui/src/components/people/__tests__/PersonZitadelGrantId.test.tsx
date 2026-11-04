@@ -106,9 +106,8 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
     renderPerson(false);
     expect(state.askedFor).toBe("u1");
     expect(screen.queryByText("zg-77")).not.toBeInTheDocument();
-    // The word is introduced with its glossary popover for a member, rather
-    // than assumed the way it is for an operator.
-    expect(screen.getByRole("button", { name: "Zitadel" })).toBeInTheDocument();
+    // The verdict is a StatusSeat (dot and word), the same for a member as an operator.
+    expect(screen.getByText("In Zitadel")).toBeInTheDocument();
   });
 
   // Syndra listing roles for a project Zitadel has no grant for is a real condition. Saying
@@ -123,7 +122,8 @@ describe("PersonAccess — Zitadel grant id in Advanced (C9a)", () => {
   it("distinguishes an unreadable Zitadel from an absent grant", () => {
     state.error = new Error("upstream down");
     renderPerson(true);
-    expect(document.body.textContent).toMatch(/Zitadel couldn’t be read just now/);
+    // Said once, as a Notice under the header, not on every project heading.
+    expect(screen.getAllByText(/Zitadel couldn’t be read just now/)).toHaveLength(1);
     expect(document.body.textContent).not.toMatch(/none —/);
   });
 });

@@ -75,10 +75,13 @@ describe("a hold in force", () => {
     // for it, so an operator and a member on the phone are discussing the same
     // thing.
     expect(screen.getByText("On hold")).toBeInTheDocument();
-    const row = screen.getByText(/put on hold by op_7/i).closest("li");
+    // The person who held it is a name that links, so the sentence is split across elements.
+    const row = screen.getByText(/put on hold by/i).closest("li");
     expect(row).not.toBeNull();
+    expect(row).toHaveTextContent("op_7");
     expect(row).toHaveTextContent("safety review");
-    expect(row).toHaveTextContent("truenas");
+    // The system by its name, not its id.
+    expect(row).toHaveTextContent("TrueNAS");
     // The trap, said out loud: holding the role is not holding the access.
     expect(screen.getByText(/still hold the role that normally gives this/i)).toBeInTheDocument();
   });

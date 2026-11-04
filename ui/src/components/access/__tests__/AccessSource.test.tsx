@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AccessSourceList,
+  SourcePopover,
   orderedSources,
   sourceQualifier,
   type RoleReason,
@@ -122,5 +123,21 @@ describe("a role through an included bundle", () => {
     render(<AccessSourceList reasons={[bundle]} />);
     expect(screen.getByText("Lab Tech")).toBeInTheDocument();
     expect(screen.queryByText(/, from /)).toBeNull();
+  });
+});
+
+describe("the source chip", () => {
+  // A trigger with nothing to open was a dead focus stop.
+  it("is a bare chip, not a button, when there is nothing to open", () => {
+    render(<SourcePopover reason={direct} />);
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("is a button that opens when it has a body", () => {
+    render(<SourcePopover reason={direct} by="Ada" />);
+    const trigger = screen.getByRole("button");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
   });
 });

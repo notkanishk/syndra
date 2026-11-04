@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
+import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
+import { roleId, type PickerPlace } from "@/components/bundles/RolePickerOne";
 import { FieldLabel, Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { useBundles } from "@/lib/queries/useBundles";
@@ -60,16 +62,20 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
   const needsRole = op === "assign_role" || op === "remove_role";
   const needsBundle = op === "assign_bundle" || op === "remove_bundle";
 
-  const roles = useMemo(() => {
-    const project = projects.data?.find((row) => row.project.id === projectId);
-    return project?.project.roles ?? [];
-  }, [projects.data, projectId]);
-
-  // A role key from a previous project is not a role in this one. Clearing it
-  // on change stops a stale key being submitted against the wrong project.
-  useEffect(() => {
-    if (roleKey && !roles.some((role) => role.key === roleKey)) setRoleKey("");
-  }, [roles, roleKey]);
+  // A role is chosen with its project, so a stale key from another project cannot be submitted.
+  const places = useMemo<PickerPlace[]>(
+    () =>
+      (projects.data ?? []).map((row) => ({
+        id: row.project.id,
+        name: row.project.name,
+        roles: (row.project.roles ?? []).map((role) => ({
+          key: role.key,
+          name: role.label || role.key,
+          note: { kind: "none" as const },
+        })),
+      })),
+    [projects.data],
+  );
 
   const input: BulkGrantInput = {
     op,
@@ -91,17 +97,16 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
   // greys out its only button on `!ready` alone — this is what says which one,
   // in the order `ready` checks them, so the operator does not have to scan a
   // multi-field compose step to find what they left blank.
-  const notReadyReason = !needsRole || projectId
-    ? !needsRole || roleKey
-      ? !needsBundle || bundleId
-        ? op !== "extend" || durationDays > 0
-          ? reason.trim().length > 0
+  const notReadyReason =
+    needsRole && !(projectId && roleKey)
+      ? "Choose a role."
+      : needsBundle && !bundleId
+        ? "Choose a bundle."
+        : op === "extend" && durationDays <= 0
+          ? "Enter how many days to extend by."
+          : reason.trim().length > 0
             ? undefined
-            : "Say why — this lands in the audit log."
-          : "Enter how many days to extend by."
-        : "Choose a bundle."
-      : "Choose a role."
-    : "Choose a project.";
+            : "Say why. This lands in Change history.";
 
   const people = `${userIds.length} ${userIds.length === 1 ? "person" : "people"}`;
 
@@ -125,39 +130,20 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
       compose={
         <>
           {needsRole && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <FieldLabel htmlFor="bulk-project">Project</FieldLabel>
-                <Select
-                  id="bulk-project"
-                  value={projectId}
-                  onChange={(event) => setProjectId(event.target.value)}
-                >
-                  <option value="">Choose a project…</option>
-                  {(projects.data ?? []).map((row) => (
-                    <option key={row.project.id} value={row.project.id}>
-                      {row.project.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <FieldLabel htmlFor="bulk-role">Role</FieldLabel>
-                <Select
-                  id="bulk-role"
-                  emphasis
-                  value={roleKey}
-                  disabled={!projectId}
-                  onChange={(event) => setRoleKey(event.target.value)}
-                >
-                  <option value="">{projectId ? "Choose a role…" : "Pick a project first"}</option>
-                  {roles.map((role) => (
-                    <option key={role.key} value={role.key}>
-                      {role.label || role.key}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+            <div>
+              <FieldLabel id="bulk-role-label">Role</FieldLabel>
+              <RolePicker
+                mode="one"
+                audience="operator"
+                places={places}
+                value={projectId && roleKey ? roleId(projectId, roleKey) : null}
+                onChange={(id) => {
+                  const [project, key] = id ? splitRoleId(id) : ["", ""];
+                  setProjectId(project);
+                  setRoleKey(key);
+                }}
+                labelledBy="bulk-role-label"
+              />
             </div>
           )}
 
@@ -194,7 +180,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
               />
               {op === "assign_role" && durationDays === 0 && (
                 <p className="mt-1.5 text-[12.5px] text-faint">
-                  0 grants access with no end date — it stays until somebody removes it.
+                  0 grants access with no end date. It stays until somebody removes it.
                 </p>
               )}
             </div>
@@ -206,7 +192,7 @@ export function BulkDialog({ op, userIds, grantIds, scope, initial, onClose }: B
               id="bulk-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Why — this lands in the audit log for every person"
+              placeholder="Why. This lands in Change history for every person"
             />
           </div>
         </>

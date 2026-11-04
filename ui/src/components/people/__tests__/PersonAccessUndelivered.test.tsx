@@ -181,7 +181,7 @@ describe("the project header when Zitadel has no grant", () => {
     // Drift will not list it — a bundle's own grant is not drift — so the old
     // pointer ended in an empty screen and an operator concluding the drift
     // report was broken.
-    expect(screen.queryByText(/see Drift/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Side by side on Drift/i })).toBeNull();
   });
 
   it("still points at Drift when the grant was sent and is missing anyway", () => {
@@ -191,7 +191,11 @@ describe("the project header when Zitadel has no grant", () => {
     ]);
     renderPerson();
 
-    expect(screen.getByText(/see Drift/i)).toBeInTheDocument();
+    // A link to the place, not a sentence naming it.
+    expect(screen.getByRole("link", { name: /Side by side on Drift/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/governance/drift"),
+    );
   });
 });
 
@@ -293,7 +297,8 @@ describe("access nothing explains", () => {
     ] as never;
     renderPerson();
 
-    expect(screen.getByText(/Nothing explains this/i)).toBeInTheDocument();
+    expect(screen.getByText("Not given by Syndra")).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing explains this/i)).toBeNull();
     expect(screen.getByText("Kiln")).toBeInTheDocument();
     // The recorded count and the unexplained count are never added together —
     // a combined "2 roles" hides the row this band exists to surface.
@@ -315,6 +320,6 @@ describe("access nothing explains", () => {
     ] as never;
     renderPerson();
 
-    expect(screen.queryByText(/Nothing explains this/i)).toBeNull();
+    expect(screen.queryByText("Not given by Syndra")).toBeNull();
   });
 });

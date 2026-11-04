@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
+import { GIVE_ROLE_LABEL, GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ApiError } from "@/lib/api-client";
 
 /**
@@ -261,5 +261,24 @@ describe("GrantDirectAccess · while Zitadel is not answering", () => {
     ).toBeInTheDocument();
     expect(within(dialog).queryByText(/as soon as you give it/)).not.toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Grant access" })).toBeEnabled();
+  });
+});
+
+// A-17 Q7: the owner's rename is one line, so the dialog title reads the constant.
+describe("GrantDirectAccess · wording and the end date", () => {
+  it("titles itself with the one exported label", () => {
+    open();
+    expect(screen.getByRole("heading", { name: GIVE_ROLE_LABEL })).toBeInTheDocument();
+  });
+
+  it("says the end date once: the control, and one footer note (no caption above it)", () => {
+    open();
+    choose("Operator");
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getAllByText(/Expiring access/)).toHaveLength(1);
+    expect(within(dialog).queryByText(/It ends on/)).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Never" }));
+    expect(within(dialog).getByText("It stays until someone removes it.")).toBeInTheDocument();
+    expect(within(dialog).getByText("No end date")).toBeInTheDocument();
   });
 });

@@ -15,7 +15,7 @@ import {
 import { ResolvedProjectName } from "@/components/names";
 import { UserName } from "@/components/names/UserName";
 import { AccountKind } from "@/components/people/AccountKind";
-import { GrantDirectAccess } from "@/components/people/GrantDirectAccess";
+import { GIVE_ROLE_LABEL, GrantDirectAccess } from "@/components/people/GrantDirectAccess";
 import { ManageBundles } from "@/components/people/ManageBundles";
 import { PersonActivity } from "@/components/people/PersonActivity";
 import { PersonRequests } from "@/components/people/PersonRequests";
@@ -25,6 +25,9 @@ import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, Mono } from "@/components/ui/Badge";
+import { FoldChevron } from "@/components/ui/FoldChevron";
+import { Notice } from "@/components/ui/Notice";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
@@ -36,7 +39,6 @@ import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
 import { Tinted, Unfold } from "@/components/ui/Unfold";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
-import { Term } from "@/components/ui/Term";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Withheld } from "@/components/ui/Withheld";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -49,7 +51,6 @@ import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useU
 import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, expiryLabel, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
-import { targetLabel } from "@/lib/nav";
 import { useApplications } from "@/lib/queries/useApplications";
 import { usePersonSignIns } from "@/lib/queries/useSignIns";
 import { useTargets } from "@/lib/queries/useTargets";
@@ -244,7 +245,8 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
     ...(isOperator ? (systems.data ?? []) : []).map((t) => ({
       id: `sys-${t.target}`,
       projectId: "",
-      label: targetLabel(t.target),
+      // The section heading below reads "Network storage"; the chip says the same.
+      label: "Network storage",
       count: undefined,
       tone: undefined,
     })),
@@ -259,7 +261,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
     });
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       {/* Stacked below `sm`, side by side above it. At phone width the avatar
           sitting left of the text column left email/id/lede/actions squeezed
           into a narrow remainder, with the two action buttons forced onto
@@ -287,18 +289,6 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                     <Mono>{user.id}</Mono>
                   </span>
                 ) : null,
-                // Operator-only for the same reason the Activity tab is: /audit
-                // is operator-gated, so a member following this link would land
-                // on a page they cannot read.
-                isOperator ? (
-                  <Link
-                    key="trail"
-                    href={`/audit?user=${encodeURIComponent(user.id)}`}
-                    className="inline-flex min-h-11 items-center font-semibold text-accent-text desktop:min-h-6 link-hover"
-                  >
-                    Full audit trail
-                  </Link>
-                ) : null,
               ]}
             </MetaRow>
           }
@@ -307,7 +297,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
               <>
                 <Button onClick={() => setBundlesOpen(true)}>Manage bundles</Button>
                 <Button variant="accent" onClick={() => setGrantOpen(true)}>
-                  Grant direct access
+                  {GIVE_ROLE_LABEL}
                 </Button>
               </>
             ) : null
@@ -335,7 +325,12 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
         <PersonActivity userId={userId} name={user.name} />
       ) : (
         <>
-          <Unfold open={advanced && isOperator} gap={18}>
+          {confirmation === "unreachable" && access.data.projects.length > 0 && (
+            <Notice tone="warn" title="Zitadel couldn’t be read just now.">
+              What follows is Syndra’s own record, which may be out of date.
+            </Notice>
+          )}
+          <Unfold open={advanced && isOperator} gap={16}>
             <AccountKind user={user} />
           </Unfold>
           {/* Bundle chips state membership and nothing else — no inline ✕.
@@ -378,16 +373,6 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
               </Link>
             ))
             )}
-            <span className="flex-1" />
-            {isOperator && (
-              <button
-                type="button"
-                onClick={() => setBundlesOpen(true)}
-                className="inline-flex min-h-11 items-center text-[13.5px] font-semibold text-accent-text desktop:min-h-6 link-tint"
-              >
-                Manage bundles
-              </button>
-            )}
           </div>
 
           {multiSource && (
@@ -396,7 +381,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
               <strong className="font-semibold text-ink">
                 {multiSource.projectName} / {roleName(multiSource.projectId, multiSource.roleKey)} is held twice
               </strong>{" "}
-              — {multiSource.explanation}. Removing one would not remove this role.
+              , {multiSource.explanation}. Removing one would not remove this role.
             </p>
           )}
 
@@ -452,7 +437,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                 sections={sections}
                 label="Projects on this page"
                 onOpen={openProject}
-                className="-mb-1 gap-x-4 px-5"
+                className="gap-x-4 px-5"
               >
                 {(readAt || confirmation === "unreachable") && (
                   <ReadFreshness state={{ readAt }} subject="What Zitadel confirmed" />
@@ -463,7 +448,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                 sections={sections}
                 label="Projects on this page"
                 onOpen={openProject}
-                gap={18}
+                gap={16}
               />
             </>
           )}
@@ -484,15 +469,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                     onClick={() => toggleProject(project.project_id)}
                     className="group -my-2 -ml-2 flex size-11 flex-none items-center justify-center"
                   >
-                    {/* The 28px round chevron is the look; the 44px button around it is the touch floor. */}
-                    <span
-                      aria-hidden
-                      className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn group-hover:bg-[var(--hover)] ${
-                        open ? "rotate-90" : ""
-                      }`}
-                    >
-                      ›
-                    </span>
+                    <FoldChevron open={open} />
                   </button>
                   <Link
                     href={`/projects/${encodeURIComponent(project.project_id)}`}
@@ -516,11 +493,12 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                   {/* When Zitadel was read is the read line's job now; what stays
                       here is what is specific to THIS project's grant. */}
                   <ZitadelGrantId
+                    userId={userId}
+                    projectId={project.project_id}
                     id={zitadelGrantByProject.get(project.project_id)}
                     showId={advanced && isOperator}
                     isOperator={isOperator}
                     loading={upstreamGrants.isLoading}
-                    unreachable={Boolean(upstreamGrants.error)}
                     // Absent because nothing has been sent yet is not absent
                     // because somebody changed Zitadel behind Syndra's back,
                     // and only the second is drift. Sending an operator to
@@ -581,17 +559,9 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
 
           {/* Advisory notes. Never an error — cleanup_hints are opinions. */}
           {access.data.cleanup_hints.map((hint) => (
-            <div key={hint} className="flex items-start gap-3 px-1 py-0.5">
-              <span
-                aria-hidden
-                className="mt-px flex h-5 w-5 flex-none items-center justify-center rounded-pill border border-line-strong text-[12px] text-muted"
-              >
-                ?
-              </span>
-              <p className="max-w-[840px] text-[14px] leading-[1.55] text-faint">
-                Advisory · {hint}
-              </p>
-            </div>
+            <p key={hint} className="max-w-[840px] px-1 text-[14px] leading-[1.55] text-muted">
+              {hint}
+            </p>
           ))}
         </>
       )}
@@ -702,17 +672,14 @@ function UnexplainedRoles({
   if (roleKeys.length === 0) return null;
   return (
     <div className="row-divider px-5 py-3.5">
-      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-warn-text">
-          Nothing explains this
-        </span>
-        <span className="text-[13.5px] text-muted">
-          {isOperator
-            ? "In Zitadel, with no bundle, rule or grant behind it."
-            : "You can use this. Nobody wrote down who gave it to you."}
-        </span>
-      </div>
-      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+      {/* A member is told nothing more: an unknown source is not theirs to read about (G17). */}
+      {isOperator && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <StatusSeat tone="warn" word="Not given by Syndra" />
+          <span className="text-[13.5px] text-muted">In Zitadel, with no bundle, rule or grant behind it.</span>
+        </div>
+      )}
+      <div className={`${isOperator ? "mt-2.5 " : ""}flex flex-wrap items-center gap-2`}>
         {sortByName(roleKeys, (key) => roleName(projectId, key), (key) => key).map((key) => (
           <span
             key={key}
@@ -751,44 +718,32 @@ function UnexplainedRoles({
  * interpreting it — Drift is where that gets triaged.
  */
 function ZitadelGrantId({
+  userId,
+  projectId,
   id,
   showId,
   isOperator,
   loading,
-  unreachable,
   unsent,
 }: {
+  /** Drift's Side by side opens on this person and project. */
+  userId: string;
+  projectId: string;
   id: string | undefined;
   /** The raw grant id is an operator's handle for Zitadel's console or a ticket. */
   showId: boolean;
   isOperator: boolean;
   loading: boolean;
-  unreachable: boolean;
   /** Every role here is still queued, so Zitadel has not been told yet. */
   unsent: boolean;
 }) {
   if (loading) return null;
-  if (unreachable) {
-    return (
-      // The reason is the sentence, not a tooltip. This was the only
-      // explanation anywhere for why the id is missing, and it was reachable
-      // by hover alone — so on a phone the row said "unavailable" and nothing
-      // else, which reads as a defect in Syndra rather than a read that failed.
-      <span className="text-[13px] text-warn-text">
-        Zitadel couldn&rsquo;t be read just now
-      </span>
-    );
-  }
   if (!id) {
-    return (
-      <span className="text-[13px] text-faint">
-        {unsent
-          ? "Not sent to Zitadel yet"
-          : isOperator
-            ? "No grant in Zitadel — see Drift › Side by side"
-            : "No grant in Zitadel yet"}
-      </span>
-    );
+    if (unsent) return <span className="text-[13px] text-faint">Not sent to Zitadel yet</span>;
+    if (isOperator) {
+      return <ArrowLink href={driftHref({ project: projectId, user: userId })}>Side by side on Drift</ArrowLink>;
+    }
+    return <span className="text-[13px] text-faint">No grant in Zitadel yet</span>;
   }
   // The read time is on the page's read line; only the handle is left here.
   // An inline bit of the line, not a region: it tints with the view (A-08 §3).
@@ -799,16 +754,6 @@ function ZitadelGrantId({
       </span>
     </Tinted>
   );
-}
-
-/**
- * The word "Zitadel", introduced with its glossary popover for a member
- * reading the confirmation states on their OWN page for the first time — an
- * operator sees this word across a dozen other screens and does not need it
- * explained again here.
- */
-function ZitadelWord({ isOperator }: { isOperator: boolean }) {
-  return isOperator ? <>Zitadel</> : <Term name="zitadel">Zitadel</Term>;
 }
 
 /** The one window for ending access (A-04 §4): a row inside it offers Extend. */
@@ -973,33 +918,23 @@ function RoleGroup({
                 // This is the state the whole page exists to make visible: the
                 // one time it happened, every element said "Granted" and only a
                 // note at the top of the project said otherwise.
-                <span className="font-semibold text-danger-text">
-                  Not in <ZitadelWord isOperator={isOperator} />
-                </span>
+                <StatusSeat tone="danger" word="Not in Zitadel" />
               ) : standing === null && confirmation === "unreachable" ? (
-                <span className="text-warn-text">
-                  Could not check <ZitadelWord isOperator={isOperator} />
-                </span>
+                <StatusSeat tone="warn" word="Could not check Zitadel" />
               ) : standing === null ? (
                 // confirmation === "unknown": still loading, or the read has
                 // not settled yet. Never nothing here — an unlabeled blank
                 // reads as the row having no status at all, which is one more
                 // wrong reading this page exists to rule out.
-                <span className="text-faint">
-                  Checking <ZitadelWord isOperator={isOperator} />…
-                </span>
+                <StatusSeat tone="neutral" word="Checking Zitadel…" />
               ) : (
                 <>
                   {/* The positive mark. The truth is Zitadel, so a role it
-                      confirmed says so outright — not only silence where the
-                      negative states would otherwise complain. */}
-                  {/* The read time is stated once, on the project heading
-                      above: every role in this card was read from the same
-                      observation, so repeating the clock on each row says
-                      nothing new and buries the part that differs. */}
-                  <span className="font-semibold text-healthy">
-                    In <ZitadelWord isOperator={isOperator} />
-                  </span>
+                      confirmed says so outright, not only silence where the
+                      negative states would otherwise complain. The read time
+                      is on the read line: every role was read from the same
+                      observation. */}
+                  <StatusSeat tone="healthy" word="In Zitadel" />
                   {expires ? (
                     <span className="font-semibold text-warn-text">
                       Ends {formatShortDate(expires)}
@@ -1033,7 +968,7 @@ function RoleGroup({
               // what is left and names it.
               <Button
                 size="sm"
-                variant={verb === "Revoke" ? "danger" : "outline"}
+                variant={verb === "Withdraw" ? "outline" : "danger"}
                 aria-label={`${verb} ${roleName(projectId, role.role_key)} in ${projectName}`}
                 onClick={() =>
                   onRemove({
@@ -1063,13 +998,13 @@ function RoleGroup({
           <Unfold open={advanced}>
             <div className="px-5 pb-3 pt-2.5">
               <div className="w-full">
-                <dl className="grid grid-cols-[118px_1fr] gap-x-4 gap-y-1.5 rounded-block bg-tint-1 px-4 py-3 text-[13.5px]">
+                <dl className="grid grid-cols-[118px_1fr] gap-x-4 gap-y-1.5 text-[13.5px]">
                   <dt className="text-faint">Grant id</dt>
                   <dd>
                     {grant ? (
                       <Mono className="text-muted">{grant.id}</Mono>
                     ) : (
-                      <Mono className="text-muted">derived — no row in direct_grants</Mono>
+                      <Mono className="text-muted">derived, no row in direct_grants</Mono>
                     )}
                   </dd>
                   {strongest?.kind === "mapping" && (

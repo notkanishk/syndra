@@ -38,6 +38,8 @@ function open(removal: Partial<Removal> & { sources: RoleReason[] }) {
           userName: "Tomas Beck",
           ...removal,
         }}
+        userId="u_2f81"
+        userName="Tomas Beck"
         onClose={() => {}}
       />
     </QueryClientProvider>,
