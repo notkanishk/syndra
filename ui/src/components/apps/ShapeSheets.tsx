@@ -273,7 +273,7 @@ export function SaveSummary({
             <FieldLabel htmlFor="shape-note">What changed, for History</FieldLabel>
             <Textarea id="shape-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why this change" />
           </div>
-          {outcome && <ActionOutcome outcome={outcome} />}
+          {outcome && <ActionOutcome outcome={outcome} word={outcome.kind === "applied" ? "Saved" : "Not saved"} />}
         </div>
       )}
       <ModalFooter

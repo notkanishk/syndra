@@ -84,7 +84,7 @@ const flush = () => act(async () => {});
 const tick = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
 
 /** The row's wrapper: it carries the leaving state, the fade and the gap. */
-const rowOf = (text: string) => screen.getByText(text).closest("[class*=row-divider]")!.parentElement!.parentElement!;
+const rowOf = (text: string | RegExp) => screen.getByText(text).closest("[class*=row-divider]")!.parentElement!.parentElement!;
 const fadeOf = rowOf;
 const list = () => document.querySelector("[data-selection-scope]")!;
 

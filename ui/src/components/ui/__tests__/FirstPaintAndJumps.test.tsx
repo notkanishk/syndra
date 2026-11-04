@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import NotFound from "@/app/not-found";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
-import { ARRIVE_SETTLED_MS } from "@/components/ui/ArriveList";
 import { Skeleton, useTintAfterSkeleton } from "@/components/ui/Skeleton";
-import { TINT_MS } from "@/lib/motion";
 
 const glide = vi.hoisted(() => ({ to: [] as HTMLElement[] }));
 vi.mock("@/lib/motion", async (original) => ({

@@ -316,6 +316,14 @@ function UnpublishedPanel({
   const discard = useDiscardBundleDraft(bundleId);
   const [failure, setFailure] = useState<Outcome | null>(null);
   const n = draftChangeCount(draft);
+  const discardDraft = async () => {
+    setFailure(null);
+    try {
+      await discard.mutateAsync();
+    } catch (error) {
+      setFailure(outcomeFromError(error));
+    }
+  };
   return (
     <Card>
       <CardHeader
@@ -328,14 +336,7 @@ function UnpublishedPanel({
               size="sm"
               disabled={discard.isPending}
               isPending={discard.isPending}
-              onClick={async () => {
-                setFailure(null);
-                try {
-                  await discard.mutateAsync();
-                } catch (error) {
-                  setFailure(outcomeFromError(error));
-                }
-              }}
+              onClick={discardDraft}
             >
               Discard changes
             </Button>
