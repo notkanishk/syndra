@@ -64,7 +64,7 @@ function rule(overrides: Partial<MappingRuleRow> = {}): MappingRuleRow {
 
 function openTheRule() {
   render(<AutomaticRulesPage />);
-  fireEvent.click(screen.getByText(/^R-/));
+  fireEvent.click(screen.getByText("member"));
 }
 
 beforeEach(() => {
@@ -119,14 +119,14 @@ describe("deleting an automatic rule", () => {
   it("says where the revokes go, per the rule's own mode", () => {
     state.rules = [rule({ confirmation_mode: "manual" })];
     const { unmount } = render(<AutomaticRulesPage />);
-    fireEvent.click(screen.getByText(/^R-/));
+    fireEvent.click(screen.getByText("member"));
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
     expect(document.body.textContent).toMatch(/waits under Pending changes/);
     unmount();
 
     state.rules = [rule({ confirmation_mode: "auto" })];
     render(<AutomaticRulesPage />);
-    fireEvent.click(screen.getByText(/^R-/));
+    fireEvent.click(screen.getByText("member"));
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
     expect(document.body.textContent).toMatch(/ends at once, with no review/);
   });
@@ -137,12 +137,14 @@ describe("deleting an automatic rule", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
 
     expect(document.body.textContent).toMatch(/retiring it revokes nothing/i);
+    // Nobody to revoke from, so the act does not say it revokes.
+    expect(screen.queryByRole("button", { name: "Retire rule and revoke access" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Retire rule" })).toHaveLength(1);
   });
 
-  // The dialog title is only ever this rule's short id ("R-aaaa") — meaningless
-  // on its own. The chip above it names the actual project/role pair so the
-  // id is never the only thing identifying which rule is about to be deleted.
-  it("names the rule by its project/role pair, not only its id", () => {
+  // The title never carries an id ("Retire this rule?"), so the chip above it is what
+  // names which rule is about to be retired.
+  it("names the rule by its project/role pair", () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
 
@@ -157,7 +159,7 @@ describe("deleting an automatic rule", () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
 
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep the rule" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
     expect(document.activeElement).not.toBe(
       screen.getByRole("button", { name: "Retire rule and revoke access" }),
     );
@@ -166,7 +168,7 @@ describe("deleting an automatic rule", () => {
   it("backs out to the editor rather than closing everything", () => {
     openTheRule();
     fireEvent.click(screen.getByRole("button", { name: "Retire rule" }));
-    fireEvent.click(screen.getByRole("button", { name: "Keep the rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByRole("button", { name: "Save rule" })).toBeTruthy();
     expect(state.remove).not.toHaveBeenCalled();
@@ -216,7 +218,7 @@ describe("after a rule is deleted", () => {
 
     await waitFor(() => expect(document.body.textContent).toMatch(/retired/i));
     expect(screen.queryByRole("button", { name: "Retire rule and revoke access" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Keep the rule" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
   });
 
@@ -245,7 +247,7 @@ describe("after a rule is deleted", () => {
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
 
     // The rule is still there, so backing out puts the operator back on it.
-    fireEvent.click(screen.getByRole("button", { name: "Keep the rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save rule" })).toBeTruthy());
   });
 });

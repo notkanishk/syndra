@@ -44,7 +44,7 @@ export function AddRolesToBundle({
   const draft = useBundleDraft(bundleId);
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
-  // Bundles to include (B9): each goes into the working copy at its latest version.
+  // Bundles to include (B9): each goes into the next version at its latest version.
   const [bundles, setBundles] = useState<ReadonlySet<string>>(() => new Set());
   const includedNow = useMemo(
     () => new Set((draft.data?.includes ?? []).map((i) => i.child_bundle_id)),
@@ -124,12 +124,12 @@ export function AddRolesToBundle({
     if (included > 0 && added === 0) {
       setOutcome({
         kind: "no_change",
-        message: `${included} ${included === 1 ? "bundle" : "bundles"} added to the ${name} draft`,
+        message: `${included} ${included === 1 ? "bundle" : "bundles"} added to ${name}'s next version`,
         detail:
           holders > 0
-            ? `Nobody has what ${included === 1 ? "it gives" : "they give"} yet. Publish a version to decide whether the ${holders} ${
+            ? `Publish a version to decide whether the ${holders} ${
                 holders === 1 ? "person" : "people"
-              } holding ${name} ${holders === 1 ? "gets" : "get"} it.`
+              } holding ${name} ${holders === 1 ? "gets" : "get"} ${included === 1 ? "it" : "them"}.`
             : "Publish a version to give it to people.",
       });
     } else if (added > 0) {
@@ -143,10 +143,10 @@ export function AddRolesToBundle({
           `${added} ${added === 1 ? "role" : "roles"}`,
         ]
           .filter(Boolean)
-          .join(" and ")} added to the ${name} draft`,
+          .join(" and ")} added to ${name}'s next version`,
         detail:
           holders > 0
-            ? `Nobody has them yet. Publish a version to decide whether the ${holders} ${
+            ? `Publish a version to decide whether the ${holders} ${
                 holders === 1 ? "person" : "people"
               } holding ${name} ${holders === 1 ? "gets" : "get"} them.`
             : "Publish a version to give them to people.",
@@ -159,13 +159,7 @@ export function AddRolesToBundle({
       <ModalHeader
         title={`Add roles to ${name}`}
         titleId="add-roles-title"
-        lede={
-          holders > 0
-            ? `Roles you tick go into the draft. The ${holders} ${
-                holders === 1 ? "person who holds" : "people who hold"
-              } ${name} keep${holders === 1 ? "s" : ""} exactly what they have until you publish a version and move them onto it.`
-            : "Roles you tick go into the draft. Publish a version to give them to people."
-        }
+        lede="Roles you tick go into the next version."
       />
 
       <div className="px-6">
@@ -190,13 +184,13 @@ export function AddRolesToBundle({
         // "something went wrong" leaves the operator unable to tell which of
         // the six landed.
         <div className="danger-note mx-6 mt-3 px-4 py-3 text-[14px] leading-[1.5]">
-          {failure} What is still ticked was not added — press Add {what} again to add the rest.
+          {failure} What is still ticked was not added. Press Add {what} again to add the rest.
         </div>
       )}
 
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={outcome.kind === "refused" || outcome.kind === "failed" ? "Not added" : "Added"} className="mx-6 mb-1" />}
 
-      <ModalFooter>
+      <ModalFooter cancel={outcome ? undefined : { onClick: onClose, disabled: applying }}>
         <Button
           variant="accent"
           disabled={count === 0 || applying}
@@ -205,7 +199,11 @@ export function AddRolesToBundle({
         >
           {count === 0 ? "Add roles" : `Add ${what}`}
         </Button>
-        <Button onClick={onClose}>Close</Button>
+        {outcome && (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        )}
       </ModalFooter>
     </Modal>
   );

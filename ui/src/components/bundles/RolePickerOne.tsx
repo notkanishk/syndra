@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { FoldHeading } from "@/components/bundles/FoldHeading";
-import { Mono } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { ChosenChip, Mono } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { Input } from "@/components/ui/Input";
 import { NextStep } from "@/components/ui/NextStep";
@@ -59,6 +59,9 @@ export interface RolePickerOneProps {
   outlined?: string;
   disabled?: boolean;
   labelledBy?: string;
+  /** Two pickers on one screen each need their own radio group and search label. */
+  group?: string;
+  searchLabel?: string;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -89,6 +92,8 @@ export function RolePickerOne({
   outlined,
   disabled = false,
   labelledBy,
+  group = "role-one",
+  searchLabel = "Search roles",
 }: RolePickerOneProps) {
   const [query, setQuery] = useState("");
   // A place opened or closed by hand keeps that, whatever the search does.
@@ -125,34 +130,16 @@ export function RolePickerOne({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Search by place or role"
-        aria-label="Search roles"
+        aria-label={searchLabel}
       />
 
       {chosen && (
         <div className="mt-3 flex flex-wrap items-center gap-2.5 desktop:gap-2" aria-label="Chosen">
           <span className="type-label mr-1">Chosen</span>
-          <span
-            key={value}
-            className="chip-in inline-flex h-9 items-center gap-1 rounded-pill border border-accent-line bg-accent-soft pl-3 pr-1 text-[13px] font-semibold"
-          >
+          <ChosenChip key={value} disabled={disabled} onRemove={() => onChange(null)} removeLabel={`Remove ${chosen.role.name}`}>
             {chosen.role.name}
             <span className="font-normal text-muted"> · {chosen.place.name}</span>
-            {/* The chip stays 36px; on touch the × reaches 44px by extending past it, invisibly. */}
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => onChange(null)}
-              aria-label={`Remove ${chosen.role.name}`}
-              className="group -my-1 -mr-2 flex min-h-[44px] min-w-[44px] items-center justify-center desktop:m-0 desktop:min-h-0 desktop:min-w-0"
-            >
-              <span
-                aria-hidden
-                className="flex size-7 items-center justify-center rounded-pill text-muted motion-tint group-hover:bg-[var(--hover)]"
-              >
-                ×
-              </span>
-            </button>
-          </span>
+          </ChosenChip>
         </div>
       )}
 
@@ -200,7 +187,7 @@ export function RolePickerOne({
                           <ChoiceRow
                             key={id}
                             single
-                            name={canPick ? "role-one" : undefined}
+                            name={canPick ? group : undefined}
                             selected={value === id}
                             locked={!canPick}
                             disabled={disabled}
@@ -251,12 +238,7 @@ function noteSeat(role: PickerRole, audience: "member" | "operator"): ReactNode 
       return operator ? (
         <>
           <span>Has this until {formatShortDate(n.until)}</span>
-          <Link
-            href="/review/expiring-access?within=30"
-            className="inline-flex min-h-[44px] items-center font-semibold text-accent-text link-hover desktop:min-h-0"
-          >
-            Extend <span aria-hidden>→</span>
-          </Link>
+          <ArrowLink href="/review/expiring-access">Extend</ArrowLink>
         </>
       ) : (
         `Yours until ${formatShortDate(n.until)}`

@@ -55,7 +55,7 @@ describe("PublishVersionDialog", () => {
 
     const choices = screen.getAllByRole("radio");
     expect(choices).toHaveLength(2);
-    expect(choices.every((c) => c.getAttribute("aria-checked") === "false")).toBe(true);
+    expect(choices.every((c) => !(c as HTMLInputElement).checked)).toBe(true);
     expect(state.rehearse).not.toHaveBeenCalled();
   });
 
@@ -107,7 +107,7 @@ describe("PublishVersionDialog", () => {
 
     expect(screen.getByRole("button", { name: "Preview the change" })).toBeDisabled();
     expect(
-      screen.getByText(/Choose what happens to the 14 people who already hold it/),
+      screen.getByText(/Choose what happens to the 14 people\./),
     ).toBeInTheDocument();
   });
 
@@ -124,7 +124,7 @@ describe("PublishVersionDialog", () => {
     );
 
     expect(
-      screen.getByText(/Choose what happens to the 1 person who already holds it/),
+      screen.getByText(/Choose what happens to the 1 person\./),
     ).toBeInTheDocument();
   });
 

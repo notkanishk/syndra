@@ -8,7 +8,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Relative } from "@/components/ui/Time";
 import { formatShortDate } from "@/lib/format";
@@ -63,6 +63,8 @@ export function BundleVersions({
   );
 
   return (
+    <div className="flex flex-col gap-4">
+      {rows.length > 0 && <ReadFreshness state={readStateOfQuery(versions)} subject={`${name}'s versions`} className="px-5" />}
     <Card>
       <CardHeader
         title="Versions"
@@ -82,12 +84,6 @@ export function BundleVersions({
           ) : undefined
         }
       />
-      <p className="row-divider px-5 pb-3.5 text-[13.5px] leading-[1.5] text-muted">
-        {readOnly
-          ? `Everyone who had ${name} lost what it gave when it was retired. Its versions stay here to read.`
-          : `Each person holds a specific version of ${name}. Publishing a new version does not move them unless you choose to.`}
-      </p>
-
       <ListStates
         isLoading={versions.isLoading}
         error={versions.error}
@@ -108,18 +104,16 @@ export function BundleVersions({
               <span className="font-display text-[17px] leading-none">v{version.version}</span>
               {index === 0 ? (
                 <Badge tone={readOnly ? "neutral" : "accent"}>{readOnly ? "Last" : "Current"}</Badge>
-              ) : !readOnly && version.holder_count > 0 ? (
-                // Only an older version with people ON it is worth marking.
-                // Marking every superseded version would make the marking
-                // meaningless, and the empty ones are just history.
-                <Badge tone="warn">
-                  {version.holder_count} {version.holder_count === 1 ? "person" : "people"} still
-                  on this version
-                </Badge>
               ) : null}
               <span className="flex-1" />
               <span className="text-[13px] text-faint">
-                {version.published_by === "system" ? "Syndra (automatic)" : <UserName id={version.published_by} />}
+                {version.published_by === "system" ? (
+                  "Syndra (automatic)"
+                ) : (
+                  <Link href={`/users/${encodeURIComponent(version.published_by)}`} className="link-hover">
+                    <UserName id={version.published_by} />
+                  </Link>
+                )}
                 {" · "}
                 <Relative iso={version.published_at} />
               </span>
@@ -144,14 +138,6 @@ export function BundleVersions({
                 ))
               )}
             </div>
-
-            {!readOnly && version.holder_count > 0 && index > 0 && (
-              <div className="mt-2.5">
-                <Button size="sm" onClick={() => setMoving(rows[0])}>
-                  Move these {version.holder_count} {version.holder_count === 1 ? "person" : "people"} to v{rows[0].version}
-                </Button>
-              </div>
-            )}
           </div>
         ))}
       </ListStates>
@@ -173,6 +159,7 @@ export function BundleVersions({
         />
       )}
     </Card>
+    </div>
   );
 }
 
@@ -186,7 +173,7 @@ export function BundlePeople({ bundleId, name }: { bundleId: string; name: strin
   const [moving, setMoving] = useState<BundleVersion | null>(null);
   const rows = useMemo(() => versions.data ?? [], [versions.data]);
   return (
-    <div className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-4">
       {(holders.data ?? []).length > 0 && (
         <ReadFreshness state={readStateOfQuery(holders)} subject={`Who has ${name}`} className="px-5" />
       )}
@@ -248,6 +235,11 @@ function Holders({
   // they got it (B7) and since when.
   return (
     <div className="flex flex-col">
+      <CardColumns>
+        <span className="min-w-[min(220px,100%)] flex-1">Person</span>
+        <span className="min-w-0 flex-1">How they got it</span>
+        <span className="w-[110px] text-right">Since</span>
+      </CardColumns>
       {Array.from(byVersion.entries())
         .sort((a, b) => b[0] - a[0])
         .map(([version, people]) => {
@@ -336,7 +328,7 @@ function MoveHoldersDialog({
   return (
     <RehearsalDialog
       title={`Move to ${name} v${target.version}`}
-      lede={`${userIds.length} ${userIds.length === 1 ? "person" : "people"} would move to v${target.version}. Their access changes to whatever v${target.version} contains — anything only their current version gave them is revoked (their access to it ends).`}
+      lede={`${userIds.length} ${userIds.length === 1 ? "person" : "people"} would move to v${target.version}. Their access changes to whatever v${target.version} contains. Anything only their current version gave them is revoked.`}
       noun={["person", "people"]}
       destructive
       // A move whose rows all resolve to "no change to their access" still
@@ -380,7 +372,7 @@ export function ThroughOtherBundles({
 }) {
   const people = includers.reduce((n, i) => n + i.people, 0);
   return (
-    <section id="through-bundles" className="card scroll-mt-6 overflow-hidden" style={{ borderStyle: "dashed" }}>
+    <section id="through-bundles" className="card scroll-mt-6 overflow-hidden">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-4">
         <h3 className="type-card-title">Through other bundles</h3>
         <span className="text-[13.5px] text-faint">
@@ -393,7 +385,7 @@ export function ThroughOtherBundles({
         puts v{latest} into its next version; its people get it when that bundle publishes, with the usual
         review.
       </p>
-      {includers.map((includer) => (
+      {sortByName(includers, (i) => i.name).map((includer) => (
         <IncluderTile
           key={includer.bundle_id}
           childId={bundleId}
@@ -436,7 +428,7 @@ function IncluderTile({
         <span className="flex min-w-0 flex-[1_1_260px] items-center gap-3">
           <span
             aria-hidden
-            className="inline-flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-dashed border-line-strong bg-surface-2 font-display text-[13px] font-semibold text-muted"
+            className="inline-flex size-[34px] flex-none items-center justify-center rounded-[10px] border border-line-strong bg-surface-2 font-display text-[13px] font-semibold text-muted"
           >
             {tile}
           </span>
@@ -447,7 +439,7 @@ function IncluderTile({
             >
               {includer.name}
             </Link>
-            <span className="text-[12.5px] text-faint">Bundle{purpose ? ` · ${purpose}` : ""}</span>
+            {purpose && <span className="text-[12.5px] text-faint">{purpose}</span>}
           </span>
         </span>
         <span className={`flex-[1_1_160px] text-[13.5px] ${behind ? "font-semibold text-warn-text" : "text-muted"}`}>
@@ -480,7 +472,7 @@ function IncluderTile({
             ))}
         </span>
       </div>
-      {failure && <ActionOutcome outcome={failure} className="mt-2.5" />}
+      {failure && <ActionOutcome outcome={failure} word="Not updated" className="mt-2.5" />}
     </div>
   );
 }

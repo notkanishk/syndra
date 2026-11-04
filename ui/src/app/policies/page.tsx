@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+import { RolePickerOne, roleId, type PickerPlace } from "@/components/bundles/RolePickerOne";
+import { splitRoleId } from "@/components/bundles/RolePicker";
 import { RetiredRulesFold } from "@/components/rules/RetiredRules";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
@@ -12,9 +14,9 @@ import { FieldLabel } from "@/components/ui/Input";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
+import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Select } from "@/components/ui/Select";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { ProjectName, RoleRef } from "@/components/names";
 import {
@@ -65,7 +67,7 @@ export default function AutomaticRulesPage() {
     );
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Automatic rules"
         lede="Each rule is a sentence: if someone holds the first role, they also get the second."
@@ -76,12 +78,17 @@ export default function AutomaticRulesPage() {
         }
       />
 
+      {rows.length > 0 && (
+        <ReadFreshness state={readStateOfQuery(rules)} subject="Automatic rules and who has them" className="px-5" />
+      )}
+
       <Card>
-        <CardColumns>
-          <span className="w-[110px]">Rule</span>
-          <span className="flex-1">If … then</span>
-          <span className="w-[130px] text-right">Given by this rule</span>
-        </CardColumns>
+        {rows.length > 0 && (
+          <CardColumns>
+            <span className="flex-1">If &hellip; then</span>
+            <span className="w-[110px] text-right">People</span>
+          </CardColumns>
+        )}
 
         <ListStates
           isLoading={rules.isLoading}
@@ -96,7 +103,6 @@ export default function AutomaticRulesPage() {
             <EmptyState
               title="No automatic rules."
               guidance="Every role somebody holds was given to them on purpose. Add a rule when holding one role should always come with a second one."
-              action={{ label: "New rule", onClick: () => setEditing("new") }}
             />
           }
         >
@@ -110,10 +116,6 @@ export default function AutomaticRulesPage() {
                 onClick={() => setEditing(rule)}
                 className="flex min-w-0 flex-1 flex-col items-start gap-1.5 py-3.5 text-left hover-tint tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-[18px]"
               >
-                <Mono className="truncate text-faint tablet:w-[110px] tablet:shrink-0">
-                  {shortRuleId(rule.id)}
-                </Mono>
-
                 <span className="w-full text-[14.5px] tablet:min-w-[320px] tablet:flex-1">
                   <span className="text-muted">
                     <ProjectName id={rule.source_project} /> /{" "}
@@ -132,7 +134,7 @@ export default function AutomaticRulesPage() {
                   </span>
                 </span>
 
-                <span className="text-[15px] tablet:w-[130px] tablet:text-right">
+                <span className="text-[15px] tablet:w-[110px] tablet:text-right">
                   {rule.holder_count ?? 0}
                   <span className="text-[13px] text-faint tablet:hidden">
                     {(rule.holder_count ?? 0) === 1
@@ -148,11 +150,6 @@ export default function AutomaticRulesPage() {
       </Card>
 
       <RetiredRulesFold />
-
-      <p className="max-w-[900px] text-[14px] leading-[1.55] text-faint">
-        One rule can set off another. Before you can save a rule, Check lists
-        every rule yours would set off, and who would gain access.
-      </p>
 
       {editing && (
         <RuleEditor
@@ -184,7 +181,7 @@ function RuleEditor({
   // Saving a rule gives the role to everyone it covers, which can cancel a
   // removal still waiting for you to send: the sheet turns to the step first.
   const step = useCancelStep({
-    host: rule ? `Edit ${shortRuleId(rule.id)}` : "New automatic rule",
+    host: rule ? "Edit this rule" : "New automatic rule",
     goAhead: "save the rule",
   });
   const validate = useValidateMappingRule();
@@ -217,8 +214,30 @@ function RuleEditor({
   // itself saved; only a thrown error leaves the form armed to retry.
   const saved = outcome?.kind === "applied" || outcome?.kind === "queued";
 
-  const rolesFor = (projectId: string) =>
-    (catalog.data ?? []).filter((role) => role.project_id === projectId);
+  // Every project that has roles, with the roles a rule can name.
+  const places = useMemo(() => {
+    const byProject = new Map<string, PickerPlace>();
+    for (const role of catalog.data ?? []) {
+      const place = byProject.get(role.project_id) ?? {
+        id: role.project_id,
+        name:
+          role.project_name ||
+          (projects.data ?? []).find((p) => p.project.id === role.project_id)?.project.name ||
+          UNKNOWN_PROJECT,
+        roles: [],
+      };
+      place.roles.push({
+        key: role.role_key,
+        name: role.display_name || humanizeKey(role.role_key),
+        description: role.description,
+        people: role.assigned_user_count,
+        waits: role.waits_for_send,
+        note: { kind: "none" },
+      });
+      byProject.set(role.project_id, place);
+    }
+    return Array.from(byProject.values());
+  }, [catalog.data, projects.data]);
 
   // Names, not ids, in every validation sentence: "Chains into R-022, which
   // would also give them Studio Access / door" is readable; the same line
@@ -239,9 +258,6 @@ function RuleEditor({
     (catalog.data ?? []).find(
       (r) => r.project_id === projectId && r.role_key === roleKey,
     );
-  const sourceWaits = Boolean(
-    roleEntry(sourceProject, sourceRole)?.waits_for_send,
-  );
   const targetEntry = roleEntry(targetProject, targetRole);
   const targetWaits = Boolean(targetEntry?.waits_for_send);
   const targetName = targetEntry?.display_name || humanizeKey(targetRole);
@@ -258,6 +274,13 @@ function RuleEditor({
       setValidated(null);
       setter(value);
     };
+  }
+
+  // Choosing or removing a role sets both halves (project and role) at once.
+  function pick(id: string | null, setProject: (v: string) => void, setRole: (v: string) => void) {
+    const [project, role] = id ? splitRoleId(id) : ["", ""];
+    change(setProject)(project);
+    setRole(role);
   }
 
   async function runValidation() {
@@ -307,7 +330,7 @@ function RuleEditor({
         chained.source_role === targetRole
       ) {
         notes.push(
-          `Also sets off ${shortRuleId(chained.id)}, which would then give them ${roleLabel(
+          `Also sets off another rule, which would then give them ${roleLabel(
             chained.target_project,
             chained.target_role,
           )}.`,
@@ -334,103 +357,43 @@ function RuleEditor({
     <Modal open onClose={onClose} busy={busy} size="md" labelledBy="rule-title">
       <PushedStep step={step}>
       <ModalHeader
-        title={rule ? `Editing ${shortRuleId(rule.id)}` : "New automatic rule"}
+        title={rule ? "Edit this rule" : "New automatic rule"}
         titleId="rule-title"
         chip={rule && ruleChip(rule)}
-        lede="Anybody who holds the first role gets the second — everyone who holds it today, and everyone who is given it later."
+        lede="Anybody who holds the first role gets the second: everyone who holds it today, and everyone who is given it later."
       />
 
       <div className="flex flex-col gap-3.5 px-6">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <FieldLabel htmlFor="rule-source-project">
-              If someone holds — project
-            </FieldLabel>
-            <Select
-              id="rule-source-project"
-              value={sourceProject}
-              onChange={(event) => {
-                change(setSourceProject)(event.target.value);
-                setSourceRole("");
-              }}
-            >
-              <option value="">Choose…</option>
-              {(projects.data ?? []).map((entry) => (
-                <option key={entry.project.id} value={entry.project.id}>
-                  {entry.project.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <FieldLabel htmlFor="rule-source-role">Role they hold</FieldLabel>
-            <Select
-              id="rule-source-role"
-              value={sourceRole}
-              disabled={!sourceProject}
-              onChange={(event) => change(setSourceRole)(event.target.value)}
-            >
-              <option value="">
-                {sourceProject ? "Choose…" : "Pick a project"}
-              </option>
-              {rolesFor(sourceProject).map((role) => (
-                <option key={role.role_key} value={role.role_key}>
-                  {role.display_name || humanizeKey(role.role_key)}
-                </option>
-              ))}
-            </Select>
-            {sourceRole && sourceWaits && (
-              <WaitsMark withLabel className="mt-1.5" />
-            )}
-          </div>
+        <div>
+          <FieldLabel id="rule-source-label">If someone holds</FieldLabel>
+          <RolePickerOne
+            mode="one"
+            audience="operator"
+            places={places}
+            value={sourceProject && sourceRole ? roleId(sourceProject, sourceRole) : null}
+            onChange={(id) => pick(id, setSourceProject, setSourceRole)}
+            labelledBy="rule-source-label"
+            group="rule-source"
+            searchLabel="Search the role they hold"
+          />
         </div>
 
         <div aria-hidden className="text-center text-[18px] text-faint">
-          ⇒
+          &rArr;
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <FieldLabel htmlFor="rule-target-project">
-              then also give them — project
-            </FieldLabel>
-            <Select
-              id="rule-target-project"
-              value={targetProject}
-              onChange={(event) => {
-                change(setTargetProject)(event.target.value);
-                setTargetRole("");
-              }}
-            >
-              <option value="">Choose…</option>
-              {(projects.data ?? []).map((entry) => (
-                <option key={entry.project.id} value={entry.project.id}>
-                  {entry.project.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <FieldLabel htmlFor="rule-target-role">Role to give</FieldLabel>
-            <Select
-              id="rule-target-role"
-              value={targetRole}
-              disabled={!targetProject}
-              onChange={(event) => change(setTargetRole)(event.target.value)}
-            >
-              <option value="">
-                {targetProject ? "Choose…" : "Pick a project"}
-              </option>
-              {rolesFor(targetProject).map((role) => (
-                <option key={role.role_key} value={role.role_key}>
-                  {role.display_name || humanizeKey(role.role_key)}
-                </option>
-              ))}
-            </Select>
-            {targetRole && targetWaits && (
-              <WaitsMark withLabel className="mt-1.5" />
-            )}
-          </div>
+        <div>
+          <FieldLabel id="rule-target-label">then also give them</FieldLabel>
+          <RolePickerOne
+            mode="one"
+            audience="operator"
+            places={places}
+            value={targetProject && targetRole ? roleId(targetProject, targetRole) : null}
+            onChange={(id) => pick(id, setTargetProject, setTargetRole)}
+            labelledBy="rule-target-label"
+            group="rule-target"
+            searchLabel="Search the role to give"
+          />
         </div>
 
         {sourceRole && targetRole && (
@@ -455,7 +418,7 @@ function RuleEditor({
               blocking={!validated.ok}
               title={
                 validated.ok
-                  ? `Checked — ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
+                  ? `Checked: ${validated.notes.length} ${validated.notes.length === 1 ? "thing" : "things"} to know`
                   : "This rule can't be saved"
               }
             >
@@ -468,11 +431,12 @@ function RuleEditor({
           ))}
       </div>
 
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={saved ? "Saved" : "Not saved"} className="mx-6 mb-1" />}
 
       {saved && step.after}
 
       <ModalFooter
+        cancel={saved ? undefined : { onClick: onClose }}
         note={
           step.note ??
           // Two different unmet conditions used to share one sentence: an
@@ -495,15 +459,6 @@ function RuleEditor({
           <Button
             variant="accent"
             disabled={!complete || !validated?.ok}
-            reason={
-              !complete
-                ? "Fill in every field above first."
-                : !validated
-                  ? "Check the rule before saving it."
-                  : !validated.ok
-                    ? "This rule can't be saved as it stands — see above."
-                    : undefined
-            }
             isPending={busy}
             onClick={async () => {
               try {
@@ -546,7 +501,6 @@ function RuleEditor({
         {!saved && (
           <Button
             disabled={!complete}
-            reason={!complete ? "Fill in every field above first." : undefined}
             isPending={validate.isPending}
             onClick={async () => {
               try {
@@ -559,7 +513,6 @@ function RuleEditor({
             {validated ? "Check again" : "Check rule"}
           </Button>
         )}
-        {!saved && <Button onClick={onClose}>Cancel</Button>}
         {/*
           Outline, and last. A rule is retired from the same place it is retargeted, because
           those are the two things you come here to do — but a solid red button beside Save is
@@ -609,7 +562,7 @@ function DeleteRuleConfirm({
 }) {
   const remove = useDeleteMappingRule();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const step = useCancelStep({ host: `Retire ${shortRuleId(rule.id)}`, goAhead: "retire it", tone: "danger" });
+  const step = useCancelStep({ host: "Retire this rule", goAhead: "retire it", tone: "danger" });
   const holders = rule.holder_count ?? 0;
   // What the backend decides (services.Deliver): the role waits, or, until
   // the switch over to roles that wait, the rule's own mode did.
@@ -637,7 +590,7 @@ function DeleteRuleConfirm({
     >
       <PushedStep step={step}>
       <ModalHeader
-        title={`Retire ${shortRuleId(rule.id)}?`}
+        title="Retire this rule?"
         titleId="rule-delete-title"
         chip={ruleChip(rule)}
         lede={`Some people may hold ${label} only because of this rule.`}
@@ -663,30 +616,27 @@ function DeleteRuleConfirm({
         </div>
       </div>
 
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word={gone ? "Retired" : "Not retired"} className="mx-6 mb-1" />}
       {gone && step.after}
 
-      <ModalFooter note={step.note ?? "If you only want the rule to give a different role, edit it instead of retiring it."}>
-        {/* First in the DOM, not first on screen: Modal focuses the panel's
-            first focusable element on open, and a dialog must not open with
-            the cursor already on the button that revokes access. `order-2`
-            keeps this where it has always sat, visually, after the
-            destructive button. */}
+      <ModalFooter
+        note={step.note ?? "If you only want the rule to give a different role, edit it instead of retiring it."}
+        cancel={gone ? undefined : { onClick: onCancel, disabled: remove.isPending }}
+      >
         {/* `onDeleted` closes the editor this dialog opened over, and it was
-            never called — so deleting a rule left the operator looking at an
-            editor for a rule that no longer exists. Called from the dismiss
-            button rather than from the mutation, because closing the editor
-            takes the outcome with it. */}
-        <Button
-          className="order-2"
-          disabled={remove.isPending}
-          onClick={gone ? onDeleted : onCancel}
-        >
-          {gone ? "Close" : "Keep the rule"}
-        </Button>
+            never called, so deleting a rule left the operator looking at an
+            editor for a rule that no longer exists. Called from Close rather
+            than from the mutation, because closing the editor takes the
+            outcome with it. */}
+        {gone && (
+          <Button variant="outline" onClick={onDeleted}>
+            Close
+          </Button>
+        )}
         {!gone && (
           <Button
-            className="order-1"
+            // A dialog must not open with the cursor on the button that revokes access.
+            data-skip-initial-focus
             variant="dangerConfirm"
             isPending={remove.isPending}
             onClick={async () => {
@@ -699,9 +649,9 @@ function DeleteRuleConfirm({
                   n === 0
                     ? {
                         kind: "applied",
-                        message: `${shortRuleId(rule.id)} retired`,
+                        message: "Rule retired",
                         detail:
-                          "Nobody's access changed — the rule was giving nothing.",
+                          "Nobody's access changed. The rule was giving nothing.",
                       }
                     : {
                         // Queued unless the rule fired unattended: the
@@ -709,7 +659,7 @@ function DeleteRuleConfirm({
                         // somebody to resume the queue, and calling them applied
                         // would say access is gone that is still there.
                         kind: auto ? "applied" : "queued",
-                        message: `${shortRuleId(rule.id)} retired — ${n} ${
+                        message: `Rule retired, ${n} ${
                           n === 1 ? "revocation" : "revocations"
                         } ${auto ? "sent" : "waiting for you to send"}`,
                         detail: auto
@@ -722,18 +672,13 @@ function DeleteRuleConfirm({
               }
             }}
           >
-            Retire rule and revoke access
+            {holders === 0 ? "Retire rule" : "Retire rule and revoke access"}
           </Button>
         )}
       </ModalFooter>
       </PushedStep>
     </Modal>
   );
-}
-
-/** "R-014" reads as a rule; a raw UUID reads as noise. */
-function shortRuleId(id: string): string {
-  return `R-${id.replace(/-/g, "").slice(0, 4)}`;
 }
 
 /**

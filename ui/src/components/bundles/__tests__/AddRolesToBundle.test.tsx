@@ -114,6 +114,28 @@ describe("AddRolesToBundle", () => {
     expect(screen.queryByRole("button", { name: /^Add \d+ roles?$/ })).toBeNull();
   });
 
+  it("lists the chosen chips A to Z, not in the order they were ticked", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    // Ticked Trained operator first, then Maintainer.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Trained operator/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Maintainer/ }));
+    const chips = screen.getAllByRole("button", { name: /^Remove / }).map((b) => b.getAttribute("aria-label"));
+    expect(chips).toEqual(["Remove Maintainer", "Remove Trained operator"]);
+  });
+
+  it("offers Cancel before anything is added, and Close only once something has been", async () => {
+    open();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Maintainer/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 role" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
   // S15: a chosen chip tints in and rises 4px, the same as the one-role picker's.
   it("a chosen role's chip arrives with the chip rise, not a bare tint", () => {
     open();
