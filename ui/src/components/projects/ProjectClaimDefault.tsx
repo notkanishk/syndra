@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Button, PILL } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Card, CardHeader } from "@/components/ui/Card";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { FormPart } from "@/components/ui/FormPart";
 import { useLeavingRows } from "@/components/ui/LeavingRows";
@@ -19,7 +19,7 @@ import {
   type ClaimFormat,
   type ProjectDefaultForm,
 } from "@/lib/queries/useClaimShape";
-import { sortNames } from "@/lib/sort";
+import { compareNames, sortNames } from "@/lib/sort";
 
 /**
  * The project's default shape (A-14 §2, §7): what every app on this project
@@ -45,15 +45,13 @@ export function ProjectClaimDefault({ projectId }: { projectId: string }) {
   const onDefault = shape.data.applications.filter((a) => a.source !== "app");
   return (
     <Card id="claims-default">
-      <div className="px-[22px] pb-4 pt-5">
-        <h2 className="type-card-title">Default shape</h2>
-        <p className="mt-1 text-[14px] leading-[1.5] text-faint">
-          What an app on {shape.data.project_name} is told when it has no shape of its own.{" "}
-          {onDefault.length === 0
-            ? "Every app here has its own shape now, so this reaches none of them."
-            : `It reaches ${onDefault.map((a) => a.name).join(", ")} today.`}
-        </p>
-      </div>
+      <CardHeader title="Default shape" className="pb-1" />
+      <p className="px-5 pb-4 text-[14px] leading-[1.5] text-faint">
+        What an app on {shape.data.project_name} is told when it has no shape of its own.{" "}
+        {onDefault.length === 0
+          ? "Every app here has its own shape now, so this reaches none of them."
+          : `It reaches ${sortNames(onDefault.map((a) => a.name)).join(", ")} today.`}
+      </p>
       <ProfileForm
         key={projectId}
         profile={shape.data.default}
@@ -149,7 +147,7 @@ function ProfileForm({
 
   return (
     <div className="flex flex-col gap-4 px-[22px] pb-5">
-      <div className="rounded-block bg-tint-1 px-4 py-3.5">
+      <div>
         <FieldLabel htmlFor="claim-name">Roles claim</FieldLabel>
         <FieldHint>
           The claim (one field inside the token) the app reads roles from. It must match the name
@@ -161,7 +159,7 @@ function ProfileForm({
           // plain fact is how a list elsewhere ended up disagreeing with
           // this screen about the same app's real claim name.
           <p className="mt-1 text-[13px] text-faint">
-            Nobody has set this yet — Syndra sends the built-in default below.
+            Nobody has set this yet. Syndra sends the built-in default below.
           </p>
         )}
         <div className="flex flex-wrap items-center gap-2.5">
@@ -181,34 +179,26 @@ function ProfileForm({
             value={format}
             onChange={setFormat}
             options={(vocabulary.data?.formats ?? ["array", "csv", "space_delimited"]).map(
-              (value) => ({ value, label: value === "space_delimited" ? "spaced" : value }),
+              (value) => ({ value, label: value === "space_delimited" ? "Space-separated" : value }),
             )}
           />
         </div>
-        <p className="mt-2 text-[12.5px] text-faint">
-          {format === "array"
-            ? 'Sent as ["trained","maintainer"].'
-            : format === "csv"
-              ? 'Sent as "trained,maintainer".'
-              : 'Sent as "trained maintainer".'}
-        </p>
       </div>
 
       <div>
         <div className="mb-2 flex items-center gap-2">
           <span className="type-label">Also send</span>
           <span className="flex-1" />
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={() => {
               const id = nextExtraId++;
               setAdded((prev) => [...prev, id]);
               setExtras((prev) => [...prev, { id, key: "", kind: "attribute", value: "email" }]);
             }}
-            className={`-mr-3.5 rounded-pill font-semibold text-accent-text control press-scale hover:bg-[var(--hover)] ${PILL.sm}`}
           >
             Add a claim
-          </button>
+          </Button>
         </div>
 
         {drawn.rows.length === 0 ? (
@@ -286,7 +276,7 @@ function ProfileForm({
       {/* Under the control that saved it, and above nothing: an editor that
           reports elsewhere leaves the operator unsure whether the shape on
           screen is the shape that was written. */}
-      {outcome && <ActionOutcome outcome={outcome} />}
+      {outcome && <ActionOutcome outcome={outcome} word="Saved" />}
 
       <div className="flex flex-wrap items-center gap-2.5">
         <Button variant="accent" disabled={!dirty || !claimName.trim()} isPending={saving} onClick={save}>
@@ -294,6 +284,7 @@ function ProfileForm({
         </Button>
         {dirty && (
           <Button
+            variant="ghost"
             onClick={() => {
               // Back to `baseline`, not `profile` directly — after a save that
               // has not refetched yet, `profile` is still the pre-save value.
@@ -347,7 +338,7 @@ function toExtras(profile: ProjectDefaultForm): ExtraClaim[] {
     kind: "static" as const,
     value: String(value ?? ""),
   }));
-  return [...attributes, ...statics].sort((a, b) => a.key.localeCompare(b.key));
+  return [...attributes, ...statics].sort((a, b) => compareNames(a.key, b.key));
 }
 
 function fromExtras(extras: ExtraClaim[]) {

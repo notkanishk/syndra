@@ -72,7 +72,7 @@ function rolesSeat(row: HTMLElement) {
 }
 
 describe("the projects table", () => {
-  const SENTENCE = "No roles yet — nothing here can be granted";
+  const SENTENCE = "No roles yet.";
 
   it("still says that nothing in a role-less project can be granted", () => {
     render(<ProjectsPage />);
@@ -92,6 +92,17 @@ describe("the projects table", () => {
       ).not.toMatch(/desktop:w-\[110px\]/);
       if (node.tagName === "A") break;
     }
+  });
+
+  it("lists the apps a project serves A to Z", () => {
+    state.apps = ["Zebra door", "Alpha desk", "Mid bench"].map((name, i) => ({
+      application: { id: `a${i}`, name, project_id: "p1" },
+    }));
+    render(<ProjectsPage />);
+    const row = screen.getByRole("link", { name: /Studio Access/ });
+    const chips = ["Alpha desk", "Mid bench", "Zebra door"].map((n) => row.textContent?.indexOf(n) ?? -1);
+    expect(chips).toEqual([...chips].sort((a, b) => a - b));
+    expect(chips.every((i) => i >= 0)).toBe(true);
   });
 
   it("keeps the count column a count, so the column reads as one", () => {

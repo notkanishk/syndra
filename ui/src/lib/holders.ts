@@ -62,9 +62,7 @@ export function holdersLine(
     parts.push(`${missing} not in Zitadel yet`);
     if (tone !== "danger") tone = "warn";
   }
-  if (parts.length === 0 && observed > 0) {
-    parts.push("confirmed");
-  }
+  // All as expected says nothing (G17): only the exception is written.
 
   return { headline: String(observed), note: parts.join(" · "), tone };
 }

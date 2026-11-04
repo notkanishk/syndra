@@ -15,12 +15,15 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Mono } from "@/components/ui/Badge";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button, ButtonLink } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Notice } from "@/components/ui/Notice";
+import { ProjectName } from "@/components/names";
+import { Card, CardHeader } from "@/components/ui/Card";
 import { FilterPills } from "@/components/ui/Select";
 import { WithheldInline } from "@/components/ui/Withheld";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { useCrumb } from "@/lib/page-crumb";
+import { sortByName } from "@/lib/sort";
 import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useRoleMembers, type RoleMember } from "@/lib/queries/useRoleMembers";
@@ -52,12 +55,12 @@ export default function RoleMembersPage({
   useCrumb(view ? `${view.project_name} / ${roleKey}` : null);
 
   const rows = useMemo(() => {
-    const all = view?.members ?? [];
+    const all = sortByName(view?.members ?? [], (member) => member.user.name, (member) => member.user.id);
     if (filter === "all") return all;
     return all.filter((member) => member.reasons.some((reason) => reason.kind === filter));
   }, [view, filter]);
 
-  const observedOnly = view?.observed_only ?? [];
+  const observedOnly = sortByName(view?.observed_only ?? [], (person) => person.name);
   // Holding is observed: a record Zitadel does not show (`in_zitadel === false`)
   // explains, it does not hold. Same count the roles index gives.
   const holdCount =
@@ -65,16 +68,18 @@ export default function RoleMembersPage({
     observedOnly.length;
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
-        eyebrow={view?.project_name ?? id}
+        eyebrow={
+          <Link href={`/projects/${id}`} className="motion-tint hover:text-accent-text">
+            <ProjectName id={id} name={view?.project_name} />
+          </Link>
+        }
         title={view?.display_name || humanizeKey(roleKey)}
-        lede="Everyone who holds this role, and how each came to hold it — directly, through a bundle, or by an automatic rule."
+        lede="Everyone who holds this role, and how each came to hold it: directly, through a bundle, or by an automatic rule."
         meta={
           <span className="flex flex-wrap items-center gap-3">
-            <Mono className="rounded-pill border border-line-strong px-3 py-1 text-[14px] text-muted">
-              {roleKey}
-            </Mono>
+            <Mono className="text-faint">{roleKey}</Mono>
             {view?.group && <span className="text-[13.5px] text-faint">Group: {view.group}</span>}
             {view?.cloned_from && (
               <span className="text-[13.5px] text-faint">cloned from {view.cloned_from}</span>
@@ -94,6 +99,14 @@ export default function RoleMembersPage({
         }
       />
 
+      {view?.withheld_unavailable && (
+        // A zero the page cannot stand behind. Saying "none" from a read that did not happen is
+        // the failure this column exists to close, reproduced on the screen that closes it.
+        <Notice tone="warn" title="Holds could not be read.">
+          This list does not say who has something withheld.
+        </Notice>
+      )}
+
       {/* One control, so it stays on the row. It used to sit inside the card
           header behind a literal "Filter by source:" label, which is the only
           place in the product a filter introduced itself in prose. */}
@@ -105,46 +118,34 @@ export default function RoleMembersPage({
             onChange={setFilter}
             options={[
               { value: "all", label: "All" },
-              { value: "direct", label: `Direct ${view?.direct_count ?? 0}` },
-              { value: "bundle", label: `Bundle ${view?.bundle_count ?? 0}` },
-              { value: "mapping", label: `Automatic ${view?.automatic_count ?? 0}` },
+              // No counts until they are read: "Direct 0" while loading is a fabricated zero.
+              { value: "direct", label: view ? `Direct ${view.direct_count}` : "Direct" },
+              { value: "bundle", label: view ? `Bundle ${view.bundle_count}` : "Bundle" },
+              { value: "mapping", label: view ? `Automatic ${view.automatic_count}` : "Automatic" },
             ]}
           />
         }
       />
 
       <Card>
-        <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-          <span className="type-card-title">
-            {/* Syndra's own record plus whoever Zitadel shows holding it with
-                no Syndra record at all — "holding is observed", and a count
-                that dropped the second half would undercount who can
-                actually use this. */}
-            {holdCount === 1 ? "1 person holds this role" : `${holdCount} people hold this role`}
-          </span>
-          {/* Stated before the list rather than left to be discovered in it.
-              "Forty people hold this role" is the sentence an operator acts on,
-              and it is false for however many of them are holding it with
-              something taken away. Not a filter pill: those partition by SOURCE,
-              and a carve-out is orthogonal to how somebody came to hold it. */}
-          {view?.withheld_unavailable ? (
-            // A zero the page cannot stand behind. Saying "none" from a read
-            // that did not happen is the failure this column exists to close,
-            // reproduced on the screen that closes it.
-            <span className="text-[13.5px] text-warn-text">
-              Holds could not be read — this list does not say who has something
-              withheld
-            </span>
-          ) : (
-            (view?.withheld_count ?? 0) > 0 && (
-              <span className="text-[13.5px] text-warn-text">
-                {view?.withheld_count === 1
-                  ? "1 of them has something withheld"
-                  : `${view?.withheld_count} of them have something withheld`}
-              </span>
-            )
-          )}
-        </div>
+        {/* Syndra's own record plus whoever Zitadel shows holding it with no Syndra record at all:
+            "holding is observed", and a count that dropped the second half would undercount who can
+            actually use this. Not a filter pill: those partition by SOURCE, and a carve-out is
+            orthogonal to how somebody came to hold it. Nothing while loading (a fabricated zero). */}
+        {view && (
+          <CardHeader
+            title={holdCount === 1 ? "1 person holds this role" : `${holdCount} people hold this role`}
+            note={
+              !view.withheld_unavailable && view.withheld_count > 0 ? (
+                <span className="text-warn-text">
+                  {view.withheld_count === 1
+                    ? "1 of them has something withheld"
+                    : `${view.withheld_count} of them have something withheld`}
+                </span>
+              ) : undefined
+            }
+          />
+        )}
 
         <ListStates
           isLoading={members.isLoading}
@@ -163,7 +164,7 @@ export default function RoleMembersPage({
             ) : (
               <EmptyState
                 title={`Nobody holds it that way.`}
-                guidance="Other sources may still carry it — clear the filter to see everyone."
+                guidance="Other sources may still carry it. Clear the filter to see everyone."
                 action={{ label: "Show everyone", onClick: () => setFilter("all") }}
               />
             )
@@ -184,10 +185,10 @@ export default function RoleMembersPage({
 
       {observedOnly.length > 0 && (
         <Card>
-          <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-            <span className="type-card-title">In Zitadel without Syndra giving it</span>
-            <ArrowLink href={driftHref({ project: id, role: roleKey })}>Review in drift</ArrowLink>
-          </div>
+          <CardHeader
+            title="In Zitadel only"
+            action={<ArrowLink href={driftHref({ project: id, role: roleKey })}>Review in drift</ArrowLink>}
+          />
           {observedOnly.map((person) => (
             <Link
               key={person.id}
@@ -290,13 +291,9 @@ function MemberRow({
       {/* The action is named after the thing being removed. Where nothing can
           be removed here, the row offers the rule instead of a dead control. */}
       {strongest?.kind === "mapping" ? (
-        <button
-          type="button"
-          onClick={() => open("mapping")}
-          className="shrink-0 text-[13px] font-semibold text-accent-text link-tint"
-        >
+        <Button variant="outline" size="sm" onClick={() => open("mapping")}>
           Open the rule
-        </button>
+        </Button>
       ) : strongest?.kind === "bundle" ? (
         <Button variant="danger" size="sm" onClick={() => open("bundle")}>
           Remove bundle assignment

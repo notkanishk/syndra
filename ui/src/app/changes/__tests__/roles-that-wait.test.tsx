@@ -75,16 +75,16 @@ describe("Roles that wait for you", () => {
 
     it("says what waited, and keeps every suggestion chosen to start", () => {
       render(<RolesThatWaitPage />);
-      expect(screen.getByText("Bundles and rules no longer have their own modes")).toBeInTheDocument();
-      expect(screen.getByText(/Until today, 1 bundle and 1 rule waited for you/)).toBeInTheDocument();
+      expect(screen.getByText("Roles to keep waiting")).toBeInTheDocument();
+      expect(screen.getByText(/Before this update, 1 bundle and 1 rule waited for you/)).toBeInTheDocument();
       expect(screen.getByText("Given by Staff, which waited")).toBeInTheDocument();
-      expect(screen.getByRole("checkbox", { name: "Laser cutter · Supervisor" })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: /Laser cutter · Supervisor/ })).toBeChecked();
       expect(screen.getByRole("button", { name: "Mark 2 and finish" })).toBeInTheDocument();
     });
 
     it("marks what's chosen, then switches over", async () => {
       render(<RolesThatWaitPage />);
-      fireEvent.click(screen.getByRole("checkbox", { name: "Laser bay · Door" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: /Laser bay · Door/ }));
       fireEvent.click(screen.getByRole("button", { name: "Mark 1 and finish" }));
       await waitFor(() => expect(state.switched).toBe(1));
       expect(state.marked).toEqual([{ ids: ["p1:laser.supervisor"], waits: true }]);
@@ -109,8 +109,13 @@ describe("Roles that wait for you", () => {
 
     it("lists the roles that wait, gathered by project, with who marked them", () => {
       render(<RolesThatWaitPage />);
-      expect(screen.getByText("Laser Lab · 1")).toBeInTheDocument();
-      expect(screen.getByText("Laser cutter · Operator")).toBeInTheDocument();
+      expect(screen.getByTestId("run-label")).toHaveTextContent(/^Laser Lab\s*1$/);
+      expect(screen.getByRole("link", { name: "Laser cutter · Operator" })).toHaveAttribute(
+        "href",
+        "/projects/p1/roles/laser.operator",
+      );
+      expect(screen.getByRole("button", { name: "Sort by role" })).toHaveAttribute("data-sort", "asc");
+      expect(screen.queryByText(/For the whole makerspace/)).toBeNull();
       expect(screen.getByText(/Kanishk Singh, 2 Oct/)).toBeInTheDocument();
       // Only changes waiting because a role waits count here; a stopped send is another story.
       expect(screen.getByText("1 change to these roles")).toBeInTheDocument();
@@ -140,6 +145,11 @@ describe("Roles that wait for you", () => {
       ).toBeInTheDocument();
       fireEvent.click(within(dialog).getByRole("button", { name: "Mark 1 role" }));
       await waitFor(() => expect(state.marked).toEqual([{ ids: ["p1:laser.supervisor"], waits: true }]));
+      // The sheet becomes its result and ends on Close: it never closes onto the list.
+      expect(await within(dialog).findByText("Marked")).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Close" })).toBeInTheDocument();
+      expect(within(dialog).queryByRole("button", { name: "Cancel" })).toBeNull();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
   });
 });

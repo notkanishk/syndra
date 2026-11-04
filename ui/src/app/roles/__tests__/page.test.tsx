@@ -95,11 +95,29 @@ describe("the roles index, as drawn", () => {
     expect(order()).toEqual(["Gamma", "Beta", "Alpha"]);
   });
 
+  it("gathers a project's roles under one label with its count, instead of repeating its name", () => {
+    state.roles = [
+      role("beta", { display_name: "Beta" }),
+      role("alpha", { display_name: "Alpha" }),
+      role("gamma", { display_name: "Gamma", project_name: "Wood shop", project_id: "p2" }),
+    ];
+    render(<RolesPage />);
+    const labels = screen.getAllByTestId("run-label").map((l) => l.textContent);
+    expect(labels).toEqual(["Laser Lab2", "Wood shop1"]);
+    expect(screen.queryAllByText("Laser Lab")).toHaveLength(1); // the label only; not once per row
+    expect(order()).toEqual(["Alpha", "Beta", "Gamma"]); // A to Z inside the run
+    // Sorted by anything else, the name is back on each row.
+    fireEvent.click(screen.getByRole("button", { name: "Sort by people" }));
+    expect(screen.queryAllByTestId("run-label")).toHaveLength(0);
+    expect(screen.getAllByText("Laser Lab")).toHaveLength(2);
+  });
+
   it("shows an Unused pill for a role nothing references, and what does for the rest", () => {
     render(<RolesPage />);
     expect(screen.getAllByText("Unused")).toHaveLength(1);
     expect(screen.getByRole("link", { name: /Beta/ }).textContent).toContain("Unused");
     expect(screen.getByText("2 bundles · 1 rule")).toBeInTheDocument();
+    expect(screen.queryByText(/Used by nothing/)).toBeNull();
   });
 
   it("marks only the role that always waits for you", () => {
@@ -128,7 +146,8 @@ describe("the roles index, as drawn", () => {
       role("alpha", { display_name: "Alpha", project_id: "382075332397630470", project_name: "382075332397630470" }),
     ];
     render(<RolesPage />);
-    expect(screen.getAllByText("Unknown project")).toHaveLength(2);
+    // Two cells, and the one run they gather under (same label, so the id beside each is the tell).
+    expect(screen.getAllByText("Unknown project")).toHaveLength(3);
     expect(document.body.textContent).toContain("Unknown project 365951028870251526");
     expect(document.body.textContent).toContain("Unknown project 382075332397630470");
   });
