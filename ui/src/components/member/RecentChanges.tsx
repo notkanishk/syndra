@@ -53,11 +53,11 @@ export function RecentChanges({
   );
 }
 
-/** An approval that isn't on your account yet, and why, in the member's words (N19). */
+/** Why an approval is still on its way, in the member's words (N19). */
 export function waitClause(waitReason: string | undefined): string {
   return waitReason?.startsWith("halted:")
-    ? "Syndra couldn't reach the sign-in system when it was approved; staff will send it."
-    : "makerspace staff check this role before it reaches you, and nothing more is needed from you.";
+    ? "Syndra couldn't reach the sign-in system when it was approved; makerspace staff will send it."
+    : "Makerspace staff check this role before it reaches you, and nothing more is needed from you.";
 }
 
 export function askHref(projectId: string, roleKey: string, extend = false): string {
@@ -99,13 +99,12 @@ function ChangeRow({
         </span>
         {change.note && (
           <span className="text-[14px] leading-[1.55] [text-wrap:pretty]">
-            &ldquo;{change.note}&rdquo;
             {change.by && (
               <span className="text-muted">
-                {" "}
-                — <UserName id={change.by} />
+                <UserName id={change.by} />:{" "}
               </span>
             )}
+            &ldquo;{change.note}&rdquo;
           </span>
         )}
         {change.kind === "request_declined" && (
@@ -141,10 +140,10 @@ function describe(change: MyChange, trigger?: string, endsNow: string | null = n
       }
       return change.waiting
         ? {
-            word: "Approved",
-            tone: "warn",
+            word: "On its way",
+            tone: "neutral",
             pre,
-            post: ` was approved${until}. It isn't on your account yet: ${waitClause(change.wait_reason)}`,
+            post: ` was approved${until}. ${waitClause(change.wait_reason)}`,
           }
         : { word: "Approved", tone: "healthy", pre, post: ` was approved${until}.` };
     case "request_declined": {

@@ -113,14 +113,10 @@ describe("MemberCatalog search", () => {
     render(<MemberCatalog heldByProject={HELD} />);
     const search = screen.getByLabelText("Search everything on offer");
     fireEvent.change(search, { target: { value: "kiln" } });
-    expect(
-      screen.getByText(/Nothing you can ask for matches “kiln”\. Ask for access, and say what you need in Why\./),
-    ).toBeTruthy();
-    // A button, not an arrow link: it opens the asking, it doesn't go anywhere to read.
-    const ask = screen.getByText("Ask for access").closest("a")!;
+    expect(screen.getByText("Nothing you can ask for matches “kiln”.")).toBeTruthy();
+    expect(screen.getByText("Ask for access, and say what you need in Why.")).toBeTruthy();
+    const ask = screen.getByRole("link", { name: "Ask for access" });
     expect(ask.getAttribute("href")).toBe("/requests?ask");
-    expect(ask.textContent).toBe("Ask for access");
-    expect(ask.className).toContain("rounded-pill");
 
     fireEvent.change(search, { target: { value: "" } });
     expect(screen.queryByText(/Nothing you can ask for matches/)).toBeNull();

@@ -52,6 +52,7 @@ vi.mock("@/lib/queries/useCatalogUsers", () => ({
 // here to a fixed name is enough to prove the row renders the name rather
 // than the raw id it's given.
 vi.mock("@/components/names", () => ({
+  UserAvatar: () => null,
   ProjectName: () => null,
   RoleRef: () => null,
   UserName: ({ id }: { id: string }) => <span>{id === "u1" ? "Ada Lovelace" : id}</span>,

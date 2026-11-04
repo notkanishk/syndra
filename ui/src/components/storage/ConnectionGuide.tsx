@@ -17,13 +17,17 @@ import { sortByName } from "@/lib/sort";
  * says SMB to the member except the address itself.
  */
 
-const DEVICES: Array<{ value: Device; label: string }> = [
-  { value: "mac", label: "Mac" },
-  { value: "windows", label: "Windows" },
-  { value: "linux", label: "Linux" },
-  { value: "ios", label: "iPhone/iPad" },
-  { value: "android", label: "Android" },
-];
+const DEVICES: Array<{ value: Device; label: string }> = sortByName(
+  [
+    { value: "mac", label: "Mac" },
+    { value: "windows", label: "Windows" },
+    { value: "linux", label: "Linux" },
+    { value: "ios", label: "iPhone/iPad" },
+    { value: "android", label: "Android" },
+  ],
+  (d) => d.label,
+  (d) => d.value,
+);
 
 /** One folder the guide can take a member to. */
 export interface GuideFolder {

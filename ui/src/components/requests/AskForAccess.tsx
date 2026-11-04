@@ -171,10 +171,10 @@ function AskForAccessOpen({
       : !value
         ? "Choose a role to ask for."
         : extend
-          ? `${selfDecides ? "You'll decide this yourself, unless another operator does first. Until then" : "Makerspace staff decide. Until they do"}, it still ends ${formatShortDate(current)}.`
+          ? `${selfDecides ? "You'll decide this yourself, unless another operator does first. Until then" : "Until it's decided"}, it still ends ${formatShortDate(current)}.`
           : selfDecides
             ? "You'll decide this yourself, unless another operator does first."
-            : "Makerspace staff decide.";
+            : undefined;
 
   return (
     <Modal open onClose={onClose} busy={create.isPending} size="sm" labelledBy="request-title">
@@ -203,17 +203,15 @@ function AskForAccessOpen({
                 <ArrivalLine state={arrivedState} role={nameOf(blockedArrival)} />
               ) : (
                 <FieldHint>
-                  Can&rsquo;t find it? Pick the closest one and describe what you actually need in Why.
-                  Makerspace staff read that before deciding.
+                  Can&rsquo;t find it? Pick the closest one and describe what you need in Why.
                 </FieldHint>
               )}
             </div>
 
             {!blockedArrival && extend && keep && keepChoice && current ? (
               <>
-                <p className="text-[14px] leading-[1.55] text-ink">
-                  You have this until {formatShortDate(current)}. Ask to keep it longer, and makerspace
-                  staff decide.
+                <p className="text-[14px] leading-[1.55] text-muted">
+                  You have this until {formatShortDate(current)}. Ask to keep it longer.
                 </p>
                 <div>
                   <FieldLabel>How much longer?</FieldLabel>
@@ -285,24 +283,21 @@ function AskForAccessOpen({
         {result && <ActionOutcome outcome={result.outcome} word={result.word} />}
       </div>
 
-      <ModalFooter note={footerNote}>
+      <ModalFooter note={footerNote} cancel={final ? undefined : { onClick: onClose }}>
         {final ? (
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
         ) : (
-          <>
-            <Button
-              variant="accent"
-              disabled={!value || Boolean(blockedArrival)}
-              /* Why it's off is the footer note's sentence; said once. */
-              isPending={create.isPending}
-              onClick={send}
-            >
-              {extend ? "Ask to keep it" : "Send request"}
-            </Button>
-            <Button onClick={onClose}>Cancel</Button>
-          </>
+          <Button
+            variant="accent"
+            disabled={!value || Boolean(blockedArrival)}
+            /* Why it's off is the footer note's sentence; said once. */
+            isPending={create.isPending}
+            onClick={send}
+          >
+            {extend ? "Ask to keep it" : "Ask for access"}
+          </Button>
         )}
       </ModalFooter>
     </Modal>
@@ -343,7 +338,7 @@ function ArrivalLine({ state, role }: { state: AskState; role: { place: string; 
           : "";
   if (!text) return null;
   return (
-    <p className="mt-2.5 flex items-start gap-2.5 text-[14px] leading-[1.5] text-ink [text-wrap:pretty]">
+    <p className="mt-2.5 flex items-start gap-2.5 text-[14px] leading-[1.5] text-muted [text-wrap:pretty]">
       <StatusDot tone={ARRIVAL_TONE[state.kind] ?? "neutral"} className="mt-[7px]" />
       <span>{text}</span>
     </p>

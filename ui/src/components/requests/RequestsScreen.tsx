@@ -1,10 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Avatar } from "@/components/ui/Avatar";
 import { type StatusTone } from "@/components/ui/Badge";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { StatusSeat } from "@/components/ui/StatusSeat";
@@ -26,8 +26,10 @@ import { FilterPills } from "@/components/ui/Select";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
+import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { Input } from "@/components/ui/Input";
-import { ProjectName, RoleRef, UserName } from "@/components/names";
+import { ProjectName, RoleRef, UserAvatar, UserName } from "@/components/names";
 import { useApplyBulkDecision, useRehearseBulkDecision } from "@/lib/queries/useRequests";
 import type { BulkPlan } from "@/lib/queries/useBulkGrants";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -59,6 +61,7 @@ import dynamic from "next/dynamic";
 // Opened on demand, so it stays out of the page's first load.
 const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").then((m) => m.RehearsalDialog));
 
+type RequestSort = "who" | "when";
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
 
 /**
@@ -143,13 +146,18 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const resolver = useNameResolver();
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
+  // The read comes newest first, so "When" ascending is that order; Who is A to Z.
+  const [sort, setSort, view] = useSort<RequestSort>("when");
 
   // What the read holds, narrowed by the search. A decided row is in it until
   // the refetch lands, and then it is not: the open list is a list of requests
   // still waiting. The search narrows the rows themselves, so a selection and a
   // bulk decision can never reach a request the operator cannot see.
   const rows = useMemo(() => {
-    const read = requests.data ?? [];
+    const read = orderBy(requests.data ?? [], view.sort, {
+      who: (entry) => resolver.resolveUser(entry.requester_id).value?.display_name ?? "",
+      when: (entry) => -new Date(entry.created_at).getTime(),
+    });
     if (!needle) return read;
     return read.filter((entry) => {
       const who = resolver.resolveUser(entry.requester_id).value;
@@ -158,7 +166,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
       return [who?.display_name, who?.email, role?.display_name, humanizeKey(entry.role_key), project?.name]
         .some((text) => text?.toLowerCase().includes(needle));
     });
-  }, [requests.data, needle, resolver]);
+  }, [requests.data, needle, resolver, view.sort]);
 
   // What is drawn: the read, plus the rows that just left it. A decided row
   // keeps its place and its outcome for the beat (Motion 5b), then fades and its
@@ -203,10 +211,10 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const [selecting, setSelecting] = useState(false);
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Requests"
-        lede="What members have asked for. Approve gives them the access for the time they asked, starting now; decline closes it, and they may ask again."
+        lede="What people have asked for. Approve gives them the access for the time they asked, starting now; decline closes it, and they may ask again. A request stays open until you decide."
       />
       {cancelStep}
 
@@ -241,19 +249,26 @@ function OperatorQueue({ userId }: { userId?: string }) {
             <SelectModeToggle active={selecting} onToggle={() => setSelecting((on) => !on)} />
           ) : null
         }
+        read={
+          requests.data ? (
+            <ReadFreshness state={readStateOfQuery(requests)} subject="The request list" className="px-[2px]" />
+          ) : undefined
+        }
       />
 
       <Card>
-        {anyPending && (
-          <CardColumns>
-            {selecting && <span className="w-11 shrink-0 desktop:w-[26px]" />}
-            <span className="w-[170px]">Who</span>
-            <span className="w-[250px]">What they asked for</span>
-            <span className="flex-1">Why</span>
-            <span className="w-[66px]">When</span>
-            <span className="w-[196px]">Decision</span>
-          </CardColumns>
-        )}
+        <CardColumns>
+          {selecting && anyPending && <span className="w-11 shrink-0 desktop:w-[26px]" />}
+          <span className="w-[170px]">
+            <SortHead label="Who" name="who" sort={sort} onSort={setSort} />
+          </span>
+          <span className="w-[250px]">What they asked for</span>
+          <span className="flex-1">Why</span>
+          <span className="w-[66px]">
+            <SortHead label="When" name="when" sort={sort} onSort={setSort} />
+          </span>
+          <span className="w-[196px]">Decision</span>
+        </CardColumns>
         {/* Only open requests can be selected; a decided one is not part of the
             working set, so the first number here is the open count and the
             second is everything the current filter shows. */}
@@ -268,6 +283,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
         )}
 
         <div data-selection-scope {...selection.containerProps} {...leaving.listProps}>
+        <div className={view.className}>
         <ListStates
           isLoading={requests.isLoading}
           error={requests.error}
@@ -315,13 +331,20 @@ function OperatorQueue({ userId }: { userId?: string }) {
                   ) : null}
                 </span>
               )}
-              <Avatar name={undefined} />
-              <div className="w-full truncate text-[15px] font-semibold tablet:w-[170px] tablet:shrink-0">
-                <UserName id={entry.requester_id} />
+              <UserAvatar id={entry.requester_id} />
+              <div className="w-full text-[15px] font-semibold [text-wrap:pretty] tablet:w-[170px] tablet:shrink-0">
+                <Link href={`/users/${encodeURIComponent(entry.requester_id)}`} className="link-hover">
+                  <UserName id={entry.requester_id} />
+                </Link>
               </div>
-              <div className="w-full text-[14.5px] text-ink/80 [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
+              <div className="w-full text-[14.5px] text-ink [text-wrap:pretty] tablet:w-[250px] tablet:min-w-[160px] tablet:shrink">
                 {entry.kind === "extend" && "Keep "}
-                <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+                <Link
+                  href={`/projects/${encodeURIComponent(entry.project_id)}/roles/${encodeURIComponent(entry.role_key)}`}
+                  className="link-hover"
+                >
+                  <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
+                </Link>
                 {catalog.data?.some(
                   (r) =>
                     r.project_id === entry.project_id &&
@@ -337,7 +360,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
               {/* What someone decides on is never cut off (RULES 9b): the reason wraps, and below
                   desktop the row wraps first, the decision seat taking the next line. */}
               <div className="w-full min-w-0 text-[14px] text-muted [text-wrap:pretty] tablet:min-w-[180px] tablet:flex-1">
-                {entry.justification ? `“${entry.justification}”` : "No reason given"}
+                {entry.justification || "No reason given"}
               </div>
               <div className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
                 <Relative iso={entry.created_at} />
@@ -366,13 +389,13 @@ function OperatorQueue({ userId }: { userId?: string }) {
                     </div>
                     {/* A failed write puts the buttons back and says why under them. */}
                     {outcomes[entry.id] && (
-                      <ActionOutcome placement="seat" className="tint-in" outcome={outcomes[entry.id].outcome} />
+                      <ActionOutcome placement="seat" className="tint-in" word="Not decided" outcome={outcomes[entry.id].outcome} />
                     )}
                   </div>
                 ) : outcomes[entry.id] ? (
                   <ActionOutcome
                     placement="seat"
-                    word={outcomes[entry.id].word}
+                    word={outcomes[entry.id].word ?? "Not decided"}
                     outcome={outcomes[entry.id].outcome}
                   />
                 ) : resolved.has(entry.id) ? null : (
@@ -412,11 +435,12 @@ function OperatorQueue({ userId }: { userId?: string }) {
           />
         </ListStates>
         </div>
+        </div>
       </Card>
 
       {/* What this operator has asked for themselves, once they have: the
           member's card, in the member's place (A-04 §2.1). */}
-      {userId && <YourRequests userId={userId} hideWhenEmpty onAsk={() => ask.setOpen(true)} />}
+      {userId && <YourRequests userId={userId} hideWhenEmpty />}
 
       <SelectionBar
         count={selecting ? selection.count : 0}
@@ -434,13 +458,13 @@ function OperatorQueue({ userId }: { userId?: string }) {
       >
         {/* Both open a decision dialog rather than deciding. */}
         <SelectionAction onClick={() => setBulkStatus("approved")}>
-          Review approving these
+          Approve these…
         </SelectionAction>
         {/* Not `danger`: declining a pending request takes nothing away —
             nobody has the access yet. The per-row Decline above (default
             variant) already gets this right; the bulk twin did not. */}
         <SelectionAction onClick={() => setBulkStatus("rejected")}>
-          Review declining these
+          Decline these…
         </SelectionAction>
       </SelectionBar>
 
@@ -500,7 +524,7 @@ function MemberRequests({ userId }: { userId: string }) {
   const { open, setOpen, close: closeDialog, linkedProject, linkedRole } = useAskOnArrival();
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Requests"
         lede="Ask for access, and see what happened to what you asked for. Makerspace staff decide; the answer appears here."
@@ -511,7 +535,7 @@ function MemberRequests({ userId }: { userId: string }) {
         }
       />
 
-      <YourRequests userId={userId} onAsk={() => setOpen(true)} />
+      <YourRequests userId={userId} />
 
       <AskForAccess
         // Remounted per link so the prefill applies to whichever role was
@@ -533,11 +557,9 @@ function MemberRequests({ userId }: { userId: string }) {
  */
 function YourRequests({
   userId,
-  onAsk,
   hideWhenEmpty = false,
 }: {
   userId: string;
-  onAsk: () => void;
   hideWhenEmpty?: boolean;
 }) {
   const requests = useRequestsMine();
@@ -562,7 +584,8 @@ function YourRequests({
         // Neutral, not applied: nothing was given or taken (#51).
         [entry.id]: {
           kind: "no_change",
-          message: "You withdrew this. Nobody will be asked to decide it.",
+          // The seat shows the detail under the word; the message is the sentence for the other placements. Said once each.
+          message: "You withdrew this.",
           detail: "Nobody will be asked to decide it",
         },
       }));
@@ -597,8 +620,7 @@ function YourRequests({
         empty={
           <EmptyState
             title="You haven't asked for anything yet."
-            guidance="If there's a machine you need and can't use, ask here and makerspace staff will decide."
-            action={{ label: "Ask for access", onClick: onAsk }}
+            guidance="If there's a machine you need and can't use, ask for it with the button above."
           />
         }
       >
@@ -612,14 +634,17 @@ function YourRequests({
                   two identical rows. */}
               <div className="text-[15px] font-semibold [text-wrap:pretty]">
                 {entry.kind === "extend" && "Keep "}
-                <ProjectName id={entry.project_id} /> ·{" "}
+                <Link href={`/projects/${encodeURIComponent(entry.project_id)}`} className="link-hover">
+                  <ProjectName id={entry.project_id} />
+                </Link>{" "}
+                ·{" "}
                 {resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
                   humanizeKey(entry.role_key)}
               </div>
               <div className="text-[13.5px] text-faint [text-wrap:pretty]">
                 {describeAskForMember(entry, terms.data)}
               </div>
-              <div className="text-[13.5px] text-faint [text-wrap:pretty]">
+              <div className="text-[13.5px] text-muted [text-wrap:pretty]">
                 {entry.justification || "No reason given"}
               </div>
             </div>
@@ -646,7 +671,7 @@ function YourRequests({
                     }
                   />
                   {outcomes[entry.id] && (
-                    <ActionOutcome placement="seat" className="tint-in" outcome={outcomes[entry.id]!} />
+                    <ActionOutcome placement="seat" className="tint-in" word="Not withdrawn" outcome={outcomes[entry.id]!} />
                   )}
                 </div>
               )}
