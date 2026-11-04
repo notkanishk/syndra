@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -204,6 +205,8 @@ export function UnexplainedAccess() {
       `${resolver.resolveProject(item.project_id).value?.name ?? ""} · ${humanizeKey(item.role_keys[0] ?? "")}`;
     return { who, what };
   }, [resolver]);
+  // The queue emptied in front of this operator, by their own act (S13): its all-clear rises and blooms once.
+  const clearedByMe = useQueueCleared(returned, !drift.isLoading && !drift.error, true).cleared?.mine != null;
   const items = useMemo(
     () =>
       applyDriftFilters(returned, filters).filter((item) =>
@@ -428,9 +431,11 @@ export function UnexplainedAccess() {
             />
           ) : (
             <EmptyState
-              title="Everything is explained."
+              title="Everyone inside is on the list, and everyone on the list is inside."
               guidance="Every piece of access in Zitadel traces back to something Syndra did, and everything Syndra gave is there."
               resolved
+              lift={clearedByMe}
+              bloom={clearedByMe}
             />
           )}
         </Card>

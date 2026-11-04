@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 
@@ -107,6 +108,7 @@ export function WithdrawnAccess() {
   const resolver = useNameResolver();
 
   const rows = useMemo(() => query.data?.revocations ?? [], [query.data]);
+  const clearedByMe = useQueueCleared(rows, !query.isLoading && !query.error, true).cleared?.mine != null;
   const [search, setSearch] = useState("");
   const [where, setWhere] = useState("");
   // Most recent first, as the board draws it: `when` is how long ago, so ascending is newest.
@@ -257,9 +259,11 @@ export function WithdrawnAccess() {
               skeleton={<RowSkeleton rows={4} label="Loading unfinished revocations" />}
               empty={
                 <EmptyState
-                  title="Nothing is unfinished."
+                  title="Everyone whose access was revoked is out."
                   guidance="Every revocation has reached the system it was sent to."
                   resolved
+                  lift={clearedByMe}
+                  bloom={clearedByMe}
                 />
               }
             >

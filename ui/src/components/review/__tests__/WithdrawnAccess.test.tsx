@@ -99,7 +99,7 @@ describe("what has not gone away yet", () => {
         <WithdrawnAccess />
       </QueryClientProvider>,
     );
-    expect(await screen.findByText("Nothing is unfinished.")).toBeInTheDocument();
+    expect(await screen.findByText("Everyone whose access was revoked is out.")).toBeInTheDocument();
     expect(screen.getByText(/This list/)).toBeInTheDocument();
   });
 

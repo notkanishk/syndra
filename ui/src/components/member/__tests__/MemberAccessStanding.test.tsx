@@ -2,13 +2,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { MemberAccess, summarySentence } from "@/components/member/MemberAccess";
-import { formatShortDate } from "@/lib/format";
+import { MemberAccess } from "@/components/member/MemberAccess";
 
 const access = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 const grants = vi.hoisted(() => ({ value: [] as unknown[] }));
 const grantsRead = vi.hoisted(() => ({ failed: false }));
 const changes = vi.hoisted(() => ({ value: [] as unknown[] }));
+const mine = vi.hoisted(() => ({ requests: [] as unknown[], targets: [] as unknown[] }));
 
 vi.mock("@/components/member/MemberCatalog", () => ({ MemberCatalog: () => null }));
 vi.mock("@/components/names", () => ({
@@ -20,6 +20,8 @@ vi.mock("@/lib/queries/useUsers", () => ({
   useUserAccess: () => access.value,
   useUserGrants: () => ({ data: grantsRead.failed ? undefined : grants.value, error: grantsRead.failed ? new Error("down") : null }),
 }));
+vi.mock("@/lib/queries/useMyStorage", () => ({ useMyStorage: () => ({ data: mine.targets }) }));
+vi.mock("@/lib/queries/useRequests", () => ({ useRequestsMine: () => ({ data: mine.requests }) }));
 vi.mock("@/lib/queries/useMyChanges", () => ({
   useMyChanges: () => ({ data: changes.value }),
 }));
@@ -79,6 +81,8 @@ function reset() {
   grants.value = [];
   grantsRead.failed = false;
   changes.value = [];
+  mine.requests = [];
+  mine.targets = [];
 }
 
 /**
@@ -110,7 +114,7 @@ describe("MemberAccess standing", () => {
     render(<MemberAccess session={session} />);
     expect(screen.queryByText("Not there yet")).toBeNull();
     expect(screen.queryByText("Couldn’t check")).toBeNull();
-    expect(screen.getByText("Checking what you can use.")).toBeTruthy();
+    expect(screen.getByText("Zitadel hasn't answered yet, so your roles aren't shown.")).toBeTruthy();
   });
 
   // A-06 §2, N23: Zitadel never read. The card headers stay, with no count, and
@@ -123,7 +127,7 @@ describe("MemberAccess standing", () => {
     expect(screen.getByText("Fabrication")).toBeTruthy();
     expect(screen.queryByText("Laser cutter · Member")).toBeNull();
     expect(screen.queryByText("Given to you")).toBeNull();
-    expect(screen.getByText("Checking what you can use.")).toBeTruthy();
+    expect(screen.getByText("Zitadel hasn't answered yet, so your roles aren't shown.")).toBeTruthy();
     expect(screen.queryByText(/\b\d+ roles?\b/)).toBeNull();
   });
 
@@ -163,11 +167,7 @@ describe("MemberAccess when the grants were not read", () => {
     render(<MemberAccess session={session} />);
     expect(screen.getAllByText("End date unavailable")).toHaveLength(2);
     expect(screen.queryByText("Given to you")).toBeNull();
-    expect(screen.getByText("Two roles across one room.")).toBeTruthy();
-  });
-
-  it("leaves the end out of the summary until the list is read", () => {
-    expect(summarySentence(4, 2, undefined)).toBe("Four roles across two rooms.");
+    expect(screen.getByText("Nothing needs you right now.")).toBeTruthy();
   });
 });
 
@@ -189,37 +189,23 @@ describe("MemberAccess expiry lives on its row", () => {
     // No separate warning box any more.
     expect(container.querySelector(".warn-note")).toBeNull();
   });
-
-  it("puts it in the summary", () => {
-    const first = formatShortDate("2026-10-20T10:00:00Z");
-    expect(summarySentence(4, 2, ["2026-10-20T10:00:00Z"])).toBe(
-      `Four roles across two rooms. One ends on ${first}.`,
-    );
-    expect(summarySentence(4, 2, ["2026-10-20T10:00:00Z", "2026-11-02T10:00:00Z"])).toBe(
-      `Four roles across two rooms. 2 roles end, the first on ${first}.`,
-    );
-    expect(summarySentence(4, 2, ["2026-10-20T10:00:00Z", "2026-11-02T10:00:00Z", "2026-12-02T10:00:00Z"])).not.toMatch(
-      /run out|runs out/,
-    );
-    expect(summarySentence(1, 1, [])).toBe("One role across one room.");
-    expect(summarySentence(undefined, 0, [])).toBe("Checking what you can use.");
-  });
 });
 
 describe("MemberAccess recent changes", () => {
-  it("leads the page when there is news, and is not drawn on a quiet month", () => {
+  it("leads the page when there is news, and keeps its seat on a quiet month", () => {
     reset();
     access.value = view(COMPLETE, ["laser"]);
     const quiet = render(<MemberAccess session={session} />);
-    expect(screen.queryByText("Recent changes")).toBeNull();
+    expect(screen.getByText("Recent changes")).toBeTruthy();
+    expect(screen.getByText("Nothing has changed in the last 30 days.")).toBeTruthy();
     quiet.unmount();
 
     changes.value = [
       { kind: "request_declined", at: inDays(-2), project_id: "p1", role_key: "mill", by: "op", note: "n", via: null },
     ];
-    render(<MemberAccess session={session} />);
+    const { container } = render(<MemberAccess session={session} />);
     const heading = screen.getByText("Recent changes");
-    const firstCardTitle = screen.getByText("Fabrication");
+    const firstCardTitle = container.querySelector("#card-p1")!;
     expect(heading.compareDocumentPosition(firstCardTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("link", { name: "All your requests" })).toBeTruthy();
   });
@@ -302,7 +288,53 @@ describe("MemberAccess first paint", () => {
     reset();
     access.value = { isLoading: true, error: null, data: undefined };
     render(<MemberAccess session={session} />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hi Sam.");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^(Morning|Afternoon|Evening), Sam\./);
+    expect(screen.getByText("Checking what you can use.")).toBeTruthy();
     expect(screen.queryByLabelText("Loading your access")).toBeNull();
+  });
+});
+
+describe("MemberAccess header line and cards", () => {
+  it("says the calm line when nothing needs them", () => {
+    reset();
+    access.value = view(COMPLETE, ["laser", "mill"]);
+    render(<MemberAccess session={session} />);
+    expect(screen.getByText("Nothing needs you right now.")).toBeTruthy();
+  });
+
+  // Rung 1 names the role and offers the jump; the row keeps the date (G12).
+  it("leads with an ending role and jumps to its card", () => {
+    reset();
+    grants.value = [{ project_id: "p1", role_key: "mill", expires_at: inDays(7) }];
+    access.value = view(COMPLETE, ["laser", "mill"]);
+    const { container } = render(<MemberAccess session={session} />);
+    expect(screen.getByText("Mill · Operator in Fabrication ends in 7 days.")).toBeTruthy();
+    const jump = screen.getByRole("button", { name: /Fabrication/ });
+    expect(container.querySelector("#card-p1")).toBeTruthy();
+    expect(jump.textContent).toContain("↓");
+  });
+
+  it("sends a storage step to Network storage", () => {
+    reset();
+    mine.targets = [{ target: "truenas", entitled: true, credential: { set: false } }];
+    access.value = view(COMPLETE, ["laser", "mill"]);
+    render(<MemberAccess session={session} />);
+    expect(screen.getByText("Your TrueNAS account is ready. Set its password to connect.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Network storage/ })).toHaveAttribute("href", "/storage");
+  });
+
+  it("orders the project cards A to Z whatever order the API gave", () => {
+    reset();
+    const base = view(COMPLETE, ["laser"]) as { data: { projects: Array<Record<string, unknown>> } };
+    const [fab] = base.data.projects;
+    base.data.projects = [
+      { ...fab, project_id: "p9", project_name: "Wood shop", observed_role_keys: [] },
+      { ...fab, project_id: "p2", project_name: "3D printing", observed_role_keys: [] },
+      { ...fab, project_id: "p1", project_name: "Laser cutting", observed_role_keys: [] },
+    ];
+    access.value = base;
+    const { container } = render(<MemberAccess session={session} />);
+    const titles = [...container.querySelectorAll("[id^='card-']")].map((el) => el.textContent);
+    expect(titles).toEqual(["3D printing", "Laser cutting", "Wood shop"]);
   });
 });

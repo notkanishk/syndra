@@ -6,7 +6,10 @@ import { useState } from "react";
 import { ChimeToggle } from "@/components/settings/ChimeToggle";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
+import { SyndraMark, WELCOMED } from "@/components/shell/SyndraMark";
+import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Segmented } from "@/components/ui/Select";
+import { Unfold } from "@/components/ui/Unfold";
 import { ACCOUNT_NAV } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
@@ -32,6 +35,7 @@ const OWN_NOTES: Record<string, string> = {
  */
 export function AccountSheet({ session }: { session: SessionUser }) {
   const [open, setOpen] = useState(false);
+  const [about, setAbout] = useState(false);
   const { theme, setTheme } = useTheme();
   const installer = useInstallPrompt();
 
@@ -127,6 +131,35 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             <ChimeToggle />
           </div>
 
+          {/* The one home of the story of the name (A-18 H1): every person reaches
+              this sheet at every width. Closed at rest, never pushed at anyone. */}
+          <div className="rounded-inner border border-line">
+            <button
+              type="button"
+              aria-expanded={about}
+              onClick={() => setAbout((on) => !on)}
+              className="flex min-h-[44px] w-full items-center gap-2.5 rounded-inner py-1.5 pl-4 pr-2 text-left text-[14.5px] hover-tint"
+            >
+              <SyndraMark size={16} />
+              <span className="flex-1">About Syndra</span>
+              <FoldChevron open={about} />
+            </button>
+            <Unfold open={about}>
+              <div className="flex flex-col gap-2.5 pb-4 pl-[42px] pr-4 pt-1">
+                <p className="text-[14.5px] leading-[1.55]">
+                  Syndra is named for Syn. In the Norse stories she keeps the door of the hall, and
+                  shuts it on those who should not enter. When a case is argued, she speaks for the
+                  one who refuses it.
+                </p>
+                <p className="text-[14.5px] leading-[1.55] text-muted">
+                  In the makerspace, Zitadel is the door. It checks that you are who you say you are.
+                  Syndra keeps the list of what that lets you use, and the reason for every name on it.
+                </p>
+                <p className="text-[12.5px] text-faint">Built in the lab it runs. Powered by Zitadel.</p>
+              </div>
+            </Unfold>
+          </div>
+
           {/* Offered here rather than as a banner on arrival. A first-load
               prompt interrupts somebody who came to read one thing and gets
               dismissed by reflex; this is where a member already is when they
@@ -142,7 +175,16 @@ export function AccountSheet({ session }: { session: SessionUser }) {
         {/* Below a hairline and last, because it is the one thing here that
             ends the session rather than adjusting it. */}
         <div className="mt-3 border-t border-line px-6 pb-[22px] pt-4">
-          <form action="/auth/logout" method="post">
+          <form
+            action="/auth/logout"
+            method="post"
+            onSubmit={() => {
+              // The next sign-in is a new first paint: the mark lights again.
+              try {
+                window.sessionStorage.removeItem(WELCOMED);
+              } catch {}
+            }}
+          >
             <Button type="submit" variant="outline" className="w-full">
               Sign out
             </Button>
