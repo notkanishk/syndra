@@ -357,14 +357,69 @@ var fromToken = map[string]bool{
 	AttrGivenName: true, AttrFamilyName: true, AttrName: true, AttrUsername: true, AttrEmail: true,
 }
 
-// Shape renders one profile against one set of facts, rows in order.
+// Shape renders one profile against one set of facts, in the editor's order
+// (A-16 §1): the roles claim's key first, then every other key A to Z, and A to
+// Z inside an object. Apps don't read key order; the order is the operator's,
+// so the token reads across from the list that edits it. Rows sharing a path
+// keep their saved order, so the first still wins.
 func Shape(p Profile, f Facts) *Object {
 	out := NewObject()
-	for _, c := range p.Claims {
+	for _, c := range ordered(p.Claims) {
 		if v, ok := c.value(p, f); ok && len(c.Path) > 0 {
 			place(out, c.Path, v)
 		}
 	}
+	return out
+}
+
+// RolesKey is the top-level key of the roles claim: the first top-level roles
+// row, else the first roles row inside an object, else "". The UI's
+// `rolesIndex` in lib/claims.ts is the same rule.
+func RolesKey(claims []Claim) string {
+	nested := ""
+	for _, c := range claims {
+		if c.Kind != KindRoles || len(c.Path) == 0 {
+			continue
+		}
+		if len(c.Path) == 1 {
+			return c.Path[0]
+		}
+		if nested == "" {
+			nested = c.Path[0]
+		}
+	}
+	return nested
+}
+
+// keyLess is A to Z for claim keys, case aside. Keys are ASCII (validClaimKey),
+// so this and lib/claims.ts's `compareKeys` agree byte for byte.
+func keyLess(a, b string) int {
+	if c := strings.Compare(strings.ToLower(a), strings.ToLower(b)); c != 0 {
+		return c
+	}
+	return strings.Compare(a, b)
+}
+
+func ordered(claims []Claim) []Claim {
+	hero := RolesKey(claims)
+	out := slices.Clone(claims)
+	slices.SortStableFunc(out, func(a, b Claim) int {
+		if len(a.Path) == 0 || len(b.Path) == 0 {
+			return len(a.Path) - len(b.Path)
+		}
+		if ah, bh := a.Path[0] == hero, b.Path[0] == hero; ah != bh {
+			if ah {
+				return -1
+			}
+			return 1
+		}
+		for i := 0; i < len(a.Path) && i < len(b.Path); i++ {
+			if c := keyLess(a.Path[i], b.Path[i]); c != 0 {
+				return c
+			}
+		}
+		return len(a.Path) - len(b.Path)
+	})
 	return out
 }
 
@@ -568,6 +623,9 @@ func Validate(p Profile) error {
 				return RowError{i, fmt.Sprintf("%q is not a valid claim name", seg)}
 			}
 		}
+		if ZitadelOwns(c.Path[0]) {
+			return RowError{i, fmt.Sprintf("`%s` is Zitadel's own claim, so Zitadel drops this one. Name it something else, or put it inside an object.", c.Path[0])}
+		}
 		if err := validateKind(c); err != "" {
 			return RowError{i, err}
 		}
@@ -640,6 +698,24 @@ func validClaimKey(key string) bool {
 		}
 	}
 	return true
+}
+
+// zitadelOwns is the top-level keys an append_claims entry can never set
+// (claims-delivery-integrity assessment Z-g, from Zitadel's userinfo.go
+// appendOrLogClaim): the registered claims live in zitadel/oidc's struct fields,
+// so an appended one is silently ineffective, and a `urn:zitadel:iam` key is
+// dropped. `email`, `name` and `preferred_username` are not here: Zitadel keeps
+// its own wherever it sends them (userinfo, the ID token), but an access token
+// carries an appended one, so they stay legal. The editor's menu greys them
+// instead (A-16 §3, ZITADEL_SENDS in lib/claims.ts).
+var zitadelOwns = map[string]bool{
+	"sub": true, "aud": true, "iss": true, "exp": true, "iat": true, "nbf": true, "jti": true, "client_id": true,
+}
+
+// ZitadelOwns reports whether a top-level key is one Zitadel never lets an
+// action set. lib/claims.ts's `zitadelOwns` is the same list.
+func ZitadelOwns(key string) bool {
+	return zitadelOwns[key] || strings.HasPrefix(key, "urn:zitadel:iam")
 }
 
 func sortedKeys[V any](m map[string]V) []string {

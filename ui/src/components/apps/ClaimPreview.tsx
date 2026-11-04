@@ -131,9 +131,11 @@ export function ClaimPreview({
               <Crossfade id={verdict.text} inline>
                 <span className="text-[14.5px] font-semibold text-ink">{verdict.text}</span>
               </Crossfade>
-              <Button size="sm" aria-expanded={open} onClick={() => setChoice({ bad, open: !open })}>
-                {open ? "Hide the checks" : "Show the checks"}
-              </Button>
+              <span className="ml-1 inline-flex">
+                <Button size="sm" aria-expanded={open} onClick={() => setChoice({ bad, open: !open })}>
+                  {open ? "Hide the checks" : "Show the checks"}
+                </Button>
+              </span>
             </div>
             <Unfold open={open}>
               <div className="px-5 pb-4 pt-0.5">

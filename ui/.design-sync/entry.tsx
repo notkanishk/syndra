@@ -24,7 +24,6 @@ export * from "@/components/ui/Card";
 export * from "@/components/ui/CheckTrail";
 export * from "@/components/ui/Choice";
 export * from "@/components/ui/ChoiceRow";
-export * from "@/components/ui/ClaimRow";
 export * from "@/components/ui/CommandBlock";
 export * from "@/components/ui/CopiedSeat";
 export * from "@/components/ui/CopyableValue";

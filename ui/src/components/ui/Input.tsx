@@ -5,15 +5,22 @@ import React, { useRef } from "react";
 import { TINT_MS, useExitPhase } from "@/lib/motion";
 
 /**
+ * A field at the sm control's height (A-16 §4): 34px with a mouse, the 44px
+ * floor below desktop, as `PILL.sm` is for a button. For fields that sit in a
+ * card's rows (the claims editor), where the 46px field was the outsized one.
+ */
+export const DENSE_FIELD = "min-h-[44px] py-[5px] text-[13.5px] desktop:min-h-0";
+
+/**
  * Text input. 14px radius rather than a pill: a field the operator types a
  * claim name or a date into should read as a container, not as a control.
  */
-export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  function Input({ className = "", ...props }, ref) {
+export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { dense?: boolean }>(
+  function Input({ className = "", dense = false, ...props }, ref) {
     return (
       <input
         ref={ref}
-        className={`block w-full rounded-inner border border-line-strong bg-transparent px-[15px] py-3 text-[15px] text-ink motion-tint placeholder:text-faint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${className}`}
+        className={`block w-full rounded-inner border border-line-strong bg-transparent px-[15px] ${dense ? DENSE_FIELD : "py-3 text-[15px]"} text-ink motion-tint placeholder:text-faint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${className}`}
         {...props}
       />
     );
