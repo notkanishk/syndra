@@ -261,6 +261,13 @@ describe("Pending changes · board layout", () => {
     expect(screen.getByRole("button", { name: "Send 2 changes" })).toBeEnabled();
   });
 
+  it("keeps a disabled Send changes, with no count, when nothing is waiting", () => {
+    pending.data = [];
+    renderPending();
+    expect(screen.getByRole("button", { name: "Send changes" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Send 0/ })).not.toBeInTheDocument();
+  });
+
   it("names no count until the list has been read", () => {
     load.loading = true;
     renderPending();

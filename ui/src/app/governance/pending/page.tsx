@@ -38,7 +38,7 @@ import { Relative } from "@/components/ui/Time";
 import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
 
 /** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
-const sendLabel = (known: boolean, n: number) => (known ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
+const sendLabel = (known: boolean, n: number) => (known && n > 0 ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
 
 /**
  * S3 · Automation › Pending changes.

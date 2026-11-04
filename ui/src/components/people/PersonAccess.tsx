@@ -34,9 +34,10 @@ import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card } from "@/components/ui/Card";
+import { CopyableValue } from "@/components/ui/CopyableValue";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
-import { Tinted, Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/components/ui/Unfold";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { WaitsMark } from "@/components/ui/WaitsMark";
@@ -286,7 +287,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                 // row drops a falsy item and its dot together, so it goes at once.
                 advanced ? (
                   <span key="id" className="tint-in">
-                    <Mono>{user.id}</Mono>
+                    <CopyableValue inline value={user.id} label="Zitadel ID" />
                   </span>
                 ) : null,
               ]}
@@ -496,7 +497,6 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                     userId={userId}
                     projectId={project.project_id}
                     id={zitadelGrantByProject.get(project.project_id)}
-                    showId={advanced && isOperator}
                     isOperator={isOperator}
                     loading={upstreamGrants.isLoading}
                     // Absent because nothing has been sent yet is not absent
@@ -707,8 +707,8 @@ function UnexplainedRoles({
  * three said anything the others did not.
  *
  * Split by what each can actually know. A grant in Zitadel is per (user,
- * project) and carries every role, so the heading is the right place for what
- * its id is and whether it exists at all. When Zitadel was read is true for the
+ * project) and carries every role, so the heading is the right place for whether
+ * it exists at all. When Zitadel was read is true for the
  * whole page and is said once, on the read line. Whether one particular role is
  * in the grant differs per row, so that stays on the row.
  *
@@ -721,7 +721,6 @@ function ZitadelGrantId({
   userId,
   projectId,
   id,
-  showId,
   isOperator,
   loading,
   unsent,
@@ -730,8 +729,6 @@ function ZitadelGrantId({
   userId: string;
   projectId: string;
   id: string | undefined;
-  /** The raw grant id is an operator's handle for Zitadel's console or a ticket. */
-  showId: boolean;
   isOperator: boolean;
   loading: boolean;
   /** Every role here is still queued, so Zitadel has not been told yet. */
@@ -745,15 +742,8 @@ function ZitadelGrantId({
     }
     return <span className="text-[13px] text-faint">No grant in Zitadel yet</span>;
   }
-  // The read time is on the page's read line; only the handle is left here.
-  // An inline bit of the line, not a region: it tints with the view (A-08 §3).
-  return (
-    <Tinted show={showId}>
-      <span className="text-[13px] text-faint">
-        Grant <Mono className="font-normal text-faint">{id}</Mono>
-      </span>
-    </Tinted>
-  );
+  // The grant id lives in the role's lineage, never in a heading (owner, A-17 Q6).
+  return null;
 }
 
 /** The one window for ending access (A-04 §4): a row inside it offers Extend. */
@@ -1021,7 +1011,7 @@ function RoleGroup({
                   )}
                   {grant?.granted_by && (
                     <>
-                      <dt className="text-faint">Granted by</dt>
+                      <dt className="text-faint">Given by</dt>
                       <dd>
                         <UserName id={grant.granted_by} />
                       </dd>

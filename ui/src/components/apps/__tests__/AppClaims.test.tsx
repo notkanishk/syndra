@@ -151,17 +151,18 @@ beforeEach(() => {
 });
 
 describe("an app's header", () => {
-  it("names the app and links its project; the client id only in Advanced", async () => {
+  it("names the app and links its project; the client id is not in the meta", async () => {
     renderScreen();
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("NetBird");
     for (const link of screen.getAllByRole("link", { name: /Network/ })) expect(link).toHaveAttribute("href", "/projects/pNet");
-    expect(screen.queryByText("301928374650192837")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).not.toHaveTextContent("301928374650192837");
   });
 
-  it("keeps the client id in Advanced", async () => {
-    api.view.advanced = true;
+  it("gives the client id its own copyable row in the tools card, in either view", async () => {
     renderScreen();
-    expect(await screen.findByText("301928374650192837")).toBeInTheDocument();
+    const row = (await screen.findByText("Client ID")).parentElement!;
+    expect(within(row).getByText("301928374650192837")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: /Copy client id|Select client id/i })).toBeInTheDocument();
   });
 
   it("puts people in 7 days and the last sign-in in the meta", async () => {

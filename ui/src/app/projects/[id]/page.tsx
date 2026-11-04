@@ -9,6 +9,7 @@ import { ProjectClaimDefault } from "@/components/projects/ProjectClaimDefault";
 import { CreateRoleDialog } from "@/components/roles/CreateRoleDialog";
 import { EmptyState, ErrorState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
+import { CopyableValue } from "@/components/ui/CopyableValue";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
@@ -139,7 +140,7 @@ export default function ProjectDetailPage({
                 {projectRoles.length} {projectRoles.length === 1 ? "role" : "roles"}
               </span>
               <Tinted show={advanced}>
-                <Mono className="text-faint">{id}</Mono>
+                <CopyableValue inline value={id} label="Project ID" />
               </Tinted>
             </span>
           )

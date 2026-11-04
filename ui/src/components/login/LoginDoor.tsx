@@ -197,7 +197,7 @@ export function LoginDoor({
             not more of Syn's biography — the voice is a doorkeeper, not a
             character, and a grant here always carries the reason it exists. */}
         <p className="login-syn" data-door="syn">
-          Syn — the goddess who keeps the door. Syndra keeps the list, and the
+          Syn, the goddess who keeps the door. Syndra keeps the list, and the
           reason for every name on it.
         </p>
         <p className="login-credit" data-door="credit">

@@ -280,4 +280,18 @@ describe("sheets push, they do not stack", () => {
     expect(page).not.toHaveBeenCalled();
     window.removeEventListener("keydown", page);
   });
+
+  it("puts Cancel first and the act last, and the first focus lands on the safe half (A-17 Q1)", () => {
+    render(
+      <Modal open={true} onClose={() => {}}>
+        <ModalFooter cancel={{ onClick: () => {} }}>
+          <button type="button">Revoke it</button>
+        </ModalFooter>
+      </Modal>,
+    );
+    const names = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(names.indexOf("Cancel")).toBeGreaterThan(-1);
+    expect(names.indexOf("Cancel")).toBeLessThan(names.indexOf("Revoke it"));
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "Revoke it" }));
+  });
 });

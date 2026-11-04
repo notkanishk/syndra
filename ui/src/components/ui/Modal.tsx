@@ -599,10 +599,10 @@ export function ModalHeader({
 /**
  * Where a dialog's Cancel sits beside its act (A-17 G4, owner's question Q1).
  * Every footer with a Cancel passes it as `cancel`, so this one line orders
- * them all. `false` keeps what most dialogs did when the question was asked:
- * the act first, Cancel after it.
+ * them all. Cancel first, the act last (owner, A-17 Q1, 5 Nov): the focus
+ * trap lands on the safe half and the act is where the eye ends.
  */
-export const CANCEL_FIRST = false;
+export const CANCEL_FIRST = true;
 
 export function ModalFooter({
   children,

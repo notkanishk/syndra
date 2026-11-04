@@ -1353,7 +1353,7 @@ function explainBody(item: DriftTriageItem, nameOf: (id?: string) => string | un
         ? ` Zitadel was still holding it on ${formatShortDate(p.last_observed_at)}.`
         : "";
       const removedBy = nameOf(item.upstream_actor) ? ` Removed${by(item.upstream_actor)}.` : "";
-      return `Granted${who}${why}. Syndra applied it on ${formatShortDate(
+      return `Given${who}${why}. Syndra applied it on ${formatShortDate(
         p.applied_at,
       )} and Zitadel accepted it.${held} It is not there now, so somebody removed it.${removedBy}`;
     }
@@ -1362,12 +1362,12 @@ function explainBody(item: DriftTriageItem, nameOf: (id?: string) => string | un
       const when = p.granted_at ? ` on ${formatShortDate(p.granted_at)}` : "";
       const why = p.reason ? `: ${p.reason}` : "";
       const removedBy = nameOf(item.upstream_actor) ? ` Removed${by(item.upstream_actor)}.` : "";
-      return `Granted${who}${when}${why}. Zitadel was still holding it on ${formatShortDate(
+      return `Given${who}${when}${why}. Zitadel was still holding it on ${formatShortDate(
         p.last_observed_at,
       )} and does not now, so somebody removed it there.${removedBy}`;
     }
     if (p?.granted_at) {
-      return `Granted${by(p.granted_by)} on ${formatShortDate(
+      return `Given${by(p.granted_by)} on ${formatShortDate(
         p.granted_at,
       )}. Zitadel has never been seen holding it, so the change most likely never went through. Check Pending changes.`;
     }

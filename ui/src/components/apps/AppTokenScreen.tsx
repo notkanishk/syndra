@@ -9,11 +9,10 @@ import { SignInLookup } from "@/components/people/SignInLookup";
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Mono } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { CopyableValue } from "@/components/ui/CopyableValue";
 import { BELOW_HEADER, PageHeader } from "@/components/ui/PageHeader";
-import { Tinted } from "@/components/ui/Unfold";
 import { ApiError, request } from "@/lib/api-client";
 import { rowProblems, type SayContext } from "@/lib/claims";
 import { describeFailure } from "@/lib/outcome";
@@ -36,6 +35,7 @@ import type { CheckContext } from "./claim-words";
 import { ClaimHistory } from "./ClaimHistory";
 import { ClaimPreview } from "./ClaimPreview";
 import { DebugMode } from "./DebugMode";
+import { ToolRow } from "./ToolRow";
 import { appTemplateId, ShapeCard } from "./ShapeCard";
 import { draftFrom, type ShapeDraft } from "./shape-draft";
 import { CopySheet, SaveSummary, TemplateSheet } from "./ShapeSheets";
@@ -170,9 +170,6 @@ function AppClaims({ applicationId }: { applicationId: string }) {
                 <span aria-hidden>·</span> {signInMeta}
               </span>
             )}
-            <Tinted show={advanced && Boolean(shape.client_id)}>
-              <span aria-hidden>·</span> client <Mono>{shape.client_id}</Mono>
-            </Tinted>
           </span>
         }
         actions={
@@ -223,6 +220,11 @@ function AppClaims({ applicationId }: { applicationId: string }) {
 
       {/* Quiet tools (A-15 §6): one card, a settings row each; nothing happens without a named button. */}
       <Card className="[&>.row-divider:first-child]:border-t-0">
+        {shape.client_id && (
+          <ToolRow label="Client ID">
+            <CopyableValue value={shape.client_id} label="Client ID" />
+          </ToolRow>
+        )}
         {signIns.data?.receiving && signIns.data.last_at && <AppSignInStrip usage={signIns.data} />}
         <DebugMode appId={applicationId} ctx={{ ...ctx, profile: shape.profile, draft: undefined }} />
         <ClaimHistory appId={applicationId} ctx={say} project={project} templates={templates} />

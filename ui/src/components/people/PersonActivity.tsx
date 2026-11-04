@@ -291,7 +291,7 @@ function ActivityRow({ entry, userId }: { entry: AuditEntry; userId: string }) {
         {formatClock(entry.created_at)}
       </span>
 
-      {/* The sentence changes with direction, because "Gave direct access"
+      {/* The sentence changes with direction, because "Gave a role"
           beside somebody's name means two opposite things depending on whether
           they were the hand or the recipient.
 

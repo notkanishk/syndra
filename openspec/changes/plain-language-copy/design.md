@@ -225,6 +225,7 @@ thing under two names reads as two things.
 | **send** — dispatch what is waiting | flush |
 | **decline** | deny, reject |
 | **lift** — end a hold | release, unblock |
+| **give** — a role, a bundle (result: **Given**; audit: "Gave a role") | grant direct access, grant access, granted (owner, A-17 Q7, 5 Nov). "Direct access" stays only as the noun for what *revoke* ends; the stored `direct_grant.*` codes and "Grant id" in lineage are technical and unchanged |
 
 *Operator* names an audience and a view. It is correct on staff screens and
 wrong in anything a member reads.

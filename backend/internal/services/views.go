@@ -1465,7 +1465,7 @@ func collectUserRoles(ctx context.Context, userID string) (map[roleKey]*models.E
 			key := roleKey{projectID: role.ProjectID, roleKey: role.RoleKey}
 			reason := models.RoleReason{
 				Kind:        "bundle",
-				Description: fmt.Sprintf("Granted by bundle %s v%d", bundle.Name, bundle.PinnedVersion),
+				Description: fmt.Sprintf("Given by bundle %s v%d", bundle.Name, bundle.PinnedVersion),
 				BundleID:    bundle.ID,
 				BundleName:  bundle.Name,
 			}

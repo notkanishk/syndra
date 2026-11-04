@@ -45,13 +45,13 @@ Source: `design_handoff_syndra/reconcile-2026-10/from-design/A-17-refinement-swe
 - [x] 3.4 `EmptyState.test.tsx` checks the action's two forms (G9).
 
 ## Q · Owner questions (A-17 §3): today's behaviour, one line each
-- [ ] Q1 Dialog footer order. `ui/src/components/ui/Modal.tsx` `CANCEL_FIRST = false`, which was the majority (act first) when asked. `true` gives the recommended Cancel-first. CancelQueuedStep keeps "Keep it" first per RULES. `ready-for-human`
-- [ ] Q2 Pending's empty Send button. `sendLabel()` in `ui/src/app/governance/pending/page.tsx` still says "Send 0 changes". `ready-for-human`
-- [ ] Q3 My access's "Nine roles across six rooms". The line is unchanged in `MemberAccess.tsx`; deleting it is the one change. `ready-for-human`
-- [ ] Q4 Mythology lines (the Zitadel card and the login line). Both unchanged. The em-dash guard parks `LoginDoor.tsx` and `app/zitadel/page.tsx` in `PARKED`. `ready-for-human`
-- [ ] Q5 Header→content. `HEADER_TO_CONTENT = 18` in `PageHeader.tsx`; 28 is the recommended value. `ready-for-human`
-- [ ] Q6 Ids in Advanced meta (person, project, app client id, grant id in a person's project headings). Left where they were. `ready-for-human`
-- [ ] Q7 "Grant direct access". `GIVE_ROLE_LABEL` in `ui/src/components/people/GrantDirectAccess.tsx` holds it. `ready-for-human`
+- [x] Q1 (answered 5 Nov: Cancel first, ghost; `CANCEL_FIRST = true`) Dialog footer order. `ui/src/components/ui/Modal.tsx` `CANCEL_FIRST = false`, which was the majority (act first) when asked. `true` gives the recommended Cancel-first. CancelQueuedStep keeps "Keep it" first per RULES. `ready-for-human`
+- [x] Q2 (answered 5 Nov: disabled "Send changes", no count) Pending's empty Send button. `sendLabel()` in `ui/src/app/governance/pending/page.tsx` still says "Send 0 changes". `ready-for-human`
+- [ ] Q3 (owner: leave unchanged; a design pass, A-18, decides what replaces it) My access's "Nine roles across six rooms". The line is unchanged in `MemberAccess.tsx`; deleting it is the one change. `ready-for-human`
+- [x] Q4 (answered 5 Nov: Zitadel card deleted, text saved for relocation; login line has no dash; guard exemptions removed. The relocation is pending A-18) Mythology lines (the Zitadel card and the login line). Both unchanged. The em-dash guard parks `LoginDoor.tsx` and `app/zitadel/page.tsx` in `PARKED`. `ready-for-human`
+- [x] Q5 (answered 5 Nov: 28, `HEADER_TO_CONTENT = 28`) Header→content. `HEADER_TO_CONTENT = 18` in `PageHeader.tsx`; 28 is the recommended value. `ready-for-human`
+- [x] Q6 (answered 5 Nov: client id in a copyable "Client ID" tools row; project and person ids stay in Advanced meta as CopyableValue; grant ids out of headings) Ids in Advanced meta (person, project, app client id, grant id in a person's project headings). Left where they were. `ready-for-human`
+- [x] Q7 (answered 5 Nov: "Give a role", everywhere a person reads it) "Grant direct access". `GIVE_ROLE_LABEL` in `ui/src/components/people/GrantDirectAccess.tsx` holds it. `ready-for-human`
 
 ## Left, with reasons
 - [ ] L1 G14 "names link by default". UserName, ProjectName and BundleName have no `link` prop yet. The plain names A-17 listed are wrapped in `link-hover` Links on each screen. Flipping the default touches every caller and risks nested anchors, so it is its own change. `needs-triage`
@@ -67,3 +67,5 @@ Source: `design_handoff_syndra/reconcile-2026-10/from-design/A-17-refinement-swe
   - The Change history Term still mentions `c_` handles.
   - `machineName` still returns "onboarding (automatic)".
   - `ready-for-agent`
+
+- [x] Q8 `--radius-lg` was already absent from `ui/` (no definition, no use); only the design-system bundle under `design_handoff_syndra/` still lists it, which is the design-sync agent's to resync.
