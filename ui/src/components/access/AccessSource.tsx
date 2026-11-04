@@ -21,7 +21,8 @@ import { compareNames } from "@/lib/sort";
  * The dot carries the meaning before the word does:
  *   solid  — a person did it
  *   ring   — a bundle did it
- *   dashed — the system did it on its own. Dashed means nobody clicked it.
+ *   thin ring, muted — the system did it on its own. Nobody clicked it.
+ *   (Dashed is NotOpenYet's alone, A-17 G19.)
  *
  * These chips encode a KIND, not a severity. Direct takes the accent because
  * it is the one source an operator can act on; the other two stay neutral.
@@ -114,20 +115,20 @@ export function SourceChip({ kind }: { kind: SourceKind }) {
   }
   if (kind === "bundle") {
     return (
-      <span className={`${base} bg-tint-2 text-ink/80`}>
+      <span className={`${base} bg-tint-2 text-ink`}>
         <i
           aria-hidden
-          className="block h-2 w-2 flex-none rounded-pill border-2 border-ink/80"
+          className="block h-2 w-2 flex-none rounded-pill border-2 border-ink"
         />
         {SOURCE_LABEL.bundle}
       </span>
     );
   }
   return (
-    <span className={`${base} border border-dashed border-ink/35 text-ink/70`}>
+    <span className={`${base} border border-line-strong text-muted`}>
       <i
         aria-hidden
-        className="block h-2 w-2 flex-none rounded-pill border border-dashed border-ink/70"
+        className="block h-2 w-2 flex-none rounded-pill border border-muted"
       />
       {SOURCE_LABEL.mapping}
     </span>
@@ -313,13 +314,16 @@ export function SourcePopover({
   if (note) rows.push(["Note", <span key="note" className="text-muted">{note}</span>]);
   const hasBody = rows.length > 0 || Boolean(footer);
 
+  // Nothing to open: a bare chip, not a button that does nothing and takes a focus stop.
+  if (!hasBody) return <SourceChip kind={kind} />;
+
   return (
     <span ref={ref} className="relative inline-flex">
       <button
         type="button"
-        onClick={() => hasBody && setOpen((value) => !value)}
-        aria-expanded={hasBody ? open : undefined}
-        className={hasBody ? "cursor-pointer" : "cursor-default"}
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="cursor-pointer"
       >
         <SourceChip kind={kind} />
       </button>
@@ -356,7 +360,7 @@ export function SourcePopover({
 }
 
 function expandedTitle(kind: SourceKind): string {
-  if (kind === "direct") return "Granted directly";
+  if (kind === "direct") return "Given directly";
   if (kind === "bundle") return "Carried by a bundle";
   return "Produced by a rule";
 }

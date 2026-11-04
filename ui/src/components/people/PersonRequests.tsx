@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo } from "react";
 
 import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { keepResult, requestOutcome } from "@/components/requests/RequestsScreen";
+import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
 import { describeAsk } from "@/components/requests/Holding";
+import { OUTCOME_LABEL } from "@/lib/outcome";
 import { useRequestDecisions, type Decided } from "@/lib/request-decisions";
 import { useTerms } from "@/lib/queries/useTerms";
 import { useRequestsAdmin, type AccessRequest } from "@/lib/queries/useRequests";
@@ -48,7 +49,7 @@ export function PersonRequests({
     () =>
       (requests.data ?? [])
         .filter((entry) => entry.requester_id === userId)
-        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
     [requests.data, userId],
   );
 
@@ -60,7 +61,7 @@ export function PersonRequests({
       <CardColumns>
         <span className="w-[250px]">What they asked for</span>
         <span className="flex-1">Why</span>
-        <span className="w-[110px]">When</span>
+        <span className="w-[66px]">When</span>
         <span className="w-[196px]">Outcome</span>
       </CardColumns>
 
@@ -92,12 +93,9 @@ export function PersonRequests({
       </ListStates>
 
       {isOperator && pending.length > 0 && (
-        <div className="border-t border-line px-5 py-3 text-[13px] text-faint">
-          {pending.length} still open — deciding here is the same decision as on{" "}
-          <Link href="/requests" className="font-semibold text-accent-text link-hover">
-            Requests
-          </Link>
-          .
+        <div className="flex flex-wrap items-center justify-between gap-x-4 border-t border-line px-5 py-3 text-[13px] text-faint">
+          <span>{pending.length} still open. Deciding here is the same decision as on Requests.</span>
+          <ArrowLink href="/requests">Open Requests</ArrowLink>
         </div>
       )}
     </Card>
@@ -124,7 +122,7 @@ function RequestRow({
 
   return (
     <div className="row-divider flex min-h-[60px] flex-col items-start gap-2 px-5 py-3.5 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:gap-4">
-      <span className="w-full text-[14.5px] tablet:w-[250px] tablet:shrink-0 tablet:truncate">
+      <span className="w-full text-[14.5px] tablet:w-[250px] tablet:shrink-0">
         <RoleRef projectId={entry.project_id} roleKey={entry.role_key} />
         <span className="block text-[12.5px] text-faint">
           {describeAsk(entry, terms.data)}
@@ -133,7 +131,7 @@ function RequestRow({
       <span className="w-full text-[14px] text-muted [text-wrap:pretty] tablet:min-w-[200px] tablet:flex-1">
         {entry.justification ? `“${entry.justification}”` : "No reason given"}
       </span>
-      <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0">
+      <span className="text-[13px] text-faint tablet:w-[66px] tablet:shrink-0">
         <Relative iso={entry.created_at} />
       </span>
       {/* One seat: the buttons, then the decision in their place (#96). */}
@@ -154,14 +152,19 @@ function RequestRow({
             </Button>
           </span>
         ) : outcome && optimisticallyResolved ? (
-          <ActionOutcome placement="seat" word={outcome.word} outcome={outcome.outcome} />
+          <ActionOutcome placement="seat" word={outcome.word ?? OUTCOME_LABEL[outcome.outcome.kind]} outcome={outcome.outcome} />
         ) : optimisticallyResolved ? null : (
           <Outcome status={entry.status} note={[keepResult(entry), entry.review_note].filter(Boolean).join(" · ")} />
         )}
         </Crossfade>
         {/* A failed write puts the buttons back and says why under them. */}
         {outcome && !optimisticallyResolved && (
-          <ActionOutcome placement="seat" className="tint-in" outcome={outcome.outcome} />
+          <ActionOutcome
+            placement="seat"
+            className="tint-in"
+            word={outcome.word ?? OUTCOME_LABEL[outcome.outcome.kind]}
+            outcome={outcome.outcome}
+          />
         )}
       </span>
     </div>

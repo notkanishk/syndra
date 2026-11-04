@@ -7,6 +7,7 @@ import { UserName } from "@/components/names/UserName";
 import { RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { StatusDot, type StatusTone } from "@/components/ui/Badge";
+import { NextStep } from "@/components/ui/NextStep";
 import { Card, CardRow } from "@/components/ui/Card";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Notice } from "@/components/ui/Notice";
@@ -17,6 +18,7 @@ import { targetLabel } from "@/lib/nav";
 import { usePersonTargets, type PersonTargetView, type RoleSource, type StoragePlace } from "@/lib/queries/useMyStorage";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useTargets } from "@/lib/queries/useTargets";
+import { sortByName, sortNames } from "@/lib/sort";
 import { useIsAdvanced } from "@/lib/ui-view";
 
 /**
@@ -43,7 +45,9 @@ function gbWords(bytes: number | undefined): string {
 function useRoleNames() {
   const resolver = useNameResolver();
   return (roles: RoleSource[] | undefined) =>
-    (roles ?? []).map((r) => resolver.resolveRole(r.project_id, r.role_key).value?.display_name || humanizeKey(r.role_key));
+    sortNames(
+      (roles ?? []).map((r) => resolver.resolveRole(r.project_id, r.role_key).value?.display_name || humanizeKey(r.role_key)),
+    );
 }
 
 /** The person's storage section: a label, then one card per system. */
@@ -63,14 +67,14 @@ export function PersonStorage({ userId, name }: { userId: string; name: string }
           title={`Couldn't load ${name}'s storage${systems.length === 1 ? ` on ${targetLabel(systems[0])}` : ""}.`}
           action={{ label: "Try again", onClick: () => views.refetch() }}
         >
-          Syndra&apos;s server did not answer when this page asked for it. Nothing was changed.
+          Syndra didn&apos;t answer when this page asked. Nothing was changed.
         </Notice>
       ) : views.data ? (
         views.data.map((view) => <SystemCard key={view.target} view={view} userId={userId} name={name} />)
       ) : (
         systems.map((target) => (
           <Card key={target} id={`sys-${target}`}>
-            <CardTop target={target} name={name} />
+            <CardTop target={target} />
             <RowSkeleton rows={4} avatar={false} label={`Loading ${name}'s storage on ${targetLabel(target)}`} />
           </Card>
         ))
@@ -79,20 +83,15 @@ export function PersonStorage({ userId, name }: { userId: string; name: string }
   );
 }
 
-function CardTop({ target, name, status }: { target: string; name: string; status?: ReactNode }) {
-  const label = targetLabel(target);
+function CardTop({ target, status }: { target: string; status?: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 px-5 pb-3 pt-4">
+    <div className="px-5 pb-3 pt-4">
       <span className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
         <Link href={`/system/targets/${target}`} className="type-card-title text-ink link-hover">
-          {label}
+          {targetLabel(target)}
         </Link>
         {status}
       </span>
-      <p className="m-0 text-[13.5px] leading-[1.5] text-faint [text-wrap:pretty]">
-        What {label} says about {name}&apos;s account. Limits, holds and folders are set on {label}&apos;s page; only{" "}
-        {name} sets their password.
-      </p>
     </div>
   );
 }
@@ -130,8 +129,8 @@ function Status({ view }: { view: PersonTargetView }) {
   const offline = view.health === "offline";
   const held = view.holds.some((h) => h.field === "enabled");
   return (
-    <span role="status" className={`inline-flex items-center gap-[7px] text-[13px] ${offline ? "text-warn-text" : "text-muted"}`}>
-      <span aria-hidden className={`h-[7px] w-[7px] flex-none rounded-pill ${offline ? "bg-warn" : held ? "bg-line-strong" : "bg-healthy"}`} />
+    <span role="status" className={`inline-flex items-center gap-2 text-[13px] ${offline ? "text-warn-text" : "text-muted"}`}>
+      <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
         <>
           Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}
@@ -197,10 +196,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
     body = (
       <>
         <Row label="Account" first>
-          <span className="inline-flex items-baseline gap-2">
-            <StatusDot tone="warn" />
-            <ArrowLink href={`/governance/pending?q=${encodeURIComponent(name)}`}>Waiting for you to send</ArrowLink>
-          </span>
+          <NextStep href={`/governance/pending?q=${encodeURIComponent(name)}`} />
           <Faint>
             {roles.length
               ? `Their ${formatList(roles)} ${rolesWord(roles.length)} ${label}.`
@@ -297,7 +293,7 @@ function SystemCard({ view, userId, name }: { view: PersonTargetView; userId: st
 
   return (
     <Card id={`sys-${view.target}`} className={`scroll-mt-4 ${stale ? "!border-line-strong !bg-canvas !shadow-none motion-tint" : ""}`}>
-      <CardTop target={view.target} name={name} status={<Status view={view} />} />
+      <CardTop target={view.target} status={<Status view={view} />} />
       {offline && (
         <div className="px-5 pb-3">
           <Notice tone="warn" live title={`${label} is offline`}>
@@ -474,7 +470,7 @@ function FolderList({ places, roleNames }: { places: StoragePlace[]; roleNames: 
   if (places.length === 0) return <span className="text-muted">None yet</span>;
   return (
     <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-      {places.map((p) => {
+      {sortByName(places, folderName, (p) => p.path).map((p) => {
         const roles = roleNames(p.roles);
         return (
           <li key={p.path} className="flex flex-col">
@@ -496,7 +492,6 @@ function FolderList({ places, roleNames }: { places: StoragePlace[]; roleNames: 
 }
 
 function HoldRow({ view, seat }: { view: PersonTargetView; seat: ReactNode }) {
-  const label = targetLabel(view.target);
   const hold = view.holds.find((h) => h.field === "enabled") ?? view.holds[0];
   return (
     <Row label="Hold" seat={seat}>
@@ -520,7 +515,7 @@ function HoldRow({ view, seat }: { view: PersonTargetView; seat: ReactNode }) {
               : hold.review_date
                 ? ` · review on ${formatShortDate(hold.review_date)}`
                 : ""}
-            {view.holds.length > 1 ? ` · and ${view.holds.length - 1} more on ${label}'s page` : ""}
+            {view.holds.length > 1 ? ` · and ${view.holds.length - 1} more` : ""}
           </Faint>
         </>
       )}

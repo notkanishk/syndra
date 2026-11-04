@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Badge } from "@/components/ui/Badge";
+import { Chip } from "@/components/ui/Badge";
 import { RoleRef } from "@/components/names";
 import { BulkDialog } from "@/components/people/BulkDialog";
 import { ListStates, EmptyState, RowSkeleton } from "@/components/states";
@@ -53,7 +53,7 @@ import { useUsers, type UserListEntry } from "@/lib/queries/useUsers";
 import { useDebounce } from "@/lib/useDebounce";
 import { useIsTouch } from "@/lib/useViewport";
 import { daysUntil } from "@/lib/format";
-import { sortNames } from "@/lib/sort";
+import { sortByName, sortNames } from "@/lib/sort";
 
 /**
  * People's bulk verbs, in the desktop order. Every one opens a rehearsal, so
@@ -178,8 +178,10 @@ export default function PeoplePage() {
   const matchedServiceAccounts = useMemo(() => {
     const query = filters.q.trim().toLowerCase();
     if (!query) return [];
-    return (users.data ?? []).filter(
-      (entry) => !isPerson(entry) && entry.user.name.toLowerCase().includes(query),
+    return sortByName(
+      (users.data ?? []).filter((entry) => !isPerson(entry) && entry.user.name.toLowerCase().includes(query)),
+      (entry) => entry.user.name,
+      (entry) => entry.user.id,
     );
   }, [users.data, filters.q]);
   const holders = useMemo(() => {
@@ -207,7 +209,6 @@ export default function PeoplePage() {
   // Selection spans the whole filter, not the rendered page.
   const selection = useRowSelection(useMemo(() => rows.map((entry) => entry.user.id), [rows]));
   const { selfId } = useUiView();
-  const expiringSoon = all.filter((entry) => entry.expiring_count > 0).length;
   // One basis for the whole list: every row carries an identical copy of when
   // Zitadel was read, so the line says it once, under the search.
   const basis = all.find((entry) => entry.observation)?.observation;
@@ -263,15 +264,13 @@ export default function PeoplePage() {
   }
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="People"
         lede="Everyone Syndra knows, and what each can use. Open a person to see and change their access; select several to change them together."
         meta={
           all.length > 0
-            ? `${all.length} ${all.length === 1 ? "person" : "people"}${
-                expiringSoon > 0 ? ` · ${expiringSoon} with access ending inside 30 days` : ""
-              }`
+            ? `${all.length} ${all.length === 1 ? "person" : "people"}`
             : undefined
         }
       />
@@ -335,11 +334,8 @@ export default function PeoplePage() {
             onToggle={() => (bulkMode ? exitBulk() : setParams({}, { bulk: "1" }))}
           />
         }
+        read={all.length > 0 ? <ReadFreshness state={readState} subject="The people list" /> : undefined}
       />
-
-      {all.length > 0 && (
-        <ReadFreshness state={readState} subject="The people list" className="-mt-1.5 px-[2px]" />
-      )}
 
       {matchedServiceAccounts.map((entry) => (
         <ArrowLink key={entry.user.id} href={`/system/service-accounts/${entry.user.id}`}>
@@ -592,22 +588,18 @@ function PersonRow({
       </span>
 
       <span className="hidden w-[180px] shrink-0 flex-wrap gap-1.5 desktop:flex">
-        {entry.bundle_names?.length ? (
-          sortNames(entry.bundle_names).map((name) => {
-            // The version rides on the chip. "Lab Tech" and "Lab Tech v2" are
-            // different facts about a person, and the row is where the
-            // difference between two people in the same bundle is visible.
-            const version = entry.bundle_versions?.[name];
-            return (
-              <Badge key={name}>
-                {name}
-                {version ? <span className="text-faint"> v{version}</span> : null}
-              </Badge>
-            );
-          })
-        ) : (
-          <span className="text-[13px] text-faint">none</span>
-        )}
+        {sortNames(entry.bundle_names ?? []).map((name) => {
+          // The version rides on the chip. "Lab Tech" and "Lab Tech v2" are
+          // different facts about a person, and the row is where the
+          // difference between two people in the same bundle is visible.
+          const version = entry.bundle_versions?.[name];
+          return (
+            <Chip key={name}>
+              {name}
+              {version ? <span className="text-faint"> v{version}</span> : null}
+            </Chip>
+          );
+        })}
       </span>
 
       {/* Wraps. What somebody holds is what the row is read for. */}
@@ -683,7 +675,8 @@ function attentionOf(entry: UserListEntry): { text: string; tone: string; rank: 
   if (entry.unexplained_count > 0) {
     const n = entry.unexplained_count;
     return {
-      text: n === 1 ? "Unexplained role" : `${n} unexplained roles`,
+      text: n === 1 ? "Unexplained role" : `${n} unexplained`,
+      // "4 unexplained", not "4 unexplained roles": it fits the 110 seat on one line.
       tone: "text-danger-text",
       rank: -3_000 - n,
     };
@@ -693,7 +686,7 @@ function attentionOf(entry: UserListEntry): { text: string; tone: string; rank: 
     const n = entry.expiring_count;
     const when = days === null ? "soon" : days <= 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`;
     return {
-      text: n === 1 ? `Ends ${when}` : `${n} end, the first ${when}`,
+      text: n === 1 ? `Ends ${when}` : `${n} ending, first ${when}`,
       tone: "text-warn-text",
       rank: -2_000 - n,
     };

@@ -109,6 +109,16 @@ describe("People index", () => {
     );
   });
 
+  it("lists matched service accounts A to Z", () => {
+    nav.url = "/users?q=net";
+    const svc = (id: string, name: string) =>
+      person({ user: { ...person().user, id, name, kind: "machine" } });
+    users.data = [svc("s2", "netbird"), svc("s1", "net-backup")];
+    renderPeople();
+    const names = screen.getAllByRole("link", { name: /is a service account/ }).map((l) => l.textContent?.replace("→", ""));
+    expect(names).toEqual(["net-backup is a service account", "netbird is a service account"]);
+  });
+
   it("says nothing about service accounts when the search is empty or matches none", () => {
     users.data = [person({ user: { ...person().user, id: "svc", name: "netbird", kind: "machine" } })];
     renderPeople();
@@ -247,10 +257,11 @@ describe("People index", () => {
     expect(screen.getByRole("button", { name: "Show 25 more" })).toBeInTheDocument();
   });
 
-  it("counts how many people have access expiring, in the header", () => {
+  it("keeps the header meta to the count: the Attention column carries what is ending", () => {
     users.data = [person({ expiring_count: 1 }), person({ user: { ...person().user, id: "u2" } })];
     renderPeople();
-    expect(screen.getByText(/1 with access ending inside 30 days/)).toBeInTheDocument();
+    expect(screen.getByText("2 people")).toBeInTheDocument();
+    expect(screen.queryByText(/ending inside/)).not.toBeInTheDocument();
   });
 });
 
@@ -353,7 +364,7 @@ describe("People index — bulk mode", () => {
     // ...and says so, with a way back to just the visible page: selecting 60
     // when you meant 10 is dozens of people's access.
     expect(await screen.findByText(/All 60 people selected/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /select only the 10 people shown/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /select only the 10 shown/i })).toBeInTheDocument();
   });
 
   it("won't select every match while a new search is still being read", () => {
@@ -525,7 +536,7 @@ describe("People · the board", () => {
     ];
     renderPeople();
     expect(screen.getByText("Ends in 2 days")).toBeInTheDocument();
-    expect(screen.getByText("3 unexplained roles")).toBeInTheDocument();
+    expect(screen.getByText("3 unexplained")).toBeInTheDocument();
     expect(screen.getByText("Open request")).toBeInTheDocument();
     expect(screen.getByText("2 open requests")).toBeInTheDocument();
   });

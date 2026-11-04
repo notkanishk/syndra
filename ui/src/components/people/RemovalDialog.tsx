@@ -8,8 +8,11 @@ import {
   type RoleReason,
   type SourceKind,
 } from "@/components/access/AccessSource";
+import { RoleRef } from "@/components/names";
+import { useShownNames } from "@/components/names/shownNames";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
-import { Mono } from "@/components/ui/Badge";
+import { StatusDot } from "@/components/ui/Badge";
+import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { useWaitsBeforeLine } from "@/components/states/useWaitsBeforeLine";
@@ -17,7 +20,6 @@ import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedSte
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
 import { useRemoveBundle } from "@/lib/queries/useBundles";
-import { humanizeKey } from "@/lib/format";
 import {
   outcomeFromError,
   succeeded,
@@ -64,6 +66,15 @@ export interface Removal {
   userName?: string;
 }
 
+/** "Project / Role name" for a title, which is text; the body shows the pair as RoleRef. */
+function useRoleLabel() {
+  const names = useShownNames();
+  return (removal: Removal) => `${removal.projectName} / ${names.role(removal.projectId, removal.roleKey)}`;
+}
+
+/** The act's own word on the result, never "Applied" (A-17 G4). */
+const resultWord = (outcome: Outcome | null) => (succeeded(outcome) ? "Removed" : "Not removed");
+
 export function RemovalDialog({
   removal,
   onClose,
@@ -86,12 +97,13 @@ export function RemovalDialog({
   userName: string | undefined;
 }) {
   const [chosen, setChosen] = useState<SourceKind | null>(null);
+  const label = useRoleLabel();
 
   if (!removal) return null;
 
   const subject = removal.userName ?? userName ?? "this person";
   const person = removal.userId ?? userId;
-  const roleLabel = `${removal.projectName} / ${removal.roleKey}`;
+  const roleLabel = label(removal);
 
   // With more than one source, the menu lists ONE entry per source, each named
   // after its own removal — never a single control that guesses.
@@ -102,24 +114,24 @@ export function RemovalDialog({
           title={`${subject} holds ${roleLabel} ${removal.sources.length} ways.`}
           lede="Each source is removed on its own terms. Pick the one you mean."
         />
-        <div className="flex flex-col gap-2 px-6">
+        <div className="flex flex-col gap-1.5 px-6">
           {removal.sources.map((source) => (
-            <button
+            <ChoiceRow
               key={source.kind}
-              type="button"
-              onClick={() => setChosen(source.kind as SourceKind)}
-              className="flex items-center gap-3 rounded-inner border border-line-strong px-4 py-3 text-left hover-tint"
-            >
-              <SourceChip kind={source.kind as SourceKind} />
-              <span className="flex-1 text-[14.5px]">{actionName(source.kind as SourceKind)}</span>
-              {sourceQualifier(source) && (
-                <span className="text-[13px] text-faint">{sourceQualifier(source)}</span>
-              )}
-            </button>
+              single
+              name="removal-source"
+              selected={false}
+              onToggle={() => setChosen(source.kind as SourceKind)}
+              title={actionName(source.kind as SourceKind)}
+              description={sourceQualifier(source) ?? undefined}
+              aside={<SourceChip kind={source.kind as SourceKind} />}
+            />
           ))}
         </div>
         <ModalFooter>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
         </ModalFooter>
       </Modal>
     );
@@ -191,7 +203,7 @@ function DirectDialog({
   const waits = useWaitsBeforeLine();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const retained = others.length > 0;
-  const roleLabel = `${removal.projectName} / ${removal.roleKey}`;
+  const roleLabel = useRoleLabel()(removal);
 
   // `grantsResolved === false` is the third state, and the reason this is not
   // a boolean: "no grant id" and "no answer yet" are different facts and the
@@ -213,7 +225,7 @@ function DirectDialog({
         chip={<SourceChip kind="direct" />}
         title={`Revoke direct access to ${roleLabel}?`}
         titleId="removal-title"
-        lede={`Granted directly to ${subject}.`}
+        lede={`Given directly to ${subject}.`}
       />
       <div className="px-6">
         <div className="danger-note px-4 py-3.5 text-[15px] leading-[1.5]">
@@ -248,16 +260,17 @@ function DirectDialog({
               </strong>
               <br />
               <span className="text-[14px] text-muted">
-                No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel — revocations send on their own, every few minutes.
+                No bundle and no rule gives it to them. Their access ends once the change reaches Zitadel. Revocations send on their own, every few minutes.
               </span>
             </>
           )}
         </div>
       </div>
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
+        cancel={succeeded(outcome) ? undefined : { onClick: onClose }}
         note={
           step.note ??
           // Two causes, and they were reported as one. "This role was not given
@@ -277,20 +290,18 @@ function DirectDialog({
                   : waits
         }
       >
-        {/* Cancel/Close comes FIRST in the markup, not just visually — the
-            dialog's focus trap (Modal.tsx) focuses the first focusable
-            element in the panel on open, and a destructive confirm rendered
-            first got that focus for free: Enter, pressed on reflex to close
-            a dialog that just opened, revoked access instead. The safe exit
-            takes the initial focus; the destructive action never does. */}
-        <Button variant={succeeded(outcome) ? "outline" : "ghost"} onClick={onClose}>
-          {succeeded(outcome) ? "Close" : "Cancel"}
-        </Button>
-        {/* Same rule as the bundle dialog: an action that has run is not an
-            action any more, and leaving it armed lets a second click revoke
-            again. */}
-        {!succeeded(outcome) && (
+        {/* The act never takes the dialog's initial focus (`data-skip-initial-focus`,
+            Modal.tsx): Enter, pressed on reflex to close a dialog that just
+            opened, once revoked access. Cancel takes it, wherever it sits.
+            And an action that has run is not an action any more: leaving it
+            armed lets a second click revoke again, so what remains is Close. */}
+        {succeeded(outcome) ? (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        ) : (
           <Button
+            data-skip-initial-focus
             variant={source?.queued ? "accent" : "dangerConfirm"}
             disabled={blocked}
             isPending={remove.isPending}
@@ -378,42 +389,33 @@ function BundleDialog({
             it withdraws the queued delivery rather than queueing its opposite —
             which is also what the backend now does, instead of enqueueing a
             revocation for access nobody ever received. */}
-        <div
-          className={`text-[12.5px] font-semibold uppercase tracking-[0.1em] ${
-            source.queued ? "text-label" : "text-danger-text"
-          }`}
-        >
-          {source.queued ? "Nothing to take back" : "They will lose"}
-        </div>
-        <div
-          className={`rounded-nav px-3.5 py-2.5 text-[14px] ${
-            source.queued ? "bg-tint-1" : "bg-danger-soft"
-          }`}
-        >
-          {removal.projectName} / <Mono>{removal.roleKey}</Mono>
+        <div className="type-label">{source.queued ? "Nothing to take back" : "They will lose"}</div>
+        <div className="flex flex-wrap items-center gap-2.5 text-[14px]">
+          <StatusDot tone={source.queued ? "neutral" : "danger"} />
+          <RoleRef projectId={removal.projectId} roleKey={removal.roleKey} />
           {source.queued ? (
-            <span className="text-[13px] text-muted"> — recorded, never sent</span>
+            <span className="text-[13px] text-muted">· recorded, never sent</span>
           ) : (
-            others.length === 0 && (
-              <span className="text-[13px] text-muted"> — no other source gives it</span>
-            )
+            others.length === 0 && <span className="text-[13px] text-muted">· no other source gives it</span>
           )}
         </div>
 
         {others.length > 0 && (
           <>
             <div className="mt-2 type-label">They will keep</div>
-            <div className="flex items-center gap-2.5 rounded-nav bg-accent-soft px-3.5 py-2.5 text-[14px]">
-              {removal.projectName} / <Mono>{removal.roleKey}</Mono>
-              <span className="text-[13px] text-muted">— still {describeOthers(others)}</span>
+            <div className="flex flex-wrap items-center gap-2.5 text-[14px]">
+              <StatusDot tone="healthy" />
+              <RoleRef projectId={removal.projectId} roleKey={removal.roleKey} />
+              <span className="text-[13px] text-muted">· still {describeOthers(others)}</span>
             </div>
           </>
         )}
       </div>
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
       <ModalFooter
+        cancel={succeeded(outcome) ? undefined : { onClick: onClose }}
         // A bundle whose grants are still waiting says nothing about them here:
         // the step is the one place that is said, because only it carries who
         // queued each change and why (A-04 §13.4).
@@ -425,22 +427,18 @@ function BundleDialog({
               "Every other role this bundle carries is removed too. Manage bundles shows the full list before you commit."))
         }
       >
-        {/* First in the markup, same reason as the direct dialog: the focus
-            trap focuses the first focusable element on open, and the safe
-            exit must be the one that gets it, never the destructive confirm
-            below. */}
-        <Button
-          variant={succeeded(outcome) ? "outline" : "ghost"}
-          onClick={onClose}
-        >
-          {succeeded(outcome) ? "Close" : "Cancel"}
-        </Button>
         {/* Gone once it has run. A destructive confirm that stays armed after
-            it succeeded fires again on the next click — which is what a person
+            it succeeded fires again on the next click, which is what a person
             does when the dialog does not close, and each press queued another
-            cascade. What remains is the one action still true: leave. */}
-        {!succeeded(outcome) && (
+            cascade. What remains is the one action still true: leave. As in
+            the direct dialog, the act never takes the initial focus. */}
+        {succeeded(outcome) ? (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        ) : (
           <Button
+            data-skip-initial-focus
             // Red is a promise about consequence. Withdrawing a delivery that
             // never went out takes nothing from anybody, and dressing it as
             // destruction contradicts the sentence directly above it.
@@ -520,14 +518,19 @@ function AutomaticDialog({
         chip={<SourceChip kind="mapping" />}
         title="This one isn't yours to remove."
         titleId="removal-title"
-        lede={`${subject} holds ${removal.projectName} / ${removal.roleKey} because an automatic rule produced it.`}
+        lede={
+          <>
+            {subject} holds <RoleRef projectId={removal.projectId} roleKey={removal.roleKey} /> because an
+            automatic rule produced it.
+          </>
+        }
       />
       <div className="flex flex-col gap-2.5 px-6">
-        <div className="rounded-inner bg-tint-1 px-4 py-3.5 text-[14.5px] leading-[1.5]">
+        <div className="text-[14.5px] leading-[1.5]">
           <span className="text-muted">{input ?? "an input role"}</span>
-          &nbsp;⇒&nbsp;
+          <span className="text-faint"> gives </span>
           <span className="font-semibold">
-            {removal.projectName} / {humanizeKey(removal.roleKey)}
+            <RoleRef projectId={removal.projectId} roleKey={removal.roleKey} />
           </span>
           <div className="mt-1.5 text-[13.5px] text-faint">
             Editing the rule changes access for everyone it applies to.
@@ -535,7 +538,7 @@ function AutomaticDialog({
         </div>
         <p className="text-[14px] leading-[1.55] text-muted">
           To revoke this from {subject} alone, remove their{" "}
-          <span className="text-ink">{input ?? "input role"}</span> — that is the input the rule
+          <span className="text-ink">{input ?? "input role"}</span>. That is the input the rule
           reads.
         </p>
         <ArrowLink href="/policies" className="self-start">
@@ -557,7 +560,7 @@ function describeOthers(others: RoleReason[]): string {
       const qualifier = sourceQualifier(source);
       if (source.kind === "bundle") return `via ${qualifier ?? "a bundle"}`;
       if (source.kind === "mapping") return `automatic${qualifier ? ` from ${qualifier}` : ""}`;
-      return "granted directly";
+      return "given directly";
     })
     .join(" and ");
 }
