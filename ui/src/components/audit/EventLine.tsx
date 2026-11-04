@@ -1,7 +1,7 @@
 "use client";
 
 import { UserName, BundleName, ProjectName } from "@/components/names";
-import { ADDON_EVENT, OPERATION_NOUN, describeAction, targetKind, shortId } from "@/lib/audit-vocabulary";
+import { ADDON_EVENT, OPERATION_NOUN, describeAction, targetKind } from "@/lib/audit-vocabulary";
 import { formatAt, formatClock, formatClockSeconds, formatList, formatRelative, humanizeKey } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import type { AuditEntry, CancelledUnsentDetails } from "@/lib/queries/useAudit";
@@ -37,12 +37,12 @@ export function TargetRef({ entry }: { entry: AuditEntry }) {
     return (
       <BundleName
         id={entry.target_id}
-        fallback={`a retired bundle (${shortId(entry.target_id, "b")})`}
+        fallback="a retired bundle"
       />
     );
   }
   if (kind === "rule") {
-    return <>{`a rule (${shortId(entry.target_id, "R")})`}</>;
+    return <>an automatic rule</>;
   }
   return <UserName id={entry.target_id} />;
 }
@@ -261,7 +261,7 @@ export function EventSentence({ entry }: { entry: AuditEntry }) {
     // after a dash is worse than the template and far better than dropping it.
     return (
       <span className={tone}>
-        {verb} — <TargetRef entry={entry} />
+        {verb}: <TargetRef entry={entry} />
       </span>
     );
   }

@@ -42,7 +42,7 @@ const entry = (i: number, actor = "u1") => ({
 afterEach(cleanup);
 
 describe("Audit export", () => {
-  it("says it exports every matching entry, and does: past the ten on screen, formulas defused", async () => {
+  it("exports every matching entry: past the ten on screen, formulas defused", async () => {
     // The 7-day window is the default; entries a minute apart all sit inside it.
     log.entries = [entry(0, "=HYPERLINK(1)"), ...Array.from({ length: 29 }, (_, i) => entry(i + 1))];
     let blob: Blob | undefined;
@@ -52,7 +52,7 @@ describe("Audit export", () => {
 
     render(<AuditPage />);
     expect(screen.getAllByText("did something")).toHaveLength(10);
-    fireEvent.click(screen.getByRole("button", { name: "Export every matching entry (CSV)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
 
     expect(blob).toBeDefined();
     const text = await new Promise<string>((resolve) => {
@@ -63,5 +63,26 @@ describe("Audit export", () => {
     await waitFor(() => expect(text.split("\n")).toHaveLength(31)); // header + all 30
     expect(text).toContain(`"'=HYPERLINK(1)"`);
     expect(text).not.toContain(`"=HYPERLINK(1)"`);
+  });
+
+  it("is one FilterBar: search, then the window, then Export, and a read line", () => {
+    log.entries = [entry(0, "system:onboarding"), entry(1)];
+    render(<AuditPage />);
+    const search = screen.getByRole("textbox", { name: "Search the loaded entries" });
+    const window = screen.getByRole("combobox", { name: "Date range" });
+    const exportButton = screen.getByRole("button", { name: "Export CSV" });
+    expect(search.compareDocumentPosition(window) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(window.compareDocumentPosition(exportButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("option", { name: "All time" })).toBeInTheDocument();
+    expect(screen.queryByText(/ loaded, /)).toBeNull();
+  });
+
+  it("names a machine by what it is, with Automatic under it, and keeps no Follow-on column", () => {
+    log.entries = [entry(0, "system:onboarding")];
+    render(<AuditPage />);
+    expect(screen.getByText("Onboarding")).toBeInTheDocument();
+    expect(screen.getByText("Automatic")).toBeInTheDocument();
+    expect(screen.queryByText("Follow-on")).toBeNull();
+    expect(screen.queryByText(/onboarding \(automatic\)/)).toBeNull();
   });
 });

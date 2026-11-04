@@ -1,15 +1,16 @@
 "use client";
 
 import { Term } from "@/components/ui/Term";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { Badge, Mono } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { StatusSeat } from "@/components/ui/StatusSeat";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ProjectName, UserName } from "@/components/names";
-import { shortId } from "@/lib/audit-vocabulary";
+import { BundleName, RoleRef, UserName } from "@/components/names";
+import { humanizeKey } from "@/lib/format";
+import { useMappingRules, type MappingRuleRow } from "@/lib/queries/useMappingRules";
 import { useCascadeGroups, type CascadeGroupRow } from "@/lib/queries/useConfirmationMode";
 import { Relative } from "@/components/ui/Time";
 
@@ -29,9 +30,10 @@ export default function ChangeHistoryPage() {
   const asked = useSearchParams().get("cascade")?.trim() ?? "";
   const cascades = useCascadeGroups(asked || undefined);
   const rows = cascades.data ?? [];
+  const rules = useMappingRules().data;
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Change history"
         lede={
@@ -40,24 +42,14 @@ export default function ChangeHistoryPage() {
             : (
                 <>
                   What each edit to a <Term name="bundle">bundle</Term> or an automatic rule then
-                  changed for people in Zitadel, newest first — one{" "}
+                  changed for people in Zitadel, newest first, one{" "}
                   <Term name="cascade">cascade</Term> per row. Audit records who did what; this
                   page records what those edits set off.
                 </>
               )
         }
-        actions={
-          asked ? (
-            <Link href="/operations/cascades" className="text-[13.5px] font-semibold text-accent-text link-hover">
-              Show every edit
-            </Link>
-          ) : undefined
-        }
+        actions={asked ? <ArrowLink href="/operations/cascades">Show every edit</ArrowLink> : undefined}
       />
-
-      <p className="text-[13px] text-faint">
-        Handles: c_ is one edit&rsquo;s set of changes, R_ an automatic rule, b_ a bundle.
-      </p>
 
       {/* This list is bundle/rule/lifecycle cascades only — a single-user direct
           grant never appears here even though it shows up in the audit feed,
@@ -66,7 +58,7 @@ export default function ChangeHistoryPage() {
           rather than "most of the period wasn't a cascade at all". */}
       {!asked && (
         <p className="text-[13px] text-faint">
-          Cascades only — a bundle edit, an automatic rule, or someone&rsquo;s status changing.
+          Cascades only: a bundle edit, an automatic rule, or someone&rsquo;s status changing.
           Direct, one-person grants don&rsquo;t appear here even though they&rsquo;re in the audit
           feed. Shows up to the 50 most recent.
         </p>
@@ -102,9 +94,9 @@ export default function ChangeHistoryPage() {
           </Card>
         }
       >
-        <div className="flex flex-col gap-[18px]">
-          {rows.map((group, index) => (
-            <CascadeCard key={group.cascade_id} group={group} newest={!asked && index === 0} />
+        <div className="flex flex-col gap-4">
+          {rows.map((group) => (
+            <CascadeCard key={group.cascade_id} group={group} rules={rules} />
           ))}
         </div>
       </ListStates>
@@ -112,46 +104,44 @@ export default function ChangeHistoryPage() {
   );
 }
 
-function CascadeCard({ group, newest }: { group: CascadeGroupRow; newest: boolean }) {
+function CascadeCard({ group, rules }: { group: CascadeGroupRow; rules?: MappingRuleRow[] }) {
   const first = group.writes[0];
+  // The rule by what it does: it has no name of its own. A bundle by its name.
+  const rule = group.source === "rule" ? rules?.find((entry) => entry.id === first?.source_ref) : undefined;
 
   return (
     <Card>
       <CardHeader
-        title={
-          <span className="flex flex-wrap items-baseline gap-2.5">
-            <Mono className={newest ? "text-[13px] text-accent-text" : "text-[13px] text-faint"}>
-              {shortId(group.cascade_id, "c")}
-            </Mono>
-            <span className="type-card-title">{titleFor(group)}</span>
-          </span>
-        }
+        title={<span className="type-card-title">{titleFor(group)}</span>}
         note={<Relative iso={group.settled_at ?? group.started_at} />}
         action={<StatePill group={group} />}
       />
 
-      <p className="row-divider px-5 py-3.5 text-[14px] leading-[1.55] text-muted">
-        {consequenceFor(group)}
-      </p>
+      <div className="row-divider flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5">
+        <p className="text-[14px] leading-[1.55] text-muted">{consequenceFor(group)}</p>
+        {group.waiting + group.failed > 0 && <ArrowLink href="/governance/pending">Pending changes</ArrowLink>}
+      </div>
 
       <div className="row-divider flex flex-wrap gap-x-5 gap-y-1.5 px-5 py-3 text-[13.5px]">
         {group.writes.slice(0, 6).map((write) => (
           <span key={write.id} className="text-muted">
-            <UserName id={write.user_id} /> · <ProjectName id={write.project_id} /> /{" "}
+            <UserName id={write.user_id} /> ·{" "}
             {(write.role_keys ?? []).map((key) => (
-              <Mono key={key} className="mr-1">
-                {key}
-              </Mono>
+              <RoleRef key={key} projectId={write.project_id} roleKey={key} className="mr-2" />
             ))}
           </span>
         ))}
         {group.writes.length > 6 && (
           <span className="text-faint">and {group.writes.length - 6} more</span>
         )}
-        {first?.source_ref && (
+        {group.source === "bundle" && first?.source_ref && (
           <span className="text-faint">
-            from {group.source === "rule" ? "rule" : "bundle"}{" "}
-            <Mono>{shortId(first.source_ref, group.source === "rule" ? "R" : "b")}</Mono>
+            from <BundleName id={first.source_ref} fallback="a bundle that is gone" />
+          </span>
+        )}
+        {rule && (
+          <span className="text-faint">
+            from the rule {humanizeKey(rule.source_role)} gives {humanizeKey(rule.target_role)}
           </span>
         )}
       </div>
@@ -160,34 +150,27 @@ function CascadeCard({ group, newest }: { group: CascadeGroupRow; newest: boolea
 }
 
 /**
- * Amber when changes are still waiting, accent when everything went through
+ * Warn when changes are still waiting, healthy when everything went through
  * AND Zitadel has confirmed it, neutral when an edit produced no changes at
- * all — which is a real and reassuring outcome, not an empty state.
+ * all, which is a real and reassuring outcome, not an empty state.
  *
  * "Applied" is Syndra's own record of having sent the write; "confirmed" is a
  * post-write read of Zitadel agreeing it landed. Read-back can lag sending by
  * a cycle, so a just-applied cascade legitimately shows sent-but-not-yet-
- * confirmed for a little while — that is a fact worth a word of its own, not
+ * confirmed for a little while. That is a fact worth a word of its own, not
  * something to fold into "sent".
  */
 function StatePill({ group }: { group: CascadeGroupRow }) {
-  if (group.failed > 0) {
-    return (
-      <Badge tone="danger">
-        {group.failed} failed
-      </Badge>
+  if (group.failed > 0) return <StatusSeat tone="danger" word={`${group.failed} failed`} />;
+  if (group.waiting > 0) return <StatusSeat tone="warn" word={`${group.waiting} waiting for you to send`} />;
+  if (group.applied > 0) {
+    return group.confirmed === group.applied ? (
+      <StatusSeat tone="healthy" word={`${group.applied} confirmed by Zitadel`} />
+    ) : (
+      <StatusSeat tone="warn" word={`${group.applied} sent, ${group.confirmed} confirmed`} />
     );
   }
-  if (group.waiting > 0) {
-    return <Badge tone="warn">{group.waiting} waiting for you to send</Badge>;
-  }
-  if (group.applied > 0) {
-    if (group.confirmed === group.applied) {
-      return <Badge tone="accent">{group.applied} confirmed by Zitadel</Badge>;
-    }
-    return <Badge tone="warn">{group.applied} sent, {group.confirmed} confirmed</Badge>;
-  }
-  return <Badge>no changes</Badge>;
+  return <StatusSeat tone="neutral" word="no changes" />;
 }
 
 function titleFor(group: CascadeGroupRow): string {
@@ -205,17 +188,17 @@ function consequenceFor(group: CascadeGroupRow): string {
   const needed = total === 1 ? "1 change was needed" : `${total} changes were needed`;
 
   if (group.failed > 0) {
-    return `${needed}. ${group.applied} went through and ${group.failed} failed on the way to Zitadel. The failed ones are still waiting under Pending changes.`;
+    return `${needed}. ${group.applied} went through and ${group.failed} failed on the way to Zitadel. The failed ones are still waiting for you to send.`;
   }
   if (group.waiting > 0 && group.applied > 0) {
-    return `${needed}. ${group.applied} went through and ${group.waiting} are still waiting for you to send. Until they all go through, some people have access that does not match the edit — send them from Pending changes.`;
+    return `${needed}. ${group.applied} went through and ${group.waiting} are still waiting for you to send. Until they all go through, some people have access that does not match the edit, so send them.`;
   }
   if (group.waiting > 0) {
-    return `${needed}, and none have reached Zitadel yet. Nothing has changed for anybody so far. Send them from Pending changes.`;
+    return `${needed}, and none have reached Zitadel yet. Nothing has changed for anybody so far.`;
   }
   if (group.confirmed === group.applied) {
     return `${needed}, and all of them went through. Nothing further is waiting from this edit.`;
   }
   const unconfirmed = group.applied - group.confirmed;
-  return `${needed}. Sent; Zitadel has not yet been read back for ${unconfirmed}.`;
+  return `${needed}. Sent; Zitadel has not yet confirmed ${unconfirmed}.`;
 }

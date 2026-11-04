@@ -220,9 +220,7 @@ export function glancePanel(m: Model, held: Map<string, number>, noReach: Insigh
   if (!lines.length) return null;
   return {
     tone: "neutral",
-    eyebrow: "The makerspace at a glance",
     title: "How access travels today",
-    meta: `${["", "One thing", "Two things", "Three things"][lines.length]} worth knowing`,
     lines,
   };
 }

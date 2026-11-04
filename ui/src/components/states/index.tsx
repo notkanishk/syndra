@@ -103,17 +103,23 @@ export function EmptyState({
   guidance,
   action,
   resolved = false,
+  bloom = false,
+  lift = false,
 }: {
   title: string;
   guidance?: string;
   action?: { label: string; href: string } | { label: string; onClick: () => void };
   resolved?: boolean;
+  /** The reader's own act just emptied it (S13): the lime dot blooms once. */
+  bloom?: boolean;
+  /** The list just emptied in front of the reader: the line rises into its place. */
+  lift?: boolean;
 }) {
   return (
-    <div role="status" className="tint-in flex flex-col justify-center gap-2.5 px-6 py-8">
+    <div role="status" className={`${lift ? "lift-in" : "tint-in"} flex flex-col justify-center gap-2.5 px-6 py-8`}>
       <div className="flex items-center gap-2.5">
         {resolved && (
-          <StatusDot tone="healthy" />
+          <StatusDot tone="healthy" bloom={bloom} />
         )}
         <div className="type-empty-title">{title}</div>
       </div>

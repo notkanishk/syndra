@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
@@ -11,7 +10,10 @@ import { useQueueCleared } from "@/lib/useQueueCleared";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { humanizeKey } from "@/lib/format";
-import { Mono, StatusDot } from "@/components/ui/Badge";
+import { StatusDot } from "@/components/ui/Badge";
+import { ArrowLink } from "@/components/ui/ArrowLink";
+import { FoldChevron } from "@/components/ui/FoldChevron";
+import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -19,11 +21,11 @@ import { Input } from "@/components/ui/Input";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ProjectName, UserName } from "@/components/names";
-import { machineName, shortId } from "@/lib/audit-vocabulary";
+import { RoleRef, UserName } from "@/components/names";
+import { machineName } from "@/lib/audit-vocabulary";
 import { targetLabel } from "@/lib/nav";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { outcomeFromError, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useBundles, type BundleRow } from "@/lib/queries/useBundles";
 import { useMappingRules, type MappingRuleRow } from "@/lib/queries/useMappingRules";
@@ -34,6 +36,9 @@ import {
 } from "@/lib/queries/usePropagation";
 import { Relative } from "@/components/ui/Time";
 import { waitIsChosen, waitReasonLine } from "@/lib/wait-reason";
+
+/** Q2 (A-17): an empty queue still says "Send 0 changes". The owner's answer is a change to this one function. */
+const sendLabel = (known: boolean, n: number) => (known ? `Send ${n} ${n === 1 ? "change" : "changes"}` : "Send changes");
 
 /**
  * S3 · Automation › Pending changes.
@@ -97,10 +102,10 @@ export default function PendingChangesPage() {
   const known = !pending.isLoading && !pending.error;
 
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Pending changes"
-        lede="Changes that have not reached Zitadel or a connected system yet. They wait for you: sending delivers all of them, in order, and each person's access changes as theirs arrives. Revocations also send on their own every few minutes."
+        lede="Changes that have not reached Zitadel or a connected system yet. Sending delivers all of them, in order, and revocations also send on their own every few minutes."
         actions={
           // With nothing left to send it fades out, then goes.
           cleared && folded ? null : (
@@ -124,42 +129,47 @@ export default function PendingChangesPage() {
                   }
                 }}
               >
-                {known ? `Send ${sentCount} ${sentCount === 1 ? "change" : "changes"}` : "Send changes"}
+                {sendLabel(known, sentCount)}
               </Button>
             </span>
           )
         }
       />
 
-      {outcome && <ActionOutcome outcome={outcome} />}
+      {outcome && <ActionOutcome outcome={outcome} word={statesNothingChanged(outcome.kind) ? "Not sent" : "Sent"} />}
 
       {known && rows.length > 0 && !cleared && (
-        <div className="flex flex-col gap-3.5">
-          <FilterBar
-            search={
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search person or role…"
-                aria-label="Search pending changes by person or role"
-              />
-            }
-          />
-          <span className="text-[13.5px] text-muted">
-            {needle
-              ? `${shown.length} of the ${rows.length} changes match. Sending sends all ${rows.length}, in order.`
-              : "They are sent in this order."}
-          </span>
-        </div>
+        <FilterBar
+          search={
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search person or role…"
+              aria-label="Search pending changes by person or role"
+            />
+          }
+          read={
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <ReadFreshness state={readStateOfQuery(pending)} subject="The queue" />
+              {needle && (
+                <span className="text-[13.5px] text-muted">
+                  {`${shown.length} of the ${rows.length} changes match. Sending sends all ${rows.length}, in order.`}
+                </span>
+              )}
+            </div>
+          }
+        />
       )}
 
       <Card>
-        <CardColumns>
-          <span className="w-[130px]">Who</span>
-          <span className="flex-1">Change</span>
-          <span className="w-[130px]">Caused by</span>
-          <span className="w-[110px] text-right">Waiting</span>
-        </CardColumns>
+        {(cleared ? !folded : known && shown.length > 0) && (
+          <CardColumns>
+            <span className="w-[130px]">Who</span>
+            <span className="flex-1">Change</span>
+            <span className="w-[130px]">Caused by</span>
+            <span className="w-[110px] text-right">Waiting</span>
+          </CardColumns>
+        )}
 
         {cleared ? (
           <>
@@ -258,29 +268,20 @@ function PendingGroups({
                   onClick={() => toggle(group.key)}
                   className="group -my-2 -ml-2 flex size-11 flex-none items-center justify-center"
                 >
-                  {/* The 28px round chevron is the look; the 44px button around it is the touch floor. */}
-                  <span
-                    aria-hidden
-                    className={`flex size-7 items-center justify-center rounded-pill border border-line-strong text-[13px] text-muted motion-turn group-hover:bg-[var(--hover)] ${
-                      open ? "rotate-90" : ""
-                    }`}
-                  >
-                    ›
-                  </span>
+                  <FoldChevron open={open} />
                 </button>
                 <p className="min-w-0 flex-1 text-[13.5px] leading-[1.5] text-muted">
-                  These {count} changes come from one edit (
-                  <Mono className="text-faint">{shortId(group.key, "c")}</Mono>).{" "}
-                  {shared ? `${shared}. ` : ""}They are sent together or not at all.
+                  These {count} changes come from one edit. {shared ? `${shared}. ` : ""}They are sent together or not at all.
                   {shown < count && ` ${shown} of ${count} shown.`}
                 </p>
+                {all.rows[0]?.cascade_id && <SetOff id={all.rows[0].cascade_id} />}
               </div>
             )}
             <Unfold open={open}>
               {group.rows.map((row) => (
                 <LeavingRow key={row.id} {...leave(row.id)}>
                   <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:items-center tablet:gap-[18px]">
-                    <span className="w-full truncate text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
+                    <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
                       <UserName id={row.user_id} />
                     </span>
 
@@ -291,11 +292,8 @@ function PendingGroups({
                         ) : (
                           <>
                             <span className="text-muted">{verb(row.op_type)}</span>{" "}
-                            <ProjectName id={row.project_id} /> /{" "}
                             {(row.role_keys ?? []).map((key) => (
-                              <Mono key={key} className="mr-1.5">
-                                {key}
-                              </Mono>
+                              <RoleRef key={key} projectId={row.project_id} roleKey={key} className="mr-3" />
                             ))}
                             {row.wait_reason === "role_waits" && <WaitsMark className="ml-1.5" />}
                           </>
@@ -305,7 +303,7 @@ function PendingGroups({
                     </span>
 
                     <span className="w-full text-[13.5px] tablet:w-[130px] tablet:shrink-0">
-                      <CausedBy row={row} bundles={bundles} rules={rules} />
+                      <CausedBy row={row} bundles={bundles} rules={rules} setOff={count < 2} />
                     </span>
 
                     <span className="text-[13px] text-faint tablet:w-[110px] tablet:shrink-0 tablet:text-right">
@@ -347,24 +345,22 @@ function ClearedGroups({
 }
 
 /**
- * The queue has emptied (S13). One line rises 6px into the list's place; its dot
- * blooms once only when this operator's send did it. A queue someone else sent
- * (or that was cancelled away) says the line without the bloom and without a
- * count or a time it cannot know.
+ * The queue has emptied (S13). One line says so; a queue someone else sent (or
+ * that was cancelled away) says it without a count or a time it cannot know.
  */
 function EverythingSent({ mine }: { mine: { count: number; at: string } | null }) {
   return (
-    <div role="status" className="lift-in flex flex-col justify-center gap-2.5 px-6 py-8">
-      <div className="flex items-center gap-2.5">
-        <span aria-hidden className={`h-2 w-2 flex-none rounded-pill bg-healthy ${mine ? "bloom" : ""}`} />
-        <div className="type-empty-title">Everything has reached Zitadel</div>
-      </div>
-      <p className="max-w-[60ch] text-[14px] text-faint">
-        {mine
-          ? `${mine.count} ${mine.count === 1 ? "change" : "changes"} sent at ${formatClock(mine.at)} · nothing is waiting for you`
-          : "Nothing is waiting for you to send"}
-      </p>
-    </div>
+    <EmptyState
+      resolved
+      lift
+      bloom={mine !== null}
+      title="Everything has reached Zitadel."
+      guidance={
+        mine
+          ? `${mine.count} ${mine.count === 1 ? "change" : "changes"} sent at ${formatClock(mine.at)}. Nothing is waiting for you.`
+          : "Nothing is waiting for you to send."
+      }
+    />
   );
 }
 
@@ -392,11 +388,6 @@ function groupByCascade(rows: PendingPropagationRow[]): CascadeGroup[] {
   return order.map((key) => ({ key, rows: byKey.get(key)! }));
 }
 
-/**
- * What set this change off — a bundle's name or a rule's mapping, never the
- * bare handle on its own. The handle stays alongside, muted, for tracing back
- * to Bundles, Access or Change history; it just never stands in for the name.
- */
 /**
  * A connected system's change has no project or roles to name. It says which
  * system, and why it was queued; rows from before the reason was kept say what
@@ -476,14 +467,22 @@ function matches(
   ].some((text) => text?.toLowerCase().includes(needle));
 }
 
+/** "What this set off": the one way to the edit's Change history, never its handle. */
+function SetOff({ id }: { id: string }) {
+  return <ArrowLink href={`/operations/cascades?cascade=${encodeURIComponent(id)}`}>What this set off</ArrowLink>;
+}
+
+/** What set this change off, by name. `setOff` puts the link to Change history on this row (a batch says it once, in its band). */
 function CausedBy({
   row,
   bundles,
   rules,
+  setOff,
 }: {
   row: PendingPropagationRow;
   bundles?: BundleRow[];
   rules?: MappingRuleRow[];
+  setOff: boolean;
 }) {
   const isBundle = row.source === "bundle";
   const bundle = isBundle ? bundles?.find((b) => b.id === row.source_ref) : undefined;
@@ -510,7 +509,7 @@ function CausedBy({
   const name = bundle
     ? bundle.name
     : rule
-      ? `${rule.source_role} → ${rule.target_role}`
+      ? `${humanizeKey(rule.source_role)} gives ${humanizeKey(rule.target_role)}`
       : isBundle
         ? "Bundle"
         : isRule
@@ -522,19 +521,8 @@ function CausedBy({
   return (
     <span className="flex flex-col gap-0.5">
       <span>{name}</span>
-      {(isBundle || isRule) && row.source_ref && (
-        <Mono className="text-faint">{shortId(row.source_ref, isBundle ? "b" : "R")}</Mono>
-      )}
-      {/* A change made by hand has no edit behind it: no handle, not a dash. */}
-      {row.cascade_id && (
-        <Link
-          href={`/operations/cascades?cascade=${encodeURIComponent(row.cascade_id)}`}
-          aria-label="See what this change set off, in Change history"
-          className="link-hover"
-        >
-          <Mono className="text-faint">{shortId(row.cascade_id, "c")}</Mono>
-        </Link>
-      )}
+      {/* A change made by hand has no edit behind it: no link, not a dash. */}
+      {setOff && row.cascade_id && <SetOff id={row.cascade_id} />}
     </span>
   );
 }
