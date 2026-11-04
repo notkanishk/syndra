@@ -7,19 +7,6 @@ import { Badge, StatusDot } from "@/components/ui/Badge";
 import { UserName } from "@/components/names/UserName";
 import { sortByName } from "@/lib/sort";
 
-/**
- * The rehearsal, rendered.
- *
- * Every bulk operation in the product — granting a role to a cohort, resolving
- * a drift queue, deciding a batch of requests — computes the same plan shape on
- * the server and shows it through this one component. That is deliberate: an
- * operator should not have to learn what "will change" looks like separately on
- * each screen, and a preview drawn by different code from the write it previews
- * is a preview of nothing.
- *
- * Rows are never identified by id. A plan an operator cannot read is a plan
- * they will approve without reading.
- */
 
 // The six words live in lib/outcome, shared with every other surface that
 // reports what happened. They were declared here first, privately, which is
@@ -48,6 +35,19 @@ export function splitCancels(consequence: string | undefined): { rest: string; c
   };
 }
 
+/**
+ * The rehearsal, rendered.
+ *
+ * Every bulk operation in the product — granting a role to a cohort, resolving
+ * a drift queue, deciding a batch of requests — computes the same plan shape on
+ * the server and shows it through this one component. That is deliberate: an
+ * operator should not have to learn what "will change" looks like separately on
+ * each screen, and a preview drawn by different code from the write it previews
+ * is a preview of nothing.
+ *
+ * Rows are never identified by id. A plan an operator cannot read is a plan
+ * they will approve without reading.
+ */
 export function PlanReview({
   plan,
   noun = ["person", "people"],

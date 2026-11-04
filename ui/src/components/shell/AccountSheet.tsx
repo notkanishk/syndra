@@ -12,6 +12,12 @@ import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
 import { useInstallPrompt } from "@/lib/useInstallPrompt";
 
+/** What each of an operator's own pages is for, under its link. */
+const OWN_NOTES: Record<string, string> = {
+  "/me": "What you can use, and asking for more",
+  "/storage": "Your password and folders",
+};
+
 /**
  * Who you are signed in as, and the two things that belong to this device.
  *
@@ -24,12 +30,6 @@ import { useInstallPrompt } from "@/lib/useInstallPrompt";
  * from a destination, and signing out clears every tab's place — which is
  * cheap to say and expensive to discover.
  */
-/** What each of an operator's own pages is for, under its link. */
-const OWN_NOTES: Record<string, string> = {
-  "/me": "What you can use, and asking for more",
-  "/storage": "Your password and folders",
-};
-
 export function AccountSheet({ session }: { session: SessionUser }) {
   const [open, setOpen] = useState(false);
   const { theme, setTheme } = useTheme();
