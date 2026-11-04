@@ -71,12 +71,10 @@ export function CreateRoleDialog({
           <div>
             <FieldLabel htmlFor="role-project">Project</FieldLabel>
             {pinnedProjectId ? (
-              // Stated, not editable. The dialog was opened from this project's
-              // own page; a select here would invite changing it by accident.
-              // Named through the shared resolver rather than a bare id — the
-              // one this dialog is pinned to is the one thing on this screen an
-              // operator should never have to read as a raw Zitadel id.
-              <div className="flex items-center rounded-inner border border-line-strong px-[15px] py-3 text-[15px]">
+              // Stated, not editable: the dialog was opened from this project's own page, and a
+              // select here would invite changing it by accident. Named through the shared
+              // resolver, never a raw id. Plain text, not a fake input.
+              <div className="flex min-h-11 items-center text-[15px]">
                 <ProjectName id={pinnedProjectId} />
               </div>
             ) : (
@@ -86,17 +84,13 @@ export function CreateRoleDialog({
                 onChange={(event) => setProjectId(event.target.value)}
               >
                 <option value="">Choose…</option>
-                {(projects.data ?? []).map((entry) => (
+                {sortByName(projects.data ?? [], (entry) => entry.project.name, (entry) => entry.project.id).map((entry) => (
                   <option key={entry.project.id} value={entry.project.id}>
                     {entry.project.name}
                   </option>
                 ))}
               </Select>
             )}
-            <FieldHint>
-              A machine or area with its own set of roles — the Laser Cutter, the Studio. Apps
-              check a person&rsquo;s roles against one project.
-            </FieldHint>
           </div>
           <div>
             <FieldLabel htmlFor="role-key">Role key</FieldLabel>
@@ -134,10 +128,6 @@ export function CreateRoleDialog({
             onChange={(event) => setDescription(event.target.value)}
             placeholder="Can cut and engrave unsupervised."
           />
-          <FieldHint>
-            Shown in full wherever this role is listed. &ldquo;Can cut unsupervised&rdquo; versus
-            &ldquo;may enter and watch&rdquo; is the whole decision you make when you give it to someone.
-          </FieldHint>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -149,7 +139,6 @@ export function CreateRoleDialog({
               onChange={(event) => setGroup(event.target.value)}
               placeholder="Safety-gated"
             />
-            <FieldHint>Optional. Roles in the same group can be filtered together on the Roles page.</FieldHint>
           </div>
           <div>
             <FieldLabel htmlFor="role-clone">Clone from</FieldLabel>
@@ -158,7 +147,7 @@ export function CreateRoleDialog({
               value={cloneFrom}
               onChange={(event) => setCloneFrom(event.target.value)}
             >
-              <option value="">Nothing — start empty</option>
+              <option value="">Start empty</option>
               {sortByName(all, (role) => `${role.project_name} / ${role.role_key}`, (role) => role.project_id).map((role) => (
                 <option
                   key={`${role.project_id}:${role.role_key}`}
@@ -168,7 +157,6 @@ export function CreateRoleDialog({
                 </option>
               ))}
             </Select>
-            <FieldHint>Copies the name and description, and records where it came from.</FieldHint>
           </div>
         </div>
       </div>
@@ -176,7 +164,7 @@ export function CreateRoleDialog({
       {/* The sheet reports its own result and stays open to do it: a role that
           nobody holds yet is a fact the operator has to act on next, and a
           dialog that closes itself takes that sentence with it. */}
-      {outcome && <ActionOutcome outcome={outcome} className="mx-6 mb-1" />}
+      {outcome && <ActionOutcome outcome={outcome} word="Created" className="mx-6 mb-1" />}
       {created && outcome?.kind === "applied" && (
         <div className="mx-6 mb-1">
           <ArrowLink href={`/changes/roles-that-wait?add=${encodeURIComponent(created)}`}>
@@ -187,11 +175,14 @@ export function CreateRoleDialog({
 
       <ModalFooter
         note={outcome?.kind === "applied" ? undefined : "When it's given, it goes straight to Zitadel, like most roles."}
+        cancel={outcome?.kind === "applied" ? undefined : { onClick: onClose }}
       >
-        {/* Gone once it has run. The catalog refetch that would flip `duplicate`
-            to true has not landed the instant this succeeds, so a second click
-            was free to resubmit the identical payload. */}
-        {outcome?.kind !== "applied" && (
+        {/* Gone once it has run: the catalog refetch that would flip `duplicate` to true has not
+            landed the instant this succeeds, so a second click was free to resubmit the identical
+            payload. The result in the sheet ends on one Close. */}
+        {outcome?.kind === "applied" ? (
+          <Button onClick={onClose}>Close</Button>
+        ) : (
           <Button
             variant="accent"
             disabled={!projectId || !roleKey || !valid || duplicate}
@@ -228,7 +219,7 @@ export function CreateRoleDialog({
                 setOutcome({
                   kind: "applied",
                   message: `${displayName || roleKey} is in ${project}`,
-                  detail: "Nobody has it yet. When it's given, it goes straight to Zitadel.",
+                  detail: "Nobody has it yet.",
                 });
                 setCreated(`${projectId}:${roleKey}`);
               } catch (error) {
@@ -239,7 +230,6 @@ export function CreateRoleDialog({
             Create role
           </Button>
         )}
-        <Button onClick={onClose}>{outcome?.kind === "applied" ? "Close" : "Cancel"}</Button>
       </ModalFooter>
     </Modal>
   );

@@ -49,8 +49,10 @@ describe("the new-role dialog pinned to a project", () => {
     await waitFor(() => expect(create).toHaveBeenCalled());
     expect(await screen.findByText(/Laser trained is in Laser Cutter/)).toBeInTheDocument();
     expect(screen.queryByText(/p-laser/)).toBeNull();
-    // Says what happens next, matching the endpoint's confirmed synchronous
-    // create (rolled back locally if Zitadel refuses — nothing left queued).
-    expect(screen.getByText(/Nobody has it yet\. When it.s given, it goes straight to Zitadel\./)).toBeInTheDocument();
+    // Said once, in the footer note; the result does not repeat it.
+    expect(screen.getByText("Nobody has it yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/goes straight to Zitadel/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 });
