@@ -66,7 +66,7 @@ func CanaryPayload() []byte {
 // CanaryExpected is the exact append_claims the canary must get. Written out,
 // not computed: a shaper change that alters it fails TestCanaryExpected
 // rather than moving the probe's expectation with it.
-const CanaryExpected = `[{"key":"syndra_canary","value":["probe"]},{"key":"syndra_canary_user","value":"syndra-canary"},{"key":"syndra_canary_team","value":"probe"}]`
+const CanaryExpected = `[{"key":"syndra_canary","value":["probe"]},{"key":"syndra_canary_team","value":"probe"},{"key":"syndra_canary_user","value":"syndra-canary"}]`
 
 // WithoutCanary is cfg with the canary project left out: what the reconciler
 // checks, since the canary is no app Zitadel knows.

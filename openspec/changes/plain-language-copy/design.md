@@ -264,11 +264,18 @@ If a filter offers a source the title does not admit, the title is wrong —
 that is how *Incoming events* spent a release called *Zitadel events* while
 carrying onboarding triggers Zitadel never sent.
 
-### An app's claims page (A-15)
+### An app's claims page (A-15, A-16)
 
 | Say | For |
 |---|---|
-| **Claim rows** | the Advanced fold holding every row's form, Add a claim and Lands in. Not "Custom claims": it collides with the `custom_claims` key. One constant, `CLAIM_ROWS` in `lib/claims.ts`, should the owner choose 4b |
+| **The roles each person holds in {project}, as a list** | the roles claim's line ("as text" when sent as text) |
+| **All 7 roles, in Syndra's words.** · **Both roles, …** · **Its one role, …** · **All 7 roles, in NetBird's words.** · **6 of 7 roles. Staff as `netbird-staff`; Guests left out.** · **5 of 7 roles. 2 renamed, 1 left out.** | the roles line's faint state (`rolesState`) |
+| **New in this draft.** | a line the saved shape lacks |
+| **No roles. {app} gets none from Syndra.** | the first line when nothing carries roles |
+| **Zitadel sends `email`** · **Sent as `groups`** · **Then choose the roles** · **Then name it and set it** | the add menu's right seat: why an entry is muted, or the one choice still to make (`ADD_MENU`) |
+| **Add a claim inside** · **Nothing: top level** · **A new object** | an object's editor, and the Inside field |
+| **Name it and give it a value.** · **Give it a value.** | a fixed value that isn't finished |
+| ~~Claim rows~~ | gone with its fold (A-16) |
 | **Show the checks** / **Hide the checks** | the preview's trail, one step away while everything passes |
 | **All five checks pass** · **Check 1 fails** · **Checks 1 and 5 fail** · **Check 4 needs a look** | the verdict line, each with " on this draft" when a draft is previewed (`verdictOf`) |
 
