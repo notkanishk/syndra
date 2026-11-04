@@ -343,6 +343,24 @@ describe("plain language", () => {
     expect(offenders, "no exclamation marks — the register is a university office").toEqual([]);
   });
 
+  /**
+   * A-17 G11: an em dash never joins a sentence or makes "WORD — fragment" on
+   * screen. About 80 had crept in, each an aside the reader had to hold while
+   * the sentence went on. A lone "—" is an empty cell's placeholder, not prose.
+   */
+  it("joins no sentence with an em dash", () => {
+    // Owner's question A-17 Q4 (the mythology lines): kept, dash and all, until answered.
+    const PARKED = new Set(["components/login/LoginDoor.tsx", "app/zitadel/page.tsx"]);
+    const offenders: string[] = [];
+    for (const { path, source } of sources()) {
+      if (PARKED.has(path)) continue;
+      for (const { line, text } of copyOf(source)) {
+        if (/—/.test(text) && text.trim() !== "—") offenders.push(`${path}:${line} — "${text.slice(0, 90)}"`);
+      }
+    }
+    expect(offenders, "a full stop, a comma or a colon").toEqual([]);
+  });
+
   it("gives every page a lede", () => {
     // A page whose first content already says what the lede would, argued one by one.
     const LEDELESS: Record<string, string> = {

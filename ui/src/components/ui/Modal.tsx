@@ -299,7 +299,7 @@ export function Modal({
 
   if (open && nested && process.env.NODE_ENV !== "production") {
     console.error(
-      "Modal: a dialog opened inside another dialog. Sheets push, they do not stack — " +
+      "Modal: a dialog opened inside another dialog. Sheets push, they do not stack: " +
         "replace the first sheet's content and make its title a back-line instead.",
     );
   }
@@ -536,7 +536,7 @@ function SheetGrabber({ busy, onClose, drag }: { busy: boolean; onClose: () => v
       <div {...drag.handlers} className="flex flex-none touch-none flex-col items-center gap-1.5 pb-1 pt-3 tablet:hidden">
         <span aria-hidden className="h-1 w-[38px] rounded-pill bg-accent/40" />
         <span className={`motion-tint text-[12.5px] ${drag.answered ? "text-ink" : "text-faint"}`}>
-          Applying your change — this sheet can&apos;t be closed until it finishes.
+          Applying your change. This sheet can&apos;t be closed until it finishes.
         </span>
       </div>
     );
@@ -613,10 +613,10 @@ export function ModalFooter({
   children: React.ReactNode;
   note?: React.ReactNode;
   /** The quieter half of the pair: always ghost (owner, 4 Nov), placed by `CANCEL_FIRST`. */
-  cancel?: { onClick: () => void; label?: string; disabled?: boolean };
+  cancel?: { onClick: () => void; label?: string; disabled?: boolean; reason?: string };
 }) {
   const quiet = cancel && (
-    <Button variant="ghost" onClick={cancel.onClick} disabled={cancel.disabled}>
+    <Button variant="ghost" onClick={cancel.onClick} disabled={cancel.disabled} reason={cancel.reason}>
       {cancel.label ?? "Cancel"}
     </Button>
   );

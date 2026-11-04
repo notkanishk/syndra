@@ -289,6 +289,7 @@ function MoreChanges({
         ))}
       </div>
       <ModalFooter note="Each one shows who would change, person by person, before anything happens.">
+        {/* The verbs above are the choice; Cancel is the footer's only button, so outline (G1). */}
         <Button variant="outline" onClick={onClose}>
           Cancel
         </Button>

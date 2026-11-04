@@ -78,19 +78,19 @@ export const GLOSSARY = {
   entitlement: {
     title: "Entitlement",
     definition:
-      "What a role entitles somebody to on a connected system — the TrueNAS groups it maps to, and therefore the shares and datasets it opens. Roles live in Zitadel; entitlements are what Syndra resolves them into.",
+      "What a role entitles somebody to on a connected system: the TrueNAS groups it maps to, and therefore the shares and datasets it opens. Roles live in Zitadel; entitlements are what Syndra resolves them into.",
     kind: "standard",
   },
   provision: {
     title: "Provision",
     definition:
-      "Create the account and everything that goes with it — home directory, primary group, shell — rather than merely adding a membership to an account that already exists.",
+      "Create the account and everything that goes with it (home directory, primary group, shell) rather than merely adding a membership to an account that already exists.",
     kind: "standard",
   },
   reconcile: {
     title: "Check for differences",
     definition:
-      "The pass that compares what Syndra believes a system holds against what it actually holds, and classifies each difference rather than resolving it by overwriting — one side moved, both did, or the account is gone. A change somebody made by hand survives it, and is reported instead of being silently reverted.",
+      "The pass that compares what Syndra believes a system holds against what it actually holds, and classifies each difference rather than resolving it by overwriting: one side moved, both did, or the account is gone. A change somebody made by hand survives it, and is reported instead of being silently reverted.",
     kind: "standard",
   },
   drift: {
@@ -108,13 +108,13 @@ export const GLOSSARY = {
   token: {
     title: "Token",
     definition:
-      "What an app is handed when somebody signs in, carrying their identity and their roles. It is issued fresh at each sign-in, so a change reaches an app the next time its user signs in — not immediately.",
+      "What an app is handed when somebody signs in, carrying their identity and their roles. It is issued fresh at each sign-in, so a change reaches an app the next time its user signs in, not immediately.",
     kind: "standard",
   },
   oidc: {
     title: "OIDC",
     definition:
-      "OpenID Connect — the protocol most apps here use to sign people in and receive their roles in a token.",
+      "OpenID Connect: the protocol most apps here use to sign people in and receive their roles in a token.",
     kind: "standard",
   },
   saml: {
@@ -126,7 +126,7 @@ export const GLOSSARY = {
   roleKey: {
     title: "Role key",
     definition:
-      "A role's stable machine name — what an app matches on, and what appears in a token. The display name can change; the key cannot, because apps are configured against it.",
+      "A role's stable machine name: what an app matches on, and what appears in a token. The display name can change; the key cannot, because apps are configured against it.",
     kind: "standard",
   },
   serviceAccount: {
@@ -173,7 +173,7 @@ export const GLOSSARY = {
   hold: {
     title: "Hold",
     definition:
-      "A deliberate block on access a role still grants, with a date to look at it again. It stays in force until somebody lifts it — the review date is a reminder, not an end date.",
+      "A deliberate block on access a role still grants, with a date to look at it again. It stays in force until somebody lifts it. The review date is a reminder, not an end date.",
     kind: "syndra",
   },
   mapping: {
@@ -185,7 +185,7 @@ export const GLOSSARY = {
   mergeFinding: {
     title: "Merge finding",
     definition:
-      "A difference reconciliation could not resolve on its own — both sides changed since Syndra last looked, or the account is gone from the system entirely. It is recorded rather than guessed at, and waits for a person.",
+      "A difference reconciliation could not resolve on its own: both sides changed since Syndra last looked, or the account is gone from the system entirely. It is recorded rather than guessed at, and waits for a person.",
     kind: "syndra",
     mustDefine: true,
   },
@@ -205,14 +205,14 @@ export const GLOSSARY = {
   logAnchor: {
     title: "Log anchor",
     definition:
-      "A hash chaining a system's change log to the last state Syndra verified. If it does not match, the log was altered or truncated after Syndra read it — the one finding here that is not routine.",
+      "A hash chaining a system's change log to the last state Syndra verified. If it does not match, the log was altered or truncated after Syndra read it, the one finding here that is not routine.",
     kind: "syndra",
     mustDefine: true,
   },
   unvouched: {
     title: "Unvouched",
     definition:
-      "A system Syndra could not read on its last attempt, so it can say nothing about what that system currently holds. Not a fault in the access — a gap in the evidence.",
+      "A system Syndra could not read on its last attempt, so it can say nothing about what that system currently holds. Not a fault in the access: a gap in the evidence.",
     kind: "syndra",
     mustDefine: true,
   },

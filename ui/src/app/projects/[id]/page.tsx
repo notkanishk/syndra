@@ -194,7 +194,7 @@ export default function ProjectDetailPage({
                   <div className="text-[15px] font-semibold">
                     <Link
                       href={`/projects/${id}/roles/${encodeURIComponent(role.role_key)}`}
-                      className="motion-tint hover:text-accent-text"
+                      className="link-hover"
                     >
                       {role.display_name || humanizeKey(role.role_key)}
                     </Link>

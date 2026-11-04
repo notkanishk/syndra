@@ -180,6 +180,8 @@ describe("a control states its role in the vocabulary the product already has", 
     const ARGUED: Record<string, string> = {
       "Record the owner":
         "the other claimant stops holding the account in Syndra, immediately and without being told",
+      // A-17 §2.22: the replacement drops every role not in the new list, straight in Zitadel.
+      "Replace roles in Zitadel": "every role left out of the new list is revoked in Zitadel, with no record in Syndra",
       "Accept this log and start over":
         "the only act in the product that discards evidence — the missing records stay missing and Syndra stops being able to say so",
     };
@@ -345,3 +347,74 @@ function stripLineComments(source: string): string {
     .map((line) => (/^\s*\/\//.test(line) ? " ".repeat(line.length) : line))
     .join("\n");
 }
+
+/**
+ * A-17's global rules, where a machine can check them. Each was found on a
+ * screen first, in several hand copies that had already drifted apart; the
+ * shared part now carries the rule, and these keep the copies from coming back.
+ */
+describe("the refinement sweep's rules (A-17)", () => {
+  const all = () =>
+    tsxFiles(join(SRC, "components"))
+      .concat(tsxFiles(join(SRC, "app")))
+      .map((path) => ({ path: path.slice(SRC.length + 1), source: stripLineComments(readFileSync(path, "utf8")) }));
+  const lineAt = (source: string, at: number) => source.slice(0, at).split("\n").length;
+
+  // G3: six hand copies of the fold chevron, in two border tones, before it was a part.
+  it("folds only through FoldChevron: no hand-turned chevron and no › glyph toggle", () => {
+    const offenders = all()
+      .filter(({ path }) => path !== "components/ui/FoldChevron.tsx")
+      .flatMap(({ path, source }) =>
+        [...source.matchAll(/\brotate-90\b|>\s*›\s*</g)].map((m) => `${path}:${lineAt(source, m.index!)}`),
+      );
+    expect(offenders, "use <FoldChevron open={…} /> inside the fold's own button").toEqual([]);
+  });
+
+  // G13: quiet text is a token, never ink at an alpha.
+  it("draws no text in ink at an alpha", () => {
+    const offenders = all().flatMap(({ path, source }) =>
+      [...source.matchAll(/\btext-ink\/\d+/g)].map((m) => `${path}:${lineAt(source, m.index!)}`),
+    );
+    expect(offenders, "text-muted or text-faint").toEqual([]);
+  });
+
+  // G4: Cancel is the footer's `cancel` slot, so one constant (Q1) orders every dialog.
+  it("puts a dialog's Cancel in ModalFooter's slot whenever it sits beside an act", () => {
+    const offenders = all().flatMap(({ path, source }) =>
+      [...source.matchAll(/<ModalFooter\b[\s\S]*?<\/ModalFooter>/g)]
+        .filter((m) => /<Button\b[^>]*>\s*Cancel\s*<\/Button>/.test(m[0]) && (m[0].match(/<Button\b/g) ?? []).length > 1)
+        .map((m) => `${path}:${lineAt(source, m.index!)}`),
+    );
+    expect(offenders, "<ModalFooter cancel={{ onClick }}>act</ModalFooter>").toEqual([]);
+  });
+
+  // G6: the breadcrumb already names the nav section.
+  it("never spends an eyebrow on a nav section", () => {
+    const offenders = all().flatMap(({ path, source }) =>
+      [...source.matchAll(/eyebrow="(Projects|Apps|Changes|System|Review|Access|People|Automation)"/g)].map(
+        (m) => `${path}:${lineAt(source, m.index!)} — ${m[1]}`,
+      ),
+    );
+    expect(offenders, "an eyebrow names a parent thing, never a section").toEqual([]);
+  });
+
+  // G5: the read line sits 10 under a FilterBar (its `read` slot), never pulled up by a negative margin.
+  it("never places a read line by a negative margin", () => {
+    const offenders = all().flatMap(({ path, source }) =>
+      [...source.matchAll(/<ReadFreshness\b/g)]
+        .filter((m) => /(^|\s|")-m[tb]-/.test(tagAt(source, m.index!)))
+        .map((m) => `${path}:${lineAt(source, m.index!)}`),
+    );
+    expect(offenders, "FilterBar read={<ReadFreshness … />}").toEqual([]);
+  });
+
+  // G10: an actor Syndra can name is shown by name. These fields hold account ids.
+  it("never renders a raw account id where the name resolver can name it", () => {
+    const ACTOR =
+      /(?<![=$])\{\s*[\w.?!]+\.(actorId|actor_id|upstream_actor|granted_by|published_by|created_by|requested_by|decided_by|user_id)\s*\}/g;
+    const offenders = all().flatMap(({ path, source }) =>
+      [...source.matchAll(ACTOR)].map((m) => `${path}:${lineAt(source, m.index!)} — ${m[1]}`),
+    );
+    expect(offenders, "<UserName id={…} />").toEqual([]);
+  });
+});

@@ -89,8 +89,8 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
         return {
           tone: "error",
           message: counts
-            ? `${counts}. Stopped — Syndra has given up on one change.`
-            : "Stopped — Syndra has given up on one change.",
+            ? `${counts}. Stopped: Syndra has given up on one change.`
+            : "Stopped: Syndra has given up on one change.",
           detail:
             "The queue stops at that change, and nothing behind it was tried. Give or revoke the access again from the person's page to try afresh.",
         };
@@ -121,7 +121,7 @@ export function describeDrain(result: DrainResult | undefined): DrainOutcome {
   if (requeued || errored) {
     return {
       tone: "warning",
-      message: `${counts} — send again.`,
+      message: `${counts}. Send again.`,
       detail: errored
         ? "A change reached Zitadel but Syndra could not record the outcome. Sending again settles it."
         : "Those changes hit a temporary error, and Syndra will try them again.",

@@ -351,7 +351,7 @@ export function MapTab({ url }: { url: InsightsUrl }) {
                 type="button"
                 aria-pressed={finding === f}
                 onClick={() => url.set({ ...toParams(null), ...NO_LENS, finding: finding === f ? null : f })}
-                className="control press-scale rounded-pill"
+                className="control press-scale inline-flex min-h-[44px] items-center desktop:min-h-0"
               >
                 <Chip className={`gap-2 ${finding === f ? "!bg-tint-3" : ""}`}>
                   <StatusDot tone={DOT[f]} />

@@ -2,6 +2,7 @@
 
 import React from "react";
 
+import { UserName } from "@/components/names/UserName";
 import { targetLabel } from "@/lib/nav";
 import { sortByName } from "@/lib/sort";
 
@@ -102,20 +103,22 @@ export function Withheld({
           <li key={`${item.target ?? ""}:${item.field}:${item.value}`} className="text-[13.5px]">
             <Held item={item} voice={audience === "member" ? "Your" : "Their"} className="text-[13px] text-ink" />
             {audience === "operator" && item.target && item.field !== "enabled" && (
-              <span className="text-muted"> on {item.target}</span>
+              <span className="text-muted"> on {targetLabel(item.target)}</span>
             )}
             {audience === "operator" && item.actorId && (
               // Who decided it, first. An operator looking at a hold is
               // deciding whether to lift it, and that is a conversation with a
               // person rather than a judgement about a row.
-              <span className="text-muted"> — put on hold by {item.actorId}</span>
+              <span className="text-muted">
+                , put on hold by <UserName id={item.actorId} />
+              </span>
             )}
             <span className="text-muted">
-              {audience === "operator" ? (item.reason ? ` — because ${item.reason}` : "") : ` — ${item.reason}`}
+              {audience === "operator" ? (item.reason ? `, because ${item.reason}` : "") : `: ${item.reason}`}
             </span>
             {item.reviewDue && (
               <span className="text-warn-text">
-                {audience === "operator" ? " · review date passed — needs a decision" : " · due for review"}
+                {audience === "operator" ? " · review date passed, needs a decision" : " · due for review"}
               </span>
             )}
           </li>
@@ -170,10 +173,10 @@ export function WithheldInline({ items }: { items: WithheldItem[] }) {
         >
           <WithheldPill />
           <Held item={item} voice="Their" className="text-[12.5px] text-ink" />
-          {item.target && item.field !== "enabled" && <span className="text-faint">on {item.target}</span>}
-          {item.reason && <span className="text-muted">— {item.reason}</span>}
+          {item.target && item.field !== "enabled" && <span className="text-faint">on {targetLabel(item.target)}</span>}
+          {item.reason && <span className="text-muted">{item.reason}</span>}
           {item.reviewDue && (
-            <span className="text-warn-text">· review date passed — needs a decision</span>
+            <span className="text-warn-text">· review date passed, needs a decision</span>
           )}
         </li>
       ))}

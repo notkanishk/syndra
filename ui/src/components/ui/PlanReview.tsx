@@ -249,7 +249,7 @@ export function planNote(plan: BulkPlan, noun: [string, string] = ["person", "pe
       ? "This reaches nobody, so there is nothing to apply."
       : `Every selected ${noun[0]} will change.`;
   }
-  return `${parts.join(" · ")} — Syndra leaves those as they are.`;
+  return `${parts.join(" · ")}. Syndra leaves those as they are.`;
 }
 
 /** "Apply to 4 people" / "Apply to 0 people". The button's own label states its scope. */
