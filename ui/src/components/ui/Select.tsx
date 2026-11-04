@@ -4,6 +4,7 @@ import React from "react";
 
 import { PILL } from "@/components/ui/Button";
 import { GlideIndicator, useGlideIndicator } from "@/components/ui/GlideIndicator";
+import { DENSE_FIELD } from "@/components/ui/Input";
 
 /**
  * Native select, styled to match Input. Native rather than a custom listbox:
@@ -15,12 +16,12 @@ import { GlideIndicator, useGlideIndicator } from "@/components/ui/GlideIndicato
  */
 export const Select = React.forwardRef<
   HTMLSelectElement,
-  React.SelectHTMLAttributes<HTMLSelectElement> & { emphasis?: boolean }
->(function Select({ className = "", emphasis = false, children, ...props }, ref) {
+  React.SelectHTMLAttributes<HTMLSelectElement> & { emphasis?: boolean; dense?: boolean }
+>(function Select({ className = "", emphasis = false, dense = false, children, ...props }, ref) {
   return (
     <select
       ref={ref}
-      className={`block w-full appearance-none rounded-inner border bg-transparent px-[15px] py-3 text-[15px] text-ink motion-tint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${
+      className={`block w-full appearance-none rounded-inner border bg-transparent px-[15px] ${dense ? DENSE_FIELD : "py-3 text-[15px]"} text-ink motion-tint focus:border-accent-line disabled:cursor-not-allowed disabled:text-faint ${
         emphasis ? "border-accent-line" : "border-line-strong"
       } ${className}`}
       {...props}
