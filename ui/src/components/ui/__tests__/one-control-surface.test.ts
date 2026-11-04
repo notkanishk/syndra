@@ -222,6 +222,26 @@ describe("a control states its role in the vocabulary the product already has", 
   });
 
   /**
+   * A button on its own is outline sm; ghost is only the quieter half of a
+   * pair, beside the accent or the destructive confirm it defers to (A-16 §4,
+   * owner 4 Nov). A lone ghost reads as bare text, which is what made the
+   * claims page look inconsistent. Pinned where it has been swept; widen
+   * `SWEPT` as the rest of Syndra follows (openspec/NEXT.md).
+   */
+  it("keeps ghost for the quieter half of a pair", () => {
+    const SWEPT = ["components/apps/"];
+    const offenders = relevant()
+      .filter(({ path }) => SWEPT.some((prefix) => path.startsWith(prefix)))
+      .flatMap(({ path, source }) =>
+        [...source.matchAll(/variant="ghost"/g)]
+          .filter((m) => !/variant="(accent|dangerConfirm)"/.test(source.slice(Math.max(0, m.index! - 400), m.index! + 400)))
+          .map((m) => `${path}:${source.slice(0, m.index!).split("\n").length}`),
+      );
+
+    expect(offenders, "a lone button is `outline` size sm; ghost sits beside its primary").toEqual([]);
+  });
+
+  /**
    * A card's way onward — "See all", "Full audit log" — is `CardHeaderLink`.
    *
    * Written by hand it is a bare line of text, and the two that existed had

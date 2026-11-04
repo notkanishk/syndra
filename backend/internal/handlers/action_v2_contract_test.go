@@ -55,7 +55,7 @@ func TestActionV2_PerAppShapeByClientID(t *testing.T) {
 	cases := []struct{ client, function, want string }{
 		{"cNB", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"groups","value":["netbird-staff","netbird-admins"]}]}`},
 		{"cInv", claims.FunctionPreUserinfo, `{"append_claims":[{"key":"groups","value":["admin","guest","staff"]},` +
-			`{"key":"custom_claims","value":{"groups":["admin","guest","staff"],"given_name":"Ada"}}]}`},
+			`{"key":"custom_claims","value":{"given_name":"Ada","groups":["admin","guest","staff"]}}]}`},
 		{"cElse", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"net.roles","value":["admin","guest","staff"]}]}`},
 		{"", claims.FunctionPreAccessToken, `{"append_claims":[{"key":"net.roles","value":["admin","guest","staff"]}]}`},
 	}
@@ -269,8 +269,8 @@ func TestActionV2_NamesComeFromZitadelsPayload(t *testing.T) {
 	log := captureCalls(t)
 	rr, _ := postInject(t, canonicalV2Payload, nil)
 	got := strings.TrimSpace(rr.Body.String())
-	want := `{"append_claims":[{"key":"groups","value":["operator","viewer"]},{"key":"custom_claims","value":{"groups":["operator","viewer"],` +
-		`"given_name":"Test","family_name":"User","name":"Test User"}}]}`
+	want := `{"append_claims":[{"key":"groups","value":["operator","viewer"]},{"key":"custom_claims","value":{"family_name":"User",` +
+		`"given_name":"Test","groups":["operator","viewer"],"name":"Test User"}}]}`
 	if got != want {
 		t.Fatalf("no facts, v1's shape:\n got %s\nwant %s", got, want)
 	}

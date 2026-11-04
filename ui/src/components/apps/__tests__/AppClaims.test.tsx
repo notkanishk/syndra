@@ -171,10 +171,17 @@ describe("an app's header", () => {
   });
 });
 
+/** The roles claim's line: the whole line is the button (the chevron is aria-hidden). */
+const rolesLine = () => screen.findByRole("button", { name: /^groups/ });
+async function openRoles() {
+  fireEvent.click(await rolesLine());
+  return screen.findByLabelText("NetBird calls Staff");
+}
+
 describe("a save NetBird will act on", () => {
   it("is said on the row, in the before-line, and gated in the summary by I understand", async () => {
     renderScreen();
-    const staff = await screen.findByLabelText("NetBird calls Staff");
+    const staff = await openRoles();
     fireEvent.change(staff, { target: { value: "network-staff" } });
 
     // Said on its row…
@@ -199,7 +206,7 @@ describe("a save NetBird will act on", () => {
 
   it("previews the draft with − and + lines, not colour alone, and says the one difference", async () => {
     renderScreen();
-    fireEvent.change(await screen.findByLabelText("NetBird calls Staff"), { target: { value: "network-staff" } });
+    fireEvent.change(await openRoles(), { target: { value: "network-staff" } });
     await screen.findByText("All six checks pass on this draft");
     expect(screen.getByText("Removed:", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Added:", { exact: false })).toBeInTheDocument();
@@ -207,15 +214,14 @@ describe("a save NetBird will act on", () => {
     expect(screen.getByText(/One difference for Kanishk Singh/)).toHaveTextContent(
       "One difference for Kanishk Singh: netbird-staff becomes network-staff.",
     );
-    // The summary describes the draft.
-    expect(screen.getByText("2 of Network's 3 roles, in NetBird's words")).toBeInTheDocument();
+    // The roles line describes the draft.
+    expect(await rolesLine()).toHaveTextContent("2 of 3 roles. 2 renamed, 1 left out.");
   });
 
   it("shows Save only after the first edit, and folds it away on Discard", async () => {
     renderScreen();
-    const staff = await screen.findByLabelText("NetBird calls Staff");
+    const staff = await openRoles();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-    expect(screen.queryByText("Nothing to save yet.")).toBeNull();
     fireEvent.change(staff, { target: { value: "network-staff" } });
     expect(await screen.findByRole("button", { name: "Save" })).toBeInTheDocument();
     // The field keeps its border while it differs from what's saved.
@@ -226,55 +232,183 @@ describe("a save NetBird will act on", () => {
   });
 });
 
-describe("the page, calm by default (A-15)", () => {
-  it("opens on the summary: one line per top-level claim, where it lands and the template", async () => {
+/** A seeded v1 shape on Custom: `groups`, then `custom_claims` holding four, one of them its own groups. */
+const v1: Profile = {
+  claims: [
+    { path: ["groups"], kind: "roles", format: "array" },
+    { path: ["custom_claims", "groups"], kind: "roles", format: "array" },
+    { path: ["custom_claims", "given_name"], kind: "attribute", source: "given_name" },
+    { path: ["custom_claims", "family_name"], kind: "attribute", source: "family_name" },
+    { path: ["custom_claims", "name"], kind: "attribute", source: "name" },
+  ],
+  include_new: true,
+  lands: "both",
+};
+/** Each claim line's key, top to bottom: the first mono in a line's button. */
+const lineKeys = () =>
+  Array.from(document.querySelectorAll("button[aria-expanded]"))
+    .map((b) => b.querySelector(".type-mono")?.textContent ?? "")
+    .filter(Boolean);
+
+describe("one list of claims (A-16)", () => {
+  it("opens on the list: the roles line first and folded, with its state; the template at the foot", async () => {
     renderScreen();
-    expect(await screen.findByText("2 of Network's 3 roles, in NetBird's words")).toBeInTheDocument();
-    expect(screen.getByText("groups", { selector: ".type-mono" })).toBeInTheDocument();
+    const roles = await rolesLine();
+    expect(roles).toHaveAttribute("aria-expanded", "false");
+    expect(roles).toHaveTextContent("The roles each person holds in Network, as a list");
+    expect(roles).toHaveTextContent("2 of 3 roles. 2 renamed, 1 left out.");
+    // Folded on arrival, even with roles renamed and left out.
+    expect(screen.queryByLabelText("NetBird calls Staff")).toBeNull();
     expect(screen.getByText("In the access token and userinfo. From the NetBird template.")).toBeInTheDocument();
-    // Cut: the header lede, the roles lede, the preview's lede.
-    expect(screen.queryByText(/is told about a person when they sign in/)).toBeNull();
-    expect(screen.queryByText(/and the word it sees for each/)).toBeNull();
-    expect(screen.queryByText(/Exactly what NetBird receives/)).toBeNull();
-  });
-
-  it("offers the app's own template when it's on another (a seeded NetBird on Custom)", async () => {
-    routes(
-      shapeOf({
-        version: { ...shapeOf({}).version!, template_id: "custom" },
-        template: { id: "custom", version: 1, name: "Custom", changes: [{ kind: "add", path: ["custom_claims"] }], updated: false },
-        suggested_template: "netbird",
-      }),
-    );
-    renderScreen();
-    expect(await screen.findByRole("button", { name: "See the NetBird template" })).toBeInTheDocument();
-    expect(screen.getByText(/From the Custom template, 1 change since\./)).toBeInTheDocument();
-    expect(screen.queryByText("Every role, in Syndra's words.")).toBeNull();
-  });
-
-  it("never shows a claim row, Add a claim or Lands in in Basic", async () => {
-    renderScreen();
-    await screen.findByLabelText("NetBird calls Staff");
+    // Gone: the Claim rows fold, the roles type-label.
     expect(screen.queryByRole("button", { name: /Claim rows/ })).toBeNull();
+    expect(screen.queryByText(/Roles NetBird sees/)).toBeNull();
+  });
+
+  it("puts the roles claim first and the rest A to Z, whatever order the rows were saved in", async () => {
+    api.view.advanced = true;
+    const p: Profile = {
+      ...v1,
+      claims: [
+        { path: ["zeta"], kind: "static", value: "z" },
+        { path: ["alpha"], kind: "attribute", source: "email" },
+        ...v1.claims.slice(1),
+        v1.claims[0],
+      ],
+    };
+    routes(shapeOf({ profile: p, version: { ...shapeOf({}).version!, profile: p } }));
+    renderScreen();
+    await rolesLine();
+    expect(lineKeys()).toEqual(["groups", "alpha", "custom_claims", "zeta"]);
+    expect(screen.getByRole("button", { name: /^custom_claims/ })).toHaveTextContent("An object holding family_name, given_name, groups and name");
+    expect(screen.getByRole("button", { name: /^custom_claims/ })).toHaveTextContent("Its groups is the same list of roles.");
+  });
+
+  it("in Basic, opens only the roles, to their words and Included: no name, Sent as, Add a claim or Lands in", async () => {
+    routes(shapeOf({ profile: v1, version: { ...shapeOf({}).version!, profile: v1 } }));
+    renderScreen();
+    await openRoles();
+    expect(screen.getByLabelText("NetBird sees Staff")).toBeInTheDocument();
+    // Basic can't rename the roles claim (owner, 4 Nov): the app's own settings point at it.
     expect(screen.queryByLabelText("Claim name")).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Sent as" })).toBeNull();
+    expect(screen.queryByText("Roles added later")).toBeNull();
     expect(screen.queryByRole("button", { name: "Add a claim" })).toBeNull();
     expect(screen.queryByText("Lands in")).toBeNull();
+    // The other lines say what they carry and don't open.
+    expect(screen.getByText("custom_claims", { selector: ".type-mono" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^custom_claims/ })).toBeNull();
   });
 
-  it("folds the claim rows in Advanced, closed on arrival, with the count and keys", async () => {
+  it("in Advanced, opens one line at a time, each to its own editor", async () => {
+    api.view.advanced = true;
+    routes(shapeOf({ profile: v1, version: { ...shapeOf({}).version!, profile: v1 } }));
+    renderScreen();
+    // Add a claim and Lands in sit after the list, nothing to open.
+    expect(await screen.findByRole("button", { name: "Add a claim" })).toBeInTheDocument();
+    expect(screen.getByText("Lands in")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Claim name")).toBeNull();
+
+    await openRoles();
+    expect(screen.getByLabelText("Claim name")).toHaveValue("groups");
+    expect(screen.getByText("NetBird reads the name set in its Settings › Groups › JWT claim.")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Sent as" })).toBeInTheDocument();
+    expect(screen.getByText("Roles added later")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove the groups claim" })).toHaveTextContent("Remove groups");
+
+    fireEvent.click(screen.getByRole("button", { name: /^custom_claims/ }));
+    expect(await rolesLine()).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() => expect(screen.queryByLabelText("NetBird calls Staff")).toBeNull());
+    expect(screen.getByLabelText("Object name")).toHaveValue("custom_claims");
+    expect(screen.getAllByLabelText("Claim name").map((i) => (i as HTMLInputElement).value)).toEqual(["family_name", "given_name", "groups", "name"]);
+    expect(screen.getByRole("button", { name: "Remove groups from custom_claims" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove custom_claims and the 4 claims inside it" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a claim inside" })).toBeInTheDocument();
+  });
+
+  it("draws each control as its design-system part: outline sm on its own, danger for Remove", async () => {
     api.view.advanced = true;
     renderScreen();
-    const fold = await screen.findByRole("button", { name: /Claim rows/ });
-    expect(fold).toHaveAttribute("aria-expanded", "false");
-    expect(fold).toHaveTextContent("1 row · groups · both places");
-    expect(screen.queryByLabelText("Claim name")).toBeNull();
-    fireEvent.click(fold);
-    expect(fold).toHaveAttribute("aria-expanded", "true");
-    expect(await screen.findByLabelText("Claim name")).toHaveValue("groups");
-    expect(screen.getByRole("button", { name: "Add a claim" })).toBeInTheDocument();
-    expect(screen.getByText("Lands in")).toBeInTheDocument();
+    await openRoles();
+    const outline = "border-line-strong";
+    await screen.findByRole("button", { name: "Show the checks" });
+    for (const name of ["See the template", "Copy another app’s shape", "Show the checks", "Add a claim"]) {
+      expect(screen.getByRole("button", { name }).className).toContain(outline);
+    }
+    expect(screen.getByRole("button", { name: "Remove the groups claim" }).className).toContain("border-danger-line");
+    // Fields are the sm control's height.
+    expect(screen.getByLabelText("Claim name").className).toContain("py-[5px]");
+    expect(screen.getByLabelText("NetBird calls Staff").className).toContain("py-[5px]");
+  });
+});
+
+describe("adding a claim (A-16 §3, a menu of finished claims)", () => {
+  async function openMenu() {
+    api.view.advanced = true;
+    renderScreen();
+    fireEvent.click(await screen.findByRole("button", { name: "Add a claim" }));
+    return screen.findByRole("listbox", { name: "Add a claim" });
+  }
+
+  it("greys the keys Zitadel sends and the roles claim already sent, saying why, and they do nothing", async () => {
+    const menu = await openMenu();
+    const email = within(menu).getByRole("option", { name: /^Email/ });
+    expect(email).toHaveAttribute("aria-disabled", "true");
+    expect(email).toHaveTextContent("Zitadel sends email");
+    expect(within(menu).getByRole("option", { name: /^Full name/ })).toHaveTextContent("Zitadel sends name");
+    expect(within(menu).getByRole("option", { name: /^Username/ })).toHaveTextContent("Zitadel sends preferred_username");
+    expect(within(menu).getByRole("option", { name: /^Roles NetBird sees/ })).toHaveTextContent("Sent as groups");
+    fireEvent.click(email);
+    expect(screen.getByRole("listbox", { name: "Add a claim" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
+  it("adds a finished claim as a working line in its A-to-Z place, opening no editor", async () => {
+    const menu = await openMenu();
+    fireEvent.click(within(menu).getByRole("option", { name: /^Given name/ }));
+    const line = await screen.findByRole("button", { name: /^given_name/ });
+    expect(line).toHaveTextContent("Given name");
+    expect(line).toHaveTextContent("New in this draft.");
+    expect(line).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Claim name")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("listbox", { name: "Add a claim" })).toBeNull());
+    expect(await screen.findByRole("button", { name: "Save" })).toBeEnabled();
+    await waitFor(() =>
+      expect(
+        api.calls.some((c) => c.path.endsWith("/preview") && String(JSON.stringify((c.body as { draft?: Profile }).draft?.claims)).includes('"given_name"')),
+      ).toBe(true),
+    );
+  });
+
+  it("opens the role picker first for Yes if they hold a role, adding nothing until a role is chosen", async () => {
+    const menu = await openMenu();
+    fireEvent.click(within(menu).getByRole("option", { name: /^Yes if they hold a role/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Which roles make it true")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Use this role" })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  });
+
+  it("lands a fixed value opened, its name focused, and keeps Save off until it has a name and a value", async () => {
+    const menu = await openMenu();
+    fireEvent.click(within(menu).getByRole("option", { name: /^A fixed value/ }));
+    const name = await screen.findByLabelText("Claim name");
+    expect(name).toHaveValue("");
+    await waitFor(() => expect(name).toHaveFocus());
+    expect(screen.getByRole("alert")).toHaveTextContent("Name it and give it a value.");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(name, { target: { value: "org" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Give it a value.");
+    // Still the same line, still open, still focused where you type.
+    expect(screen.getByLabelText("Claim name")).toBe(name);
+    fireEvent.change(screen.getByLabelText("Value for everyone"), { target: { value: "makerspace" } });
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+});
+
+describe("the page, calm by default (A-15)", () => {
   it("keeps the checks to one line when all pass, and shows them on demand, whole", async () => {
     renderScreen();
     expect(await screen.findByText("All six checks pass")).toBeInTheDocument();
@@ -415,14 +549,14 @@ describe("copying another app's shape", () => {
     expect(await screen.findByText(/as a draft\. Not saved yet\./)).toBeInTheDocument();
   }
 
-  it("lists what didn't copy, and a row whose role isn't here stops Save, opening the claim rows by itself", async () => {
+  it("lists what didn't copy, and a row whose role isn't here stops Save, opening its line by itself", async () => {
     api.view.advanced = true;
     await copyInventory();
-    expect(screen.getByRole("button", { name: /Claim rows/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /^is_admin/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("alert")).toHaveTextContent("Admin isn't in Audio. Choose a role from Audio, or remove this row.");
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(screen.getByText(/to save\./)).toHaveTextContent("Fix is_admin to save.");
-    // The roles table says it again, under the rows.
+    // Said under the list too.
     expect(screen.getAllByText(/Not in this project, so not copied/).length).toBeGreaterThan(0);
   });
 
@@ -453,7 +587,8 @@ describe("an app with no shape of its own", () => {
       missing_roles: [],
     });
     renderScreen("gl");
-    expect(await screen.findByText("Every role in Code, in Syndra's words")).toBeInTheDocument();
+    expect(await screen.findByText("The roles each person holds in Code, as a list")).toBeInTheDocument();
+    expect(screen.getByText("All 3 roles, in Syndra's words.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Code’s default/ })).toHaveAttribute("href", "/projects/pCode#claims-default");
     expect(await screen.findByText("Suggested: this app is called GitLab")).toBeInTheDocument();
     await waitFor(() => expect(api.calls.find((c) => c.path.endsWith("draft-from"))?.body).toEqual({ template_id: "gitlab" }));

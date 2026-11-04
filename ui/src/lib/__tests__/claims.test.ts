@@ -3,16 +3,20 @@ import { describe, expect, it } from "vitest";
 import { check6, verdictOf, type CheckContext } from "@/components/apps/claim-words";
 import type { StatusTone } from "@/components/ui/Badge";
 import {
+  ADD_MENU,
+  addMuted,
   breakingLine,
+  claimLines,
+  compareKeys,
   diffLines,
-  foldNote,
   fromTemplate,
   literal,
   roleWords,
+  rolesIndex,
+  rolesState,
   rowProblems,
   sentAs,
   setRole,
-  summaryLines,
   understandLine,
   namesRoles,
 } from "@/lib/claims";
@@ -60,6 +64,37 @@ describe("a draft's own row checks", () => {
     expect(out[1]?.message).toBe("`groups` is sent by another row too.");
     expect(out[2]?.message).toBe("`custom_claims` is already an object here, holding `groups`.");
     expect(out.every((x) => !x || x.blocksPreview)).toBe(true);
+  });
+
+  it("says which a fixed value lacks, a name or a value, and lets a nameless one stop the preview", () => {
+    const out = rowProblems(
+      p([
+        { path: [""], kind: "static", value: "" },
+        { path: ["org"], kind: "static", value: "" },
+        { path: ["tags"], kind: "static", value: [] },
+        { path: ["flag"], kind: "static", value: false },
+        { path: ["n"], kind: "static", value: 0 },
+      ]),
+      { project: "Network" },
+    );
+    expect(out.map((x) => x?.message ?? null)).toEqual(["Name it and give it a value.", "Give it a value.", "Give it a value.", null, null]);
+    expect(out[0]?.blocksPreview).toBe(true);
+    expect(out[1]?.blocksPreview).toBe(false);
+  });
+
+  it("refuses a top-level key Zitadel never lets an app set, as the shaper's Validate does", () => {
+    const out = rowProblems(
+      p([
+        { path: ["sub"], kind: "static", value: "x" },
+        { path: ["urn:zitadel:iam:org:id"], kind: "static", value: "x" },
+        { path: ["custom_claims", "sub"], kind: "static", value: "x" },
+        { path: ["email"], kind: "attribute", source: "email" },
+      ]),
+      { project: "Network" },
+    );
+    expect(out[0]?.message).toBe("`sub` is Zitadel's own claim, so Zitadel drops this one. Name it something else, or put it inside an object.");
+    expect(out[1]?.blocksPreview).toBe(true);
+    expect(out.slice(2)).toEqual([null, null]);
   });
 
   it("keeps a dotted name one key", () => {
@@ -140,59 +175,107 @@ describe("Sent as", () => {
   });
 });
 
-describe("the summary (A-15 §2)", () => {
+describe("the list of claims (A-16 §1–§2)", () => {
   const ctx = { app: "NetBird", project: "Network" };
   const base: Profile = { claims: [{ path: ["groups"], kind: "roles", format: "array" }], roles: [], include_new: true, lands: "both" };
-  const words = (p: Profile) => summaryLines(p, roles, ctx).map((l) => `${l.key}: ${l.words}`);
+  const mapped = (as: Record<string, string>, out: string[] = []): Profile => ({
+    ...base,
+    include_new: false,
+    roles: roles.map((r) => ({ key: r.key, ...(as[r.key] ? { as: as[r.key] } : {}), included: !out.includes(r.key) })),
+  });
+  const state = (p: Profile, rs = roles) => rolesState(p, rs, ctx);
 
-  it("counts renames and left-out roles in the roles line", () => {
-    const mapped = (as: Record<string, string>, out: string[] = []): Profile => ({
-      ...base,
-      include_new: false,
-      roles: roles.map((r) => ({ key: r.key, ...(as[r.key] ? { as: as[r.key] } : {}), included: !out.includes(r.key) })),
-    });
-    expect(words(base)).toEqual(["groups: Every role in Network, in Syndra's words"]);
-    expect(words(mapped({}))).toEqual(["groups: All 3 of Network's roles, in Syndra's words"]);
-    expect(words(mapped({ staff: "netbird-staff" }))).toEqual(["groups: All 3 of Network's roles, 1 in NetBird's words"]);
-    expect(words(mapped({ staff: "s", admin: "a", guest: "g" }))).toEqual(["groups: All 3 of Network's roles, in NetBird's words"]);
-    expect(words(mapped({ staff: "s" }, ["guest"]))).toEqual(["groups: 2 of Network's 3 roles, 1 in NetBird's words"]);
+  it("says the roles' state on the roles line, naming up to two changes, A to Z by name", () => {
+    expect(state(base)).toBe("All 3 roles, in Syndra's words.");
+    expect(state(base, roles.slice(0, 2))).toBe("Both roles, in Syndra's words.");
+    expect(state(base, roles.slice(0, 1))).toBe("Its one role, in Syndra's words.");
+    expect(state(mapped({ staff: "s", admin: "a", guest: "g" }))).toBe("All 3 roles, in NetBird's words.");
+    expect(state(mapped({ staff: "netbird-staff" }, ["guest"]))).toBe("2 of 3 roles. Staff as `netbird-staff`; Guests left out.");
+    expect(state(mapped({ staff: "netbird-staff" }))).toBe("All 3 roles. Staff as `netbird-staff`.");
+    expect(state(mapped({ staff: "s", admin: "a" }, ["guest"]))).toBe("2 of 3 roles. 2 renamed, 1 left out.");
+    expect(state(mapped({}, ["staff", "admin", "guest"]))).toBe("None of the 3 roles. All left out.");
     // A word that is the key itself is Syndra's word.
-    expect(words(mapped({ staff: "staff" }))).toEqual(["groups: All 3 of Network's roles, in Syndra's words"]);
+    expect(state(mapped({ staff: "staff" }))).toBe("All 3 roles, in Syndra's words.");
   });
 
-  it("says an object by its keys, one line per top-level claim, in order", () => {
+  it("puts the roles claim first and the rest A to Z, an object's keys A to Z too", () => {
     const p: Profile = {
       ...base,
       claims: [
-        { path: ["groups"], kind: "roles" },
+        { path: ["zeta"], kind: "static", value: 1 },
+        { path: ["custom_claims", "name"], kind: "attribute", source: "name" },
         { path: ["custom_claims", "groups"], kind: "roles" },
         { path: ["custom_claims", "given_name"], kind: "attribute", source: "given_name" },
-        { path: ["custom_claims", "name"], kind: "attribute", source: "name" },
-        { path: ["org"], kind: "static", value: "makerspace" },
-        { path: ["is_admin"], kind: "if_role", roles: ["admin", "staff"] },
+        { path: ["Is_admin"], kind: "if_role", roles: ["admin", "staff"] },
+        { path: ["groups"], kind: "roles" },
       ],
     };
-    expect(words(p)).toEqual([
-      "groups: Every role in Network, in Syndra's words",
-      "custom_claims: An object holding `groups`, `given_name` and `name`",
-      'org: The same for everyone: `"makerspace"`',
-      "is_admin: `true` if they hold Admins or Staff, else `false`",
+    const lines = claimLines(p, roles, ctx);
+    expect(lines.map((l) => `${l.key}: ${l.words}`)).toEqual([
+      "groups: The roles each person holds in Network, as a list",
+      "custom_claims: An object holding `given_name`, `groups` and `name`",
+      "Is_admin: `true` if they hold Admins or Staff, otherwise `false`",
+      "zeta: The same for everyone: `1`",
     ]);
-    expect(foldNote(p)).toBe("6 rows · `groups` · `custom_claims` holding 3 · `org` · `is_admin` · both places");
-    expect(foldNote({ ...base, lands: "userinfo" })).toBe("1 row · `groups` · ID token and userinfo");
+    expect(lines[0]).toMatchObject({ roles: true, sub: "All 3 roles, in Syndra's words.", rows: [5] });
+    expect(lines[1]).toMatchObject({ object: true, sub: "Its `groups` is the same list of roles.", rows: [1, 2, 3] });
+    expect(lines.slice(1).every((l) => !l.roles)).toBe(true);
   });
 
-  it("keeps a text-format warning on its line, nested or not, and says nothing for none", () => {
-    const lines = summaryLines({ ...base, claims: [{ path: ["custom_claims", "groups"], kind: "roles", format: "csv" }] }, roles, ctx);
-    expect(lines[0].warn).toBe("As text, with commas. No app Syndra has a template for reads roles as text.");
-    expect(summaryLines(base, roles, ctx)[0].warn).toBeUndefined();
-    expect(summaryLines({ ...base, claims: [] }, roles, ctx)).toEqual([]);
+  it("makes a nested roles claim's object the roles line, and with none every line is A to Z", () => {
+    const nested = claimLines({ ...base, claims: [{ path: ["email"], kind: "attribute", source: "email" }, { path: ["custom_claims", "groups"], kind: "roles" }] }, roles, ctx);
+    expect(nested.map((l) => [l.key, l.roles])).toEqual([["custom_claims", true], ["email", false]]);
+    const none = claimLines({ ...base, claims: [{ path: ["b"], kind: "bundles" }, { path: ["a"], kind: "role_ends" }] }, roles, ctx);
+    expect(none.map((l) => l.key)).toEqual(["a", "b"]);
+    expect(rolesIndex({ ...base, claims: [{ path: ["a"], kind: "bundles" }] })).toBe(-1);
+  });
+
+  it("marks a line the saved shape lacks as new, and keeps a text-format warning on its line", () => {
+    const draft: Profile = { ...base, claims: [...base.claims, { path: ["given_name"], kind: "attribute", source: "given_name" }] };
+    expect(claimLines(draft, roles, { ...ctx, saved: base })[1].sub).toBe("New in this draft.");
+    expect(claimLines(draft, roles, ctx)[1].sub).toBeUndefined();
+    const text = claimLines({ ...base, claims: [{ path: ["custom_claims", "groups"], kind: "roles", format: "csv" }] }, roles, ctx);
+    expect(text[0].warn).toBe("As text, with commas. No app Syndra has a template for reads roles as text.");
+    expect(claimLines(base, roles, ctx)[0].warn).toBeUndefined();
+  });
+
+  it("orders keys as the shaper does: case aside, then byte order", () => {
+    expect(["zeta", "Beta", "alpha", "beta"].sort(compareKeys)).toEqual(["alpha", "Beta", "beta", "zeta"]);
   });
 
   it("names the template and the changes since in one line", () => {
     expect(fromTemplate("Custom", 5)).toBe("From the Custom template, 5 changes since.");
     expect(fromTemplate("NetBird", 1)).toBe("From the NetBird template, 1 change since.");
     expect(fromTemplate("NetBird", 0)).toBe("From the NetBird template.");
+  });
+});
+
+describe("the add menu (A-16 §3)", () => {
+  const entry = (label: string) => ADD_MENU.flatMap((g) => g.entries).find((e) => e.label === label)!;
+
+  it("greys Zitadel's own keys at the top level only, saying so", () => {
+    for (const [label, key] of [["Email", "email"], ["Full name", "name"], ["Username", "preferred_username"]]) {
+      expect(entry(label).key).toBe(key);
+      expect(addMuted(entry(label), new Set(), { inside: false })).toBe(`Zitadel sends \`${key}\``);
+      expect(addMuted(entry(label), new Set(), { inside: true })).toBeUndefined();
+    }
+    // given_name and family_name reach the access token, which Zitadel doesn't fill with them.
+    expect(addMuted(entry("Given name"), new Set(), { inside: false })).toBeUndefined();
+  });
+
+  it("mutes a key already sent and a second roles claim, and names the roles claim groups by default", () => {
+    expect(addMuted(entry("Given name"), new Set(["given_name"]), { inside: false })).toBe("Sent as `given_name`");
+    expect(addMuted(entry("Roles {app} sees"), new Set(["roles"]), { inside: false, rolesKey: "roles" })).toBe("Sent as `roles`");
+    expect(entry("Roles {app} sees")).toMatchObject({ key: "groups", claim: { kind: "roles", format: "array" } });
+    expect(addMuted(entry("Roles {app} sees"), new Set(), { inside: true, rolesKey: "groups" })).toBeUndefined();
+    expect(addMuted(entry("Yes if they hold a role"), new Set(["x"]), { inside: false })).toBeUndefined();
+  });
+
+  it("lists every group A to Z", () => {
+    for (const g of ADD_MENU) {
+      const labels = g.entries.map((e) => e.label);
+      expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b)));
+    }
   });
 });
 

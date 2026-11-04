@@ -38,13 +38,59 @@ func tokenJSON(t *testing.T, p Profile, f Facts) string {
 	return string(b)
 }
 
-// The v1 seed must reproduce exactly what Actions v1 sent, in row order, with
-// the shared parent merged into one object.
+// The v1 seed must reproduce what Actions v1 sent, with the shared parent
+// merged into one object, in the editor's order: the roles claim first, then A
+// to Z, and A to Z inside the object (A-16 §1).
 func TestShape_ActionsV1(t *testing.T) {
 	f := Facts{Roles: []string{"staff", "admin"}, GivenName: "Ada", FamilyName: "Lovelace", Name: "Ada Lovelace"}
-	want := `{"groups":["staff","admin"],"custom_claims":{"groups":["staff","admin"],"given_name":"Ada","family_name":"Lovelace","name":"Ada Lovelace"}}`
+	want := `{"groups":["staff","admin"],"custom_claims":{"family_name":"Lovelace","given_name":"Ada","groups":["staff","admin"],"name":"Ada Lovelace"}}`
 	if got := tokenJSON(t, ActionsV1(), f); got != want {
 		t.Fatalf("v1 shape:\n got %s\nwant %s", got, want)
+	}
+}
+
+// The token's order is the editor's (A-16 §1): the roles claim's key first,
+// wherever its row sits, then A to Z (case aside), and A to Z inside an object.
+// A nested roles claim brings its object first; with no roles claim it is A to
+// Z throughout. Rows sharing a path keep their saved order, so the first wins.
+func TestShape_Order(t *testing.T) {
+	f := Facts{Roles: []string{"admin"}, GivenName: "Ada", Email: "e@example.edu"}
+	p := Profile{Lands: LandsBoth, IncludeNew: true, Claims: []Claim{
+		{Path: []string{"zeta"}, Kind: KindStatic, Value: json.RawMessage(`1`)},
+		{Path: []string{"Beta"}, Kind: KindStatic, Value: json.RawMessage(`2`)},
+		{Path: []string{"obj", "z"}, Kind: KindStatic, Value: json.RawMessage(`3`)},
+		{Path: []string{"obj", "a"}, Kind: KindAttribute, Source: AttrGivenName},
+		{Path: []string{"groups"}, Kind: KindRoles},
+		{Path: []string{"alpha"}, Kind: KindStatic, Value: json.RawMessage(`4`)},
+	}}
+	if got, want := tokenJSON(t, p, f), `{"groups":["admin"],"alpha":4,"Beta":2,"obj":{"a":"Ada","z":3},"zeta":1}`; got != want {
+		t.Fatalf("top-level roles:\n got %s\nwant %s", got, want)
+	}
+	if got := RolesKey(p.Claims); got != "groups" {
+		t.Fatalf("RolesKey = %q", got)
+	}
+
+	nested := Profile{Lands: LandsBoth, IncludeNew: true, Claims: []Claim{
+		{Path: []string{"email"}, Kind: KindAttribute, Source: AttrEmail},
+		{Path: []string{"custom_claims", "groups"}, Kind: KindRoles},
+	}}
+	if got, want := tokenJSON(t, nested, f), `{"custom_claims":{"groups":["admin"]},"email":"e@example.edu"}`; got != want {
+		t.Fatalf("nested roles:\n got %s\nwant %s", got, want)
+	}
+
+	none := Profile{Lands: LandsBoth, Claims: []Claim{
+		{Path: []string{"b"}, Kind: KindStatic, Value: json.RawMessage(`1`)},
+		{Path: []string{"a"}, Kind: KindStatic, Value: json.RawMessage(`2`)},
+		{Path: []string{"a"}, Kind: KindStatic, Value: json.RawMessage(`3`)},
+	}}
+	if got, want := tokenJSON(t, none, f), `{"a":2,"b":1}`; got != want {
+		t.Fatalf("no roles:\n got %s\nwant %s", got, want)
+	}
+	if RolesKey(none.Claims) != "" {
+		t.Fatal("RolesKey with no roles claim")
+	}
+	if got := ordered(p.Claims); got[0].Path[0] != "groups" || p.Claims[0].Path[0] != "zeta" {
+		t.Fatal("ordered must sort a copy, never the saved rows")
 	}
 }
 
@@ -108,7 +154,7 @@ func TestRolesOnly(t *testing.T) {
 		{Path: []string{"s"}, Kind: KindStatic, Value: json.RawMessage(`1`)},
 	}}
 	got, _ := json.Marshal(Shape(p.RolesOnly(), Facts{UserID: "u", ProjectID: "p", Roles: []string{"admin"}}))
-	if string(got) != `{"r":["admin"],"uid":"u","pid":"p","n":1,"is":true,"s":1}` {
+	if string(got) != `{"r":["admin"],"is":true,"n":1,"pid":"p","s":1,"uid":"u"}` {
 		t.Fatalf("got %s", got)
 	}
 	if len(p.Claims) != 10 {
@@ -139,7 +185,7 @@ func TestShape_EveryKind(t *testing.T) {
 	// Title is empty, so it is left out rather than sent as null; the service
 	// account flag is false and still sent; a left-out role's end is not sent;
 	// the dotted key stays one flat key.
-	want := `{"is_admin":true,"is_owner":false,"bundles":[],"ends":{"stf":"2027-05-31"},"svc":false,"tenant":7,"syndra.laser.roles":"stf,admin"}`
+	want := `{"syndra.laser.roles":"stf,admin","bundles":[],"ends":{"stf":"2027-05-31"},"is_admin":true,"is_owner":false,"svc":false,"tenant":7}`
 	if got := tokenJSON(t, p, f); got != want {
 		t.Fatalf("\n got %s\nwant %s", got, want)
 	}
@@ -181,7 +227,7 @@ func TestEffective(t *testing.T) {
 func TestFromFlat_OrderAndTypes(t *testing.T) {
 	p := FromFlat("", "", map[string]string{"team": AttrTeam, "email": AttrEmail}, map[string]any{"n": 2.0, "a": "x"})
 	got := tokenJSON(t, p, Facts{Roles: []string{"r"}, Email: "e@example.edu", Team: "T"})
-	if want := `{"roles":["r"],"email":"e@example.edu","team":"T","a":"x","n":2}`; got != want {
+	if want := `{"roles":["r"],"a":"x","email":"e@example.edu","n":2,"team":"T"}`; got != want {
 		t.Fatalf("got %s want %s", got, want)
 	}
 }
@@ -223,6 +269,14 @@ func TestValidate(t *testing.T) {
 	bad(Profile{Claims: []Claim{{Path: []string{"x"}, Kind: KindRoles, Format: "tsv"}}}, "format")
 	bad(Profile{Lands: "id_token"}, "lands")
 	bad(Profile{Roles: []RoleMap{{Key: "a"}, {Key: "a"}}}, "twice")
+
+	// Zitadel never lets an action set its registered claims or its own urn
+	// namespace (Z-g), so a top-level one is refused, naming the row. Inside an
+	// object it is just a key, and email stays legal: an access token carries it.
+	bad(Profile{Claims: []Claim{{Path: []string{"sub"}, Kind: KindStatic, Value: json.RawMessage(`"x"`)}}}, "`sub` is Zitadel's own claim")
+	bad(Profile{Claims: []Claim{{Path: []string{"urn:zitadel:iam:org:id"}, Kind: KindStatic, Value: json.RawMessage(`"x"`)}}}, "Zitadel's own claim")
+	ok(Profile{Claims: []Claim{{Path: []string{"custom_claims", "sub"}, Kind: KindStatic, Value: json.RawMessage(`"x"`)}}})
+	ok(Profile{Claims: []Claim{{Path: []string{"email"}, Kind: KindAttribute, Source: AttrEmail}}})
 
 	// The error names its row, so the UI can put it under that row.
 	err := Validate(Normalize(Profile{Claims: []Claim{{Path: []string{"ok"}, Kind: KindRoles}, {Path: []string{"x"}, Kind: "wat"}}}))
