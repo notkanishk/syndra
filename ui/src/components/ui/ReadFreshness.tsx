@@ -223,7 +223,7 @@ export function ReadFreshness({
         // about what it saw and silent about the rest, and an operator who
         // reads it as "that is everything" concludes an absence from a list
         // that was cut off.
-        <span className="text-faint">· not the whole list — only the first part was read</span>
+        <span className="text-faint">· not the whole list, only the first part was read</span>
       )}
       {onRefresh && reading === "stale" && (
         // It tints in where the line ends. Its slot is zero tall, so the button
@@ -263,16 +263,16 @@ function sentence(
       // Always the way out. The button is the way out when there is one;
       // otherwise the sentence has to say it, or the reader is left with a
       // warning and no move.
-      const wayOut = canRefresh ? "" : " — reload the page to read it again";
+      const wayOut = canRefresh ? "" : ". Reload the page to read it again";
       return age
-        ? `${subject} was read ${age} — too old to act on${wayOut}`
+        ? `${subject} was read ${age}, too old to act on${wayOut}`
         : `${subject} has not been read yet${wayOut}`;
     }
     case "provisional":
       // Never "unreachable" alone. The useful half is that what is on screen is
       // real and dated, not that the network is down.
       return age
-        ? `Could not reach the connected system — this is the last state seen, ${age}`
+        ? `Could not reach the connected system. This is the last state seen, ${age}`
         : "Could not reach the connected system, and there is no earlier copy to show";
   }
 }

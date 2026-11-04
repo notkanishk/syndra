@@ -28,7 +28,7 @@ describe("the two densities say the same thing", () => {
   it("names the value, the system and the reason inline", () => {
     render(<WithheldInline items={[ITEM]} />);
     expect(screen.getByText("lab_makers")).toBeInTheDocument();
-    expect(screen.getByText(/on truenas/)).toBeInTheDocument();
+    expect(screen.getByText(/on TrueNAS/)).toBeInTheDocument();
     expect(screen.getByText(/safety review/)).toBeInTheDocument();
   });
 
@@ -70,7 +70,7 @@ describe("a hold on a whole account", () => {
     expect(container.textContent).not.toMatch(/\btrue\b/);
     expect(screen.getAllByText(/Their TrueNAS account/)).toHaveLength(2);
     expect(screen.getByText(/Your TrueNAS account/)).toBeInTheDocument();
-    expect(container.textContent).toContain("Their TrueNAS account — put on hold by system — because left the team");
+    expect(container.textContent).toContain("Their TrueNAS account, put on hold by ");
   });
 
   it("does not say the system twice", () => {

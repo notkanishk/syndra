@@ -153,7 +153,7 @@ describe("Modal", () => {
     );
     // Silently ignoring a drag or a tap reads as a frozen app, and the
     // operator's next move is to reload the page mid-mutation.
-    expect(screen.getByText("Applying your change — this sheet can't be closed until it finishes.")).toBeTruthy();
+    expect(screen.getByText("Applying your change. This sheet can't be closed until it finishes.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Close this sheet" })).toBeNull();
   });
 

@@ -20,19 +20,19 @@ describe("describeDrain", () => {
     const outcome = describeDrain(result({ requeued: 8 }));
     expect(outcome.tone).toBe("warning");
     expect(outcome.message).toContain("8 waiting for you to send");
-    expect(outcome.message).toContain("send again");
+    expect(outcome.message).toContain("Send again");
   });
 
   it("says a decided-but-unrecorded change needs another pass", () => {
     const outcome = describeDrain(result({ applied: 3, errored: 1 }));
     expect(outcome.tone).toBe("warning");
-    expect(outcome.message).toBe("3 sent · 1 not recorded — send again.");
+    expect(outcome.message).toBe("3 sent · 1 not recorded. Send again.");
     expect(outcome.detail).toMatch(/could not record/);
   });
 
   it("reports every non-zero count, in a fixed order", () => {
     const outcome = describeDrain(result({ applied: 1, failed: 2, requeued: 3, errored: 4 }));
-    expect(outcome.message).toBe("1 sent · 2 failed · 3 waiting for you to send · 4 not recorded — send again.");
+    expect(outcome.message).toBe("1 sent · 2 failed · 3 waiting for you to send · 4 not recorded. Send again.");
   });
 
   it("does not celebrate a terminal failure", () => {

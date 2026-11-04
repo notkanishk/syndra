@@ -226,7 +226,7 @@ function WaitingRoles({
                   <div className="min-w-[min(220px,100%)] flex-1">
                     <Link
                       href={`/projects/${m.project_id}/roles/${encodeURIComponent(m.role_key)}`}
-                      className="text-[15px] font-semibold motion-tint hover:text-accent-text"
+                      className="text-[15px] font-semibold link-hover"
                     >
                       {roleName(role, m.role_key)}
                     </Link>{" "}

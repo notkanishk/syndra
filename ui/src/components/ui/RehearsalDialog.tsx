@@ -604,6 +604,19 @@ export function RehearsalDialog({
       {outcome && <ActionOutcome outcome={outcome} word={outcome.word ?? OUTCOME_LABEL[outcome.kind]} className="mx-6 mb-1" />}
 
       <ModalFooter
+        // The quieter half on every step but the result: Back to compose where there is one.
+        // Disabled while a write is out: abandoning the dialog mid-apply does not abandon
+        // the write, it only takes away the report of what it did.
+        cancel={
+          step === "result"
+            ? undefined
+            : {
+                onClick: compose && step !== "compose" ? () => setStep("compose") : onClose,
+                label: compose && step !== "compose" ? "Back" : "Cancel",
+                disabled: busy,
+                reason: busy ? (step === "review" ? "Wait for the change to finish." : "Wait for the preview to finish.") : undefined,
+              }
+        }
         note={
           step === "review" && plan
             ? waits
@@ -627,9 +640,6 @@ export function RehearsalDialog({
             >
               Preview the change
             </Button>
-            <Button disabled={busy} reason={busy ? "Wait for the preview to finish." : undefined} onClick={onClose}>
-              Cancel
-            </Button>
           </>
         )}
 
@@ -646,48 +656,13 @@ export function RehearsalDialog({
             >
               Preview the change for {scope?.affected} {noun[1]}
             </Button>
-            <Button
-              disabled={busy}
-              reason={busy ? "Wait for the preview to finish." : undefined}
-              onClick={compose ? () => setStep("compose") : onClose}
-            >
-              {compose ? "Back" : "Cancel"}
-            </Button>
           </>
         )}
 
         {step === "review" && (
           <>
-            {/* Cancel/Back precedes the confirm button in DOM order so the
-                focus trap's initial focus (first focusable element) never
-                lands on a destructive `dangerConfirm`; `order-1`/`order-2`
-                keep the visual layout unchanged, matching the same fix in
-                bundles/page.tsx's delete dialog.
-                Disabled while a write is out. Abandoning the dialog mid-apply
-                does not abandon the write — it only takes away the report of
-                what it did, which is the one thing the operator still needs. */}
-            {compose ? (
-              <Button
-                className="order-2"
-                disabled={busy}
-                reason={busy ? "Wait for the change to finish." : undefined}
-                onClick={() => setStep("compose")}
-              >
-                Back
-              </Button>
-            ) : (
-              <Button
-                className="order-2"
-                disabled={busy}
-                reason={busy ? "Wait for the change to finish." : undefined}
-                onClick={onClose}
-              >
-                Cancel
-              </Button>
-            )}
             <Button
               variant={destructive ? "dangerConfirm" : "accent"}
-              className="order-1"
               isPending={busy}
               disabled={Boolean(applyBlocked)}
               // Not while a write is out: "Waiting for the preview." under a

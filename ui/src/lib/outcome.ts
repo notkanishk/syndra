@@ -98,7 +98,7 @@ export function sentence(text: string): string {
 export function describeFailure(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 403) return "You don't have permission to do this.";
-    if (error.status === 404) return "That item no longer exists — someone may have removed it.";
+    if (error.status === 404) return "That item no longer exists. Someone may have removed it.";
     return error.message;
   }
   if (error instanceof Error) return error.message;

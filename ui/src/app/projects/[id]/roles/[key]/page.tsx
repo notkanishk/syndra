@@ -71,7 +71,7 @@ export default function RoleMembersPage({
     <div className="flex flex-col gap-4">
       <PageHeader
         eyebrow={
-          <Link href={`/projects/${id}`} className="motion-tint hover:text-accent-text">
+          <Link href={`/projects/${id}`} className="link-hover">
             <ProjectName id={id} name={view?.project_name} />
           </Link>
         }

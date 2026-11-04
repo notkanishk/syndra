@@ -88,6 +88,8 @@ export function Button({
       type={type}
       disabled={isDisabled}
       aria-busy={isPending || undefined}
+      // A destructive confirm never takes a dialog's first focus, wherever the footer places Cancel (Q1).
+      data-skip-initial-focus={variant === "dangerConfirm" || undefined}
       className={buttonClasses({ variant, size, disabled: isDisabled, className })}
       {...props}
     >

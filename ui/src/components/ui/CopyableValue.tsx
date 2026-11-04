@@ -155,7 +155,7 @@ export function CopyableValue({
       {/* Announced rather than only coloured: the label change is the whole
           feedback, and a sighted user gets it from the button's own text. */}
       <span aria-live="polite" className="sr-only">
-        {copied ? `${label} copied` : selected ? `${label} is selected — hold to copy` : ""}
+        {copied ? `${label} copied` : selected ? `${label} is selected. Hold to copy` : ""}
       </span>
     </div>
   );
