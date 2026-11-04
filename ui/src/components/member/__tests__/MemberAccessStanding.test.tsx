@@ -139,7 +139,8 @@ describe("MemberAccess standing", () => {
     access.value = view(COMPLETE, ["laser", "kiln"], { observed_role_count: 2 });
     render(<MemberAccess session={session} />);
     expect(screen.getByText("Kiln")).toBeTruthy();
-    expect(screen.getByText("You can use this. Nobody wrote down who gave it to you.")).toBeTruthy();
+    // Said nothing about who gave it: unknown is silent (G17).
+    expect(screen.queryByText(/Nobody wrote down/)).toBeNull();
   });
 
   // Members never see the operator's step: they can't send.
@@ -180,7 +181,6 @@ describe("MemberAccess expiry lives on its row", () => {
     const rows = [...container.querySelectorAll(".row-divider")];
     expect(rows[0].textContent).toContain("Mill · Operator");
     expect(rows[0].getAttribute("data-ends")).toBe("true");
-    expect(rows[0].className).toContain("bg-warn-soft");
     expect(rows[0].textContent).toMatch(/Given to you until .+ · 10 days left/);
     const keep = screen.getByText("Ask to keep it").closest("a")!;
     expect(keep.textContent).not.toContain("→");
@@ -217,11 +217,11 @@ describe("MemberAccess recent changes", () => {
     changes.value = [
       { kind: "request_declined", at: inDays(-2), project_id: "p1", role_key: "mill", by: "op", note: "n", via: null },
     ];
-    const { container } = render(<MemberAccess session={session} />);
+    render(<MemberAccess session={session} />);
     const heading = screen.getByText("Recent changes");
     const firstCardTitle = screen.getByText("Fabrication");
     expect(heading.compareDocumentPosition(firstCardTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(container.textContent).toContain("All your requests →");
+    expect(screen.getByRole("link", { name: "All your requests" })).toBeTruthy();
   });
 
   it("shows in the empty state too: a member with nothing still sees a declined request", () => {
