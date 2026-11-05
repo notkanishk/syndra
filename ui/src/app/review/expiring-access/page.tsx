@@ -1,5 +1,6 @@
 "use client";
 
+import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { keepView, recallView, usePlace } from "@/lib/place";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -576,6 +577,7 @@ function ExpiringRow({
   // (user, project, role) and overwrites expires_at, so this renews in place
   // rather than creating a duplicate.
   const extend = useCreateGrant(grant.user_id);
+  const roleWaits = useRoleWaits();
   // No sheet of its own: a small one holds the step if extending would cancel
   // a change still waiting for you to send (A-04 §14).
   const step = useCancelStep({ host: "Extend this access", goAhead: "extend", standalone: true });
@@ -650,7 +652,9 @@ function ExpiringRow({
       <div className="flex w-full min-w-0 flex-col items-start gap-2 desktop:w-auto desktop:min-w-[300px] desktop:items-end">
         <Crossfade id={reported ? "outcome" : extend.isPending ? "forecast" : "open"} className="w-full tablet:w-auto">
         {extend.isPending && !reported ? (
-          <ActionForecast word={`${FORECAST.extend} by ${EXTEND_DAYS} days`} />
+          <ActionForecast
+            word={roleWaits(grant.project_id, grant.role_key) ? FORECAST.queued : `${FORECAST.extend} by ${EXTEND_DAYS} days`}
+          />
         ) : reported ? (
           <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />
         ) : (

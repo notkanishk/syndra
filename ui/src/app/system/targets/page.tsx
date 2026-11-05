@@ -90,9 +90,8 @@ export default function ConnectedSystemsPage() {
             <EmptyState
               title="No system is connected."
               guidance={
-                "Syndra manages accounts on a system outside itself, such as network storage or a " +
-                "door controller, through an add-on. Whoever runs the Syndra server connects one " +
-                "(see DEPLOY.md). Until then Syndra manages sign-in only."
+                "Connecting one is done on the Syndra server; the person who runs it has the steps. " +
+                "Until then Syndra manages sign-in only."
               }
             />
           }

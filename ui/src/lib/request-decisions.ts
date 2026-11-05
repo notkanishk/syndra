@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { formatShortDate, humanizeKey } from "@/lib/format";
-import { FORECAST, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
+import { FORECAST, forecastFor, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
+import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
 import { FLASH_MS } from "@/lib/motion";
@@ -107,6 +108,7 @@ export interface Decided {
 export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean } = {}) {
   const decide = useDecideRequest();
   const resolver = useNameResolver();
+  const roleWaits = useRoleWaits();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [outcomes, setOutcomes] = useState<Record<string, Decided>>({});
   // The first 100ms (A-19 P2): what Syndra WILL do, in the seat, while the write is in flight.
@@ -131,9 +133,12 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
   async function act(entry: AccessRequest, next: "approved" | "rejected") {
     setResolved((prev) => new Set(prev).add(entry.id));
     setDeciding(entry);
+    // A role that waits forecasts the wait, not the approval (A-20 P8).
     forecast(
       entry.id,
-      next === "rejected" ? FORECAST.decline : entry.kind === "extend" ? FORECAST.extend : FORECAST.approve,
+      next === "rejected"
+        ? FORECAST.decline
+        : forecastFor(entry.kind === "extend" ? "extend" : "approve", roleWaits(entry.project_id, entry.role_key)),
     );
     try {
       const result = await step.run(() => decide.mutateAsync({ id: entry.id, status: next }));

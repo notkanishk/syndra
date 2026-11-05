@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { Mono, StatusDot } from "@/components/ui/Badge";
@@ -13,7 +14,10 @@ import { WouldCancelQueued } from "@/lib/api-client";
 import { armAck, type QueuedChange } from "@/lib/cancel-confirm";
 import { formatAgoShort, humanizeKey } from "@/lib/format";
 import { SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
+import { settleIndicators } from "@/lib/queries/useIndicators";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
+import { ActionForecast } from "@/components/ui/ActionOutcome";
+import { FORECAST } from "@/lib/outcome";
 
 /**
  * Undoing a change that's still waiting (A-04 §14, proposed/CancelQueuedStep.md).
@@ -190,6 +194,8 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
   const [kept, setKept] = useState<QueuedChange[] | null>(null);
   const [cancelled, setCancelled] = useState<QueuedChange[] | null>(null);
   const who = useWho();
+  // Optional: a sheet rendered alone (a test, a story) has no cache to correct.
+  const client = useContext(QueryClientContext);
   const returnFocus = useRef<HTMLElement | null>(null);
 
   const run = useCallback(async function run<T>(write: () => Promise<T>): Promise<T | typeof KEPT> {
@@ -199,7 +205,11 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
     for (;;) {
       try {
         const result = await write();
-        if (shown.length) setCancelled(shown);
+        if (shown.length) {
+          setCancelled(shown);
+          // They are off the queue now that the server said so; the rail follows the answer.
+          if (client) settleIndicators(client, { pending_propagation: -shown.length });
+        }
         returnFocus.current = null;
         setAsking((a) => (a ? { ...a, closed: true, busy: false } : a));
         return result;
@@ -230,7 +240,7 @@ export function useCancelStep(options: CancelStepOptions): CancelStep {
         setAsking((a) => (a ? { ...a, busy: true } : a));
       }
     }
-  }, []);
+  }, [client]);
 
   const open = asking !== null && !asking.closed;
 
@@ -350,10 +360,15 @@ function StepBody({ asking, options, who }: { asking: Asking; options: CancelSte
       </div>
       <ModalFooter
         note={
+          busy ? (
+            // The first 100ms: what Syndra will do, in its own tense, until the server answers.
+            <ActionForecast word={FORECAST.cancel} />
+          ) : (
           <>
             Nothing changes until you choose.
             {noReason && ` If you're unsure why ${askWho} queued it, keep it and ask ${askWho}.`}
           </>
+          )
         }
       >
         <Button data-keep variant="outline" disabled={busy} onClick={() => asking.answer(false)}>
