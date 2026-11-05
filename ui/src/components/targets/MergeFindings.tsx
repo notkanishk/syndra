@@ -6,7 +6,9 @@ import { useState } from "react";
 import { EmptyState, ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
 import { UserName } from "@/components/names";
-import { Mono } from "@/components/ui/Badge";
+import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
+import { RoleRef } from "@/components/names/RoleRef";
+import { fieldWords } from "@/lib/role-mapping-plan";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -77,7 +79,7 @@ export function MergeFindings({ target }: { target: string }) {
             <div key={f.id}>
               <CardRow first={i === 0} className="flex-wrap">
                 <Person id={f.subject_id} />
-                {f.field ? <Mono>{f.field}</Mono> : null}
+                {f.field ? <span className="text-[13.5px] text-muted">{fieldWords(f.field)}</span> : null}
                 <span className="flex-1" />
                 <span className="text-[13px] text-faint">
                   first seen <Relative iso={f.detected_at} />
@@ -85,6 +87,11 @@ export function MergeFindings({ target }: { target: string }) {
               </CardRow>
               <div className="px-5 pb-3 text-[13.5px] text-muted">
                 {describe(f, name)}
+                {rawSides(f) && (
+                  <TechnicalDetail className="mt-2" placeKey={`finding:${f.id}`}>
+                    <TechnicalPayload>{rawSides(f)}</TechnicalPayload>
+                  </TechnicalDetail>
+                )}
               </div>
               {f.decision === "unbound" ? (
                 // Decided as unbound and still standing means the unbind did not
@@ -172,7 +179,7 @@ export function MergeFindings({ target }: { target: string }) {
  */
 function describe(f: MergeFinding, name: string): string {
   const was = show(f.base);
-  const its = f.field ? `Its ${f.field}` : "It";
+  const its = f.field ? `Its ${fieldWords(f.field)}` : "It";
   switch (f.outcome) {
     case "deleted_upstream":
       return `This account is no longer on ${name}. Somebody deleted it there. Creating it again brings back what they deleted; stopping management leaves ${name} alone and Syndra forgets the account.`;
@@ -218,7 +225,14 @@ function decisionLabel(decision: string, name: string): string {
 function show(value: unknown): string {
   if (value === undefined || value === null) return "unrecorded";
   if (typeof value === "string") return value;
-  return JSON.stringify(value);
+  // A structured value is the machine's words: its exact form is under Technical detail.
+  return typeof value === "object" ? "a structured value" : String(value);
+}
+
+/** The three sides of a finding, exact, for whoever runs the server. */
+function rawSides(f: MergeFinding): string | null {
+  const sides = [f.base, f.ours, f.theirs];
+  return sides.some((v) => v !== null && typeof v === "object") ? JSON.stringify({ base: f.base, ours: f.ours, theirs: f.theirs }, null, 2) : null;
 }
 
 /**
@@ -318,7 +332,7 @@ function DecisionForm({
           <span>{finding.why_not}</span>
           {(finding.policy ?? []).map((p) => (
             <span key={p.mapping_id} className="text-faint">
-              <Mono>{p.role_key}</Mono> → {p.value} ·{" "}
+              <RoleRef projectId={p.project_id} roleKey={p.role_key} /> gives the {p.value} group ·{" "}
               {p.holders} {p.holders === 1 ? "person holds" : "people hold"} that role
             </span>
           ))}

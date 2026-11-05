@@ -12,6 +12,8 @@ import {
 } from "@/components/upstream/UpstreamShell";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { Mono } from "@/components/ui/Badge";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -223,9 +225,11 @@ function UserGrants({ userId, name, state }: { userId: string; name: string; sta
               <span className="min-w-[200px] flex-1 text-[14.5px] [overflow-wrap:anywhere]">
                 <ProjectName id={grant.projectId} /> <RoleKeys keys={grant.roleKeys} />
               </span>
-              <Mono className="max-w-full shrink-0 text-faint [overflow-wrap:anywhere] tablet:w-[170px]">
-                {grant.id}
-              </Mono>
+              <span className="basis-full tablet:order-last">
+                <TechnicalDetail placeKey={`grant:${grant.id}`}>
+                  <CopyableValue value={grant.id} label="Grant id" />
+                </TechnicalDetail>
+              </span>
               <span className="flex gap-2">
                 <Button size="sm" onClick={() => setEditing(ref)}>
                   Change roles

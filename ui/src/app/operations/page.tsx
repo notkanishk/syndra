@@ -14,6 +14,8 @@ import { FilterChip } from "@/components/ui/FilterChip";
 import { FilterField, FilterPanel } from "@/components/ui/FilterPanel";
 import { Input } from "@/components/ui/Input";
 import { Notice } from "@/components/ui/Notice";
+import { CopyableValue } from "@/components/ui/CopyableValue";
+import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import { Unfold } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
@@ -428,12 +430,28 @@ function EventRow({
         </span>
       </div>
       {open && (
-        <div className="row-divider bg-surface-0 px-5 py-3.5">
-          {/* The raw type, for whoever matches it against Zitadel: kept out of the row. */}
-          <span className="type-mono text-[12.5px] text-faint">{row.type}</span>
-          <pre className="mt-1.5 overflow-x-auto font-mono text-[12.5px] leading-[1.7] text-muted">
-            {JSON.stringify(row.details, null, 2)}
-          </pre>
+        <div className="row-divider flex flex-col gap-3 bg-surface-0 px-5 py-3.5">
+          {/* Named facts first; the machine's words sit folded under them (A-20 P11). */}
+          <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-1.5 text-[14px] tablet:grid-cols-[150px_1fr]">
+            {row.userId && (
+              <>
+                <dt className="text-muted">Who</dt>
+                <dd className="m-0"><Person id={row.userId} /></dd>
+              </>
+            )}
+            <dt className="text-muted">What</dt>
+            <dd className="m-0">{row.title}</dd>
+            <dt className="text-muted">From</dt>
+            <dd className="m-0">{row.source === "provider" ? "Zitadel" : "Syndra, when somebody new joined"}</dd>
+            <dt className="text-muted">When</dt>
+            <dd className="m-0">{formatWhen(row.at)}</dd>
+            <dt className="text-muted">What Syndra did</dt>
+            <dd className="m-0">{word}</dd>
+          </dl>
+          <TechnicalDetail placeKey={`event:${row.id}`}>
+            <CopyableValue value={row.type} label="Event type" />
+            <TechnicalPayload>{JSON.stringify(row.details, null, 2)}</TechnicalPayload>
+          </TechnicalDetail>
         </div>
       )}
     </>

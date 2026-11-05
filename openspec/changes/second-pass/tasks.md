@@ -52,7 +52,7 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [ ] `plain-language.test.ts` guard for "Online" / "Unreachable" as state words and "accounts" as a count word (`needs-triage`: "Online" has legitimate uses in `useOnline`)
 - [ ] "people" for every count in the System group (`ready-for-agent`)
 - [ ] Offline for Zitadel counts polls the page has seen; a backend `recent` array on `/zitadel/health` would make it survive a reload (`needs-triage`)
-- [ ] P11, Technical detail and raw ids (wave 3)
+- [x] P11, Technical detail and raw ids (see P11 below)
 
 ### P8 · the forecast reaches everything
 
@@ -147,3 +147,18 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [x] Role page's raw key leaves Basic; bundles lede loses its third sentence
 - [x] Tests: `GoTo`, `KeysHost`, cascades, bundles list, role page
 - [ ] "Nothing matches that." for every emptied search (`ready-for-agent`: left to code's taste by A-20, not unified here)
+## P11
+
+### P11 · the System group in words, part one (built 5 Nov 2026)
+
+- [x] `TechnicalDetail` (+ `TechnicalPayload`) in `components/ui/TechnicalDetail.tsx`: FoldChevron, Unfold, closed by default, `placeKey` keeps it open on Back; in `.design-sync` (entry, config, `previews/TechnicalDetail.tsx`, moves row)
+- [x] Incoming events: an opened row is named facts (who, what, from, when, what Syndra did); the raw type (CopyableValue) and JSON sit under Technical detail
+- [x] A system's page: operation ids leave the Capabilities rows for one fold; the log-finding fold is the same part; "Unknown account" instead of an id used as a name (binding conflict, Dormant accounts)
+- [x] Mappings: the row says "Gives the fabrication group"; the role key and `field → value` are folded; dialog ledes lose `field = value`; Version history and Merge findings say "group", "home folder" (`fieldWords`), never the field's own name
+- [x] Claims delivery: "Syndra expected something other than what Zitadel has." with expected and found folded; an unknown app's client id is a CopyableValue
+- [x] Zitadel: the signing key's commands sit under Technical detail, the row says "Rotate the key on the Syndra server. The person who runs it has the command."; grant ids and project ids are folded
+- [x] Tests: `TechnicalDetail.test.tsx`, `SystemRawGuard.test.ts` (fails if a System file dumps JSON, prints an id as bare mono, or uses an id as a name), and the Operations, Zitadel, TargetOverview, Mapping, Claims delivery tests now open the fold before looking for a raw value
+- [ ] Audit: no raw handle is shown today (A-17 G10); nothing moved there `needs-triage`
+- [ ] `RoleRef` still prints the role key beside the project name outside the System group; System-group uses should read the role's display name `ready-for-agent`
+- [ ] Signing-key replacement: the owner chose a hands-off flow where Syndra rotates the key itself; a separate backend and UI change, not the four-step manual guide on the board `ready-for-human`
+- [ ] `ErrorState` Technical detail for a failure body (status, path) `needs-triage`

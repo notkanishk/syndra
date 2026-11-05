@@ -58,6 +58,7 @@ export * from "@/components/ui/StatusSeat";
 export * from "@/components/ui/Tabs";
 export * from "@/components/ui/Term";
 export * from "@/components/ui/Time";
+export * from "@/components/ui/TechnicalDetail";
 export * from "@/components/ui/TokenBlock";
 export * from "@/components/ui/WaitsMark";
 export * from "@/components/ui/Withheld";
