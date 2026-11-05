@@ -212,3 +212,40 @@ func (c *managementClient) TokenFlowActions(ctx context.Context) ([]TokenAction,
 	}
 	return out, nil
 }
+
+// ActionKeyRotator replaces an Actions v2 target's signing key: the one write
+// Syndra makes to its own Actions setup (action-key-autorotation). Needs
+// action.target.write; a 403 says the service account lacks it.
+type ActionKeyRotator interface {
+	// RotateTargetSigningKey expires the target's key at once ("0s", the only
+	// value Zitadel accepts) and returns the new one from Zitadel's answer.
+	// Never log the key.
+	RotateTargetSigningKey(ctx context.Context, targetID string) (string, error)
+}
+
+// KeyRotator is the live rotator, or nil without a Management client.
+func KeyRotator() ActionKeyRotator {
+	r, _ := MgmtClient.(ActionKeyRotator)
+	return r
+}
+
+func (c *managementClient) RotateTargetSigningKey(ctx context.Context, targetID string) (string, error) {
+	if targetID == "" || strings.ContainsAny(targetID, "/?#") {
+		return "", fmt.Errorf("rotate signing key: bad target id")
+	}
+	resp, err := c.doRequest(ctx, http.MethodPost, "/v2/actions/targets/"+targetID, map[string]string{"expirationSigningKey": "0s"})
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var res struct {
+		SigningKey string `json:"signingKey"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&res); err != nil {
+		return "", fmt.Errorf("rotate signing key: %w", err)
+	}
+	if res.SigningKey == "" {
+		return "", fmt.Errorf("rotate signing key: zitadel's answer carried no signingKey")
+	}
+	return res.SigningKey, nil
+}

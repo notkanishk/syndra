@@ -81,6 +81,10 @@ export const AUDIT_ACTIONS: Record<
   // Welcome roles at a first sign-in (owner, 3 Nov): Makerspace settings' switch.
   "welcome_claims.turned_on": { verb: "Turned on welcome roles at a first sign-in" },
   "welcome_claims.turned_off": { verb: "Turned off welcome roles at a first sign-in" },
+  // action-key-autorotation: Syndra replacing the action signing key, on its own or from Replace now.
+  "action_key.replaced": { verb: "Replaced the action signing key" },
+  "action_key.not_replaced": { verb: "Tried to replace the action signing key; Zitadel didn't" },
+  "action_key.verified_later": { verb: "Confirmed the new action signing key with a test sign-in" },
   // Look up sign-ins (owner, 3 Nov): recorded before Zitadel's log is read, with the
   // reason and the range in its details. The person is the target; an app lookup has none.
   "sign_ins.looked_up": {

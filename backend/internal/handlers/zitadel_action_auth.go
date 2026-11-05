@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"syndra/internal/claimserve"
@@ -21,20 +23,57 @@ const (
 func devModeNoZitadel() bool { return os.Getenv("ZITADEL_DOMAIN") == "" }
 
 // withZitadelActionSignature verifies the Actions v2 HMAC signature on the
-// request body before invoking `next`, with the key in secretEnvVar.
+// request body before invoking `next`: the event listener's keyring Syndra
+// read from Zitadel first (action-key-autorotation), then the key in
+// secretEnvVar, which is only the bootstrap. A mismatch asks the keyring to
+// read Zitadel again, as the claims door does, so no key change ever needs a
+// restart.
 //
-// With the key unset it passes through only when ZITADEL_DOMAIN is also unset
+// With no key at all it passes through only when ZITADEL_DOMAIN is also unset
 // (dev mode); otherwise the request is refused with 503 MISCONFIGURED, so a
 // production deployment never accepts unverified payloads (May 2026 audit
 // C1). A missing, malformed, stale or mismatched signature is a 401
 // INVALID_SIGNATURE with no detail.
 func withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http.HandlerFunc {
-	return claimserve.SignatureCheck(secretEnvVar, func() []claimserve.SlotKey {
-		if k := os.Getenv(secretEnvVar); k != "" {
-			return []claimserve.SlotKey{{Slot: claimtel.KeySlotCurrent, Key: k}}
+	keys := func() []claimserve.SlotKey { return eventSigningKeys(secretEnvVar) }
+	refresh := func(ctx context.Context) []claimserve.SlotKey {
+		rdb := claimConfigRedis()
+		if rdb == nil {
+			return keys()
 		}
-		return nil
-	}, nil, devModeNoZitadel, next)
+		return claimserve.AwaitNewKeys(ctx, rdb, &eventKeysRefreshed, keys, func() []claimserve.SlotKey {
+			loadEventKeyring(ctx, rdb)
+			return keys()
+		})
+	}
+	return claimserve.SignatureCheck(secretEnvVar, keys, refresh, func() { nudgeKeyring() }, devModeNoZitadel, next)
+}
+
+// eventKeyring is the event listener target's keyring in this process: loaded
+// from Redis (events:keyring), moved by the keyring follower and the rotator.
+var (
+	eventKeyring       atomic.Pointer[claimserve.Keyring]
+	eventKeysRefreshed atomic.Int64
+)
+
+// eventSigningKeys is every key an event may be signed with: the keyring,
+// then the env key.
+func eventSigningKeys(envVar string) []claimserve.SlotKey {
+	var ks []claimserve.SlotKey
+	if k := eventKeyring.Load(); k != nil {
+		ks = k.Keys(time.Now())
+	}
+	return claimserve.KeysWithEnv(ks, os.Getenv(envVar))
+}
+
+// loadEventKeyring reads events:keyring into this process; a failed or
+// unreadable read keeps what it had.
+func loadEventKeyring(ctx context.Context, rdb claimserve.Redis) {
+	rctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	if k, err := claimserve.ReadKeyring(rctx, rdb, claimserve.EventsKeyringKey); err == nil {
+		eventKeyring.Store(&k)
+	}
 }
 
 // withClaimsSignature is the claims target's check (S5): the keyring Syndra

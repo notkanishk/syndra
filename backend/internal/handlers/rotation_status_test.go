@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"syndra/internal/db"
 )
 
 // withFixedNow pins nowFn for a single test and restores it via t.Cleanup.
@@ -23,6 +26,15 @@ func withFixedNow(t *testing.T, now time.Time) {
 func withKeyInstalled(t *testing.T) {
 	t.Helper()
 	t.Setenv(envActionKey, "test-signing-key")
+	withRotationRecord(t, db.ActionKeyRotationState{})
+}
+
+// withRotationRecord stands in for Syndra's record of replacing the key.
+func withRotationRecord(t *testing.T, st db.ActionKeyRotationState) {
+	t.Helper()
+	orig := dbActionKeyRotationNow
+	dbActionKeyRotationNow = func(context.Context, string) (db.ActionKeyRotationState, error) { return st, nil }
+	t.Cleanup(func() { dbActionKeyRotationNow = orig })
 }
 
 func decodeRotationStatus(t *testing.T, rr *httptest.ResponseRecorder) ActionRotationStatus {

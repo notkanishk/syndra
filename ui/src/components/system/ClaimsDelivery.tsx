@@ -221,6 +221,19 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
       );
       break;
     }
+    // action-key-autorotation: subject "unverified" (replaced, the test sign-in
+    // after it didn't get its claims) or "failed" (Zitadel didn't replace it).
+    case "KEY_ROTATION":
+      if (group.some((f) => f.subject === "unverified")) {
+        title = "The new signing key isn't confirmed";
+        body =
+          "Syndra replaced the action signing key, but the test sign-in after it didn't get its claims. Syndra still accepts the old key and the new one, and won't replace it again on its own. The Action signing key row, below, says when it happened.";
+      } else {
+        title = "Zitadel didn't replace the signing key";
+        body =
+          "Syndra tried to replace the action signing key and Zitadel didn't do it. The old key still works, and Syndra tries again in the next quiet hours. The Action signing key row, below, says when.";
+      }
+      break;
     default:
       title = "Claim delivery needs a look";
       body = (
