@@ -12,11 +12,10 @@ import (
 )
 
 type CreateMappingRuleRequest struct {
-	SourceProject    string `json:"source_project"`
-	SourceRole       string `json:"source_role"`
-	TargetProject    string `json:"target_project"`
-	TargetRole       string `json:"target_role"`
-	ConfirmationMode string `json:"confirmation_mode,omitempty"`
+	SourceProject string `json:"source_project"`
+	SourceRole    string `json:"source_role"`
+	TargetProject string `json:"target_project"`
+	TargetRole    string `json:"target_role"`
 }
 
 // handleGetMappingRule reads one rule, retired or not, so a retired rule can say when and by whom
@@ -111,15 +110,11 @@ func handleCreateMappingRule(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "system"
 	}
-	// The cascade owns the mutation now (create rule + per-holder outbox rows commit in one
-	// tx via db.CreateMappingRuleAndEnqueue), then (auto mode) drains those rows. Enqueue
-	// failure rolls back the mutation → 500; a drain failure rides in cascade.drain.
-	mode, err := resolveConfirmationMode(r.Context(), req.ConfirmationMode)
-	if err != nil {
-		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
-		return
-	}
-	ruleID, cascade, err := svcCascadeRuleCreated(r.Context(), actor, req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole, mode)
+	// The cascade owns the mutation (create rule + per-holder outbox rows commit in one
+	// tx via db.CreateMappingRuleAndEnqueue), then delivers those rows: each goes unless
+	// its role waits. Enqueue failure rolls back the mutation → 500; a drain failure
+	// rides in cascade.drain.
+	ruleID, cascade, err := svcCascadeRuleCreated(r.Context(), actor, req.SourceProject, req.SourceRole, req.TargetProject, req.TargetRole)
 	if err != nil {
 		if db.IsUniqueViolation(err) {
 			jsonErrorResponse(w, http.StatusConflict, "CONFLICT", "A mapping rule with this source/target combination already exists")
@@ -226,7 +221,7 @@ func handleUpdateMappingRule(w http.ResponseWriter, r *http.Request) {
 //
 // It reads the rule first for the same reason the update path does: the id alone does not say
 // what the rule reached, and the revoke set is computed from the closure the rule was part of.
-// There is no cycle check — removing an edge cannot create one — and no confirmation-mode
+// There is no cycle check — removing an edge cannot create one — and no mode
 // argument: a deletion inherits the mode the rule itself carried, so a rule that queued its
 // writes queues the writes that undo it.
 // DELETE /api/v1/rules/mapping/{id}

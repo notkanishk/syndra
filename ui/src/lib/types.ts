@@ -84,7 +84,10 @@ export interface CascadeOutcome {
   message?: string;
   cascade?: {
     enqueued: number;
-    mode: string;
+    /** How many of them wait for you: their role waits. */
+    waiting?: number;
+    /** Why any of them is not in Zitadel yet (role_waits, halted:…); absent when all went. */
+    wait_reason?: string;
     no_op?: boolean;
   };
 }

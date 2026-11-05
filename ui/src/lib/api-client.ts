@@ -22,14 +22,27 @@ export interface ApiErrorBody {
   cancels?: QueuedChange[];
 }
 
+/** What a response with no envelope message says, by status, in the copy guide's words. */
+function fallbackMessage(status: number): string {
+  if (status === 401) return "Your session ended before this ran.";
+  if (status === 403) return "You don't have permission to do this.";
+  if (status === 404) return "That item no longer exists. Someone may have removed it.";
+  if (status === 413) return "That request is too large. Nothing was changed.";
+  if (status >= 500) return "Syndra's server had a problem.";
+  return "Syndra's server had a problem and gave no reason.";
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: Record<string, string>;
 
   constructor(status: number, body: ApiErrorBody | string) {
-    const parsed: ApiErrorBody = typeof body === "string" ? { message: body } : body;
-    super(parsed.message ?? "Syndra's server had a problem and gave no reason.");
+    // A bare string is a gateway's page or an upstream's text, never the product's words: at 5xx
+    // it is not shown. The envelope's `message` is the only copy that reaches the screen.
+    const parsed: ApiErrorBody =
+      typeof body === "string" ? (status >= 500 ? {} : { message: body }) : body;
+    super(parsed.message ?? fallbackMessage(status));
     this.name = "ApiError";
     this.status = status;
     this.code = parsed.error ?? "UNKNOWN_ERROR";

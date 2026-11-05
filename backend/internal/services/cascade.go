@@ -15,12 +15,11 @@ import (
 // CascadeResult reports what a cascade enqueued and (auto only) drained.
 type CascadeResult struct {
 	Enqueued int                     `json:"enqueued"`
-	Mode     string                  `json:"mode"`
 	Drain    propagation.DrainResult `json:"drain"`
 
-	// Waiting counts rows held for the operator (a role that waits, or a
-	// mode set to wait), and WaitReason says why the change isn't in Zitadel
-	// yet: role_waits, manual, or halted:<reason>. Empty when it all went.
+	// Waiting counts rows held for the operator (a role that waits), and
+	// WaitReason says why the change isn't in Zitadel yet: role_waits or
+	// halted:<reason>. Empty when it all went.
 	Waiting    int    `json:"waiting"`
 	WaitReason string `json:"wait_reason,omitempty"`
 
@@ -102,20 +101,19 @@ func refuseRetired(b models.Bundle) error {
 }
 
 // applyMode delivers the JUST-enqueued rows (Deliver): each goes to Zitadel
-// now unless its role waits, or, before the switch over, the bundle's or
-// rule's own mode is "manual". The rows were already persisted atomically
+// now unless its role waits. A bundle's or rule's own mode used to decide this
+// too; under roles that wait it decided nothing and was dropped (migration
+// 000078). The rows were already persisted atomically
 // with the source mutation by the caller, so a send failure is NON-FATAL: it
 // is captured in res.Drain (Halted/Reason) and applyMode returns nil, so the
 // handler still responds 200 and the rows sit pending in the worklist,
 // recoverable via "Resume now". (Returning an error here would 500 AFTER the
 // mutation committed, inviting a retry that re-runs the whole cascade and
 // mints duplicate outbox rows.)
-func applyMode(ctx context.Context, mode string, ids []string) (CascadeResult, error) {
-	mode = db.NormalizeConfirmationMode(mode)
-	d := Deliver(ctx, ids, mode == "manual")
+func applyMode(ctx context.Context, ids []string) (CascadeResult, error) {
+	d := Deliver(ctx, ids, false)
 	return CascadeResult{
 		Enqueued:   len(ids),
-		Mode:       mode,
 		Drain:      d.Drain,
 		Waiting:    len(d.Waiting),
 		WaitReason: d.WaitReason(),
@@ -135,34 +133,14 @@ func applyMode(ctx context.Context, mode string, ids []string) (CascadeResult, e
 // simulation of the change — never from a post-mutation read — so the delta can be handed to the
 // existing atomic *AndEnqueue db functions (mutation + audit + enqueue in one tx).
 
-// effectiveClosure applies the mapping-rule fixpoint over a base set of held (project,role) keys.
-// This is a pure, set-only mirror of collectUserRoles' fixpoint loop (views.go, ~lines 791-812):
-// same multi-hop, run-until-no-change semantics, minus the EffectiveRole/reason bookkeeping that
-// makes the two awkward to share directly. Keep this in sync if that loop's semantics change.
+// effectiveClosure applies the mapping-rule fixpoint over a base set of held (project,role) keys,
+// through models.RuleClosure — the one implementation the compiler, the views and the mapping
+// cohort share, so a cascade sends Zitadel exactly the chain the token carries.
 func effectiveClosure(base map[roleKey]bool, rules []models.MappingRule) map[roleKey]bool {
-	closure := make(map[roleKey]bool, len(base))
-	for k := range base {
-		closure[k] = true
-	}
-	for i := 0; i < len(rules); i++ {
-		changed := false
-		for _, rule := range rules {
-			src := roleKey{projectID: rule.SourceProject, roleKey: rule.SourceRole}
-			if !closure[src] {
-				continue
-			}
-			tgt := roleKey{projectID: rule.TargetProject, roleKey: rule.TargetRole}
-			if !closure[tgt] {
-				closure[tgt] = true
-				changed = true
-			}
-		}
-		if !changed {
-			break
-		}
-	}
-	return closure
+	return models.RuleClosure(base, rules, newRoleKey)
 }
+
+func newRoleKey(projectID, role string) roleKey { return roleKey{projectID: projectID, roleKey: role} }
 
 // closureDelta returns adds (after−before) and revokes (before−after), sorted for a deterministic
 // enqueue order.
@@ -386,9 +364,9 @@ func CascadeBundleAssignedToUser(ctx context.Context, actor, userID, bundleID st
 		// would hand them newer access than their pin records — the exact
 		// mismatch versioning exists to prevent. Moving them forward is a
 		// separate, rehearsed action.
-		return CascadeResult{Mode: bundle.ConfirmationMode, NoOp: true}, nil
+		return CascadeResult{NoOp: true}, nil
 	}
-	return applyMode(ctx, bundle.ConfirmationMode, ids)
+	return applyMode(ctx, ids)
 }
 
 // EditBundleWorkingCopy adds or removes a role in the bundle's working copy.
@@ -413,7 +391,7 @@ func EditBundleWorkingCopy(ctx context.Context, actor, bundleID, projectID, role
 // enqueue params carry SourceRef="" here; CreateMappingRuleAndEnqueue stamps the new rule id onto
 // them after the INSERT ... RETURNING, since the id doesn't exist yet at simulation time. Returns
 // the new rule id for the handler response. The handler does cycle/self-ref validation first.
-func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, targetProject, targetRole, mode string) (string, CascadeResult, error) {
+func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, targetProject, targetRole string) (string, CascadeResult, error) {
 	var ruleID string
 	var ids []string
 
@@ -453,14 +431,13 @@ func CascadeRuleCreated(ctx context.Context, actor, sourceProject, sourceRole, t
 		}
 
 		ruleID, ids, err = svcCreateRuleAndEnqueue(ctx, actor,
-			sourceProject, sourceRole, targetProject, targetRole,
-			db.NormalizeConfirmationMode(mode), params)
+			sourceProject, sourceRole, targetProject, targetRole, params)
 		return err
 	})
 	if err != nil {
 		return "", CascadeResult{}, err
 	}
-	res, err := applyMode(ctx, mode, ids)
+	res, err := applyMode(ctx, ids)
 	return ruleID, res, err
 }
 
@@ -507,7 +484,7 @@ func CascadeBundleRemovedFromUser(ctx context.Context, actor, userID, bundleID s
 	if err != nil {
 		return CascadeResult{}, err
 	}
-	return applyMode(ctx, bundle.ConfirmationMode, ids)
+	return applyMode(ctx, ids)
 }
 
 // CascadeBundleRetired retires a bundle and takes back what only it was granting.
@@ -579,7 +556,7 @@ func CascadeBundleRetired(ctx context.Context, actor, bundleID string) (CascadeR
 	if err != nil {
 		return CascadeResult{}, err
 	}
-	return applyMode(ctx, bundle.ConfirmationMode, ids)
+	return applyMode(ctx, ids)
 }
 
 // CascadeRuleUpdated re-projects a rule whose matcher/target changed. `old` is the rule as it was
@@ -644,7 +621,7 @@ func CascadeRuleUpdated(ctx context.Context, actor string, old models.MappingRul
 	if err != nil {
 		return CascadeResult{}, err
 	}
-	return applyMode(ctx, old.ConfirmationMode, ids)
+	return applyMode(ctx, ids)
 }
 
 // CascadeRuleRetired retires a rule and takes back what only it was granting. It is
@@ -702,7 +679,7 @@ func CascadeRuleRetired(ctx context.Context, actor string, old models.MappingRul
 	if err != nil {
 		return CascadeResult{}, err
 	}
-	return applyMode(ctx, old.ConfirmationMode, ids)
+	return applyMode(ctx, ids)
 }
 
 // userBaseHoldingsExcludingGrant is userBaseHoldings but omits exactly one

@@ -145,8 +145,6 @@ var (
 	cacheRebuildUser = cache.RebuildUserCache
 
 	// Webhook handler injectable vars.
-	webhookEnforceMappingRules             = zitadel.EnforceMappingRules
-	webhookRevokeMappingRules              = zitadel.RevokeMappingRules
 	webhookTriggerOnboarding               = services.TriggerOnboarding
 	dbInsertWebhookEvent                   = db.InsertWebhookEvent
 	dbCompleteWebhookEvent                 = db.CompleteWebhookEvent
@@ -409,13 +407,10 @@ var (
 	svcDriftTriageQueue     = services.DriftTriageQueue
 	svcDriftTriageRows      = services.DriftTriageRows
 
-	// Confirmation-mode surfaces (Task 22): global default read/write, bulk toggle, and
-	// Change history.
-	dbGetConfigSetting          = db.GetConfigSetting
-	dbSetConfigSetting          = db.SetConfigSetting
-	dbSetRuleConfirmationMode   = db.SetRuleConfirmationMode
-	dbSetBundleConfirmationMode = db.SetBundleConfirmationMode
-	dbGetCascadeGroups          = db.GetCascadeGroups
+	// Config settings and Change history.
+	dbGetConfigSetting = db.GetConfigSetting
+	dbSetConfigSetting = db.SetConfigSetting
+	dbGetCascadeGroups = db.GetCascadeGroups
 
 	// Bulk access changes. Rehearsal is its own injectable so the handler's
 	// central contract — apply never acts on a diff nobody approved — is

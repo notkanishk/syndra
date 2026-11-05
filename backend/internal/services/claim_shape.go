@@ -535,9 +535,9 @@ func roleNames(ctx context.Context, projectID string) map[string]string {
 const SeedNote = "As Actions v1 sent it"
 
 // seedApp gives one app the v1 shape when Zitadel created it before the
-// cutoff and it has no shape yet. An override saved under the old per-project
-// shaping (app_claim_overrides) rides along, so the key that app read keeps
-// coming.
+// cutoff and it has no shape yet. (Overrides saved under the old per-project
+// shaping used to ride along; none existed anywhere, and migration 000078
+// dropped their table, refusing if one did.)
 func seedApp(ctx context.Context, app models.ApplicationCatalog) (bool, error) {
 	cutoff, err := svcClaimShapeSeedCutoff(ctx)
 	if err != nil {
@@ -546,28 +546,9 @@ func seedApp(ctx context.Context, app models.ApplicationCatalog) (bool, error) {
 	if !app.Created.IsZero() && !app.Created.Before(cutoff) {
 		return false, nil
 	}
-	p := claims.ActionsV1()
-	note := SeedNote
-	overrides, err := svcListAppClaimOverrides(ctx)
-	if err != nil {
-		return false, err
-	}
-	for _, o := range overrides {
-		if o.ApplicationID != app.ID {
-			continue
-		}
-		for _, c := range claims.FromFlat(o.ClaimName, o.FormatType, o.AttributeClaims, o.StaticClaims).Claims {
-			next := p
-			next.Claims = append(append([]claims.Claim(nil), p.Claims...), c)
-			if claims.Validate(next) == nil {
-				p = next
-				note = SeedNote + ", with its own claims from before"
-			}
-		}
-	}
 	_, wrote, err := svcInsertClaimShape(ctx, db.ClaimShapeVersion{
-		ApplicationID: app.ID, ProjectID: app.ProjectID, ClientID: app.ClientID, Profile: p,
-		TemplateID: "custom", TemplateVersion: 1, Note: note, SavedBy: "system",
+		ApplicationID: app.ID, ProjectID: app.ProjectID, ClientID: app.ClientID, Profile: claims.ActionsV1(),
+		TemplateID: "custom", TemplateVersion: 1, Note: SeedNote, SavedBy: "system",
 	}, true)
 	return wrote, err
 }

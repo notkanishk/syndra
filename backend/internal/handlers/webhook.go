@@ -287,17 +287,19 @@ func HandleZitadelWebhook(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]string{"message": "Webhook processed"})
 }
 
-// processGrantAdded handles grant_added and grant_changed events:
-// rebuild cache, enforce mapping rules per role, trigger onboarding for new_user,
-// per role, which is what carries the change to any mapped target.
+// processGrantAdded handles grant_added and grant_changed events: rebuild
+// the cache, trigger onboarding for new_user, and raise drift.
+//
+// It does not fire mapping rules, and must not. Every event that survives the
+// self-mutation guard is a change made outside Syndra, which is drift to
+// triage, never a decision to act on: the token does not count it as held, so
+// a rule fired from it would give Zitadel a role the token does not carry. A
+// rule fires when Syndra's own record of the source changes (db.FollowRules
+// and the cascades), including when an operator adopts this drift.
 func processGrantAdded(ctx context.Context, event WebhookPayload, eventID string) error {
 	cacheRebuildUser(ctx, event.UserID, append([]string{event.SourceProject}, event.ProjectIDs...))
 
 	for _, role := range event.RoleKeys {
-		if err := webhookEnforceMappingRules(ctx, event.UserID, event.SourceProject, role); err != nil {
-			return fmt.Errorf("orchestrator failure for role=%s: %w", role, err)
-		}
-
 		// Legacy back-compat: role_key=new_user on grant_added also triggers onboarding.
 		if role == "new_user" {
 			idempotencyKey := fmt.Sprintf("webhook:%s:%s", event.UserID, event.SourceProject)
@@ -402,23 +404,16 @@ func detectWebhookRemoval(ctx context.Context, event WebhookPayload) {
 	}
 }
 
-// processGrantRemoved handles grant_removed events:
-// recompile the cache, revoke derived grants per role through mapping rules,
-// The target side follows from the role change itself: the closure diff every
-// cascade computes fires the lifecycle trigger, which converges whatever
-// targets that role is mapped to. There is no second queue to write to.
+// processGrantRemoved handles grant_removed events: recompile the cache and
+// raise a removal Syndra intends as drift.
+//
+// No rule revocation, for the reason processGrantAdded fires none: a removal
+// made outside Syndra leaves Syndra's record of the source unchanged, so the
+// closure, the token and what Syndra owes Zitadel are unchanged too. The
+// removal itself is the finding.
 func processGrantRemoved(ctx context.Context, event WebhookPayload, eventID string) error {
 	cacheRebuildUser(ctx, event.UserID, []string{event.SourceProject})
-	// BEFORE the cascade, deliberately. The revocations below remove derived
-	// intent, so asking afterwards whether Syndra expects this role would be
-	// asking about the world the cascade has just made rather than the one the
-	// removal happened in.
 	detectWebhookRemoval(ctx, event)
-	for _, role := range event.RoleKeys {
-		if err := webhookRevokeMappingRules(ctx, event.UserID, event.SourceProject, role); err != nil {
-			return fmt.Errorf("revocation failure for role=%s: %w", role, err)
-		}
-	}
 	return nil
 }
 

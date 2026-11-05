@@ -408,9 +408,9 @@ func TestHandleBulkGrants_UnconfirmedDrainReportsQueuedNotApplied(t *testing.T) 
 	}
 }
 
-// A bundle whose owner set it to manual confirmation is *meant* to leave work
-// queued. That is not a failure, and it is not "applied" either.
-func TestHandleBulkGrants_ManualBundleReportsQueued(t *testing.T) {
+// A bundle carrying a role that waits is *meant* to leave work queued. That is
+// not a failure, and it is not "applied" either.
+func TestHandleBulkGrants_WaitingBundleReportsQueued(t *testing.T) {
 	stubRehearsal(t, services.BulkPlan{
 		Op:       services.BulkOpAssignBundle,
 		Outcomes: []services.BulkOutcome{{UserID: "u1", Effect: services.EffectApply}},
@@ -424,7 +424,7 @@ func TestHandleBulkGrants_ManualBundleReportsQueued(t *testing.T) {
 	rebuildUserCacheDetachedFn = func(context.Context, string) {}
 	stubDrain(t)
 	svcCascadeBundleAssigned = func(context.Context, string, string, string) (services.CascadeResult, error) {
-		return services.CascadeResult{Enqueued: 3, Mode: "manual", Waiting: 3, WaitReason: db.WaitReasonManual}, nil
+		return services.CascadeResult{Enqueued: 3, Waiting: 3, WaitReason: db.WaitReasonRoleWaits}, nil
 	}
 
 	rr := httptest.NewRecorder()
@@ -432,10 +432,10 @@ func TestHandleBulkGrants_ManualBundleReportsQueued(t *testing.T) {
 
 	plan := decodePlan(t, rr)
 	if plan.Outcomes[0].Effect != services.EffectQueued {
-		t.Fatalf("effect = %q, want queued for a confirmation-gated bundle", plan.Outcomes[0].Effect)
+		t.Fatalf("effect = %q, want queued for a bundle whose role waits", plan.Outcomes[0].Effect)
 	}
-	if !strings.Contains(plan.Outcomes[0].Detail, "applies on confirmation") {
-		t.Errorf("the row must name the bundle's own gate, got %q", plan.Outcomes[0].Detail)
+	if !strings.Contains(plan.Outcomes[0].Detail, "always waits for you") {
+		t.Errorf("the row must say a role waits, got %q", plan.Outcomes[0].Detail)
 	}
 }
 
@@ -446,8 +446,8 @@ func TestHandleBulkGrants_DrainedCascadeIsApplied(t *testing.T) {
 		name string
 		res  services.CascadeResult
 	}{
-		{"auto bundle, fully drained", services.CascadeResult{Enqueued: 2, Mode: "auto", Drain: propagation.DrainResult{Applied: 2}}},
-		{"nothing to propagate", services.CascadeResult{Enqueued: 0, Mode: "manual"}},
+		{"auto bundle, fully drained", services.CascadeResult{Enqueued: 2, Drain: propagation.DrainResult{Applied: 2}}},
+		{"nothing to propagate", services.CascadeResult{Enqueued: 0}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stubRehearsal(t, services.BulkPlan{
@@ -512,11 +512,11 @@ func TestHandleBulkGrants_RejectsInvalidRequests(t *testing.T) {
 // A bundle whose role waits says so, rather than blaming the bundle's mode or
 // calling it merely "still queued".
 func TestCascadeQueuedReason_SaysTheRoleWaits(t *testing.T) {
-	got := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Mode: "auto", Waiting: 1, WaitReason: db.WaitReasonRoleWaits})
+	got := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Waiting: 1, WaitReason: db.WaitReasonRoleWaits})
 	if got != "a role it gives always waits for you" {
 		t.Fatalf("got %q", got)
 	}
-	if got := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Mode: "auto", Drain: propagation.DrainResult{Applied: 2}}); got != "" {
+	if got := cascadeQueuedReason(services.CascadeResult{Enqueued: 2, Drain: propagation.DrainResult{Applied: 2}}); got != "" {
 		t.Fatalf("everything sent says nothing: %q", got)
 	}
 }

@@ -388,12 +388,21 @@ func handleResolveMergeFinding(w http.ResponseWriter, r *http.Request) {
 		// a wedge — the operator saw an error, the controls disappeared, and
 		// every retry came back 409.
 		if req.Resolution == db.ResolutionUnbound && !errors.Is(err, db.ErrMergeFindingDecided) {
-			jsonResponse(w, http.StatusAccepted, map[string]any{
-				"resolved": false, "decided": true, "resolution": req.Resolution,
-				"repair_needed": true,
-				"detail": "The target released the account and Syndra's own records were not updated. " +
-					"Nothing on the target changed. Press unbind again to finish it — every step is safe to repeat.",
-				"error": err.Error(),
+			// The cause is for the log; the body is the envelope plus the repair state.
+			ref := supportReference()
+			log.Printf("[HTTP] repair needed ref=%s finding=%s: %v", ref, id, err)
+			const detail = "The target released the account and Syndra's own records were not updated. " +
+				"Nothing on the target changed. Press unbind again to finish it, every step is safe to repeat."
+			jsonResponse(w, http.StatusAccepted, struct {
+				ErrorResponse
+				Resolved     bool   `json:"resolved"`
+				Decided      bool   `json:"decided"`
+				Resolution   string `json:"resolution"`
+				RepairNeeded bool   `json:"repair_needed"`
+				Detail       string `json:"detail"`
+			}{
+				ErrorResponse{Error: "REPAIR_NEEDED", Message: detail, Details: map[string]string{"request_id": ref}},
+				false, true, req.Resolution, true, detail,
 			})
 			return
 		}

@@ -7,13 +7,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const (
-	confirmationModeAuto   = "auto"
-	confirmationModeManual = "manual"
-
-	ConfigKeyDefaultConfirmationMode = "global.default_rule_confirmation_mode"
-)
-
 // GetConfigSetting returns the value for key, or "" when the key is absent
 // (absence is not an error — callers fall back to a compile-time default).
 func GetConfigSetting(ctx context.Context, key string) (string, error) {
@@ -37,12 +30,4 @@ func SetConfigSetting(ctx context.Context, key, value, updatedBy string) error {
 			updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
 		key, value, updatedBy)
 	return err
-}
-
-// NormalizeConfirmationMode returns a valid mode, defaulting unknown/empty to auto.
-func NormalizeConfirmationMode(m string) string {
-	if m == confirmationModeManual {
-		return confirmationModeManual
-	}
-	return confirmationModeAuto
 }

@@ -211,6 +211,17 @@ describe("proxy route admin/member boundary", () => {
     global.fetch = vi.fn().mockRejectedValue(new Error("down")) as unknown as typeof fetch;
     const res = await call(GET, "GET", ["catalog"]);
     expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; message: string; details?: { request_id?: string } };
+    expect(body.error).toBe("BACKEND_UNREACHABLE");
+    expect(body.message).not.toContain("down");
+    expect(body.details?.request_id).toMatch(/^[0-9A-F]{8}$/);
+  });
+
+  it("speaks the backend's envelope for its own refusals", async () => {
+    (getSession as Mock).mockResolvedValue(null);
+    const res = await call(GET, "GET", ["catalog"]);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "UNAUTHORIZED", message: "Your session ended before this ran." });
   });
 });
 
@@ -248,12 +259,16 @@ describe("proxy route contract", () => {
     expect(await res.text()).toBe("");
   });
 
-  it("passes a non-JSON error through under its real status, not as 'unreachable'", async () => {
-    upstream("<html>bad gateway</html>", { status: 503, headers: { "Retry-After": "7" } });
+  it("keeps a non-JSON error's real status and Retry-After but never its text", async () => {
+    upstream("<html>rpc error: code = Unavailable 192.0.2.7</html>", { status: 503, headers: { "Retry-After": "7" } });
     const res = await call(GET, "GET", ["catalog"]);
     expect(res.status).toBe(503);
-    expect(await res.text()).toBe("<html>bad gateway</html>");
-    expect(res.headers.get("content-type")).toMatch(/^text\/plain/);
+    const raw = await res.text();
+    expect(raw).not.toContain("rpc error");
+    expect(raw).not.toContain("192.0.2.7");
+    const body = JSON.parse(raw) as { error: string; message: string; details: { request_id: string } };
+    expect(body.error).toBe("UPSTREAM_ERROR");
+    expect(body.details.request_id).toBeTruthy();
     expect(res.headers.get("retry-after")).toBe("7");
   });
 

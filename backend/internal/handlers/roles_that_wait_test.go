@@ -14,11 +14,11 @@ import (
 
 func stubRolesThatWait(t *testing.T, model string) (marked *[]string, audits *[]string) {
 	t.Helper()
-	oList, oMark, oUnmark, oSugg, oMeta, oSet, oAudit :=
-		dbListRoleWaits, dbMarkRoleWaits, dbUnmarkRoleWaits, dbListWaitSuggestions, dbGetConfigSettingMeta, dbSetConfigSetting, dbInsertAuditLog
+	oList, oMark, oUnmark, oMeta, oSet, oAudit :=
+		dbListRoleWaits, dbMarkRoleWaits, dbUnmarkRoleWaits, dbGetConfigSettingMeta, dbSetConfigSetting, dbInsertAuditLog
 	t.Cleanup(func() {
-		dbListRoleWaits, dbMarkRoleWaits, dbUnmarkRoleWaits, dbListWaitSuggestions, dbGetConfigSettingMeta, dbSetConfigSetting, dbInsertAuditLog =
-			oList, oMark, oUnmark, oSugg, oMeta, oSet, oAudit
+		dbListRoleWaits, dbMarkRoleWaits, dbUnmarkRoleWaits, dbGetConfigSettingMeta, dbSetConfigSetting, dbInsertAuditLog =
+			oList, oMark, oUnmark, oMeta, oSet, oAudit
 	})
 	var m, a []string
 	dbListRoleWaits = func(context.Context) ([]db.RoleWait, error) { return nil, nil }
@@ -27,10 +27,6 @@ func stubRolesThatWait(t *testing.T, model string) (marked *[]string, audits *[]
 		return true, nil
 	}
 	dbUnmarkRoleWaits = func(context.Context, string, string) (bool, error) { return true, nil }
-	dbListWaitSuggestions = func(context.Context) ([]db.WaitSuggestion, error) {
-		return []db.WaitSuggestion{{ProjectID: "p1", RoleKey: "operator",
-			Via: []db.WaitSource{{Kind: "bundle", ID: "b1", Name: "Lab Tech"}}}}, nil
-	}
 	dbGetConfigSettingMeta = func(context.Context, string) (db.ConfigSetting, bool, error) {
 		if model == "" {
 			return db.ConfigSetting{}, false, nil
@@ -45,13 +41,13 @@ func stubRolesThatWait(t *testing.T, model string) (marked *[]string, audits *[]
 	return &m, &a
 }
 
-// Before the switch over the page offers the one-time move; after it, not.
-func TestRolesThatWait_SuggestsTheMoveOnlyBeforeTheSwitch(t *testing.T) {
+// The page says whether the switch over happened. The one-time move it once
+// offered read the bundles' and rules' own modes, which are gone (000078).
+func TestRolesThatWait_ReportsTheSwitch(t *testing.T) {
 	for _, tc := range []struct {
 		model    string
 		switched bool
-		suggest  int
-	}{{"", false, 1}, {db.ConfirmationModelRoles, true, 0}} {
+	}{{"", false}, {db.ConfirmationModelRoles, true}} {
 		stubRolesThatWait(t, tc.model)
 		rr := httptest.NewRecorder()
 		handleListRolesThatWait(rr, httptest.NewRequest(http.MethodGet, "/api/v1/roles-that-wait", nil))
@@ -59,7 +55,7 @@ func TestRolesThatWait_SuggestsTheMoveOnlyBeforeTheSwitch(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 			t.Fatal(err)
 		}
-		if got.SwitchedOver != tc.switched || len(got.Suggestions) != tc.suggest || got.Roles == nil {
+		if got.SwitchedOver != tc.switched || got.Roles == nil {
 			t.Fatalf("model %q: %+v", tc.model, got)
 		}
 	}

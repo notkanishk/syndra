@@ -822,7 +822,9 @@ function DeleteBundleDialog({
               const result = await step.run(() => remove.mutateAsync(bundleId));
               if (result === KEPT) return;
               const n = result.cascade?.enqueued ?? 0;
-              const auto = result.cascade?.mode === "auto";
+              // What the server says happened: any wait reason means some
+              // of it is not in Zitadel yet.
+              const auto = !result.cascade?.wait_reason;
               // The welcome-bundle consequence is folded into the same report
               // rather than fired as a second notification. It is the same
               // event, and it is the half an operator most needs: from now on

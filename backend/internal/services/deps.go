@@ -239,14 +239,13 @@ var (
 
 	// Claim shaping: the project default (flat, claim_profiles), per-app shape
 	// versions, and the old per-project overrides, read only by the v1 seed.
-	svcGetClaimProfile       = db.GetClaimProfile
-	svcUpsertClaimProfile    = db.UpsertClaimProfile
-	svcListAppClaimOverrides = db.ListAppClaimOverrides
-	svcLatestClaimShapes     = db.LatestClaimShapes
-	svcClaimShapeAt          = db.ClaimShapeAt
-	svcClaimShapeHistory     = db.ClaimShapeHistory
-	svcInsertClaimShape      = db.InsertClaimShapeVersion
-	svcClaimShapeSeedCutoff  = db.ClaimShapeSeedCutoff
+	svcGetClaimProfile      = db.GetClaimProfile
+	svcUpsertClaimProfile   = db.UpsertClaimProfile
+	svcLatestClaimShapes    = db.LatestClaimShapes
+	svcClaimShapeAt         = db.ClaimShapeAt
+	svcClaimShapeHistory    = db.ClaimShapeHistory
+	svcInsertClaimShape     = db.InsertClaimShapeVersion
+	svcClaimShapeSeedCutoff = db.ClaimShapeSeedCutoff
 	// The explain step's reads: what the token path stores, a fresh compile
 	// when it stores nothing, and Zitadel's settings for check 1 (read-only).
 	svcStoredFacts   = cache.StoredFacts
