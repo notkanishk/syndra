@@ -174,3 +174,15 @@ describe("headerLine, rung by rung", () => {
     ]);
   });
 });
+
+describe("headerLine since the last sign-in (A-20 P18)", () => {
+  it("the calm rung says nothing has changed since then", () => {
+    expect(line({ quietSince: "on Tuesday" }).text).toBe("Nothing has changed since you were last here, on Tuesday.");
+  });
+  it("any rung above it still speaks first", () => {
+    expect(line({ quietSince: "on Tuesday", onItsWay: [role("Operator in Laser cutting")] }).text).toMatch(/on its way/);
+  });
+  it("a first visit says what Syndra is, never a last time", () => {
+    expect(line({ firstVisit: true, quietSince: "on Tuesday" }).text).toMatch(/keeps the makerspace/);
+  });
+});

@@ -92,7 +92,6 @@
   --font-mono: var(--font-jetbrains);
 
   /* Geometry */
-  --radius-shell: 26px;
   --radius-card: 20px;
   --radius-panel: 18px;
   --radius-block: 16px;
@@ -607,7 +606,7 @@
   body {
     background-color: var(--ground);
     color: var(--ink);
-    font-family: var(--font-figtree), system-ui, sans-serif;
+    font-family: var(--font-sans), system-ui, sans-serif;
     font-size: 14.5px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;

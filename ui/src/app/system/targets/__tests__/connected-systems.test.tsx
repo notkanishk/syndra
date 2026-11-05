@@ -145,11 +145,11 @@ describe("connected systems", () => {
     expect(screen.getByText("Unknown until it answers")).toBeTruthy();
   });
 
-  it("shows a dash, never 0, when the count has not been read", () => {
+  it("says Not yet, never 0, when the count has not been read", () => {
     state.targets = [target()];
     render(<ConnectedSystemsPage />);
     expect(screen.queryByText("0")).toBeNull();
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Not yet").length).toBeGreaterThan(0);
   });
 
   describe("Needs you", () => {
@@ -231,14 +231,14 @@ describe("connected systems", () => {
   // Registration is a deployment fact and a manifest is a runtime one. Showing
   // `0` for a target that has never answered would be a claim about the TARGET
   // — that it can do nothing — rather than about Syndra not having asked.
-  it("shows dashes, not zero, for a target that has never answered", () => {
+  it("says Not yet, not zero, for a target that has never answered", () => {
     state.targets = [target({ callable: false, operations: [] })];
     render(<ConnectedSystemsPage />);
 
     expect(screen.getByText("No answer yet")).toBeTruthy();
     expect(screen.queryByText("0")).toBeNull();
     // Needs you and People: Syndra has not read it.
-    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(screen.getAllByText("Not yet")).toHaveLength(2);
     expect(screen.queryByText("Nothing waiting")).toBeNull();
     expect(screen.getByText(/usually clears by itself/)).toBeTruthy();
   });

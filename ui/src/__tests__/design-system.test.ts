@@ -922,3 +922,26 @@ describe("design system", () => {
     expect(body).toMatch(/&\.underline\s*\{[^}]*text-decoration-color:\s*currentColor/);
   });
 });
+
+// A-20 P14: one breakpoint for the phone shell, and the tap floor is a token.
+describe("one breakpoint, one tap floor (A-20 P14)", () => {
+  it("never switches layout at Tailwind's sm: (640px); tablet: (720px) is the one", () => {
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      const source = readFileSync(file, "utf8");
+      // `sm:` as a variant on a utility, not a size named sm.
+      for (const hit of source.matchAll(/(?<=[\s"'`])sm:[a-z[-]/g)) found.push(`${file}: ${hit[0]}`);
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("writes the tap floor as var(--tap), never as 44, 48 or 52 pixels", () => {
+    const found: string[] = [];
+    for (const file of walk(SRC_ROOT)) {
+      if (file.endsWith("CopyableValue.tsx")) continue; // a read-only value's own row, not a tap target
+      const source = readFileSync(file, "utf8");
+      for (const hit of source.matchAll(/\b(?:w-11|min-h-\[(?:44|48|52)px\])(?![\w-])/g)) found.push(`${file}: ${hit[0]}`);
+    }
+    expect(found).toEqual([]);
+  });
+});

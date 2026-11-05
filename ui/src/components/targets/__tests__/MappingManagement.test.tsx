@@ -151,9 +151,13 @@ describe("what roles reach a target", () => {
     state.holders = ["u1", "u2", "u3"];
     renderMappings();
 
-    expect(screen.getByText("group → lab_makers")).toBeInTheDocument();
-    const row = screen.getByText("group → lab_makers").closest("div") as HTMLElement;
+    // The row says what the role gives in words; the field and value are folded.
+    expect(screen.getByText("Gives the lab_makers group")).toBeInTheDocument();
+    expect(screen.queryByText("group → lab_makers")).toBeNull();
+    const row = screen.getByText("Gives the lab_makers group").closest("div") as HTMLElement;
     expect(row.parentElement?.textContent).toMatch(/3 people/);
+    fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
+    expect(screen.getByText("group → lab_makers")).toBeInTheDocument();
   });
 
   // The cohort is the reason this row can offer a convergence at all: the

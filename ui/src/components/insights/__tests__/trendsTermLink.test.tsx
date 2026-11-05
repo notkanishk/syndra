@@ -112,3 +112,31 @@ describe("Trends and the term dates", () => {
     expect(screen.queryByRole("link", { name: /Makerspace settings/ })).toBeNull();
   });
 });
+
+describe("Trends freshness and a failed read (A-20 P12)", () => {
+  it("says when it was read", async () => {
+    mount("tab=trends", "Monsoon 2026");
+    await screen.findByText(/This term is Monsoon 2026/);
+    expect(screen.getByText(/The trends/)).toBeInTheDocument();
+  });
+
+  it("says a recent-use read failed, in words that differ from the one still loading", async () => {
+    query = "tab=trends";
+    respond.mockImplementation((path: string) =>
+      path.includes("/insights/usage") ? Promise.reject(new Error("boom")) : Promise.resolve(trends("Monsoon 2026")),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Mount />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Couldn't read recent use.")).toBeInTheDocument();
+    expect(screen.queryByText("Reading recent use.")).not.toBeInTheDocument();
+  });
+
+  it("gives a line that says nothing is wrong the healthy dot", async () => {
+    mount("tab=trends", "Monsoon 2026");
+    const line = await screen.findByText("No direct access ends in the next 30 days.");
+    expect(line.closest("[role=status]")?.querySelector("[data-dot]")).not.toBeNull();
+  });
+});

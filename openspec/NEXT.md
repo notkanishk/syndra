@@ -17,13 +17,35 @@ Four buckets, in the order they actually unblock each other:
 
 ## 0. The second pass (A-20), first wave
 
-Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. P11 (Technical detail) is the third wave.
+Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
+
+## 0b. Syndra replaces the action signing key itself
+
+Source: owner, 5 Nov 2026, "Automatic + button". It reverses #71. Change: [`changes/action-key-autorotation`](changes/action-key-autorotation/tasks.md), ADR-005, migration 000077, on branch `feat/action-key-autorotate`.
+
+**What it does.**
+- Syndra replaces both target keys a few days before the 90-day limit, in a quiet window, and checks them with a test sign-in.
+- "Replace now" and a by-hand guide are on System › Zitadel.
+- The event listener's key is under the keyring now, so no key change needs a restart.
+- Production's key was 92 days old, so the first quiet window after deploy replaces it.
+
+**Open, owner** (#ready-for-human):
+- Set `TZ` in production's `.env`. Unset, the 03:00–05:00 window is UTC.
+- Confirm the backend's service account still holds `action.target.write`.
+- After the first replacement, read the Zitadel row and the audit.
 
 ## 1. Code
 
 ### A-20 second pass — [`changes/second-pass`](changes/second-pass/proposal.md)
 
 Owner said "all yes" on 5 Nov 2026. **P1 (names link by default, G14) is built** on `feat/a20-names-link`; P2 to P8 are in other branches and add their own sections to that change. Open from P1: the resolver does not know which ids are service accounts, so a bare `UserName` opens `/users/:id`; only rows that call `useAccountHref` reach `/system/service-accounts/:id`.
+### A-20 P18 built (5 Nov 2026)
+
+Since you were last here: migration 000076 keeps previous and current sign-in per person; Home's calm panel and working headline and My access's calm rung say "since Tuesday". See `changes/second-pass/tasks.md` (P18). Open: nothing; the migration backfills current from each person's latest act, so the first sign-in after deploy names that day.
+### A-20 second pass, P9 (built 5 Nov 2026)
+
+The design system's cards tell the truth about motion and phone, the README names every token, four cards render, five gain previews: see [`changes/second-pass`](changes/second-pass/tasks.md) section P9. Open: publish the resynced bundle (BRIDGE steps 2-3, `ready-for-human`); `text-warn-ink/[.78]` in CommandBlock.
+
 ### A-20 second pass (P4, P7 built)
 
 Headings leave with the rows and errors carry four parts: see [`changes/second-pass`](changes/second-pass/tasks.md). Open: pass `fine` to `ErrorState` from Zitadel-facing pages.
@@ -44,9 +66,17 @@ not have been converted anyway — TrueNAS takes plaintext and nothing else. The
 member view renders the re-enrolment state; the operator communication is the
 thing to do before this deploys.
 
+### A-20 second pass, P13 P16 P17 (built 5 Nov 2026)
+
+[`changes/second-pass`](changes/second-pass/tasks.md): the claims page's leftovers, Pending's person and role filters as one model, and the small sweep. Open: the TrueNAS offer's Advanced link waits on P10's `AdvancedLink`; one "Nothing matches that." for every emptied search.
+
 ### A-20 second pass, P2 P3 P6 (built 5 Nov 2026)
 
 [`changes/second-pass`](changes/second-pass/tasks.md): the welcome as the title's second sentence (Home on a calm day only), the shell's Notices under the page header, the phone top bar's mark and Go to. Open: a look on a real phone (bar at 360px, the bloom). Go to for members is deliberately not built (A-20 P6).
+
+### A-20 second pass, P10 P14 P15 P19 (built 5 Nov 2026)
+
+[`changes/second-pass`](changes/second-pass/tasks.md): `AdvancedLink` (Basic to an Advanced page switches the view on the way; `ArrowLink`, `NextStep`, tiles and Home's footnote use it), one breakpoint (`tablet:`) and the tap floor as `var(--tap)`, the phone form on three more lists, the top bar's chip as the first name, no drift sound for members, and Back keeping a person's folds, the claims editor's open line, a query-only change's scroll and a remembered Requests status. Open: a look on a real phone at 360 and 700px, the tab bar now at 44px; Select mode's place; EOY-P5.4 and P5.5 are closed.
 
 ### Basic / Advanced IA — what the redesign left open
 
@@ -745,3 +775,7 @@ Don't re-litigate these without new information.
 
 - **OE15** — `golang-migrate` kept. Its dirty-state guard on mid-migration failure is worth the one dependency; a stdlib runner would drop that recovery.
 - **OE21** — `sortedKeys` → `slices.Sorted(maps.Keys(…))` declined. `sortedKeys` returns a non-nil empty slice, `slices.Sorted` returns `nil`, and `zitadelByPair[k]` is allocated before its `RoleKeys` loop — so a Zitadel grant with zero roles would flip `"role_keys": []` to `null` in the reconciliation response. Six lines is not worth a JSON contract change.
+
+### A-20 second pass, P12 Insights to the rules (built 5 Nov 2026)
+
+On `feat/a20-p12-insights` ([`changes/second-pass`](changes/second-pass/tasks.md) P12): five chip seats with a hollow count, receded (not dashed) unused nodes, Notice-toned warn/danger answers, StatusDot everywhere, "Back to the map" / "Keep this answer", Trends freshness and a distinct failed read, and the phone's plain node list under the answer. Open: the Timeline track is still hand-drawn [needs-triage]; Drift and Expiring all-clear lines (sweep L4) not re-checked [needs-triage].

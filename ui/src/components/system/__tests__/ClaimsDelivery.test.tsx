@@ -221,11 +221,36 @@ describe("Claims delivery, with problems", () => {
     expect(screen.getByText(/^1 check differs from what claim delivery needs/)).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Configuration checklist" });
     const row = within(list).getByText("Making an access token calls only the claims action").closest("li")!;
-    expect(row).toHaveTextContent("Expected syndra-claim-injector · found syndra-claim-injector, old-script");
+    // A sentence outside; the expected and found values wait under Technical detail.
+    expect(row).toHaveTextContent("Syndra expected something other than what Zitadel has.");
+    expect(row).not.toHaveTextContent("old-script");
+    fireEvent.click(within(row).getByRole("button", { name: /Technical detail/ }));
+    expect(row).toHaveTextContent("Expected syndra-claim-injector");
+    expect(row).toHaveTextContent("Found syndra-claim-injector, old-script");
     expect(within(row).getByRole("link", { name: /Open Actions in Zitadel/ })).toHaveAttribute(
       "href",
       "https://auth.example.org/ui/console/actions",
     );
+  });
+
+  // action-key-autorotation: a replacement the test sign-in didn't confirm, or one Zitadel refused.
+  it("says a new signing key isn't confirmed, what still works, and where to look", () => {
+    set(delivery({ findings: [finding({ kind: "KEY_ROTATION", subject: "unverified", severity: "soft" })] }));
+    renderIt();
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("The new signing key isn't confirmed");
+    expect(notice).toHaveTextContent(/accepts the old key and the new one, and won't replace it again on its own/);
+    expect(notice).toHaveTextContent(/Action signing key row, below/);
+    expect(notice.className).toMatch(/warn/);
+    expect(notice).not.toHaveTextContent("KEY_ROTATION");
+  });
+
+  it("says Zitadel didn't replace the signing key and the old one still works", () => {
+    set(delivery({ findings: [finding({ kind: "KEY_ROTATION", subject: "failed", severity: "soft" })] }));
+    renderIt();
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("Zitadel didn't replace the signing key");
+    expect(notice).toHaveTextContent(/The old key still works, and Syndra tries again in the next quiet hours/);
   });
 
   it("tells the owner what to grant when Zitadel refuses a read", () => {
@@ -254,7 +279,10 @@ describe("Claims delivery, with problems", () => {
     set(delivery({ configuration: { ...delivery().configuration!, rows: [r5] } }));
     renderIt();
     const row = screen.getByText("NetBird's claims reach where its shape sends them").closest("li")!;
-    expect(row).toHaveTextContent("Expected The access token · found BEARER access token, userinfo outside the ID token");
+    expect(row).not.toHaveTextContent("BEARER");
+    fireEvent.click(within(row).getByRole("button", { name: /Technical detail/ }));
+    expect(row).toHaveTextContent("Expected The access token");
+    expect(row).toHaveTextContent("Found BEARER access token, userinfo outside the ID token");
     expect(within(row).getByRole("link", { name: /Open NetBird in Zitadel/ })).toHaveAttribute(
       "href",
       "https://auth.example.org/ui/console/projects/pNet/apps/a-net",

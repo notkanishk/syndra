@@ -61,7 +61,10 @@ vi.mock("@/lib/queries/useOperations", () => ({
 vi.mock("@/lib/queries/useIndicators", () => ({
   useIndicatorsRead: () => ({ data: { unconfirmed_revocations: 0, holds_due: 0 }, isPlaceholderData: false }),
 }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => state.advanced,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/requests/Holding", () => ({ HoldingNote: () => null, alreadyHeld: () => false }));
 

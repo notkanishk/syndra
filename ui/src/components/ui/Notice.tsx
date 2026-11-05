@@ -14,6 +14,10 @@ import { UnfoldOnArrival, useUnfoldOpening } from "@/lib/motion";
  *
  * One per card. `blocking` makes it an alert: the thing it is about can't be
  * used until it clears. Otherwise it is a status, read when reached.
+ *
+ * G7: it sits under the PageHeader, never above it, and a fact it states is not
+ * restated by the card that holds it. `live` makes its dot breathe (the one
+ * licensed loop) for as long as the condition is going on.
  */
 const TONES = {
   warn: { box: "border-warn-line bg-warn-soft", dot: "bg-warn", title: "text-warn-text" },

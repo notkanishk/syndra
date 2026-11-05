@@ -3,6 +3,7 @@
 import { ArriveList } from "@/lib/motion";
 import { LANES, type Highlight, type Model } from "@/components/insights/model";
 import { NodeGlyph, nodeSurface } from "@/components/insights/tone";
+import { Card, CardHeader } from "@/components/ui/Card";
 
 const BLURB: Record<string, string> = {
   bundle: "Sets of roles given together.",
@@ -73,6 +74,59 @@ export function NodeList({
             })}
           </ArriveList>
         </section>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Below tablet: the nodes as a plain list, each lane A to Z with its people
+ * (RULES Phone, 87c). The counts are the map's own: observed holders from
+ * Zitadel, or what the lens reads. A role not yet read has no number, not a
+ * zero. The answer sits above, in the panel.
+ */
+export function PhoneNodes({
+  model,
+  focusId,
+  count,
+  unit = "",
+  onPick,
+}: {
+  model: Model;
+  focusId: string | null;
+  count: (id: string) => number | null;
+  unit?: string;
+  onPick: (id: string | null) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      {LANES.filter((lane) => model.lanes[lane.kind].length > 0).map((lane) => (
+        <Card key={lane.kind}>
+          <CardHeader title={lane.title} count={model.lanes[lane.kind].length} />
+          {model.lanes[lane.kind].map((node) => {
+            const n = count(node.id);
+            const name = model.nameOf(node.id);
+            return (
+              <button
+                key={node.id}
+                type="button"
+                data-node={node.id}
+                aria-pressed={node.id === focusId}
+                onClick={() => onPick(node.id === focusId ? null : node.id)}
+                className="row-divider motion-tint flex min-h-[var(--tap)] w-full items-center gap-3 px-5 py-3 text-left aria-pressed:bg-accent-soft"
+              >
+                <NodeGlyph kind={node.kind} />
+                <span className="min-w-0 flex-1 text-[14.5px] font-semibold">{name}</span>
+                {n != null && (
+                  <span className="text-[13px] tabular-nums text-muted">
+                    {n === 1 ? "1 person" : `${n} people`}
+                    {unit ? ` ${unit}` : ""}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </Card>
       ))}
     </div>
   );

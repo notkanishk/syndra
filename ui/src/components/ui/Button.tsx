@@ -14,6 +14,10 @@ import React from "react";
  * Disabled controls state their reason in visible copy, never only in a
  * title: hover does not exist on touch and does not survive a screenshot sent
  * to a colleague. Pass `reason` and it renders beneath the button.
+ *
+ * G1: a button on its own is outline sm; ghost is only the quieter half of a
+ * pair beside a primary (Cancel, Discard). G16: inside a card or row a button is
+ * sm; md only in a page header and a dialog footer.
  */
 
 type Variant = "accent" | "outline" | "ghost" | "danger" | "dangerConfirm";

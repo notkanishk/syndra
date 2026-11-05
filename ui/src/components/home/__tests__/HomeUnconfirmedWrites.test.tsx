@@ -66,7 +66,10 @@ vi.mock("@/lib/queries/useOperations", () => ({
     refetch: vi.fn(),
   }),
 }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => state.advanced,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 vi.mock("@/components/names", async () => {
   const actual = await vi.importActual<typeof import("@/components/names")>("@/components/names");

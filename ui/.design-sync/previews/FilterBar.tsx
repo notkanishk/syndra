@@ -3,7 +3,7 @@
 // Phone: The same at every width.
 // moves:end
 import { useState } from "react";
-import { FilterBar, Input, FilterPanel, FilterField, Select, SelectModeToggle, Tabs, FilterPills } from "ui";
+import { FilterBar, Input, FilterPanel, FilterField, Select, SelectModeToggle, FilterPills } from "ui";
 
 function Search({ placeholder }: { placeholder: string }) {
   const [q, setQ] = useState("");
@@ -28,15 +28,17 @@ export const People = () => {
   );
 };
 
-/** Tabs lead because they decide what the page is. */
-export const WithTabs = () => {
-  const [tab, setTab] = useState("triage");
+/** G18: the pill set that chooses which list you are reading leads; search follows; Filters sit right. */
+export const WithPills = () => {
+  const [status, setStatus] = useState("open");
   return (
     <FilterBar
       leading={
-        <Tabs label="Views of unexplained access" value={tab} onSelect={setTab} options={[
-          { value: "triage", label: "Needs a decision" },
-          { value: "reconciliation", label: "Side by side" },
+        <FilterPills label="Filter requests by status" value={status} onChange={setStatus} options={[
+          { value: "open", label: "Open" },
+          { value: "approved", label: "Approved" },
+          { value: "declined", label: "Declined" },
+          { value: "all", label: "All" },
         ]} />
       }
       search={<Search placeholder="Search by person or role…" />}
@@ -51,20 +53,15 @@ export const WithTabs = () => {
   );
 };
 
-/** One narrowing control stays on the row instead of behind a panel. */
-export const OneControl = () => {
-  const [status, setStatus] = useState("open");
-  return (
-    <FilterBar
-      search={<Search placeholder="Search requests…" />}
-      filters={
-        <FilterPills label="Filter requests by status" value={status} onChange={setStatus} options={[
-          { value: "open", label: "Open" },
-          { value: "approved", label: "Approved" },
-          { value: "declined", label: "Declined" },
-          { value: "all", label: "All" },
-        ]} />
-      }
-    />
-  );
-};
+/** One narrowing control (not a list chooser) stays on the row instead of behind a panel. */
+export const OneControl = () => (
+  <FilterBar
+    search={<Search placeholder="Search projects…" />}
+    filters={
+      <Select defaultValue="" aria-label="Filter by lab">
+        <option value="">Any lab</option>
+        <option value="laser">Laser lab</option>
+      </Select>
+    }
+  />
+);

@@ -209,6 +209,7 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 | Cancel a queued change | Will be cancelled | Cancelled |
 | Adopt | Will be adopted | Adopted |
 | Mark as owned elsewhere | Will be marked | Marked |
+| Replace the action signing key | Will be replaced | Replaced |
 | Anything Syndra knows will wait | Will wait for you to send | Waiting for you to send |
 
 ## 6. Vocabulary

@@ -21,22 +21,86 @@ func TestRecordFirstSignIn_Live(t *testing.T) {
 	user := "fs-" + time.Now().Format("150405.000000")
 	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM person_first_sign_in WHERE user_id = $1`, user) })
 
-	at1, first, err := RecordFirstSignIn(ctx, user)
-	if err != nil || !first {
-		t.Fatalf("first call: first=%v err=%v", first, err)
+	in1, err := RecordSignIn(ctx, user)
+	if err != nil || !in1.First || in1.Previous != nil {
+		t.Fatalf("first call: %+v err=%v (the first sign-in has no previous)", in1, err)
 	}
 	time.Sleep(20 * time.Millisecond)
-	at2, first, err := RecordFirstSignIn(ctx, user)
-	if err != nil || first {
-		t.Fatalf("second call: first=%v err=%v (the welcome belongs to one session)", first, err)
+	in2, err := RecordSignIn(ctx, user)
+	if err != nil || in2.First {
+		t.Fatalf("second call: %+v err=%v (the welcome belongs to one session)", in2, err)
 	}
-	if !at2.Equal(at1) {
-		t.Fatalf("overwritten: %v then %v", at1, at2)
+	if !in2.FirstAt.Equal(in1.FirstAt) {
+		t.Fatalf("overwritten: %v then %v", in1.FirstAt, in2.FirstAt)
 	}
 	var n int
 	_ = PG.QueryRow(ctx, `SELECT count(*) FROM person_first_sign_in WHERE user_id = $1`, user).Scan(&n)
 	if n != 1 {
 		t.Fatalf("%d rows", n)
+	}
+}
+
+func TestMigration000076_DownUndoesUp(t *testing.T) {
+	up, _ := os.ReadFile("../../db/migrations/000076_last_sign_in.up.sql")
+	down, _ := os.ReadFile("../../db/migrations/000076_last_sign_in.down.sql")
+	for _, name := range []string{"last_sign_in_at", "previous_sign_in_at", "person_sign_in_order"} {
+		if !strings.Contains(string(up), name) || !strings.Contains(string(down), name) {
+			t.Errorf("000076 halves do not both name %s", name)
+		}
+	}
+}
+
+// Each sign-in moves current into previous; a retried callback within the
+// settle window moves nothing; the order guard refuses an incoherent row.
+func TestRecordSignIn_ShiftsPreviousAndCurrent_Live(t *testing.T) {
+	ctx := liveDB(t)
+	user := "si-" + time.Now().Format("150405.000000")
+	t.Cleanup(func() { _, _ = PG.Exec(ctx, `DELETE FROM person_first_sign_in WHERE user_id = $1`, user) })
+	read := func() (last time.Time, prev *time.Time) {
+		t.Helper()
+		if err := PG.QueryRow(ctx, `SELECT last_sign_in_at, previous_sign_in_at FROM person_first_sign_in WHERE user_id = $1`, user).Scan(&last, &prev); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+
+	if in, err := RecordSignIn(ctx, user); err != nil || !in.First || in.Previous != nil {
+		t.Fatalf("first: %+v %v", in, err)
+	}
+	// A retried callback is the same sign-in.
+	if in, err := RecordSignIn(ctx, user); err != nil || in.First || in.Previous != nil {
+		t.Fatalf("retry: %+v %v (nothing should move inside the settle window)", in, err)
+	}
+
+	// Age the current sign-in, as a day passing would.
+	day1 := time.Now().UTC().Add(-72 * time.Hour).Truncate(time.Second)
+	if _, err := PG.Exec(ctx, `UPDATE person_first_sign_in SET first_sign_in_at = $2, last_sign_in_at = $2 WHERE user_id = $1`, user, day1); err != nil {
+		t.Fatal(err)
+	}
+	in, err := RecordSignIn(ctx, user)
+	if err != nil || in.Previous == nil || !in.Previous.Equal(day1) {
+		t.Fatalf("second sign-in: %+v %v, want previous = %v", in, err, day1)
+	}
+	last2, _ := read()
+	if !last2.After(day1) {
+		t.Fatalf("current did not advance: %v", last2)
+	}
+
+	// Third sign-in: previous is the second, not the first.
+	day2 := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Second)
+	if _, err := PG.Exec(ctx, `UPDATE person_first_sign_in SET last_sign_in_at = $2 WHERE user_id = $1`, user, day2); err != nil {
+		t.Fatal(err)
+	}
+	if in, err := RecordSignIn(ctx, user); err != nil || in.Previous == nil || !in.Previous.Equal(day2) {
+		t.Fatalf("third sign-in: %+v %v, want previous = %v", in, err, day2)
+	}
+
+	// The coherence guard: a previous later than current is refused.
+	if _, err := PG.Exec(ctx, `UPDATE person_first_sign_in SET previous_sign_in_at = last_sign_in_at + interval '1 hour' WHERE user_id = $1`, user); err == nil {
+		t.Error("previous after current was accepted")
+	}
+	if _, err := PG.Exec(ctx, `UPDATE person_first_sign_in SET last_sign_in_at = first_sign_in_at - interval '1 hour' WHERE user_id = $1`, user); err == nil {
+		t.Error("current before first was accepted")
 	}
 }
 
@@ -51,6 +115,9 @@ func TestFirstSignInBackfill_Live(t *testing.T) {
 	}
 	sql := string(up)
 	backfill := sql[strings.Index(sql, "INSERT INTO person_first_sign_in"):]
+	// 000076 made the current sign-in required; the 000075 statement predates it.
+	backfill = strings.Replace(backfill, "(user_id, first_sign_in_at)", "(user_id, first_sign_in_at, last_sign_in_at)", 1)
+	backfill = strings.Replace(backfill, "SELECT user_id, MIN(at) FROM", "SELECT user_id, MIN(at), MIN(at) FROM", 1)
 	stamp := time.Now().Format("150405.000000")
 	actor, requester, usage, grant, nobody := "bf-a"+stamp, "bf-r"+stamp, "bf-u"+stamp, "bf-g"+stamp, "bf-n"+stamp
 	old := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
@@ -92,10 +159,10 @@ func TestFirstSignInBackfill_Live(t *testing.T) {
 			t.Errorf("%s: %v, want the earliest record %v", u, at, old)
 		}
 	}
-	if _, first, err := RecordFirstSignIn(ctx, actor); err != nil || first {
-		t.Errorf("a person who has used Syndra must not be welcomed: first=%v err=%v", first, err)
+	if in, err := RecordSignIn(ctx, actor); err != nil || in.First {
+		t.Errorf("a person who has used Syndra must not be welcomed: first=%v err=%v", in.First, err)
 	}
-	if _, first, err := RecordFirstSignIn(ctx, nobody); err != nil || !first {
-		t.Errorf("a person Syndra has no record of is new: first=%v err=%v", first, err)
+	if in, err := RecordSignIn(ctx, nobody); err != nil || !in.First {
+		t.Errorf("a person Syndra has no record of is new: first=%v err=%v", in.First, err)
 	}
 }

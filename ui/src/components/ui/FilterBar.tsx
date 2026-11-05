@@ -14,7 +14,8 @@
  *
  *   [ leading ]  [ search…              ]        [ Filters · 2 ] [ trailing ]
  *
- * `leading` is whatever decides what the page IS — tabs, usually. Search is
+ * `leading` is whatever chooses which list you are reading (G18): a pill set
+ * such as Requests' status or Expiring's window. Search is
  * next because it is the fastest way to the one row somebody wants, and it
  * stays visible for exactly that reason: a search hidden behind a disclosure is
  * a search nobody uses. Everything that narrows rather than finds goes in the
@@ -52,10 +53,10 @@ export function FilterBar({
   const bar = (
     <div className="flex flex-wrap items-center gap-2.5">
       {leading}
-      {search && <div className="min-w-[220px] flex-1 sm:max-w-[340px]">{search}</div>}
+      {search && <div className="min-w-[220px] flex-1 tablet:max-w-[340px]">{search}</div>}
       {/* Pushes the controls apart only when there is room; on a phone
           everything wraps into a column and this collapses to nothing. */}
-      <span className="hidden flex-1 sm:block" />
+      <span className="hidden flex-1 tablet:block" />
       {filters}
       {trailing}
     </div>

@@ -133,7 +133,7 @@ describe("GrantDirectAccess · choosing the role", () => {
     open();
     fireEvent.click(screen.getByRole("button", { name: /Printing Lab/ }));
     expect(screen.getByText("Given")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", expect.stringMatching(/^\/governance\/pending\?role=/));
     expect(screen.getByRole("radio", { name: /Operator/ })).toBeDisabled();
   });
 

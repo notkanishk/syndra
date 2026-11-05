@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
 /**
  * The 3-tile stat row: label caps / big value / one-line sub.
@@ -49,13 +49,13 @@ export function StatCard({
   );
   const frame = "card min-w-[260px] flex-1 px-5 py-4";
   return href ? (
-    <Link
+    <AdvancedLink
       href={href}
       aria-label={label}
       className={`${frame} block text-inherit no-underline motion-tint hover:shadow-[0_0_0_1px_var(--accent-line)] active:[background-image:linear-gradient(var(--tint-3),var(--tint-3))]`}
     >
       {body}
-    </Link>
+    </AdvancedLink>
   ) : (
     <div className={frame}>{body}</div>
   );

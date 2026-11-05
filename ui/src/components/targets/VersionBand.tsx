@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { RoleRef, UserName } from "@/components/names";
+import { fieldWords } from "@/lib/role-mapping-plan";
 import {
   usePublishMappingVersion,
   type MappingChange,
@@ -187,7 +188,7 @@ function ChangeRow({ change }: { change: MappingChange }) {
       <span className="font-semibold">
         <RoleRef projectId={change.project_id} roleKey={change.role_key} />
       </span>
-      <span className="type-mono text-muted">{change.field}</span>
+      <span className="text-muted">{fieldWords(change.field)}</span>
       <span className="text-muted">
         {change.kind === "changed" ? (
           <>

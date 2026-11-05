@@ -138,7 +138,7 @@ function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>
                 type="button"
                 aria-expanded={isOpen}
                 onClick={() => toggle(project.id)}
-                className="hover-tint flex min-h-[52px] w-full items-center gap-3 px-5 py-2.5 text-left"
+                className="hover-tint flex min-h-[var(--tap)] w-full items-center gap-3 px-5 py-2.5 text-left"
               >
                 <FoldChevron open={isOpen} />
                 <span className="flex min-w-0 flex-1 flex-col gap-px">
@@ -155,7 +155,7 @@ function ReadCatalog({ heldByProject }: { heldByProject: Map<string, Set<string>
                       <div
                         key={role.key}
                         data-match={hits?.has(role.key) || undefined}
-                        className={`row-divider flex min-h-[48px] flex-wrap items-center gap-x-3.5 gap-y-1.5 py-2.5 ${
+                        className={`row-divider flex min-h-[var(--tap)] flex-wrap items-center gap-x-3.5 gap-y-1.5 py-2.5 ${
                           hits?.has(role.key) ? "bg-accent-soft" : ""
                         }`}
                       >

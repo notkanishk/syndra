@@ -17,7 +17,8 @@ function fulfilled<T>(value: T): Promise<T> {
   return { status: "fulfilled", value, then() {} } as unknown as Promise<T>;
 }
 
-const state = vi.hoisted(() => ({ data: undefined as RoleMembersView | undefined }));
+const state = vi.hoisted(() => ({ data: undefined as RoleMembersView | undefined, advanced: false }));
+vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced, useUiView: () => ({ audience: "basic" }) }));
 
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({
@@ -131,5 +132,17 @@ describe("role members — holding is observed", () => {
     renderPage();
 
     expect(screen.getByText("ada@example.edu")).toBeInTheDocument();
+  });
+
+  it("prints the raw role key in Advanced and not in Basic (A-20 P17)", () => {
+    state.data = view();
+    state.advanced = false;
+    const { unmount } = renderPage();
+    expect(screen.queryByText("trained")).not.toBeInTheDocument();
+    unmount();
+    state.advanced = true;
+    renderPage();
+    expect(screen.getByText("trained")).toBeInTheDocument();
+    state.advanced = false;
   });
 });

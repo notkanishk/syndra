@@ -12,6 +12,8 @@ import type { SessionUser } from "@/lib/session";
 
 const state = vi.hoisted(() => ({
   advanced: true,
+  every: [] as Array<{ id: string; created_at: string }>,
+  pending: [] as Array<{ id: string; created_at: string }>,
   governance: {
     pending_requests: [] as unknown[],
     expiring_grants: [] as unknown[],
@@ -44,7 +46,12 @@ vi.mock("@/lib/queries/useRequests", () => {
   // One array, as the query cache gives: a fresh one per render reads as a new list.
   const none: never[] = [];
   return {
-    useRequestsAdmin: () => ({ data: none, isLoading: false, error: null, refetch: vi.fn() }),
+    useRequestsAdmin: (status?: string) => ({
+      data: status === "all" ? state.every : status === "pending" ? state.pending : none,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
     useDecideRequest: () => ({ mutate: vi.fn(), isPending: false }),
   };
 });
@@ -65,7 +72,10 @@ vi.mock("@/lib/queries/useOperations", () => ({
     refetch: vi.fn(),
   }),
 }));
-vi.mock("@/lib/ui-view", () => ({ useIsAdvanced: () => state.advanced }));
+vi.mock("@/lib/ui-view", () => ({
+  useIsAdvanced: () => state.advanced,
+  useUiView: () => ({ view: "basic", setView: () => {} }),
+}));
 vi.mock("@/components/home/Makerspace", () => ({ Makerspace: () => <div /> }));
 
 // One object, as the query cache gives: a fresh one per render reads as a new list.
@@ -241,5 +251,58 @@ describe("quiet hours and the first welcome", () => {
     expect(screen.queryByText(/Welcome to Syndra/)).toBeNull();
     expect(title.textContent).toMatch(/needs? you/);
     expect(dateLine(title)?.textContent).toMatch(/\w+day|last checked/);
+  });
+});
+
+describe("since they were last here (A-20 P18)", () => {
+  const renderAs = (who: SessionUser) =>
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Home session={who} />
+      </QueryClientProvider>,
+    );
+  const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString();
+  const withPrevious = (iso: string) => ({ ...session, previousSignIn: iso }) as SessionUser;
+  const weekday = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { weekday: "long" });
+  beforeEach(() => {
+    state.advanced = true;
+    state.every = [];
+    state.pending = [];
+    state.governance.unreconciled_targets = [];
+  });
+
+  it("a calm day says nothing came in, in the panel's own seat", () => {
+    const prev = daysAgo(3);
+    renderAs(withPrevious(prev));
+    expect(screen.getByText(new RegExp(`Since ${weekday(prev)}, nothing came in\\.`))).toBeTruthy();
+  });
+
+  it("does not say it when a request came in since", () => {
+    const prev = daysAgo(3);
+    state.every = [{ id: "r1", created_at: daysAgo(1) }];
+    renderAs(withPrevious(prev));
+    expect(screen.queryByText(/nothing came in/)).toBeNull();
+  });
+
+  it("says nothing without a previous sign-in", () => {
+    renderAs(session);
+    expect(screen.queryByText(/nothing came in/)).toBeNull();
+  });
+
+  it("a working day names how many of the things are new, and never adds a part", () => {
+    const prev = daysAgo(3);
+    state.pending = [{ id: "r1", created_at: daysAgo(1) }];
+    renderAs(withPrevious(prev));
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(
+      new RegExp(`One thing needs you, new since ${weekday(prev)}\\.`),
+    );
+  });
+
+  it("a thing older than the last sign-in is not new", () => {
+    state.pending = [{ id: "r1", created_at: daysAgo(5) }];
+    renderAs(withPrevious(daysAgo(3)));
+    const title = screen.getByRole("heading", { level: 1 }).textContent ?? "";
+    expect(title).toMatch(/One thing needs you\./);
+    expect(title).not.toMatch(/since/);
   });
 });
