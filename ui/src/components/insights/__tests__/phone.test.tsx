@@ -88,8 +88,20 @@ describe("Insights below tablet (20a)", () => {
     expect(screen.queryByRole("radiogroup", { name: "View" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /waiting for you to send/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Earlier date" })).not.toBeInTheDocument();
-    // Structure that is not the answer: no map, no list of nodes.
-    expect(screen.queryByText("Operator", { selector: "button *" })).not.toBeInTheDocument();
+    // No map; the nodes are the plain list below (87c).
+    expect(document.querySelector("svg")).toBeNull();
+  });
+
+  it("lists the nodes plainly under the answer, by lane, each with its people where Zitadel was read", () => {
+    render(<Mount />);
+    const project = document.querySelector("[data-node='project:p1']") as HTMLElement;
+    const role = document.querySelector("[data-node='role:p1:op']") as HTMLElement;
+    expect(project).toHaveTextContent("Laser Lab");
+    // held is empty in this fixture: nothing read, so no number (never a zero).
+    expect(role.textContent).not.toMatch(/\d|people/);
+    // Picking one asks the question in the link, as on the map.
+    fireEvent.click(project);
+    expect(replace).toHaveBeenCalledWith(expect.stringContaining("q="), { scroll: false });
   });
 
   it("turns the lens into a Select, and choosing one writes it to the link", () => {
@@ -101,15 +113,15 @@ describe("Insights below tablet (20a)", () => {
     expect(replace).toHaveBeenCalledWith(expect.stringContaining("lens=ending"), { scroll: false });
   });
 
-  it("with a question, the panel is the page: its sentences, Pin this and Copy as sentences, and where the map is", () => {
+  it("with a question, the panel is the page: its sentences, Keep this answer and Copy as sentences, and where the map is", () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: vi.fn() }, configurable: true });
     query = "q=role:p1:op";
     render(<Mount />);
     expect(screen.queryByText("Worth a look")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Laser Lab · Operator" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pin this" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep this answer" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy as sentences" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to the map" })).toBeInTheDocument();
     expect(screen.getByText(/The map draws this on a wider screen/)).toBeInTheDocument();
   });
 

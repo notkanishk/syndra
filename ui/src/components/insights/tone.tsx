@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
 import type { Lane, Tone } from "@/components/insights/model";
+import { StatusDot, type StatusTone } from "@/components/ui/Badge";
 
 /** Tokens only. A pin's shades are mixes of the accent, never a second hue. */
 export const TONE_COLOUR: Record<Tone, string> = {
@@ -12,6 +13,14 @@ export const TONE_COLOUR: Record<Tone, string> = {
   ink: "var(--ink)",
 };
 
+const DOT_TONE: Partial<Record<Tone, StatusTone>> = { accent: "accent", warn: "warn", danger: "danger" };
+
+/** A tone's dot is the product's StatusDot; a pin's shade of the accent is its fill. */
+export function ToneDot({ tone, className = "" }: { tone: Tone; className?: string }) {
+  const named = DOT_TONE[tone];
+  return <StatusDot tone={named ?? "neutral"} fill={named ? undefined : TONE_COLOUR[tone]} className={className} />;
+}
+
 const SOFT: Partial<Record<Tone, string>> = {
   accent: "var(--accent-soft)",
   warn: "var(--warn-soft)",
@@ -20,7 +29,7 @@ const SOFT: Partial<Record<Tone, string>> = {
 
 /**
  * A node's box: border and fill say its part in the answer. One with no part
- * recedes to the page (no fill, a hairline edge) and keeps its words at full
+ * recedes to the canvas ground with a line-strong edge, never dashed (dashed means NotOpenYet, A-20 P12) and keeps its words at full
  * strength: an opacity took its count line under 4.5:1 (A-09 §2).
  */
 export function nodeSurface(tone: Tone | undefined, focused: boolean, unused: boolean, dim: boolean): CSSProperties {
@@ -37,8 +46,8 @@ export function nodeSurface(tone: Tone | undefined, focused: boolean, unused: bo
             : "var(--line)";
   return {
     borderColor: dim ? "var(--line)" : border,
-    borderStyle: unused && !tone ? "dashed" : "solid",
-    background: (tone && SOFT[tone]) || (dim || (unused && !tone) ? "transparent" : "var(--surface-1)"),
+    borderStyle: "solid",
+    background: (tone && SOFT[tone]) || (dim ? "transparent" : unused && !tone ? "var(--canvas)" : "var(--surface-1)"),
   };
 }
 
