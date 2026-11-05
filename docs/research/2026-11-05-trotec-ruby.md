@@ -85,11 +85,9 @@ reversible.
    add-on reports itself read-only and plans nothing, so a Ruby update can
    never half-apply a change. A Ruby update then means one recorded check and a
    version bump.
-2. **Which credential it runs as.** One option is a dedicated Ruby admin user
-   with a personal access token. We don't yet know whether a token can call the
-   `/api/User/*` routes. If it can't, the add-on signs in as that user and
-   holds the session's bearer token. Either way the secret stays inside the
-   add-on container, like the TrueNAS API key.
+2. **Which credential it runs as.** A dedicated Ruby admin user that signs in;
+   personal access tokens can't reach the user routes (checked below). The
+   secret stays inside the add-on container, like the TrueNAS API key.
 3. **Passwords.** A new Ruby account gets its first password by email from
    Ruby. Syndra can do better, the way it does for network storage: the member
    sets their laser password on their own My access / storage-style page, and
@@ -126,17 +124,103 @@ bearer token in localStorage, not a cookie, which limits what a foreign page
 could do with that. It's still worth keeping the Ruby PC reachable only from
 the LAN, which it is.
 
-## To find out before building (all read-only)
+## Checks done, 5 Nov 2026 (read-only, in the owner's admin session)
 
-- [ ] Can a personal access token call `/api/User/*`, or only the public REST
-      API? This decides how the add-on authenticates.
-- [ ] What does `CreateUser` need, and does it always send the welcome email?
-      (Ruby needs SMTP or internet for that.)
-- [ ] Does `UpdateUserData` carry active, admin and materials in one call?
-- [ ] Is the API reachable from the backend host's network to the machines
-      VLAN on 5001?
-- [ ] How often does Ruby update itself (the updater on 46146), and can updates
-      be held until the add-on has a recorded contract for the new version?
+These settle the design. Everything was read from Ruby's own OpenAPI documents
+(`/swagger/0.1-InternalApi/swagger.json` and `/swagger/1.0-OpenApi/swagger.json`
+on port 5001), the UI bundle, the settings pages, and two unauthenticated
+version calls from the production host. Nothing was created, changed or signed
+into.
+
+1. **Personal access tokens cannot manage users.**
+   - Tokens belong to the *public* API, `1.0-OpenApi`. Its scheme is
+     `Authorization: PersonalAccessToken <token>`, and its 16 routes are all
+     jobs, designs, queue and device status.
+   - It has no user routes at all.
+   - Every `/api/User/*` route is in the *internal* API, `0.1-InternalApi`, under
+     a separate `oauth2` scheme. That scheme accepts the session token that
+     `SignIn` returns, and admin routes also require `RequirePermissionIsAdmin`.
+   - No internal route accepts the token scheme.
+   - **So the add-on signs in as a dedicated Ruby admin account.** It calls
+     `POST /api/User/SignIn` with `{email, password}`, which returns an
+     `AuthenticatedUser` carrying the bearer token. It signs in again when the
+     token expires.
+   - The account's password lives only in the add-on's secret, like the TrueNAS
+     API key. That account must have accepted the EULA (`AcceptEula`), or its
+     calls may be refused.
+2. **Creating a user sets their password.**
+   - The call is `POST /api/User/CreateUser?password=<p>&language=<l>` with a
+     `ManageableUser` body.
+   - Ruby's own screen generates a temporary password and shows it to the
+     admin, so creation does not depend on email.
+   - A `language` parameter is sent, so Ruby may also email the person.
+     Confirm on the first real create.
+   - The new account is flagged `temporaryPassword`, so Ruby asks for a new
+     password at first sign-in.
+   - For Syndra this means: the add-on creates the account with a random
+     password nobody sees, then the person sets their own laser password in
+     Syndra, through `PUT /api/User/ResetUserPassword?userId=&newPass=`, as with
+     network storage.
+   - Whether a reset also sets `temporaryPassword`, and so forces a second
+     change at the laser, is the one behaviour to confirm when building.
+3. **One call carries all of a user's state.**
+   - `PUT /api/User/UpdateUserData` takes the whole `ManageableUser`:
+     `id, email, name, active, roles[], permissions[], createdOn, updatedOn`.
+   - Ruby's own UI sends the stored user merged with the change. The add-on
+     does the same: read, merge, put.
+   - Roles: `User`, `Admin`, `Superadmin`, `MdbAdmin` (materials database),
+     `Hmi` (the machine's touch panel).
+   - Permissions: `IsUser`, `IsAdmin`, `IsSuperadmin`, `CanModifyMdb`.
+   - Syndra should never grant `Superadmin` or `Hmi`, and the add-on's manifest
+     should not list them.
+   - Groups are separate: `POST /api/User/ReplaceUsersInGroup` sets a group's
+     whole membership. Deleting users is `PUT /api/User/DeleteUsers`; we
+     disable instead.
+4. **Reachable.**
+   - From the production app host, and from inside the backend container, the
+     API answers on 5001, both through `laser.makerspace.tools` and at the
+     PC's own address. Authenticated routes return `401`.
+   - `GET /api/Info/GetApiInformationalVersion` needs no auth and returns the
+     WebApi build (`20251105.4 live 02a201f …`). That is the add-on's version
+     probe.
+   - `GetVersionInfo` needs a session.
+5. **Updates can't be held.**
+   - Settings › Info shows `AutoUpdater: Running` and branch `live`. Settings ›
+     Features only has "Allow update from touch panel". There is no switch to
+     defer updates.
+   - So the version gate is required, not optional. The add-on keeps a recorded
+     contract per WebApi version, and on an unknown version it reports
+     `read_only` and plans nothing. Unfinished changes wait in Syndra's queue
+     until someone records the new version's contract (one recorded-responses
+     check, as for TrueNAS), and the add-on resumes.
+
+**Recorded for the build:**
+- Internal scheme version `0.1-InternalApi`.
+- Ruby 2.11.1.64391, frontend 20251125.11, WebApi 20251105.4.
+- The `x-api-version` header defaults to `InternalApi`.
+
+## When it's built: the slice
+
+1. **Account.** Create a dedicated Ruby admin account for Syndra (owner, by
+   hand), with the EULA accepted. Its email and password go into the add-on's
+   secret.
+2. **Add-on.** `addons/ruby`, following the contract in `addons/contract`:
+   - `/subjects` from `GetUsers` and `GetGroups`;
+   - `/values` for groups and for the roles User, Admin and MdbAdmin;
+   - `/plan` and `/apply` through `CreateUser`, `UpdateUserData` and
+     `ReplaceUsersInGroup`;
+   - `/operations/set-password` through `ResetUserPassword`;
+   - `/health` from the version probe plus a signed-in `GetLoggedInUser`.
+3. **Mapping.** In Syndra, a Laser project:
+   - an Operator role makes an active account;
+   - a Materials role adds `MdbAdmin` and `CanModifyMdb`;
+   - a Laser admin role adds `Admin` and `IsAdmin`;
+   - groups follow bundles.
+4. **Revoke.** Revoking sets `active: false`; it never deletes.
+5. **First sync.** Existing Ruby users come in as unmanaged, and an operator
+   matches each one by email before Syndra manages it.
+6. **Member page.** Members get "Laser password" next to "Network storage",
+   through the existing self-service password path.
 
 ## Sources
 
