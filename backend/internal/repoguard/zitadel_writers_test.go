@@ -34,15 +34,10 @@ var mayWriteZitadelGrants = map[string]string{
 	// transactionally, with its audit line, before anything left the process.
 	"backend/internal/services/propagation/deps.go": "the outbox drain's own seam",
 
-	// KNOWN GAP, dormant. The webhook orchestrator propagates a mapping rule by
-	// calling Zitadel directly: no ledger row, no outbox row, no audit line, and
-	// a failure that is logged and stepped over. It is reachable only when a
-	// mapping rule exists, and none does — so this is a trap that springs on
-	// whoever creates the first rule, not a live hole.
-	//
-	// Tracked in openspec/NEXT.md. Listed here so it is impossible to believe
-	// the invariant holds everywhere while reading the code that breaks it.
-	"backend/internal/zitadel/orchestrator.go": "KNOWN GAP: untraced rule propagation (openspec/NEXT.md)",
+	// There used to be a second entry here, listed as a KNOWN GAP: the webhook
+	// orchestrator fired mapping rules by calling Zitadel directly. Rules now
+	// go through the outbox like every other cascade (rules-on-the-pipeline),
+	// so the drain above is the only writer, and this map has one entry.
 }
 
 func TestOnlyTheTracedPathWritesZitadelGrants(t *testing.T) {

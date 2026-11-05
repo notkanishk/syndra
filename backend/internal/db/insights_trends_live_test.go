@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/models"
 )
 
@@ -88,9 +89,12 @@ func TestAuditDayCounts_AgainstTheSchema(t *testing.T) {
 	audit("direct_grant.upserted", "grant-since-deleted", trendAt(10, 6)) // nothing to point back through: by hand
 
 	actions := []string{"bundle.assigned", "direct_grant.upserted"}
-	count := func(offset int) map[string]int {
+	count := func(name string) map[string]int {
 		t.Helper()
-		rows, err := AuditDayCounts(ctx, trendFrom, trendTo, actions, offset)
+		old := clock.Name
+		clock.Name = name
+		defer func() { clock.Name = old }()
+		rows, err := AuditDayCounts(ctx, trendFrom, trendTo, actions)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -101,13 +105,13 @@ func TestAuditDayCounts_AgainstTheSchema(t *testing.T) {
 		return out
 	}
 
-	if got, want := count(0), map[string]int{
+	if got, want := count("UTC"), map[string]int{
 		"2001-03-01 bundle.assigned": 1, "2001-03-04 bundle.assigned": 3, "2001-03-10 direct_grant.upserted": 2,
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("UTC days = %v, want %v", got, want)
 	}
-	// The same rows on the operator's calendar: the offset moves them across midnight.
-	if got, want := count(5*3600+1800), map[string]int{
+	// The same rows on the makerspace's calendar: the zone moves them across midnight.
+	if got, want := count("Asia/Kolkata"), map[string]int{
 		"2001-03-01 bundle.assigned": 1, "2001-03-04 bundle.assigned": 1, "2001-03-05 bundle.assigned": 2,
 		"2001-03-10 direct_grant.upserted": 2,
 	}; !reflect.DeepEqual(got, want) {
@@ -155,7 +159,7 @@ func TestOutsideBundleRoles_AgainstTheSchema(t *testing.T) {
 	ctx := liveDB(t)
 	sfx := liveSuffix()
 	proj := "pTrendOut" + sfx
-	bundleID, err := CreateBundle(ctx, "trend outside "+sfx, "", "auto", []models.BundleRole{
+	bundleID, err := CreateBundle(ctx, "trend outside "+sfx, "", []models.BundleRole{
 		{ProjectID: proj, RoleKey: "given"}, {ProjectID: proj, RoleKey: "dropped"},
 	})
 	if err != nil {

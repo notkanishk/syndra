@@ -17,7 +17,8 @@ import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outc
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useCreateRequest } from "@/lib/queries/useRequests";
 import { useTerms } from "@/lib/queries/useTerms";
-import { daysUntilTermEnd, endOfDay, keepOptions, nextTermEnd } from "@/lib/term";
+import { daysUntilTermEnd, keepOptions, nextTermEnd } from "@/lib/term";
+import { endAfterDaysISO, endOfDayISO } from "@/lib/time";
 
 /** What a member asks for, in the units a member thinks in. */
 type HowLong = "7" | "30" | "term";
@@ -102,8 +103,8 @@ function AskForAccessOpen({
   // date so a late approval still ends with the term.
   const ordinaryUntil =
     howLong === "term"
-      ? endOfDay(nextTermEnd(new Date(), terms.data)).toISOString()
-      : new Date(Date.now() + ordinaryDays * 86_400_000).toISOString();
+      ? endOfDayISO(nextTermEnd(new Date(), terms.data))
+      : endAfterDaysISO(ordinaryDays);
 
   const keep = useMemo(
     () => (current ? keepOptions(current, terms.data ?? []) : null),

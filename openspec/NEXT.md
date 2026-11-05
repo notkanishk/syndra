@@ -19,14 +19,48 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0d. One retry core (one-path W1d, 5 Nov 2026)
+
+Change: [`changes/one-path`](changes/one-path/tasks.md), branch `fix/one-retry-core`, migration 000080.
+
+**What it does.**
+- Every Zitadel call goes through `internal/extcall`. Reads are retried with jittered, capped backoff. A write is resent only after a 429.
+- Any other failure of a write is never resent. `AddUserGrant` and `AddProjectRole` read back instead, which ends the orphan role left after a 503 on create.
+- A requeued outbox row now waits (`not_before`, 1m doubling to 30m) before a batch claim takes it again. A spent budget still lands in failed.
+
+**Open.**
+- "Next try at" on the pending worklist #ready-for-agent.
+- The add-on transport onto `extcall` (W1e).
+- `roles.go` still rolls back when the read-back cannot confirm (W1a).
+## 0d. One time zone (5 Nov 2026)
+
+Owner: "get everything in one IST time zone." Change [`changes/one-time-zone`](changes/one-time-zone/tasks.md), branch `fix/history-in-ist`, migration **000079** (000078 is the rules branch's, 000080 the retries branch's: 000079 must not be applied before 000078 exists, or golang-migrate skips 000078).
+
+- **Built.** `internal/clock` and `ui/src/lib/time.ts` are the one zone (from `TZ`, default `Asia/Kolkata`). Every day, date sentence and end date goes through them; "until <date>" is the whole IST day, "N days" ends as the Nth calendar day does. Guards on both sides.
+- **History.** Snapshots re-keyed exactly from `taken_at`. Daily sign-in totals through 5 Nov are recounted exactly from Zitadel's event log by the backend, on the first daily pass after 5 Nov ends. Future hold end/review dates at exactly UTC midnight move to the end of that day. N-day grant ends are not rewritten (no day to recover).
+- **Operator-gated.** Run on staging against production's copy first; read the production counts in `tasks.md` 4.5 before deploy; confirm the `[FINDINGS] sign-in totals … recounted` log line. UNVERIFIED: that the deployment's Zitadel credentials can read the event log back to 3 Nov (Zitadel keeps events; the lookup endpoint already reads them).
+- **Also resolves** the action-key change's "TZ must be set" gate: the quiet window is read in `clock.Loc`, which defaults to IST.
+## 0d. Rules on the pipeline (5 Nov 2026)
+## 0d. One path, W1b: the error envelope (5 Nov 2026)
+
+Branch `fix/error-envelope`; detail in [`changes/one-path`](changes/one-path/proposal.md). Raw Zitadel and add-on text no longer reaches the screen at 502/503 for the raw codes, the proxy speaks the same envelope, and the reference is kept. Open: a `writeUpstream` at each raw call site (retire `rawUpstreamCodes`), and the remaining hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on.
+## 0d. One add-on pipe (W1e/W1f, 5 Nov 2026)
+
+Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.md). Every add-on call now goes through `addons/pipe.go` (breaker, trace before a write, idempotency key), lifecycle changes leave an `addon_operations` row and an audit line, and the TrueNAS plan and apply share one `decide`. Open from it:
+
+- The add-on's setting endpoint does not read the `Idempotency-Key` header yet (`addons/truenas/settings.go`).
+- Plan and apply can still disagree on a new account's home folder when it already exists.
+- No UI wording for `lifecycle.set` rows (Unconfirmed changes, audit vocabulary).
+- Not yet run against the real add-on: production use (2 mappings, 6 bindings) is covered by the recorded-fixture and contract tests only. Check one lifecycle flip and one setting write after deploy, then read the new row and the `Idempotency-Key` in the add-on's request log. #ready-for-human
+
 ## 0c. Dead-schema cleanup: stopped, and guards added (5 Nov 2026)
 
-Branch `chore/dead-schema-and-guards`. Owner approved two removals on condition that nothing still reads or writes them. Both are still read, so neither was removed and no migration 000078 was written.
+Change [`rules-on-the-pipeline`](changes/rules-on-the-pipeline/tasks.md), ADR-006, migration 000078, branch `feat/rules-on-the-pipeline`.
 
-- **`confirmation_mode` columns** (reconcile-build 3.9). Still read and written: `db/bundles.go`, `db/rules.go`, `db/cascade.go` (bulk set), `db/role_waits.go` (wait suggestions), `services/welcome_claims.go:53` (before the switch over), `services/cascade.go` `applyMode`, `handlers/cascade_surfaces.go`, plus the UI (policies, cascades). Migration 000058 only sets `confirmation.model = roles`; it does not retire the reads. Whether production has switched over could not be checked (no production access). `?apply=true` is not part of this: it is the plan-gated apply on requests and drift.
-- **`app_claim_overrides`** (claims-shaping 4.9). Nothing writes it. One reader remains: `db/claim_profiles.go` `ListAppClaimOverrides`, used by `services/claim_shape.go` `seedApp`, which runs at start and hourly. The seed folds an override into an app's version 1 only when the app has no shape yet, so dropping the table means the hourly seed stops folding.
-- **To finish.** Delete the readers first (and the UI), then a migration that refuses while `app_claim_overrides` has a row whose application has no `app_claim_shape_versions` row, or `confirmation.model` is not `roles`.
-- **Guards added.** `bun run typecheck` (CI ui job), the System state words guard, the people-not-users guard. Note `bunx tsc` runs the unrelated `tsc` package; use `bun run typecheck`.
+- **Mapping rules now go through the outbox.** Every direct write (a grant, an approval, a bulk give, a replace or revoke, an adopted drift) runs through `db.FollowRules`, which enqueues the closure difference as `source='rule'` rows in the same transaction. The webhook fires no rules: a Zitadel-side change is drift. The untraced orchestrator is deleted, and the repo guard allows one Zitadel writer, the drain.
+- **One closure.** `models.RuleClosure` is called by the compiler, every cascade, the access views and the mapping cohort. A live test asserts that Zitadel is sent exactly what `cache.CompileFacts` derives on A→B→C.
+- **Dead schema removed** (was 0c, stopped earlier the same day). `confirmation_mode` was traced read by read and is inert under roles (design.md). The reads, the writes, the endpoints and the one-time move are gone, and so is `app_claim_overrides`'s reader. Migration 000078 refuses unless `confirmation.model = 'roles'` and refuses while the table has a row.
+- **Open:** run 000078 on staging first (it refuses safely). Before the first production rule, try one on staging. The other "who holds what" readers the audit found are listed in tasks §6.
 
 ## 0b. Syndra replaces the action signing key itself
 
@@ -196,7 +230,7 @@ The reconcile slice (Storage B1–B2, Connected systems B3, #57) is being built 
 
 - **Network storage on a person's page** (owner, 2026-10-15; designed 3 Nov in A-10; **built**, see A-10 below). A read-only section for operators: the person's account on TrueNAS, their home folder use against its limit, the folders they can open, and any limit or hold of their own, each with "Set on TrueNAS's page →". Every write stays on the system's page (one write place, many read places). The reads exist: `GET /targets/{t}/homes`, the member's own places, allowances.
 - **Composed roles, created by administrators** (owner, 2026-10-14; details to be settled with the owner before building). Today TrueNAS maps one role to the wide base groups. The goal is an operator flow that composes a role from others: a tier role carries resource roles, and those resource roles map to resource groups (`mk-<resource>-<ro|rw>`, AGDLP). The model already exists as `mapping_rules`, kept depth-1 so `effectiveClosure` (`services/cascade.go:108`) and `EnforceMappingRules` agree.
-  - **Blocked on the untraced rule propagation below.** Production has zero mapping rules. The first composed role an operator creates is the rule that springs that trap, so the enqueue fix lands first.
+  - **Unblocked** (5 Nov 2026, rules-on-the-pipeline): rules now go through the outbox and follow chains to their end, so composed roles need not stay depth-1.
 - **What happens to a home folder after someone leaves** (owner, 2026-10-14). Today it is kept, always: Syndra never moves or deletes a home (truenas-reconcile D10). The choice to build: keep it (today), archive it (owner becomes root, private, the shape the 14 Oct cleanup of old folders used), or delete it after N days. It should be settable per system, with the date the person left shown beside each kept folder.
 - **Role kind (core / extra)**: designed, not owed until a screen needs it. The only SQL touch points are `backend/internal/db/roles.go:31,62,81`.
 
@@ -307,13 +341,7 @@ The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checke
 ### Phase 5 — Automation & Governance
 
 - **Service Catalog Abstraction** — the spec'd service→bundle request mapping still falls back to project/role. [`specs/service-catalog`]
-- **Untraced rule propagation** — `EnforceMappingRules` / `RevokeMappingRules` call the Zitadel Management API **directly**: no ledger row, no outbox row, no audit line, and a failure that is logged and stepped over. Every other Syndra-mediated Zitadel mutation leaves its trace before the call, which is the premise the drift sweep reasons from — `deps.go` states the rule for handlers ("the handlers no longer call Zitadel grant APIs directly"), and nothing stated it for anybody else.
-
-  Also (audit, 27 Oct): rules fire only from webhooks, and the self-mutation guard drops Syndra's own events, so once rules exist they apply only to grants made outside Syndra.
-
-  **Dormant, not live:** the loop body runs only when a mapping rule exists, and production has **zero** (`select count(*) from mapping_rules` → 0, checked 2026-08-27). This is a trap that springs on whoever creates the first rule, not a hole open today. Drift does not currently false-positive on it either, because `expectedViaRule` explains rule-derived grants without needing a trace.
-
-  The fix is to enqueue rather than call — the outbox already carries "rule cascades" per the architecture. Doing that changes a live webhook path, so it wants its own change rather than a sweep. Guarded meanwhile by `repoguard.TestOnlyTheTracedPathWritesZitadelGrants`, which lists this file by name with the argument, so a **second** untraced writer cannot appear the way the first did. Supersedes the old "Partial Failure Rollback" entry, which described the swallowed-failure half only.
+- ~~**Untraced rule propagation**~~ — **Resolved 5 Nov 2026** by [`rules-on-the-pipeline`](changes/rules-on-the-pipeline/proposal.md) (ADR-006). Rules fire from Syndra's own record through the outbox, follow the whole chain, and no longer fire from webhooks. The orchestrator is deleted, and the repo guard's KNOWN GAP entry with it.
 - **Rate Limiting** — webhook, action-injection, and shadow-password endpoints are unthrottled. **Blocked on one decision: in-process vs Redis-backed.** Redis is already a dependency, so the cost difference is small; the real question is whether limits must hold across replicas.
 - **Advanced Filters** — multi-dimensional user search (project, role, account age, grant staleness).
 - **Bulk Operations** — mass grant/revoke with preview, per-user outcomes, idempotent retry.
@@ -610,8 +638,8 @@ of code answering the same semantic question, written separately, one of them
 never taught about a new source. Five were fixed in `bundle-lifecycle-repair`
 (see §7–9 there). What that audit found and left:
 
-- **Untraced rule propagation is worse than "untraced".** Already recorded below
-  as a dormant trap, and the audit found the sharper half:
+- ~~**Untraced rule propagation is worse than "untraced".**~~ Resolved 5 Nov 2026
+  (rules-on-the-pipeline: one closure, enqueued). What the audit found:
   `zitadel.EnforceMappingRules` is single-hop where `collectUserRoles` is a
   fixpoint, so on a chain `A→B→C` it grants B and never C — while the compiled
   token carries C. The token and Zitadel disagree, and the drift sweep does not

@@ -17,10 +17,10 @@ func GetMappingRuleByID(ctx context.Context, id string) (models.MappingRule, err
 	var r models.MappingRule
 	err := querier(ctx).QueryRow(ctx,
 		`SELECT id, source_zitadel_project_id, source_zitadel_role_key,
-		        target_zitadel_project_id, target_zitadel_role_key, confirmation_mode, created_at,
+		        target_zitadel_project_id, target_zitadel_role_key, created_at,
 		        retired_at, COALESCE(retired_by, '')
 		 FROM mapping_rules WHERE id = $1`, id).
-		Scan(&r.ID, &r.SourceProject, &r.SourceRole, &r.TargetProject, &r.TargetRole, &r.ConfirmationMode, &r.CreatedAt,
+		Scan(&r.ID, &r.SourceProject, &r.SourceRole, &r.TargetProject, &r.TargetRole, &r.CreatedAt,
 			&r.RetiredAt, &r.RetiredBy)
 	return r, err
 }
@@ -30,7 +30,7 @@ func GetMappingRuleByID(ctx context.Context, id string) (models.MappingRule, err
 // once.
 func GetActiveMappingRules(ctx context.Context) ([]models.MappingRule, error) {
 	return listMappingRules(ctx, `
-		SELECT id, source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, confirmation_mode, created_at
+		SELECT id, source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, created_at
 		FROM mapping_rules WHERE retired_at IS NULL;`, false)
 }
 
@@ -38,7 +38,7 @@ func GetActiveMappingRules(ctx context.Context) ([]models.MappingRule, error) {
 // They are history to read, never input to a decision.
 func GetRetiredMappingRules(ctx context.Context) ([]models.MappingRule, error) {
 	return listMappingRules(ctx, `
-		SELECT id, source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, confirmation_mode, created_at,
+		SELECT id, source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, created_at,
 		       retired_at, COALESCE(retired_by, '')
 		FROM mapping_rules WHERE retired_at IS NOT NULL ORDER BY retired_at DESC;`, true)
 }
@@ -53,7 +53,7 @@ func listMappingRules(ctx context.Context, query string, retired bool) ([]models
 	var rules []models.MappingRule
 	for rows.Next() {
 		var r models.MappingRule
-		dest := []any{&r.ID, &r.SourceProject, &r.SourceRole, &r.TargetProject, &r.TargetRole, &r.ConfirmationMode, &r.CreatedAt}
+		dest := []any{&r.ID, &r.SourceProject, &r.SourceRole, &r.TargetProject, &r.TargetRole, &r.CreatedAt}
 		if retired {
 			dest = append(dest, &r.RetiredAt, &r.RetiredBy)
 		}

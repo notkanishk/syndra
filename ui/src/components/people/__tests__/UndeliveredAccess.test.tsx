@@ -29,7 +29,7 @@ vi.mock("@/lib/queries/useBundles", () => ({
   useRemoveBundle: () => ({
     mutateAsync: vi.fn(async () => {
       removed.calls += 1;
-      return { cascade: { enqueued: removed.enqueued, mode: "manual" } };
+      return { cascade: { enqueued: removed.enqueued } };
     }),
     isPending: false,
   }),

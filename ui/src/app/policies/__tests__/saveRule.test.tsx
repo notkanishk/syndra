@@ -27,7 +27,7 @@ vi.mock("@/lib/queries/useProjects", () => ({
 
 // Before the switch over: a rule's own mode still holds its changes.
 vi.mock("@/lib/queries/useRolesThatWait", () => ({
-  useRolesThatWait: () => ({ data: { switched_over: false, roles: [], suggestions: [] } }),
+  useRolesThatWait: () => ({ data: { switched_over: true, roles: [] } }),
 }));
 vi.mock("@/lib/queries/useRoles", () => ({
   useGlobalRoleCatalog: () => ({

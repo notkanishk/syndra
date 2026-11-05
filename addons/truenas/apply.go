@@ -602,19 +602,86 @@ func (s *server) locate(req ApplyRequest) (*Subject, Binding, *BindingConflict, 
 	return nil, Binding{SubjectID: req.Subject, Username: derived}, nil, cut, nil
 }
 
+// change is what one subject needs, decided once. `plan` reads it to say what
+// would happen and `converge` and `createAndConverge` read it to do it, so the
+// apply can never decide differently from the plan an operator approved. What
+// the two still own is wording (describePlannedChange / describeChange) and the
+// target's ids, which only a write needs.
+type change struct {
+	// groups, when set, is the full replacement for the managed groups.
+	groups *[]string
+	// locked, when set, is the lock to write (true = account disabled).
+	locked *bool
+	// smbOff sends smb:false. smbPending is SMB wanted ON, which is never sent
+	// here: TrueNAS accepts `smb: true` only in the call that sets a password
+	// ("Password must be reset in order to enable SMB authentication"), and sent
+	// alone it refuses the WHOLE update, so every other change in it failed with
+	// it, on every pass. The member's next password carries it (password.set
+	// reads Binding.WantsSMB). Turning it OFF is always allowed, and is the half
+	// revocation needs.
+	smbOff, smbPending bool
+	// home is decideHome's answer, set by the caller once it has read the
+	// target: it can fail, and the order of failures is the callers' to keep.
+	home homeDecision
+}
+
+// decide is the pure half of a convergence. current is nil for an account that
+// does not exist yet, in which case every managed field is a write.
+func decide(current *Subject, desired desiredState, home homeDecision) change {
+	c := change{home: home}
+	if desired.managed[FieldGroup] && (current == nil || !sameSet(current.Groups, desired.groups)) {
+		// A full replace, which is what makes this level-triggered: the same call
+		// grants and revokes, and re-issuing it is a no-op.
+		g := desired.groups
+		c.groups = &g
+	}
+	if desired.managed[FieldEnabled] && (current == nil || current.Enabled != desired.enabled) {
+		l := !desired.enabled
+		c.locked = &l
+	}
+	if current != nil && desired.managed[FieldSMBEnabled] && current.SMBEnabled != desired.smbEnabled {
+		if desired.smbEnabled {
+			c.smbPending = true
+		} else {
+			c.smbOff = true
+		}
+	}
+	return c
+}
+
+// writes is whether user.update has anything to carry.
+func (c change) writes() bool {
+	return c.groups != nil || c.locked != nil || c.smbOff || c.home.path != ""
+}
+
+// applyTo is the subject as this change leaves it.
+func (c change) applyTo(s Subject) Subject {
+	if c.groups != nil {
+		s.Groups = *c.groups
+	}
+	if c.locked != nil {
+		s.Enabled = !*c.locked
+	}
+	if c.smbOff {
+		s.SMBEnabled = false
+	}
+	if c.home.path != "" {
+		s.Home = c.home.path
+	}
+	return s
+}
+
 // converge brings an existing account onto the desired state.
 func (s *server) converge(req ApplyRequest, desired desiredState, current *Subject) (ApplyOutcome, int, error) {
 	update := map[string]any{}
+	c := decide(current, desired, homeDecision{})
 
-	if desired.managed[FieldGroup] && !sameSet(current.Groups, desired.groups) {
-		// A full replace, which is what makes this level-triggered: the same
-		// call grants and revokes, and re-issuing it is a no-op.
-		//
+	if c.groups != nil {
 		// Sent as record ids, which is what the read resolved names FROM. A
 		// write in names against a read in ids is the asymmetry where an
 		// account lands in the wrong groups and the next read calls it
 		// converged.
-		ids, err := s.groupIDsFor(desired.groups)
+		ids, err := s.groupIDsFor(*c.groups)
 		if err != nil {
 			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
 		}
@@ -622,24 +689,13 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		// the replace is of the groups Syndra manages, not of the account's.
 		update["groups"] = append(ids, current.builtinGroups...)
 	}
-	if desired.managed[FieldEnabled] && current.Enabled != desired.enabled {
-		update["locked"] = !desired.enabled
+	if c.locked != nil {
+		update["locked"] = *c.locked
 	}
-	// Turning SMB ON is never sent here. TrueNAS needs a credential to hash
-	// and accepts `smb: true` only in the call that sets a password ("Password
-	// must be reset in order to enable SMB authentication"), whether or not the
-	// account already has one. Sent alone it refuses the WHOLE update, so every
-	// other change in it — the groups — failed with it, on every pass. The
-	// member's next password carries it (password.set reads Binding.WantsSMB).
-	// Turning it OFF is always allowed, and is the half revocation needs.
-	smbPending := false
-	if desired.managed[FieldSMBEnabled] && current.SMBEnabled != desired.smbEnabled {
-		if desired.smbEnabled {
-			smbPending = true
-		} else {
-			update["smb"] = false
-		}
+	if c.smbOff {
+		update["smb"] = false
 	}
+	smbPending := c.smbPending
 	smbWait := smbWaiting(current)
 
 	// The home folder rides in the same update, so one write and one read-back
@@ -649,6 +705,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 	if err != nil {
 		return ApplyOutcome{}, statusFor(err), err
 	}
+	c.home = home
 	if home.path != "" {
 		for k, v := range homeFields(home.path) {
 			update[k] = v
@@ -667,7 +724,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		return strings.TrimSpace(base)
 	}
 
-	if len(update) == 0 {
+	if !c.writes() {
 		// Nothing for user.update. The limit is its own call, and may still be
 		// owed.
 		quota, err := s.convergeQuota(desired, homeAfter, current.UID)
@@ -690,7 +747,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 		}
 	}
 
-	if len(update) == 0 && smbPending {
+	if !c.writes() && smbPending {
 		// Nothing to write, and something still wanted. Reported as its own
 		// outcome rather than as no-change: "already in the requested state" is
 		// false, and reporting it would leave an operator believing SMB is on.
@@ -704,7 +761,7 @@ func (s *server) converge(req ApplyRequest, desired desiredState, current *Subje
 			Fingerprint: fingerprintSubject(current),
 		}, http.StatusOK, nil
 	}
-	if len(update) == 0 {
+	if !c.writes() {
 		// Re-applying an unchanged set issues no mutating call at all. Not an
 		// optimisation: the drain re-drives rows, so an apply that wrote every
 		// time would rewrite every account on every pass and fill the mutation
@@ -804,9 +861,10 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		return ApplyOutcome{}, http.StatusUnprocessableEntity,
 			fmt.Errorf("derived name %q is not valid on this target", binding.Username)
 	}
+	want := decide(nil, desired, homeDecision{})
 	var groupIDs []apiID
-	if desired.managed[FieldGroup] {
-		ids, err := s.groupIDsFor(desired.groups)
+	if want.groups != nil {
+		ids, err := s.groupIDsFor(*want.groups)
 		if err != nil {
 			return ApplyOutcome{}, http.StatusUnprocessableEntity, err
 		}
@@ -839,9 +897,9 @@ func (s *server) createAndConverge(req ApplyRequest, desired desiredState, bindi
 		// — a later `user.update({smb: true})` is refused with `Password must
 		// be reset in order to enable SMB authentication`.
 		"smb":    false,
-		"locked": desired.managed[FieldEnabled] && !desired.enabled,
+		"locked": want.locked != nil && *want.locked,
 	}
-	if desired.managed[FieldGroup] {
+	if want.groups != nil {
 		create["groups"] = groupIDs
 	}
 

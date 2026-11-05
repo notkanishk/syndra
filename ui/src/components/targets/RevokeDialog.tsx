@@ -12,6 +12,7 @@ import { Notice } from "@/components/ui/Notice";
 import { targetLabel } from "@/lib/nav";
 import { useRevokeTargetAccess, type RevocationResult } from "@/lib/queries/useHolds";
 import { useIsTouch } from "@/lib/useViewport";
+import { endOfDayISO } from "@/lib/time";
 
 /**
  * Revoking somebody's access on a target (6.17; design §27).
@@ -185,7 +186,7 @@ export function RevokeDialog({
             revoke.mutate(
               {
                 reason,
-                reviewDate: reviewDate ? new Date(reviewDate).toISOString() : undefined,
+                reviewDate: reviewDate ? endOfDayISO(reviewDate) : undefined,
               },
               { onSuccess: setResult },
             )

@@ -19,7 +19,6 @@ import (
 // p1, p2 and p3, and settings passed in for the rest.
 type welcomeWorld struct {
 	switchValue string
-	mode        string
 	model       string
 	waits       []db.RoleWait
 	retired     bool
@@ -50,7 +49,7 @@ func stubWelcome(t *testing.T, w welcomeWorld) {
 		return "b1", nil
 	}
 	svcGetBundleByID = func(_ context.Context, id string) (models.Bundle, error) {
-		b := models.Bundle{ID: id, Name: "Welcome", ConfirmationMode: w.mode}
+		b := models.Bundle{ID: id, Name: "Welcome"}
 		if w.retired {
 			at := time.Now()
 			b.RetiredAt = &at
@@ -98,7 +97,7 @@ func TestWelcomeClaims_Off(t *testing.T) {
 }
 
 func TestWelcomeClaims_OnSendsWhatTheBundleGivesWithoutApproval(t *testing.T) {
-	stubWelcome(t, welcomeWorld{switchValue: "true", mode: "auto",
+	stubWelcome(t, welcomeWorld{switchValue: "true",
 		waits: []db.RoleWait{{ProjectID: "p1", RoleKey: "safety"}}})
 	w, err := WelcomeClaims(context.Background())
 	if err != nil {
@@ -119,10 +118,9 @@ func TestWelcomeClaims_OnSendsWhatTheBundleGivesWithoutApproval(t *testing.T) {
 func TestWelcomeClaims_NothingToSend(t *testing.T) {
 	everyRole := []db.RoleWait{{ProjectID: "p1", RoleKey: "maker"}, {ProjectID: "p1", RoleKey: "safety"}, {ProjectID: "p2", RoleKey: "visitor"}}
 	for name, w := range map[string]welcomeWorld{
-		"a welcome bundle set to wait, before the switch over": {mode: "manual"},
-		"every role waits":            {mode: "auto", waits: everyRole},
-		"no welcome bundle":           {mode: "auto", noBundle: true},
-		"the welcome bundle, retired": {mode: "auto", retired: true},
+		"every role waits":            {waits: everyRole},
+		"no welcome bundle":           {noBundle: true},
+		"the welcome bundle, retired": {retired: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w.switchValue = "true"
@@ -133,16 +131,10 @@ func TestWelcomeClaims_NothingToSend(t *testing.T) {
 			}
 		})
 	}
-	t.Run("set to wait after the switch over sends: only roles decide", func(t *testing.T) {
-		stubWelcome(t, welcomeWorld{switchValue: "true", mode: "manual", model: db.ConfirmationModelRoles})
-		if got, _ := WelcomeClaims(context.Background()); len(got.Facts) != 2 {
-			t.Fatalf("got %+v", got)
-		}
-	})
 }
 
 func TestWelcomeClaims_AReadFailureIsAnError(t *testing.T) {
-	stubWelcome(t, welcomeWorld{switchValue: "true", mode: "auto", appsErr: errors.New("zitadel down")})
+	stubWelcome(t, welcomeWorld{switchValue: "true", appsErr: errors.New("zitadel down")})
 	if _, err := WelcomeClaims(context.Background()); err == nil {
 		t.Fatal("a failed read must keep the last publish, not publish a guess")
 	}
@@ -151,7 +143,7 @@ func TestWelcomeClaims_AReadFailureIsAnError(t *testing.T) {
 // The welcome roles are exactly what onboarding's cascade sends a person who
 // holds nothing: the same closure, the same latest published version.
 func TestWelcomeClaims_EqualsWhatOnboardingWouldSend(t *testing.T) {
-	stubWelcome(t, welcomeWorld{switchValue: "true", mode: "auto"})
+	stubWelcome(t, welcomeWorld{switchValue: "true"})
 	svcGetDirectGrantsForUser = noDirects
 	svcGetUserBundleRolesGrouped = noBundleRoles
 	var sent []string

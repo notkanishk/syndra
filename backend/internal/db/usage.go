@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"syndra/internal/clock"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Usage kinds, as the usage_last_seen CHECK constraint spells them.
@@ -21,9 +25,6 @@ type UsageRow struct {
 	Kind      string    `json:"kind"`
 	LastAt    time.Time `json:"last_at"`
 }
-
-// localDay is the server-local calendar day of t, the day Trends counts in.
-func localDay(t time.Time) string { return t.In(time.Local).Format("2006-01-02") }
 
 // RecordUsage notes that userID used appID of projectID (either ” when
 // unknown) at `at`. The later time always wins, so a redelivered or
@@ -47,7 +48,7 @@ func RecordUsage(ctx context.Context, userID, projectID, appID, kind string, at 
 		INSERT INTO sign_in_daily (app_id, day, count)
 		SELECT $3, $6::date, 1 FROM seen WHERE seen.kind = 'sign_in'
 		ON CONFLICT (app_id, day) DO UPDATE SET count = sign_in_daily.count + 1`,
-		userID, projectID, appID, kind, at, localDay(at))
+		userID, projectID, appID, kind, at, clock.Day(at))
 	if err != nil {
 		return fmt.Errorf("record usage: %w", err)
 	}
@@ -127,7 +128,7 @@ func PruneUsage(ctx context.Context, before time.Time) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("prune usage: %w", err)
 	}
-	if _, err := querier(ctx).Exec(ctx, `DELETE FROM sign_in_daily WHERE day < $1::date`, localDay(before)); err != nil {
+	if _, err := querier(ctx).Exec(ctx, `DELETE FROM sign_in_daily WHERE day < $1::date`, clock.Day(before)); err != nil {
 		return 0, fmt.Errorf("prune sign-in totals: %w", err)
 	}
 	return tag.RowsAffected(), nil
@@ -135,20 +136,21 @@ func PruneUsage(ctx context.Context, before time.Time) (int64, error) {
 
 // SignInsSince is the earliest moment Syndra is known to have been receiving
 // sign-ins: the oldest last-seen time or daily total still kept. Nil when there
-// is neither. A lower bound, so "no sign-in since then" is always true.
+// is neither. A lower bound, so "no sign-in since then" is always true. A day
+// starts at the makerspace's midnight, not the session's (the cluster's is UTC).
 func SignInsSince(ctx context.Context) (*time.Time, error) {
 	var at *time.Time
 	err := querier(ctx).QueryRow(ctx, `
 		SELECT LEAST(
 			(SELECT MIN(last_at) FROM usage_last_seen WHERE kind = 'sign_in'),
-			(SELECT MIN(day)::timestamptz FROM sign_in_daily))`).Scan(&at)
+			(SELECT MIN(day)::timestamp AT TIME ZONE $1 FROM sign_in_daily))`, clock.Name).Scan(&at)
 	if err != nil {
 		return nil, fmt.Errorf("sign-ins since: %w", err)
 	}
 	return at, nil
 }
 
-// SignInDay is one app's total for one server-local day.
+// SignInDay is one app's total for one makerspace day.
 type SignInDay struct {
 	Day   string `json:"day"` // YYYY-MM-DD
 	Count int    `json:"count"`
@@ -182,7 +184,7 @@ func GetAppUsage(ctx context.Context, appID string, recent, window time.Time) (A
 	}
 	rows, err := querier(ctx).Query(ctx, `
 		SELECT to_char(day, 'YYYY-MM-DD'), count FROM sign_in_daily
-		 WHERE app_id = $1 AND day >= $2::date ORDER BY day`, appID, localDay(window))
+		 WHERE app_id = $1 AND day >= $2::date ORDER BY day`, appID, clock.Day(window))
 	if err != nil {
 		return AppUsage{}, fmt.Errorf("app sign-in days: %w", err)
 	}
@@ -195,4 +197,43 @@ func GetAppUsage(ctx context.Context, appID string, recent, window time.Time) (A
 		out.Days = append(out.Days, d)
 	}
 	return out, rows.Err()
+}
+
+// SignInDayKey is one app ("" is "app unknown") on one makerspace day.
+type SignInDayKey struct{ AppID, Day string }
+
+// SignInRecountPending is what 000079 left to recount: the first day
+// sign_in_daily holds and the last one still on the UTC day. through is nil
+// when nothing waits; first is nil when no total is left at all.
+func SignInRecountPending(ctx context.Context) (first, through *string, err error) {
+	err = querier(ctx).QueryRow(ctx, `
+		SELECT (SELECT MIN(day)::text FROM sign_in_daily),
+		       (SELECT MAX(through)::text FROM sign_in_daily_recount)`).Scan(&first, &through)
+	if err != nil {
+		return nil, nil, fmt.Errorf("sign-in recount pending: %w", err)
+	}
+	return first, through, nil
+}
+
+// ReplaceSignInDays swaps every total from `first` through `through`
+// (inclusive days) for `counts`, and marks the recount done, in one
+// transaction: a reader sees the old totals or the new ones, never a mix.
+func ReplaceSignInDays(ctx context.Context, first, through string, counts map[SignInDayKey]int) error {
+	return InTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM sign_in_daily WHERE day BETWEEN $1::date AND $2::date`, first, through); err != nil {
+			return fmt.Errorf("clear sign-in totals: %w", err)
+		}
+		for k, n := range counts {
+			if n < 1 || k.Day < first || k.Day > through {
+				continue // only the days asked for, and only days with a sign-in
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO sign_in_daily (app_id, day, count) VALUES ($1, $2::date, $3)`, k.AppID, k.Day, n); err != nil {
+				return fmt.Errorf("write sign-in total: %w", err)
+			}
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM sign_in_daily_recount WHERE through <= $1::date`, through); err != nil {
+			return fmt.Errorf("close sign-in recount: %w", err)
+		}
+		return nil
+	})
 }

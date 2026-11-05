@@ -1,27 +1,24 @@
-import { daysUntil } from "@/lib/format";
+import { addDays, civilDay, daysBetween, endOfDayISO } from "@/lib/time";
 
 type TermDates = { name: string; start: string; end: string };
 
-function termDay(ymd: string): Date {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
 /**
- * The end of the term holding today, or of the next to start when today falls
- * between two; null when the setting names none.
+ * The last day of the term holding today, or of the next to start when today
+ * falls between two; null when the setting names none. Days are the
+ * makerspace's ("YYYY-MM-DD"), compared as text.
  */
-export function currentTermEnd(terms: TermDates[], now: Date = new Date()): Date | null {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+export function currentTermEnd(terms: TermDates[], now: Date = new Date()): string | null {
+  const today = civilDay(now);
   const sorted = [...terms].sort((a, b) => a.start.localeCompare(b.start));
   const hit =
-    sorted.find((t) => termDay(t.start) <= today && today <= termDay(t.end)) ??
-    sorted.find((t) => termDay(t.start) > today);
-  return hit ? termDay(hit.end) : null;
+    sorted.find((t) => t.start <= today && today <= t.end) ??
+    sorted.find((t) => t.start > today);
+  return hit ? hit.end : null;
 }
 
 /**
- * The academic term boundary access is usually asked for and granted against.
+ * The academic term boundary access is usually asked for and granted against:
+ * its last day.
  *
  * A makerspace's natural unit is not 30 days, it is "until term ends" — which
  * is why both the operator's grant dialog and the member's request dialog offer
@@ -31,29 +28,19 @@ export function currentTermEnd(terms: TermDates[], now: Date = new Date()): Date
  * no term still to come) does it fall back to 18 May and 18 December, the
  * institution's usual boundaries, rather than offering nothing.
  */
-export function nextTermEnd(now: Date = new Date(), terms?: TermDates[]): Date {
+export function nextTermEnd(now: Date = new Date(), terms?: TermDates[]): string {
   const fromSetting = terms?.length ? currentTermEnd(terms, now) : null;
   if (fromSetting) return fromSetting;
-  const year = now.getFullYear();
-  const may = new Date(year, 4, 18);
-  const december = new Date(year, 11, 18);
-  if (now < may) return may;
-  if (now < december) return december;
-  return new Date(year + 1, 4, 18);
+  const today = civilDay(now);
+  const year = Number(today.slice(0, 4));
+  if (today < `${year}-05-18`) return `${year}-05-18`;
+  if (today < `${year}-12-18`) return `${year}-12-18`;
+  return `${year + 1}-05-18`;
 }
 
-/**
- * The last moment of a day, local. An ask "until the end of term" is stored as
- * this, so a late approval still ends with the term and the term's last day is
- * still the member's.
- */
-export function endOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
-}
-
-/** Whole days from now to the next term boundary, never less than one. */
+/** Calendar days from today to the next term's last day, never less than one. */
 export function daysUntilTermEnd(now: Date = new Date(), terms?: TermDates[]): number {
-  return Math.max(1, daysUntil(nextTermEnd(now, terms).toISOString(), now) ?? 1);
+  return Math.max(1, daysBetween(civilDay(now), nextTermEnd(now, terms)));
 }
 
 /** What asking to keep a role offers: a way to pick how much longer, and where it lands. */
@@ -61,13 +48,6 @@ export interface KeepChoice {
   days: number;
   /** The end it would have, counted from the current end. */
   until: string;
-}
-
-const DAY = 86_400_000;
-
-function localDay(iso: string): Date {
-  const d = new Date(iso);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 /**
@@ -82,21 +62,19 @@ export function keepOptions(
   terms: Array<{ name: string; start: string; end: string }>,
   now: Date = new Date(),
 ): { month: KeepChoice; term: KeepChoice | { reason: string } } {
-  const end = new Date(currentEnd);
-  const reach = (days: number): KeepChoice => ({
-    days,
-    until: new Date(end.getTime() + days * DAY).toISOString(),
-  });
+  // "N days" is N calendar days, ending as the Nth does (lib/time.ts), as the backend counts it.
+  const endDay = civilDay(new Date(currentEnd));
+  const reach = (days: number): KeepChoice => ({ days, until: endOfDayISO(addDays(endDay, days)) });
 
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = civilDay(now);
   const sorted = [...terms].sort((a, b) => a.start.localeCompare(b.start));
-  const within = sorted.findIndex((t) => termDay(t.start) <= today && today <= termDay(t.end));
-  const next = within >= 0 ? sorted[within + 1] : sorted.find((t) => termDay(t.start) > today);
+  const within = sorted.findIndex((t) => t.start <= today && today <= t.end);
+  const next = within >= 0 ? sorted[within + 1] : sorted.find((t) => t.start > today);
 
   if (!next) return { month: reach(30), term: { reason: "There's no next term set yet." } };
-  const days = Math.round((termDay(next.end).getTime() - localDay(currentEnd).getTime()) / DAY);
+  const days = daysBetween(endDay, next.end);
   if (days < 1) {
     return { month: reach(30), term: { reason: "It already ends after the end of next term." } };
   }
-  return { month: reach(30), term: { days, until: endOfDay(termDay(next.end)).toISOString() } };
+  return { month: reach(30), term: { days, until: endOfDayISO(next.end) } };
 }

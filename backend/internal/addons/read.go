@@ -137,13 +137,6 @@ func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledg
 	if err != nil {
 		return PlanResult{Outcome: OutcomeUnreached, Err: err}
 	}
-	if !a.br.allow(timeNow()) {
-		return PlanResult{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
-	}
-	cred, err := credentialFor(a.Registration)
-	if err != nil {
-		return PlanResult{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
-	}
 
 	wire := make([]planSubjectWire, 0, len(subjects))
 	for _, s := range subjects {
@@ -156,8 +149,10 @@ func Plan(ctx context.Context, target string, subjects []PlanSubject, acknowledg
 		return PlanResult{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: encode plan: %w", target, err)}
 	}
 
-	resp := doAuthenticated(ctx, cred, http.MethodPost, a.Registration.BaseURL+"/plan", body, callTimeout)
-	a.br.record(timeNow(), resp)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/plan", Body: body})
+	if err != nil {
+		return PlanResult{Outcome: OutcomeUnreached, Err: err}
+	}
 
 	out := PlanResult{
 		Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err,
@@ -293,16 +288,10 @@ func Subjects(ctx context.Context, target string) SubjectsResult {
 	if err != nil {
 		return SubjectsResult{Outcome: OutcomeUnreached, Err: err}
 	}
-	if !a.br.allow(timeNow()) {
-		return SubjectsResult{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
-	}
-	cred, err := credentialFor(a.Registration)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/subjects"})
 	if err != nil {
-		return SubjectsResult{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
+		return SubjectsResult{Outcome: OutcomeUnreached, Err: err}
 	}
-
-	resp := doAuthenticated(ctx, cred, http.MethodGet, a.Registration.BaseURL+"/subjects", nil, callTimeout)
-	a.br.record(timeNow(), resp)
 
 	out := SubjectsResult{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err}
 	if resp.Outcome != OutcomeSucceeded {
@@ -404,16 +393,10 @@ func readHealth(ctx context.Context, target string) TargetHealth {
 	// any differently from another call — it goes through the same record. An
 	// operator watching a target come back reads this; letting it bypass the
 	// breaker would make the surface disagree with what every other call gets.
-	if !a.br.allow(timeNow()) {
-		return TargetHealth{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
-	}
-	cred, err := credentialFor(a.Registration)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/health"})
 	if err != nil {
-		return TargetHealth{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
+		return TargetHealth{Outcome: OutcomeUnreached, Err: err}
 	}
-
-	resp := doAuthenticated(ctx, cred, http.MethodGet, a.Registration.BaseURL+"/health", nil, callTimeout)
-	a.br.record(timeNow(), resp)
 
 	out := TargetHealth{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err}
 	if resp.Outcome != OutcomeSucceeded {
@@ -430,21 +413,15 @@ func readHealth(ctx context.Context, target string) TargetHealth {
 // SetLifecycle moves an add-on between active, draining and read-only at
 // runtime (design §18).
 //
-// A mutation, and deliberately not an operation: operations act on a SUBJECT,
-// carry a durable record and a one-shot dispatch token, and are deduplicated on
-// a call id. This acts on the add-on itself, is idempotent by construction —
-// setting the same state twice is the same state — and has no subject to bind
-// to. Forcing it through the operation protocol would mean minting an
-// `addon_operations` row with no subject and a dedup token for a call that is
-// safe to repeat.
-func SetLifecycle(ctx context.Context, target, state, reason string) (map[string]any, error) {
+// A mutation, so it leaves what every other mutation leaves: an
+// `addon_operations` row and its audit line (who flipped it, to which state),
+// committed before the call. The subject is the add-on itself, the id is the
+// idempotency key, and `reason` stays in the request — the row has no free-text
+// column by design.
+func SetLifecycle(ctx context.Context, target, state, reason, actor string) (map[string]any, error) {
 	a, err := Get(target)
 	if err != nil {
 		return nil, err
-	}
-	cred, err := credentialFor(a.Registration)
-	if err != nil {
-		return nil, fmt.Errorf("addon %s: %w", target, err)
 	}
 	body, err := json.Marshal(map[string]any{
 		"contract_version": ContractVersion, "state": state, "reason": reason,
@@ -453,12 +430,17 @@ func SetLifecycle(ctx context.Context, target, state, reason string) (map[string
 		return nil, fmt.Errorf("addon %s: encode lifecycle: %w", target, err)
 	}
 
-	resp := doAuthenticated(ctx, cred, http.MethodPost, a.Registration.BaseURL+"/lifecycle", body, callTimeout)
-	// Deliberately NOT recorded against the breaker. The breaker is a health
-	// signal about the add-on's ability to serve work, and this is the call an
-	// operator makes to stop it serving work — letting a refusal here count
-	// towards opening the circuit would conflate "we told it to stop" with "it
-	// stopped answering".
+	// SkipBreaker: neither consulted nor fed. The breaker is a health signal
+	// about the add-on's ability to serve work, and this is the call an operator
+	// makes to stop it serving work — letting a refusal here count towards
+	// opening the circuit would conflate "we told it to stop" with "it stopped
+	// answering", and an open circuit must not stop the operator's stop.
+	resp, err := a.operate(ctx, db.AddonOperationParams{
+		Target: target, Operation: "lifecycle.set", ActorID: actor, SubjectID: target, About: state,
+	}, sendSpec{Method: http.MethodPost, Path: "/lifecycle", Body: body, SkipBreaker: true})
+	if err != nil {
+		return nil, err
+	}
 	if resp.Outcome != OutcomeSucceeded {
 		return nil, fmt.Errorf("addon %s: lifecycle change refused (%d): %v", target, resp.Status, resp.Err)
 	}
@@ -509,17 +491,10 @@ func ResolvesValue(ctx context.Context, target, field, value string) (Resolution
 	if err != nil {
 		return Resolution{}, nil
 	}
-	if !a.br.allow(timeNow()) {
-		return Resolution{}, nil
-	}
-	cred, err := credentialFor(a.Registration)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/values/" + url.PathEscape(field)})
 	if err != nil {
 		return Resolution{}, nil
 	}
-
-	resp := doAuthenticated(ctx, cred, http.MethodGet,
-		a.Registration.BaseURL+"/values/"+url.PathEscape(field), nil, callTimeout)
-	a.br.record(timeNow(), resp)
 	if resp.Outcome != OutcomeSucceeded {
 		// Includes a 404 for a field this add-on does not enumerate. Not an
 		// answer about the value.
@@ -608,16 +583,10 @@ func ReadValues(ctx context.Context, target, field string) Values {
 	if err != nil {
 		return Values{Outcome: OutcomeUnreached}
 	}
-	if !a.br.allow(timeNow()) {
-		return Values{Outcome: OutcomeUnreached}
-	}
-	cred, err := credentialFor(a.Registration)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/values/" + url.PathEscape(field)})
 	if err != nil {
 		return Values{Outcome: OutcomeUnreached}
 	}
-	resp := doAuthenticated(ctx, cred, http.MethodGet,
-		a.Registration.BaseURL+"/values/"+url.PathEscape(field), nil, callTimeout)
-	a.br.record(timeNow(), resp)
 	if resp.Outcome != OutcomeSucceeded {
 		return Values{Outcome: resp.Outcome}
 	}
@@ -648,7 +617,7 @@ type TargetSetting struct {
 // ReadSettings asks a target for its settings. ok is false when it couldn't
 // say, which is not "it has none".
 func ReadSettings(ctx context.Context, target string) (settings []TargetSetting, ok bool) {
-	resp, ok := settingsCall(ctx, target, http.MethodGet, "/settings", nil, nil)
+	resp, ok := settingsCall(ctx, target, http.MethodGet, "/settings", nil)
 	if !ok || resp.Outcome != OutcomeSucceeded {
 		return nil, false
 	}
@@ -668,62 +637,37 @@ func ReadSettings(ctx context.Context, target string) (settings []TargetSetting,
 //
 // A write, so it leaves the same trace as every other add-on mutation: an
 // addon_operations row and its audit line committed before the call, claimed as
-// the request goes out, and settled with how it ended. The row's id is the call
-// id. The add-on's setting endpoint takes no call id yet, so it is not sent;
-// writing the same value twice is harmless, which is why this needs no
-// deduplication to be safe.
+// the request goes out, and settled with how it ended. The row's id is the
+// idempotency key, sent as the Idempotency-Key header (the add-on's setting
+// endpoint decodes strictly and takes no call id in its body yet); writing the
+// same value twice is harmless, which is why it is safe until it does.
 func PutSetting(ctx context.Context, target, name, value, actor string) (CallResponse, bool) {
-	const operation = "setting.put"
-	id, err := dbBeginAddonOperation(ctx, db.AddonOperationParams{
-		Target: target, Operation: operation, ActorID: actor, SubjectID: name,
-		// The value is not a secret: it is a dataset path, shown back on the
-		// system page, and it is how a later read settles this record.
-		About: value,
-	})
+	a, err := Get(target)
 	if err != nil {
-		// No record, no call: the record is the precondition, not a log of it.
+		// Nothing to record against: the row's target is a foreign key.
 		return CallResponse{Outcome: OutcomeUnreached, Err: err}, false
 	}
 	body, _ := json.Marshal(map[string]string{"value": value, "actor": actor})
-	claim := func(ctx context.Context) error {
-		return OperationRecord(id, target, operation, name).consume(ctx)
-	}
-	resp, ok := settingsCall(ctx, target, http.MethodPut, "/settings/"+url.PathEscape(name), body, claim)
-	status, known := map[Outcome]string{
-		OutcomeSucceeded: db.AddonOpSucceeded, OutcomeRejected: db.AddonOpRejected,
-		OutcomeUnreached: db.AddonOpUnreached, OutcomeIndeterminate: db.AddonOpIndeterminate,
-	}[resp.Outcome]
-	if !known {
-		status = db.AddonOpIndeterminate
-	}
-	if err := dbSettleAddonOperation(ctx, id, status); err != nil {
-		// The row stays `dispatching`, which is the honest state for "sent, and
-		// we cannot say what came back"; the unresolved surface shows it.
-		log.Printf("[ADDON] %s/%s call_id=%s dispatched but its outcome was not recorded: %v", target, operation, id, err)
-	}
-	return resp, ok
+	resp, _ := a.operate(ctx, db.AddonOperationParams{
+		Target: target, Operation: "setting.put", ActorID: actor, SubjectID: name,
+		// The value is not a secret: it is a dataset path, shown back on the
+		// system page, and it is how a later read settles this record.
+		About: value,
+	}, sendSpec{Method: http.MethodPut, Path: "/settings/" + url.PathEscape(name), Body: body})
+	return resp, resp.Status != 0
 }
 
-// settingsCall is one authenticated call to a target's settings or homes
-// endpoints. claim, when set, is taken immediately before the request leaves and
-// after every other refusal, so a call the breaker or a missing credential
-// stopped is not recorded as sent.
-func settingsCall(ctx context.Context, target, method, path string, body []byte, claim func(context.Context) error) (CallResponse, bool) {
+// settingsCall is one authenticated read of a target's settings or homes
+// endpoints. Not being able to ask is `ok == false`, never "it has none".
+func settingsCall(ctx context.Context, target, method, path string, body []byte) (CallResponse, bool) {
 	a, err := Get(target)
-	if err != nil || !a.br.allow(timeNow()) {
-		return CallResponse{Outcome: OutcomeUnreached}, false
-	}
-	cred, err := credentialFor(a.Registration)
 	if err != nil {
 		return CallResponse{Outcome: OutcomeUnreached}, false
 	}
-	if claim != nil {
-		if err := claim(ctx); err != nil {
-			return CallResponse{Outcome: OutcomeUnreached, Err: err}, false
-		}
+	resp, err := a.send(ctx, sendSpec{Method: method, Path: path, Body: body})
+	if err != nil {
+		return CallResponse{Outcome: OutcomeUnreached}, false
 	}
-	resp := doAuthenticated(ctx, cred, method, a.Registration.BaseURL+path, body, callTimeout)
-	a.br.record(timeNow(), resp)
 	return resp, resp.Status != 0
 }
 
@@ -745,7 +689,7 @@ type Homes struct {
 
 // ReadHomes asks a target for every home folder and its use.
 func ReadHomes(ctx context.Context, target string) Homes {
-	resp, ok := settingsCall(ctx, target, http.MethodGet, "/homes", nil, nil)
+	resp, ok := settingsCall(ctx, target, http.MethodGet, "/homes", nil)
 	if !ok || resp.Outcome != OutcomeSucceeded {
 		return Homes{}
 	}
@@ -778,15 +722,10 @@ func ReadReach(ctx context.Context, target string) Reach {
 	if err != nil {
 		return Reach{}
 	}
-	if !a.br.allow(timeNow()) {
-		return Reach{}
-	}
-	cred, err := credentialFor(a.Registration)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodGet, Path: "/reach"})
 	if err != nil {
 		return Reach{}
 	}
-	resp := doAuthenticated(ctx, cred, http.MethodGet, a.Registration.BaseURL+"/reach", nil, callTimeout)
-	a.br.record(timeNow(), resp)
 	if resp.Outcome != OutcomeSucceeded {
 		return Reach{}
 	}
@@ -860,13 +799,6 @@ func MyStorage(ctx context.Context, target, subject, actor string) StorageStatus
 	if err != nil {
 		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
 	}
-	if !a.br.allow(timeNow()) {
-		return StorageStatus{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
-	}
-	cred, err := credentialFor(a.Registration)
-	if err != nil {
-		return StorageStatus{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
-	}
 
 	body, err := json.Marshal(map[string]any{
 		"contract_version": ContractVersion,
@@ -880,9 +812,10 @@ func MyStorage(ctx context.Context, target, subject, actor string) StorageStatus
 		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
 	}
 
-	resp := doAuthenticated(ctx, cred, http.MethodPost,
-		a.Registration.BaseURL+"/operations/storage.status", body, callTimeout)
-	a.br.record(timeNow(), resp)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/storage.status", Body: body})
+	if err != nil {
+		return StorageStatus{Outcome: OutcomeUnreached, Err: err}
+	}
 
 	out := StorageStatus{Outcome: resp.Outcome, Err: resp.Err}
 	if resp.Outcome != OutcomeSucceeded {
@@ -959,13 +892,6 @@ func Activity(ctx context.Context, target, subject, since string) ActivityReport
 	if err != nil {
 		return ActivityReport{Outcome: OutcomeUnreached, Err: err}
 	}
-	if !a.br.allow(timeNow()) {
-		return ActivityReport{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
-	}
-	cred, err := credentialFor(a.Registration)
-	if err != nil {
-		return ActivityReport{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
-	}
 
 	params := map[string]any{}
 	if since != "" {
@@ -983,9 +909,10 @@ func Activity(ctx context.Context, target, subject, since string) ActivityReport
 		return ActivityReport{Outcome: OutcomeUnreached, Err: err}
 	}
 
-	resp := doAuthenticated(ctx, cred, http.MethodPost,
-		a.Registration.BaseURL+"/operations/activity.get", body, callTimeout)
-	a.br.record(timeNow(), resp)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/activity.get", Body: body})
+	if err != nil {
+		return ActivityReport{Outcome: OutcomeUnreached, Err: err}
+	}
 
 	out := ActivityReport{Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err}
 	if resp.Outcome != OutcomeSucceeded {
@@ -1084,13 +1011,6 @@ func SystemHealth(ctx context.Context, target string) SystemReport {
 	if err != nil {
 		return SystemReport{Outcome: OutcomeUnreached, Err: err}
 	}
-	if !a.br.allow(timeNow()) {
-		return SystemReport{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, target)}
-	}
-	cred, err := credentialFor(a.Registration)
-	if err != nil {
-		return SystemReport{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", target, err)}
-	}
 
 	body, err := json.Marshal(map[string]any{
 		"contract_version": ContractVersion,
@@ -1107,9 +1027,10 @@ func SystemHealth(ctx context.Context, target string) SystemReport {
 		return SystemReport{Outcome: OutcomeUnreached, Err: err}
 	}
 
-	resp := doAuthenticated(ctx, cred, http.MethodPost,
-		a.Registration.BaseURL+"/operations/health.get", body, callTimeout)
-	a.br.record(timeNow(), resp)
+	resp, err := a.send(ctx, sendSpec{Method: http.MethodPost, Path: "/operations/health.get", Body: body})
+	if err != nil {
+		return SystemReport{Outcome: OutcomeUnreached, Err: err}
+	}
 
 	out := SystemReport{Outcome: resp.Outcome, Err: resp.Err}
 	if resp.Outcome != OutcomeSucceeded {
