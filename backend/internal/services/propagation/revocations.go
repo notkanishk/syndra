@@ -6,10 +6,17 @@ import (
 	"log"
 
 	"syndra/internal/db"
+	"syndra/internal/models"
 )
 
-// DrainRevocations is the one background drain this system has, and it drains
-// revocations only.
+// DrainRevocations is the one background drain this system has. It drains
+// revocations, and retries of changes already sent once that the target
+// didn't take (ClaimDueRetries).
+//
+// Retries are not a widening of the consent rule below: a retried row is one
+// the operator already sent, straight away or by Send, and it is tried again
+// only after its backoff. A row that waits for the operator (its role waits)
+// is never one of them (owner, 5 Nov 2026).
 //
 // The inherited rule is that buffered propagations drain solely on explicit
 // operator action, and that rule exists to protect a consent property: nobody
@@ -57,9 +64,14 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 		if err != nil {
 			return DrainResult{}, fmt.Errorf("claim revocations: %w", err)
 		}
+		retries, err := claimRetries(ctx, db.TargetZitadel, claimBatch)
+		if err != nil {
+			return DrainResult{}, fmt.Errorf("claim retries: %w", err)
+		}
+		rows = append(rows, retries...)
 		var pass DrainResult
 		for _, row := range rows {
-			if halt := pass.processRow(ctx, row); halt {
+			if halt := pass.automatic(ctx, row, pass.processRow); halt {
 				break
 			}
 		}
@@ -81,6 +93,11 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 			continue
 		}
 		rows, err := claimRevocations(ctx, target, claimBatch)
+		if err == nil {
+			var retries []models.PendingPropagation
+			retries, err = claimRetries(ctx, target, claimBatch)
+			rows = append(rows, retries...)
+		}
 		if err != nil {
 			// Logged and skipped rather than returned: the Zitadel leg above has
 			// already dispatched, and failing the pass would discard that report
@@ -91,11 +108,23 @@ func DrainRevocations(ctx context.Context) (DrainResult, error) {
 		}
 		var pass DrainResult
 		for _, row := range rows {
-			if halt := pass.dispatchEntitlement(ctx, row); halt {
+			if halt := pass.automatic(ctx, row, pass.dispatchEntitlement); halt {
 				break
 			}
 		}
 		res.merge(target, pass)
 	}
 	return res, nil
+}
+
+// automatic sends one row on the runner's own initiative. A row tried before
+// (attempts > 0) is an automatic retry, and every one is audited with its try
+// number and how it went, so the history never loses one.
+func (res *DrainResult) automatic(ctx context.Context, row models.PendingPropagation, send func(context.Context, models.PendingPropagation) bool) bool {
+	before := *res
+	halt := send(ctx, row)
+	if row.Attempts > 0 {
+		auditRetry(ctx, row, retryOutcome(before, *res))
+	}
+	return halt
 }

@@ -38,7 +38,11 @@ describe("the one automatic resend", () => {
 
   it("never sends a third time: two lost replies are unconfirmed", async () => {
     const { send, calls } = sender(LOST, LOST);
-    expect(await sendWithOneResend(send)).toEqual({ status: "indeterminate" });
+    expect(await sendWithOneResend(send, () => {}, async () => {})).toEqual({
+      status: "indeterminate",
+      // Two tries spent: nothing sends it again until the member does.
+      retry: { state: "waiting", try: 2, of: 2 },
+    });
     expect(calls).toHaveLength(2);
   });
 
@@ -63,6 +67,28 @@ describe("the one automatic resend", () => {
     const { send, calls } = sender(refusal);
     await expect(sendWithOneResend(send)).rejects.toBe(refusal);
     expect(calls).toEqual([false]);
+  });
+
+  // The one retry model (owner, 5 Nov): the server names the next try, the
+  // page says so before it waits ("Syndra is trying again at 14:05"), waits
+  // until then, and only then sends it again.
+  it("says the next try first, waits for it, then resends", async () => {
+    const next = new Date(Date.now() + 8000).toISOString();
+    const lost: CredentialAnswer = { status: "indeterminate", retry: { state: "retrying", try: 2, of: 2, next_try: next } };
+    const { send, calls } = sender(lost, { status: "set" });
+    const heard: unknown[] = [];
+    const waited: number[] = [];
+    const answer = await sendWithOneResend(
+      send,
+      (retry) => heard.push({ retry, sendsSoFar: calls.length }),
+      async (ms) => {
+        waited.push(ms);
+      },
+    );
+    expect(answer.status).toBe("set");
+    expect(heard).toEqual([{ retry: lost.retry, sendsSoFar: 1 }]);
+    expect(waited[0]).toBeGreaterThan(6000);
+    expect(calls).toEqual([false, true]);
   });
 
   it("tells a lost reply from one Syndra gave", () => {

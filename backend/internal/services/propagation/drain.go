@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 )
 
@@ -37,6 +38,11 @@ type DrainResult struct {
 	Exhausted int    `json:"exhausted,omitempty"`
 	Halted    bool   `json:"halted"`
 	Reason    string `json:"reason,omitempty"`
+	// Retry is where a change the caller just sent stands when the target
+	// didn't take it: the next try and which try of how many. Set by
+	// services.Deliver for the rows it sent; a pass over many rows leaves it
+	// to each row (GetPendingPropagations).
+	Retry *extcall.RetryState `json:"retry,omitempty"`
 	// HaltedTarget names whose pass produced Reason. Its own field rather than a
 	// prefix on Reason: the reason strings are matched by callers and read by
 	// operators, and folding two facts into one string makes both harder to use.

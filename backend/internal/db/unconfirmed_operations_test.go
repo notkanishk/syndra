@@ -71,8 +71,8 @@ func TestAResendIsBoundToItsFirstSendAndUncounted(t *testing.T) {
 			t.Errorf("the resend insert is missing %q", guard)
 		}
 	}
-	if !strings.Contains(insert, `"retried_by": "automatic"`) {
-		t.Error("the resend's audit row says it was sent again automatically")
+	if !strings.Contains(insert, "extcall.AddonResend.AuditMark(2)") {
+		t.Error("the resend's audit row carries the one automatic-retry mark (retried_by automatic, try 2 of 2)")
 	}
 	count := funcBody(t, string(src), "CountRecentAddonOperations")
 	if !strings.Contains(count, "AND retry_of IS NULL") {

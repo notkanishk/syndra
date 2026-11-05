@@ -116,6 +116,14 @@ export const AUDIT_ACTIONS: Record<
   // Worded the operator's way (A-04 §14.8). The row carries who caused it, the person
   // and the outbox row, but not what the change was, who queued it or why: those are
   // on the superseded outbox row, which no read returns yet.
+  // The background drain sent again, on its own, a change Zitadel didn't take
+  // (the one retry model, owner 5 Nov 2026). One row per automatic try; its
+  // details carry retried_by "automatic", try n of N, and how it went.
+  "propagation.retried": {
+    verb: "Sent a change to Zitadel again on its own (an automatic retry)",
+    template: "Sent a change for {} to Zitadel again on its own (an automatic retry)",
+    passive: "A change to their access was sent to Zitadel again on its own (an automatic retry)",
+  },
   "propagation.cancelled_unsent": {
     verb: "Cancelled a change that was waiting for you to send",
     template: "Cancelled a change that was waiting for you to send, for {}",

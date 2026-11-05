@@ -45,6 +45,13 @@ export interface Indicators {
    * none is absent.
    */
   unconfirmed_operations?: Record<string, number>;
+  /**
+   * Of pending_propagation, the changes Zitadel didn't take that Syndra sends
+   * again on its own (the one retry model), and the ones it gave up on this
+   * week. Said on Home and the rail, so neither a retry nor its end is silent.
+   */
+  retrying?: number;
+  gave_up?: number;
   zitadel_reachable: boolean;
 }
 

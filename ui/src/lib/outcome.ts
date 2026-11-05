@@ -216,8 +216,11 @@ export type ForecastAct = Exclude<keyof typeof FORECAST, "queued">;
  * Acts that go on to Zitadel. When the role they touch is one of Roles that
  * wait, Syndra already knows they will wait for the operator, so the forecast
  * is the wait and not the act (A-20 P8): "Will wait for you to send", never
- * "Will be approved". Decline, keep, lift, cancel, adopt and mark never reach
- * Zitadel, so a waiting role changes nothing about them.
+ * "Will be approved". Decline, keep, lift, cancel and mark never reach Zitadel.
+ * Adopt does reach it, indirectly: it sends nothing of its own row, but it
+ * fires the automatic rules, and each role a rule gives is queued in Pending
+ * changes for you to send (drift attribute answers `rule_outbox_ids`). Its own
+ * forecast is still "Will be adopted", so a waiting role changes nothing here.
  */
 const REACHES_ZITADEL: ReadonlySet<ForecastAct> = new Set<ForecastAct>(["approve", "extend", "remove", "give"]);
 
