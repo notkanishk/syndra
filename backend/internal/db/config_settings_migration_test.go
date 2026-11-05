@@ -23,10 +23,6 @@ func TestMigration000017_ConfirmationModeEnumMatchesGo(t *testing.T) {
 			t.Errorf("000017 up migration missing %q", want)
 		}
 	}
-	// The Go layer only ever writes these two mode literals:
-	for _, mode := range []string{confirmationModeAuto, confirmationModeManual} {
-		if !strings.Contains(s, "'"+mode+"'") {
-			t.Errorf("migration CHECK does not cover Go literal %q", mode)
-		}
-	}
+	// The columns this created are dropped by 000078; the Go layer writes no
+	// mode any more (TestMigration000078_* in rules_pipeline_migration_test.go).
 }

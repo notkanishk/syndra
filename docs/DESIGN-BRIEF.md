@@ -288,9 +288,9 @@ Create, edit roles within, set the default for new members, view impact before c
 `GET/POST /api/v1/bundles` · `POST /api/v1/bundles/{id}/roles` · `DELETE /api/v1/bundles/{id}/roles/{projectId}/{roleKey}` · `PUT /api/v1/bundles/{id}/welcome` · `GET /api/v1/bundles/{id}/impact`
 
 #### S2 · Automation › Automatic rules
-"Role A in project X ⇒ role B in project Y." Includes validate-before-save and per-rule confirmation mode (`auto` applies immediately, `manual` queues for review).
+"Role A in project X ⇒ role B in project Y." Includes validate-before-save. Whether a rule's changes wait is decided by the role it gives (Roles that wait); rules have no mode of their own (migration 000078).
 
-`GET/POST /api/v1/rules/mapping` · `PUT /api/v1/rules/mapping/{id}` · `POST /api/v1/rules/mapping/validate` · `POST /api/v1/policies/confirmation-mode`
+`GET/POST /api/v1/rules/mapping` · `PUT /api/v1/rules/mapping/{id}` · `POST /api/v1/rules/mapping/validate`
 
 #### S2b · Automation › Settings
 Route: `/automation/settings`.
@@ -299,7 +299,7 @@ The **global default confirmation mode** — whether new rules apply automatical
 
 This is system-wide policy affecting every future cascade, so it gets a stable home inside Automation. It must **not** live in the sidebar footer, an account menu, or a preferences drawer: those locations read as personal settings, and someone will flip an org-wide policy thinking they changed something about themselves.
 
-`GET/PUT /api/v1/config/confirmation-mode-default`
+(Superseded: the global default confirmation mode and its endpoint were removed with the per-rule modes, migration 000078. Roles that wait is the one write place for what waits.)
 
 #### S3 · Automation › Pending changes
 Queued Zitadel writes awaiting confirmation, with manual drain.

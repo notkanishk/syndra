@@ -79,7 +79,13 @@ func TestEnqueueWrites_WritesSourceAndSourceRef(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read propagation_enqueue.go: %v", err)
 	}
-	fb := funcBody(t, string(src), "enqueueWrites")
+	// The write itself lives in enqueueOwn; enqueueWrites wraps it with the
+	// mapping rules (FollowRules), which must see the write, never bypass it.
+	wrap := funcBody(t, string(src), "enqueueWrites")
+	if !strings.Contains(wrap, "FollowRules(") || !strings.Contains(wrap, "enqueueOwn(ctx, tx, p, key)") {
+		t.Fatalf("enqueueWrites must run the write through FollowRules; body:\n%s", wrap)
+	}
+	fb := funcBody(t, string(src), "enqueueOwn")
 	for _, want := range []string{"source", "source_ref"} {
 		if !strings.Contains(fb, want) {
 			t.Errorf("enqueueWrites must write outbox column %q; body:\n%s", want, fb)

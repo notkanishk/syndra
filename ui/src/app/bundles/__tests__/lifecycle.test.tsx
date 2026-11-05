@@ -68,7 +68,7 @@ beforeEach(() => {
   state.update = vi.fn().mockResolvedValue({ message: "ok" });
   state.remove = vi
     .fn()
-    .mockResolvedValue({ message: "ok", was_welcome: false, cascade: { enqueued: 4, mode: "auto" } });
+    .mockResolvedValue({ message: "ok", was_welcome: false, cascade: { enqueued: 4 } });
 });
 
 afterEach(cleanup);

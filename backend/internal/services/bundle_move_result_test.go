@@ -6,6 +6,7 @@ import (
 
 	"syndra/internal/db"
 	"syndra/internal/models"
+	"syndra/internal/services/propagation"
 )
 
 // Applying a move must REPORT the move.
@@ -46,12 +47,17 @@ func TestMoveHolders_ReportsWhatItMoved(t *testing.T) {
 		return []models.BundleVersion{{ID: targetID, BundleID: bundleID, Version: 4}}, nil
 	}
 	svcGetBundleByID = func(context.Context, string) (models.Bundle, error) {
-		return models.Bundle{ID: bundleID, ConfirmationMode: "manual"}, nil
+		return models.Bundle{ID: bundleID}, nil
 	}
 	svcMoveHoldersAndEnqueue = func(
 		_ context.Context, _ string, _ string, _ string, _ []string, _ []db.EnqueueParams,
 	) ([]string, error) {
 		return []string{"outbox-1"}, nil
+	}
+	// The row is sent: its role does not wait, and nothing else holds a
+	// change any more (a bundle's own mode went with 000078).
+	svcDrainBatch = func(context.Context, []string) (propagation.DrainResult, error) {
+		return propagation.DrainResult{Applied: 1}, nil
 	}
 
 	plan, err := MoveHolders(context.Background(), "operator", MoveHoldersRequest{

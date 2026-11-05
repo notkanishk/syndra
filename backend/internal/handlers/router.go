@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/subtle"
-	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"log"
@@ -129,16 +127,6 @@ func NewRouter() http.Handler {
 	// stays, readable; a write to a retired one is refused 409 RETIRED.
 	mux.HandleFunc("DELETE /api/v1/rules/mapping/{id}", withCORS(withOperatorAuth(handleRetireMappingRule)))
 	mux.HandleFunc("POST /api/v1/rules/mapping/validate", withCORS(withUserAuth(handleValidateMappingRule)))
-
-	// Global confirmation-mode default (Task 22): every create-bundle/create-rule form reads this
-	// to prefill its mode selector, so the GET is user-gated like the rest of those forms. Setting
-	// it is global policy — operator-gated, same posture as the welcome-bundle toggle.
-	mux.HandleFunc("GET /api/v1/config/confirmation-mode-default", withCORS(withUserAuth(handleGetGlobalConfirmationDefault)))
-	mux.HandleFunc("PUT /api/v1/config/confirmation-mode-default", withCORS(withOperatorAuth(handleSetGlobalConfirmationDefault)))
-
-	// Bulk confirmation-mode toggle (Task 22): flips confirmation_mode on a set of rules or
-	// bundles in one statement. Operator-gated — a cross-cutting policy mutation.
-	mux.HandleFunc("POST /api/v1/policies/confirmation-mode", withCORS(withOperatorAuth(handleBulkSetConfirmationMode)))
 
 	// Roles that wait for you (N14 B): the one write place for which roles
 	// wait in Pending changes. Operator-gated, like every makerspace-wide setting.
@@ -679,44 +667,3 @@ func jsonResponse(w http.ResponseWriter, status int, payload any) {
 	}
 }
 
-// jsonError defines standard API error shape
-type ErrorResponse struct {
-	Error   string            `json:"error"`
-	Message string            `json:"message"`
-	Details map[string]string `json:"details,omitempty"`
-}
-
-func jsonErrorResponse(w http.ResponseWriter, status int, errStr, msg string) {
-	if status == http.StatusInternalServerError {
-		// An internal failure's own text — a constraint name, a scanner
-		// mismatch — is for the log, never for the screen: it reads as the
-		// operator's mistake when it is Syndra's. They get a sentence and a
-		// reference that finds the log line; the cause stays one grep away.
-		ref := supportReference()
-		log.Printf("[HTTP] internal error ref=%s code=%s: %s", ref, errStr, msg)
-		jsonResponse(w, status, ErrorResponse{
-			Error:   errStr,
-			Message: "Something went wrong inside Syndra.",
-			Details: map[string]string{"request_id": ref},
-		})
-		return
-	}
-	jsonResponse(w, status, ErrorResponse{Error: errStr, Message: msg})
-}
-
-// supportReference is a short id an operator can read out and grep for.
-func supportReference() string {
-	b := make([]byte, 5)
-	if _, err := rand.Read(b); err != nil {
-		return "unavailable"
-	}
-	return strings.ToUpper(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
-}
-
-func jsonValidationErrorResponse(w http.ResponseWriter, msg string, details map[string]string) {
-	jsonResponse(w, http.StatusBadRequest, ErrorResponse{
-		Error:   "VALIDATION_FAILED",
-		Message: msg,
-		Details: details,
-	})
-}

@@ -28,10 +28,6 @@ func resetRulesDeps(t *testing.T) {
 	origDetectUpdate := dbDetectCycleOnUpdate
 	origCascadeUpdate := svcCascadeRuleUpdated
 	origCascadeDelete := svcCascadeRuleRetired
-	origGetConfig := dbGetConfigSetting
-	// Default: no configured global default (resolveConfirmationMode normalizes "" to "auto") —
-	// keeps every existing test that doesn't set confirmation_mode from hitting a real DB call.
-	dbGetConfigSetting = func(ctx context.Context, key string) (string, error) { return "", nil }
 	t.Cleanup(func() {
 		dbGetActiveMappingRules = origGetActive
 		dbDetectCycleOnInsert = origDetect
@@ -41,7 +37,6 @@ func resetRulesDeps(t *testing.T) {
 		dbDetectCycleOnUpdate = origDetectUpdate
 		svcCascadeRuleUpdated = origCascadeUpdate
 		svcCascadeRuleRetired = origCascadeDelete
-		dbGetConfigSetting = origGetConfig
 	})
 }
 
@@ -134,9 +129,9 @@ func TestHandleCreateMappingRule_HappyPath(t *testing.T) {
 		return nil
 	}
 	var gotSP, gotSR, gotTP, gotTR string
-	svcCascadeRuleCreated = func(ctx context.Context, actor, sp, sr, tp, tr, mode string) (string, services.CascadeResult, error) {
+	svcCascadeRuleCreated = func(ctx context.Context, actor, sp, sr, tp, tr string) (string, services.CascadeResult, error) {
 		gotSP, gotSR, gotTP, gotTR = sp, sr, tp, tr
-		return "rule-1", services.CascadeResult{Enqueued: 1, Mode: "auto", Drain: propagation.DrainResult{Applied: 1}}, nil
+		return "rule-1", services.CascadeResult{Enqueued: 1, Drain: propagation.DrainResult{Applied: 1}}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/rules/mapping", strings.NewReader(`{"source_project":"p1","source_role":"r1","target_project":"p2","target_role":"r2"}`))
@@ -169,7 +164,7 @@ func TestHandleCreateMappingRule_UniqueViolationIs409(t *testing.T) {
 	resetRulesDeps(t)
 
 	dbDetectCycleOnInsert = func(ctx context.Context, sp, sr, tp, tr string) error { return nil }
-	svcCascadeRuleCreated = func(ctx context.Context, actor, sp, sr, tp, tr, mode string) (string, services.CascadeResult, error) {
+	svcCascadeRuleCreated = func(ctx context.Context, actor, sp, sr, tp, tr string) (string, services.CascadeResult, error) {
 		return "", services.CascadeResult{}, &pgconn.PgError{Code: "23505", ConstraintName: "idx_mapping_rules_logic"}
 	}
 
@@ -195,7 +190,7 @@ func TestHandleCreateMappingRule_CascadeErrorIs500(t *testing.T) {
 	dbDetectCycleOnInsert = func(ctx context.Context, sp, sr, tp, tr string) error {
 		return nil
 	}
-	svcCascadeRuleCreated = func(ctx context.Context, actor, sp, sr, tp, tr, mode string) (string, services.CascadeResult, error) {
+	svcCascadeRuleCreated = func(ctx context.Context, actor, sp, sr, tp, tr string) (string, services.CascadeResult, error) {
 		return "", services.CascadeResult{}, errors.New("insert rule failed")
 	}
 
@@ -300,7 +295,7 @@ func TestHandleUpdateMappingRule_CycleDetected(t *testing.T) {
 func TestHandleUpdateMappingRule_RetargetOnlyCyclingWithOldEdge_Accepted(t *testing.T) {
 	resetRulesDeps(t)
 
-	old := models.MappingRule{ID: "rule1", SourceProject: "p1", SourceRole: "r1", TargetProject: "p2", TargetRole: "r2", ConfirmationMode: "auto"}
+	old := models.MappingRule{ID: "rule1", SourceProject: "p1", SourceRole: "r1", TargetProject: "p2", TargetRole: "r2"}
 	dbGetMappingRuleByID = func(ctx context.Context, id string) (models.MappingRule, error) {
 		return old, nil
 	}
@@ -312,7 +307,7 @@ func TestHandleUpdateMappingRule_RetargetOnlyCyclingWithOldEdge_Accepted(t *test
 	var gotOld models.MappingRule
 	svcCascadeRuleUpdated = func(ctx context.Context, actor string, o models.MappingRule, sp, sr, tp, tr string) (services.CascadeResult, error) {
 		gotOld = o
-		return services.CascadeResult{Mode: "auto"}, nil
+		return services.CascadeResult{}, nil
 	}
 
 	// Retarget rule1 to the reverse edge (p2:r2 -> p1:r1) — this only cycles if rule1's own old
@@ -337,7 +332,7 @@ func TestHandleUpdateMappingRule_RetargetOnlyCyclingWithOldEdge_Accepted(t *test
 func TestHandleUpdateMappingRule_HappyPath(t *testing.T) {
 	resetRulesDeps(t)
 
-	old := models.MappingRule{ID: "rule1", SourceProject: "p1", SourceRole: "r1", TargetProject: "p2", TargetRole: "r2old", ConfirmationMode: "auto"}
+	old := models.MappingRule{ID: "rule1", SourceProject: "p1", SourceRole: "r1", TargetProject: "p2", TargetRole: "r2old"}
 	dbGetMappingRuleByID = func(ctx context.Context, id string) (models.MappingRule, error) {
 		return old, nil
 	}
@@ -347,7 +342,7 @@ func TestHandleUpdateMappingRule_HappyPath(t *testing.T) {
 	var gotSP, gotSR, gotTP, gotTR string
 	svcCascadeRuleUpdated = func(ctx context.Context, actor string, o models.MappingRule, sp, sr, tp, tr string) (services.CascadeResult, error) {
 		gotSP, gotSR, gotTP, gotTR = sp, sr, tp, tr
-		return services.CascadeResult{Enqueued: 2, Mode: "auto", Drain: propagation.DrainResult{Applied: 2}}, nil
+		return services.CascadeResult{Enqueued: 2, Drain: propagation.DrainResult{Applied: 2}}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/rules/mapping/rule1",
@@ -489,14 +484,14 @@ func TestHandleRetireMappingRule_PassesThePreDeleteRuleAndReportsTheCascade(t *t
 	resetRulesDeps(t)
 
 	stored := models.MappingRule{ID: "rule-1", SourceProject: "sp", SourceRole: "sr",
-		TargetProject: "tp", TargetRole: "tr", ConfirmationMode: "manual"}
+		TargetProject: "tp", TargetRole: "tr"}
 	dbGetMappingRuleByID = func(ctx context.Context, id string) (models.MappingRule, error) {
 		return stored, nil
 	}
 	var gotRule models.MappingRule
 	svcCascadeRuleRetired = func(ctx context.Context, actor string, old models.MappingRule) (services.CascadeResult, error) {
 		gotRule = old
-		return services.CascadeResult{Enqueued: 3, Mode: "manual"}, nil
+		return services.CascadeResult{Enqueued: 3}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/rules/mapping/rule-1", nil)
@@ -518,7 +513,7 @@ func TestHandleRetireMappingRule_PassesThePreDeleteRuleAndReportsTheCascade(t *t
 	}
 	// The queued revokes are the whole consequence of the click; a response that omitted them
 	// would let the screen report a deletion as if nothing was waiting.
-	if resp.Cascade.Enqueued != 3 || resp.Cascade.Mode != "manual" {
+	if resp.Cascade.Enqueued != 3 {
 		t.Fatalf("cascade not reported: %+v", resp.Cascade)
 	}
 }

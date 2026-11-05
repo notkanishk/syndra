@@ -76,7 +76,7 @@ ALL_TABLES=(
   webhook_events onboarding_triggers pending_zitadel_propagations
   drift_items external_grant_exclusions audit_logs access_requests
   user_bundle_assignments bundle_roles bundles mapping_rules
-  direct_role_grants app_claim_overrides claim_profiles roles
+  direct_role_grants claim_profiles roles
   zitadel_grants_index config_settings
 )
 
