@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules at the edges</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/syndra/fonts/fonts.css">
+<link rel="stylesheet" href="ds/syndra/_ds_bundle.container.css">
+<link rel="stylesheet" href="ds/syndra/styles.css">
+<script src="ds/syndra/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): a name as a link (P1 makes UserName do this itself). */
+.a20-name{color:var(--ink);font-weight:600;text-decoration-line:underline;text-decoration-color:transparent;transition:color var(--duration-tint) var(--ease-tint),text-decoration-color var(--duration-tint) var(--ease-tint)}
+.a20-name:hover,.a20-name.is-hover{color:var(--accent-text);text-decoration-color:currentColor}
+.a20-plain{color:var(--ink);font-weight:600}
+.a20-seat{flex:0 0 110px;text-align:right;font-variant-numeric:tabular-nums}
+.a20-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:14px 20px}
+.a20-readline{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;font-size:13.5px;color:var(--muted)}
+.a20-filterbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.a20-cols{display:flex;align-items:center;gap:16px;padding:10px 20px;border-bottom:1px solid var(--divider)}
+.a20-cols span{font-size:12.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Rules at the edges board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Across the product · Proposed 5 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">Rules at the edges</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-20, part one of three. Three rules already settled and not yet applied where they matter most: the shell's own Notice sits above every page's header (G7); sixteen lists keep their column headings over an empty state (G9); and names still do not link (G14), which is why the name does not always arrive with you. Nothing new moves. The product gets the rules it already has.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you asked</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Go over everything again. Rich, fluid, organic, flowing, elegant; the app as an extension of the user.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What I recommend here</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">The Notice under the header</strong>: PageHeader owns a slot for the shell's offline and degraded Notices, so the title is the first thing on every page, on every outage. <strong style="color:var(--ink)">Headings leave with the rows</strong>: ListStates draws the column headings only when there are rows under them. <strong style="color:var(--ink)">Names link</strong>: UserName, ProjectName and BundleName link by default; only a page's own subject does not.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · The shell's Notice, under the header (P3)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">People, while Zitadel is not answering. Today the degraded Notice is the first thing in the content column, above the title, on every page (AppShell.tsx:94-97). Proposed, PageHeader keeps a slot 16 below its lede, and the shell's Notices render there. The amber dot breathes as it does today; the Notice still opens by Unfold. The title is the first thing on the page, which is what the rule was for.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ noticeFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:440px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:880px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Notice phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:2px solid var(--accent-line);background:var(--canvas)"><dc-import name="Frame" frame-src="a20-rules-at-the-edges.dc.html?frame=notice-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · proposed</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">On a phone the Notice used to push the title off the first screen on every outage. Now the title and lede come first, then the Notice, then the list.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">2 · Headings leave with the rows (P4)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">People, with a search that matches nobody. Today the column headings stay over the empty state on sixteen lists (users/page.tsx:399 and 426 among them). Proposed, ListStates takes the headings as its head and draws them only with rows. The empty state is a sentence with a full stop and one outline sm button, as G9 says.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ emptyFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:400px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:800px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">3 · Names link (P1)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">A Requests row and a Pending changes row. Today the names are plain text on every queue (components/names/ has no link; only two local copies on Home and Pending link). Proposed, UserName, ProjectName and BundleName link by default: ink at rest, accent with the underline tinting in on hover (A-08 2a). One link per destination per row, so the role beside the person links its project only when the project is not already named. The second row of each pair shows the hover.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ nameFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:420px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:840px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch">The full list of twelve questions is in from-design/A-20-second-pass.md §6. The other boards are a20-first-visit-and-phone and a20-system-in-words.</p>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isNotice }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:16px">
+  <sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+    <x-import component-from-global-scope="Syndra.Notice" tone="warn" live="{{ true }}" title="Zitadel isn't answering. This is what it held at 09:12." hint-size="100%,90px">Everything below is real, read 4 minutes ago, and may have changed since. Giving and revoking access waits until Zitadel answers.</x-import>
+  </sc-if>
+  <div style="display:flex;flex-direction:column;gap:28px">
+    <x-import component-from-global-scope="Syndra.PageHeader" title="People" lede="Everyone Syndra knows, and what each can use." hint-size="100%,90px"></x-import>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <sc-if value="{{ isProposed }}" hint-placeholder-val="{{ true }}">
+        <x-import component-from-global-scope="Syndra.Notice" tone="warn" live="{{ true }}" title="Zitadel isn't answering. This is what it held at 09:12." hint-size="100%,90px">Everything below is real, read 4 minutes ago, and may have changed since. Giving and revoking access waits until Zitadel answers.</x-import>
+      </sc-if>
+      <div class="a20-filterbar">
+        <div style="flex:1 1 320px;max-width:560px"><x-import component-from-global-scope="Syndra.Input" placeholder="Search by name or email" aria-label="Search people" hint-size="100%,44px"></x-import></div>
+        <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Filters</x-import>
+        <span style="margin-left:auto"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Select</x-import></span>
+      </div>
+      <div class="a20-readline"><span style="display:inline-flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="warn" ring="{{ true }}" hint-size="6px,6px"></x-import>Last known · 09:12</span></div>
+      <x-import component-from-global-scope="Syndra.Card" stale="{{ true }}" hint-size="100%,300px">
+        <div class="a20-cols"><span style="flex:1 1 250px">Person</span><span style="flex:1 1 200px">Bundle</span><span class="a20-seat">Roles</span></div>
+        <sc-for list="{{ people }}" as="p" hint-placeholder-count="4">
+          <div class="a20-row row-divider">
+            <span style="flex:1 1 250px;min-width:0;display:flex;align-items:center;gap:12px"><x-import component-from-global-scope="Syndra.Avatar" name="{{ p.name }}" hint-size="28px,28px"></x-import><span style="display:flex;flex-direction:column"><span class="a20-plain">{{ p.name }}</span><span style="font-size:12.5px;color:var(--faint)">{{ p.email }}</span></span></span>
+            <span style="flex:1 1 200px;font-size:14px;color:var(--muted)">{{ p.bundle }}</span>
+            <span class="a20-seat" style="font-size:14px">{{ p.roles }}</span>
+          </div>
+        </sc-for>
+      </x-import>
+    </div>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="People" lede="Everyone Syndra knows, and what each can use." hint-size="100%,90px"></x-import>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="a20-filterbar">
+      <div style="flex:1 1 320px;max-width:560px"><x-import component-from-global-scope="Syndra.Input" default-value="zyx" placeholder="Search by name or email" aria-label="Search people" hint-size="100%,44px"></x-import></div>
+      <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Filters</x-import>
+      <span style="margin-left:auto"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="80px,34px">Select</x-import></span>
+    </div>
+    <div class="a20-readline"><span style="display:inline-flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>Read just now</span></div>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+      <sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+        <div class="a20-cols"><span style="flex:1 1 250px">Person</span><span style="flex:1 1 200px">Bundle</span><span class="a20-seat">Roles</span></div>
+      </sc-if>
+      <x-import component-from-global-scope="Syndra.EmptyState" title="Nobody matches that." guidance="Search by a name or an email. Everyone who has signed in with a university Google account is here." action="{{ clearAction }}" hint-size="100%,150px"></x-import>
+    </x-import>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isNames }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/requests" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <x-import component-from-global-scope="Syndra.PageHeader" title="Requests" lede="What members have asked for. A request waits here until you approve or decline it." hint-size="100%,90px"></x-import>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="Open" count="{{ 2 }}" hint-size="100%,56px"></x-import>
+      <sc-for list="{{ requests }}" as="r" hint-placeholder-count="2">
+        <div class="a20-row row-divider">
+          <span style="flex:1 1 320px;min-width:0;display:flex;align-items:center;gap:12px"><x-import component-from-global-scope="Syndra.Avatar" name="{{ r.name }}" hint-size="28px,28px"></x-import><span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:15px"><a class="a20-name {{ r.cls }}" href="#person">{{ r.name }}</a> <span style="color:var(--muted)">asked for {{ r.role }} in</span> <a class="a20-name {{ r.cls }}" href="#project">{{ r.project }}</a></span><span style="font-size:12.5px;color:var(--faint)">{{ r.when }}</span></span></span>
+          <span style="display:flex;gap:8px;white-space:nowrap"><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Approve</x-import><x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" hint-size="90px,34px">Decline</x-import></span>
+        </div>
+      </sc-for>
+    </x-import>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+      <x-import component-from-global-scope="Syndra.CardHeader" title="Pending changes" count="{{ 2 }}" note="As the row reads on Pending changes, with the names linking" hint-size="100%,56px"></x-import>
+      <sc-for list="{{ pending }}" as="p" hint-placeholder-count="2">
+        <div class="a20-row row-divider">
+          <span style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:15px"><a class="a20-name {{ p.cls }}" href="#person">{{ p.name }}</a> <span style="color:var(--muted)">· Give {{ p.role }} in</span> <a class="a20-name {{ p.cls }}" href="#project">{{ p.project }}</a></span>
+            <span style="font-size:12.5px;color:var(--faint)">{{ p.when }}</span>
+          </span>
+          <span style="flex:0 0 200px"><x-import component-from-global-scope="Syndra.StatusSeat" tone="warn" word="Waiting for you to send" note="{{ p.note }}" hint-size="200px,40px"></x-import></span>
+        </div>
+      </sc-for>
+    </x-import>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":4600}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 2, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 2 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Priya Nair" }], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const parts = this.st.split("-");
+    const kind = parts[0];
+    const variant = parts[1] || "";
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note, rec) => ({ src: "a20-rules-at-the-edges.dc.html?frame=" + frame, label, note: note || "", edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+
+    // Alphabetical, always: the list is A to Z by shown name.
+    const people = [
+      { name: "Aanya Rao", email: "aanya.rao@example.edu", bundle: "Lab tech", roles: "4" },
+      { name: "Kabir Mehta", email: "kabir.mehta@example.edu", bundle: "Member", roles: "2" },
+      { name: "Prisha Menon", email: "prisha.menon@example.edu", bundle: "Member", roles: "1" },
+      { name: "Priya Nair", email: "priya.nair@example.edu", bundle: "Lab tech", roles: "3" },
+    ];
+    const requests = [
+      { name: "Priya Nair", role: "Operator", project: "Laser cutting", when: "Asked 3 days ago, on 2 Nov", cls: "" },
+      { name: "Rohan Iyer", role: "Member", project: "Wood shop", when: "Asked yesterday, on 4 Nov", cls: "is-hover" },
+    ];
+    const pending = [
+      { name: "Priya Nair", role: "Operator", project: "Laser cutting", when: "Queued 2 minutes ago, by you", note: "She can't use it yet", cls: "" },
+      { name: "Rohan Iyer", role: "Member", project: "Wood shop", when: "Queued 2 minutes ago, by you", note: "He can't use it yet", cls: "is-hover" },
+    ];
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("Should the shell's offline and degraded Notices move under the page header, in a slot PageHeader owns?", "Yes. G7 was written for pages; the shell was left out. The title is the first thing on every page."),
+      Q("Should column headings leave with the rows, so an empty state never sits under a table head?", "Yes. ListStates takes the head and draws it only with rows. Sixteen lists change, one part."),
+      Q("Should UserName, ProjectName and BundleName link by default, with only a page's own subject unlinked?", "Yes. It is G14 as written, and it is what lets the name arrive with you from every row."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isNotice: kind === "notice",
+      isEmpty: kind === "empty",
+      isNames: kind === "names",
+      isToday: variant === "today",
+      isProposed: variant !== "today",
+      operator: this.operator, rootData: this.rootData, noop,
+      people, requests, pending, questions,
+      clearAction: { label: "Clear the search", onClick: noop },
+      noticeFrames: [
+        f("notice-today", "Today · the Notice above the title", "The degraded Notice is the first thing in the content column on every page, and the title moves down under it.", false),
+        f("notice", "Proposed · under the header · dark", "PageHeader keeps a slot 16 under its lede. The shell's Notices render there, and still open by Unfold.", true),
+        f("notice-light", "Proposed · light", "The same in daylight.", true),
+      ],
+      emptyFrames: [
+        f("empty-today", "Today · headings over nobody", "Person, Bundle and Roles stay above the empty state: a table with no table.", false),
+        f("empty", "Proposed · the sentence alone · dark", "The headings go with the rows. The empty state is a sentence with a full stop and one outline sm button.", true),
+        f("empty-light", "Proposed · light", "The same in daylight.", true),
+      ],
+      nameFrames: [
+        f("names", "Names link · dark", "Each name and each project is a link; the second row of each pair is the hover: accent, with the underline tinted in.", true),
+        f("names-light", "Names link · light", "The same in daylight.", true),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
