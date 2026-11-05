@@ -290,6 +290,27 @@ export async function fetchProfileMetadata(
 }
 
 /**
+ * Records the person's first sign-in to Syndra (written once, never overwritten)
+ * and says whether THIS sign-in is the one that recorded it. The answer rides in
+ * the session cookie, so the welcome lasts the session and never returns. Any
+ * failure is "not the first visit": a missed welcome is better than a repeated one.
+ */
+export async function recordFirstSignIn(accessToken: string, backendUrl: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${backendUrl}/api/v1/me/first-sign-in`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { first_visit?: unknown };
+    return body.first_visit === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Last resort before giving up on a name: "priya.sharma@example.org" reads
  * as "Priya Sharma". Still a person's name rather than an opaque id, which is
  * the whole point — a raw `sub` is never an acceptable display name.

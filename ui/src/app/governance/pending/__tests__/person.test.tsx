@@ -128,3 +128,49 @@ describe("Pending changes opened for a person", () => {
     expect(screen.getAllByRole("link", { name: "Ada Lovelace" })[0]).toHaveAttribute("href", "/users/u1");
   });
 });
+
+describe("Pending changes opened for a role", () => {
+  beforeEach(() => {
+    pending.data = [
+      row("o1", "u1", { project_id: "p1", role_keys: ["laser.operator"] }),
+      row("o2", "u2", { project_id: "p1", role_keys: ["laser.door"] }),
+      row("o3", "u2", { project_id: "p2", role_keys: ["laser.operator"] }),
+    ];
+  });
+
+  it("carries project and role key in the link", () => {
+    render(<NextStep role={{ projectId: "p 1", roleKey: "laser.operator" }} />);
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/governance/pending?role=p%201%2Flaser.operator");
+  });
+
+  it("narrows to that role (the same key in another project stays out) and says Send still sends all", () => {
+    nav.search = "role=p1%2Flaser.operator";
+    renderPending();
+    expect(screen.getAllByRole("link", { name: "Ada Lovelace" })).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: "Priya Nair" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show every role's changes" })).toBeInTheDocument();
+    expect(screen.getByText("1 of the 3 changes match. Sending sends all 3, in order.")).toBeInTheDocument();
+  });
+
+  it("clears with the chip's own x: everything returns and the parameter is gone", () => {
+    vi.useFakeTimers();
+    try {
+      nav.search = "role=p1%2Flaser.operator";
+      window.history.replaceState(null, "", "/governance/pending?role=p1%2Flaser.operator");
+      renderPending();
+      fireEvent.click(screen.getByRole("button", { name: "Show every role's changes" }));
+      vi.advanceTimersByTime(500);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(screen.getByRole("link", { name: "Ada Lovelace" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Priya Nair" })).toHaveLength(2);
+    expect(window.location.search).toBe("");
+  });
+
+  it("says so when the role has nothing waiting", () => {
+    nav.search = "role=p1%2Fnone";
+    renderPending();
+    expect(screen.getByText("Nothing is waiting for you to send for this role.")).toBeInTheDocument();
+  });
+});

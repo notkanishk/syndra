@@ -33,7 +33,7 @@ vi.mock("@/lib/queries/useRoles", async (orig) => ({
 vi.mock("@/lib/queries/usePropagation", async (orig) => ({
   ...(await orig<typeof import("@/lib/queries/usePropagation")>()),
   usePendingPropagations: () => ({
-    data: [{ id: "o1", wait_reason: "role_waits" }, { id: "o2", wait_reason: "halted:zitadel_offline" }],
+    data: [{ id: "o1", wait_reason: "role_waits", project_id: "p1", role_keys: ["laser.operator"] }, { id: "o2", wait_reason: "halted:zitadel_offline" }],
   }),
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
@@ -119,6 +119,16 @@ describe("Roles that wait for you", () => {
       expect(screen.getByText(/Kanishk Singh, 2 Oct/)).toBeInTheDocument();
       // Only changes waiting because a role waits count here; a stopped send is another story.
       expect(screen.getByText("1 change to these roles")).toBeInTheDocument();
+    });
+
+    it("opens Pending changes narrowed to the role from the role's own row", () => {
+      render(<RolesThatWaitPage />);
+      const links = screen.getAllByRole("link", { name: /Waiting for you to send/ });
+      // The role's own link carries project and role key; the footer stays the whole queue.
+      expect(links.map((l) => l.getAttribute("href"))).toEqual([
+        "/governance/pending?role=p1%2Flaser.operator",
+        "/governance/pending",
+      ]);
     });
 
     it("does not point at the drift sound (A-07 §1: it is about drift, and lives in Account)", () => {

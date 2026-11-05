@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { greeting } from "@/lib/greeting";
+import { greeting, isQuietHour } from "@/lib/greeting";
 import { termDayLine } from "@/lib/term-dates";
 
 const at = (hour: number) => new Date(2026, 10, 5, hour, 0, 0);
 
 describe("greeting", () => {
   it("is Morning before 12, Afternoon before 17, Evening after", () => {
-    expect([0, 11, 12, 16, 17, 23].map((h) => greeting(at(h)))).toEqual([
+    expect([5, 11, 12, 16, 17, 23].map((h) => greeting(at(h)))).toEqual([
       "Morning",
       "Morning",
       "Afternoon",
@@ -15,6 +15,19 @@ describe("greeting", () => {
       "Evening",
       "Evening",
     ]);
+  });
+});
+
+describe("quiet hours", () => {
+  it("run from 22:00 up to 05:00, and greet as Evening throughout", () => {
+    const quiet = [22, 23, 0, 1, 2, 4].map((h) => [isQuietHour(at(h)), greeting(at(h))]);
+    expect(quiet.every(([q, g]) => q === true && g === "Evening")).toBe(true);
+    // The edges: 21:59 is not quiet, 05:00 is not quiet and is Morning.
+    expect(isQuietHour(new Date(2026, 10, 5, 21, 59))).toBe(false);
+    expect(isQuietHour(new Date(2026, 10, 5, 4, 59))).toBe(true);
+    expect(isQuietHour(at(5))).toBe(false);
+    expect(greeting(at(5))).toBe("Morning");
+    expect(greeting(at(21))).toBe("Evening");
   });
 });
 

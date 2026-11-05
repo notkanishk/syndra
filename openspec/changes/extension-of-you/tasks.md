@@ -37,6 +37,7 @@
 - [x] EOY-F6 P12 tests: tokens present in both themes; no component uses a raw z-index or black overlay.
 - [x] EOY-F7 P14: traced the backend (`handleRevokeDrift` enqueues `revoke`; `DrainRevocations` claims it); one wording, `REVOKE_SENDS_ITSELF`.
 - [x] EOY-F8 P14 tests: sends-itself wording and the waits case.
+- [x] EOY-F12 Pending changes narrows by `?role=<project id>/<role key>` under a clearable FilterChip, as `?person=` does (A-19 wave 1 follow-up). Roles that wait: a role with changes waiting shows its own "Waiting for you to send" link, which carries the role; the page's footer link stays the whole queue. The chip's clear drops the parameter; Send still sends everything. Tests in `governance/pending/__tests__/person.test.tsx` and `changes/__tests__/roles-that-wait.test.tsx`.
 - [ ] EOY-F9 Copy guide: add the forecast tense table to section 5 (`plain-language-copy/design.md`). `ready-for-agent`
 - [ ] EOY-F10 Forecast in dialogs and `setQueryData` on the rail indicators, if the owner wants counts to move at the answer. `needs-triage`
 - [ ] EOY-F11 `--tap` is declared but components still write `min-h-[44px]`; convert as touched. `ready-for-agent`

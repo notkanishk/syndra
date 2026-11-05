@@ -71,6 +71,8 @@ function isOwnMemberRoute(method: "GET" | "POST" | "PUT" | "DELETE", path: strin
     return rest.length === 1 && ["profile", "targets", "changes"].includes(rest[0]);
   }
   if (method === "POST") {
+    // POST /me/first-sign-in (the sign-in route's own call, idempotent and self-scoped).
+    if (rest.length === 1 && rest[0] === "first-sign-in") return true;
     // POST /me/targets/{target}/credential, and nothing else under the prefix.
     return rest.length === 3 && rest[0] === "targets" && rest[2] === "credential";
   }
