@@ -301,7 +301,7 @@ func TestAssigningABundleQueuesTheStateAFTERTheAssignment(t *testing.T) {
 	}
 
 	svcGetBundleByID = func(ctx context.Context, id string) (models.Bundle, error) {
-		return models.Bundle{ID: id, ConfirmationMode: "manual"}, nil
+		return models.Bundle{ID: id}, nil
 	}
 	svcLatestVersionRoles = func(context.Context, string) (models.BundleVersion, []models.BundleRole, error) {
 		return models.BundleVersion{ID: "v1", Version: 1},

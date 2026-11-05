@@ -65,7 +65,7 @@ func TestMappingHolders_FollowsRuleChains(t *testing.T) {
 		_, _ = PG.Exec(ctx, `DELETE FROM direct_role_grants WHERE zitadel_project_id = $1`, proj)
 	})
 	for _, r := range [][2]string{{"a", "b"}, {"b", "c"}} {
-		id, _, err := CreateMappingRuleAndEnqueue(ctx, "chain-test", proj, r[0], proj, r[1], "auto", nil)
+		id, _, err := CreateMappingRuleAndEnqueue(ctx, "chain-test", proj, r[0], proj, r[1], nil)
 		if err != nil {
 			t.Fatalf("rule %v: %v", r, err)
 		}

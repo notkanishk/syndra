@@ -9,7 +9,6 @@ import type { RolesThatWait } from "@/lib/queries/useRolesThatWait";
 const state = vi.hoisted(() => ({
   waits: null as unknown as RolesThatWait,
   marked: [] as { ids: string[]; waits: boolean }[],
-  switched: 0,
 }));
 
 function role(project_id: string, role_key: string, display_name: string, people: number, waits = false): CatalogRole {
@@ -47,63 +46,18 @@ vi.mock("@/lib/queries/useRolesThatWait", async (orig) => ({
       state.marked.push(v);
     },
   }),
-  useSwitchToRolesThatWait: () => ({
-    isPending: false,
-    mutateAsync: async () => {
-      state.switched++;
-    },
-  }),
 }));
 
 beforeEach(() => {
   state.marked = [];
-  state.switched = 0;
 });
 
 describe("Roles that wait for you", () => {
-  describe("the one-time move, before the switch over", () => {
-    beforeEach(() => {
-      state.waits = {
-        roles: [],
-        switched_over: false,
-        suggestions: [
-          { project_id: "p1", role_key: "laser.supervisor", via: [{ kind: "bundle", id: "b1", name: "Staff" }] },
-          { project_id: "p1", role_key: "laser.door", via: [{ kind: "rule", id: "r1" }] },
-        ],
-      };
-    });
-
-    it("says what waited, and keeps every suggestion chosen to start", () => {
-      render(<RolesThatWaitPage />);
-      expect(screen.getByText("Roles to keep waiting")).toBeInTheDocument();
-      expect(screen.getByText(/Before this update, 1 bundle and 1 rule waited for you/)).toBeInTheDocument();
-      expect(screen.getByText("Given by Staff, which waited")).toBeInTheDocument();
-      expect(screen.getByRole("checkbox", { name: /Laser cutter · Supervisor/ })).toBeChecked();
-      expect(screen.getByRole("button", { name: "Mark 2 and finish" })).toBeInTheDocument();
-    });
-
-    it("marks what's chosen, then switches over", async () => {
-      render(<RolesThatWaitPage />);
-      fireEvent.click(screen.getByRole("checkbox", { name: /Laser bay · Door/ }));
-      fireEvent.click(screen.getByRole("button", { name: "Mark 1 and finish" }));
-      await waitFor(() => expect(state.switched).toBe(1));
-      expect(state.marked).toEqual([{ ids: ["p1:laser.supervisor"], waits: true }]);
-    });
-
-    it("can finish with none marked", async () => {
-      render(<RolesThatWaitPage />);
-      fireEvent.click(screen.getByRole("button", { name: "Mark none" }));
-      await waitFor(() => expect(state.switched).toBe(1));
-      expect(state.marked).toEqual([{ ids: [], waits: true }]);
-    });
-  });
-
   describe("after the switch over", () => {
     beforeEach(() => {
       state.waits = {
         roles: [{ project_id: "p1", role_key: "laser.operator", marked_by: "u1", marked_at: "2026-10-02T09:00:00Z" }],
         switched_over: true,
-        suggestions: [],
       };
     });
 

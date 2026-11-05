@@ -10,7 +10,6 @@ export interface MappingRuleRow {
   source_role: string;
   target_project: string;
   target_role: string;
-  confirmation_mode?: "auto" | "manual";
   /** How many people hold the input role — i.e. how many this rule acts on. */
   holder_count: number;
   created_at: string;
@@ -25,8 +24,6 @@ export interface CreateMappingRuleInput {
   source_role: string;
   target_project: string;
   target_role: string;
-  /** Optional override — omitted falls back to the global default (Task 22). */
-  confirmation_mode?: "auto" | "manual";
 }
 
 export interface ValidateMappingRuleResult {
@@ -118,7 +115,7 @@ export function useDeleteMappingRule() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) =>
-      request<{ message: string; cascade: { enqueued: number; mode: string } }>(
+      request<{ message: string; cascade: { enqueued: number; waiting?: number; wait_reason?: string } }>(
         `/rules/mapping/${id}`,
         { method: "DELETE" },
       ),

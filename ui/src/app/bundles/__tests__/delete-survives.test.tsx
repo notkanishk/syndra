@@ -65,7 +65,7 @@ beforeEach(() => {
   state.remove = vi.fn().mockResolvedValue({
     message: "Bundle deleted",
     was_welcome: false,
-    cascade: { enqueued: 4, mode: "manual" },
+    cascade: { enqueued: 4, waiting: 4, wait_reason: "role_waits" },
   });
 });
 

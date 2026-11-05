@@ -155,7 +155,7 @@ func TestOutsideBundleRoles_AgainstTheSchema(t *testing.T) {
 	ctx := liveDB(t)
 	sfx := liveSuffix()
 	proj := "pTrendOut" + sfx
-	bundleID, err := CreateBundle(ctx, "trend outside "+sfx, "", "auto", []models.BundleRole{
+	bundleID, err := CreateBundle(ctx, "trend outside "+sfx, "", []models.BundleRole{
 		{ProjectID: proj, RoleKey: "given"}, {ProjectID: proj, RoleKey: "dropped"},
 	})
 	if err != nil {

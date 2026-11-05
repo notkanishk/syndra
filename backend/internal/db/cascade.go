@@ -339,7 +339,7 @@ func AddRoleToBundleAndEnqueue(ctx context.Context, actor, bundleID, projectID, 
 // mapping_rules). params are built by the caller from a PRE-mutation closure simulation with
 // SourceRef left empty (the rule id does not exist yet); this stamps SourceRef = the new rule id
 // on every param right after the INSERT ... RETURNING, before enqueueing.
-func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sourceRole, targetProject, targetRole, mode string, params []EnqueueParams) (string, []string, error) {
+func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sourceRole, targetProject, targetRole string, params []EnqueueParams) (string, []string, error) {
 	tx, owned, err := beginOrJoin(ctx)
 	if err != nil {
 		return "", nil, err
@@ -350,12 +350,11 @@ func CreateMappingRuleAndEnqueue(ctx context.Context, actor, sourceProject, sour
 
 	const insertRule = `
 		INSERT INTO mapping_rules
-			(source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key, confirmation_mode)
-		VALUES ($1,$2,$3,$4,$5)
+			(source_zitadel_project_id, source_zitadel_role_key, target_zitadel_project_id, target_zitadel_role_key)
+		VALUES ($1,$2,$3,$4)
 		RETURNING id`
 	var ruleID string
-	if err := tx.QueryRow(ctx, insertRule, sourceProject, sourceRole, targetProject, targetRole,
-		NormalizeConfirmationMode(mode)).Scan(&ruleID); err != nil {
+	if err := tx.QueryRow(ctx, insertRule, sourceProject, sourceRole, targetProject, targetRole).Scan(&ruleID); err != nil {
 		return "", nil, err
 	}
 
@@ -434,24 +433,6 @@ func RemoveRoleFromBundleAndEnqueue(ctx context.Context, actor, bundleID, projec
 		}
 	}
 	return ids, nil
-}
-
-// SetRuleConfirmationMode bulk-updates the confirmation_mode of the given mapping rules in one
-// statement (one implicit tx). mode is normalized so an invalid literal can never persist.
-func SetRuleConfirmationMode(ctx context.Context, ids []string, mode string) error {
-	_, err := querier(ctx).Exec(ctx,
-		`UPDATE mapping_rules SET confirmation_mode = $1 WHERE id = ANY($2) AND retired_at IS NULL`,
-		NormalizeConfirmationMode(mode), ids)
-	return err
-}
-
-// SetBundleConfirmationMode bulk-updates the confirmation_mode of the given bundles in one
-// statement (one implicit tx). Same shape as SetRuleConfirmationMode.
-func SetBundleConfirmationMode(ctx context.Context, ids []string, mode string) error {
-	_, err := querier(ctx).Exec(ctx,
-		`UPDATE bundles SET confirmation_mode = $1 WHERE id = ANY($2) AND retired_at IS NULL`,
-		NormalizeConfirmationMode(mode), ids)
-	return err
 }
 
 // GetCascadeGroups is Change history's read: every cascade-originated write,

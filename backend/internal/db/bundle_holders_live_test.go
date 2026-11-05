@@ -18,7 +18,7 @@ func TestBundleHolderSourceAndDiscardDraft_AgainstTheSchema(t *testing.T) {
 	alice, bob := "live-holder-a-"+suffix, "live-holder-b-"+suffix
 	v1Role := models.BundleRole{ProjectID: "live-holders", RoleKey: "v1." + suffix}
 
-	bundleID, err := CreateBundle(ctx, "live holders "+suffix, "", "auto", []models.BundleRole{v1Role})
+	bundleID, err := CreateBundle(ctx, "live holders "+suffix, "", []models.BundleRole{v1Role})
 	if err != nil {
 		t.Fatal(err)
 	}

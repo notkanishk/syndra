@@ -109,3 +109,26 @@ func TestDeliver_UnreadableFlagsSendNothing(t *testing.T) {
 		t.Fatalf("nothing may be sent when the flags can't be read: sent=%v waiting=%v", *drained, d.Waiting)
 	}
 }
+
+// Why the bundles' and rules' own mode could be dropped (migration 000078):
+// under roles it changed nothing. For any marks and any send outcome, a mode
+// set to wait (legacyWait true) and one set to go deliver identically: the
+// same rows sent, the same rows waiting, the same reasons recorded. applyMode
+// now always passes false, which is therefore the same delivery as before.
+func TestDeliver_UnderRolesTheOldModeChangedNothing(t *testing.T) {
+	for _, halt := range []string{"", "zitadel_offline"} {
+		for _, waits := range []map[string]bool{{}, {"r1": true}, {"r1": true, "r2": true}} {
+			run := func(legacy bool) (Delivery, []string, map[string]string) {
+				drained, reasons := deliveryFixture(t, waits, db.ConfirmationModelRoles, halt)
+				d := Deliver(context.Background(), []string{"r1", "r2"}, legacy)
+				return d, append([]string(nil), *drained...), reasons
+			}
+			manual, manualSent, manualWhy := run(true)
+			auto, autoSent, autoWhy := run(false)
+			if !reflect.DeepEqual(manual, auto) || !reflect.DeepEqual(manualSent, autoSent) || !reflect.DeepEqual(manualWhy, autoWhy) {
+				t.Fatalf("halt=%q waits=%v: manual %+v sent %v why %v; auto %+v sent %v why %v",
+					halt, waits, manual, manualSent, manualWhy, auto, autoSent, autoWhy)
+			}
+		}
+	}
+}
