@@ -56,6 +56,18 @@ func DeleteRole(ctx context.Context, id string) error {
 	return nil
 }
 
+// UpdateRole sets a Syndra-recorded role's display name and group. A role with
+// no local row (made in Zitadel directly) updates nothing and is not an error.
+func UpdateRole(ctx context.Context, projectID, roleKey, displayName, group string) error {
+	_, err := querier(ctx).Exec(ctx, `
+		UPDATE roles SET display_name = $3, role_group = $4, updated_at = NOW()
+		 WHERE zitadel_project_id = $1 AND role_key = $2`, projectID, roleKey, displayName, group)
+	if err != nil {
+		return fmt.Errorf("update role: %w", err)
+	}
+	return nil
+}
+
 // GetRole retrieves a single role by its natural key.
 func GetRole(ctx context.Context, projectID, roleKey string) (models.Role, error) {
 	query := `

@@ -66,4 +66,18 @@ describe("revoking a person's roles in Zitadel", () => {
     expect(state.remove).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  // The backend keeps a role a bundle or a rule still gives (W1a); the result
+  // says which, in its words rather than this screen's guess.
+  it("says which roles it kept because something else still gives them", async () => {
+    state.remove = vi.fn().mockResolvedValue({ revoked_roles: [], retained_roles: ["pLaser/trained"] });
+    render(<UpstreamUsersPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Revoke roles" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /I understand this revokes 1 role/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Revoke this role in Zitadel" }));
+
+    await waitFor(() =>
+      expect(document.body.textContent).toMatch(/Kept, because a bundle or a rule still gives it: trained\./),
+    );
+  });
 });

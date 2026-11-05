@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import {
-  DirectWriteWarning,
   UpstreamShell,
   WriteFooter,
   WriteResult,
@@ -14,6 +13,8 @@ import { CopyableValue } from "@/components/ui/CopyableValue";
 import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
+import { AcknowledgeCount } from "@/components/ui/Acknowledge";
+import { ApiError } from "@/lib/api-client";
 import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
@@ -27,9 +28,8 @@ import {
 } from "@/lib/queries/useUpstream";
 import { sortByName } from "@/lib/sort";
 
-/** What is recorded when a change goes straight to Zitadel: one line, and no explanation. */
-const AUDIT_ONLY =
-  "Syndra recorded one line in Audit and nothing else; it will not explain this change anywhere.";
+/** What is recorded: the same as making the role under Access › Roles. */
+const RECORDED = "Syndra recorded this in Audit before it changed Zitadel, as Access › Roles does.";
 
 /**
  * Projects and their roles, as the identity provider holds them.
@@ -128,7 +128,7 @@ export default function UpstreamProjectsPage() {
             empty={
               <EmptyState
                 title="This project has no roles in Zitadel."
-                guidance="Create one here, or better, create it in Syndra under Access › Roles, so Syndra keeps track of it."
+                guidance="Create one here or under Access › Roles. Either way, Syndra keeps track of it."
               />
             }
           >
@@ -168,7 +168,11 @@ function RoleRow({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  // Who Zitadel shows holding the role, as the refusal named them. Set only
+  // once Syndra has refused for that reason; the next press confirms the count.
+  const [held, setHeld] = useState<{ count: number; holders: string } | null>(null);
   const done = outcome?.kind === "applied";
+  const name = role.displayName || role.key;
 
   return (
     <>
@@ -195,41 +199,53 @@ function RoleRow({
       {confirming && (
         <Modal open onClose={() => setConfirming(false)} busy={remove.isPending} size="sm">
           <ModalHeader
-            title={`Delete ${role.displayName || role.key} in Zitadel?`}
-            lede={done ? undefined : "The role disappears from Zitadel, and everybody who holds it loses it at once."}
+            title={`Delete ${name} in Zitadel?`}
+            lede={
+              done
+                ? undefined
+                : "Syndra checks who holds it first. If anybody does, it names them and asks you again before anything changes."
+            }
           />
-          {/* Once it has run, "the moment you press the button" describes a click that already
-              happened, and the result says the rest: the warning leaves. */}
-          {!done && (
+          {/* The count comes from Syndra's refusal, never from this screen's own reading:
+              the confirmation names exactly the people the backend will take it from. */}
+          {!done && held && (
             <div className="px-6">
-              <DirectWriteWarning
-                what="Deleting a role revokes it (ends access) for everyone who holds it, the moment you press the button."
-                acknowledged={acknowledged}
-                onAcknowledge={setAcknowledged}
+              <AcknowledgeCount
+                checked={acknowledged}
+                onChange={setAcknowledged}
+                count={held.count}
+                noun="people"
+                verb="revokes this role for"
+                consequence={`Zitadel shows ${held.holders} holding ${name}. Deleting it revokes it for them at once.`}
               />
             </div>
           )}
           {outcome && <WriteResult outcome={outcome} word="Deleted" />}
 
           <WriteFooter outcome={outcome} onClose={() => setConfirming(false)}>
-            {/* Retires on success, same as the sibling RoleDialog's submit in
-                this file: left armed, a second click deleted the same role
-                again. A FAILED attempt keeps the button so there is a retry. */}
+            {/* Retires on success: left armed, a second click deleted the same
+                role again. A refused attempt keeps the button so there is a retry. */}
             <Button
               variant="dangerConfirm"
-              disabled={!acknowledged}
-              reason={!acknowledged ? "Check the box above to confirm you understand the consequence." : undefined}
+              disabled={held !== null && !acknowledged}
+              reason={held && !acknowledged ? "Check the box above to confirm who loses it." : undefined}
               isPending={remove.isPending}
               onClick={async () => {
                 try {
-                  await remove.mutateAsync({ projectId, key: role.key });
-                  setOutcome({ kind: "applied", message: `${role.key} deleted in Zitadel`, detail: AUDIT_ONLY });
+                  await remove.mutateAsync({ projectId, key: role.key, confirmHolders: held?.count });
+                  setOutcome({ kind: "applied", message: `${role.key} deleted in Zitadel`, detail: RECORDED });
                 } catch (error) {
+                  if (error instanceof ApiError && error.code === "ROLE_HELD") {
+                    setHeld({ count: Number(error.details?.count ?? 0), holders: error.details?.holders ?? "" });
+                    setAcknowledged(false);
+                    setOutcome(null);
+                    return;
+                  }
                   setOutcome(outcomeFromError(error));
                 }
               }}
             >
-              Delete role in Zitadel
+              {held ? `Delete and revoke it for ${held.count} ${held.count === 1 ? "person" : "people"}` : "Delete role in Zitadel"}
             </Button>
           </WriteFooter>
         </Modal>
@@ -253,7 +269,6 @@ function RoleDialog({
   const [key, setKey] = useState(role?.key ?? "");
   const [displayName, setDisplayName] = useState(role?.displayName ?? "");
   const [group, setGroup] = useState(role?.group ?? "");
-  const [acknowledged, setAcknowledged] = useState(false);
   const done = outcome?.kind === "applied";
 
   const busy = create.isPending || update.isPending;
@@ -262,7 +277,11 @@ function RoleDialog({
     <Modal open onClose={onClose} busy={busy} size="sm">
       <ModalHeader
         title={role ? `Edit ${role.key} in Zitadel` : "New role in Zitadel"}
-        lede={done ? undefined : "Syndra will not know about this role until someone adds it under Access › Roles."}
+        lede={
+          done
+            ? undefined
+            : "The same as Access › Roles: Syndra records it, then changes Zitadel, and puts its record back if Zitadel says no."
+        }
       />
       {!done && (
         <div className="flex flex-col gap-3.5 px-6">
@@ -296,39 +315,27 @@ function RoleDialog({
             />
             <FieldHint>Optional. A label Zitadel uses to group related roles; Syndra ignores it.</FieldHint>
           </div>
-          <DirectWriteWarning
-            what="Creating or renaming a role here happens outside Syndra's record."
-            acknowledged={acknowledged}
-            onAcknowledge={setAcknowledged}
-          />
         </div>
       )}
-      {/* The dialog reports its own result and stays open to do it: the sentence
-          this reports is that Syndra has no record of what just happened, and a
-          dialog that closes itself takes that sentence with it. */}
+      {/* The dialog reports its own result and stays open to do it, so a refusal
+          and what Syndra recorded are read where the change was made. */}
       {outcome && <WriteResult outcome={outcome} word={role ? "Saved" : "Created"} className="mx-6 mb-1 mt-3" />}
 
       <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
           // Saving a display name grants and revokes nothing: non-destructive, so accent.
           variant="accent"
-          disabled={!key.trim() || !acknowledged}
-          reason={
-            !key.trim()
-              ? "Enter a role key first."
-              : !acknowledged
-                ? "Check the box above to confirm you understand this happens outside Syndra's record."
-                : undefined
-          }
+          disabled={!key.trim()}
+          reason={!key.trim() ? "Enter a role key first." : undefined}
           isPending={busy}
           onClick={async () => {
             try {
               if (role) {
                 await update.mutateAsync({ projectId, key: role.key, displayName, group });
-                setOutcome({ kind: "applied", message: `${role.key} updated in Zitadel`, detail: AUDIT_ONLY });
+                setOutcome({ kind: "applied", message: `${role.key} updated in Zitadel`, detail: RECORDED });
               } else {
                 await create.mutateAsync({ projectId, key: key.trim(), displayName, group });
-                setOutcome({ kind: "applied", message: `${key.trim()} created in Zitadel`, detail: AUDIT_ONLY });
+                setOutcome({ kind: "applied", message: `${key.trim()} created in Zitadel`, detail: RECORDED });
               }
             } catch (error) {
               setOutcome(outcomeFromError(error));

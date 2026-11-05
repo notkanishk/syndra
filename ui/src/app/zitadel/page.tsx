@@ -529,10 +529,10 @@ function UpstreamInspection({ reachable }: { reachable: boolean }) {
  *
  * Each control carries its own warning beside it (#72): a warning three
  * scroll-lengths above the button it applies to is a warning nobody reads. And
- * each says its own truth (#75): a person's roles go through Syndra's ledger
- * and Pending changes, so they are recorded; a project or role edit goes
- * straight out, so the next drift check lists it with nobody's name on it.
- * One warning for both would be false for one of them.
+ * each says its own truth (#75). Since W1a both are recorded: a person's roles
+ * go through the person page's pipe, a role through Access › Roles' pipe
+ * (trace, then Zitadel, then a read-back). What still differs is that a role
+ * delete takes it from everybody Zitadel shows holding it, once confirmed.
  */
 function UpstreamWrites({ reachable }: { reachable: boolean }) {
   const [open, setOpen] = useState(false);
@@ -556,9 +556,9 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
       label: "Projects and roles",
       warning: (
         <>
-          <strong className="font-semibold text-danger-text">Goes straight to Zitadel, and Syndra keeps no record of it.</strong>{" "}
-          One line in Audit and nothing else: no reason, no plan, no Change history. The next drift
-          check lists it under Drift, with nobody’s name on it.
+          <strong className="font-semibold text-ink">Recorded in Syndra, then changed in Zitadel at once.</strong>{" "}
+          The same as making a role under Access › Roles. Deleting a role somebody holds is refused
+          until you confirm who loses it.
         </>
       ),
       instead: "Inside Syndra: a project’s page, which keeps track of every role.",

@@ -29,7 +29,6 @@ function openTheDialog() {
   render(<UpstreamProjectsPage />);
   fireEvent.click(screen.getByRole("button", { name: "New role in Zitadel" }));
   fireEvent.change(screen.getByLabelText("Role key"), { target: { value: "trained" } });
-  fireEvent.click(screen.getByRole("checkbox", { name: /I understand this changes Zitadel/ }));
 }
 
 beforeEach(() => {
@@ -37,14 +36,12 @@ beforeEach(() => {
 });
 
 /**
- * The four upstream consoles are the least undoable writes in the product:
- * no rehearsal, no cascade preview, no ledger row. The dialog therefore
- * becomes its own result rather than closing itself — the sentence it has to
- * deliver is that Syndra has no record of what just happened, and a dialog
- * that closes takes that sentence with it.
+ * The dialog becomes its own result rather than closing itself, so a refusal
+ * and what Syndra recorded are read where the change was made. Since W1a the
+ * role goes through the same pipe as Access › Roles, so it is recorded.
  */
 describe("the upstream role dialog becomes its own result", () => {
-  it("stays open on success and says Syndra has no record of it", async () => {
+  it("stays open on success and says Syndra recorded it", async () => {
     state.create.mockResolvedValue(undefined);
     openTheDialog();
 
@@ -55,7 +52,7 @@ describe("the upstream role dialog becomes its own result", () => {
     const message = await within(screen.getByRole("dialog")).findByText(/trained created in Zitadel/);
     const report = message.closest('[role="status"]') as HTMLElement;
     expect(report.textContent).toContain("trained created in Zitadel");
-    expect(report.textContent).toContain("recorded one line in Audit and nothing else");
+    expect(report.textContent).toContain("recorded this in Audit before it changed Zitadel");
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 

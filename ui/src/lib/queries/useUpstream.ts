@@ -156,30 +156,45 @@ export function useUpstreamGrants() {
 }
 
 // ---------------------------------------------------------------------------
-// Writes. These bypass Syndra's ledger and outbox entirely — see the warning
-// the Identity provider page renders above them. Kept here rather than beside
-// the ordinary mutations so nothing reaches for one by accident.
+// Writes. Each goes through the same pipe as its everyday screen: a person's
+// roles as a person's page changes them, a role as Access › Roles makes it.
+// Kept here rather than beside the ordinary mutations so nothing reaches for
+// one by accident.
 // ---------------------------------------------------------------------------
 
-function useUpstreamMutation<V>(fn: (value: V) => Promise<unknown>) {
+/**
+ * What a change on the Zitadel › People screen did, role by role ("project/role").
+ * Retained roles stay because a bundle or a rule still gives them.
+ */
+export interface ZitadelGrantChange {
+  given_roles?: string[];
+  revoked_roles?: string[];
+  retained_roles?: string[];
+  wait_reason?: string;
+}
+
+function useUpstreamMutation<V, R = unknown>(fn: (value: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["upstream"] });
-      // Anything written directly upstream will surface as drift on the next
-      // sweep; invalidating here means the operator sees that immediately
-      // rather than wondering why the number moved tomorrow.
       qc.invalidateQueries({ queryKey: ["drift"] });
       // A role created or renamed here changes the names every screen resolves.
       qc.invalidateQueries({ queryKey: ["name-catalog"] });
+      // The same records the everyday screens read: a person's access, a
+      // role's holders and the catalogue, the queue of changes to send.
+      qc.invalidateQueries({ queryKey: ["users"] });
+      qc.invalidateQueries({ queryKey: ["roles"] });
+      qc.invalidateQueries({ queryKey: ["governance"] });
+      qc.invalidateQueries({ queryKey: ["propagations"] });
     },
   });
 }
 
 export const useUpstreamAssignGrant = () =>
   useUpstreamMutation(({ userId, projectId, roleKeys }: { userId: string; projectId: string; roleKeys: string[] }) =>
-    request(`/zitadel/users/${userId}/grants`, {
+    request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants`, {
       method: "POST",
       body: { projectId, roleKeys },
     }),
@@ -187,15 +202,16 @@ export const useUpstreamAssignGrant = () =>
 
 export const useUpstreamUpdateGrant = () =>
   useUpstreamMutation(({ userId, grantId, roleKeys }: { userId: string; grantId: string; roleKeys: string[] }) =>
-    request(`/zitadel/users/${userId}/grants/${grantId}`, {
+    request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants/${grantId}`, {
       method: "PUT",
       body: { roleKeys },
     }),
   );
 
+/** Sent at once, as a removal on a person's page is (`?apply=true`). */
 export const useUpstreamRemoveGrant = () =>
   useUpstreamMutation(({ userId, grantId }: { userId: string; grantId: string }) =>
-    request(`/zitadel/users/${userId}/grants/${grantId}`, { method: "DELETE" }),
+    request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants/${grantId}?apply=true`, { method: "DELETE" }),
   );
 
 export const useUpstreamCreateRole = () =>
@@ -216,11 +232,18 @@ export const useUpstreamUpdateRole = () =>
       }),
   );
 
+/**
+ * Refused with 409 ROLE_HELD while anybody holds the role in Zitadel; the
+ * refusal's details carry `count` and `holders`, and sending that same count
+ * back as `confirmHolders` is the confirmation.
+ */
 export const useUpstreamDeleteRole = () =>
-  useUpstreamMutation(({ projectId, key }: { projectId: string; key: string }) =>
-    request(`/zitadel/projects/${projectId}/roles/${encodeURIComponent(key)}`, {
-      method: "DELETE",
-    }),
+  useUpstreamMutation(({ projectId, key, confirmHolders }: { projectId: string; key: string; confirmHolders?: number }) =>
+    request(
+      `/zitadel/projects/${projectId}/roles/${encodeURIComponent(key)}` +
+        (confirmHolders ? `?confirm_holders=${confirmHolders}` : ""),
+      { method: "DELETE" },
+    ),
   );
 
 export const upstreamQueryKeys = KEYS;

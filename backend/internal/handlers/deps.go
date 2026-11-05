@@ -278,24 +278,11 @@ var (
 		}
 		return zitadel.MgmtClient.ListProjectRoles(ctx, projectID, p)
 	}
-	zitadelAddProjectRole = func(ctx context.Context, projectID, roleKey, displayName, group string) error {
-		if zitadel.MgmtClient == nil {
-			return errNoClient
-		}
-		return zitadel.MgmtClient.AddProjectRole(ctx, projectID, roleKey, displayName, group)
-	}
-	zitadelUpdateProjectRole = func(ctx context.Context, projectID, roleKey, displayName, group string) error {
-		if zitadel.MgmtClient == nil {
-			return errNoClient
-		}
-		return zitadel.MgmtClient.UpdateProjectRole(ctx, projectID, roleKey, displayName, group)
-	}
-	zitadelDeleteProjectRole = func(ctx context.Context, projectID, roleKey string) error {
-		if zitadel.MgmtClient == nil {
-			return errNoClient
-		}
-		return zitadel.MgmtClient.DeleteProjectRole(ctx, projectID, roleKey)
-	}
+	// Role writes from the Zitadel › Projects screen go through the same one
+	// pipe as Access › Roles (services/roles.go writeRole): trace, call,
+	// read back, undo. No handler calls Zitadel's role API directly.
+	svcUpdateRole         = services.UpdateRole
+	svcDeleteRole         = services.DeleteRole
 	zitadelListUserGrants = func(ctx context.Context, userID string, p zitadel.SearchParams) (*zitadel.SearchResult[zitadel.UserGrant], error) {
 		if zitadel.MgmtClient == nil {
 			return nil, errNoClient
