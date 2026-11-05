@@ -80,6 +80,6 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] Rate limits: the door counts only after every key and the refresh failed (`claimserve/door.go` `SignatureCheck`), shared by the event webhook; `TestRateLimit_VerifiedWebhookCallsAreNeverCounted` pins it. A 429 shows the server sentence through `describeFailure`/`outcomeFromError`.
 - [x] `writeUpstream` sentences name what failed (Zitadel, that system) and `describeFailure` adds the next step and the full reference to a bare line; cards keep `failureMessage` plus their own reference.
 - [x] Claims page: check 5 "unlisted" says access, not role (the gate is any grant); the not-listed notice ignores an unreadable call record; save, History restore and the save row say what holds a shape back (`heldBackLine`) instead of promising "next sign-in" while Zitadel names no app or lists no project.
-- [ ] Template and chooser sheets still say "keeps the project's default until you save", which is untrue while Zitadel names no app #ready-for-agent
-- [ ] `DRAIN_ERROR`, `RECONCILE_FAILED`, `LIFECYCLE_NOT_SET` failures are shown with "Nothing was changed." but may have partly applied #needs-triage
+- [x] Template sheet and chooser use `heldBackLine` instead of "keeps the project's default until you save" while Zitadel names no app
+- [x] Partial-failure codes (`MAY_HAVE_GONE_THROUGH` in `ui/src/lib/outcome.ts`) say "Some of this may have gone through. Check <where> before trying again."; `partial-codes.test.tsx` reads the handlers and fails on an undecided 5xx code
 

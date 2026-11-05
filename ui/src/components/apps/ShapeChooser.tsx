@@ -28,6 +28,7 @@ export function ShapeChooser({
   draft,
   setDraft,
   project,
+  heldBack,
   onOpenTemplate,
   footer,
 }: {
@@ -37,6 +38,8 @@ export function ShapeChooser({
   draft: ShapeDraft | null;
   setDraft: (d: ShapeDraft | null) => void;
   project: string;
+  /** Why a save would not reach the app yet (claim-words heldBackLine). */
+  heldBack?: string;
   onOpenTemplate?: (id: string) => void;
   /** The button and its before-line; `start` is absent until a row's draft is in. */
   footer: (verb: string, note: string, start?: () => void) => ReactNode;
@@ -113,7 +116,9 @@ export function ShapeChooser({
           `Start from ${short}`,
           shape.source === "app"
             ? "Makes a draft. Nothing changes until you save."
-            : `Makes a draft. ${app} keeps ${project}'s default until you save.`,
+            : heldBack
+              ? `Makes a draft. Saving it won't change what ${app} gets yet. ${heldBack}`
+              : `Makes a draft. ${app} keeps ${project}'s default until you save.`,
           ready,
         )}
       </>

@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
-import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
+import { describeFailure, mayHaveGoneThrough, outcomeFromError, partialSentence, sentence } from "@/lib/outcome";
 import { UserName } from "@/components/names";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import { RoleRef } from "@/components/names/RoleRef";
@@ -354,7 +354,9 @@ function DecisionForm({
                   // An ApiError's message is the envelope's sentence (never upstream text); anything else is a transport fault.
                   const said = error instanceof ApiError ? error.message : describeFailure(error);
                   const ref = outcomeFromError(error).requestId;
-                  return ref ? `${sentence(said)} Reference ${ref}.` : said;
+                  const where = mayHaveGoneThrough(error);
+                  const told = where ? `${sentence(said)} ${partialSentence(where)}` : said;
+                  return ref ? `${sentence(told)} Reference ${ref}.` : told;
                 })()
               : "That decision did not go through. Nothing was changed."}
           </span>

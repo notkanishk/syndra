@@ -70,12 +70,14 @@ export function TemplateSheet({
   template,
   shape,
   project,
+  heldBack,
   onClose,
   onStart,
 }: {
   template: ClaimTemplate;
   shape: AppClaimShape;
   project: string;
+  heldBack?: string;
   onClose: () => void;
   onStart: () => void;
 }) {
@@ -109,7 +111,9 @@ export function TemplateSheet({
             ? mine && mine.changes.length === 0
               ? "A template is copied in. Syndra never changes your shape when a template changes."
               : "Starting again makes a draft of the template. Nothing changes until you save."
-            : `Makes a draft. ${app} keeps ${project}'s default until you save.`
+            : heldBack
+              ? `Makes a draft. Saving it won't change what ${app} gets yet. ${heldBack}`
+              : `Makes a draft. ${app} keeps ${project}'s default until you save.`
         }
       >
         <Button onClick={onClose}>Close</Button>
