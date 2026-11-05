@@ -19,6 +19,20 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0d. One retry core (one-path W1d, 5 Nov 2026)
+
+Change: [`changes/one-path`](changes/one-path/tasks.md), branch `fix/one-retry-core`, migration 000080.
+
+**What it does.**
+- Every Zitadel call goes through `internal/extcall`. Reads are retried with jittered, capped backoff. A write is resent only after a 429.
+- Any other failure of a write is never resent. `AddUserGrant` and `AddProjectRole` read back instead, which ends the orphan role left after a 503 on create.
+- A requeued outbox row now waits (`not_before`, 1m doubling to 30m) before a batch claim takes it again. A spent budget still lands in failed.
+
+**Open.**
+- "Next try at" on the pending worklist #ready-for-agent.
+- The add-on transport onto `extcall` (W1e).
+- `roles.go` still rolls back when the read-back cannot confirm (W1a).
+
 ## 0c. Dead-schema cleanup: stopped, and guards added (5 Nov 2026)
 
 Branch `chore/dead-schema-and-guards`. Owner approved two removals on condition that nothing still reads or writes them. Both are still read, so neither was removed and no migration 000078 was written.

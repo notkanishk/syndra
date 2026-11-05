@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 	"time"
 )
@@ -292,6 +293,12 @@ const revocationFirst = `
 	            AND r.status IN ('pending', 'in_flight'))) DESC,
 	p.intent_seq`
 
+// notBeforeDue is the backoff gate both batch claims share: a requeued row is
+// not claimable until its not_before has passed. ClaimPropagationByID does not
+// apply it: that claim is an operator's explicit apply of one row, a
+// deliberate retry, and the retry budget still bounds it.
+const notBeforeDue = `(p.not_before IS NULL OR p.not_before <= NOW())`
+
 // ClaimPendingPropagations atomically transitions up to `limit` claimable rows
 // to in_flight and returns them in dispatch order. FOR UPDATE SKIP LOCKED makes
 // concurrent drains safe (mirrors ClaimPendingIntents).
@@ -326,6 +333,7 @@ func ClaimPendingPropagations(ctx context.Context, target string, limit int) ([]
 			SELECT p.id FROM propagation_outbox p
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
+			  AND ` + notBeforeDue + `
 			-- Revocations first, by subject; then intent order, not
 			-- transaction-start order — created_at is fixed at BEGIN and the
 			-- access lock is taken after it, so a serially-older add can carry
@@ -443,6 +451,7 @@ func ClaimPendingRevocations(ctx context.Context, target string, limit int) ([]m
 			JOIN targets t ON t.target = p.target AND t.state = 'active'
 			WHERE p.status IN ('pending','in_flight') AND p.target = $2
 			  AND (p.op_type = 'revoke' OR p.withdraws_only)
+			  AND ` + notBeforeDue + `
 			  -- A role that always waits waits for the operator on the way
 			  -- out too, however the loss came about (an expiry, a removal):
 			  -- losing it is theirs to send (N14 B). Read from role_waits
@@ -656,14 +665,28 @@ func MarkPropagationFailed(ctx context.Context, id, errMsg string) error {
 		 WHERE id=$1 AND status='in_flight'`, errMsg)
 }
 
-// RequeuePropagation returns a row to pending after a transient error and bumps
-// attempts. Caller decides (via attempts vs OUTBOX_MAX_RETRIES) whether to halt.
+// outboxBackoff spaces a row's tries: 1m doubling to a 30m cap, jittered. With
+// the default budget of five that is roughly 1+2+4+8+16 minutes before a row
+// lands in failed, long enough to outlast a Zitadel blip, which an unspaced
+// budget did not (one row could spend every try inside a second).
+var outboxBackoff = extcall.Policy{Base: time.Minute, Max: 30 * time.Minute}
+
+// RequeuePropagation returns a row to pending after a transient error, bumps
+// attempts, and sets not_before so the batch claims leave it alone until its
+// backoff has passed. Caller decides (via attempts vs OUTBOX_MAX_RETRIES)
+// whether to halt; a spent budget is MarkPropagationFailed, the state the UI
+// already lists.
+//
+// The wait is extcall.Backoff for the row's own attempt count, chosen in the
+// same statement that increments it: the schedule goes in as an array and the
+// row indexes it, so the count and the wait cannot disagree.
 func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 	const q = `UPDATE propagation_outbox
-		SET status='pending', attempts=attempts+1, last_error=$2, started_at=NULL
+		SET status='pending', attempts=attempts+1, last_error=$2, started_at=NULL,
+		    not_before = NOW() + make_interval(secs => ($3::float8[])[LEAST(attempts+1, cardinality($3::float8[]))])
 		WHERE id=$1 AND status='in_flight' RETURNING attempts`
 	var attempts int
-	err := querier(ctx).QueryRow(ctx, q, id, errMsg).Scan(&attempts)
+	err := querier(ctx).QueryRow(ctx, q, id, errMsg, backoffSchedule()).Scan(&attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, fmt.Errorf("%w: %s", ErrPropagationNotInFlight, id)
 	}
@@ -671,6 +694,16 @@ func RequeuePropagation(ctx context.Context, id, errMsg string) (int, error) {
 		return 0, fmt.Errorf("requeue propagation: %w", err)
 	}
 	return attempts, nil
+}
+
+// backoffSchedule is outboxBackoff's wait, in seconds, after 0..15 spent tries
+// (SQL index n+1). Sixteen reaches the cap many times over.
+func backoffSchedule() []float64 {
+	out := make([]float64, 16)
+	for n := range out {
+		out[n] = extcall.Backoff(outboxBackoff, n).Seconds()
+	}
+	return out
 }
 
 // ReleasePropagation returns a row to pending WITHOUT spending a retry.
