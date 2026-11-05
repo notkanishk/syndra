@@ -22,6 +22,14 @@ Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pa
 ## 0d. One path, W1b: the error envelope (5 Nov 2026)
 
 Branch `fix/error-envelope`; detail in [`changes/one-path`](changes/one-path/proposal.md). Raw Zitadel and add-on text no longer reaches the screen at 502/503 for the raw codes, the proxy speaks the same envelope, and the reference is kept. Open: a `writeUpstream` at each raw call site (retire `rawUpstreamCodes`), and the remaining hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on.
+## 0d. One add-on pipe (W1e/W1f, 5 Nov 2026)
+
+Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.md). Every add-on call now goes through `addons/pipe.go` (breaker, trace before a write, idempotency key), lifecycle changes leave an `addon_operations` row and an audit line, and the TrueNAS plan and apply share one `decide`. Open from it:
+
+- The add-on's setting endpoint does not read the `Idempotency-Key` header yet (`addons/truenas/settings.go`).
+- Plan and apply can still disagree on a new account's home folder when it already exists.
+- No UI wording for `lifecycle.set` rows (Unconfirmed changes, audit vocabulary).
+- Not yet run against the real add-on: production use (2 mappings, 6 bindings) is covered by the recorded-fixture and contract tests only. Check one lifecycle flip and one setting write after deploy, then read the new row and the `Idempotency-Key` in the add-on's request log. #ready-for-human
 
 ## 0c. Dead-schema cleanup: stopped, and guards added (5 Nov 2026)
 
