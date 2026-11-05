@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 
 import { AppShell } from '@/components/shell/AppShell';
 import { Providers } from '@/components/providers';
@@ -11,19 +11,19 @@ import './globals.css';
 // Display face — page titles, card titles, dialog titles. Optical sizing is
 // exposed so a 42px greeting and a 20px card title are drawn as the same face
 // rather than the same outline scaled twice.
-const bricolage = Bricolage_Grotesque({
-  subsets: ['latin'],
+const bricolage = localFont({
+  src: './fonts/bricolage-latin.woff2',
   display: 'swap',
-  // Variable font: the weight axis comes for free, opsz is opted into.
-  axes: ['opsz'],
+  // Variable font: weight 200-800 and the opsz axis are both in the file.
+  weight: '200 800',
   variable: '--font-bricolage',
 });
 
 // Body face — every row, label and paragraph.
-const figtree = Figtree({
-  subsets: ['latin'],
+const figtree = localFont({
+  src: './fonts/figtree-latin.woff2',
   display: 'swap',
-  weight: ['400', '500', '600', '700'],
+  weight: '400 700',
   variable: '--font-figtree',
 });
 
@@ -31,10 +31,10 @@ const figtree = Figtree({
 // face for any of those: they are things an operator pastes into a config
 // file, and the shape of the glyphs is the difference between reading them
 // and re-reading them.
-const jetbrains = JetBrains_Mono({
-  subsets: ['latin'],
+const jetbrains = localFont({
+  src: './fonts/jetbrains-latin.woff2',
   display: 'swap',
-  weight: ['400', '500'],
+  weight: '400 500',
   variable: '--font-jetbrains',
 });
 
