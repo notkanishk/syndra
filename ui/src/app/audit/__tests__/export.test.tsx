@@ -26,7 +26,7 @@ vi.mock("@/lib/queries/useAudit", () => ({
 vi.mock("@/lib/queries/useNameResolver", () => ({
   useNameResolver: () => ({ resolveUser: () => ({ value: null }) }),
 }));
-vi.mock("@/components/names", () => ({ UserName: () => <span>someone</span> }));
+vi.mock("@/components/names", () => ({ UserName: () => <span>someone</span>, UNKNOWN_ACCOUNT: "Unknown account" }));
 vi.mock("@/components/audit/EventLine", () => ({ EventSentence: () => <span>did something</span> }));
 vi.mock("@/components/audit/TraceCell", () => ({ TraceCell: () => <span /> }));
 
@@ -63,6 +63,11 @@ describe("Audit export", () => {
     await waitFor(() => expect(text.split("\n")).toHaveLength(31)); // header + all 30
     expect(text).toContain(`"'=HYPERLINK(1)"`);
     expect(text).not.toContain(`"=HYPERLINK(1)"`);
+    // A name column never carries an id: an unresolved person reads as the shared phrase, and the id sits in its own column.
+    const [head, first] = text.split("\n");
+    expect(head).toBe(`"when","who","who_id","what","target","target_id","resource"`);
+    expect(first).toContain(`"Unknown account","'=HYPERLINK(1)"`);
+    expect(first).toContain(`"Unknown account","u2"`);
   });
 
   it("is one FilterBar: search, then the window, then Export, and a read line", () => {

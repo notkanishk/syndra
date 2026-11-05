@@ -32,12 +32,29 @@ function fallbackMessage(status: number): string {
   return "Syndra's server had a problem and gave no reason.";
 }
 
+/**
+ * A write whose reply never arrived: the request may have been sent and done.
+ * Still a TypeError, so every reader of a lost reply (`lostReply`, the network
+ * words) treats it as before; it only adds which method was lost.
+ */
+export class LostReply extends TypeError {
+  constructor(
+    cause: unknown,
+    readonly method: string,
+  ) {
+    super(cause instanceof Error ? cause.message : "Failed to fetch");
+    this.name = "LostReply";
+  }
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: Record<string, string>;
+  /** The request's method, so a failed write is told apart from a failed read. */
+  readonly method?: string;
 
-  constructor(status: number, body: ApiErrorBody | string) {
+  constructor(status: number, body: ApiErrorBody | string, method?: string) {
     // A bare string is a gateway's page or an upstream's text, never the product's words: at 5xx
     // it is not shown. The envelope's `message` is the only copy that reaches the screen.
     const parsed: ApiErrorBody =
@@ -47,6 +64,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = parsed.error ?? "UNKNOWN_ERROR";
     this.details = parsed.details;
+    this.method = method;
   }
 }
 
@@ -136,11 +154,18 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     }
   }
 
-  const res = await fetch(url, {
-    ...init,
-    headers,
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers,
+      body,
+    });
+  } catch (e) {
+    // A read that fails fails harmlessly; a write may have been done.
+    if (method !== "GET" && e instanceof TypeError) throw new LostReply(e, method);
+    throw e;
+  }
 
   if (res.status === 204) {
     return undefined as T;
@@ -192,7 +217,7 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     if (res.status === 409 && refusal?.error === "WOULD_CANCEL_QUEUED" && refusal.cancels?.length) {
       throw new WouldCancelQueued(refusal.cancels, method, path);
     }
-    throw new ApiError(res.status, parsed as ApiErrorBody | string);
+    throw new ApiError(res.status, parsed as ApiErrorBody | string, method);
   }
 
   return parsed as T;

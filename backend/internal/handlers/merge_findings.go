@@ -436,7 +436,7 @@ func writeResolutionError(w http.ResponseWriter, err error) {
 	case errors.Is(err, db.ErrAllowanceUnbounded), errors.Is(err, db.ErrAllowanceInvalid):
 		jsonValidationErrorResponse(w, err.Error(), map[string]string{"resolution": "unbounded"})
 	case errors.Is(err, errReleaseNotConfirmed):
-		jsonErrorResponse(w, http.StatusBadGateway, "RELEASE_NOT_CONFIRMED", err.Error())
+		writeUpstream(w, err, "RELEASE_NOT_CONFIRMED")
 	case errors.Is(err, db.ErrMergeFindingDecided):
 		// 409, and it names who, what and WHY. The two answers here are
 		// opposites, so a second operator has to know that somebody chose — and

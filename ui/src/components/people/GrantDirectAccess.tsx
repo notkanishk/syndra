@@ -20,10 +20,11 @@ import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { useRulePreview } from "@/lib/queries/useRulePreview";
 import { forecastFor, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
-import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
+import { expiryLabel, formatShortDate } from "@/lib/format";
 import { useTerms, type Term } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, nextTermEnd } from "@/lib/term";
 import { daysFromToday, endAfterDaysISO, endOfDayISO } from "@/lib/time";
+import { roleName } from "@/lib/names";
 
 /**
  * E5 · Give a role. Project → role → expiry.
@@ -94,7 +95,7 @@ function GrantDirectAccessOpen({
       .filter((role) => role.project_id === entry.project.id)
       .map((role) => ({
         key: role.role_key,
-        name: role.display_name || humanizeKey(role.role_key),
+        name: roleName(role.display_name, role.role_key),
         description: role.description || undefined,
         // Observed in Zitadel, or nothing: a count that was never read isn't zero.
         people: role.observed_user_count,
@@ -103,10 +104,10 @@ function GrantDirectAccessOpen({
       })),
   }));
   const first = userName.trim().split(/\s+/)[0] || "They";
-  const roleName = selectedRole?.display_name || humanizeKey(roleKey);
+  const grantedRole = roleName(selectedRole?.display_name, roleKey);
   // A grant that would cancel a removal still waiting for you to send turns the
   // sheet to a step first (A-04 §14); Keep it comes back here as it was.
-  const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${roleName}` });
+  const step = useCancelStep({ host: `Give ${userName} a role`, goAhead: `give ${grantedRole}` });
   const waits = useWaitsBeforeLine();
   // What the automatic rules also give with this role, said before the click
   // (audit C2), from the closure the write itself follows.
@@ -225,7 +226,7 @@ function GrantDirectAccessOpen({
                 ) : selectedRole.waits_for_send ? (
                   <span className="block">
                     <WaitsMark className="mr-1.5" />
-                    {roleName} always waits for you, so {first} gets it once you send it.
+                    {grantedRole} always waits for you, so {first} gets it once you send it.
                   </span>
                 ) : (
                   <span className="block">{first} can use it as soon as you give it.</span>
@@ -281,21 +282,21 @@ function GrantDirectAccessOpen({
                   if (made === KEPT) return;
                   // `wait_reason` is the backend's account of why this isn't
                   // in Zitadel yet; without one the grant went straight through.
-                  const why = waitReasonLine(made.wait_reason, roleName, new Date().toISOString());
+                  const why = waitReasonLine(made.wait_reason, grantedRole, new Date().toISOString());
                   // The rows the rules queued with it: named as the preview
                   // named them, only when the write says it queued some.
                   const queuedByRules = (made as { rule_outbox_ids?: string[] }).rule_outbox_ids?.length ?? 0;
                   const alsoGave = queuedByRules > 0 && ruleLines.length > 0 ? ` ${ruleLines.join(" ")}` : "";
                   if (made.wait_reason === RETRYING) {
                     // Zitadel didn't take it; Syndra sends it again on its own (lib/retry.ts).
-                    const out = retryingOutcome(`${roleName} is given to ${first} in Syndra`, made.retry);
+                    const out = retryingOutcome(`${grantedRole} is given to ${first} in Syndra`, made.retry);
                     setResult({ word: "Given", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } });
                   } else if (made.status !== "applied" || made.wait_reason) {
                     setResult({
                       word: "Given",
                       outcome: {
                         kind: "queued",
-                        message: `${roleName} is given to ${first}`,
+                        message: `${grantedRole} is given to ${first}`,
                         detail:
                           (made.wait_reason === "role_waits"
                             ? `${why}, so ${first} can't use it yet.`
@@ -309,7 +310,7 @@ function GrantDirectAccessOpen({
                       word: "Given",
                       outcome: {
                         kind: "applied",
-                        message: `${first} can use ${roleName} on their own now`,
+                        message: `${first} can use ${grantedRole} on their own now`,
                         ...(alsoGave ? { detail: alsoGave.trim() } : {}),
                       },
                     });

@@ -45,7 +45,7 @@
 - [x] Move the envelope to `handlers/errors.go`; sanitise raw upstream text at 502/503/504 `ready-for-agent`
 - [x] Proxy errors use the envelope; gateway text never reaches the screen
 - [x] `merge_findings.go` and `claim_shape.go` bodies use the envelope
-- [ ] `writeUpstream` at every raw call site, then delete `rawUpstreamCodes` (needs W1a, W1e files) `needs-triage`
+- [x] `writeUpstream` at every raw call site, `rawUpstreamCodes` deleted; guard `TestNoErrorTextReachesAFiveHundredBody` (branch `fix/one-name-path`)
 - [ ] Route `bundles.go`, `access.go`, `claimserve/door.go`, the add-on writer through one envelope type `needs-triage`
 
 Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
@@ -85,3 +85,25 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [x] Guard test: every mutation uses it; rail kinds hold governance
 - [ ] `HomeLimit.tsx`, `UnconfirmedChanges.tsx` onto `invalidateAfter`, then widen the guard's raw-call scan to `src/` `ready-for-agent`
 - [ ] `["name-catalog"]` defined twice (`useNameCatalog.ts`, `useNameResolver.tsx`) belongs to W2d
+
+## W2d: one path for a name (branch `fix/one-name-path`)
+
+- [x] `ui/src/lib/names.ts` `roleName`; inline chains, local hooks and `shownNames.ts` routed through it
+- [x] Ids out of the audit CSV name columns (id columns added), People on a target, Unexplained access picker, plan review sort, create-role picker
+- [x] `backend/internal/textsort`; twelve backend name sorts routed through it
+- [x] Guards: `names-one-path.test.ts`, `repoguard/name_sort_test.go`
+- [ ] One person fallback phrase across screens (`this person`, `Somebody`, `They`) #ready-for-agent
+- [ ] Backend returns `("", false)` rather than the id as a name in six places (`directory/zitadel.go:430-436`, `insights_trends.go:240`, `insights_lens.go:165`, `claim_shape.go:644`, `role_members.go:120`, `directory/demo.go:48`) #ready-for-agent
+- [ ] Go `roleLabel` (`services/views.go`) deleted or pinned to `humanizeKey` by a golden test #ready-for-agent
+- [ ] SQL `ORDER BY name` (`db/bundle_includes.go`, `target_bindings.go`, `role_waits.go`): DB collation UNVERIFIED #needs-triage
+- [ ] One envelope type for `bundles.go`, `access.go`, `claimserve/door.go`, add-on writer #needs-triage
+
+## Coherence group D (branch `fix/coherence-remaining`)
+
+- [x] Rate limits: the door counts only after every key and the refresh failed (`claimserve/door.go` `SignatureCheck`), shared by the event webhook; `TestRateLimit_VerifiedWebhookCallsAreNeverCounted` pins it. A 429 shows the server sentence through `describeFailure`/`outcomeFromError`.
+- [x] `writeUpstream` sentences name what failed (Zitadel, that system) and `describeFailure` adds the next step and the full reference to a bare line; cards keep `failureMessage` plus their own reference.
+- [x] Claims page: check 5 "unlisted" says access, not role (the gate is any grant); the not-listed notice ignores an unreadable call record; save, History restore and the save row say what holds a shape back (`heldBackLine`) instead of promising "next sign-in" while Zitadel names no app or lists no project.
+- [x] Template sheet and chooser use `heldBackLine` instead of "keeps the project's default until you save" while Zitadel names no app
+- [x] Partial-failure codes (`MAY_HAVE_GONE_THROUGH` in `ui/src/lib/outcome.ts`) say "Some of this may have gone through. Check <where> before trying again."; `partial-codes.test.tsx` reads the handlers and fails on an undecided 5xx code
+
+- [x] A lost reply on a write (`LostReply` in `api-client.ts`, the proxy `BACKEND_UNREACHABLE`/`UPSTREAM_ERROR` on a non-GET) says "Check Pending changes or Audit", never "Nothing was changed."; `ANSWER_NOT_RECORDED` mapped, `CREDENTIAL_NOT_SET` and `PLAN_CLAIM_ERROR` verified as writing nothing

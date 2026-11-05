@@ -188,6 +188,8 @@ export interface SayContext {
   roles: ProjectRole[];
   reach?: Reach | null;
   templateId?: string;
+  /** Why a saved shape would not reach the app yet, when something outside it stops that. Said instead of "next sign-in". */
+  heldBack?: string;
 }
 
 const labelOf = (roles: ProjectRole[], key?: string) => roles.find((r) => r.key === key)?.label ?? key ?? "";

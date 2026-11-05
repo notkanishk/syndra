@@ -12,13 +12,14 @@ import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { Segmented } from "@/components/ui/Select";
 import { ApiError } from "@/lib/api-client";
-import { formatShortDate, humanizeKey, lengthWords } from "@/lib/format";
+import { formatShortDate, lengthWords } from "@/lib/format";
 import { outcomeFromError, type ActionOutcome as ActionResult } from "@/lib/outcome";
 import { useCatalogProjects } from "@/lib/queries/useCatalogUsers";
 import { useCreateRequest } from "@/lib/queries/useRequests";
 import { useTerms } from "@/lib/queries/useTerms";
 import { daysUntilTermEnd, keepOptions, nextTermEnd } from "@/lib/term";
 import { endAfterDaysISO, endOfDayISO } from "@/lib/time";
+import { roleName } from "@/lib/names";
 
 /** What a member asks for, in the units a member thinks in. */
 type HowLong = "7" | "30" | "term";
@@ -78,7 +79,7 @@ function AskForAccessOpen({
     name: project.name,
     roles: project.roles.map((role) => ({
       key: role.key,
-      name: role.label || humanizeKey(role.key),
+      name: roleName(role.label, role.key),
       description: role.description || undefined,
       note: noteOf(askState(project.id, role.key)),
     })),
@@ -90,11 +91,11 @@ function AskForAccessOpen({
     const project = catalog.data.find((p) => p.id === placeId);
     return {
       place: project?.name ?? "",
-      role: project?.roles.find((r) => r.key === roleKey)?.label || humanizeKey(roleKey),
+      role: roleName(project?.roles.find((r) => r.key === roleKey)?.label, roleKey),
     };
   };
   const chosen = value ? stateOfId(value) : ({ kind: "none" } as AskState);
-  const { place: placeName, role: roleName } = nameOf(value);
+  const { place: placeName, role: chosenRole } = nameOf(value);
   const extend = chosen.kind === "until";
   const current = chosen.kind === "until" ? chosen.until : null;
 
@@ -136,8 +137,8 @@ function AskForAccessOpen({
           kind: "no_change",
           message:
             extend && keepChoice
-              ? `To keep ${placeName} · ${roleName} until ${formatShortDate(keepChoice.until)}`
-              : `${roleName} on ${placeName}, ${
+              ? `To keep ${placeName} · ${chosenRole} until ${formatShortDate(keepChoice.until)}`
+              : `${chosenRole} on ${placeName}, ${
                   howLong === "term" ? `until ${formatShortDate(ordinaryUntil)}` : `for ${lengthWords(ordinaryDays)}`
                 }`,
           detail: extend
@@ -155,7 +156,7 @@ function AskForAccessOpen({
             kind: "no_change",
             message: extend
               ? "You've already asked to keep this. It's waiting, and the answer appears on this page"
-              : `You already asked for ${roleName} on ${placeName}, from another tab. That request is waiting`,
+              : `You already asked for ${chosenRole} on ${placeName}, from another tab. That request is waiting`,
             detail: "Nothing was changed. Its answer appears on this page.",
           },
         });

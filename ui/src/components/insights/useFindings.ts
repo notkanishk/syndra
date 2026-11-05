@@ -6,7 +6,9 @@ import type { Panel } from "@/components/insights/AnswerPanel";
 import { glancePanel, overlapView, singleRoutesView, unusedView, type Lit } from "@/components/insights/findingsPanels";
 import type { Mark } from "@/components/insights/LaneMap";
 import { listOf, type Model } from "@/components/insights/model";
-import { formatShortDate, humanizeKey } from "@/lib/format";
+import { formatShortDate } from "@/lib/format";
+import { roleName } from "@/lib/names";
+
 import { useDriftItems } from "@/lib/queries/useDrift";
 import { useInsightsFindings } from "@/lib/queries/useInsights";
 import { usePendingPropagations } from "@/lib/queries/usePropagation";
@@ -37,9 +39,9 @@ export function useFindings(m: Model | null) {
   const found = useInsightsFindings();
 
   return useMemo(() => {
-    const roleName = (projectId: string, key: string, fallback?: string) => {
+    const nameOfRole = (projectId: string, key: string, fallback?: string) => {
       const id = m?.roleId(projectId, key);
-      return id && m ? m.nameOf(id) : fallback || humanizeKey(key);
+      return id && m ? m.nameOf(id) : roleName(fallback, key);
     };
     const roleNode = (projectId: string, key: string) => m?.roleId(projectId, key) ?? null;
     const nodes: { drift: string[]; send: string[] } = { drift: [], send: [] };
@@ -57,7 +59,7 @@ export function useFindings(m: Model | null) {
     for (const item of driftRows ?? []) {
       for (const key of item.role_keys) {
         const gk = `${item.drift_type}\u0000${item.project_id}\u0000${key}`;
-        const g = groups.get(gk) ?? { name: roleName(item.project_id, key), type: item.drift_type, users: new Set() };
+        const g = groups.get(gk) ?? { name: nameOfRole(item.project_id, key), type: item.drift_type, users: new Set() };
         g.users.add(item.user_id);
         groups.set(gk, g);
         const id = roleNode(item.project_id, key);
@@ -74,7 +76,7 @@ export function useFindings(m: Model | null) {
     const waiting = (pending.data ?? []).filter((r) => r.wait_reason);
     const sendGroups = new Map<string, { text: (k: number) => string; users: Set<string> }>();
     for (const r of waiting) {
-      const roles = r.role_keys.map((k) => roleName(r.project_id, k));
+      const roles = r.role_keys.map((k) => nameOfRole(r.project_id, k));
       for (const k of r.role_keys) {
         const id = roleNode(r.project_id, k);
         if (id && !nodes.send.includes(id)) nodes.send.push(id);

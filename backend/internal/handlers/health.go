@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -13,7 +14,8 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := db.PG.Ping(ctx); err != nil {
-		jsonResponse(w, http.StatusServiceUnavailable, map[string]string{"status": "unhealthy", "db": err.Error()})
+		log.Printf("[HTTP] database ping failed: %v", err)
+		jsonResponse(w, http.StatusServiceUnavailable, map[string]string{"status": "unhealthy", "db": "unreachable"})
 		return
 	}
 	jsonResponse(w, http.StatusOK, map[string]string{"status": "ok"})

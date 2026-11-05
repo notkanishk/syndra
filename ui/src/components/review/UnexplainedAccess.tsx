@@ -33,7 +33,7 @@ import { BULK_MAX_USERS } from "@/lib/queries/useBulkGrants";
 import { useGovernanceSummary } from "@/lib/queries/useGovernance";
 import { useReconciliationDiff } from "@/lib/queries/useGrants";
 import { useProjects } from "@/lib/queries/useProjects";
-import { ProjectName, UserName } from "@/components/names";
+import { ProjectName, UNKNOWN_ACCOUNT, UserName } from "@/components/names";
 import {
   useAttributeDrift,
   useBulkAttributeDrift,
@@ -228,7 +228,7 @@ export function UnexplainedAccess() {
     const byId = new Map<string, string>();
     for (const item of applyDriftFilters(returned, filters, new Date(), "user")) {
       if (byId.has(item.user_id)) continue;
-      byId.set(item.user_id, resolver.resolveUser(item.user_id).value?.display_name ?? item.user_id);
+      byId.set(item.user_id, resolver.resolveUser(item.user_id).value?.display_name ?? UNKNOWN_ACCOUNT);
     }
     return sortByName(Array.from(byId, ([id, name]) => ({ id, name })), (p) => p.name);
   }, [returned, filters, resolver]);

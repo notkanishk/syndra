@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"syndra/internal/demo"
@@ -23,7 +24,7 @@ func handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 	if zitadel.MgmtClient != nil {
 		user, err := zitadel.MgmtClient.GetUser(r.Context(), uid)
 		if err != nil {
-			jsonErrorResponse(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to fetch user from Zitadel: "+err.Error())
+			writeUpstream(w, fmt.Errorf("fetch user from Zitadel: %w", err), "UPSTREAM_ERROR")
 			return
 		}
 		if user == nil {
@@ -66,7 +67,7 @@ func handleGetMyProfile(w http.ResponseWriter, r *http.Request) {
 
 	profile, found, err := directory.Default.FindUser(r.Context(), uid)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "UPSTREAM_ERROR", "Failed to resolve profile: "+err.Error())
+		writeUpstream(w, fmt.Errorf("resolve profile: %w", err), "UPSTREAM_ERROR")
 		return
 	}
 	if !found {

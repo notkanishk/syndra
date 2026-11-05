@@ -7,6 +7,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"syndra/internal/textsort"
 	"time"
 
 	"syndra/internal/cache"
@@ -481,7 +482,7 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 			keyProjects = append(keyProjects, role.ProjectName)
 			keyProjectIDs = append(keyProjectIDs, role.ProjectID)
 		}
-		sort.Strings(keyProjects)
+		textsort.Strings(keyProjects)
 		sort.Strings(keyProjectIDs)
 
 		bundleNames := make([]string, 0, len(bundles))
@@ -490,7 +491,7 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 			bundleNames = append(bundleNames, b.Name)
 			bundleVersions[b.Name] = b.PinnedVersion
 		}
-		sort.Strings(bundleNames)
+		textsort.Strings(bundleNames)
 
 		item := models.UserListItem{
 			User:               user,
@@ -527,9 +528,7 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 		items = append(items, item)
 	}
 
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].User.Name < items[j].User.Name
-	})
+	textsort.ByName(items, func(i models.UserListItem) string { return i.User.Name }, func(i models.UserListItem) string { return i.User.ID })
 
 	return items, nil
 }
@@ -1061,9 +1060,7 @@ func listProjectsFromSnapshot(snap *accessSnapshot) ([]models.ProjectSummary, er
 		projectSummaries = append(projectSummaries, summary)
 	}
 
-	sort.Slice(projectSummaries, func(i, j int) bool {
-		return projectSummaries[i].Project.Name < projectSummaries[j].Project.Name
-	})
+	textsort.ByName(projectSummaries, func(s models.ProjectSummary) string { return s.Project.Name }, func(s models.ProjectSummary) string { return s.Project.ID })
 
 	return projectSummaries, nil
 }
