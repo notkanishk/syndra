@@ -204,6 +204,8 @@ describe("the action, once it has run", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));
-    await waitFor(() => expect(screen.getByText(/are revoked once you send/i)).toBeInTheDocument());
+    // No wait reason: the server delivered all three (services.Deliver), so it
+    // says they went, never "once you send" (final verification N1).
+    await waitFor(() => expect(screen.getByText(/3 changes went to Zitadel/)).toBeInTheDocument());
   });
 });

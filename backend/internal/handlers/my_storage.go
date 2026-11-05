@@ -83,9 +83,15 @@ type myTargetView struct {
 	// had no way to learn why.
 	//
 	// The two states are kept apart rather than collapsed to a boolean, because
-	// they differ in exactly the way a member needs: a drain is minutes and ends
-	// by itself, and read-only is somebody working on the server and ends when
-	// they say so. One deserves "shortly" and the other must not be given it.
+	// they differ in what a member is told: a drain lets the last few changes
+	// finish before staff work on the server, and read-only is staff working on
+	// it. Neither ends by itself: an operator sets the add-on back to active
+	// (addons/truenas lifecycle.go, POST /lifecycle via handlers/inventory.go),
+	// or a restart does after a shutdown drain. Nothing resumes on the end of a
+	// pause either: a change the add-on declined is released to pending
+	// (propagation/addon.go), where a revocation goes on the background drain
+	// and anything else waits for an operator's Send. So neither state is
+	// given a time or a "by itself" (final verification, MyStorage).
 	Lifecycle string `json:"lifecycle,omitempty"`
 	// Storage is what the TARGET says about this account: whether it can be
 	// used yet, and how much room is left.

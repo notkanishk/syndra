@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -272,19 +271,40 @@ func applyDecisionPlan(r *http.Request, plan *services.BulkPlan, status, note st
 			out.Detail = "Didn't go through: " + err.Error()
 			continue
 		}
-		// What the approval's delivery did, not "applied" regardless
-		// (re-audit R2): a role that waits, or a send Zitadel didn't take,
-		// is queued and says which.
-		if decided.WaitReason != "" || decided.RuleWaiting > 0 {
+		// What the approval's delivery did to the approved role's OWN row
+		// (ReasonFor, as the single path), not "applied" regardless (re-audit
+		// R2): Zitadel refused it, a role that waits, or a send Zitadel
+		// didn't take. A role an automatic rule gave that waits is counted
+		// apart and never blamed on the approval (final verification N4).
+		out.RuleWaiting = decided.RuleWaiting
+		if decided.RuleWaiting > 0 {
+			out.Consequence = ruleWaitingLine(decided.RuleWaiting)
+		}
+		switch {
+		case db.IsRefused(decided.WaitReason):
+			out.Effect = services.EffectFailed
+			out.WaitReason = decided.WaitReason
+			out.Detail = refusedDetail(decided.WaitReason, false)
+		case decided.WaitReason != "":
 			out.Effect = services.EffectQueued
 			out.WaitReason, out.Retry = decided.WaitReason, decided.Retry
-			out.Detail = queuedDetail(cmp.Or(decided.WaitReason, db.WaitReasonRoleWaits))
-			continue
+			out.Detail = queuedDetail(decided.WaitReason)
+		default:
+			out.Effect = services.EffectApplied
 		}
-		out.Effect = services.EffectApplied
 	}
 
 	plan.Summary = services.SummarizeOutcomes(plan.Outcomes)
+}
+
+// ruleWaitingLine is a bulk row's line for the roles automatic rules gave
+// with the act that wait for Send (the same words as request-decisions.ts
+// withRuleWaits).
+func ruleWaitingLine(n int) string {
+	if n == 1 {
+		return "One role an automatic rule also gives always waits for you, so it is in Pending changes."
+	}
+	return fmt.Sprintf("%d roles automatic rules also give always wait for you, so they are in Pending changes.", n)
 }
 
 // decideOneRequest runs the very same decision the single-request endpoint

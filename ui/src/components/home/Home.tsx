@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HoldingNote, alreadyHeld } from "@/components/requests/Holding";
+import { ApproveButton, HoldingNote } from "@/components/requests/Holding";
 
 import { AdvancedLink } from "@/components/ui/AdvancedLink";
 
@@ -32,7 +32,7 @@ import { useTargets } from "@/lib/queries/useTargets";
 import { serviceAccountHref, useServiceAccounts } from "@/lib/queries/useServiceAccounts";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { outcomeFromDrain } from "@/lib/drain-outcome";
-import { EXTEND_DAYS, NOTHING_TO_DO, outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { EXTEND_DAYS, NOTHING_TO_DO, outcomeFromError, outcomeFromExtend, type ActionOutcome as Outcome, type AutoRetry } from "@/lib/outcome";
 import { useCreateGrant } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import type { ServiceAccount } from "@/lib/types";
@@ -289,7 +289,7 @@ export function Home({ session }: { session: SessionUser }) {
                 gaveUp={gaveUp}
                 retryingBy={readIndicators?.retrying_by}
                 gaveUpBy={readIndicators?.gave_up_by}
-                auto={readIndicators?.auto_retry !== false}
+                auto={readIndicators?.auto_retry ?? null}
               />
             </Block>
             <Block open={expiring.length > 0}>
@@ -658,15 +658,7 @@ function OpenRequests({
               ) : (
                 <>
                   <div className="flex gap-2">
-                    <Button
-                      variant="accent"
-                      size="sm"
-                      disabled={alreadyHeld(entry)}
-                      reason={alreadyHeld(entry) ? "They already have this." : undefined}
-                      onClick={() => act(entry, "approved")}
-                    >
-                      Approve
-                    </Button>
+                    <ApproveButton request={entry} onClick={() => act(entry, "approved")} />
                     <Button size="sm" onClick={() => act(entry, "rejected")}>
                       Decline
                     </Button>
@@ -913,8 +905,8 @@ export function Retries({
   gaveUp: number;
   retryingBy?: Record<string, number>;
   gaveUpBy?: Record<string, number>;
-  /** False when this server sends nothing again on its own (REVOCATION_DRAIN_ENABLED=false). */
-  auto?: boolean;
+  /** False when this server sends nothing again on its own (REVOCATION_DRAIN_ENABLED=false); null while unknown (N3). */
+  auto?: AutoRetry;
 }) {
   const seen = useMarkGaveUpSeen();
   const [failure, setFailure] = useState<Outcome | null>(null);
@@ -928,7 +920,9 @@ export function Retries({
             <StatusDot tone="warn" />
             <span className="text-warn-text">
               {systemsOf(retryingBy)} didn&apos;t take {one(retrying)}.{" "}
-              {auto
+              {auto === null
+                ? `Each change on Pending changes says whether Syndra sends it again on its own or it waits for you.`
+                : auto
                 ? `Syndra sends ${retrying === 1 ? "it" : "them"} again on its own and says here if it stops. ${NOTHING_TO_DO}`
                 : `This Syndra server doesn't send changes again on its own, so ${retrying === 1 ? "it waits" : "they wait"} for you. Press Send on Pending changes to try again.`}
             </span>
@@ -1085,6 +1079,7 @@ function UnconfirmedWrites({ summary }: { summary: UnconfirmedWriteSummary }) {
 
 /** The result's word: the act's own past tense, or "Not …" when it did not happen. */
 function outcomeWord(outcome: Outcome, done: string, not: string): string {
+  if (outcome.recorded) return "Refused by Zitadel";
   return outcome.kind === "failed" || outcome.kind === "refused" ? not : done;
 }
 

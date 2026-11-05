@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { seedAutoRetry } from "@/test-utils/drain";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -66,7 +67,7 @@ function row(overrides: Partial<PendingRow> = {}): PendingRow {
 }
 
 function renderPending() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = seedAutoRetry(new QueryClient({ defaultOptions: { queries: { retry: false } } }), true);
   return render(
     <QueryClientProvider client={client}>
       <PendingChangesPage />

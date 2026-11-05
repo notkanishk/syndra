@@ -1,5 +1,5 @@
 import { targetLabel } from "@/lib/nav";
-import type { ActionOutcome, OutcomeKind } from "@/lib/outcome";
+import { DRAIN_UNKNOWN_NEXT, type ActionOutcome, type AutoRetry, type OutcomeKind } from "@/lib/outcome";
 import type { DrainResult } from "@/lib/queries/usePropagation";
 
 export type DrainTone = "success" | "warning" | "error" | "info";
@@ -30,7 +30,7 @@ export interface DrainOutcome {
  * silence on an HTTP 200: an operator reads "0 sent, 0 failed" after a pass
  * that requeued eight changes and concludes the queue is idle.
  */
-export function describeDrain(result: DrainResult | undefined, auto = true): DrainOutcome {
+export function describeDrain(result: DrainResult | undefined, auto: AutoRetry = true): DrainOutcome {
   const applied = result?.applied ?? 0;
   const failed = result?.failed ?? 0;
   const requeued = result?.requeued ?? 0;
@@ -81,9 +81,12 @@ export function describeDrain(result: DrainResult | undefined, auto = true): Dra
         return {
           tone: "error",
           message: "Zitadel is not answering. Nothing was sent.",
-          detail: auto
-            ? "Nothing counts against the retry limit. Revocations, and changes Zitadel didn't take before, go again on their own once it answers; the rest wait for you to send."
-            : "Nothing counts against the retry limit. This Syndra server doesn't send anything again on its own, so everything waits for you to press Send once Zitadel answers.",
+          detail:
+            auto === null
+              ? "Nothing counts against the retry limit. Everything stays in Pending changes until it reaches Zitadel."
+              : auto
+                ? "Nothing counts against the retry limit. Revocations, and changes Zitadel didn't take before, go again on their own once it answers; the rest wait for you to send."
+                : "Nothing counts against the retry limit. This Syndra server doesn't send anything again on its own, so everything waits for you to press Send once Zitadel answers.",
         };
       case "target_unreachable":
         return {
@@ -121,6 +124,18 @@ export function describeDrain(result: DrainResult | undefined, auto = true): Dra
   // Neither asks anything of the operator: the background drain sends them
   // again at their next try, which each row below names.
   if (requeued || errored) {
+    if (auto === null) {
+      // Not known yet whether the background drain is on (N3): no promise.
+      return {
+        tone: "warning",
+        sendsItself: true,
+        message: `${counts}.`,
+        detail: errored
+          ? "Syndra could not record how a change went. It stays in Pending changes until it is settled."
+          : `Zitadel didn't answer for ${requeued === 1 ? "one change" : `${requeued} changes`}, so ${requeued === 1 ? "it is" : "they are"} still in Pending changes.`,
+        next: DRAIN_UNKNOWN_NEXT,
+      };
+    }
     if (!auto) {
       // The background drain is off: nothing sends these again until Send.
       return {
@@ -175,7 +190,7 @@ export const STOPPED_NEXT =
  * not a failure, and an operator who reads it as one goes looking for a broken
  * machine instead of pressing the button again.
  */
-export function outcomeFromDrain(result: DrainResult | undefined, auto = true): ActionOutcome {
+export function outcomeFromDrain(result: DrainResult | undefined, auto: AutoRetry = true): ActionOutcome {
   const { tone, message, detail, sendsItself, next } = describeDrain(result, auto);
   const kind: OutcomeKind =
     tone === "success" ? "applied" : tone === "warning" ? "queued" : tone === "error" ? "failed" : "no_change";

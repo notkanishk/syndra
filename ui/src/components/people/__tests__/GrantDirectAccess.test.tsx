@@ -239,6 +239,23 @@ describe("GrantDirectAccess · its result", () => {
     ).toBeInTheDocument();
   });
 
+  // Final verification N1: Zitadel refused it outright. It used to read "It
+  // goes when you send it", with a Send link Send could never honour.
+  it("a give Zitadel refused says so, with why and the true step, and no Send link", async () => {
+    state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "failed", wait_reason: "refused:not_found" });
+    open();
+    await grant();
+
+    expect(screen.getByText("Refused by Zitadel")).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel refused this: it no longer has this person, project or role/)).toBeInTheDocument();
+    expect(screen.getByText(/give it again once the reason is fixed/)).toBeInTheDocument();
+    expect(screen.queryByText(/goes when you send it/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+    // Given in Syndra: the sheet is its result, and nothing gives twice.
+    expect(screen.queryByRole("button", { name: "Give role" })).not.toBeInTheDocument();
+  });
+
   it("reports Given, in their first name, when nothing waits", async () => {
     state.mutateAsync.mockResolvedValue({ outbox_id: "o1", status: "applied" });
     open();

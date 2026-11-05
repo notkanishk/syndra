@@ -342,13 +342,14 @@ func TestBulkAdoptPlan_NamesTheRuleRows(t *testing.T) {
 		t.Fatal("the apply line counts the rule rows")
 	}
 	// Re-audit R1: an adoption that queued rule rows is not done for the
-	// operator: the row is queued, so the result ends on "send it".
+	// operator, so the result ends on "send it". N4: the adoption itself took
+	// effect, so the row stays applied and the rule rows are counted apart.
 	dbAttributeDriftTx = func(context.Context, string, db.EnqueueParams) ([]string, error) {
 		return []string{"rule-o1"}, nil
 	}
 	applyDriftPlan(httptest.NewRequest("POST", "/", nil), &plan, driftOpAdopt, "op", "")
-	if o := plan.Outcomes[0]; o.Effect != services.EffectQueued || !strings.Contains(o.Consequence, "for you to send") {
-		t.Fatalf("an adoption that queued rule rows must be queued, got %+v", o)
+	if o := plan.Outcomes[0]; o.Effect != services.EffectApplied || o.RuleWaiting != 1 || !strings.Contains(o.Consequence, "for you to send") {
+		t.Fatalf("an adoption that queued rule rows is applied, with the rule rows counted apart, got %+v", o)
 	}
 }
 

@@ -218,14 +218,17 @@ describe("giving roles in Zitadel", () => {
   it("a refused part ends on what to do, never on nothing", async () => {
     state.assign.mockResolvedValue({
       status: "failed",
-      roles: [{ role: "pLaser/maintainer", change: "given", status: "failed" }],
+      roles: [{ role: "pLaser/maintainer", change: "given", status: "failed", reason: "refused:not_found" }],
     });
     render(<UpstreamUsersPage />);
     const dialog = openGive("maintainer");
     fireEvent.click(within(dialog).getByRole("checkbox"));
     fireEvent.click(within(dialog).getByRole("button", { name: /Give .* in Zitadel/ }));
 
-    await waitFor(() => expect(dialog.textContent).toMatch(/Zitadel refused part of it/));
+    // N1: every role refused, so it says "Zitadel refused this", with the cause.
+    await waitFor(() => expect(dialog.textContent).toMatch(/Zitadel refused this/));
+    expect(dialog.textContent).toMatch(/Zitadel refused this for maintainer: it no longer has this person, project or role/);
+    expect(dialog.textContent).not.toMatch(/Nothing was changed/);
     expect(dialog.textContent).toMatch(/Open their page to see what they hold now/);
     expect(dialog.textContent).not.toMatch(/Nothing for you to do/);
   });

@@ -14,6 +14,9 @@ import { formatClock } from "@/lib/format";
  *   manual                      "Its bundle or rule was set to wait" (rows
  *                               from before migration 000078 only: the mode
  *                               it names was dropped there)
+ *   refused:<cause>             "Zitadel refused this: {cause}" (not a wait:
+ *                               terminal, nothing sends it again; final
+ *                               verification N1, lib/retry.ts refusedOutcome)
  */
 export function waitReasonLine(
   reason: string | undefined | null,
@@ -21,6 +24,7 @@ export function waitReasonLine(
   at?: string | null,
 ): string | undefined {
   if (!reason) return undefined;
+  if (isRefused(reason)) return `Zitadel refused this: ${refusalCause(reason)}`;
   if (reason === "role_waits") return `${role} always waits for you`;
   if (reason === "manual") return "Its bundle or rule was set to wait";
   const when = at ? ` at ${formatClock(at)}` : "";
@@ -34,6 +38,26 @@ export function waitReasonLine(
     default:
       return reason.startsWith("halted:") ? `The send stopped${when}` : undefined;
   }
+}
+
+/** A change Zitadel refused outright when it was sent (`refused:<cause>`, db.WaitReasonRefused). */
+export function isRefused(reason: string | undefined | null): boolean {
+  return Boolean(reason?.startsWith("refused:"));
+}
+
+/**
+ * The plain cause of a refusal, said after "Zitadel refused this:". The same
+ * words as the server's bulk rows (handlers/bulk.go refusalWords).
+ */
+const REFUSAL_CAUSE: Record<string, string> = {
+  not_allowed: "Syndra's service account isn't allowed to make this change",
+  not_found: "it no longer has this person, project or role",
+  invalid: "it said the change isn't valid",
+  other: "it gave a reason Syndra can't put in plain words",
+};
+
+export function refusalCause(reason: string): string {
+  return REFUSAL_CAUSE[reason.slice("refused:".length)] ?? REFUSAL_CAUSE.other;
 }
 
 /** A wait the operator chose (the role, or before the switch its mode), not a send that stopped. */

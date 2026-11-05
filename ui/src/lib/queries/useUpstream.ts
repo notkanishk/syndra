@@ -202,6 +202,8 @@ export interface ZitadelRoleChange {
   change: "given" | "revoked" | "kept";
   /** applied: in Zitadel now; waiting: held for you to send; pending: not taken yet; kept: nothing sent. */
   status: "applied" | "waiting" | "pending" | "failed" | "kept";
+  /** Why a failed role isn't in Zitadel: `refused:<cause>` (lib/wait-reason.ts refusalCause). */
+  reason?: string;
 }
 
 function useUpstreamMutation<V, R = unknown>(fn: (value: V) => Promise<R>) {

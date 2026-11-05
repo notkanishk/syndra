@@ -271,7 +271,7 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 | Decline | Will be declined | Declined |
 | Extend | Will be extended | Extended |
 | Remove | Will be removed | Removed |
-| Revoke under Drift | Will be removed | On its way: Revocations send on their own. A role that waits: Waits for you, Waiting for you to send |
+| Revoke under Drift | Will be removed | Taken: Removed in Zitadel. Not taken yet: the retry line ("Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)."). Halted with the drain on: On its way, Revocations send on their own. Drain off: Recorded in Syndra. The revocation waits in Pending changes until someone presses Send. Drain not read yet: Not in Zitadel yet, then "Open Pending changes to see what has not reached Zitadel yet." A role that waits: Waits for you, Waiting for you to send. Refused: Refused by Zitadel |
 | Keep | Will be kept | Kept |
 | Lift a hold | Will be lifted | Lifted |
 | Give | Will be given | Given |
@@ -280,6 +280,12 @@ words are `FORECAST` in `lib/outcome.ts`; a test holds this table to it.
 | Mark as owned elsewhere | Will be marked | Marked |
 | Replace the action signing key | Will be replaced | Replaced |
 | Anything Syndra knows will wait | Will wait for you to send | Waiting for you to send |
+
+**Anything Zitadel refused outright** has no forecast of its own (the act's own forecast stands) and, once it happened, reads Refused by Zitadel: "{Done} in Syndra. Zitadel refused this: {cause}." Then "It isn't in Zitadel, and Syndra won't send it again. Pending changes lists it under Syndra stopped sending." The step: give or extend it again from their page once the reason is fixed; a revocation shows in Drift after the next check, to revoke there. Never "Nothing was changed.": Syndra recorded it.
+
+**A refusal's cause is said in plain words** (`refused:<cause>`, `lib/wait-reason.ts refusalCause`, the same words as `handlers/bulk.go refusalWords`): not allowed, "Syndra's service account isn't allowed to make this change" (and the step starts "Ask whoever runs Zitadel to let Syndra's service account change grants."); not found, "it no longer has this person, project or role"; not valid, "it said the change isn't valid"; anything else, "it gave a reason Syndra can't put in plain words".
+
+**The drain switch is said only once it is read.** Until the indicators answer (or when they can't), nothing says "on its own" or "until you press Send": the sentence says what is known and ends on "Open Pending changes to see what has not reached Zitadel yet." The rail pill says "Syndra stopped sending N changes" for a give-up, the same words as Home and Pending changes.
 
 ## 6. Vocabulary
 

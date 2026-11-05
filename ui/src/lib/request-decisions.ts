@@ -11,8 +11,8 @@ import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
 import { FLASH_MS } from "@/lib/motion";
-import { RETRYING, retryingOutcome } from "@/lib/retry";
-import { waitReasonLine } from "@/lib/wait-reason";
+import { RETRYING, refusedOutcome, retryingOutcome } from "@/lib/retry";
+import { isRefused, waitReasonLine } from "@/lib/wait-reason";
 
 /**
  * What approving one request reports. The response says only whether the
@@ -49,6 +49,8 @@ export function withRuleWaits(outcome: ActionOutcome, ruleWaiting: number | unde
       : `${ruleWaiting} roles automatic rules also give always wait for you, so they are in Pending changes.`;
   // Already waiting for Send: the link says it once.
   if (outcome.kind === "queued" && !outcome.sendsItself) return { ...outcome, message: `${outcome.message} ${line}` };
+  // A refusal stays a refusal (N1): the rule's wait is one more step after it.
+  if (outcome.recorded) return { ...outcome, message: `${outcome.message}. ${line}`, next: `${outcome.next ?? ""} Then press Send on Pending changes for the rule's role.`.trim() };
   return { ...outcome, kind: "queued", sendsItself: undefined, message: `${outcome.message} ${line}`, next: SEND_IT };
 }
 
@@ -96,6 +98,8 @@ function approvalOnly(
   role: string,
   result?: Pick<DecisionResult, "effect" | "until" | "retry" | "rule_waiting">,
 ): ActionOutcome {
+  // Final verification N1: Zitadel refused the approved role outright.
+  if (isRefused(waitReason)) return refusedOutcome("Approved in Syndra", waitReason);
   if (waitReason === RETRYING) return retryingOutcome("Approved", result?.retry);
   if (!waitReason) {
     const ends = result?.until ? `until ${formatShortDate(result.until)}` : "with no end date";
@@ -235,7 +239,7 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
         decided = { word: "Extended", outcome: extendedOutcome(entry, result) };
       } else {
         decided = {
-          word: "Approved",
+          word: isRefused(result?.wait_reason) ? "Refused by Zitadel" : "Approved",
           outcome: approvalOutcome(
             result?.wait_reason,
             personOr(resolver.resolveUser(entry.requester_id).value?.display_name, true),

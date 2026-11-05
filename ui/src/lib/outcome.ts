@@ -1,6 +1,7 @@
 import { ApiError, LostReply } from "@/lib/api-client";
 // A cycle (retry.ts reads NOTHING_TO_DO): both sides use the other only inside functions.
-import { RETRYING, retryingOutcome, type RetryState } from "@/lib/retry";
+import { RETRYING, refusedOutcome, retryingOutcome, type RetryState } from "@/lib/retry";
+import { isRefused } from "@/lib/wait-reason";
 
 /**
  * What happened, in six words, everywhere in the product.
@@ -57,6 +58,13 @@ export interface ActionOutcome {
    * ends on one (owner, 5 Nov 2026: "clear next steps or lack thereof").
    */
   next?: string;
+  /**
+   * Syndra recorded the act, and only the target refused it (final
+   * verification N1, `refused:<cause>`). A failure, but never "Nothing was
+   * changed.", and the act's own button is spent: approving or giving again
+   * is not the step (lib/retry.ts refusedOutcome says the step).
+   */
+  recorded?: boolean;
 }
 
 /** The explicit "no step left" (copy guide §2): said, never implied by silence. */
@@ -67,6 +75,20 @@ export const SEND_IT = "Press Send on Pending changes.";
 
 /** A change that goes on its own, with nothing to say about when. */
 export const SENDS_ITSELF_NEXT = `${NOTHING_TO_DO} Syndra sends it on its own and says on Home if it stops sending it.`;
+
+/**
+ * Whether this server sends changes again on its own (lib/queries/useIndicators
+ * useAutoRetry): null until the indicators are read, or when they can't be
+ * (final verification N3). Unknown promises nothing either way.
+ */
+export type AutoRetry = boolean | null;
+
+/**
+ * The step when Syndra can't tell yet whether a change goes on its own or
+ * waits for Send (N3): true either way, because Pending changes lists
+ * everything that has not reached Zitadel.
+ */
+export const DRAIN_UNKNOWN_NEXT = "Open Pending changes to see what has not reached Zitadel yet.";
 
 /**
  * The step an outcome leaves, or that there is none. Never empty: the guard
@@ -258,12 +280,16 @@ export function outcomeFromExtend(
   days: number,
   leaves?: string,
 ): ActionOutcome {
-  if (result?.status !== "pending") {
-    return { kind: "applied", message: `Extended by ${days} days`, detail: leaves };
-  }
   // Re-audit R14: the end date is Syndra's and has already moved; only what
   // reaches Zitadel waits, and why decides who sends it.
   const done = `Extended by ${days} days in Syndra`;
+  // Final verification N1: a refusal is terminal, never "Extended".
+  if (isRefused(result?.wait_reason) || result?.status === "failed") {
+    return refusedOutcome(done, result?.wait_reason);
+  }
+  if (result?.status !== "pending") {
+    return { kind: "applied", message: `Extended by ${days} days`, detail: leaves };
+  }
   if (result.wait_reason === RETRYING) return retryingOutcome(done, result.retry);
   if (result.wait_reason === "role_waits" || result.wait_reason === "manual" || !result.wait_reason) {
     return { kind: "queued", message: `Will extend by ${days} days once sent` };
@@ -330,6 +356,14 @@ export const REVOKE_SENDS_ITSELF: ActionOutcome = {
 export const REVOKE_SENDS_ITSELF_WORD = "On its way";
 
 /**
+ * The word for a change that carries no Send link: "On its way" only when it
+ * really goes on its own; "Not in Zitadel yet" while that isn't known (N3).
+ */
+export function sendsItselfWord(outcome: ActionOutcome): string {
+  return outcome.next === DRAIN_UNKNOWN_NEXT ? "Not in Zitadel yet" : REVOKE_SENDS_ITSELF_WORD;
+}
+
+/**
  * The same revoke when this server's background drain is off
  * (REVOCATION_DRAIN_ENABLED=false, `auto_retry: false` in the indicators):
  * nothing sends it until someone presses Send, so it says that and ends on
@@ -340,8 +374,17 @@ export const REVOKE_WAITS_FOR_SEND: ActionOutcome = {
   message: "Recorded in Syndra. The revocation waits in Pending changes until someone presses Send",
 };
 
-/** {@link REVOKE_SENDS_ITSELF} with the drain on, {@link REVOKE_WAITS_FOR_SEND} with it off. */
-export const revokeQueued = (auto: boolean): ActionOutcome => (auto ? REVOKE_SENDS_ITSELF : REVOKE_WAITS_FOR_SEND);
+/** The same revoke before Syndra knows whether the drain is on (N3): no promise either way. */
+export const REVOKE_NOT_YET: ActionOutcome = {
+  kind: "queued",
+  message: "Recorded in Syndra. The revocation is not in Zitadel yet",
+  sendsItself: true,
+  next: DRAIN_UNKNOWN_NEXT,
+};
+
+/** {@link REVOKE_SENDS_ITSELF} with the drain on, {@link REVOKE_WAITS_FOR_SEND} with it off, {@link REVOKE_NOT_YET} unknown. */
+export const revokeQueued = (auto: AutoRetry): ActionOutcome =>
+  auto === null ? REVOKE_NOT_YET : auto ? REVOKE_SENDS_ITSELF : REVOKE_WAITS_FOR_SEND;
 
 /**
  * Every refusal and every failure ends the same way, and it is the sentence an
@@ -437,5 +480,5 @@ export function waitsForSend(outcome: ActionOutcome): boolean {
  * try again.
  */
 export function succeeded(outcome: ActionOutcome | null): boolean {
-  return outcome !== null && !statesNothingChanged(outcome.kind);
+  return outcome !== null && (!statesNothingChanged(outcome.kind) || Boolean(outcome.recorded));
 }

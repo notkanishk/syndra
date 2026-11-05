@@ -13,8 +13,8 @@ import { FieldLabel, Input } from "@/components/ui/Input";
 import { Segmented } from "@/components/ui/Select";
 import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { WaitsMark } from "@/components/ui/WaitsMark";
-import { RETRYING, retryingOutcome } from "@/lib/retry";
-import { waitReasonLine } from "@/lib/wait-reason";
+import { RETRYING, refusedOutcome, retryingOutcome } from "@/lib/retry";
+import { isRefused, waitReasonLine } from "@/lib/wait-reason";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
@@ -117,7 +117,7 @@ function GrantDirectAccessOpen({
 
   const ready = Boolean(value) && (preset !== "date" || Boolean(customDate)) && !rules.isLoading;
   // Given, or waiting for you to send: the sheet is its result and nothing sends twice.
-  const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued";
+  const done = result?.outcome.kind === "applied" || result?.outcome.kind === "queued" || Boolean(result?.outcome.recorded);
 
   return (
     <Modal open onClose={onClose} busy={grant.isPending} size="md" labelledBy="grant-title">
@@ -294,7 +294,11 @@ function GrantDirectAccessOpen({
                   // whatever happened to the role given here (re-audit R12).
                   const report = (r: { word: string; outcome: Outcome }) =>
                     setResult({ ...r, outcome: withRuleWaits(r.outcome, made.rule_waiting) });
-                  if (made.wait_reason === RETRYING) {
+                  if (isRefused(made.wait_reason) || made.status === "failed") {
+                    // Final verification N1: Zitadel refused it outright; Send won't move it.
+                    const out = refusedOutcome(`${grantedRole} is given to ${first} in Syndra`, made.wait_reason);
+                    report({ word: "Refused by Zitadel", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } });
+                  } else if (made.wait_reason === RETRYING) {
                     // Zitadel didn't take it; Syndra sends it again on its own (lib/retry.ts).
                     const out = retryingOutcome(`${grantedRole} is given to ${first} in Syndra`, made.retry);
                     report({ word: "Given", outcome: { ...out, detail: `${out.detail ?? ""}${alsoGave}` } });

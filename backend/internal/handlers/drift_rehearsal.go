@@ -207,10 +207,11 @@ func applyDriftPlan(r *http.Request, plan *services.BulkPlan, op, actor, reason 
 		}
 		out.Effect = services.EffectApplied
 		if n := len(ruleIDs); n > 0 {
-			// The adoption is done, but what the rules gave waits for Send:
-			// queued, so the result ends on "send it", never on "nothing for
-			// you to do" (re-audit R1).
-			out.Effect = services.EffectQueued
+			// The adoption is done, but what the rules gave waits for Send.
+			// Counted apart, never as the adoption waiting (final verification
+			// N4), and the result still ends on "send it", never on "nothing
+			// for you to do" (re-audit R1).
+			out.RuleWaiting = n
 			out.Consequence = adoptedRuleRows(n)
 		}
 	}

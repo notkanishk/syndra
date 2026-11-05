@@ -272,8 +272,18 @@ describe("when changes can't happen", () => {
       expect(container.textContent).not.toMatch(/apply it|when changes start again/i);
       // A drain earns no person; an open-ended pause gets one instead of an estimate.
       expect(Boolean(screen.queryByText(/Need it today\? Ask makerspace staff/))).toBe(lifecycle === "read_only");
+      // Final verification: neither pause ends, nor resumes changes, by itself
+      // (an operator sets the add-on back to active; a change it declined
+      // waits in Pending changes), and neither has a known length.
+      expect(container.textContent).not.toMatch(/by itself|on its own|few minutes/i);
       unmount();
     }
+  });
+
+  it("a drain says who ends the pause, and that held-back changes wait until then", () => {
+    state.targets = [view({ lifecycle: "draining" })];
+    renderStorage();
+    expect(screen.getAllByText(/Makerspace staff end the pause; account changes held back wait until then\./).length).toBeGreaterThan(0);
   });
 
   it("an account on its way while paused waits on staff, said inside the state", () => {

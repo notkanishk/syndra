@@ -156,7 +156,11 @@ function Status({ view }: { view: PersonTargetView }) {
  * change goes when someone presses Send. Only a person who changed their access
  * meanwhile has anything to do, so it says so rather than promising nothing.
  */
-export function offlineNext(label: string, auto: boolean): string {
+export function offlineNext(label: string, auto: boolean | null): string {
+  // Not known yet whether revocations go on their own (N3): no promise either way.
+  if (auto === null) {
+    return `If you change their access while ${label} is offline, the change stays in Pending changes until it reaches ${label}. Otherwise there is nothing for you to do.`;
+  }
   return auto
     ? `If you change their access while ${label} is offline, the change waits until it answers: a revocation then sends on its own, anything else when you press Send on Pending changes. Otherwise there is nothing for you to do.`
     : `If you change their access while ${label} is offline, the change waits in Pending changes; press Send there once it answers. Otherwise there is nothing for you to do.`;

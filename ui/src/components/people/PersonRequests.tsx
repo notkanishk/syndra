@@ -12,7 +12,7 @@ import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
-import { HoldingNote, describeAsk } from "@/components/requests/Holding";
+import { ApproveButton, HoldingNote, describeAsk } from "@/components/requests/Holding";
 import { OUTCOME_LABEL } from "@/lib/outcome";
 import { useRequestDecisions, type Decided } from "@/lib/request-decisions";
 import { useTerms } from "@/lib/queries/useTerms";
@@ -145,14 +145,7 @@ function RequestRow({
         <Crossfade id={open && isOperator ? "open" : outcome && optimisticallyResolved ? "outcome" : forecast ? "forecast" : "status"}>
         {open && isOperator ? (
           <span className="flex items-center gap-3 tablet:gap-2">
-            <Button
-              variant="accent"
-              size="sm"
-              isPending={isPending}
-              onClick={() => onDecide(entry, "approved")}
-            >
-              Approve
-            </Button>
+            <ApproveButton request={entry} isPending={isPending} onClick={() => onDecide(entry, "approved")} />
             <Button size="sm" isPending={isPending} onClick={() => onDecide(entry, "rejected")}>
               Decline
             </Button>

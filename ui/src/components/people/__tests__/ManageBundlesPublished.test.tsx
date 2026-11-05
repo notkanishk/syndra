@@ -121,8 +121,33 @@ describe("ManageBundles", () => {
     expect(screen.getByText(/nothing is waiting for you to send/i)).toBeInTheDocument();
   });
 
-  it("reports the change waiting, and where to send it, when it enqueues a cascade", async () => {
+  // Final verification N1: a cascade Zitadel refused is said as a refusal, with
+  // its cause and step; it never waits, and Send is not the step.
+  it("says Zitadel refused this, with why and what to do, when it did", async () => {
+    state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 1, wait_reason: "refused:not_allowed" } });
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
+
+    expect(await screen.findByText("Refused by Zitadel")).toBeInTheDocument();
+    expect(screen.getByText(/Zitadel refused this: Syndra's service account isn't allowed/)).toBeInTheDocument();
+    expect(screen.getByText(/Ask whoever runs Zitadel/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was changed/)).not.toBeInTheDocument();
+  });
+
+  it("says a cascade the server sent went, never that it waits", async () => {
     state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 2 } });
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));
+
+    expect(await screen.findByText(/Sent to Zitadel: 2 changes/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Waiting for you to send/ })).not.toBeInTheDocument();
+  });
+
+  it("reports the change waiting, and where to send it, when it enqueues a cascade", async () => {
+    state.assignAsync = vi.fn().mockResolvedValue({ cascade: { enqueued: 2, waiting: 2, wait_reason: "role_waits" } });
     open();
     fireEvent.click(screen.getByRole("checkbox", { name: /Lab Tech/ }));
     fireEvent.click(screen.getByRole("button", { name: "Apply 1 change" }));

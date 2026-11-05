@@ -172,7 +172,8 @@ export function ActionOutcome({
       <p className="text-[15px] leading-[1.55] text-ink">
         {sentence(outcome.message)}
         {/* Said once: a refusal whose own sentence already says it is not told twice (re-audit R20). */}
-        {statesNothingChanged(outcome.kind) && !outcome.partial && !/nothing was changed/i.test(outcome.message)
+        {/* A refusal Syndra already recorded changed Syndra, so it is never "Nothing was changed." (N1). */}
+        {statesNothingChanged(outcome.kind) && !outcome.partial && !outcome.recorded && !/nothing was changed/i.test(outcome.message)
           ? ` ${NOTHING_CHANGED}`
           : ""}
       </p>

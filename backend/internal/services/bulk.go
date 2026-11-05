@@ -121,6 +121,11 @@ type BulkOutcome struct {
 	// on its own from one that waits for Send (re-audit R2).
 	WaitReason string              `json:"wait_reason,omitempty"`
 	Retry      *extcall.RetryState `json:"retry,omitempty"`
+	// RuleWaiting counts the rows automatic rules queued with this row's act
+	// that wait for Send. Apart from Effect, so a rule's wait is never blamed
+	// on the act (final verification N4): an approval or an adoption that
+	// took effect stays applied, and the result still ends on Send.
+	RuleWaiting int `json:"rule_waiting,omitempty"`
 	// Grants the row would act on. Populated for remove_role and extend so the
 	// apply pass acts on identified rows rather than re-guessing.
 	GrantIDs []string `json:"grant_ids,omitempty"`
@@ -314,7 +319,7 @@ func rehearseOne(
 		// a bulk selection goes wrong — they match the filter that found the
 		// cohort and nobody notices in a count.
 		out.Effect = EffectBlocked
-		out.Detail = fmt.Sprintf("Account is %s — remove it from the selection to continue.", strings.ToLower(profile.Status))
+		out.Detail = fmt.Sprintf("Account is %s. Remove it from the selection to continue.", strings.ToLower(profile.Status))
 		out.Fingerprint = FingerprintUserAccess(uid, profile.Status, nil, nil)
 		return out, nil
 	}
@@ -487,7 +492,7 @@ func rehearseRemoveRole(
 		out.Effect = EffectNoChange
 		if effective := roleMap[roleKey{projectID: req.ProjectID, roleKey: req.RoleKey}]; effective != nil {
 			out.Detail = "Holds no direct grant here."
-			out.Consequence = fmt.Sprintf("Keeps the role %s — remove that source instead.", sourcePhrase(effective.Reasons))
+			out.Consequence = fmt.Sprintf("Keeps the role %s. Remove that source instead.", sourcePhrase(effective.Reasons))
 		} else {
 			out.Detail = "Doesn't hold this role."
 		}
@@ -498,7 +503,7 @@ func rehearseRemoveRole(
 	out.GrantIDs = []string{existing.ID}
 	if other := otherSources(roleMap, req.ProjectID, req.RoleKey); other != "" {
 		out.Detail = "Direct grant removed."
-		out.Consequence = fmt.Sprintf("Keeps the role %s — this does not take their access away.", other)
+		out.Consequence = fmt.Sprintf("Keeps the role %s, so this does not take their access away.", other)
 	} else {
 		out.Detail = "Loses this role."
 	}
@@ -706,7 +711,7 @@ func lengthens(current *time.Time, durationDays int) bool {
 func expiryPhrase(current *time.Time, durationDays int) string {
 	if durationDays <= 0 {
 		if current != nil {
-			return "Expiry removed — the grant becomes permanent."
+			return "Expiry removed, so the grant becomes permanent."
 		}
 		return "No expiry."
 	}

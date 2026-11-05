@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query";
+import { seedAutoRetry } from "@/test-utils/drain";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -158,7 +159,7 @@ function enterSelect() {
 }
 
 function renderTriage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = seedAutoRetry(new QueryClient({ defaultOptions: { queries: { retry: false } } }), true);
   return render(
     <QueryClientProvider client={client}>
       <UnexplainedAccess />
@@ -857,7 +858,7 @@ describe("Drift while Zitadel is not answering", () => {
   it("disables the decisions and says they wait, in words", () => {
     zitadel.down = true;
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={seedAutoRetry(new QueryClient(), true)}>
         <UnexplainedAccess />
       </QueryClientProvider>,
     );
@@ -873,7 +874,7 @@ describe("Drift while Zitadel is not answering", () => {
   it("leaves them live when Zitadel answers", () => {
     zitadel.down = false;
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={seedAutoRetry(new QueryClient(), true)}>
         <UnexplainedAccess />
       </QueryClientProvider>,
     );

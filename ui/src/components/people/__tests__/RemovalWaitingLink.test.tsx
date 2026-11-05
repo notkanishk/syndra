@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { seedAutoRetry } from "@/test-utils/drain";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -27,9 +28,9 @@ const bundle: RoleReason = { kind: "bundle", bundle_id: "b1", bundle_name: "Lab 
 
 describe("the Removal dialog's way to Pending changes", () => {
   it("carries the person it removed the bundle from", async () => {
-    removeBundle.mockResolvedValue({ cascade: { enqueued: 2 } });
+    removeBundle.mockResolvedValue({ cascade: { enqueued: 2, waiting: 2, wait_reason: "role_waits" } });
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={seedAutoRetry(new QueryClient(), true)}>
         <RemovalDialog
           removal={{
             projectId: "pLaser",

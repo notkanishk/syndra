@@ -1,5 +1,6 @@
 import { formatClock } from "@/lib/format";
-import { NOTHING_TO_DO, SENDS_ITSELF_NEXT, type ActionOutcome } from "@/lib/outcome";
+import { DRAIN_UNKNOWN_NEXT, NOTHING_TO_DO, SENDS_ITSELF_NEXT, type ActionOutcome, type AutoRetry } from "@/lib/outcome";
+import { isRefused, refusalCause } from "@/lib/wait-reason";
 
 /**
  * One retry model, in words (owner, 5 Nov 2026). A Zitadel change in the
@@ -85,22 +86,62 @@ export function memberRetryLine(retry: RetryState, now: Date = new Date()): stri
  * and on its way by itself. `done` is what happened in Syndra ("Approved").
  */
 export function retryingOutcome(done: string, retry: RetryState | undefined, it = "it"): ActionOutcome {
-  const line = retry
-    ? retryLine(retry, "Zitadel", it)
-    : `Zitadel didn't answer. Syndra sends ${it} again on its own.`;
+  if (!retry) {
+    // The server couldn't read the row's next try (services/delivery.go
+    // nextRetry), so neither "on its own" nor "waits for Send" is known (N3).
+    const line = `Zitadel didn't answer, so ${it} isn't in Zitadel yet.`;
+    return { kind: "queued", message: `${done}. ${line}`, detail: line, sendsItself: true, next: DRAIN_UNKNOWN_NEXT };
+  }
+  const line = retryLine(retry, "Zitadel", it);
   // Waiting is never "on its way": nothing sends it until Send is pressed.
-  const goes = !retry || retry.state === "retrying";
+  const goes = retry.state === "retrying";
   return {
     kind: "queued",
     message: `${done}. ${line}`,
     detail: line,
     sendsItself: goes || undefined,
-    next: retry ? retryNextStep(retry, { it }) : SENDS_ITSELF_NEXT,
+    next: retryNextStep(retry, { it }),
   };
 }
 
 /** The wait reason an action answers with when what it sent is retrying. */
 export const RETRYING = "halted:retrying";
+
+/** Where Syndra lists a change it stopped sending (pending/page.tsx StoppedSending). */
+const STOPPED = "It isn't in Zitadel, and Syndra won't send it again. Pending changes lists it under Syndra stopped sending.";
+
+/**
+ * The one true step a refusal leaves (final verification N1): the change is
+ * terminal, so Send won't move it. A give is given again from the person's
+ * page; a revocation still held shows in Drift after the next check and is
+ * revoked there (the same steps as Pending changes' Syndra stopped sending).
+ * `again` names the act to repeat ("give", "extend").
+ */
+export function refusedNext(reason: string | undefined, { revocation = false, again = "give" }: { revocation?: boolean; again?: string } = {}): string {
+  const step = revocation
+    ? "They may still hold it in Zitadel. It shows in Drift after Syndra's next check; revoke it there once the reason is fixed."
+    : `Open their page to see what they hold now, then ${again} it again once the reason is fixed.`;
+  return reason === "refused:not_allowed" ? `Ask whoever runs Zitadel to let Syndra's service account change grants. ${step}` : step;
+}
+
+/**
+ * An action whose change Zitadel refused outright (`refused:<cause>`): done in
+ * Syndra, not in Zitadel, and never sent again. Says "Zitadel refused this",
+ * the plain cause, and the true step. `done` is what happened in Syndra.
+ */
+export function refusedOutcome(
+  done: string,
+  reason: string | undefined,
+  options: { revocation?: boolean; again?: string } = {},
+): ActionOutcome {
+  return {
+    kind: "failed",
+    recorded: true,
+    message: `${done}. Zitadel refused this: ${refusalCause(reason ?? "refused:other")}`,
+    detail: STOPPED,
+    next: refusedNext(reason, options),
+  };
+}
 
 /**
  * What retiring a bundle or a rule did to the access it gave: `n` revocations,
@@ -114,16 +155,38 @@ export function retireOutcome(
   reason: string | undefined,
   retry?: RetryState,
   after = "",
-  auto = true,
+  auto: AutoRetry = true,
 ): ActionOutcome {
   const changes = `${n} ${n === 1 ? "change" : "changes"}`;
   if (!reason) {
     return { kind: "applied", message: `${changes} went to Zitadel.`, detail: `The access it gave was revoked.${after}` };
   }
+  // Final verification N1: Zitadel refused a revocation outright. Terminal:
+  // never "went", never "on its way".
+  if (isRefused(reason)) {
+    return {
+      kind: "failed",
+      recorded: true,
+      message: `The access it gave was revoked in Syndra. Zitadel refused this: ${refusalCause(reason)}`,
+      detail: `What Zitadel refused isn't in Zitadel, and Syndra won't send it again. Pending changes lists it under Syndra stopped sending.${after}`,
+      next: refusedNext(reason, { revocation: true }),
+    };
+  }
+  // Before the indicators are read nothing is promised either way (N3),
+  // unless the server already said so with its own retry state (below).
+  if (auto === null && reason !== "role_waits" && reason !== "manual" && !retry) {
+    return {
+      kind: "queued",
+      message: `Not in Zitadel yet. Until ${n === 1 ? "it is" : "they are"}, that access stays.`,
+      detail: after.trim() || undefined,
+      sendsItself: true,
+      next: DRAIN_UNKNOWN_NEXT,
+    };
+  }
   // With the background drain off nothing goes on its own, so a revocation
   // that is not in Zitadel waits for Send like one a role holds, unless the
   // server already said so with its own retry state (below).
-  if (reason === "role_waits" || reason === "manual" || (!auto && retry?.state !== "waiting")) {
+  if (reason === "role_waits" || reason === "manual" || (auto === false && retry?.state !== "waiting")) {
     return {
       kind: "queued",
       message: `${n} ${n === 1 ? "change waits" : "changes wait"} for you to send.`,

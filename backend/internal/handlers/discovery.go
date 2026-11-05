@@ -17,6 +17,7 @@ import (
 	"syndra/internal/extcall"
 	"syndra/internal/models"
 	"syndra/internal/services"
+	"syndra/internal/services/propagation"
 	"syndra/internal/zitadel"
 )
 
@@ -464,6 +465,9 @@ type zitadelRoleChange struct {
 	Role   string `json:"role"`   // "project/role"
 	Change string `json:"change"` // given | revoked | kept
 	Status string `json:"status"`
+	// Reason is why a failed role isn't in Zitadel: refused:<cause>, the
+	// plain cause of Zitadel's refusal (final verification N1).
+	Reason string `json:"reason,omitempty"`
 	rows   []string
 }
 
@@ -594,10 +598,22 @@ const (
 func grantNotRead(w http.ResponseWriter, err error) {
 	log.Printf("[ZITADEL] read grant: %v", err)
 	jsonResponse(w, http.StatusBadGateway, ErrorResponse{
-		Error:   grantNotReadCode,
+		Error: grantNotReadCode,
 		// The screen adds "Nothing was changed." and the next step.
 		Message: "Syndra couldn't read this grant from Zitadel, so it didn't start.",
 	})
+}
+
+// partlyRecordedMessage says what became of the roles a faulted change had
+// recorded (final verification N6): a revocation sends on its own while this
+// server's background drain is on, unless its role waits for you; everything
+// else, and every revocation with the drain off, waits for Send.
+func partlyRecordedMessage(n int, revoking, auto bool) string {
+	lead := fmt.Sprintf("Syndra recorded %d of the roles, then hit a fault, so the rest was not recorded.", n)
+	if revoking && auto {
+		return lead + " What it recorded is in Pending changes: a revocation there sends on its own unless its role waits for you, and anything else waits for you to press Send."
+	}
+	return lead + " What it recorded waits in Pending changes until you press Send."
 }
 
 // grantChangeFailed answers a fault part-way through a change's roles. Each
@@ -608,9 +624,11 @@ func grantNotRead(w http.ResponseWriter, err error) {
 // changed" (re-audit R17).
 func grantChangeFailed(w http.ResponseWriter, r *http.Request, userID string, err error, res zitadelGrantChange) {
 	var written []string
+	revoking := false
 	for _, rc := range res.Roles {
 		if rc.Change != "kept" {
 			written = append(written, rc.Role)
+			revoking = revoking || rc.Change == "revoked"
 		}
 	}
 	if len(written) == 0 {
@@ -621,9 +639,8 @@ func grantChangeFailed(w http.ResponseWriter, r *http.Request, userID string, er
 	ref := supportReference()
 	log.Printf("[HTTP] error status=500 ref=%s code=%s: recorded %v, then: %v", ref, partlyRecordedCode, written, err)
 	jsonResponse(w, http.StatusInternalServerError, ErrorResponse{
-		Error: partlyRecordedCode,
-		Message: fmt.Sprintf("Syndra recorded %d of the roles, then hit a fault. What it recorded waits in Pending changes; the rest was not recorded.",
-			len(written)),
+		Error:   partlyRecordedCode,
+		Message: partlyRecordedMessage(len(written), revoking, propagation.AutoRetry()),
 		Details: map[string]string{"request_id": ref, "recorded": strings.Join(written, ",")},
 	})
 }
@@ -807,6 +824,7 @@ func walkRemoveRoles(ctx context.Context, actor, userID, projectID string, roles
 func finishZitadelGrantChange(w http.ResponseWriter, r *http.Request, userID string, res zitadelGrantChange) {
 	rebuildUserCacheDetachedFn(r.Context(), userID)
 	row := map[string]string{}
+	refused := map[string]string{}
 	if len(res.OutboxIDs) > 0 {
 		d := svcDeliver(r.Context(), res.OutboxIDs, r.URL.Query().Get("apply") != "true")
 		res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
@@ -817,6 +835,9 @@ func finishZitadelGrantChange(w http.ResponseWriter, r *http.Request, userID str
 			row[id] = "pending"
 			if st, err := dbGetPropagationStatus(r.Context(), id); err == nil && (st == "applied" || st == "failed") {
 				row[id] = st
+			}
+			if why := d.ReasonFor(id); db.IsRefused(why) {
+				row[id], refused[id] = "failed", why
 			}
 		}
 	}
@@ -831,6 +852,7 @@ func finishZitadelGrantChange(w http.ResponseWriter, r *http.Request, userID str
 			if st := cmp.Or(row[id], "pending"); rc.Status == "" || roleStatusRank[st] < roleStatusRank[rc.Status] {
 				rc.Status = st
 			}
+			rc.Reason = cmp.Or(rc.Reason, refused[id])
 		}
 		rc.Status = cmp.Or(rc.Status, "pending")
 		if worst == "" || roleStatusRank[rc.Status] < roleStatusRank[worst] {

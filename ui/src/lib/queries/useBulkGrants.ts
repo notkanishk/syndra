@@ -89,10 +89,16 @@ export interface BulkOutcome {
   /** What this person is left holding — the part a count never tells you. */
   consequence?: string;
   grant_ids?: string[];
-  /** A queued row's reason: role_waits, manual, halted:<reason>, or halted:retrying (Syndra sends it again on its own). */
+  /**
+   * A queued row's reason: role_waits, manual, halted:<reason>, or
+   * halted:retrying (Syndra sends it again on its own). A failed row's
+   * refused:<cause> when Zitadel refused it outright (N1).
+   */
   wait_reason?: string;
   /** A retrying row's next try. */
   retry?: RetryState;
+  /** Rows automatic rules queued with this row's act that wait for Send (N4), never the act's own wait. */
+  rule_waiting?: number;
 }
 
 export interface BulkSummary {
