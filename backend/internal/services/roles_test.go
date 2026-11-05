@@ -25,8 +25,10 @@ func resetRoleDeps(t *testing.T) {
 	origRefs := svcDbGetAllReferencedRoleKeys
 	origAudit := svcInsertAuditLog
 	origMgmt := zitadel.MgmtClient
+	origTx, origAuditDetails, origUpdate, origMembers := svcInTxLockingAccess, svcInsertAuditLogDetails, svcDbUpdateRole, roleMembersFor
 
 	t.Cleanup(func() {
+		svcInTxLockingAccess, svcInsertAuditLogDetails, svcDbUpdateRole, roleMembersFor = origTx, origAuditDetails, origUpdate, origMembers
 		svcDbCreateRole = origCreate
 		svcDbGetRole = origGet
 		svcDbDeleteRole = origDelete
@@ -41,6 +43,9 @@ func resetRoleDeps(t *testing.T) {
 
 func noopRoleDeps() {
 	svcInsertAuditLog = func(_ context.Context, _, _, _, _ string) error { return nil }
+	svcInTxLockingAccess = func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+	svcInsertAuditLogDetails = func(context.Context, string, string, string, string, any) error { return nil }
+	svcDbUpdateRole = func(context.Context, string, string, string, string) error { return nil }
 	svcDbCreateRole = func(_ context.Context, projectID, roleKey, displayName, _, _, _ string, _, _ *string) (string, error) {
 		return "role-new", nil
 	}

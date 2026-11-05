@@ -57,6 +57,19 @@ Source: owner, 5 Nov 2026, "it should never come in the way of legitimate use". 
 - After deploy, read `rate_limits` on production's `/healthz/claims`.
 - Confirm Caddy writes the client's address as the last `X-Forwarded-For` entry. This is unverified on the live box.
 
+## 0d. One path per operation — W1a, the Zitadel screens (5 Nov 2026)
+
+Source: owner, 5 Nov 2026, "follow same pipe for same operation". Change: [`changes/one-path`](changes/one-path/tasks.md), branch `fix/zitadel-screen-pipes`.
+
+**What it does.**
+- Every role create, rename and delete, from Zitadel › Projects or Access › Roles, goes through `services/roles.go` `writeRole`: the trace first (the `roles` row and an audit row in one transaction), then Zitadel, then a read-back on any error before anything is undone. A 503 that landed no longer leaves an orphan role.
+- A role delete is refused while Syndra gives the role, and while anyone holds it in Zitadel until the operator confirms the named people by their count.
+- Zitadel › People gives, replaces and removes through the person page's pipe. A role a bundle or a rule still gives is kept, not revoked.
+
+**Open:**
+- `POST /api/v1/roles` still maps its errors itself (task 1.13). #ready-for-agent
+- After deploy, delete an unheld role on the dev box and read both audit rows. #ready-for-human
+
 ## 1. Code
 
 ### A-20 second pass — [`changes/second-pass`](changes/second-pass/proposal.md)
