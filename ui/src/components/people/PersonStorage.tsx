@@ -515,9 +515,9 @@ function HoldRow({ view, seat, page }: { view: PersonTargetView; seat: ReactNode
             {view.holds.length > 1 && (
               <>
                 {" · "}
-                <Link href={page} className="font-semibold text-accent-text link-hover">
+                <AdvancedLink href={page} className="font-semibold text-accent-text link-hover">
                   and {view.holds.length - 1} more
-                </Link>
+                </AdvancedLink>
               </>
             )}
           </Faint>
