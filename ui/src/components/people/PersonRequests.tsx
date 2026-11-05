@@ -8,7 +8,7 @@ import { keepResult, requestOutcome } from "@/components/requests/RequestsScreen
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Crossfade } from "@/components/ui/Crossfade";
 import { StatusSeat } from "@/components/ui/StatusSeat";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { Relative } from "@/components/ui/Time";
@@ -43,7 +43,7 @@ export function PersonRequests({
   // audit tail, nothing is truncated on the way.
   const requests = useRequestsAdmin("all");
   // The queue's own decide: an approval here says what it says there.
-  const { act, resolved, outcomes, isPending, cancelStep } = useRequestDecisions();
+  const { act, resolved, outcomes, forecasts, isPending, cancelStep } = useRequestDecisions();
 
   const mine = useMemo(
     () =>
@@ -88,6 +88,7 @@ export function PersonRequests({
             isPending={isPending}
             onDecide={act}
             outcome={outcomes[entry.id] ?? null}
+            forecast={forecasts[entry.id]}
           />
         ))}
       </ListStates>
@@ -109,6 +110,7 @@ function RequestRow({
   isPending,
   onDecide,
   outcome,
+  forecast,
 }: {
   entry: AccessRequest;
   isOperator: boolean;
@@ -116,6 +118,7 @@ function RequestRow({
   isPending: boolean;
   onDecide: (entry: AccessRequest, status: "approved" | "rejected") => void;
   outcome: Decided | null;
+  forecast?: string;
 }) {
   const open = entry.status === "pending" && !optimisticallyResolved;
   const terms = useTerms();
@@ -136,7 +139,7 @@ function RequestRow({
       </span>
       {/* One seat: the buttons, then the decision in their place (#96). */}
       <span className="flex w-full flex-col gap-2 tablet:w-[196px] tablet:shrink-0">
-        <Crossfade id={open && isOperator ? "open" : outcome && optimisticallyResolved ? "outcome" : "status"}>
+        <Crossfade id={open && isOperator ? "open" : outcome && optimisticallyResolved ? "outcome" : forecast ? "forecast" : "status"}>
         {open && isOperator ? (
           <span className="flex items-center gap-3 tablet:gap-2">
             <Button
@@ -152,7 +155,9 @@ function RequestRow({
             </Button>
           </span>
         ) : outcome && optimisticallyResolved ? (
-          <ActionOutcome placement="seat" word={outcome.word ?? OUTCOME_LABEL[outcome.outcome.kind]} outcome={outcome.outcome} />
+          <ActionOutcome placement="seat" word={outcome.word ?? OUTCOME_LABEL[outcome.outcome.kind]} outcome={outcome.outcome} person={entry.requester_id} />
+        ) : forecast ? (
+          <ActionForecast word={forecast} />
         ) : optimisticallyResolved ? null : (
           <Outcome status={entry.status} note={[keepResult(entry), entry.review_note].filter(Boolean).join(" · ")} />
         )}
@@ -161,6 +166,7 @@ function RequestRow({
         {outcome && !optimisticallyResolved && (
           <ActionOutcome
             placement="seat"
+            person={entry.requester_id}
             className="tint-in"
             word={outcome.word ?? OUTCOME_LABEL[outcome.outcome.kind]}
             outcome={outcome.outcome}

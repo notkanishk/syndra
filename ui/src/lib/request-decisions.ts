@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { formatShortDate, humanizeKey } from "@/lib/format";
-import { outcomeFromError, type ActionOutcome } from "@/lib/outcome";
+import { FORECAST, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { useDecideRequest, type AccessRequest, type DecisionResult } from "@/lib/queries/useRequests";
 import { FLASH_MS } from "@/lib/useFlashOnChange";
@@ -109,6 +109,15 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
   const resolver = useNameResolver();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [outcomes, setOutcomes] = useState<Record<string, Decided>>({});
+  // The first 100ms (A-19 P2): what Syndra WILL do, in the seat, while the write is in flight.
+  // Words only. It is cleared by the true word or by the error; nothing is rolled back because
+  // nothing was changed on screen.
+  const [forecasts, setForecasts] = useState<Record<string, string>>({});
+  const forecast = (id: string, word: string | null) =>
+    setForecasts((prev) => {
+      const { [id]: _gone, ...rest } = prev;
+      return word ? { ...rest, [id]: word } : rest;
+    });
   // Approving can cancel a removal still waiting for you to send. A row has no
   // sheet of its own, so the step opens a small sheet holding only itself.
   const [deciding, setDeciding] = useState<AccessRequest | null>(null);
@@ -122,9 +131,14 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
   async function act(entry: AccessRequest, next: "approved" | "rejected") {
     setResolved((prev) => new Set(prev).add(entry.id));
     setDeciding(entry);
+    forecast(
+      entry.id,
+      next === "rejected" ? FORECAST.decline : entry.kind === "extend" ? FORECAST.extend : FORECAST.approve,
+    );
     try {
       const result = await step.run(() => decide.mutateAsync({ id: entry.id, status: next }));
       if (result === KEPT) {
+        forecast(entry.id, null);
         // Kept: the request is still waiting, in its seat, and nothing was decided.
         setResolved((prev) => {
           const copy = new Set(prev);
@@ -152,7 +166,9 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
         };
       }
       setOutcomes((prev) => ({ ...prev, [entry.id]: decided }));
+      forecast(entry.id, null);
     } catch (error) {
+      forecast(entry.id, null);
       setResolved((prev) => {
         const copy = new Set(prev);
         copy.delete(entry.id);
@@ -195,5 +211,5 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
   const staying = useMemo(() => new Set(Array.from(resolved).filter((id) => !over.has(id))), [resolved, over]);
 
   /** Render once beside the rows: the step for an approval that would cancel something. */
-  return { act, settleAll, resolved, staying, outcomes, isPending: decide.isPending, cancelStep: step.element };
+  return { act, settleAll, resolved, staying, outcomes, forecasts, isPending: decide.isPending, cancelStep: step.element };
 }

@@ -45,13 +45,14 @@ import { useCreateGrant } from "@/lib/queries/useUsers";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import {
   EXTEND_DAYS,
+  FORECAST,
   outcomeFromError,
   outcomeFromExtend,
   statesNothingChanged,
   succeeded,
   type ActionOutcome as Outcome,
 } from "@/lib/outcome";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { compareNames } from "@/lib/sort";
 
 /**
@@ -631,8 +632,10 @@ function ExpiringRow({
       </div>
 
       <div className="flex w-full min-w-0 flex-col items-start gap-2 desktop:w-auto desktop:min-w-[300px] desktop:items-end">
-        <Crossfade id={reported ? "outcome" : "open"} className="w-full tablet:w-auto">
-        {reported ? (
+        <Crossfade id={reported ? "outcome" : extend.isPending ? "forecast" : "open"} className="w-full tablet:w-auto">
+        {extend.isPending && !reported ? (
+          <ActionForecast word={`${FORECAST.extend} by ${EXTEND_DAYS} days`} />
+        ) : reported ? (
           <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />
         ) : (
           <div className="flex w-full flex-wrap items-center gap-2 tablet:w-auto tablet:justify-end">

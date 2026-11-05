@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppSignInStrip } from "@/components/apps/AppSignInStrip";
 import { ProjectName } from "@/components/names";
 import { SignInLookup } from "@/components/people/SignInLookup";
-import { ErrorState, RowSkeleton } from "@/components/states";
+import { ErrorState, RowSkeleton, SkeletonAfterDelay } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +17,7 @@ import { ApiError, request } from "@/lib/api-client";
 import { rowProblems, type SayContext } from "@/lib/claims";
 import { describeFailure } from "@/lib/outcome";
 import { useCrumb } from "@/lib/page-crumb";
+import { useSeededApp } from "@/lib/queries/seed";
 import { useCatalogUsers } from "@/lib/queries/useCatalogUsers";
 import {
   useAppClaimShape,
@@ -49,6 +50,32 @@ import { CopySheet, SaveSummary, TemplateSheet } from "./ShapeSheets";
  */
 export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   const shape = useAppClaimShape(applicationId);
+  // The name arrives with you (A-19 P1): the header paints from the Apps list.
+  const seed = useSeededApp(applicationId);
+  useCrumb(seed?.name);
+  // The header is the row's own: on the first frame, outside the skeleton delay.
+  if (shape.isLoading && seed) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader
+          title={seed.name}
+          meta={
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
+              {kindOf(seed.consumer)} · roles from{" "}
+              <ArrowLink href={`/projects/${seed.project_id}`}>
+                <ProjectName id={seed.project_id} />
+              </ArrowLink>
+            </span>
+          }
+        />
+        <SkeletonAfterDelay>
+          <Card>
+            <RowSkeleton rows={4} avatar={false} label="Loading app" />
+          </Card>
+        </SkeletonAfterDelay>
+      </div>
+    );
+  }
   return (
     <ReadGate
       loading={shape.isLoading}

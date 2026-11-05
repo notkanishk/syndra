@@ -393,6 +393,32 @@ describe("design system", () => {
     expect(constant![1], "FLASH_MS must equal --duration-flash").toBe(declared![1]);
   });
 
+  // A-19 P12: the scrim, the four layers and the touch floor are tokens.
+  it("declares the scrim in both themes, and the layers and the tap floor once", () => {
+    const css = readFileSync(GLOBALS_CSS, "utf8");
+    const dark = css.slice(css.indexOf('[data-theme="dark"] {'), css.indexOf('[data-theme="light"] {'));
+    const light = css.slice(css.indexOf('[data-theme="light"] {'));
+    expect(dark).toContain("--scrim: rgba(0, 0, 0, 0.55)");
+    // The violet-black of --shadow-dialog, never pure black, at 0.35.
+    expect(light).toContain("--scrim: rgba(60, 40, 120, 0.35)");
+    for (const token of ["--layer-bar: 20", "--layer-pill: 30", "--layer-dialog: 50", "--layer-popover: 60", "--tap: 44px"]) {
+      expect(css, `globals.css must declare ${token}`).toContain(token);
+    }
+    // A popover opened in a dialog shows over it.
+    expect(css.indexOf("--layer-dialog")).toBeLessThan(css.indexOf("--layer-popover"));
+  });
+
+  it("no component writes a raw z-index number or a black overlay", () => {
+    const found = patternOffenders(
+      /\bz-(?:\[?\d|auto)|zIndex:\s*\d|z-index:\s*\d|\bbg-(?:black|white)\/\d|rgba\(\s*0\s*,\s*0\s*,\s*0/,
+      "raw z-index or black overlay",
+    ).filter((entry) => !entry.file.endsWith(NO_TOKENS_AVAILABLE));
+    expect(
+      found,
+      `Use --layer-* for stacking and --scrim for overlays:\n${describeOffenders(found)}`,
+    ).toEqual([]);
+  });
+
   // A-05: the motion vocabulary is tokens, so a change to a curve or a cap is a
   // decision in one place. Each of these has a consumer in globals.css.
   it("declares the motion tokens Motion v2 names", () => {

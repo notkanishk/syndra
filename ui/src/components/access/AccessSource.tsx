@@ -171,8 +171,8 @@ export function givenAt(reasons: RoleReason[] | undefined | null): string | unde
  * the confirmation the deployment asked for is the system working. What it must
  * not do is read as delivered.
  */
-export function NotSentYet({ className = "", why }: { className?: string; why?: string }) {
-  return <NextStep why={why} className={className} />;
+export function NotSentYet({ className = "", why, person }: { className?: string; why?: string; person?: string }) {
+  return <NextStep why={why} person={person} className={className} />;
 }
 
 export function AccessSourceList({

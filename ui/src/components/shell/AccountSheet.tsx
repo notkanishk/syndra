@@ -36,7 +36,7 @@ const OWN_NOTES: Record<string, string> = {
 export function AccountSheet({ session }: { session: SessionUser }) {
   const [open, setOpen] = useState(false);
   const [about, setAbout] = useState(false);
-  const { theme, setTheme } = useTheme();
+  const { choice, setTheme } = useTheme();
   const installer = useInstallPrompt();
 
   return (
@@ -111,11 +111,12 @@ export function AccountSheet({ session }: { session: SessionUser }) {
             <Segmented
               label="Appearance"
               size="sm"
-              value={theme ?? "dark"}
+              value={choice}
               onChange={setTheme}
               options={[
                 { value: "dark", label: "Dark" },
                 { value: "light", label: "Light" },
+                { value: "device", label: "Device" },
               ]}
             />
           </div>

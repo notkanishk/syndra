@@ -106,8 +106,8 @@ describe("the navigation sheet dragged by its grabber (S3)", () => {
     const { scrim, panel, grabber } = open();
     drag(grabber, 150);
     expect(panel.style.transform).toBe("translateY(150px)");
-    // 150 of 600 is a quarter: its own 70% wash is thinned by a quarter.
-    expect(scrim.style.backgroundColor).toBe("rgba(0, 0, 0, 0.525)");
+    // 150 of 600 is a quarter: the wash is thinned by a quarter.
+    expect(scrim.style.getPropertyValue("--scrim-keep")).toBe("0.75");
   });
 
   it("settles back when let go short of a third, and stays open", () => {
