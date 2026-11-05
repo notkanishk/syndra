@@ -1,5 +1,6 @@
 "use client";
 
+import { settleIndicators } from "@/lib/queries/useIndicators";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
@@ -115,8 +116,9 @@ function useBulkDriftMutation<B>(path: string, apply: boolean) {
   return useMutation({
     mutationFn: (body: B) =>
       request<BulkPlan>(apply ? `${path}?apply=true` : path, { method: "POST", body }),
-    onSuccess: () => {
+    onSuccess: (plan) => {
       if (!apply) return;
+      settleIndicators(qc, { drift: -(plan.summary?.succeeded ?? 0) });
       qc.invalidateQueries({ queryKey: ["drift"] });
       qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
       // Drift status drives the People list's unexplained_count, so a bulk
@@ -165,6 +167,8 @@ function useDriftMutation<B>(path: (id: string) => string, extraKeys: readonly (
     mutationFn: async ({ id, body }: { id: string; body?: B }) =>
       request(path(id), { method: "POST", body }),
     onSuccess: () => {
+      // The rail's count follows the answer; the refetch below confirms it.
+      settleIndicators(qc, { drift: -1 });
       qc.invalidateQueries({ queryKey: ["drift"] });
       qc.invalidateQueries({ queryKey: governanceQueryKeys.all });
       // Drift status drives the People list's unexplained_count, so any triage

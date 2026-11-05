@@ -29,6 +29,10 @@ describe("the copy guide's forecast table", () => {
       FORECAST.remove,
       FORECAST.keep,
       FORECAST.lift,
+      FORECAST.give,
+      FORECAST.cancel,
+      FORECAST.adopt,
+      FORECAST.mark,
       FORECAST.queued,
     ]);
   });

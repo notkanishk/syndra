@@ -1,5 +1,6 @@
 "use client";
 
+import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -133,14 +134,14 @@ function Status({ view }: { view: PersonTargetView }) {
       <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
         <>
-          Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}
+          {SYSTEM_WORDS.offline}{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}
           {view.last_known ? ` · last read ${formatClock(view.last_known.read_at)}` : ""}
         </>
       ) : held ? (
-        <>Answering · their account is on hold</>
+        <>{SYSTEM_WORDS.answering} · their account is on hold</>
       ) : (
         <>
-          Answering{view.checked_at ? <> · read <Relative iso={view.checked_at} /></> : null}
+          {SYSTEM_WORDS.answering}{view.checked_at ? <> · read <Relative iso={view.checked_at} /></> : null}
         </>
       )}
     </span>

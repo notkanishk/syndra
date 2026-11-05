@@ -23,6 +23,10 @@ vi.mock("next/dynamic", () => ({
 }));
 beforeEach(() => Promise.all(dynamicLoads));
 
+// The forecast asks which roles wait; most surfaces under test have no list to
+// read. Said once here, so a test about a waiting role overrides it locally.
+vi.mock("@/lib/queries/useRoleWaits", () => ({ useRoleWaits: () => () => false }));
+
 // jsdom implements no matchMedia. Installed once per file rather than per
 // test, because components capture it during render; reset between tests so a
 // query answered in one does not leak into the next. See test-utils/media.ts

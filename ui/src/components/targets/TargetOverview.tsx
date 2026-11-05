@@ -236,6 +236,21 @@ export function TargetOverview({ target }: { target: string }) {
         >
           {/* First, because a person may be waiting on one. A loading or failed
               read shows no rows and no count (A-09 §4 States). */}
+          {/* The seat does not come and go (A-20 P5): a card holds the place while
+              the reads are out, and says so in words when nothing is waiting. */}
+          {!waitingKnown && (unconfirmed.isLoading || findings.isLoading || health.isLoading) && (
+            <Card>
+              <RowSkeleton rows={1} avatar={false} label="Reading what is waiting on you" />
+            </Card>
+          )}
+          {waitingKnown && waiting === 0 && (
+            <Card>
+              <EmptyState
+                title="Nothing is waiting on you."
+                guidance={`A change ${name} never answered, an account two records disagree about, or a password that needs a new one appears here.`}
+              />
+            </Card>
+          )}
           <UnconfirmedChanges
             target={target}
             operations={unconfirmed.data ?? []}
@@ -1371,7 +1386,7 @@ function Inventory({ target, stale }: { target: string; stale: boolean }) {
         errorTitle="The account list could not be read"
         empty={
           <EmptyState
-            title="Nothing outside Syndra"
+            title="Nothing outside Syndra."
             guidance={`Every account on ${name} was created by Syndra.`}
           />
         }

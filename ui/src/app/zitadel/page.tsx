@@ -21,6 +21,8 @@ import { formatAt } from "@/lib/format";
 import { useClaimsDelivery, type ClaimsDelivery as Delivery } from "@/lib/queries/useClaimsDelivery";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useZitadelHealth } from "@/lib/queries/useZitadel";
+import { CheckPips, zitadelReading } from "@/components/targets/TargetReading";
+import { useMissedChecks } from "@/lib/useMissedChecks";
 
 interface RotationStatus {
   key_installed?: boolean;
@@ -56,9 +58,16 @@ export default function IdentityProviderPage() {
 
   const live = health.data?.status === "ok";
   const notConfigured = health.data?.status === "disabled";
-  const projectCount = live
-    ? (health.data?.projects_total ?? projects.data?.length ?? 0)
-    : (projects.data?.length ?? 0);
+  // A count is said only once it has been read: while projects load there is
+  // none, and the meta says the word and nothing else (A-20 P5).
+  const projectCount: number | undefined = live
+    ? (health.data?.projects_total ?? projects.data?.length)
+    : projects.data?.length;
+  const misses = useMissedChecks(
+    (health as { dataUpdatedAt?: number }).dataUpdatedAt ?? health.data,
+    health.data ? live || notConfigured : undefined,
+  );
+  const reading = zitadelReading({ status: health.data?.status, misses });
   const keyOverdue = rotation.data?.status === "warn" || rotation.data?.status === "stale";
 
   return (
@@ -76,7 +85,9 @@ export default function IdentityProviderPage() {
             {health.data?.domain ? <Mono>{health.data.domain}</Mono> : null}
             {health.isLoading || health.error
               ? null
-              : `${projectCount} project${projectCount === 1 ? "" : "s"}${live ? "" : ", last known"}`}
+              : projectCount === undefined
+                ? null
+                : `${projectCount} project${projectCount === 1 ? "" : "s"}${live ? "" : ", last known"}`}
           </MetaRow>
         }
       />
@@ -100,8 +111,12 @@ export default function IdentityProviderPage() {
         />
       ) : (
         <HealthLine
+          reading={reading}
           live={live}
           notConfigured={notConfigured}
+          misses={misses}
+          onCheckAgain={() => health.refetch()}
+          checking={health.isFetching}
           latency={health.data?.latency_ms}
           detail={health.data?.error}
           projectCount={projectCount}
@@ -294,41 +309,53 @@ function rotationSentence(status: RotationStatus | undefined, error: unknown): s
  * sentence with a cause, never a dot on its own.
  */
 function HealthLine({
+  reading,
   live,
   notConfigured,
+  misses,
+  onCheckAgain,
+  checking,
   latency,
   detail,
   projectCount,
 }: {
+  reading: ReturnType<typeof zitadelReading>;
   live: boolean;
   notConfigured: boolean;
+  misses: number;
+  onCheckAgain: () => void;
+  checking?: boolean;
   latency?: number;
   detail?: string;
-  projectCount: number;
+  projectCount?: number;
 }) {
-  const word = live ? "Answering" : notConfigured ? "Not connected" : "Not answering";
+  const word = reading.word;
+  const sees = projectCount === undefined ? "" : `, and sees ${projectCount} project${projectCount === 1 ? "" : "s"}`;
+  // One or two missed checks are shown as pips and raise no Notice; three in a row is Offline.
+  const pips = !live && !notConfigured;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 text-[13.5px]">
-        <StatusSeat tone={live ? "healthy" : "warn"} word={word} />
+        <StatusSeat tone={reading.tone} word={word} />
+        {pips && <CheckPips recent={Array(Math.min(misses, 3)).fill("missed")} />}
         <span className="text-muted">
           {live
-            ? `in ${latency ?? 0} ms, and sees ${projectCount} project${projectCount === 1 ? "" : "s"}`
+            ? `in ${latency ?? 0} ms${sees}`
             : notConfigured
               ? "Syndra is not set up to talk to Zitadel"
               : "the projects check waits for it"}
         </span>
+        <Button size="sm" variant="outline" onClick={onCheckAgain} disabled={checking}>
+          Check again
+        </Button>
       </div>
 
-      <Unfold open={!live} gap={16}>
-        <Notice
-          tone={notConfigured ? "warn" : "danger"}
-          title={notConfigured ? "Not connected" : "Unreachable"}
-        >
+      <Unfold open={notConfigured || reading.offline} gap={16}>
+        <Notice tone={notConfigured ? "warn" : "neutral"} title={`${word}.`}>
           {notConfigured
             ? "Syndra is not set up to talk to Zitadel, so nothing decided here changes anyone's real access. "
-            : "Syndra's last attempt to reach Zitadel failed. "}
+            : "Three checks in a row went unanswered. Syndra keeps checking. "}
           {detail ||
             "Syndra is showing what it last knew. Nothing is lost: changes waiting for you to send stay in order and go through when Zitadel is back."}
         </Notice>
