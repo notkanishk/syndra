@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { Mono, StatusDot } from "@/components/ui/Badge";
-import { ArriveList } from "@/components/ui/ArriveList";
+import { ArriveList } from "@/lib/motion";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { NextStep } from "@/components/ui/NextStep";

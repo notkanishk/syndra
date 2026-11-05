@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/queries/seed", () => ({ useSeededBundleName: () => undefined }));
+
 import { BundlePage } from "@/components/bundles/BundlePage";
 import type { BundleRow } from "@/lib/queries/useBundles";
 

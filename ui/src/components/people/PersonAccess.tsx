@@ -32,13 +32,13 @@ import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { WaitsMark } from "@/components/ui/WaitsMark";
@@ -518,7 +518,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
                     aria-expanded={open}
                     aria-label={`${open ? "Fold" : "Open"} ${project.project_name}`}
                     onClick={() => toggleProject(project.project_id)}
-                    className="group -my-2 -ml-2 flex size-11 flex-none items-center justify-center"
+                    className="group -my-2 -ml-2 flex size-[var(--tap)] flex-none items-center justify-center"
                   >
                     <FoldChevron open={open} />
                   </button>

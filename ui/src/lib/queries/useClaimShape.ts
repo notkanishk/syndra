@@ -1,6 +1,6 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { request } from "@/lib/api-client";
 import { sortByName } from "@/lib/sort";
@@ -205,10 +205,17 @@ export function useClaimVocabulary() {
   });
 }
 
+const fetchClaimShape = (appId: string) => request<AppClaimShape>(`${app(appId)}/claim-shape`);
+
+/** Warms an app's shape read (A-19 P9): the same key and read the page uses. */
+export function prefetchAppClaimShape(qc: QueryClient, appId: string) {
+  return qc.prefetchQuery({ queryKey: claimKeys.shape(appId), queryFn: () => fetchClaimShape(appId) });
+}
+
 export function useAppClaimShape(appId: string | undefined) {
   return useQuery({
     queryKey: claimKeys.shape(appId ?? ""),
-    queryFn: () => request<AppClaimShape>(`${app(appId!)}/claim-shape`),
+    queryFn: () => fetchClaimShape(appId!),
     enabled: Boolean(appId),
   });
 }

@@ -3,15 +3,15 @@
 import React from "react";
 
 import { PILL } from "@/components/ui/Button";
-import { GlideIndicator, useGlideIndicator } from "@/components/ui/GlideIndicator";
+import { GlideIndicator, useGlideIndicator } from "@/lib/motion";
 
 /**
  * The page-level tab row: two or three views of one subject, switched in place.
  *
  * It exists because there were two hand-rolled copies of it — the person page
  * and the drift queue — and they had already drifted from each other in the
- * ways copies always do. Same 44px floor spelled two ways (`min-h-11` and
- * `min-h-[44px]`), and vertical padding applied always in one and only above
+ * ways copies always do. Same 44px floor spelled two ways (`min-h-[var(--tap)]` and
+ * `min-h-[var(--tap)]`), and vertical padding applied always in one and only above
  * the desktop breakpoint in the other, so the same control was a different
  * height on a phone depending on which screen you were on.
  *

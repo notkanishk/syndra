@@ -1,5 +1,6 @@
 "use client";
 
+import { keepView, recallView, usePlace } from "@/lib/place";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
@@ -7,7 +8,7 @@ import { useMemo, useRef, useState } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { BulkDialog } from "@/components/people/BulkDialog";
@@ -18,9 +19,9 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
 import { FilterPills } from "@/components/ui/Select";
-import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
 import { RunLabel, SortHead, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import {
   RowCheckbox,
   SelectAllRow,
@@ -89,6 +90,10 @@ function windowDays(raw: string | null): Window {
   return WINDOWS.find((d) => String(d) === raw) ?? WINDOWS[0];
 }
 
+const isString = (value: unknown): value is string => typeof value === "string";
+const isOpenMap = (value: unknown): value is Record<SectionKey, boolean> =>
+  typeof value === "object" && value !== null && "undecided" in value && "lapse" in value;
+
 type SortKey = "who" | "what" | "given" | "ends";
 
 /** The two cards. `ends` is the clock: soonest first unless a heading says otherwise. */
@@ -100,7 +105,10 @@ type SectionKey = keyof typeof SECTIONS;
 
 export default function ExpiringAccessPage() {
   const router = useRouter();
-  const within = windowDays(useSearchParams().get("within"));
+  // A link that names its window wins; a bare link opens on the one you last chose (A-19 P8),
+  // and the pill says which.
+  const [kept, setKept] = useState<string | undefined>(() => recallView("expiring", "pill", isString));
+  const within = windowDays(useSearchParams().get("within") ?? kept ?? null);
   const grants = useExpiringGrants(within);
   const rows = useMemo(() => [...(grants.data ?? [])].sort(sortBySoonest), [grants.data]);
 
@@ -108,8 +116,9 @@ export default function ExpiringAccessPage() {
   // is what is seen.
   const resolver = useNameResolver();
   const [query, setQuery] = useState("");
-  const [sort, flipSort, view] = useSort<SortKey>("ends");
-  const [open, setOpen] = useState<Record<SectionKey, boolean>>({ undecided: true, lapse: true });
+  const [sort, flipSort, view] = useSort<SortKey>("ends", { list: "expiring", keys: ["who", "what", "given", "ends"] });
+  // Open sections are where a Back finds them (A-19 P5).
+  const [open, setOpen] = usePlace<Record<SectionKey, boolean>>("open", { undecided: true, lapse: true }, isOpenMap);
   const text = useMemo(
     () => ({
       who: (grant: ExpiringGrantRow) => resolver.resolveUser(grant.user_id).value?.display_name ?? "",
@@ -278,14 +287,16 @@ export default function ExpiringAccessPage() {
             label="How far ahead"
             value={String(within)}
             options={WINDOWS.map((d) => ({ value: String(d), label: `${d} days` }))}
-            onChange={(next) =>
+            onChange={(next) => {
+              keepView("expiring", "pill", next);
+              setKept(next);
               router.replace(
                 next === String(WINDOWS[0])
                   ? "/review/expiring-access"
                   : `/review/expiring-access?within=${next}`,
                 { scroll: false },
-              )
-            }
+              );
+            }}
           />
         }
         search={
@@ -404,9 +415,14 @@ export default function ExpiringAccessPage() {
           userIds={selectedUsers}
           grantIds={selectedGrantIds}
           scope="with access that ends"
-          onClose={() => {
+          onClose={(applied) => {
             setExtending(false);
-            selection.clear();
+            // Select is a mode, not structure (A-19 P10.2): it ends with the result. Closing
+            // the plan without applying leaves the selection where it was.
+            if (applied) {
+              selection.clear();
+              setSelecting(false);
+            }
           }}
         />
       )}

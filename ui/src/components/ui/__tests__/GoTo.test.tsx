@@ -14,8 +14,8 @@ vi.mock("@/lib/ui-view", () => ({
 
 const catalog = {
   users: [
-    { id: "u2", name: "Priya Nair", email: "p@x.edu", title: "Student Staff", team: "Fabrication" },
-    { id: "u1", name: "Arjun Priest", email: "a@x.edu", title: "", team: "Wood shop" },
+    { id: "u2", name: "Priya Nair", email: "p@example.edu", title: "Student Staff", team: "Fabrication" },
+    { id: "u1", name: "Arjun Priest", email: "a@example.edu", title: "", team: "Wood shop" },
   ],
   projects: [{ id: "p1", name: "Print Lab", kind: "", description: "", roles: [{ key: "trained", label: "Trained", description: "" }] }],
   applications: [{ id: "a1", name: "Print Queue", project_id: "p1", description: "", consumer: "oidc", claim_name: "", format_type: "" }],

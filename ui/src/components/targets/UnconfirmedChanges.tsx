@@ -10,7 +10,7 @@ import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { describeFailure, sentence } from "@/lib/outcome";

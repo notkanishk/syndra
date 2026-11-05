@@ -1,6 +1,6 @@
 import React from "react";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 
 /**
  * The container surface: 20px radius, one hairline, no padding of its own so

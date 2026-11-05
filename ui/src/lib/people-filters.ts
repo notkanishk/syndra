@@ -26,7 +26,8 @@ export type Attention =
   | "unexplained"
   | "requests"
   | "no-access"
-  | "departed";
+  | "departed"
+  | "unseen";
 
 export const ATTENTION_VALUES: readonly Attention[] = [
   "expiring",
@@ -34,6 +35,7 @@ export const ATTENTION_VALUES: readonly Attention[] = [
   "requests",
   "no-access",
   "departed",
+  "unseen",
 ];
 
 export const ATTENTION_LABELS: Record<Attention, string> = {
@@ -42,6 +44,7 @@ export const ATTENTION_LABELS: Record<Attention, string> = {
   requests: "Open requests",
   "no-access": "No access yet",
   departed: "Departed, still has access",
+  unseen: "Sent, not seen back yet",
 };
 
 export interface PeopleFilters {
@@ -219,6 +222,9 @@ function matchesAttention(entry: UserListEntry, attention: Attention): boolean {
       // Only departed people who still hold something: a cleanly offboarded
       // account is not work, and listing it as such would bury the ones that are.
       return isDeparted(entry.user.status) && hasAccess(entry);
+    case "unseen":
+      // Zitadel accepted a change for them and no read has shown it back (A-19 P10.5).
+      return (entry.unseen_count ?? 0) > 0;
   }
 }
 

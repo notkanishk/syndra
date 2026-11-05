@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Select";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 
 import { getChimeContext, isChimeEnabled, playDriftChime, setChimeEnabled } from "@/lib/driftChime";
 import { useReducedMotion } from "@/lib/useViewport";

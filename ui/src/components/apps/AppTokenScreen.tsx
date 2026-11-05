@@ -15,6 +15,7 @@ import { CopyableValue } from "@/components/ui/CopyableValue";
 import { BELOW_HEADER, PageHeader } from "@/components/ui/PageHeader";
 import { ApiError, request } from "@/lib/api-client";
 import { rowProblems, type SayContext } from "@/lib/claims";
+import { keepDraft, keepPerson, readKeptDraft, readKeptPerson } from "@/lib/claims-memory";
 import { describeFailure } from "@/lib/outcome";
 import { useCrumb } from "@/lib/page-crumb";
 import { useSeededApp } from "@/lib/queries/seed";
@@ -128,14 +129,24 @@ function AppClaims({ applicationId }: { applicationId: string }) {
   const project = resolver.resolveProject(projectId).value?.name ?? "this project";
   useCrumb(app);
 
-  const [personId, setPersonId] = useState("");
+  // "Preview for" remembers its last person for this app, this tab (A-19 P10.6).
+  const [personId, setPersonId] = useState(() => readKeptPerson(applicationId));
   useEffect(() => {
-    if (personId || users.data.length === 0) return;
+    if (users.data.length === 0) return;
+    // Someone no longer listed is not remembered: back to the usual first choice.
+    if (personId && users.data.some((u) => u.id === personId)) return;
     setPersonId(users.data.some((u) => u.id === selfId) ? selfId! : users.data[0].id);
   }, [users.data, selfId, personId]);
+  useEffect(() => keepPerson(applicationId, personId), [applicationId, personId]);
   const person = users.data.find((u) => u.id === personId)?.name ?? "this person";
 
-  const [draft, setDraft] = useState<ShapeDraft | null>(null);
+  // A draft survives leaving the page and coming back, until it is saved or discarded (A-19 P10.6).
+  const [restored] = useState(() => readKeptDraft(applicationId));
+  const [draft, setDraft] = useState<ShapeDraft | null>(restored?.draft ?? null);
+  useEffect(() => {
+    // The restored draft is already kept, with its own time; only a change after it is written again.
+    if (draft !== restored?.draft) keepDraft(applicationId, draft);
+  }, [applicationId, draft, restored]);
   const [sheet, setSheet] = useState<{ kind: "template"; id: string } | { kind: "copy" } | { kind: "save" } | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
   const beforeCopy = useRef<ShapeDraft | null>(null);
@@ -214,6 +225,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
             shape={shape}
             draft={draft}
             setDraft={setDraft}
+            restoredAt={restored && draft === restored.draft ? restored.at : undefined}
             token={token}
             person={person}
             preview={preview.data}

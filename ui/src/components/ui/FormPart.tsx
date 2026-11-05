@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-import { LeavingRow, type LeaveProps } from "@/components/ui/LeavingRows";
-import { Unfold } from "@/components/ui/Unfold";
+import { LeavingRow, type LeaveProps } from "@/lib/motion";
+import { Unfold } from "@/lib/motion";
 
 /**
  * A row of a form or an editor (Motion v2, form parts). Added: it opens to its

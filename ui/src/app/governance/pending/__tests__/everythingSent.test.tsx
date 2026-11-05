@@ -99,6 +99,20 @@ describe("Everything sent (S13), with the page still", () => {
     expect(screen.queryByText(/sent at/)).not.toBeInTheDocument();
   });
 
+  // A-19 P10.1 (Q11): the line ends in one next link, to where what was sent can be read.
+  it("links to Change history, from this operator's send and from someone else's alike", async () => {
+    const view = render(tree());
+    pending.data = [];
+    view.rerender(tree());
+    expect(screen.getByRole("link", { name: /Change history/ })).toHaveAttribute("href", "/operations/cascades");
+    expect(screen.getAllByRole("link", { name: /Change history/ })).toHaveLength(1);
+  });
+
+  it("offers no Change history link while changes are waiting, or on a queue that was empty from the start", () => {
+    render(tree());
+    expect(screen.queryByRole("link", { name: /Change history/ })).toBeNull();
+  });
+
   it("goes away when changes are waiting again", () => {
     const view = render(tree());
     pending.data = [];

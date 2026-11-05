@@ -21,7 +21,7 @@ export function FoldHeading({
       type="button"
       aria-expanded={open}
       onClick={onClick}
-      className="flex min-h-[44px] w-full items-center gap-3 px-3 py-2 text-left hover-tint"
+      className="flex min-h-[var(--tap)] w-full items-center gap-3 px-3 py-2 text-left hover-tint"
     >
       <FoldChevron open={open} />
       <span className="min-w-0 flex-1 text-[14.5px] font-semibold">{title}</span>

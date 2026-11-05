@@ -12,7 +12,7 @@ import { Chip } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { formatShortDate } from "@/lib/format";
 import { useCrumb } from "@/lib/page-crumb";
 import { useBundleVersions } from "@/lib/queries/useBundleVersions";

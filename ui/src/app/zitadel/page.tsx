@@ -14,7 +14,7 @@ import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { StatusSeat } from "@/components/ui/StatusSeat";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { ClaimsDelivery } from "@/components/system/ClaimsDelivery";
 import { request } from "@/lib/api-client";
 import { formatAt } from "@/lib/format";
@@ -442,7 +442,7 @@ function UpstreamWrites({ reachable }: { reachable: boolean }) {
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex min-h-11 w-full flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4 text-left"
+        className="flex min-h-[var(--tap)] w-full flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4 text-left"
       >
         <FoldChevron open={open} />
         <span className="type-card-title text-danger-text">Change Zitadel directly</span>

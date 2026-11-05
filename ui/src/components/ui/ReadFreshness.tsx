@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 import { formatRelative } from "@/lib/format";
 
 /**
@@ -98,7 +98,7 @@ const TONE: Record<Freshness, string> = {
  * floor), with the 44px target on touch moved to an unpainted `before` box.
  */
 export const READ_AGAIN_PILL =
-  "min-h-0! py-px! before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 desktop:before:hidden";
+  "min-h-0! py-px! before:absolute before:inset-x-0 before:top-1/2 before:h-[var(--tap)] before:-translate-y-1/2 desktop:before:hidden";
 
 export interface RefreshPress {
   /** A press is in flight: show the control busy, and the old age stays until the read lands. */

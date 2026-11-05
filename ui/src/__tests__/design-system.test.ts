@@ -7,7 +7,7 @@ import {
   ARRIVE_MS,
   ARRIVE_SETTLED_MS,
   ARRIVE_STEP_MS,
-} from "@/components/ui/ArriveList";
+} from "@/lib/motion";
 
 /**
  * Design-system canary.
@@ -386,7 +386,7 @@ describe("design system", () => {
     const declared = /--duration-flash:\s*(\d+)ms/.exec(css);
     expect(declared, "globals.css must declare --duration-flash").not.toBeNull();
 
-    const hook = readFileSync(resolve(SRC_ROOT, "lib/useFlashOnChange.ts"), "utf8");
+    const hook = readFileSync(resolve(SRC_ROOT, "lib/motion/flash.ts"), "utf8");
     const constant = /FLASH_MS = (\d+)/.exec(hook);
     expect(constant, "useFlashOnChange must export FLASH_MS").not.toBeNull();
 
@@ -406,6 +406,18 @@ describe("design system", () => {
     }
     // A popover opened in a dialog shows over it.
     expect(css.indexOf("--layer-dialog")).toBeLessThan(css.indexOf("--layer-popover"));
+  });
+
+  // A-19 EOY-F11: the touch floor is --tap, spelled once.
+  it("no component spells the touch floor as 44px or 11", () => {
+    const found = patternOffenders(
+      /(?:min-[hw]|\bh|\bsize)-(?:\[44px\]|11\b)|before:h-11/,
+      "touch floor typed out",
+    ).filter((entry) => !/\.(?:test|spec)\./.test(entry.file) && !entry.file.includes("__tests__"));
+    expect(
+      found,
+      `Write the touch floor as min-h-[var(--tap)] (or size-[var(--tap)]):\n${describeOffenders(found)}`,
+    ).toEqual([]);
   });
 
   it("no component writes a raw z-index number or a black overlay", () => {
@@ -723,7 +735,7 @@ describe("design system", () => {
         if (!height || Number(height[1]) >= 44) continue;
         // An explicit 44 anywhere in the string is the escape: a small ring
         // inside a full-size box is the fix, not a violation.
-        if (/min-h-\[44px\]|min-h-11|(?:^|\s)h-11/.test(classes)) continue;
+        if (/min-h-\[var\(--tap\)\]|(?:^|\s)h-\[var\(--tap\)\]/.test(classes)) continue;
         const line = source.slice(0, tag.at).split("\n").length;
         under.push(`${file.replace(SRC_ROOT, "src")}:${line} h-[${height[1]}px]`);
       }

@@ -8,7 +8,7 @@ import { ProjectName } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Mono } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { useShownNames } from "@/components/names/shownNames";
 import { useRetiredMappingRules } from "@/lib/queries/useMappingRules";
 import { sortByName } from "@/lib/sort";

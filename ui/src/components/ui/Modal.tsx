@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState, type Rea
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
-import { FLASH_MS } from "@/lib/useFlashOnChange";
+import { FLASH_MS } from "@/lib/motion";
 import { LIGHT_LEAD_MS, SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 
 /**
@@ -561,7 +561,7 @@ function SheetGrabber({ busy, onClose, drag }: { busy: boolean; onClose: () => v
       // 44px tall, 26px of it visible: the bar is a hairline and the target
       // around it is a thumb. It draws no extra space because the padding
       // eats into the header's own top gap.
-      className="-mb-[18px] mx-auto flex h-11 w-full max-w-[120px] flex-none touch-none items-center justify-center tablet:hidden"
+      className="-mb-[18px] mx-auto flex h-[var(--tap)] w-full max-w-[120px] flex-none touch-none items-center justify-center tablet:hidden"
     >
       <span aria-hidden className="h-1 w-[38px] rounded-pill bg-ink/20" />
     </button>

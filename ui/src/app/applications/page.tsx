@@ -34,7 +34,7 @@ const APP_SORT: Record<AppSort, (entry: ApplicationView) => string | number> = {
  */
 export default function AppsPage() {
   const apps = useApplications();
-  const [sort, setSort, view] = useSort<AppSort>("app");
+  const [sort, setSort, view] = useSort<AppSort>("app", { list: "applications", keys: ["app", "people"] });
   const all = useMemo(() => apps.data ?? [], [apps.data]);
   const rows = useMemo(() => orderBy(all, view.sort, APP_SORT), [all, view.sort]);
   const basis = all[0]?.observation;
@@ -111,6 +111,7 @@ export default function AppsPage() {
             const subLine = [kindOf(entry), shapeLine(entry, all, templates)].filter(Boolean);
             return (
             <Link
+              data-row
               key={entry.application.id}
               href={`/applications/${entry.application.id}`}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"

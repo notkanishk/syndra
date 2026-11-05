@@ -7,7 +7,7 @@ import { StatusDot } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { Ticks } from "@/components/ui/TokenBlock";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { TEMPLATE_FOR, TEMPLATE_META, TEMPLATE_SHEET } from "@/lib/claims";
 import { outcomeFromError } from "@/lib/outcome";
 import { useApplications, type ApplicationView } from "@/lib/queries/useApplications";

@@ -56,7 +56,7 @@ export function ChoiceRow({
 
   return (
     <label
-      className={`flex min-h-[44px] items-start gap-3 rounded-inner border px-3.5 py-2.5 motion-tint ${
+      className={`flex min-h-[var(--tap)] items-start gap-3 rounded-inner border px-3.5 py-2.5 motion-tint ${
         chosen ? "border-accent-line bg-accent-soft" : outlined ? "border-line-strong" : "border-transparent"
       } ${inert ? "" : chosen ? "cursor-pointer" : "cursor-pointer hover-tint"}`}
     >

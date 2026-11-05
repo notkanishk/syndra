@@ -27,7 +27,7 @@ import { CheckPips, targetReading } from "@/components/targets/TargetReading";
 import { ProjectSet, ProjectStep, SetupStrip } from "@/components/targets/ProjectSetup";
 import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Term } from "@/components/ui/Term";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { UserName } from "@/components/names";
 import { formatBytes, formatClock, formatShortDate, personLine, versionLabel } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";

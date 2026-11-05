@@ -136,3 +136,35 @@ func TestPeopleIndex_SearchStillMatchesNames(t *testing.T) {
 		t.Fatalf("name search returned %d rows", len(items))
 	}
 }
+
+// A-19 P10.5: "Sent, not seen back" on Home opens People filtered, so each row
+// has to say how many of ITS writes are unseen, and only its own.
+func TestLoadAttention_CountsUnseenWritesPerPerson(t *testing.T) {
+	origE, origR, origD, origU := svcGetExpiringDirectGrants, svcGetAccessRequests, svcGetPendingDriftItems, svcGetUnconfirmedWrites
+	t.Cleanup(func() {
+		svcGetExpiringDirectGrants, svcGetAccessRequests, svcGetPendingDriftItems, svcGetUnconfirmedWrites = origE, origR, origD, origU
+	})
+	svcGetExpiringDirectGrants = func(context.Context, time.Duration) ([]models.DirectGrant, error) { return nil, nil }
+	svcGetAccessRequests = func(context.Context, string) ([]models.AccessRequest, error) { return nil, nil }
+	svcGetPendingDriftItems = func(context.Context) ([]models.DriftItem, error) { return nil, nil }
+	svcGetUnconfirmedWrites = func(context.Context) (models.UnconfirmedWriteSummary, error) {
+		return models.UnconfirmedWriteSummary{Count: 3, Users: map[string]int{"u_tomas": 2, "u_amara": 1}}, nil
+	}
+
+	idx, err := loadAttention(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idx.unseen["u_tomas"] != 2 || idx.unseen["u_amara"] != 1 || idx.unseen["u_nobody"] != 0 {
+		t.Errorf("unseen = %v", idx.unseen)
+	}
+
+	// The read failing is one filter's worth of zeros, never an error on the People page.
+	svcGetUnconfirmedWrites = func(context.Context) (models.UnconfirmedWriteSummary, error) {
+		return models.UnconfirmedWriteSummary{}, context.DeadlineExceeded
+	}
+	idx, err = loadAttention(context.Background())
+	if err != nil || len(idx.unseen) != 0 {
+		t.Errorf("a failed read must leave the index usable: err=%v unseen=%v", err, idx.unseen)
+	}
+}

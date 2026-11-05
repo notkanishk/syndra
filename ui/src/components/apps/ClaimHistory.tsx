@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/Choice";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { Ticks } from "@/components/ui/TokenBlock";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { ApiError } from "@/lib/api-client";
 import { changeLine, type SayContext } from "@/lib/claims";
 import { formatShortDate } from "@/lib/format";

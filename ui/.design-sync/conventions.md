@@ -30,7 +30,7 @@ Prefer the components (`Button` variants, `Badge` / `Chip` tones, `StatusDot`, `
 | Roles | `--accent` `--accent-text` `--accent-soft` `--accent-line`, `--healthy`, `--warn` `--warn-text` `--warn-soft`, `--danger` `--danger-text` `--danger-soft` |
 | Type | `--font-sans` (Figtree, body), `--font-display` (Bricolage Grotesque, headings), `--font-mono` (JetBrains Mono, role keys / ids) |
 
-Ready-made classes: `type-page-title`, `type-section-title`, `type-card-title`, `type-label`, `type-mono`, `card`, `panel`, `accent-note`, `warn-note`, `danger-note`, `row-divider`. Tailwind classes only exist if the app already uses them, so do not invent utility classes - use the variables above with inline styles.
+Ready-made classes: `type-page-title`, `type-section-title`, `type-card-title`, `type-label`, `type-mono`, `card`, `panel`, `warn-note`, `danger-note`, `row-divider`. Tailwind classes only exist if the app already uses them, so do not invent utility classes - use the variables above with inline styles.
 
 ## Where the truth lives
 - `styles.css` and its import `_ds_bundle.css`: the app's compiled `globals.css`, with every token for both themes.
@@ -41,7 +41,7 @@ Ready-made classes: `type-page-title`, `type-section-title`, `type-card-title`, 
 <SyndraRoot pathname="/">
   <Card>
     <CardHeader title="Open requests" count={2}
-      action={<CardHeaderLink href="/requests">See all →</CardHeaderLink>} />
+      action={<CardHeaderLink href="/requests">All requests</CardHeaderLink>} />
     <CardRow first>
       <div style={{ width: 170, fontWeight: 600 }}>Aanya Rao</div>
       <div style={{ flex: 1, color: "var(--muted)" }}>Laser cutter · Operator</div>

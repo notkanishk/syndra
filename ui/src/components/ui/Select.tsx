@@ -3,7 +3,7 @@
 import React from "react";
 
 import { PILL } from "@/components/ui/Button";
-import { GlideIndicator, useGlideIndicator } from "@/components/ui/GlideIndicator";
+import { GlideIndicator, useGlideIndicator } from "@/lib/motion";
 import { DENSE_FIELD } from "@/components/ui/Input";
 
 /**
@@ -100,8 +100,8 @@ export function Segmented<T extends string>({
   // where a segmented control sits in a dense toolbar.
   const pad =
     size === "sm"
-      ? "min-h-[44px] px-3 text-[12.5px] desktop:min-h-0 desktop:py-1"
-      : "min-h-[44px] px-4 text-[13px] desktop:min-h-0 desktop:py-1.5";
+      ? "min-h-[var(--tap)] px-3 text-[12.5px] desktop:min-h-0 desktop:py-1"
+      : "min-h-[var(--tap)] px-4 text-[13px] desktop:min-h-0 desktop:py-1.5";
   const { ref, box } = useGlideIndicator(value);
   const keys = radioGroup(options, value, onChange);
   return (

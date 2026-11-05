@@ -392,6 +392,7 @@ type attentionIndex struct {
 	soonest     map[string]time.Time
 	requests    map[string]int
 	unexplained map[string]int
+	unseen      map[string]int
 }
 
 func loadAttention(ctx context.Context) (attentionIndex, error) {
@@ -400,6 +401,7 @@ func loadAttention(ctx context.Context) (attentionIndex, error) {
 		soonest:     map[string]time.Time{},
 		requests:    map[string]int{},
 		unexplained: map[string]int{},
+		unseen:      map[string]int{},
 	}
 
 	grants, err := svcGetExpiringDirectGrants(ctx, reviewHorizon)
@@ -431,6 +433,16 @@ func loadAttention(ctx context.Context) (attentionIndex, error) {
 	if err == nil {
 		for _, d := range drift {
 			idx.unexplained[d.UserID]++
+		}
+	}
+
+	// Writes Zitadel accepted and no read has seen back: the same read as Home's
+	// "Sent, not seen back", so the card and the filter it opens count alike. Same
+	// tolerance as drift: a failure is one filter's worth of zeros, not a 500.
+	if unconfirmed, err := svcGetUnconfirmedWrites(ctx); err == nil {
+		idx.unseen = unconfirmed.Users
+		if idx.unseen == nil {
+			idx.unseen = map[string]int{}
 		}
 	}
 
@@ -492,6 +504,7 @@ func listUsersFromSnapshot(snap *accessSnapshot, query string, attention attenti
 			ExpiringCount:      attention.expiring[user.ID],
 			OpenRequestCount:   attention.requests[user.ID],
 			UnexplainedCount:   attention.unexplained[user.ID],
+			UnseenCount:        attention.unseen[user.ID],
 			Observation:        basis,
 		}
 		if basis.ReadAt != nil {

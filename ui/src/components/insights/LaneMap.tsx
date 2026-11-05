@@ -1,6 +1,6 @@
 "use client";
 
-import { ArriveList } from "@/components/ui/ArriveList";
+import { ArriveList } from "@/lib/motion";
 import { useRef, useState } from "react";
 
 import { LANES, type Highlight, type Model, type Tone } from "@/components/insights/model";
@@ -210,7 +210,7 @@ export function LaneMap({
                     aria-pressed={node.id === focusId}
                     aria-label={people != null ? `${name}, ${people} ${people === 1 ? "person" : "people"} ${unit}`.trim() : name}
                     onClick={() => onPick(node.id === focusId ? null : node.id)}
-                    className={`motion-tint flex min-h-[44px] desktop:min-h-[38px] w-full items-center gap-2 rounded-nav border px-3 py-1.5 text-left ${node.id === breathing ? "breathe" : ""}`}
+                    className={`motion-tint flex min-h-[var(--tap)] desktop:min-h-[38px] w-full items-center gap-2 rounded-nav border px-3 py-1.5 text-left ${node.id === breathing ? "breathe" : ""}`}
                     data-dim={(Boolean(highlight) && !tone) || undefined}
                     style={nodeSurface(tone, node.id === focusId, unused.has(node.id), Boolean(highlight) && !tone)}
                   >
@@ -237,7 +237,7 @@ export function LaneMap({
                 <button
                   type="button"
                   onClick={() => setOpened((s) => new Set(s).add(lane.kind))}
-                  className="motion-tint flex min-h-[44px] desktop:min-h-[38px] w-full items-center rounded-nav border border-dashed border-line-strong px-3 text-left text-[13px] text-muted hover:text-ink"
+                  className="motion-tint flex min-h-[var(--tap)] desktop:min-h-[38px] w-full items-center rounded-nav border border-dashed border-line-strong px-3 text-left text-[13px] text-muted hover:text-ink"
                 >
                   {lane.more} more {lane.noun}
                 </button>

@@ -3,12 +3,12 @@
 import { ResolvedProjectName } from "@/components/names";
 import { MemberCatalog } from "@/components/member/MemberCatalog";
 import { headerLine, type NamedRole } from "@/components/member/headerLine";
-import { RecentChanges, askHref } from "@/components/member/RecentChanges";
+import { RecentChanges } from "@/components/member/RecentChanges";
+import { AskForAccess } from "@/components/requests/AskForAccess";
 import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
-import { ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { ARROW_LINK, ArrowLink } from "@/components/ui/ArrowLink";
-import { Crossfade } from "@/components/ui/Crossfade";
 import { StatusDot } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { BELOW_HEADER, usePageHead } from "@/components/ui/PageHeader";
@@ -27,7 +27,7 @@ import type { SessionUser } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
 import { greeting } from "@/lib/greeting";
-import { glideTo } from "@/lib/motion";
+import { Crossfade, glideTo } from "@/lib/motion";
 import { targetLabel } from "@/lib/nav";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useRequestsMine } from "@/lib/queries/useRequests";
@@ -52,6 +52,8 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   const catalog = useCatalogProjects();
   const storage = useMyStorage();
   const myRequests = useRequestsMine();
+  // "Ask to keep it" asks here and stays here (A-19 P10.4): the dialog is mounted on this page.
+  const [asking, setAsking] = useState<{ projectId: string; roleKey: string } | null>(null);
   // The line and the greeting depend on the reader's clock and zone, which the
   // server doesn't share: they appear on mount, in a seat held by an invisible
   // stand-in so nothing below moves (same rule as Home).
@@ -328,13 +330,19 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                   <RoleRow
                     key={role.role_key}
                     name={roleName(project.project_id, role.role_key)}
-                    projectId={project.project_id}
-                    roleKey={role.role_key}
                     reasons={role.reasons}
                     expiresAt={role.expiresAt}
                     endKnown={grantsRead}
                     standing={standing(project, role.role_key)}
                     waiting={waiting.get(`${project.project_id}/${role.role_key}`)}
+                    askedToKeep={(myRequests.data ?? []).some(
+                      (r) =>
+                        r.status === "pending" &&
+                        r.kind === "extend" &&
+                        r.project_id === project.project_id &&
+                        r.role_key === role.role_key,
+                    )}
+                    onAskToKeep={() => setAsking({ projectId: project.project_id, roleKey: role.role_key })}
                   />
                 ))}
                 {/* Something they hold that Syndra has no reason for. The
@@ -365,6 +373,18 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         storage. If the door and machine bridge ever needs a card on this page,
         lift the working panel out of MyStorage; do not restore this one.
       */}
+
+      {/* Asked from the row, answered in the row: the page does not leave (A-19 P10.4). */}
+      {asking && (
+        <AskForAccess
+          key={`${asking.projectId}:${asking.roleKey}`}
+          open
+          onClose={() => setAsking(null)}
+          initial={asking}
+          userId={session.id}
+          selfDecides={session.role === "admin"}
+        />
+      )}
     </div>
   );
 }
@@ -394,23 +414,24 @@ function StandingMark({ standing }: { standing: Standing }) {
  */
 function RoleRow({
   name,
-  projectId,
-  roleKey,
   reasons,
   expiresAt,
   endKnown,
   standing,
   waiting,
+  askedToKeep,
+  onAskToKeep,
 }: {
   name: string;
-  projectId: string;
-  roleKey: string;
   reasons: RoleReason[];
   expiresAt: string | null;
   /** Whether the grants list was read: without it a missing end date is unknown, not absent. */
   endKnown: boolean;
   standing: Standing;
   waiting?: MyChange;
+  /** A request to keep this role is waiting for makerspace staff. */
+  askedToKeep: boolean;
+  onAskToKeep: () => void;
 }) {
   const [strongest] = orderedSources(reasons);
   const ends = Boolean(expiresAt) && strongest?.kind === "direct" && !waiting;
@@ -433,11 +454,21 @@ function RoleRow({
           )}
         </span>
       </span>
-      {/* It opens a dialog, so it is a button with no arrow (A-04 §7.5). */}
+      {/* It opens a dialog, so it is a button with no arrow (A-04 §7.5). The answer takes the
+          button's seat, so the row does not change shape. */}
       {ends && (
-        <ButtonLink variant="outline" size="sm" href={askHref(projectId, roleKey, true)}>
-          Ask to keep it
-        </ButtonLink>
+        <Crossfade id={askedToKeep ? "asked" : "open"}>
+          {askedToKeep ? (
+            <span className="inline-flex min-h-[32px] items-center gap-2 text-[13.5px] font-semibold text-muted">
+              <StatusDot tone="neutral" />
+              Asked to keep it
+            </span>
+          ) : (
+            <Button variant="outline" size="sm" onClick={onAskToKeep}>
+              Ask to keep it
+            </Button>
+          )}
+        </Crossfade>
       )}
     </div>
   );

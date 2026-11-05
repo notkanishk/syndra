@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
-import { Unfold } from "@/components/ui/Unfold";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
+import { Unfold } from "@/lib/motion";
 import { formatClock } from "@/lib/format";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 
@@ -291,7 +291,7 @@ function PendingGroups({
                   aria-expanded={open}
                   aria-label={`${open ? "Fold" : "Open"} these ${count} changes`}
                   onClick={() => toggle(group.key)}
-                  className="group -my-2 -ml-2 flex size-11 flex-none items-center justify-center"
+                  className="group -my-2 -ml-2 flex size-[var(--tap)] flex-none items-center justify-center"
                 >
                   <FoldChevron open={open} />
                 </button>
@@ -380,6 +380,7 @@ function EverythingSent({ mine }: { mine: { count: number; at: string } | null }
       lift
       bloom={mine !== null}
       title="Everything has reached Zitadel."
+      action={{ label: "Change history", href: "/operations/cascades" }}
       guidance={
         mine
           ? `${mine.count} ${mine.count === 1 ? "change" : "changes"} sent at ${formatClock(mine.at)}. Nothing is waiting for you.`

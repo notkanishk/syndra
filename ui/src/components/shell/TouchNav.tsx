@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BADGE_TONE, DOT_TONE, loudestTone } from "@/components/shell/navTones";
 import { ViewSwitch } from "@/components/shell/ViewSwitch";
 import { ToBody, useDialogFocusTrap, useSheetDrag, useSheetLeave } from "@/components/ui/Modal";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { GoToPanel } from "@/components/ui/GoTo";
 import { leafMatches, navFor, operatorNav, targetNav, type IndicatorKey, type NavEntry, type NavLeaf } from "@/lib/nav";
 import { useIndicatorsRead } from "@/lib/queries/useIndicators";
@@ -213,7 +213,7 @@ function SheetTrigger({
         onClick={() => setOpen(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-[44px] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink control press-scale"
+        className="flex min-h-[var(--tap)] w-full items-center gap-2.5 rounded-pill bg-tint-2 px-4 text-[13.5px] font-semibold text-ink control press-scale"
       >
         <span aria-hidden className="text-faint">
           •••
@@ -365,7 +365,7 @@ function NavSheet({
           // border pushes everything a pixel that arithmetic on the padding
           // alone does not see, and a first attempt computed that way put the
           // bar 6px low.
-          className="-mb-[1px] -mt-[11px] mx-auto flex h-11 w-full max-w-[120px] touch-none items-center justify-center"
+          className="-mb-[1px] -mt-[11px] mx-auto flex h-[var(--tap)] w-full max-w-[120px] touch-none items-center justify-center"
         >
           <span aria-hidden className="h-1 w-[38px] rounded-pill bg-ink/20" />
         </button>
@@ -549,7 +549,7 @@ function SheetRow({
       replace
       onClick={onPick}
       aria-current={active ? "page" : undefined}
-      className={`mt-0.5 flex min-h-[44px] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
+      className={`mt-0.5 flex min-h-[var(--tap)] items-center gap-2.5 rounded-[12px] text-[15px] control press-scale ${
         nested ? "pl-7 pr-3.5" : "px-3.5"
       } ${active ? "bg-accent-soft font-semibold text-accent-text" : "text-muted"}`}
     >

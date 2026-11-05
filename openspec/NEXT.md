@@ -199,10 +199,9 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 [`changes/extension-of-you`](changes/extension-of-you/proposal.md) section A is built on `feat/a19-wave1-nav` (P1 the name arrives with you, P3 "Waiting for you to send" lands on you, P4 Go to; the owner said "all yes", 5 Nov). Section B (P2, P11, P12, P14) is the parallel build's. Open:
 
 - **Resync and publish the design bundle** with `GoTo`, `GoToPanel` and `Kbd` (`ui/.design-sync`, previews written) [ready-for-human: needs Chrome and a publish].
-- **Seed project and bundle pages** from their lists, as person and app now are [ready-for-agent].
-- **Pass `person` from the Removal dialog and Roles that wait** to `NextStep`, so every "Waiting for you to send" narrows [ready-for-agent].
+- **Roles that wait** keeps the whole-queue "Waiting for you to send": its rows are roles, not people. Narrow it by role only if the owner wants that [needs-triage].
 - **A phone Go to in Basic.** Basic's tab bar has no sheet, so the phone Input is reached through the sheet only (Advanced). Whether to add an entry is a structure question [needs-triage].
-- Second wave not started: P5 Back keeps your place, P6, P7 Keys (`?`, arrows between rows), P10.
+- Second wave: P6, P7 and P10 are built on `feat/a19-motion-keys` (below). P5 Back keeps your place, P8 and P9 are other builds.
 
 ### Audit of 27 Oct — remediation in batches
 
@@ -247,7 +246,11 @@ The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checke
 
 ### A-19 · An extension of you
 
+Wave 2 · motion and keys is built on `feat/a19-motion-keys` (`changes/extension-of-you/tasks.md` section C): `lib/motion/` is the one motion module, every design-system card has generated Moves and Phone lines (`ui/.design-sync/moves.json`), `?` opens the Keys sheet, ↑ ↓ and Enter work on row links in `ArriveList`, and six dead ends are closed (Q9, Q10, Q11 and the rest). Open: resync and publish the bundle with the lines, `GoTo`, `Kbd` and `KeysSheet`, and the Design System's `tokens.css` motion tokens `ready-for-human`; arrow keys on the queues (Pending, Requests, Expiring, Holds), whose rows are not whole-row links `needs-triage`.
+
 Wave 1 · feel is built (P2 forecast tense, P11 Appearance Device, P12 scrim/layer/tap tokens, P14 Drift revoke wording): `changes/extension-of-you/tasks.md`. Open: EOY-F9 (copy guide forecast table), EOY-F10 (dialog forecasts, rail count at the answer), EOY-F11 (`--tap` adoption). Second wave P5, P6, P7, P10; third P8, P9, P13.
+Wave 1 · feel is built (P2 forecast tense, P11 Appearance Device, P12 scrim/layer/tap tokens, P14 Drift revoke wording): `changes/extension-of-you/tasks.md`. Open: EOY-F9 (copy guide forecast table), EOY-F10 (dialog forecasts, rail count at the answer), EOY-F11 (`--tap` adoption). Wave 2 · place is built on `feat/a19-place` (P5 Back keeps your place, P8 your last view, P9 intent prefetch; `tasks.md` section C). Open there: EOY-P5.4 (other open folds), EOY-P5.5 (scroll keyed by path only), EOY-P9.2 (project and bundle prefetch). Still ahead: P6, P7, P10 (parallel build), P13.
+Wave 1 · feel is built (P2 forecast tense, P11 Appearance Device, P12 scrim/layer/tap tokens, P14 Drift revoke wording): `changes/extension-of-you/tasks.md`. Hygiene (P13), F9 and F11 are built (`feat/a19-hygiene`, section C of the tasks). Open: EOY-F10 (dialog forecasts, rail count at the answer); nine design cards still without a preview, the per-card "Not for", Moves and Phone lines, and the bundle resync (design-sync tool, [ready-for-human]). Second wave P5, P6, P7, P10; third P8, P9.
 
 ---
 

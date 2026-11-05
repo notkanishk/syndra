@@ -7,7 +7,7 @@ import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
@@ -39,7 +39,7 @@ export default function ProjectsPage() {
   const projects = useProjects();
   const apps = useApplications();
   const [query, setQuery] = useState("");
-  const [sort, setSort, view] = useSort<ProjectSort>("project");
+  const [sort, setSort, view] = useSort<ProjectSort>("project", { list: "projects", keys: ["project", "people"] });
 
   const appsByProject = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -156,6 +156,7 @@ export default function ProjectsPage() {
             return (
             <LeavingRow key={entry.project.id} {...leaving.props(entry.project.id)}>
             <Link
+              data-row
               href={`/projects/${entry.project.id}`}
               className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3.5 hover-tint tablet:flex-row tablet:items-center tablet:gap-[18px]"
             >
