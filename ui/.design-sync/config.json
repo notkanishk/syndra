@@ -153,6 +153,7 @@
     "GoToPanel": "nav: Array<{ kind: \"leaf\"; label: string; href: string } | { kind: \"group\"; label: string; children: Array<{ kind: \"leaf\"; label: string; href: string }> }>;\n  /** Called when a row is opened, so the host can close. */\n  onGo: () => void;\n  /** Inside the phone's Go to sheet: no key hints, rows replace. */\n  embedded?: boolean;\n  /** Embedded only: what the sheet shows while the Input is empty. */\n  idle?: React.ReactNode;"
   },
   "overrides": {
+    "GoToPanel": {"cardMode": "column"},
     "KeysSheet": {"cardMode": "single", "viewport": "1000x760"},
     "GoTo": {
       "cardMode": "single",
