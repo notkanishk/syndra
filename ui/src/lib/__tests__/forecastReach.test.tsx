@@ -38,7 +38,7 @@ describe("forecastFor", () => {
   });
 
   it("does not claim a wait for an act that never reaches Zitadel", () => {
-    for (const act of ["decline", "keep", "lift", "cancel", "adopt", "mark"] as const) {
+    for (const act of ["decline", "keep", "lift", "cancel", "adopt", "mark", "replace"] as const) {
       expect(forecastFor(act, true)).toBe(FORECAST[act]);
     }
   });

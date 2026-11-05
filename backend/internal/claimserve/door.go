@@ -31,6 +31,9 @@ type Door struct {
 	Record func(claimtel.Call)
 	// OnMiss hears a person with no facts for the project: recompile them.
 	OnMiss func(userID string)
+	// Refresh, after a call no key verified, returns the keys again from a
+	// fresh look at the keyring (Plane.RefreshKeys).
+	Refresh func(context.Context) []SlotKey
 	// OnMismatch hears a call no key verified: read the keyring again.
 	OnMismatch func()
 	// Debug, when set, is asked about each answered call (debug mode).
@@ -100,13 +103,17 @@ func (d *Door) Delivery(next http.HandlerFunc) http.HandlerFunc {
 // Signature verifies the call against Keys, then the next handler reads the
 // same body again.
 func (d *Door) Signature(next http.HandlerFunc) http.HandlerFunc {
-	return SignatureCheck("ZITADEL_ACTION_SIGNING_KEY", d.Keys, d.OnMismatch, d.DevMode, next)
+	return SignatureCheck("ZITADEL_ACTION_SIGNING_KEY", d.Keys, d.Refresh, d.OnMismatch, d.DevMode, next)
 }
 
 // SignatureCheck verifies against each of keys() in turn. With no key at all
 // it passes through only in dev mode, and refuses otherwise (May 2026 audit
-// C1). onMismatch, when set, hears every call whose signature matched none.
-func SignatureCheck(envName string, keys func() []SlotKey, onMismatch func(), devMode func() bool, next http.HandlerFunc) http.HandlerFunc {
+// C1). On a mismatch, refresh (when set) is asked for the keys again, and the
+// call is verified once more against what it returns: a key Syndra replaced a
+// moment ago verifies on its first call, not after the next poll
+// (action-key-autorotation). onMismatch, when set, hears every call whose
+// signature still matched none.
+func SignatureCheck(envName string, keys func() []SlotKey, refresh func(context.Context) []SlotKey, onMismatch func(), devMode func() bool, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var ks []SlotKey
 		if keys != nil {
@@ -132,6 +139,11 @@ func SignatureCheck(envName string, keys func() []SlotKey, onMismatch func(), de
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		slot, err := VerifySignature(body, r.Header.Get(SignatureHeader), ks, SignatureTolerance, time.Now())
+		if err != nil && refresh != nil && SignatureOutcome(err) == claimtel.SigMismatch {
+			if again := refresh(r.Context()); len(again) > 0 {
+				slot, err = VerifySignature(body, r.Header.Get(SignatureHeader), again, SignatureTolerance, time.Now())
+			}
+		}
 		if err != nil {
 			o := SignatureOutcome(err)
 			claimtel.From(r.Context()).Set(o)

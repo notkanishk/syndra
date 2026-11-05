@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"syndra/internal/claimcheck"
 )
 
 // Default threshold for the signing-key rotation warning. 90 days matches the
@@ -48,31 +52,70 @@ const (
 type ActionRotationStatus struct {
 	KeyInstalled  bool       `json:"key_installed"`
 	LastRotatedAt *time.Time `json:"last_rotated_at,omitempty"`
-	AgeDays       *int       `json:"age_days,omitempty"`
-	ThresholdDays int        `json:"threshold_days"`
-	Status        string     `json:"status"`
-	RotateCommand string     `json:"rotate_command"`
+	// LastRotatedSource says where LastRotatedAt was observed: "syndra"
+	// (Syndra's own record of replacing it), "keyring" (Syndra saw Zitadel's
+	// key change, e.g. a manual rotate.sh) or "env" (the .env bootstrap date,
+	// only until either of the others has one).
+	LastRotatedSource string `json:"last_rotated_source,omitempty"`
+	AgeDays           *int   `json:"age_days,omitempty"`
+	ThresholdDays     int    `json:"threshold_days"`
+	Status            string `json:"status"`
+	RotateCommand     string `json:"rotate_command"`
+	// RegisterCommand sets a key up when none is (the guide's setup path).
+	RegisterCommand string     `json:"register_command"`
+	DueAt           *time.Time `json:"due_at,omitempty"`
+	// Auto is the schedule (action-key-autorotation).
+	Auto autoRotateStatus `json:"auto"`
+	// Rotating is whether a replacement is running now.
+	Rotating    bool                   `json:"rotating"`
+	LastOutcome *rotationOutcomeStatus `json:"last_outcome,omitempty"`
 }
 
-// HandleActionRotationStatus reports the state of the currently installed
-// Action signing key: whether one is installed at all, and if so how old it
-// is relative to the configured rotation threshold. Read-only; no side
-// effects. Gated by withOperatorAuth at the router so only admins hit it.
+type autoRotateStatus struct {
+	On            bool       `json:"on"`
+	OffReason     string     `json:"off_reason,omitempty"`
+	LeadDays      int        `json:"lead_days"`
+	Window        string     `json:"window"`
+	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
+}
+
+// rotationOutcomeStatus is Syndra's latest attempt, without its id or actor.
+type rotationOutcomeStatus struct {
+	Trigger    string          `json:"trigger"`
+	StartedAt  time.Time       `json:"started_at"`
+	FinishedAt *time.Time      `json:"finished_at,omitempty"`
+	Outcome    string          `json:"outcome"`
+	Replaced   []string        `json:"replaced"`
+	Probe      json.RawMessage `json:"probe,omitempty"`
+	Error      string          `json:"error,omitempty"`
+}
+
+// HandleActionRotationStatus reports the Action signing key: whether one is
+// installed, how old it is (observed: observedLastReplaced), when it is due,
+// the schedule that replaces it (action-key-autorotation) and Syndra's last
+// attempt. Read-only. Gated by withOperatorAuth at the router.
 //
-// Zitadel does not expire the signing key on its own (see application-claims
-// spec § "Signing Key Rotation is Policy-Driven, Not Scheduled"), so this
-// endpoint is how operators get observability without scheduling rotation.
+// Zitadel does not expire the signing key on its own; the threshold is
+// Syndra's policy, and since 5 Nov 2026 Syndra keeps it (ADR-005).
 func HandleActionRotationStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		jsonErrorResponse(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET is supported")
 		return
 	}
 
-	keyInstalled := os.Getenv(envActionKey) != ""
+	// The by-hand guide watches for the new key: ?watch=1 asks Zitadel for it
+	// now (RunKeyring keeps that to one read per 10s, whoever asks).
+	if r.URL.Query().Get("watch") == "1" {
+		nudgeKeyring()
+	}
+	keyInstalled := len(actionSigningKeys()) > 0
+	c := autoConfig()
 	resp := ActionRotationStatus{
-		KeyInstalled:  keyInstalled,
-		ThresholdDays: rotationThresholdDays(),
-		RotateCommand: "make zitadel-actions-rotate-key",
+		KeyInstalled:    keyInstalled,
+		ThresholdDays:   rotationThresholdDays(),
+		RotateCommand:   serverCommand("make zitadel-actions-rotate-key"),
+		RegisterCommand: serverCommand("make zitadel-actions-register"),
+		Auto:            autoRotateStatus{On: c.On, OffReason: c.OffReason, LeadDays: c.LeadDays, Window: strings.Replace(c.Window, "-", "–", 1)},
 	}
 
 	// Precedence 1: no signing key installed -> signature verification is off.
@@ -84,40 +127,54 @@ func HandleActionRotationStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw := os.Getenv(envActionKeyRotatedAt)
-	if raw == "" {
-		resp.Status = "unknown"
-		jsonResponse(w, http.StatusOK, resp)
-		return
-	}
-
-	t, err := time.Parse(time.RFC3339, raw)
+	st, err := dbActionKeyRotationNow(r.Context(), claimcheck.ClaimTarget)
 	if err != nil {
-		log.Printf("[ACTION] %s is set but not RFC3339: %v", envActionKeyRotatedAt, err)
-		resp.Status = "unknown"
-		jsonResponse(w, http.StatusOK, resp)
-		return
+		log.Printf("[ACTION] could not read Syndra's key replacement record: %v", err)
+	}
+	if l := st.Last; l != nil {
+		resp.Rotating = l.Outcome == "in_flight"
+		resp.LastOutcome = &rotationOutcomeStatus{Trigger: l.Trigger, StartedAt: l.StartedAt, FinishedAt: l.FinishedAt,
+			Outcome: l.Outcome, Replaced: l.Replaced, Probe: l.Probe, Error: l.Error}
 	}
 
 	now := nowFn()
-	// Precedence 2: future-dated timestamps are a config error, not a fresh
-	// rotation. Treating them as "ok, age 0" would suppress the warn/stale
-	// ladder indefinitely (a typo in the year, or host clock skew, could hide
-	// an old key forever).
-	if t.After(now) {
-		log.Printf("[ACTION] %s=%q is in the future (%.0fh ahead); reporting unknown",
-			envActionKeyRotatedAt, raw, t.Sub(now).Hours())
+	t, source := observedLastReplaced(st)
+	if c.On {
+		next := nextAutoAttempt(now, t, st.LastAutoAt, c)
+		resp.Auto.NextAttemptAt = &next
+	}
+	// Precedence 2: no observed date (none recorded, the .env one unset,
+	// malformed or in the future: a typo in the year must never hide an old
+	// key) is "unknown", which the schedule treats as due.
+	if t == nil {
+		if raw := os.Getenv(envActionKeyRotatedAt); raw != "" {
+			log.Printf("[ACTION] %s=%q is not a past RFC3339 time; reporting unknown", envActionKeyRotatedAt, raw)
+		}
 		resp.Status = "unknown"
 		jsonResponse(w, http.StatusOK, resp)
 		return
 	}
 
-	age := ageInDays(now, t)
-	resp.LastRotatedAt = &t
-	resp.AgeDays = &age
+	age := ageInDays(now, *t)
+	due := t.Add(time.Duration(resp.ThresholdDays) * 24 * time.Hour)
+	resp.LastRotatedAt, resp.LastRotatedSource, resp.AgeDays, resp.DueAt = t, source, &age, &due
 	resp.Status = classifyRotationStatus(age, resp.ThresholdDays)
 
 	jsonResponse(w, http.StatusOK, resp)
+}
+
+// envServerDir is the Syndra checkout on the server (where make runs). The
+// backend runs in a container and cannot see it, so compose passes it in.
+const envServerDir = "SYNDRA_SERVER_DIR"
+
+// serverCommand is cmd as the operator pastes it on the server: prefixed
+// with the checkout when it is known, so the guide never types a path.
+func serverCommand(cmd string) string {
+	dir := strings.TrimSpace(os.Getenv(envServerDir))
+	if dir == "" || !strings.HasPrefix(dir, "/") || strings.ContainsAny(dir, " '\"`$;&|\n") {
+		return cmd
+	}
+	return "cd " + dir + " && " + cmd
 }
 
 // rotationThresholdDays reads the operator-configured threshold or falls back

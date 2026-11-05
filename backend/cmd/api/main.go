@@ -14,6 +14,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	// The key replacement's quiet window is local time (TZ); the alpine image
+	// carries no zone files.
+	_ "time/tzdata"
 
 	"syndra/internal/addons"
 	"syndra/internal/cache"
@@ -573,6 +576,11 @@ func main() {
 		claimConfigSched = periodic.New("CLAIM-CONFIG", 10*time.Minute, 10*time.Minute, handlers.RunClaimConfigCheck)
 		go claimConfigSched.Start(ctx)
 		go handlers.RunKeyring(ctx)
+		// Syndra replaces the Actions signing keys itself a few days before
+		// the limit, in the quiet window (action-key-autorotation, ADR-005).
+		// SYNDRA_ACTION_KEY_AUTOROTATE=off is the kill switch; the look still
+		// runs, to confirm an unverified replacement once the probes pass.
+		go periodic.New("ACTION-KEY", handlers.ActionKeyAutoEvery, handlers.ActionKeyAutoEvery, handlers.RunActionKeyAutoRotate).Start(ctx)
 	}
 	if handlers.DeadmanConfigured() {
 		go periodic.New("DEADMAN", handlers.DeadmanEvery, handlers.DeadmanEvery, handlers.PingDeadman).Start(ctx)

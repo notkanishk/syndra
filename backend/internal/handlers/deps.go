@@ -365,6 +365,14 @@ var (
 	dbClaimFindings             = db.ClaimFindings
 	dbLastSignInPerApp          = db.LastSignInPerApp
 	zitadelActions              = zitadel.Actions
+	// Replacing the Actions signing keys (action-key-autorotation).
+	zitadelKeyRotator           = zitadel.KeyRotator
+	dbTryActionKeyRotationLock  = db.TryActionKeyRotationLock
+	dbAbandonActionKeyRotations = db.AbandonActionKeyRotations
+	dbStartActionKeyRotation    = db.StartActionKeyRotation
+	dbMarkActionKeyReplaced     = db.MarkActionKeyReplaced
+	dbFinishActionKeyRotation   = db.FinishActionKeyRotation
+	dbActionKeyRotationNow      = db.ActionKeyRotationNow
 	zitadelTokenSettings        = func(ctx context.Context, projectID, appID string) (*zitadel.TokenSettings, error) {
 		if zitadel.MgmtClient == nil {
 			return nil, errNoClient

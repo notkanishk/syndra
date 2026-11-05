@@ -2,23 +2,25 @@
 
 import { Term } from "@/components/ui/Term";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ErrorState, RowSkeleton } from "@/components/states";
 import { ArrowLink } from "@/components/ui/ArrowLink";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Mono, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
-import { CommandBlock } from "@/components/ui/CommandBlock";
-import { TechnicalDetail } from "@/components/ui/TechnicalDetail";
 import { FoldChevron } from "@/components/ui/FoldChevron";
+import { Modal, ModalFooter, ModalHeader, mountedWhileOpen } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { Unfold } from "@/lib/motion";
 import { ClaimsDelivery } from "@/components/system/ClaimsDelivery";
+import { SigningKeyGuide, replaceResult, type RotateResult } from "@/components/system/SigningKeyGuide";
 import { request } from "@/lib/api-client";
-import { formatAt } from "@/lib/format";
+import { formatAt, formatShortDate } from "@/lib/format";
+import { FORECAST, outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { useClaimsDelivery, type ClaimsDelivery as Delivery } from "@/lib/queries/useClaimsDelivery";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useZitadelHealth } from "@/lib/queries/useZitadel";
@@ -28,10 +30,32 @@ import { useMissedChecks } from "@/lib/useMissedChecks";
 interface RotationStatus {
   key_installed?: boolean;
   last_rotated_at?: string | null;
+  /** syndra: Syndra's own record; keyring: Syndra saw Zitadel's key change; env: the .env date only. */
+  last_rotated_source?: "syndra" | "keyring" | "env";
   age_days?: number;
   threshold_days?: number;
-  status?: "ok" | "warn" | "stale" | string;
+  status?: "disabled" | "unknown" | "ok" | "warn" | "stale" | string;
   rotate_command?: string;
+  /** The register command, with the server checkout prefixed when configured. */
+  register_command?: string;
+  due_at?: string;
+  auto?: {
+    on: boolean;
+    off_reason?: "switched_off" | "no_zitadel";
+    lead_days?: number;
+    window?: string;
+    next_attempt_at?: string;
+  };
+  rotating?: boolean;
+  last_outcome?: {
+    trigger: "auto" | "button";
+    started_at: string;
+    finished_at?: string;
+    outcome: "in_flight" | "verified" | "unverified" | "failed" | "abandoned";
+    replaced?: string[];
+    probe?: { pass: boolean; class?: string; detail?: string };
+    error?: string;
+  };
 }
 
 /**
@@ -53,6 +77,8 @@ export default function IdentityProviderPage() {
     queryKey: ["zitadel", "rotation"],
     queryFn: () => request<RotationStatus>("/zitadel/action-rotation-status"),
     retry: false,
+    // While Syndra is replacing the key (on its own, or from another tab), the row follows it.
+    refetchInterval: (query) => (query.state.data?.rotating ? 5_000 : false),
   });
 
   const keyring = useClaimsDelivery().data?.keyring;
@@ -95,8 +121,10 @@ export default function IdentityProviderPage() {
 
       <Unfold open={keyOverdue && rotation.data?.age_days !== undefined} gap={16}>
         <Notice tone="warn" title={`The action signing key is ${rotation.data?.age_days} days old.`} live>
-          It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works. How to
-          replace it, below, walks through it; sign-ins carry on while you do.
+          It is past the {rotation.data?.threshold_days ?? 90}-day limit and still works.{" "}
+          {rotation.data?.auto?.on
+            ? "Syndra replaces it on its own in the next quiet hours, and sign-ins carry on."
+            : "Replacing it on its own is switched off: Replace now, below, does it, and sign-ins carry on."}
         </Notice>
       </Unfold>
 
@@ -134,20 +162,21 @@ export default function IdentityProviderPage() {
 }
 
 /**
- * The signing key, as one compact row — read-only, and deliberately so.
+ * The action signing key: Syndra replaces it on its own, and on demand.
  *
- * There is no "Rotate now" button and there should not be one. Rotation is a
- * command the operator runs on the server, and they see its exit code and the
- * new keys. Since S5 the claims key needs no restart: Syndra reads the claims
- * action's key from Zitadel every minute and right after a call it can't
- * verify, keeping the previous key working for 15 minutes. The key in .env is
- * the starting point and the fallback, updated at the next deploy. The event
- * listener's key is still read from .env only, so that one still needs a
- * restart.
+ * This reverses #71 ("no Rotate now button"). Owner, 5 Nov 2026, "Automatic +
+ * button": Syndra replaces the key itself a few days before the limit, in the
+ * quiet hours, checks that a signed test sign-in still gets its claims, and
+ * records it; "Replace now" does the same on demand. #71 was right while the
+ * only way to rotate was a command whose aftermath (a restart, a .env edit)
+ * lived on the server. Syndra now takes the new keys straight from Zitadel's
+ * answer, for the claims action and the event listener alike, so there is no
+ * aftermath left for a person to do. See openspec/changes/action-key-autorotation
+ * and docs/adr/005-syndra-replaces-the-action-signing-key.md.
  *
- * "How to replace it" opens the guide, and the guide is CommandBlocks: the
- * command and everything that has to happen after it (#71). The button only
- * shows the steps; it never runs one.
+ * "Do it by hand" (and "How to set it up") open the designed guide
+ * (route-zitadel §2, components/system/SigningKeyGuide): for when the
+ * automatic way is off, has failed, or Zitadel refuses Syndra the write.
  */
 function SigningKey({
   status,
@@ -160,9 +189,12 @@ function SigningKey({
   error: unknown;
   keyring?: Delivery["keyring"];
 }) {
-  const rotateCommand = status?.rotate_command ?? "make zitadel-actions-rotate-key";
+  const [guiding, setGuiding] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const notSetUp = !status?.key_installed && !error;
   const { tone, word } = keyState(status, error);
+  const inFlight = isRotating(status);
+  const noZitadel = status?.auto?.off_reason === "no_zitadel";
 
   return (
     <Card>
@@ -184,66 +216,100 @@ function SigningKey({
             </p>
           )}
         </div>
+        {!loading && !error && !inFlight && (
+          <span className="flex flex-wrap items-start gap-2.5">
+            {status?.key_installed && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={noZitadel}
+                reason={noZitadel ? "Syndra isn't connected to Zitadel." : undefined}
+                onClick={() => setReplacing(true)}
+              >
+                Replace now
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => setGuiding(true)}>
+              {notSetUp ? "How to set it up" : "Do it by hand"}
+            </Button>
+          </span>
+        )}
       </div>
 
-      <div className="row-divider px-5 py-3">
-        <TechnicalDetail placeKey="signing-key">
-        <div className="flex flex-col gap-4">
-
-          {notSetUp ? (
-            <CommandBlock
-              tone="warn"
-              command="make zitadel-actions-register"
-              caption="No key is set up, so Syndra cannot tell genuine Zitadel requests from forged ones. Run this to register with Zitadel; it creates a key."
-              steps={[
-                <>
-                  Copy the printed key into <Mono>ZITADEL_ACTION_SIGNING_KEY</Mono> in{" "}
-                  <Mono>.env</Mono>.
-                </>,
-                <>
-                  Restart the backend: <Mono>docker compose restart backend</Mono>.
-                </>,
-                <>
-                  Confirm it took: <Mono>make zitadel-actions-verify</Mono>.
-                </>,
-              ]}
-            />
-          ) : (
-            <CommandBlock
-              command={rotateCommand}
-              caption="Run this in a terminal on the server Syndra runs on. This panel does not replace the key itself. Syndra picks up the new claims key from Zitadel within a minute and keeps the old one working for 15 minutes, so sign-ins carry on."
-              steps={[
-                <>
-                  The command writes the new key to a file under <Mono>zitadel/actions/</Mono>,
-                  one per registered Action, and backs up the old one alongside it.
-                </>,
-                <>
-                  The event listener&rsquo;s key, <Mono>ZITADEL_EVENT_SIGNING_KEY</Mono>, is read from{" "}
-                  <Mono>.env</Mono> only: put its new value there and restart the backend,{" "}
-                  <Mono>docker compose restart backend</Mono>. Until then Syndra can&rsquo;t verify
-                  the events Zitadel sends it.
-                </>,
-                <>
-                  Confirm it took: <Mono>make zitadel-actions-verify</Mono>.
-                </>,
-                <>
-                  At the next deploy, not before, put the new claims key in{" "}
-                  <Mono>ZITADEL_ACTION_SIGNING_KEY</Mono> and the printed timestamp in{" "}
-                  <Mono>ZITADEL_ACTION_SIGNING_KEY_ROTATED_AT</Mono>. The key in <Mono>.env</Mono> is
-                  only where Syndra starts and what it falls back to; without the timestamp this
-                  panel goes back to reporting an unknown age.
-                </>,
-              ]}
-            />
-          )}
-        </div>
-        </TechnicalDetail>
-      </div>
+      <ReplaceKeyDialog open={replacing} onClose={() => setReplacing(false)} />
+      <SigningKeyGuide open={guiding} status={status} onClose={() => setGuiding(false)} />
     </Card>
   );
 }
 
-/** What the keyring last did: Syndra follows the claims key in Zitadel on its own (S5). */
+/**
+ * Replace now: one sentence, Cancel first (and focused), then the act. While
+ * the request is out the seat says what Syndra will do; the sheet then becomes
+ * its own result, with Close.
+ */
+const ReplaceKeyDialog = mountedWhileOpen(function ReplaceKeyDialog({
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const client = useQueryClient();
+  // final: the server answered with what happened, so there is nothing to press twice.
+  const [result, setResult] = useState<{ outcome: Outcome; word: string; final: boolean } | null>(null);
+  const replace = useMutation({
+    mutationFn: () =>
+      request<RotateResult>("/zitadel/action-key/rotate", { method: "POST", body: { force: true } }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ["zitadel", "rotation"] });
+      void client.invalidateQueries({ queryKey: ["claims"] });
+    },
+  });
+  const done = result?.final ?? false;
+
+  return (
+    <Modal open onClose={onClose} busy={replace.isPending} size="sm" labelledBy="replace-key-title">
+      <ModalHeader
+        title="Replace the action signing key"
+        titleId="replace-key-title"
+        lede="Zitadel makes a new key and Syndra starts using it at once, so sign-ins carry on."
+      />
+      {!result && replace.isPending && <ActionForecast className="mx-6 mb-1" word={FORECAST.replace} />}
+      {result && <ActionOutcome outcome={result.outcome} word={result.word} className="mx-6 mb-1" />}
+      <ModalFooter
+        cancel={done ? undefined : { onClick: onClose, disabled: replace.isPending }}
+        note={
+          result
+            ? undefined
+            : "Syndra then signs a test sign-in with the new key and checks it gets its claims."
+        }
+      >
+        {done ? (
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        ) : (
+          <Button
+            variant="accent"
+            isPending={replace.isPending}
+            onClick={async () => {
+              setResult(null);
+              try {
+                setResult({ ...replaceResult(await replace.mutateAsync()), final: true });
+              } catch (err) {
+                // Refused before anything happened: the act stays, to try again.
+                setResult({ outcome: outcomeFromError(err), word: "Not replaced", final: false });
+              }
+            }}
+          >
+            Replace the key
+          </Button>
+        )}
+      </ModalFooter>
+    </Modal>
+  );
+});
+
+/** What the keyring last did: Syndra follows both keys in Zitadel on its own (S5). */
 function keyringSentence(k: Delivery["keyring"]): string {
   if (k.error?.status === 403) {
     return "Syndra isn't allowed to read the key from Zitadel, so it checks with the key in .env alone. Give Syndra's service account the read-only IAM_OWNER_VIEWER role in Zitadel.";
@@ -253,7 +319,24 @@ function keyringSentence(k: Delivery["keyring"]): string {
   }
   if (!k.read_at) return "Syndra hasn't read the key from Zitadel yet. The key in .env works meanwhile.";
   const changed = k.changed_at ? ` It last changed ${formatAt(k.changed_at)}.` : "";
-  return `Syndra reads the key from Zitadel every minute, and right after a call it can't verify, so a new key works without a restart. Last read ${formatAt(k.read_at)}.${changed}`;
+  return `Syndra reads the claims key and the event listener's key from Zitadel every minute, and right after a call it can't verify, so a new key never needs a restart. Last read ${formatAt(k.read_at)}.${changed}`;
+}
+
+function isRotating(status: RotationStatus | undefined): boolean {
+  return Boolean(status?.rotating || status?.last_outcome?.outcome === "in_flight");
+}
+
+/**
+ * The last attempt, unless it is a failure that a later replacement (by hand,
+ * say) has overtaken: then it says nothing about the key in use.
+ */
+function latestAttempt(status: RotationStatus): RotationStatus["last_outcome"] {
+  const lo = status.last_outcome;
+  if (!lo) return undefined;
+  const failed = lo.outcome === "failed" || lo.outcome === "abandoned";
+  const overtaken = status.last_rotated_at && Date.parse(lo.started_at) < Date.parse(status.last_rotated_at);
+  if (failed && overtaken) return undefined;
+  return lo;
 }
 
 function keyState(
@@ -262,6 +345,10 @@ function keyState(
 ): { tone: StatusTone; word: string } {
   if (error) return { tone: "warn", word: "Unknown" };
   if (!status?.key_installed) return { tone: "warn", word: "Not set up" };
+  if (isRotating(status)) return { tone: "neutral", word: "Replacing" };
+  const lo = latestAttempt(status);
+  if (lo?.outcome === "unverified") return { tone: "warn", word: "Not confirmed" };
+  if (lo?.outcome === "failed" || lo?.outcome === "abandoned") return { tone: "warn", word: "Not replaced" };
   if (status.age_days === undefined) return { tone: "warn", word: "Age unknown" };
   if (status.status === "warn" || status.status === "stale") {
     return { tone: "warn", word: "Past its limit" };
@@ -270,9 +357,8 @@ function keyState(
 }
 
 /**
- * One sentence carrying state, cause and consequence. The stat card above
- * gives the headline; this says what it means. `disabled` is the case worth
- * spelling out — it reads like "not set up yet" and actually means every
+ * One sentence carrying state, cause and consequence. `disabled` is the case
+ * worth spelling out: it reads like "not set up yet" and actually means every
  * inbound Action request is being trusted unchecked.
  */
 function rotationSentence(status: RotationStatus | undefined, error: unknown): string {
@@ -284,19 +370,48 @@ function rotationSentence(status: RotationStatus | undefined, error: unknown): s
   if (!status.key_installed) {
     return "No key is set up, so Syndra accepts every request that claims to come from Zitadel without checking. Anyone who can reach Syndra on the network could change what a sign-in grants. Set up a key before real access depends on this.";
   }
-
-  const threshold = status.threshold_days ?? 90;
-  const age = status.age_days;
-
-  if (age === undefined) {
-    return `The key works, but Syndra does not know when it was last replaced, so it cannot warn you when the ${threshold}-day limit is reached. Set the date the rotate command printed in Syndra's settings.`;
+  if (isRotating(status)) {
+    return "Replacing… Zitadel is making a new key and Syndra starts using it the moment it arrives. Sign-ins carry on.";
   }
-  if (status.status === "stale") {
-    return `The key is more than twice the ${threshold}-day limit. Replace it now.`;
+
+  const auto = status.auto?.on ?? false;
+  const quiet = status.auto?.window ? ` (${status.auto.window})` : "";
+  const nextTry = status.auto?.next_attempt_at ? `, ${formatAt(status.auto.next_attempt_at)}` : "";
+  const due = status.due_at ? formatShortDate(status.due_at) : "";
+  const lo = latestAttempt(status);
+
+  if (lo?.outcome === "unverified") {
+    return `Replaced ${formatAt(lo.finished_at ?? lo.started_at)}, but the test sign-in after it didn't get its claims. Syndra still accepts the old key and the new one, and won't replace it again on its own. Claims delivery, above, says what went wrong.`;
   }
-  // The Notice above the page already says how old it is; a warn key says nothing more here.
-  if (status.status === "warn") return "";
-  return `The key is ${age} days old, within the ${threshold}-day limit. Nothing to do.`;
+  if (lo?.outcome === "failed" || lo?.outcome === "abandoned") {
+    const what = lo.outcome === "failed" ? "Zitadel didn't replace it" : "the attempt was cut off before it finished";
+    const then = auto
+      ? ` Syndra tries again in the next quiet hours${nextTry}, at most once a day.`
+      : " Replace it now, or by hand below.";
+    return `Syndra tried to replace the key ${formatAt(lo.started_at)} and ${what}. The old key still works.${then}`;
+  }
+  if (lo?.outcome === "verified" && status.last_rotated_source === "syndra") {
+    const when = formatShortDate(lo.finished_at ?? status.last_rotated_at);
+    const next = due ? ` Next by ${due}.` : "";
+    return lo.trigger === "auto" ? `Replaced on its own on ${when}.${next}` : `Replaced on ${when}.${next}`;
+  }
+
+  if (!auto) {
+    const why =
+      status.auto?.off_reason === "no_zitadel"
+        ? "Syndra isn't connected to Zitadel, so it can't replace the key on its own."
+        : "Replacing it on its own is switched off.";
+    if (status.status === "warn" || status.status === "stale") return `${why} Replace it now, or by hand below.`;
+    return due ? `Due on ${due}. ${why} Replace it before then.` : `${why} Syndra doesn't know when it was last replaced.`;
+  }
+  if (status.age_days === undefined) {
+    return `Syndra doesn't know when the key was last replaced, so it replaces it on its own in the next quiet hours${quiet}.`;
+  }
+  // Overdue: the Notice above the page says how old it is; the row says what happens next.
+  if (status.status === "warn" || status.status === "stale") {
+    return `Syndra replaces it on its own in the next quiet hours${nextTry || quiet}.`;
+  }
+  return due ? `Due on ${due}; Syndra replaces it on its own before then.` : `Syndra replaces it on its own before the ${status.threshold_days ?? 90}-day limit.`;
 }
 
 /**

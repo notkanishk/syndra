@@ -125,3 +125,33 @@ func TestListActionTargets_ReadsTheResourceKey(t *testing.T) {
 		}
 	}
 }
+
+// The rotation is rotate.sh's call, exactly: POST /v2/actions/targets/{id}
+// with expirationSigningKey "0s", and the new key read from the answer. An
+// answer without a key, or a refusal, is an error, never an empty key.
+func TestRotateTargetSigningKey(t *testing.T) {
+	c := actionsClient(t, func(req *http.Request, body map[string]any) *http.Response {
+		if req.Method != http.MethodPost || req.URL.Path != "/v2/actions/targets/T1" || body["expirationSigningKey"] != "0s" || len(body) != 1 {
+			t.Errorf("unexpected %s %s %v", req.Method, req.URL.Path, body)
+		}
+		return jsonResp(200, map[string]any{"changeDate": "2026-11-05T03:00:00Z", "signingKey": "NEWKEY"})
+	})
+	if k, err := c.RotateTargetSigningKey(context.Background(), "T1"); err != nil || k != "NEWKEY" {
+		t.Fatalf("got %q, %v", k, err)
+	}
+	if _, err := c.RotateTargetSigningKey(context.Background(), "../x"); err == nil {
+		t.Error("a target id with a path separator went out")
+	}
+
+	empty := actionsClient(t, func(*http.Request, map[string]any) *http.Response { return jsonResp(200, map[string]any{}) })
+	if _, err := empty.RotateTargetSigningKey(context.Background(), "T1"); err == nil {
+		t.Error("an answer with no signingKey was taken as a key")
+	}
+	denied := actionsClient(t, func(*http.Request, map[string]any) *http.Response {
+		return jsonResp(403, map[string]any{"message": "no permission"})
+	})
+	var se *StatusError
+	if _, err := denied.RotateTargetSigningKey(context.Background(), "T1"); !errors.As(err, &se) || se.Code != 403 {
+		t.Errorf("a refusal is a 403 StatusError, got %v", err)
+	}
+}

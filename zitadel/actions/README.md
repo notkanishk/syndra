@@ -210,8 +210,11 @@ The service user only needs these permissions during:
   own — see [Signing Key Handling → Zitadel does not expire the signing
   key](#zitadel-does-not-expire-the-signing-key)).
 
-In steady state — Zitadel calling Syndra's `/api/action/inject` — no
-outbound Actions admin call is made, so the role can be:
+The backend itself also replaces the target keys on a schedule
+(action-key-autorotation), so `action.target.read` and `action.target.write`
+stay on the backend's account. The options below apply to the rest of the
+Actions permissions. Apart from those two, no outbound Actions admin call is
+made in steady state, so the role can be:
 
 - **Kept permanently assigned** (pragmatic, least operator toil).
 - **Assigned and revoked per run** (defensive; rotate happens rarely
@@ -281,12 +284,17 @@ requirement:
   shared credentials on a cadence (commonly 90 days).
 - **Defense in depth** — cap the blast radius of an undetected leak.
 
-None of these apply to Zitadel; they're operator policy. Syndra ships the
-rotate command below but deliberately does **not** run it on a schedule —
-rotation frequency is a deployment-level decision, not a runtime one. If/when
-Zitadel enables longer graceful periods on `expiration_signing_key`, a
-backend dual-key acceptance path becomes worth building; until then,
-scheduled automation buys little and adds infrastructure.
+None of these apply to Zitadel; they're operator policy. **Since 5 Nov 2026
+Syndra keeps that policy itself.** It replaces both keys a few days before the
+90-day limit, in a quiet window, and checks the result with a test sign-in. It
+holds the old and new keys together in its keyring, so nothing needs a restart.
+"Replace now" on System › Zitadel does the same on demand. The command below is
+the manual fallback. See `openspec/changes/action-key-autorotation` and ADR-005.
+This reverses the earlier "no schedule, no button" decision (#71).
+
+Consequence for permissions: the backend's own service account now uses
+`action.target.write` at runtime. Keep it assigned, or every automatic
+replacement fails with `KEY_ROTATION:failed`, and the old key stays in use.
 
 ### Lifecycle
 

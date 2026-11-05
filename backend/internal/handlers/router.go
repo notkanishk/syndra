@@ -235,6 +235,8 @@ func NewRouter() http.Handler {
 	// configured threshold (see rotation_status.go for semantics). Feeds the
 	// Rotation Status panel on /zitadel in the UI.
 	mux.HandleFunc("GET /api/v1/zitadel/action-rotation-status", withCORS(withOperatorAuth(HandleActionRotationStatus)))
+	mux.HandleFunc("POST /api/v1/zitadel/action-key/rotate", withCORS(withOperatorAuth(HandleRotateActionKey)))
+	mux.HandleFunc("POST /api/v1/zitadel/action-key/verify", withCORS(withOperatorAuth(HandleVerifyActionKey)))
 
 	// Zitadel Discovery — live state introspection and cross-project role management.
 	// Gated by withOperatorAuth: requires the admin project role (ZITADEL_ADMIN_ROLE_KEY).

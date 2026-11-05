@@ -47,6 +47,7 @@ func NewProcess(rdb RelayRedis, envKey string, devMode bool) *Process {
 	p.door = &Door{
 		Plane:   func() *Plane { return p.Plane },
 		Keys:    func() []SlotKey { return KeysWithEnv(p.Plane.SigningKeys(), envKey) },
+		Refresh: func(ctx context.Context) []SlotKey { return KeysWithEnv(p.Plane.RefreshKeys(ctx), envKey) },
 		DevMode: func() bool { return devMode },
 		Record: func(c claimtel.Call) {
 			p.Rec.Record(c)
