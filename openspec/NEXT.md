@@ -19,6 +19,10 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0d. One path, W1b: the error envelope (5 Nov 2026)
+
+Branch `fix/error-envelope`; detail in [`changes/one-path`](changes/one-path/proposal.md). Raw Zitadel and add-on text no longer reaches the screen at 502/503 for the raw codes, the proxy speaks the same envelope, and the reference is kept. Open: a `writeUpstream` at each raw call site (retire `rawUpstreamCodes`), and the remaining hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on.
+
 ## 0c. Dead-schema cleanup: stopped, and guards added (5 Nov 2026)
 
 Branch `chore/dead-schema-and-guards`. Owner approved two removals on condition that nothing still reads or writes them. Both are still read, so neither was removed and no migration 000078 was written.
