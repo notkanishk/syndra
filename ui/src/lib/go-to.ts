@@ -46,7 +46,8 @@ export interface GoToSource {
 export const fold = (text: string): string =>
   text
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    // ASCII only: the design-system bundle can be read without a charset.
+    .replace(/\p{M}/gu, "")
     .toLowerCase()
     .trim();
 
