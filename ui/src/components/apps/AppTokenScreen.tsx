@@ -58,17 +58,7 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
   if (shape.isLoading && seed) {
     return (
       <div className="flex flex-col gap-4">
-        <PageHeader
-          title={seed.name}
-          meta={
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
-              {kindOf(seed.consumer)} · roles from{" "}
-              <ArrowLink href={`/projects/${seed.project_id}`}>
-                <ProjectName id={seed.project_id} link={false} />
-              </ArrowLink>
-            </span>
-          }
-        />
+        <SeedHeader seed={seed} />
         <SkeletonAfterDelay>
           <Card>
             <RowSkeleton rows={4} avatar={false} label="Loading app" />
@@ -92,7 +82,7 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
     >
       {shape.error ? (
         <div className="flex flex-col gap-4">
-        {seed && <PageHeader title={seed.name} />}
+        {seed && <SeedHeader seed={seed} />}
         <ErrorState
           title={shape.error instanceof ApiError && shape.error.status === 404 ? "That app doesn't exist." : "Couldn't load this app."}
           error={shape.error instanceof ApiError && shape.error.status === 404 ? new Error("It may have been removed in Zitadel.") : shape.error}
@@ -103,6 +93,23 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
         <AppClaims key={applicationId} applicationId={applicationId} />
       ) : null}
     </ReadGate>
+  );
+}
+
+/** The header the row already gave us: kept as it is when the read fails. */
+function SeedHeader({ seed }: { seed: NonNullable<ReturnType<typeof useSeededApp>> }) {
+  return (
+      <PageHeader
+        title={seed.name}
+        meta={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
+            {kindOf(seed.consumer)} · roles from{" "}
+            <ArrowLink href={`/projects/${seed.project_id}`}>
+              <ProjectName id={seed.project_id} link={false} />
+            </ArrowLink>
+          </span>
+        }
+      />
   );
 }
 
@@ -262,7 +269,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
 
       {/* Quiet tools (A-15 §6): one card, a settings row each; nothing happens without a named button. */}
       <Card className="[&>.row-divider:first-child]:border-t-0">
-        {shape.client_id && (
+        {advanced && shape.client_id && (
           <ToolRow label="Client ID">
             <CopyableValue value={shape.client_id} label="Client ID" />
           </ToolRow>

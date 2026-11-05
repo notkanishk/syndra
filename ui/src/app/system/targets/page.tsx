@@ -257,7 +257,7 @@ function TargetRow({ row, first }: { row: TargetSummary; first: boolean }) {
           answering, the last count stays and says so. */}
       <span className="flex flex-col gap-0.5 pt-px tablet:w-[110px] tablet:shrink-0 tablet:text-right">
         {bound === undefined ? (
-          <span className="text-[15px] text-faint">—</span>
+          <span className="text-[15px] text-faint">Not yet</span>
         ) : (
           <>
             <span className={`text-[15px] ${answering ? "" : "text-muted"}`}>
@@ -293,7 +293,7 @@ function NeedsNote({
   loading: boolean;
   unread: boolean;
 }) {
-  if (!callable) return <span className="text-faint">—</span>;
+  if (!callable) return <span className="text-faint">Not yet</span>;
   if (!answering) return <span className="text-faint">Unknown until it answers</span>;
   if (loading) return <span className="text-faint">Reading…</span>;
   if (unread) return <span className="text-faint">Not read just now</span>;

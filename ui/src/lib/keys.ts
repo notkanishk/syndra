@@ -7,9 +7,13 @@ import { useEffect, type KeyboardEvent as ReactKeyEvent, type RefObject } from "
  * field belongs to the field.
  */
 
+/** The sheet swaps this for the modifier as this keyboard prints it (⌘ or Ctrl). */
+export const MOD = "Mod";
+
 /** The Keys sheet's rows, in the order it prints them. `keys` are drawn as Kbd. */
 export const KEY_ROWS: ReadonlyArray<{ keys: readonly string[]; does: string }> = [
   { keys: ["/"], does: "Go to a page or a name" },
+  { keys: [MOD, "K"], does: "Go to, even from a field" },
   { keys: ["?"], does: "Show these keys" },
   { keys: ["Esc"], does: "Close what is open, or leave Select" },
   { keys: ["↑", "↓"], does: "Move between rows in a list" },

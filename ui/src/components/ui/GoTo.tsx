@@ -25,6 +25,13 @@ type GoToProps = {
   nav: NavEntry[];
 };
 
+/** What the box is for, by who is asking: a member has pages only, Basic has no Bundles page. */
+export const GO_TO_PLACEHOLDER = {
+  member: "A page",
+  basic: "A person, a project, an app, or a page",
+  advanced: "A person, a project, an app, a bundle, or a page",
+} as const;
+
 export function GoTo({ open, onClose, nav }: GoToProps) {
   return (
     <Modal open={open} onClose={onClose} size="sm">
@@ -114,7 +121,7 @@ export function GoToPanel({
         aria-activedescendant={!showIdle && current ? optionId(current) : undefined}
         autoComplete="off"
         spellCheck={false}
-        placeholder="A person, a project, an app, a bundle, or a page"
+        placeholder={GO_TO_PLACEHOLDER[audience]}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);

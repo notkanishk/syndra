@@ -152,8 +152,7 @@ export function CopySheet({
         setDraft={setDraft}
         project={project}
         footer={(verb, note, start) => (
-          <ModalFooter note={note}>
-            <Button onClick={() => onClose(false)}>Cancel</Button>
+          <ModalFooter note={note} cancel={{ onClick: () => onClose(false) }}>
             <Button
               variant="accent"
               disabled={!start}
@@ -277,6 +276,7 @@ export function SaveSummary({
         </div>
       )}
       <ModalFooter
+        cancel={saved ? undefined : { onClick: () => onClose(false), disabled: busy }}
         note={
           saved
             ? undefined
@@ -288,14 +288,9 @@ export function SaveSummary({
         {saved ? (
           <Button onClick={() => onClose(true)}>Close</Button>
         ) : (
-          <>
-            <Button disabled={busy} onClick={() => onClose(false)}>
-              Cancel
-            </Button>
-            <Button variant="accent" isPending={busy} disabled={breaking.length > 0 && !understood} onClick={submit}>
-              Save
-            </Button>
-          </>
+          <Button variant="accent" isPending={busy} disabled={breaking.length > 0 && !understood} onClick={submit}>
+            Save
+          </Button>
         )}
       </ModalFooter>
     </Modal>
