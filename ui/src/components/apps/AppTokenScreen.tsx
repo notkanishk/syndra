@@ -64,7 +64,7 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
               {kindOf(seed.consumer)} · roles from{" "}
               <ArrowLink href={`/projects/${seed.project_id}`}>
-                <ProjectName id={seed.project_id} />
+                <ProjectName id={seed.project_id} link={false} />
               </ArrowLink>
             </span>
           }
@@ -91,11 +91,14 @@ export function AppTokenScreen({ applicationId }: { applicationId: string }) {
       }
     >
       {shape.error ? (
+        <div className="flex flex-col gap-4">
+        {seed && <PageHeader title={seed.name} />}
         <ErrorState
           title={shape.error instanceof ApiError && shape.error.status === 404 ? "That app doesn't exist." : "Couldn't load this app."}
           error={shape.error instanceof ApiError && shape.error.status === 404 ? new Error("It may have been removed in Zitadel.") : shape.error}
           onRetry={() => shape.refetch()}
         />
+        </div>
       ) : shape.data ? (
         <AppClaims key={applicationId} applicationId={applicationId} />
       ) : null}
@@ -201,7 +204,7 @@ function AppClaims({ applicationId }: { applicationId: string }) {
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-faint">
             {kindOf(shape.application.consumer)} · roles from{" "}
             <ArrowLink href={`/projects/${projectId}`}>
-              <ProjectName id={projectId} />
+              <ProjectName id={projectId} link={false} />
             </ArrowLink>
             {signInMeta && (
               <span className="tint-in">

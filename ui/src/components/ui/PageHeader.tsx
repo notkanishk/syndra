@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState } from "react";
 
+import { ShellNotices } from "@/components/shell/ShellNotices";
 import { ARRIVE_SETTLED_MS, returnedToThisPage } from "@/lib/motion";
 import { TINT_MS } from "@/lib/motion";
 
@@ -75,11 +76,8 @@ export function PageHeader({
   const head = usePageHead();
 
   return (
-    <div
-      className={`${head.className} flex flex-wrap items-end gap-4 ${className}`}
-      data-settled={head["data-settled"]}
-      style={BELOW_HEADER}
-    >
+    <div className={head.className} data-settled={head["data-settled"]} style={BELOW_HEADER}>
+      <div className={`flex flex-wrap items-end gap-4 ${className}`}>
       {/* `flex-auto` (basis: auto), not `flex-1` (basis: 0%) — with a 0%
           basis this block reports zero size to the wrap decision, so `actions`
           claims the whole line and this text is squeezed into whatever sliver
@@ -95,6 +93,9 @@ export function PageHeader({
         )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
+      </div>
+      {/* The shell's Notices, 16 under the lede (A-20 P3, G7). */}
+      <ShellNotices />
     </div>
   );
 }

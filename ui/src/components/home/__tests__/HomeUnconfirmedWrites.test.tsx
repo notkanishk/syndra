@@ -72,7 +72,7 @@ vi.mock("@/components/names", async () => {
   const actual = await vi.importActual<typeof import("@/components/names")>("@/components/names");
   return {
     ...actual,
-    UserName: ({ id }: { id: string | null | undefined }) => <span>{id}</span>,
+    UserName: ({ id }: { id: string | null | undefined }) => <a href={`/users/${id}`}>{id}</a>,
     UserAvatar: () => <span />,
     RoleRef: ({ roleKey }: { roleKey: string | null | undefined }) => <span>{roleKey}</span>,
   };

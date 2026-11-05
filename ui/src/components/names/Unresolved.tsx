@@ -1,5 +1,6 @@
 "use client";
 
+import { NameLink } from "@/components/names/NameLink";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 
 /**
@@ -28,6 +29,7 @@ export function Unresolved({
   id,
   idLabel = "id",
   className = "",
+  href,
 }: {
   /** Faint when it is the shared phrase; a caller's own wording is shown as given. */
   label: React.ReactNode;
@@ -35,10 +37,16 @@ export function Unresolved({
   /** What the id is, for the copy control's name: "account id", "project id". */
   idLabel?: string;
   className?: string;
+  /**
+   * G14: the page this name would open. The words link; the copy control beside
+   * them stays outside the link, so no control sits inside another.
+   */
+  href?: string;
 }) {
+  const words = typeof label === "string" ? <span className="text-faint">{label}</span> : label;
   return (
     <span className={className}>
-      {typeof label === "string" ? <span className="text-faint">{label}</span> : label}
+      {href ? <NameLink href={href}>{words}</NameLink> : words}
       {id ? (
         <>
           {" "}

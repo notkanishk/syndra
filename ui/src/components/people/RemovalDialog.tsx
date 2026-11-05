@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useContext, useState } from "react";
 
 import {
   SourceChip,
@@ -10,7 +10,10 @@ import {
 } from "@/components/access/AccessSource";
 import { RoleRef } from "@/components/names";
 import { useShownNames } from "@/components/names/shownNames";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
+import { useRoleWaits } from "@/lib/queries/useRoleWaits";
+import { settleIndicators } from "@/lib/queries/useIndicators";
+import { QueryClientContext } from "@tanstack/react-query";
 import { StatusDot } from "@/components/ui/Badge";
 import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { ArrowLink } from "@/components/ui/ArrowLink";
@@ -21,6 +24,8 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { useRemoveDirectGrant } from "@/lib/queries/useRoleMembers";
 import { useRemoveBundle } from "@/lib/queries/useBundles";
 import {
+  forecastFor,
+  FORECAST,
   outcomeFromError,
   succeeded,
   type ActionOutcome as Outcome,
@@ -200,6 +205,8 @@ function DirectDialog({
   onClose: () => void;
 }) {
   const remove = useRemoveDirectGrant();
+  const roleWaits = useRoleWaits();
+  const client = useContext(QueryClientContext);
   const waits = useWaitsBeforeLine();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const retained = others.length > 0;
@@ -266,6 +273,14 @@ function DirectDialog({
           )}
         </div>
       </div>
+      {/* The first 100ms. Withdrawing a grant that is still waiting cancels it; a role
+          that waits holds its own removal; anything else is simply removed. */}
+      {!outcome && remove.isPending && (
+        <ActionForecast
+          className="mx-6 mb-1"
+          word={source?.queued ? FORECAST.cancel : forecastFor("remove", roleWaits(removal.projectId, removal.roleKey))}
+        />
+      )}
       {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 
@@ -314,6 +329,8 @@ function DirectDialog({
                   }),
                 );
                 if (result === KEPT) return;
+                // A withdrawn grant leaves the queue; the rail follows the answer.
+                if (source?.queued && client) settleIndicators(client, { pending_propagation: -1 });
                 // The residual outcome, from the backend that computed it. A
                 // role this person also holds through a bundle or a rule
                 // survives the removal, and which ones those are is a closure
@@ -362,6 +379,7 @@ function BundleDialog({
 }) {
   const bundleName = source.bundle_name ?? "this bundle";
   const removeBundle = useRemoveBundle(userId ?? "");
+  const roleWaits = useRoleWaits();
   const waits = useWaitsBeforeLine();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const step = useCancelStep({
@@ -411,6 +429,12 @@ function BundleDialog({
           </>
         )}
       </div>
+      {!outcome && removeBundle.isPending && (
+        <ActionForecast
+          className="mx-6 mb-1"
+          word={source.queued ? FORECAST.cancel : forecastFor("remove", roleWaits(removal.projectId, removal.roleKey))}
+        />
+      )}
       {outcome && <ActionOutcome word={resultWord(outcome)} outcome={outcome} person={userId} className="mx-6 mb-1" />}
       {outcome && succeeded(outcome) && step.after}
 

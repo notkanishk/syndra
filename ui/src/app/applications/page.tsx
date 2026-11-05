@@ -75,19 +75,20 @@ export default function AppsPage() {
       )}
 
       <Card stale={readState.current === false}>
-        <CardColumns>
-          <span className="w-[300px] min-w-[170px]">
-            <SortHead label="App" name="app" sort={sort} onSort={setSort} />
-          </span>
-          <span className="min-w-[140px] flex-1">Reads roles from</span>
-          <span className="w-[220px] shrink-0 text-right">Claims</span>
-          <span className="w-[110px] shrink-0 text-right">
-            <SortHead label="People" name="people" sort={sort} onSort={setSort} />
-          </span>
-        </CardColumns>
-
         <div className={view.className}>
         <ListStates
+          head={
+            <CardColumns>
+              <span className="w-[300px] min-w-[170px]">
+                <SortHead label="App" name="app" sort={sort} onSort={setSort} />
+              </span>
+              <span className="min-w-[140px] flex-1">Reads roles from</span>
+              <span className="w-[220px] shrink-0 text-right">Claims</span>
+              <span className="w-[110px] shrink-0 text-right">
+                <SortHead label="People" name="people" sort={sort} onSort={setSort} />
+              </span>
+            </CardColumns>
+          }
           isLoading={apps.isLoading}
           error={apps.error}
           isEmpty={rows.length === 0}
@@ -131,7 +132,7 @@ export default function AppsPage() {
               </span>
 
               <span className="w-full text-[14px] text-muted tablet:min-w-[140px] tablet:flex-1">
-                <ProjectName id={entry.application.project_id} />
+                <ProjectName id={entry.application.project_id} link={false} />
               </span>
 
               <span className="text-[13px] tablet:w-[220px] tablet:shrink-0 tablet:text-right">

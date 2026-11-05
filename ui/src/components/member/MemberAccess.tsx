@@ -26,6 +26,7 @@ import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import type { SessionUser } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { expiryLabel, formatShortDate, humanizeKey } from "@/lib/format";
+import { ShellNotices } from "@/components/shell/ShellNotices";
 import { greeting, WELCOME } from "@/lib/greeting";
 import { Crossfade, glideTo } from "@/lib/motion";
 import { targetLabel } from "@/lib/nav";
@@ -176,6 +177,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
         loading: access.isLoading,
         read: !unread,
         now,
+        firstVisit: session.firstVisit,
         // Only what Zitadel holds, with the grant's end: the record supplies the date, never the count.
         ending: grantsRead
           ? (grants.data ?? []).flatMap((grant) =>
@@ -216,17 +218,17 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={`${head.className} flex flex-col gap-2`} data-settled={head["data-settled"]} style={BELOW_HEADER}>
+      <div className={head.className} data-settled={head["data-settled"]} style={BELOW_HEADER}>
         <h1 className="type-page-title">
           {now ? greeting(now) : <span className="invisible">Afternoon</span>}, {firstName(session.name)}.{" "}
-          <span className="text-faint">Here&rsquo;s what you can use.</span>
+          <span className="text-faint">{session.firstVisit ? WELCOME : <>Here&rsquo;s what you can use.</>}</span>
         </h1>
         {/* One line, always there, in the same seat in every state, so nothing below it moves. */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0 text-[14.5px] text-muted">
-          {session.firstVisit ? (
-            // The first visit only (A-18 idea 8): above every rung, in the line's own seat.
-            <span>{WELCOME}</span>
-          ) : line ? (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0 text-[14.5px] text-muted">
+          {/* The welcome is the title's second sentence (A-20 P2), so the ladder
+              speaks here on the first visit too: "From today, you can use …"
+              is never hidden on its day. */}
+          {line ? (
             <>
               <span className="flex items-center gap-2.5">
                 {line.tone !== "none" && <StatusDot tone={line.tone} />}
@@ -251,6 +253,8 @@ export function MemberAccess({ session }: { session: SessionUser }) {
             <span className="invisible">Checking what you can use.</span>
           )}
         </div>
+        {/* The shell's Notices, under the whole head (A-20 P3, G7). */}
+        <ShellNotices />
       </div>
 
       {/* The read is one hand-over (S7): a skeleton only if it is slow, then the cards arrive. */}

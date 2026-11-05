@@ -1,5 +1,6 @@
 "use client";
 
+import { SYSTEM_WORDS } from "@/components/targets/TargetReading";
 import { useEffect, useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
@@ -382,13 +383,13 @@ function SystemStatus({ view, state }: { view: MyTargetView; state: State }) {
     <span role="status" className={`tint-in inline-flex items-center gap-2 text-[13px] leading-[1.4] motion-tint ${offline ? "text-warn-text" : "text-muted"}`}>
       <StatusDot tone={offline ? "warn" : held ? "neutral" : "healthy"} />
       {offline ? (
-        <>Offline{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
+        <>{SYSTEM_WORDS.offline}{view.reachable_since ? ` since ${formatClock(view.reachable_since)}` : ""}</>
       ) : held ? (
-        <>Online · your account is on hold</>
+        <>{SYSTEM_WORDS.answering} · your account is on hold</>
       ) : state === "waiting" || state === "unread" || PASSWORD_STEP.has(state) ? (
-        <>Online{checked}</>
+        <>{SYSTEM_WORDS.answering}{checked}</>
       ) : (
-        <>Online and accepting sign-ins{checked}</>
+        <>{SYSTEM_WORDS.answering} and accepting sign-ins{checked}</>
       )}
     </span>
   );

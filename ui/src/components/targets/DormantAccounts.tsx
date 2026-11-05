@@ -100,7 +100,7 @@ export function DormantAccounts({ target, stale = false }: { target: string; sta
         errorTitle="This list could not be read"
         empty={
           <EmptyState
-            title="Nothing to tidy"
+            title="Nothing to tidy."
             guidance={`Every account Syndra created on ${name} is still backed by a role.`}
           />
         }

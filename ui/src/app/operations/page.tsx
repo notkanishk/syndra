@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { ONBOARDING_TITLE, zitadelTitle } from "@/app/operations/event-words";
@@ -490,17 +489,13 @@ interface StreamRow {
 function Person({ id }: { id: string }) {
   const href = useAccountHref();
   return (
-    <Link href={href(id)} className="text-ink link-hover">
-      <UserName id={id} />
-    </Link>
+    <UserName id={id} href={href(id)} className="text-ink" />
   );
 }
 
 function Project({ id }: { id: string }) {
   return (
-    <Link href={`/projects/${id}`} className="text-ink link-hover">
-      <ProjectName id={id} />
-    </Link>
+    <ProjectName id={id} className="text-ink" />
   );
 }
 

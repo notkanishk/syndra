@@ -100,6 +100,16 @@ export function sentence(text: string): string {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
+/** What a browser calls a request that never reached the server, in each engine's words. */
+const RAW_NETWORK = /failed to fetch|networkerror|network request failed|load failed|fetch failed/i;
+
+export const NETWORK_FAULT = "Syndra's server didn't answer.";
+
+/** The third of the copy guide's four parts (§8): the next step, and where. */
+export function nextStep(hasReference: boolean): string {
+  return `Try again in a minute. If it keeps failing, ask the person who runs the Syndra server${hasReference ? " and quote the reference below" : ""}.`;
+}
+
 /** What went wrong, in the product's voice rather than the transport's. */
 export function describeFailure(error: unknown): string {
   if (error instanceof ApiError) {
@@ -107,6 +117,8 @@ export function describeFailure(error: unknown): string {
     if (error.status === 404) return "That item no longer exists. Someone may have removed it.";
     return error.message;
   }
+  // A fetch that never connected: the browser's words are never the product's.
+  if (error instanceof TypeError || (error instanceof Error && RAW_NETWORK.test(error.message))) return NETWORK_FAULT;
   if (error instanceof Error) return error.message;
   return "Something went wrong and the request did not go through.";
 }
@@ -189,7 +201,28 @@ export const FORECAST = {
   remove: "Will be removed",
   keep: "Will be kept",
   lift: "Will be lifted",
+  give: "Will be given",
+  cancel: "Will be cancelled",
+  adopt: "Will be adopted",
+  mark: "Will be marked",
 } as const;
+
+/** The acts a forecast can name: every word but the one for a wait. */
+export type ForecastAct = Exclude<keyof typeof FORECAST, "queued">;
+
+/**
+ * Acts that go on to Zitadel. When the role they touch is one of Roles that
+ * wait, Syndra already knows they will wait for the operator, so the forecast
+ * is the wait and not the act (A-20 P8): "Will wait for you to send", never
+ * "Will be approved". Decline, keep, lift, cancel, adopt and mark never reach
+ * Zitadel, so a waiting role changes nothing about them.
+ */
+const REACHES_ZITADEL: ReadonlySet<ForecastAct> = new Set<ForecastAct>(["approve", "extend", "remove", "give"]);
+
+/** The forecast seat's word for `act`, given whether its role is a role that waits. */
+export function forecastFor(act: ForecastAct, roleWaits?: boolean): string {
+  return roleWaits && REACHES_ZITADEL.has(act) ? FORECAST.queued : FORECAST[act];
+}
 
 /**
  * A Drift revoke, as an outcome. Code decides, and code says it sends by

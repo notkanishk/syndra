@@ -7,7 +7,8 @@ import IdentityProviderPage from "@/app/zitadel/page";
 
 const rotation = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 const health = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
-const projects = vi.hoisted(() => ({ value: [] as unknown[] }));
+const projects = vi.hoisted(() => ({ value: [] as unknown[] | undefined }));
+const refetch = vi.hoisted(() => vi.fn());
 
 // The page reads rotation status through the raw request helper and health
 // through its own hook, so both are stubbed at their respective seams.
@@ -16,7 +17,7 @@ vi.mock("@/lib/api-client", () => ({
 }));
 
 vi.mock("@/lib/queries/useZitadel", () => ({
-  useZitadelHealth: () => ({ data: health.value, isLoading: false, error: null, refetch: () => {} }),
+  useZitadelHealth: () => ({ data: health.value, isLoading: false, error: null, refetch, isFetching: false }),
 }));
 
 const keyring = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
@@ -29,7 +30,7 @@ vi.mock("@/components/system/ClaimsDelivery", () => ({
 }));
 
 vi.mock("@/lib/queries/useProjects", () => ({
-  useProjects: () => ({ data: projects.value, isLoading: false, error: null }),
+  useProjects: () => ({ data: projects.value, isLoading: projects.value === undefined, error: null }),
 }));
 
 function renderPage() {
@@ -78,12 +79,40 @@ describe("Identity provider · one verdict about reachability", () => {
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
   });
 
-  it("calls it 'Unreachable' everywhere when Zitadel is configured but did not answer — never 'Connected'", async () => {
+  // A-20 P5: one word per state. The seat and the Notice never disagree, and "Unreachable" is gone.
+  it("says 'Not answering' in the seat, with the pips, and never 'Unreachable' or 'Connected'", async () => {
     health.value = { status: "error", mode: "live", error: "dial tcp: connection refused" };
     renderPage();
-    expect(await screen.findAllByText(/Unreachable/)).not.toHaveLength(0);
+    expect(await screen.findByText("Not answering")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Last 3 checks: missed, no check yet, no check yet/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Unreachable/)).not.toBeInTheDocument();
     expect(screen.queryByText("Connected")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Not connected/)).not.toBeInTheDocument();
+    // One or two missed checks raise no Notice.
+    expect(screen.queryByText("Not answering.")).not.toBeInTheDocument();
+  });
+
+  it("is Offline, with a Notice of the same word, once three checks in a row have gone unanswered", async () => {
+    health.value = { status: "error", mode: "live", error: "dial tcp: connection refused" };
+    const { rerender } = renderPage();
+    for (const n of [1, 2]) {
+      health.value = { status: "error", mode: "live", error: `miss ${n}` };
+      rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <IdentityProviderPage />
+        </QueryClientProvider>,
+      );
+    }
+    expect(await screen.findByText("Offline")).toBeInTheDocument();
+    expect(screen.getByText("Offline.")).toBeInTheDocument();
+    expect(screen.queryByText("Not answering")).not.toBeInTheDocument();
+  });
+
+  it("has a Check again that reads again", async () => {
+    health.value = { status: "error", mode: "live" };
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -94,6 +123,15 @@ describe("Identity provider · one verdict about reachability", () => {
  * answers, Syndra's remembered one, marked last known, when it can't.
  */
 describe("Identity provider · health line", () => {
+  // "0 projects, last known" used to be said while the projects were still loading.
+  it("never says a count it has not read: while projects load the header says no count", async () => {
+    health.value = { status: "error", mode: "live" };
+    projects.value = undefined;
+    renderPage();
+    expect(await screen.findByText("Not answering")).toBeInTheDocument();
+    expect(screen.queryByText(/\d+ projects?/)).not.toBeInTheDocument();
+  });
+
   it("is one line with the reply time and no fold behind it", async () => {
     health.value = { status: "ok", mode: "live", latency_ms: 42, projects_total: 6 };
     renderPage();

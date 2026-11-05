@@ -8,6 +8,9 @@ import { navFor, targetNav } from "@/lib/nav";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useUiView } from "@/lib/ui-view";
 
+/** Dispatch on `window` to open Go to by touch (the phone top bar's button). */
+export const OPEN_GO_TO = "syndra:open-go-to";
+
 /**
  * Mounts Go to once and owns its two keys: `/` when no field has the focus, and
  * Cmd K (Ctrl K elsewhere). It never fires while somebody is typing, and it
@@ -30,8 +33,18 @@ export function GoToHost() {
       event.preventDefault();
       setOpen((was) => (chord ? !was : true));
     }
+    // The phone's top bar button (A-20 P6) asks for the same dialog by event, so
+    // there is one Go to and one place that decides it may open.
+    function onAsk() {
+      if (otherDialogOpen('[role="combobox"][aria-label="Go to"]')) return;
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(OPEN_GO_TO, onAsk);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(OPEN_GO_TO, onAsk);
+    };
   }, []);
 
   return <GoTo open={open} onClose={() => setOpen(false)} nav={nav} />;

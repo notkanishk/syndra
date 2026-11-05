@@ -1,6 +1,6 @@
 "use client";
 
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { request } from "@/lib/api-client";
@@ -58,6 +58,28 @@ const EMPTY: Indicators = {
   revocations_escalated: false,
   zitadel_reachable: true,
 };
+
+/**
+ * The rail's count, set from the answer (A-20 P8). Called in a mutation's
+ * `onSuccess` and nowhere else, so the number changes when the server has
+ * answered and never ahead of it; the refetch the same handler asks for then
+ * confirms it. `change` returns the deltas to apply to the real reading, and
+ * the result never goes below zero. With no reading in the cache yet there is
+ * nothing to correct, so nothing is written (the fabricated zeros are not one).
+ */
+export function settleIndicators(
+  client: QueryClient,
+  change: Partial<Record<"pending_requests" | "expiring_grants" | "pending_propagation" | "drift" | "holds_due", number>>,
+) {
+  client.setQueryData<Indicators>(["governance", "indicators"], (current) => {
+    if (!current) return current;
+    const next = { ...current };
+    for (const [key, delta] of Object.entries(change) as Array<[keyof typeof change, number]>) {
+      next[key] = Math.max(0, current[key] + delta);
+    }
+    return next;
+  });
+}
 
 function indicatorsQuery(enabled: boolean) {
   return queryOptions({

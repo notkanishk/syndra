@@ -209,26 +209,17 @@ function Holds({ userId, name }: { userId: string; name: string }) {
         onRetry={() => access.refetch()}
         errorTitle="Couldn't load what this account holds."
         skeleton={<RowSkeleton rows={3} avatar={false} label="Loading what this account holds" />}
-        empty={<EmptyState title={`${name} holds no access.`} guidance="Access appears here once a bundle or a direct grant gives it some." />}
+        empty={<EmptyState title={`${name} holds no access.`} guidance="Access appears here once a bundle or by hand gives it some." />}
       >
         {rows.map(({ project, roleKey, reasons }, index) => {
           const sources = orderedSources(reasons);
           const strongest = sources[0];
-          const verb = strongest?.queued ? "Withdraw" : strongest?.kind === "direct" ? "Revoke" : "Remove";
+          const verb = strongest?.queued ? "Cancel the change" : strongest?.kind === "direct" ? "Revoke" : "Remove";
           const roleName = humanizeKey(roleKey);
           return (
             <CardRow key={`${project.project_id}::${roleKey}`} first={index === 0}>
               <span className="min-w-0 flex-1 text-[15px] font-semibold tablet:flex-none tablet:basis-[260px]">
-                <Link
-                  href={`/projects/${encodeURIComponent(project.project_id)}`}
-                  className="link-hover"
-                >
-                  <ResolvedProjectName
-                    name={project.project_name}
-                    resolved={project.project_name_resolved}
-                    id={project.project_id}
-                  />
-                </Link>
+                <ResolvedProjectName name={project.project_name} resolved={project.project_name_resolved} id={project.project_id} />
                 <span aria-hidden className="text-faint"> · </span>
                 <span>{roleName}</span>
               </span>

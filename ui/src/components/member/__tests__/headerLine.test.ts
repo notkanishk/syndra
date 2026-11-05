@@ -19,6 +19,25 @@ const calm: HeaderFacts = {
 };
 const line = (over: Partial<HeaderFacts>) => headerLine({ ...calm, ...over });
 
+describe("headerLine on a first visit (A-20 P2)", () => {
+  it("never hides a rung: a role given today is still said", () => {
+    const got = line({ firstVisit: true, startedToday: [{ project: "Laser cutting", projectId: "p1" }] });
+    expect(got.text).toBe("From today, you can use Laser cutting.");
+  });
+
+  it("a role that ends still leads", () => {
+    const got = line({ firstVisit: true, ending: [{ ...role("Operator in Laser cutting"), endsAt: inDays(3) }] });
+    expect(got.tone).toBe("warn");
+  });
+
+  it("the calm rung says what Syndra is, with no dot", () => {
+    expect(line({ firstVisit: true })).toEqual({
+      tone: "none",
+      text: "It keeps the makerspace\u2019s list of who can use what, and why.",
+    });
+  });
+});
+
 describe("headerLine, rung by rung", () => {
   it("loading: no dot, 'Checking what you can use.'", () => {
     expect(line({ loading: true })).toEqual({ tone: "none", text: "Checking what you can use." });

@@ -69,16 +69,17 @@ export default function ConnectedSystemsPage() {
       ))}
 
       <Card>
-        <CardColumns>
-          <span className="min-w-0 flex-1">
-            System <span aria-hidden>↑</span>
-          </span>
-          <span className="w-[180px] shrink-0">Status</span>
-          <span className="hidden w-[250px] shrink-0 desktop:block">Needs you</span>
-          <span className="w-[110px] shrink-0 text-right">People</span>
-        </CardColumns>
-
         <ListStates
+          head={
+            <CardColumns>
+              <span className="min-w-0 flex-1">
+                System <span aria-hidden>↑</span>
+              </span>
+              <span className="w-[180px] shrink-0">Status</span>
+              <span className="hidden w-[250px] shrink-0 desktop:block">Needs you</span>
+              <span className="w-[110px] shrink-0 text-right">People</span>
+            </CardColumns>
+          }
           isLoading={targets.isLoading}
           error={targets.error}
           isEmpty={rows.length === 0}
@@ -89,9 +90,8 @@ export default function ConnectedSystemsPage() {
             <EmptyState
               title="No system is connected."
               guidance={
-                "Syndra manages accounts on a system outside itself, such as network storage or a " +
-                "door controller, through an add-on. Whoever runs the Syndra server connects one " +
-                "(see DEPLOY.md). Until then Syndra manages sign-in only."
+                "Connecting one is done on the Syndra server; the person who runs it has the steps. " +
+                "Until then Syndra manages sign-in only."
               }
             />
           }
