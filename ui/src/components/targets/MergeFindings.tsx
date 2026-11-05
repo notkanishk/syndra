@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { EmptyState, ListStates } from "@/components/states";
 import { ApiError } from "@/lib/api-client";
+import { describeFailure, outcomeFromError, sentence } from "@/lib/outcome";
 import { UserName } from "@/components/names";
 import { TechnicalDetail, TechnicalPayload } from "@/components/ui/TechnicalDetail";
 import { RoleRef } from "@/components/names/RoleRef";
@@ -349,7 +350,12 @@ function DecisionForm({
           // an operator pressing a button that never works.
           <span className="text-[13.5px] text-warn-text">
             {error instanceof Error
-              ? error.message
+              ? (() => {
+                  // An ApiError's message is the envelope's sentence (never upstream text); anything else is a transport fault.
+                  const said = error instanceof ApiError ? error.message : describeFailure(error);
+                  const ref = outcomeFromError(error).requestId;
+                  return ref ? `${sentence(said)} Reference ${ref}.` : said;
+                })()
               : "That decision did not go through. Nothing was changed."}
           </span>
         )
