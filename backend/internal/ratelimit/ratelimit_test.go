@@ -60,7 +60,7 @@ func TestFailuresLimitPerSourceAndRefill(t *testing.T) {
 
 func TestPersonHasBothWindows(t *testing.T) {
 	l, now := clocked(nil, DefaultSelfService)
-	r := req("10.0.0.2:1")
+	r := req("203.0.113.2:1")
 	n := 0
 	// A write every 6s never meets the minute limit, so only the hour can stop it.
 	for ; n < 100 && l.Person(r, "u1") == 0; n++ {
@@ -157,10 +157,10 @@ func TestClientIP(t *testing.T) {
 		// A public peer cannot name somebody else.
 		{req("203.0.113.7:1", "198.51.100.1"), "203.0.113.7"},
 		// Behind Caddy: the last entry, the one the proxy wrote.
-		{req("192.168.4.5:1", "198.51.100.9, 198.51.100.1"), "198.51.100.1"},
-		{req("172.18.0.1:1", "198.51.100.1", "2001:db8::1"), "2001:db8::1"},
+		{req("[fd00::5]:1", "198.51.100.9, 198.51.100.1"), "198.51.100.1"},
+		{req("[fd00::18]:1", "198.51.100.1", "2001:db8::1"), "2001:db8::1"},
 		{req("127.0.0.1:1", "not-an-ip"), "127.0.0.1"},
-		{req("10.0.0.3:1"), "10.0.0.3"},
+		{req("[fd00::3]:1"), "fd00::3"},
 	} {
 		if got := ClientIP(c.r); got != c.want {
 			t.Errorf("%s %v: got %s, want %s", c.r.RemoteAddr, c.r.Header.Values("X-Forwarded-For"), got, c.want)
