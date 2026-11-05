@@ -20,6 +20,9 @@ Four buckets, in the order they actually unblock each other:
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
 ## 0d. Rules on the pipeline (5 Nov 2026)
+## 0d. One path, W1b: the error envelope (5 Nov 2026)
+
+Branch `fix/error-envelope`; detail in [`changes/one-path`](changes/one-path/proposal.md). Raw Zitadel and add-on text no longer reaches the screen at 502/503 for the raw codes, the proxy speaks the same envelope, and the reference is kept. Open: a `writeUpstream` at each raw call site (retire `rawUpstreamCodes`), and the remaining hand-built bodies in `bundles.go`, `access.go`, `claimserve/door.go` and the add-on.
 ## 0d. One add-on pipe (W1e/W1f, 5 Nov 2026)
 
 Branch `fix/one-addon-pipe`; change [`changes/one-path`](changes/one-path/tasks.md). Every add-on call now goes through `addons/pipe.go` (breaker, trace before a write, idempotency key), lifecycle changes leave an `addon_operations` row and an audit line, and the TrueNAS plan and apply share one `decide`. Open from it:
