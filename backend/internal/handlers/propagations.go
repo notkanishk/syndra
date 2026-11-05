@@ -60,6 +60,10 @@ func handleListPendingPropagations(w http.ResponseWriter, r *http.Request) {
 	if rows == nil {
 		rows = []models.PendingPropagation{} // encode as [] not null for the UI
 	}
+	// Each row Syndra sends again on its own says when, and which try.
+	for i := range rows {
+		rows[i].Retry = propagation.RowRetry(rows[i])
+	}
 	jsonResponse(w, http.StatusOK, map[string]any{"pending": rows})
 }
 

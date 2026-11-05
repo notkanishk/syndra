@@ -197,6 +197,7 @@ func TestGovernanceIndicators_CountsWithoutBuildingSummary(t *testing.T) {
 	svcCountPendingPropagations = func(context.Context) (int, error) { return 2, nil }
 	svcCountPendingDrift = func(context.Context) (int, error) { return 12, nil }
 	svcZitadelReachable = func(context.Context) bool { return false }
+	svcCountRetries = func(context.Context) (int, int, error) { return 1, 4, nil }
 
 	got, err := GovernanceIndicators(context.Background())
 	if err != nil {
@@ -204,6 +205,10 @@ func TestGovernanceIndicators_CountsWithoutBuildingSummary(t *testing.T) {
 	}
 	if got.PendingRequests != 3 || got.ExpiringGrants != 1 || got.PendingPropagation != 2 || got.Drift != 12 {
 		t.Fatalf("indicator counts wrong: %#v", got)
+	}
+	// An automatic retry, and its end, are said on the rail and Home.
+	if got.Retrying != 1 || got.GaveUp != 4 {
+		t.Fatalf("retrying/gave_up = %d/%d, want 1/4", got.Retrying, got.GaveUp)
 	}
 	if horizon != expiryHorizon {
 		t.Errorf("badge and Today must share one expiry horizon; got %v want %v", horizon, expiryHorizon)

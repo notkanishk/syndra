@@ -30,7 +30,14 @@
 - [x] 1.5 Migration 000080 `propagation_outbox.not_before`; `RequeuePropagation` sets it; both batch claims respect it
 - [x] 1.6 One start-up wait schedule in `cmd/api/main.go`
 - [x] 1.7 Tests: backoff spacing and cap, retryable vs terminal, read-back on ambiguous write, outbox respects `not_before`, max attempts to failed (live), down migration (text and live, in a rolled-back transaction)
-- [ ] 1.8 Show "next try at" (`not_before`) on the pending worklist. The models and UI are outside W1d's files #ready-for-agent
+- [x] 1.8 Show "next try at" (`not_before`) on the pending worklist: `GetPendingPropagations` returns `not_before`, `attempts` and `retry`; `RetryStatus` says "Zitadel didn't answer. Syndra sends it again at 14:05 (try 2 of 6)." in IST (branch `fix/coherence-delivery`)
+- [x] 1.8a One retry model (`extcall/retry.go`: `OutboxRetry`, `AddonResend`, `Policy.Retrying`, `AuditMark`), parity test across both (`extcall/retry_test.go`); `ui/src/lib/retry.ts` + `components/ui/RetryStatus.tsx` the one set of words and the one part
+- [x] 1.8b Background drain retries any change already sent that Zitadel didn't take, past its backoff, gives included (`db.ClaimDueRetries`, live test `retry_claims_live_test.go`); never `role_waits`/`manual`; every automatic try audited `propagation.retried`; tick 1m
+- [x] 1.8c Send takes rows in backoff (`ClaimPendingPropagations` ungated); `Delivery.WaitReason()` = `halted:retrying` on Requeued/Errored, with `Drain.Retry`; approve, give, remove, bundle retire carry `retry`
+- [x] 1.8d Vocal: Home's Pending changes block says retrying and gave-up counts (`/governance/indicators` `retrying`, `gave_up`); member storage page says "Not confirmed yet. Syndra is trying again at 14:05." and waits for the server-named next try
+- [ ] 1.8e Rule retire (`app/policies/page.tsx:643-663`) to use `retireOutcome` from `lib/retry.ts` and drop "applied without review" (group B's file) #ready-for-agent
+- [ ] 1.8f The rail's Pending changes badge could turn warn while `retrying > 0` (Sidebar/TouchNav, outside this branch's files) #needs-triage
+- [ ] 1.8g Deploy, then 503 one give on the dev box (stop Zitadel briefly) and watch it go on its own at the named time; audit shows `propagation.retried` #ready-for-human
 - [ ] 1.9 Move the add-on transport onto `extcall` (W1e) #ready-for-agent
 - [ ] 1.10 Owner: after deploy, watch `[ZITADEL] ... req=` lines during the next Zitadel blip #ready-for-human
 

@@ -20,6 +20,7 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { Input } from "@/components/ui/Input";
 import { WaitsMark } from "@/components/ui/WaitsMark";
+import { RetryStatus } from "@/components/ui/RetryStatus";
 import { narrow, usePendingFilters } from "@/lib/pending-filter";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -113,7 +114,7 @@ export default function PendingChangesPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Pending changes"
-        lede="Changes that have not reached Zitadel or a connected system yet. Sending delivers all of them, in order, and revocations also send on their own every few minutes."
+        lede="Changes that have not reached Zitadel or a connected system yet. Sending delivers all of them, in order, now. Revocations, and changes Zitadel didn't take when they were sent, also go again on their own; a role that waits for you never does."
         actions={
           // With nothing left to send it fades out, then goes.
           cleared && folded ? null : (
@@ -144,7 +145,14 @@ export default function PendingChangesPage() {
         }
       />
 
-      {outcome && <ActionOutcome outcome={outcome} word={statesNothingChanged(outcome.kind) ? "Not sent" : "Sent"} />}
+      {outcome && (
+        <ActionOutcome
+          outcome={outcome}
+          // "Sent" only when every change went: a pass that left some to be
+          // sent again is not one (W2).
+          word={statesNothingChanged(outcome.kind) ? "Not sent" : outcome.kind === "queued" ? "Not all sent" : "Sent"}
+        />
+      )}
 
       {known && rows.length > 0 && !cleared && (
         <FilterBar
@@ -466,12 +474,18 @@ function sharedWait(rows: PendingPropagationRow[]): string | undefined {
 }
 
 /**
- * What state the change is in, under it: why it waits (warn only for a send
- * that stopped, not for a wait the operator chose), a failure and what the
- * system said, and that a revocation also goes on its own. `skipWait` is the
- * batch's shared reason, already said in its band.
+ * What state the change is in, under it: a change Zitadel didn't take says
+ * when Syndra sends it again and which try (RetryStatus, the one retry model);
+ * otherwise why it waits (warn only for a send that stopped, not for a wait the
+ * operator chose), and that a revocation also goes on its own. `skipWait` is
+ * the batch's shared reason, already said in its band.
+ *
+ * No failed line: this list holds only pending and in-flight rows, and a
+ * failed row is terminal, so nothing here could say "Syndra will try again"
+ * about one truthfully (S4).
  */
 function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: string }) {
+  if (row.retry) return <RetryStatus retry={row.retry} system={targetLabel(row.target ?? "zitadel")} />;
   const line = waitLine(row);
   return (
     <>
@@ -485,16 +499,7 @@ function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: s
             <span className="text-warn-text">{line}</span>
           </span>
         ))}
-      {row.status === "failed" && (
-        <span className="inline-flex items-center gap-2 text-[13px] text-danger-text">
-          <StatusDot tone="danger" />
-          <span className="[overflow-wrap:anywhere]">
-            Failed, and Syndra will try again
-            {row.last_error ? `: ${row.last_error}` : "."}
-          </span>
-        </span>
-      )}
-      {row.op_type === "revoke" && (
+      {row.op_type === "revoke" && !waitIsChosen(row.wait_reason) && (
         <span className="text-[12.5px] text-faint">
           A revocation: it also sends on its own within a few minutes.
         </span>

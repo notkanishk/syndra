@@ -203,8 +203,8 @@ func TestARefusalDoesNotEchoTheCredential(t *testing.T) {
 }
 
 // An unconfirmed outcome must not be reported as success. An operation carrying
-// a secret is never auto-retried, so the member is told to check rather than
-// told it worked.
+// a secret is never retried by the server; the page sends it once more, and
+// the member is told when, never that it worked.
 func TestAnUnconfirmedCredentialSetIsNotReportedAsDone(t *testing.T) {
 	h := &storageHarness{entitled: true, bound: true, outcome: addons.OutcomeIndeterminate}
 	stubMyStorage(t, h)
@@ -220,6 +220,21 @@ func TestAnUnconfirmedCredentialSetIsNotReportedAsDone(t *testing.T) {
 	}
 	if len(h.recorded) != 0 {
 		t.Error("nothing may be recorded for a change nobody confirmed")
+	}
+	// Vocal: the page is told when it sends it again, and which try, from the
+	// one retry model (extcall.AddonResend) — the same shape a Zitadel row has.
+	retry, _ := out["retry"].(map[string]any)
+	if retry["state"] != "retrying" || retry["try"] != float64(2) || retry["of"] != float64(2) || retry["next_try"] == nil {
+		t.Fatalf("first lost reply: retry = %v, want retrying, try 2 of 2, with a next try", out["retry"])
+	}
+
+	// After the one resend, nothing tries again until the member does.
+	rr, _ = setCredential(t, `{"password":"`+memberSecret+`","resend":true}`)
+	out = map[string]any{}
+	_ = json.Unmarshal(rr.Body.Bytes(), &out)
+	retry, _ = out["retry"].(map[string]any)
+	if retry["state"] != "waiting" || retry["try"] != float64(2) || retry["next_try"] != nil {
+		t.Fatalf("resend lost too: retry = %v, want waiting, try 2 of 2, no next try", out["retry"])
 	}
 }
 

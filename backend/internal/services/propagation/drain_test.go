@@ -28,6 +28,8 @@ func stubDrainDeps(t *testing.T) {
 	for _, restore := range []func(){
 		swap(&zitadelReachable, func(context.Context) bool { return true }),
 		swap(&claimPending, func(context.Context, string, int) ([]models.PendingPropagation, error) { return nil, nil }),
+		swap(&claimRetries, func(context.Context, string, int) ([]models.PendingPropagation, error) { return nil, nil }),
+		swap(&insertAudit, func(context.Context, string, string, string, string, any) error { return nil }),
 		swap(&grantIndexHasRole, func(context.Context, string, string, string) (bool, error) { return false, nil }),
 		// One seam for "what does Zitadel hold for this pair". Empty id means no
 		// grant yet, which is what a drain test that has not said otherwise means.

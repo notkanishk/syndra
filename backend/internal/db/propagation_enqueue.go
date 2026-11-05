@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"syndra/internal/extcall"
 )
 
 // EnqueueParams is the input to the transactional enqueue. RoleKeys is plural so
@@ -67,6 +68,8 @@ type EnqueueResult struct {
 	// WaitReason says why the change isn't in Zitadel yet, when it isn't:
 	// role_waits, manual, or halted:<reason> (services.Deliver).
 	WaitReason string `json:"wait_reason,omitempty"`
+	// Retry is the next try and which try, when Zitadel didn't take it.
+	Retry *extcall.RetryState `json:"retry,omitempty"`
 	// RuleOutboxIDs are the rows the mapping rules added to this write: what a
 	// chain of rules derives from the role given, or takes back with the role
 	// removed. Written in the same transaction, delivered with OutboxID.

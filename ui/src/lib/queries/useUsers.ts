@@ -8,6 +8,7 @@ import type { ObservationBasis } from "@/lib/queries/useRoles";
 import type { CascadeOutcome } from "@/lib/types";
 import { sortByName } from "@/lib/sort";
 import { invalidateAfter } from "./invalidation";
+import type { RetryState } from "@/lib/retry";
 
 // Shapes mirror the backend `users.go` handler responses. Kept narrow to what
 // the Users page renders; widen if more fields are needed.
@@ -255,6 +256,8 @@ export interface CreateGrantResult {
   status: string;
   /** Why the grant isn't in Zitadel yet: role_waits, halted:<reason> or manual. */
   wait_reason?: string;
+  /** With halted:retrying: when Syndra sends it again, and which try. */
+  retry?: RetryState;
 }
 
 /**

@@ -6,10 +6,14 @@ import { formatClock } from "@/lib/format";
  * changes, and every outcome that meant to send and didn't.
  *
  *   role_waits                  "{Role} always waits for you"
+ *   halted:retrying             "Zitadel didn't answer. Syndra sends it again on its own"
+ *                               (the action's `retry` says when: lib/retry.ts)
  *   halted:zitadel_offline      "Zitadel didn't answer at 10:42"
  *   halted:drain_in_progress    "Another send was running at 10:42"
  *   halted:<other>              "The send stopped at 10:42"
- *   manual                      "Its bundle or rule was set to wait"
+ *   manual                      "Its bundle or rule was set to wait" (rows
+ *                               from before migration 000078 only: the mode
+ *                               it names was dropped there)
  */
 export function waitReasonLine(
   reason: string | undefined | null,
@@ -21,6 +25,8 @@ export function waitReasonLine(
   if (reason === "manual") return "Its bundle or rule was set to wait";
   const when = at ? ` at ${formatClock(at)}` : "";
   switch (reason) {
+    case "halted:retrying":
+      return "Zitadel didn't answer. Syndra sends it again on its own";
     case "halted:zitadel_offline":
       return `Zitadel didn't answer${when}`;
     case "halted:drain_in_progress":

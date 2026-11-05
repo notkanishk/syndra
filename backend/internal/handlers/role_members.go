@@ -83,7 +83,7 @@ func handleDeleteUserDirectGrant(w http.ResponseWriter, r *http.Request) {
 	// role the grant carried is still covered by another source — and that is
 	// the point: nothing is queued, so nothing is sent.
 	d := svcDeliver(r.Context(), res.OutboxIDs, r.URL.Query().Get("apply") != "true")
-	res.WaitReason = d.WaitReason()
+	res.WaitReason, res.Retry = d.WaitReason(), d.Drain.Retry
 	for _, id := range d.Sent {
 		if st, serr := dbGetPropagationStatus(r.Context(), id); serr == nil && st != "" {
 			res.Status = st

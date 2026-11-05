@@ -130,6 +130,11 @@ export function Home({ session }: { session: SessionUser }) {
   // zeros are not a reading, so they count as nothing.
   const unconfirmedBy = (indicators.isPlaceholderData ? undefined : indicators.data?.unconfirmed_operations) ?? {};
   const unconfirmed = Object.values(unconfirmedBy).reduce((sum, n) => sum + n, 0);
+  // Changes Zitadel didn't take that Syndra sends again on its own, and the
+  // ones it gave up on this week: said here so an automatic retry, and its
+  // end, never go unnoticed (owner, 5 Nov 2026).
+  const retrying = (indicators.isPlaceholderData ? 0 : indicators.data?.retrying) ?? 0;
+  const gaveUp = (indicators.isPlaceholderData ? 0 : indicators.data?.gave_up) ?? 0;
   // Writes Zitadel accepted that no later read has been able to see, old
   // enough that the gap is a finding rather than Zitadel's read projection
   // catching up (see UnconfirmedWrites — the threshold lives on the backend
@@ -175,7 +180,7 @@ export function Home({ session }: { session: SessionUser }) {
     unowned.length > 0,
     ...(advanced
       ? [
-          (propagation?.count ?? 0) > 0,
+          (propagation?.count ?? 0) > 0 || gaveUp > 0,
           unconfirmedWrites.count > 0,
           (drift?.count ?? 0) > 0,
           unvouched.length > 0,
@@ -193,7 +198,7 @@ export function Home({ session }: { session: SessionUser }) {
     queue.rows.length === 0 && ["Requests", "/requests"],
     expiring.length === 0 && ["Expiring access", "/review/expiring-access"],
     advanced && (drift?.count ?? 0) === 0 && ["Drift", "/governance/drift"],
-    advanced && (propagation?.count ?? 0) === 0 && ["Pending changes", "/governance/pending"],
+    advanced && (propagation?.count ?? 0) === 0 && gaveUp === 0 && ["Pending changes", "/governance/pending"],
     advanced &&
       readIndicators?.unconfirmed_revocations === 0 && [
         "Unfinished revocations",
@@ -288,7 +293,7 @@ export function Home({ session }: { session: SessionUser }) {
             onboardingGaps > 0 ||
             gaps.rows.length > 0 ||
             unowned.length > 0 ||
-            (advanced && (findings > 0 || unconfirmed > 0 || (propagation?.count ?? 0) > 0))
+            (advanced && (findings > 0 || unconfirmed > 0 || (propagation?.count ?? 0) > 0 || gaveUp > 0))
           }
           className="min-w-0 desktop:col-start-2"
         >
@@ -308,9 +313,11 @@ export function Home({ session }: { session: SessionUser }) {
             <Block open={advanced && unconfirmed > 0}>
               <NotConfirmed count={unconfirmed} bySystem={unconfirmedBy} />
             </Block>
-            <Block open={advanced && (propagation?.count ?? 0) > 0}>
+            <Block open={advanced && ((propagation?.count ?? 0) > 0 || gaveUp > 0)}>
               <PendingChanges
                 count={propagation?.count ?? 0}
+                retrying={retrying}
+                gaveUp={gaveUp}
                 reachable={propagation?.zitadel_reachable ?? true}
               />
             </Block>
@@ -866,13 +873,50 @@ function ServiceAccountsToLookAt({ accounts }: { accounts: ServiceAccount[] }) {
   );
 }
 
-function PendingChanges({ count, reachable }: { count: number; reachable: boolean }) {
+function PendingChanges({
+  count,
+  retrying = 0,
+  gaveUp = 0,
+  reachable,
+}: {
+  count: number;
+  /** Of `count`, the ones Zitadel didn't take that Syndra sends again on its own. */
+  retrying?: number;
+  /** Changes Syndra stopped trying in the last week: no longer in `count`. */
+  gaveUp?: number;
+  reachable: boolean;
+}) {
   const drain = useDrainPropagations();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   return (
     <Card>
       <CardHeader title="Pending changes" count={count} />
+      {retrying > 0 && (
+        <CardRow>
+          <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
+            <StatusDot tone="warn" />
+            <span className="text-warn-text">
+              Zitadel didn&apos;t answer for {retrying === 1 ? "one of them" : `${retrying} of them`}. Syndra sends{" "}
+              {retrying === 1 ? "it" : "them"} again on its own; Pending changes says when.
+            </span>
+          </span>
+          <ArrowLink href="/governance/pending">Pending changes</ArrowLink>
+        </CardRow>
+      )}
+      {gaveUp > 0 && (
+        <CardRow>
+          <span className="inline-flex flex-1 items-center gap-2 text-[14px]">
+            <StatusDot tone="danger" />
+            <span className="text-danger-text">
+              Syndra gave up on {gaveUp === 1 ? "one change" : `${gaveUp} changes`} this week after every try. Give or
+              revoke the access again from the person&apos;s page.
+            </span>
+          </span>
+          <ArrowLink href="/audit">Audit</ArrowLink>
+        </CardRow>
+      )}
+      {count > 0 && (
       <CardRow>
         <div className="flex-1 text-[14.5px]">
           {count} {count === 1 ? "change is" : "changes are"} waiting for you to send to Zitadel
@@ -898,6 +942,7 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           Send {count === 1 ? "it" : "them"} now
         </Button>
       </CardRow>
+      )}
 
       {/* The result sits in the block that ran it, at row weight rather than
           as a bordered box inside a bordered card. Today is a landing an
@@ -905,7 +950,12 @@ function PendingChanges({ count, reachable }: { count: number; reachable: boolea
           must not restyle the block around it. */}
       {outcome && (
         <CardRow>
-          <ActionOutcome outcome={outcome} placement="inline" word={outcomeWord(outcome, "Sent", "Not sent")} />
+          <ActionOutcome
+            outcome={outcome}
+            placement="inline"
+            // Never "Sent" for a pass that left changes to be sent again.
+            word={outcome.kind === "queued" ? "Not all sent" : outcomeWord(outcome, "Sent", "Not sent")}
+          />
         </CardRow>
       )}
     </Card>
