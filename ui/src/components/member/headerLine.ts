@@ -45,6 +45,8 @@ export interface HeaderFacts {
   now: Date;
   /** This session is the person's first: the calm rung says what Syndra is. */
   firstVisit?: boolean;
+  /** When they were last here and nothing in their feed is newer: "on Tuesday", "yesterday" (A-20 P18). */
+  quietSince?: string;
   /** Roles Zitadel holds that end, with when. Empty until the grants are read. */
   ending: Array<NamedRole & { endsAt: string }>;
   /** Given, not on the account after a full read. */
@@ -163,5 +165,10 @@ export function headerLine(facts: HeaderFacts): HeaderLine {
   // instead (A-20 P2), because there is nothing else to say and the title has
   // already welcomed them.
   if (facts.firstVisit) return { tone: "none", text: ABOUT };
+  // After a first visit there is no "last time"; otherwise, when the feed has
+  // nothing since the previous sign-in, say so (A-20 P18).
+  if (facts.quietSince) {
+    return { tone: "healthy", text: `Nothing has changed since you were last here, ${facts.quietSince}.` };
+  }
   return { tone: "healthy", text: "Nothing needs you right now." };
 }

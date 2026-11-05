@@ -24,6 +24,10 @@ Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pa
 ### A-20 second pass — [`changes/second-pass`](changes/second-pass/proposal.md)
 
 Owner said "all yes" on 5 Nov 2026. **P1 (names link by default, G14) is built** on `feat/a20-names-link`; P2 to P8 are in other branches and add their own sections to that change. Open from P1: the resolver does not know which ids are service accounts, so a bare `UserName` opens `/users/:id`; only rows that call `useAccountHref` reach `/system/service-accounts/:id`.
+### A-20 P18 built (5 Nov 2026)
+
+Since you were last here: migration 000076 keeps previous and current sign-in per person; Home's calm panel and working headline and My access's calm rung say "since Tuesday". See `changes/second-pass/tasks.md` (P18). Open: nothing; the migration backfills current from each person's latest act, so the first sign-in after deploy names that day.
+
 ### A-20 second pass (P4, P7 built)
 
 Headings leave with the rows and errors carry four parts: see [`changes/second-pass`](changes/second-pass/tasks.md). Open: pass `fine` to `ErrorState` from Zitadel-facing pages.

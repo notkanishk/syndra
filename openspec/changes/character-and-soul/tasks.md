@@ -31,3 +31,5 @@
   - Tests: live-DB (written once, never overwritten, first only for the recording call, the backfill); guard mutation-checked; session cookie round trip; Home and My access render.
 - [x] 5.2 Quiet hours (idea 9; owner 5 Nov): Home's calm guidance gains "It will keep until morning." from 22:00 to 05:00 on a calm day only; `greeting()` reads Evening in those hours. `isQuietHour` in `lib/greeting.ts`, boundaries tested.
 - [ ] 5.3 The 404 in voice (idea 10): not building
+
+- [x] 5.4 Since you were last here (A-20 P18; owner 5 Nov, Q9 yes): migration `000076_last_sign_in` keeps the previous and current sign-in beside the first, `RecordSignIn` moves them on each sign-in, `previous_sign_in_at` rides `POST /me/first-sign-in` into the session. Home and My access say "since Tuesday" in their existing seats. Detail in `changes/second-pass/tasks.md` (P18).

@@ -50,7 +50,7 @@ import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ClockTime, Relative } from "@/components/ui/Time";
 import { expiryLabel, formatShortDate, formatWeekday, whyNotChecked } from "@/lib/format";
 import { ShellNotices } from "@/components/shell/ShellNotices";
-import { greeting, isQuietHour, WELCOME } from "@/lib/greeting";
+import { greeting, isQuietHour, lastHere, WELCOME } from "@/lib/greeting";
 import { useTerms } from "@/lib/queries/useTerms";
 import { termDayLine } from "@/lib/term-dates";
 import { compareNames, sortByName } from "@/lib/sort";
@@ -103,6 +103,8 @@ export function Home({ session }: { session: SessionUser }) {
   const advanced = useIsAdvanced();
   const summary = useGovernanceSummary();
   const requests = useRequestsAdmin("pending");
+  // Every request, only to say whether any came in since they were last here (A-20 P18).
+  const everyRequest = useRequestsAdmin("all");
   const onboarding = useMissedOnboarding();
   const indicators = useIndicatorsRead();
 
@@ -222,9 +224,21 @@ export function Home({ session }: { session: SessionUser }) {
   // A swap held for the pointer (S5) keeps the grid as it last was, and the
   // headline with it: what leaves is what was there.
   const held = useRef<{ grid: React.ReactNode; blocks: number }>({ grid: null, blocks: 0 });
+  // "Since Tuesday" (A-20 P18): what Syndra has a record of arriving after the
+  // previous sign-in, never access. A block is new when a request or a joiner
+  // in it arrived since; the sentence only ever lengthens in place.
+  const here = now ? lastHere(session.previousSignIn, now) : null;
+  const prevAt = session.previousSignIn ? new Date(session.previousSignIn).getTime() : NaN;
+  const after = (iso?: string | null) => !!iso && new Date(iso).getTime() > prevAt;
+  const newBlocks = Math.min(
+    blocks,
+    (pending.some((r) => after(r.created_at)) ? 1 : 0) + (missed.some((p) => after(p.joined)) ? 1 : 0),
+  );
+  const nothingCameIn =
+    here !== null && !everyRequest.isLoading && !everyRequest.error && !(everyRequest.data ?? []).some((r) => after(r.created_at));
   const headline = error
     ? "Couldn't check."
-    : workSentence(calm && !swap.showsCalm ? held.current.blocks : blocks, loading);
+    : workSentence(calm && !swap.showsCalm ? held.current.blocks : blocks, loading, here?.since, newBlocks);
   // The first visit's welcome takes the headline's seat on a calm day only
   // (A-20 P2): on a working day the work is the welcome. It is a sentence in
   // the seat that is already there, so the date line never moves.
@@ -401,10 +415,11 @@ export function Home({ session }: { session: SessionUser }) {
             resolved
             title="Nothing here needs you."
             guidance={
+              // Since they were last here (A-20 P18), in the guidance's own seat: no row is added.
+              (nothingCameIn && here ? `Since ${here.since}, nothing came in. ` : "") +
+              "No open requests, and no access ending in the next 14 days." +
               // Late at night, on a calm day only: permission to stop (A-18 idea 9).
-              now && isQuietHour(now)
-                ? "No open requests, and no access ending in the next 14 days. It will keep until morning."
-                : "No open requests, and no access ending in the next 14 days."
+              (now && isQuietHour(now) ? " It will keep until morning." : "")
             }
           />
         </div>
@@ -1092,11 +1107,13 @@ function firstName(session: SessionUser): string {
 // "here" is load-bearing: the collapsed nav bar below counts PLACES elsewhere
 // that want a look, and a things-count beside a places-count with no word
 // telling them apart reads as one total that disagrees with itself.
-function workSentence(count: number, loading: boolean): string {
+function workSentence(count: number, loading: boolean, since?: string, fresh = 0): string {
   if (loading) return "Checking.";
   if (count === 0) return "Nothing needs you right now.";
-  if (count === 1) return "One thing needs you.";
-  return `${spell(count)} things need you.`;
+  const base = count === 1 ? "One thing needs you" : `${spell(count)} things need you`;
+  if (!since || fresh === 0) return `${base}.`;
+  if (fresh >= count) return `${base}, ${count === 1 ? "new" : count === 2 ? "both new" : "all new"} since ${since}.`;
+  return `${base}, ${spell(fresh).toLowerCase()} of them new since ${since}.`;
 }
 
 const WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];

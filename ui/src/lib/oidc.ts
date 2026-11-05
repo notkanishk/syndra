@@ -295,18 +295,23 @@ export async function fetchProfileMetadata(
  * the session cookie, so the welcome lasts the session and never returns. Any
  * failure is "not the first visit": a missed welcome is better than a repeated one.
  */
-export async function recordFirstSignIn(accessToken: string, backendUrl: string): Promise<boolean> {
+export async function recordFirstSignIn(
+  accessToken: string,
+  backendUrl: string,
+): Promise<{ firstVisit: boolean; previousSignIn?: string }> {
   try {
     const res = await fetch(`${backendUrl}/api/v1/me/first-sign-in`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) return false;
-    const body = (await res.json()) as { first_visit?: unknown };
-    return body.first_visit === true;
+    if (!res.ok) return { firstVisit: false };
+    const body = (await res.json()) as { first_visit?: unknown; previous_sign_in_at?: unknown };
+    // A-20 P18: when they were last here before this sign-in; absent on the first.
+    const previous = typeof body.previous_sign_in_at === "string" ? body.previous_sign_in_at : undefined;
+    return { firstVisit: body.first_visit === true, ...(previous ? { previousSignIn: previous } : {}) };
   } catch {
-    return false;
+    return { firstVisit: false };
   }
 }
 

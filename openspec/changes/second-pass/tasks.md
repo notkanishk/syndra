@@ -64,3 +64,14 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [x] Tests: `forecastReach.test.tsx`, `requestForecast.test.tsx`, `RemovalForecast.test.tsx`, `GrantForecast.test.tsx`, `CancelForecast.test.tsx`, `RehearsalForecast.test.tsx`, Drift cases in `UnexplainedAccess.test.tsx`
 - [ ] Remove's rail count: only a withdrawn queued grant moves it; a direct revoke's count is left to the refetch (`needs-triage`)
 - [ ] Bulk decision and bulk extend rail counts (`ready-for-agent`)
+
+### P18 · since you were last here (owner, Q9, 5 Nov 2026)
+
+- [x] Migration `000076_last_sign_in`: `person_first_sign_in` gains `last_sign_in_at` (NOT NULL) and `previous_sign_in_at`, with the `person_sign_in_order` coherence check (current >= first; previous between first and current). One row, two timestamps. Backfill: current starts as the person's latest act in Syndra (audit entry or request)
+- [x] `db.RecordSignIn` replaces `RecordFirstSignIn`: each sign-in moves current into previous; a second call within a minute is the same sign-in and moves nothing
+- [x] `POST /me/first-sign-in` also answers `previous_sign_in_at` (null on the first). No new route, so the proxy allowlist and router guard are unchanged. The callback puts it in the session as `previousSignIn`
+- [x] `lastHere()` in `lib/greeting.ts`: yesterday, a weekday under a week, a date beyond; nothing for today
+- [x] Home: calm guidance "Since Tuesday, nothing came in." (no request, any status, since); working headline "Three things need you, two of them new since Tuesday." (a block is new when a request or a joiner in it arrived since). Counts Syndra's records of arrivals, never access
+- [x] My access: calm rung "Nothing has changed since you were last here, on Tuesday." only when the changes feed was read and holds nothing newer; every rung above it still speaks first
+- [x] Tests: live-DB (previous and current shift, first has none, retry inside the window moves nothing, order guard, down undoes up; settle window mutation-checked); `lastHere`, `headerLine`, session cookie, Home
+- [ ] Deviation: Home's "nothing came in" goes in the calm panel's guidance, under the unchanged title "Nothing here needs you.", rather than replacing it
