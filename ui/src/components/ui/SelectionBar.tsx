@@ -145,7 +145,7 @@ function SelectionBarBody({
       : "";
 
   const stacked = phone && verbs !== undefined && verbs.length >= 3;
-  const frame = `${leaving ? "tint-out pointer-events-none" : "tint-in"} sticky bottom-4 z-20 mt-2 flex rounded-[18px] border px-5 py-3.5 shadow-dialog ${
+  const frame = `${leaving ? "tint-out pointer-events-none" : "tint-in"} sticky bottom-4 z-(--layer-bar) mt-2 flex rounded-[18px] border px-5 py-3.5 shadow-dialog ${
     overCeiling ? "border-warn-line bg-warn-soft" : "border-line-strong bg-surface-2"
   }`;
   const takeCeiling =

@@ -211,7 +211,7 @@ describe("GrantDirectAccess · its result", () => {
     await grant("Supervisor");
 
     expect(screen.getByText("Given")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending?person=u1");
     expect(screen.getByText("Supervisor always waits for you, so Ada can't use it yet.")).toBeInTheDocument();
     expect(screen.queryByText("Applied")).not.toBeInTheDocument();
   });

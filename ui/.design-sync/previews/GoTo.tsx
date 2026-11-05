@@ -1,0 +1,92 @@
+import { useEffect } from "react";
+import { GoTo, SyndraRoot, UiViewProvider, useUiView } from "ui";
+
+const noop = () => {};
+/** The card wrapper is transformed, so it is the containing block for the fixed overlay: give it the viewport. */
+const stage = { margin: -24, height: "100dvh" } as const;
+
+/** Pins the operator's view; the provider persists it, so every cell sets its own. */
+function View({ view, children }: { view: "basic" | "advanced"; children: React.ReactNode }) {
+  const { setView } = useUiView();
+  useEffect(() => setView(view), [setView, view]);
+  return <>{children}</>;
+}
+
+/** The pages Go to may list: the current view's tree (src/lib/nav.ts), here a short excerpt. */
+const leaf = (label: string, href: string) => ({ kind: "leaf" as const, label, href });
+const nav = [
+  leaf("Home", "/"),
+  leaf("People", "/users"),
+  { kind: "group" as const, label: "Access", children: [leaf("Projects", "/projects"), leaf("Roles", "/roles"), leaf("Apps", "/applications")] },
+  leaf("Requests", "/requests"),
+];
+
+/** From the name catalog Syndra already holds: no request is made while typing. */
+const catalog = {
+  users: [
+    { id: "u1", name: "Priya Nair", email: "priya.nair@example.edu", title: "Makerspace Manager", team: "Makerspace", status: "active", avatar: "PN" },
+    { id: "u2", name: "Prisha Rao", email: "prisha.rao@example.edu", title: "Student", team: "Design Club", status: "active", avatar: "PR" },
+    { id: "u3", name: "Arjun Priest", email: "arjun@example.edu", title: "", team: "Wood shop", status: "active", avatar: "AP" },
+  ],
+  projects: [
+    { id: "p1", name: "Print Lab", kind: "project", description: "", roles: [{ key: "operator", label: "Operator", description: "" }] },
+    { id: "p2", name: "Laser cutter", kind: "project", description: "", roles: [] },
+  ],
+  applications: [{ id: "a1", name: "Print Queue", project_id: "p1", description: "", consumer: "oidc", claim_name: "", format_type: "" }],
+};
+const data = [
+  { key: ["name-catalog"], value: catalog },
+  { key: ["name-bundles"], value: [{ id: "b1", name: "Printing basics" }] },
+];
+
+/** Types into the Input as a person would, so the grouped results draw. */
+function Typing({ text, children }: { text: string; children: React.ReactNode }) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const input = document.querySelector<HTMLInputElement>('[role="combobox"]');
+      if (!input) return;
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      set?.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [text]);
+  return <>{children}</>;
+}
+
+/** "pri" typed in Advanced: People, Projects, Apps and Bundles, each A to Z, the first row selected. */
+export const WithResults = () => (
+  <SyndraRoot pathname="/" data={data}>
+    <UiViewProvider isOperator>
+      <View view="advanced">
+        <Typing text="pri">
+          <div style={stage}><GoTo open onClose={noop} nav={nav} /></div>
+        </Typing>
+      </View>
+    </UiViewProvider>
+  </SyndraRoot>
+);
+
+/** No match: one quiet line and no guidance. */
+export const NothingByThatName = () => (
+  <SyndraRoot pathname="/" data={data}>
+    <UiViewProvider isOperator>
+      <View view="basic">
+        <Typing text="zzzz">
+          <div style={stage}><GoTo open onClose={noop} nav={nav} /></div>
+        </Typing>
+      </View>
+    </UiViewProvider>
+  </SyndraRoot>
+);
+
+/** Open with nothing typed: pages only, A to Z. */
+export const Pages = () => (
+  <SyndraRoot pathname="/" data={data}>
+    <UiViewProvider isOperator>
+      <View view="basic">
+        <div style={stage}><GoTo open onClose={noop} nav={nav} /></div>
+      </View>
+    </UiViewProvider>
+  </SyndraRoot>
+);

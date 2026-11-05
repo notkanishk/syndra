@@ -105,7 +105,7 @@ describe("a role whose grant has not been sent", () => {
     ]);
     renderPerson();
 
-    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending");
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toHaveAttribute("href", "/governance/pending?person=u1");
     // An expiry on access that does not exist yet answers a question nobody
     // can ask, so the marker takes the slot rather than sitting beside it.
     expect(screen.queryByText("No end date")).toBeNull();

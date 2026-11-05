@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Act in place, and keys</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.container.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/react-cache-shim.js"></script>
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): the Kbd key (proposed/Kbd.md). Everything else is the real part. */
+.a19-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;padding:0 6px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--tint-1);font-family:var(--font-mono);font-size:11.5px;color:var(--muted)}
+.a19-link{display:inline-flex;align-items:center;gap:4px;font-size:13.5px;font-weight:600;color:var(--accent-text);text-decoration-line:underline;text-decoration-color:transparent}
+.a19-link:hover{text-decoration-color:currentColor}
+.a19-seat{display:flex;flex-direction:column;gap:4px;min-width:0}
+.a19-why{font-size:13.5px;color:var(--muted)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Act in place and keys board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Across the product · Proposed 5 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">The first 100ms, your place kept, and the keys</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-19, part two. What a row says in the frame after you press it (P2), the four keys (P7), Appearance that follows the device (P11), and what Back brings back (P5). None of it adds a loop, a route transition or a box. The breathing dot the Button already has carries into the seat while Syndra is on its way, and the bloom plays only on the true word.</p>
+  </header>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · The first 100ms, in the future tense (P2)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">One access row on a person's page, drawn at each moment. At rest, its verbs. In the frame after the press, the seat crossfades (S4) to a forecast in the plan row's tense, amber, and its dot breathes while the request is on its way. On the response the dot changes colour where it sits and the word crossfades to the true one; the bloom plays once, only here, only for something that went well. A failure appears still, and the verbs return beside it. The seat is sized to its taller content, so nothing below moves at any moment.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ actFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:700px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1400px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Act phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:1180px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><dc-import name="Frame" frame-src="a19-act-in-place-and-keys.dc.html?frame=act-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · the same moments</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The seat wraps under the role; the verbs keep the 44px floor. The forecast is one line.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">The forecast, act by act</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Each act has one forecast and one true word. The forecast is a sentence about Syndra's own next step, which Syndra does know; it never claims access changed. Access is observed, so the true word arrives only with Zitadel's answer.</p>
+    <div class="card" style="overflow:hidden">
+      <div style="display:flex;gap:18px;padding:10px 22px;border-bottom:1px solid var(--line)"><span class="type-label" style="flex:0 0 200px;color:var(--label)">Act</span><span class="type-label" style="flex:1 1 260px;color:var(--label)">In flight (amber, breathing)</span><span class="type-label" style="flex:1 1 260px;color:var(--label)">True word (dot changes where it sits)</span></div>
+      <sc-for list="{{ forecasts }}" as="r" hint-placeholder-count="7">
+        <div style="display:flex;flex-wrap:wrap;gap:6px 18px;padding:12px 22px;border-top:{{ r.rule }};font-size:14px;line-height:1.5">
+          <span style="flex:0 0 200px;font-weight:600">{{ r.act }}</span>
+          <span style="flex:1 1 260px;min-width:0;color:var(--muted);text-wrap:pretty">{{ r.flight }}</span>
+          <span style="flex:1 1 260px;min-width:0;text-wrap:pretty">{{ r.done }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">2 · Keys (P7) and Appearance (P11)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Four keys, shown once on a sheet opened by ?. No letter shortcuts for verbs: an accidental Revoke is not calm. The Kbd part appears only here and in Go to's footer, never on a button. Appearance gains Device, which is what the theme already does until someone picks; choosing it clears the stored choice, and a change on the device crossfades every token (S14) with nothing moving.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ sheetFrames }}" as="f" hint-placeholder-count="4">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:460px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:920px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px;max-width:1500px">
+    <h2 class="type-section-title" style="margin:0">3 · Back keeps your place (P5)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">What a list brings back when you return to it by Back, and only then. It is memory for this session, keyed by the list's URL; a fresh navigation from the rail starts clean, and nothing crosses a visit. Nothing arrives on a return (S11 already says so), so the page is simply as you left it.</p>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px">
+      <sc-for list="{{ kept }}" as="k" hint-placeholder-count="4">
+        <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:6px">
+          <span style="display:inline-flex;align-items:center;gap:9px;font-size:14.5px;font-weight:600"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>{{ k.what }}</span>
+          <span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ k.how }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="5">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isAct }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u2" data="{{ rootData }}" hint-size="100%,100vh">
+<div style="padding:36px 32px;display:flex;flex-direction:column;gap:22px;background:var(--ground);min-height:100vh">
+  <sc-for list="{{ moments }}" as="m" hint-placeholder-count="5">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--faint)">{{ m.when }}</span>
+      <x-import component-from-global-scope="Syndra.Card" hint-size="100%,96px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px 20px">
+          <span style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:15px;font-weight:600">Operator <span style="font-weight:400;color:var(--muted)">in Laser cutting</span></span>
+            <span class="a19-why">Given by hand, until 12 Nov · 7 days left</span>
+          </span>
+          <span style="flex:0 0 260px;min-width:0" class="a19-seat">
+            <sc-if value="{{ m.seat }}" hint-placeholder-val="{{ true }}">
+              <x-import component-from-global-scope="Syndra.StatusSeat" tone="{{ m.tone }}" word="{{ m.word }}" note="{{ m.note }}" hint-size="240px,40px"></x-import>
+              <sc-if value="{{ m.link }}" hint-placeholder-val="{{ false }}"><a class="a19-link" href="#pending">Waiting for you to send <span aria-hidden="true">→</span></a></sc-if>
+            </sc-if>
+          </span>
+          <span style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto">
+            <sc-if value="{{ m.verbs }}" hint-placeholder-val="{{ true }}">
+              <x-import component-from-global-scope="Syndra.Button" variant="outline" size="sm" is-pending="{{ m.busy }}" hint-size="96px,32px">Extend 14 days</x-import>
+              <x-import component-from-global-scope="Syndra.Button" variant="danger" size="sm" hint-size="80px,32px">Revoke</x-import>
+            </sc-if>
+          </span>
+        </div>
+      </x-import>
+    </div>
+  </sc-for>
+</div>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isKeys }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:8px">
+  <h1 class="type-page-title" style="margin:0">People</h1>
+  <p style="margin:0;font-size:14.5px;color:var(--muted)">Everyone with an account, and what they can use.</p>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="keys-title" hint-size="420px,520px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Keys" lede="These work anywhere in Syndra. Inside a field, only Esc." title-id="keys-title" hint-size="100%,90px"></x-import>
+  <div style="display:flex;flex-direction:column;padding:0 24px 8px">
+    <sc-for list="{{ keys }}" as="k" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:16px;min-height:44px;padding:8px 0;border-top:{{ k.rule }}">
+        <span style="flex:0 0 96px;display:inline-flex;gap:4px"><sc-for list="{{ k.caps }}" as="c" hint-placeholder-count="1"><span class="a19-kbd">{{ c }}</span></sc-for></span>
+        <span style="font-size:14.5px;line-height:1.5;text-wrap:pretty">{{ k.what }}</span>
+      </div>
+    </sc-for>
+  </div>
+  <x-import component-from-global-scope="Syndra.ModalFooter" hint-size="100%,72px">
+    <x-import component-from-global-scope="Syndra.Button" variant="outline" on-click="{{ noop }}" hint-size="90px,40px">Close</x-import>
+  </x-import>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isAppearance }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:8px">
+  <h1 class="type-greeting" style="margin:0">Morning, Kanishk. <span style="color:var(--faint)">Nothing needs you right now.</span></h1>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="account-title" hint-size="420px,620px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Account" title-id="account-title" hint-size="100%,70px"></x-import>
+  <div style="display:flex;flex-direction:column;gap:14px;padding:0 24px 8px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <x-import component-from-global-scope="Syndra.Avatar" name="Kanishk Singh" size="list" hint-size="44px,44px"></x-import>
+      <span style="min-width:0"><span style="display:block;font-size:15px;font-weight:600">Kanishk Singh</span><span style="display:block;font-size:13px;color:var(--muted)">kanishk@example.edu</span></span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding:12px 16px;border:1px solid var(--line);border-radius:var(--radius-inner);font-size:14.5px">
+      <span style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span>Appearance</span><x-import component-from-global-scope="Syndra.Segmented" label="Appearance" size="sm" value="device" options="{{ themeOptions }}" on-change="{{ noop }}" hint-size="210px,32px"></x-import></span>
+      <span style="font-size:13px;color:var(--muted)">Device follows this phone or computer, and changes when it does.</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding:12px 16px;border:1px solid var(--line);border-radius:var(--radius-inner);font-size:14.5px">
+      <span style="display:flex;flex-direction:column;gap:2px"><span>Sound when drift is found</span><span style="font-size:13px;color:var(--muted)">In this browser only</span></span>
+      <span><x-import component-from-global-scope="Syndra.Segmented" label="Sound when drift is found" size="sm" value="off" options="{{ chimeOptions }}" on-change="{{ noop }}" hint-size="110px,32px"></x-import></span>
+    </div>
+  </div>
+  <div style="margin-top:12px;border-top:1px solid var(--line);padding:16px 24px 22px">
+    <x-import component-from-global-scope="Syndra.Button" variant="outline" class-name="w-full" hint-size="100%,40px">Sign out</x-import>
+    <p style="margin:10px 0 0;font-size:12.5px;line-height:1.5;color:var(--faint)">Signing out signs you out in every open tab.</p>
+  </div>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":6400}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 1, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 0 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Priya Nair" }], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const kind = this.st.split("-")[0];
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note) => ({ src: "a19-act-in-place-and-keys.dc.html?frame=" + frame, label, note: note || "" });
+
+    // One row, five moments. The seat is StatusSeat; the verbs are the real Buttons.
+    const M = (when, o) => Object.assign({ seat: false, verbs: false, busy: false, link: false, tone: "neutral", word: "", note: "" }, o, { when });
+    const moments = [
+      M("0 ms · at rest: the verbs, and nothing in the seat", { verbs: true }),
+      M("The frame after the press (under 16 ms): the pressed verb shows its dot, and the seat crossfades to the forecast. Amber, breathing.", { verbs: true, busy: true, seat: true, tone: "warn", word: "Extending", note: "Will end 26 Nov" }),
+      M("The response (went well): the dot turns lime where it sits and blooms once; the word crossfades. The verbs have left the seat.", { seat: true, tone: "healthy", word: "Extended", note: "Until 26 Nov · leaves this list on the next read" }),
+      M("The response (a queued act, Revoke): the amber dot stays and stops breathing; the forecast becomes the link.", { seat: true, tone: "warn", word: "Waiting for you to send", note: "She can use it until you send", link: true }),
+      M("The response (refused): still, no bloom. The verbs return beside it so you can try again.", { verbs: true, seat: true, tone: "danger", word: "Didn't extend", note: "Zitadel refused it. Nothing changed." }),
+    ];
+
+    const F = (act, flight, done) => ({ act, flight, done });
+    const forecasts = [
+      F("Extend 14 days", "Extending · Will end 26 Nov", "Extended · Until 26 Nov"),
+      F("Approve a request", "Approving · Will wait for you to send", "Waiting for you to send →"),
+      F("Decline a request", "Declining · Will tell her why", "Declined · She has your reason"),
+      F("Give a role (queued)", "Giving · Will wait for you to send", "Waiting for you to send →"),
+      F("Revoke (queued)", "Revoking · Will wait for you to send", "Waiting for you to send →"),
+      F("Lift a hold", "Lifting · Will be lifted now", "Lifted"),
+      F("Adopt (Drift)", "Adopting · Will be explained by this", "Explained · Leaves this list on the next read"),
+    ];
+    forecasts.forEach((x, i) => { x.rule = i === 0 ? "0" : DIV; });
+
+    const keys = [
+      { caps: ["/"], what: "Go to: a person, a project, an app, a bundle or a page, by name." },
+      { caps: ["?"], what: "These keys." },
+      { caps: ["Esc"], what: "Close what is open, or leave Select." },
+      { caps: ["↑", "↓"], what: "Move between the rows of a list." },
+      { caps: ["Enter"], what: "Open the row, or take the act in a dialog." },
+      { caps: ["Tab"], what: "The row's own buttons, then the next row." },
+    ];
+    keys.forEach((x, i) => { x.rule = i === 0 ? "0" : DIV; });
+
+    const kept = [
+      { what: "The fold", how: "Showing 25 of 112 stays at 25. Back to 10 is still one press away." },
+      { what: "Open sections", how: "A direction on Drift or a window on Expiring you had opened is still open." },
+      { what: "The pill", how: "Requests' status, Expiring's 14 or 30. A pill is already in the URL on some lists; this covers the rest." },
+      { what: "Where you were", how: "The scroll lands on the row you left from, after the list's first paint, with no arrive." },
+    ];
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("The first 100ms: the seat forecasts in the future tense while the request is in flight, then crossfades to the true word?", "Yes. It is the plan row's own tense, and Syndra never says something happened before it did."),
+      Q("Should the forecast's amber dot breathe while in flight, carrying the Button's own idiom into the seat?", "Yes. It is the one loop the product has, used for exactly what it means: waiting."),
+      Q("Keys: /, ?, Esc, and arrows between rows with Enter to open; no letter shortcuts for verbs?", "Yes, as the second wave."),
+      Q("Appearance gains Device?", "Yes. One tap undoes a choice the control today cannot undo."),
+      Q("Back keeps your place, for this session only, never across visits?", "Yes. Nothing should jump under the reader on the way back either."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isAct: kind === "act",
+      isKeys: kind === "keys",
+      isAppearance: kind === "appearance",
+      operator: this.operator, rootData: this.rootData, noop,
+      moments, forecasts, keys, kept, questions,
+      themeOptions: [{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }, { value: "device", label: "Device" }],
+      chimeOptions: [{ value: "off", label: "Off" }, { value: "on", label: "On" }],
+      actFrames: [
+        f("act", "The five moments · dark", "Rest, the frame after the press, the true word, a queued act's true word, and a refusal."),
+        f("act-light", "The five moments · light", "The same in daylight. The amber and lime are light's own values."),
+      ],
+      sheetFrames: [
+        f("keys", "Keys · dark", "Modal sm from ?. Six rows, one outline Close. The Kbd part is drawn inline until built."),
+        f("keys-light", "Keys · light"),
+        f("appearance", "Appearance with Device · dark", "The Account sheet's Appearance row with a third option. One line says what Device does. The drift sound row is unchanged."),
+        f("appearance-light", "Appearance with Device · light"),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

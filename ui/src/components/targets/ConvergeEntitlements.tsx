@@ -113,7 +113,7 @@ export function ConvergeEntitlements({
  */
 function PlanProvenance({ plan, leaving }: { plan: EntitlementPlan; leaving: boolean }) {
   return (
-    // Above the page, below a dialog. It sat at z-60 — the highest number in
+    // Above the page, below a dialog. It once sat above every dialog, the highest step in
     // the product — which put a passive freshness read on top of the scrim of
     // any dialog the operator opened, including the ones asking them to type a
     // name before something irreversible happens.
@@ -124,7 +124,7 @@ function PlanProvenance({ plan, leaving }: { plan: EntitlementPlan; leaving: boo
     // the next time either one changes height.
     <ToBody>
     <div
-      className="pointer-events-none fixed inset-x-0 z-30 flex justify-center px-6"
+      className="pointer-events-none fixed inset-x-0 z-(--layer-pill) flex justify-center px-6"
       style={{ bottom: "calc(var(--touch-nav-height) + 24px)" }}
     >
       {/* The dock lifts into place, 6px and no scale, and tints out on leave. The

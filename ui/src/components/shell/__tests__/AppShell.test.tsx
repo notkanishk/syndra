@@ -8,6 +8,7 @@ import type { SessionUser } from "@/lib/session";
 vi.mock("@/components/shell/Sidebar", () => ({ default: () => <a href="#rail">rail</a> }));
 vi.mock("@/components/shell/TopBar", () => ({ TopBar: () => <header>top</header> }));
 vi.mock("@/components/shell/TouchNav", () => ({ TouchNav: () => null }));
+vi.mock("@/components/shell/GoToHost", () => ({ GoToHost: () => null }));
 vi.mock("@/components/states/DegradedBanner", () => ({ DegradedBanner: () => null }));
 vi.mock("@/components/states/OfflineBanner", () => ({ OfflineBanner: () => null }));
 vi.mock("@/lib/page-crumb", () => ({ PageCrumbProvider: ({ children }: { children: React.ReactNode }) => children }));

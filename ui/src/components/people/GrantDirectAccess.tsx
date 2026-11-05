@@ -192,7 +192,7 @@ function GrantDirectAccessOpen({
           in the act's own word. It stays open on success too: what an operator
           wants next is to read what happened to the person they just acted on,
           and a dialog that closes itself takes that with it. */}
-      {result && <ActionOutcome outcome={result.outcome} word={result.word} className="mx-6 mb-1" />}
+      {result && <ActionOutcome outcome={result.outcome} word={result.word} person={userId} className="mx-6 mb-1" />}
       {result && step.after}
 
       {/* One note for the date (said once, here: the control above is the date)

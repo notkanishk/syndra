@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Go to, and arriving</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/fonts/fonts.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.container.css">
+<link rel="stylesheet" href="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/styles.css">
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/react-cache-shim.js"></script>
+<script src="_ds/syndra-design-system-7133b076-0060-40fa-8ec6-e7ad8cbb94d1/_ds_bundle.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>body{margin:0;container-type:inline-size;container-name:syndra-frame;background:var(--ground);color:var(--ink);font-family:var(--font-sans)} a:not([class]){color:var(--accent-text);text-decoration:none} a:not([class]):hover{color:var(--focus-ring)}
+/* Drawn inline until built (BRIDGE): the Go to result row, and the Kbd key. Code builds GoTo per proposed/GoTo.md and Kbd per proposed/Kbd.md. */
+.a19-result{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 24px;text-decoration:none;color:var(--ink)}
+.a19-result[aria-selected="true"]{background:var(--tint-2)}
+.a19-result .n{font-size:14.5px;font-weight:600}
+.a19-result .d{font-size:13px;color:var(--muted);min-width:0;flex:1 1 auto;text-wrap:pretty}
+.a19-result .k{font-size:12.5px;color:var(--faint);white-space:nowrap}
+.a19-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:20px;padding:0 6px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--tint-1);font-family:var(--font-mono);font-size:11.5px;color:var(--muted)}
+.a19-name{color:var(--ink);text-decoration-line:underline;text-decoration-color:transparent;font-weight:600}
+.a19-name:hover{color:var(--accent-text);text-decoration-color:currentColor}
+.a19-tab{display:inline-flex;align-items:center;min-height:36px;padding:0 14px;border-radius:var(--radius-pill);font-size:14px;font-weight:600;color:var(--muted)}
+.a19-tab[aria-current="page"]{background:var(--surface-2);color:var(--ink)}</style>
+</helmet>
+
+<sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
+<div style="padding:72px;display:flex;flex-direction:column;gap:56px;background:var(--ground);min-height:100vh">
+  <header data-screen-label="Go to and arriving board" style="display:flex;flex-direction:column;gap:12px;max-width:960px">
+    <span class="type-label" style="color:var(--label)">Across the product · Proposed 5 Nov 2026 · your choices are at the end</span>
+    <h1 class="type-page-title" style="margin:0">Go to, and the name that arrives with you</h1>
+    <p style="margin:0;font-size:15px;line-height:1.6;color:var(--muted);max-width:72ch">A-19, part one of two. Three of the first wave: one way to reach anything by typing its name (P4); the next page painting with the name you clicked already in it (P1); and the promised step landing on the person it was about (P3). Nothing new moves. The continuity is that the thing you pressed is still there when the page changes.</p>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;max-width:1500px">
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What you asked</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)">Go through the design system and the project in depth and improve on them. Rich, fluid, organic, flowing, elegant. Make the user feel the app is an extension of them.</p></div>
+    <div class="card" style="padding:18px 20px;display:flex;flex-direction:column;gap:8px"><span class="type-label" style="color:var(--label)">What I recommend here</span><p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted)"><strong style="color:var(--ink)">Go to</strong>: one Modal sm with one Input, opened by / or Cmd K, grouped Pages · People · Projects · Apps · Bundles, A to Z inside each group, nothing pinned. <strong style="color:var(--ink)">The name arrives</strong>: a row seeds the next page, so the header paints on the first frame and the skeleton covers only what the row could not know. <strong style="color:var(--ink)">Landing on you</strong>: "Waiting for you to send" carries the person into Pending changes as a chip.</p></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">1 · Go to (P4)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Press / anywhere a field is not focused, or Cmd K (Ctrl K). The sheet rises as every dialog does (S1). "pri" is typed. Groups keep a fixed order and a group with no match is left out; inside a group the names are A to Z by their shown name. Enter opens the first result, the arrows move the selection, Esc closes. Advanced leaves appear only in Advanced. No recent items, no pins.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ gotoFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:520px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:1040px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Go to phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--line-strong);background:var(--canvas)"><dc-import name="Frame" frame-src="a19-go-to-and-arriving.dc.html?frame=goto-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · the same sheet from the bottom edge</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">Below tablet it is the Go to a page sheet the phone already has, with the Input at its top, in both views. The keyboard rises with it; the results sit above the keyboard.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">2 · The name arrives with you (P1)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">The first frame of a person's page, opened from the People list. Today the page knows nothing until the read lands. Proposed, the row seeds the page with what it already held: the name, the email, the kind. The header, breadcrumb, avatar and tabs paint at once and hold still; the skeleton covers only the rows, and only after 200ms (S7). Nothing moves between the two screens, which is the whole of the continuity Syndra allows.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ arriveFrames }}" as="f" hint-placeholder-count="3">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:420px;overflow:hidden;border-radius:var(--radius-inner);border:{{ f.edge }};background:var(--canvas)"><div style="width:1440px;height:840px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+      <figure data-screen-label="Arrive phone" style="margin:0;display:flex;flex-direction:column;gap:10px">
+        <div style="width:390px;height:844px;overflow:hidden;border-radius:var(--radius-card);border:2px solid var(--accent-line);background:var(--canvas)"><dc-import name="Frame" frame-src="a19-go-to-and-arriving.dc.html?frame=arrive-phone" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div>
+        <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:390px"><span style="font-size:15px;font-weight:600">Phone · proposed</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">The header is the one thing a phone shows above the fold while the read is on its way, so it is the one thing that must be right on the first frame.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:18px">
+    <h2 class="type-section-title" style="margin:0">3 · Landing on you (P3)</h2>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:84ch">Pending changes, opened from "Waiting for you to send" on Priya's page. The link carried her, so her chip is in force and the read line says what is shown and what Send does. Her name links back to her page (G14). Clearing the chip shows everyone's changes; Send always sends all of them, so the chip never changes what Send does.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+      <sc-for list="{{ landingFrames }}" as="f" hint-placeholder-count="2">
+        <figure data-screen-label="{{ f.label }}" style="margin:0;display:flex;flex-direction:column;gap:10px">
+          <div style="width:720px;height:460px;overflow:hidden;border-radius:var(--radius-inner);border:1px solid var(--line-strong);background:var(--canvas)"><div style="width:1440px;height:920px;transform:scale(0.5);transform-origin:0 0"><dc-import name="Frame" frame-src="{{ f.src }}" style="width:100%;height:100%" hint-size="100%,100%"></dc-import></div></div>
+          <figcaption style="display:flex;flex-direction:column;gap:3px;max-width:720px"><span style="font-size:15px;font-weight:600">{{ f.label }}</span><span style="font-size:13.5px;line-height:1.55;color:var(--muted)">{{ f.note }}</span></figcaption>
+        </figure>
+      </sc-for>
+    </div>
+  </section>
+
+  <section data-screen-label="Questions for the owner" style="display:flex;flex-direction:column;gap:18px;max-width:1100px">
+    <h2 class="type-section-title" style="margin:0">Questions for you (this board)</h2>
+    <div class="card" style="overflow:hidden">
+      <sc-for list="{{ questions }}" as="q" hint-placeholder-count="4">
+        <div style="display:flex;gap:16px;padding:16px 22px;border-top:{{ q.rule }}">
+          <span style="flex:0 0 22px;font-size:15px;font-weight:600;color:var(--faint)">{{ q.n }}</span>
+          <span style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:14.5px;font-weight:600;line-height:1.5;text-wrap:pretty">{{ q.ask }}</span>
+            <span style="font-size:13.5px;line-height:1.55;color:var(--muted);text-wrap:pretty"><strong style="color:var(--accent-text)">Recommended:</strong> {{ q.rec }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:0;font-size:13.5px;line-height:1.6;color:var(--muted);max-width:90ch">The full list of twelve questions is in from-design/A-19-extension-of-you.md §6. The second board, a19-act-in-place-and-keys, carries the first 100ms, the keys, Appearance and Back.</p>
+  </section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isGoto }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:8px">
+  <h1 class="type-greeting" style="margin:0">Morning, Kanishk. <span style="color:var(--faint)">Nothing needs you right now.</span></h1>
+  <div style="font-size:14.5px;color:var(--faint)">Thursday 5 Nov · last checked 09:14</div>
+</div>
+<x-import component-from-global-scope="Syndra.Modal" open="{{ true }}" on-close="{{ noop }}" size="sm" labelled-by="goto-title" hint-size="420px,560px">
+  <x-import component-from-global-scope="Syndra.ModalHeader" title="Go to" title-id="goto-title" hint-size="100%,70px"></x-import>
+  <div style="padding:0 24px 12px"><x-import component-from-global-scope="Syndra.Input" default-value="pri" placeholder="A person, a project, an app, a bundle, or a page" aria-label="Go to" hint-size="100%,44px"></x-import></div>
+  <div role="listbox" aria-label="Matches" style="display:flex;flex-direction:column;padding-bottom:8px">
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+      <span class="type-label" style="color:var(--label);padding:12px 24px 4px">{{ g.name }}</span>
+      <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+        <a class="a19-result" role="option" href="#go" aria-selected="{{ r.sel }}"><span class="n">{{ r.name }}</span><span class="d">{{ r.note }}</span><span class="k">{{ r.kind }}</span></a>
+      </sc-for>
+    </sc-for>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;padding:12px 24px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--faint)">
+    <span style="display:inline-flex;align-items:center;gap:6px"><span class="a19-kbd">↑</span><span class="a19-kbd">↓</span> move</span>
+    <span style="display:inline-flex;align-items:center;gap:6px"><span class="a19-kbd">Enter</span> open</span>
+    <span style="display:inline-flex;align-items:center;gap:6px"><span class="a19-kbd">Esc</span> close</span>
+  </div>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isArriveToday }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u2" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.Card" hint-size="100%,220px">
+  <x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 4 }}" label="Loading this person's access" hint-size="100%,200px"></x-import>
+</x-import>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isArrive }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/users/u2" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px 20px">
+    <x-import component-from-global-scope="Syndra.Avatar" name="Priya Nair" size="header" hint-size="56px,56px"></x-import>
+    <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:6px">
+      <h1 class="type-page-title" style="margin:0">Priya Nair</h1>
+      <span style="font-size:14.5px;color:var(--muted)">priya.nair@example.edu · Student, Design</span>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="150px,40px">Manage bundles</x-import>
+      <x-import component-from-global-scope="Syndra.Button" variant="outline" hint-size="120px,40px">Give a role</x-import>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <nav aria-label="Views of this person's access" style="display:flex;gap:4px">
+      <a class="a19-tab" href="#access" aria-current="page">Access</a><a class="a19-tab" href="#requests">Requests</a><a class="a19-tab" href="#activity">Activity</a>
+    </nav>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,190px">
+      <x-import component-from-global-scope="Syndra.RowSkeleton" rows="{{ 3 }}" avatar="{{ false }}" label="Reading what Priya can use" hint-size="100%,170px"></x-import>
+    </x-import>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+
+<sc-if value="{{ isLanding }}" hint-placeholder-val="{{ false }}">
+<x-import component-from-global-scope="Syndra.SyndraRoot" pathname="/governance/pending" data="{{ rootData }}" hint-size="100%,100vh">
+<x-import component-from-global-scope="Syndra.AppShell" session="{{ operator }}" hint-size="100%,100vh">
+<div style="display:flex;flex-direction:column;gap:28px">
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 20px">
+    <div style="flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:8px">
+      <h1 class="type-page-title" style="margin:0">Pending changes</h1>
+      <p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--muted);max-width:64ch">Changes Syndra has queued for Zitadel. Send sends all of them, in order.</p>
+    </div>
+    <x-import component-from-global-scope="Syndra.Button" variant="accent" hint-size="150px,40px">Send 7 changes</x-import>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px">
+      <div style="flex:1 1 320px;max-width:560px"><x-import component-from-global-scope="Syndra.Input" placeholder="Search these changes" aria-label="Search these changes" hint-size="100%,44px"></x-import></div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;font-size:13.5px;color:var(--muted)">
+      <span style="display:inline-flex;align-items:center;gap:8px"><x-import component-from-global-scope="Syndra.StatusDot" tone="healthy" hint-size="6px,6px"></x-import>Read just now</span>
+      <x-import component-from-global-scope="Syndra.FilterChip" on-clear="{{ noop }}" clear-label="Show everyone's changes" hint-size="130px,32px">Priya Nair</x-import>
+      <span>Showing Priya Nair's 2 changes. Send sends all 7.</span>
+    </div>
+    <x-import component-from-global-scope="Syndra.Card" hint-size="100%,200px">
+      <sc-for list="{{ pending }}" as="p" hint-placeholder-count="2">
+        <div class="row-divider" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:14px 20px">
+          <span style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:15px"><a class="a19-name" href="#person">Priya Nair</a> <span style="color:var(--muted)">· {{ p.what }}</span></span>
+            <span style="font-size:12.5px;color:var(--faint)">{{ p.when }}</span>
+          </span>
+          <span style="flex:0 0 200px"><x-import component-from-global-scope="Syndra.StatusSeat" tone="warn" word="Waiting for you to send" note="{{ p.note }}" hint-size="200px,40px"></x-import></span>
+        </div>
+      </sc-for>
+    </x-import>
+  </div>
+</div>
+</x-import>
+</x-import>
+</sc-if>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":5200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const q = new URLSearchParams(((this.props && this.props.frameQuery) || window.location.search));
+    this.frame = q.get("frame");
+    this.st = this.frame || "";
+    this.operator = { id: "u1", name: "Kanishk Singh", email: "kanishk@example.edu", title: "Makerspace staff", team: "Operations", status: "active", avatar: "KS", role: "admin", sessionType: "demo" };
+    this.rootData = [
+      { key: ["system", "mode"], value: { directory: "zitadel", zitadel_configured: true, degraded: false } },
+      { key: ["governance", "indicators"], value: { pending_requests: 0, expiring_grants: 0, drift: 0, unconfirmed_revocations: 0, holds_due: 0, pending_propagation: 7 } },
+      { key: ["targets"], value: { targets: [{ target: "truenas" }] } },
+      { key: ["name-catalog"], value: { users: [{ id: "u2", display_name: "Priya Nair" }], projects: [], applications: [] } },
+      { key: ["name-bundles"], value: [] },
+    ];
+  }
+  renderVals() {
+    const noop = () => {};
+    const kind = this.st.split("-")[0];
+    const DIV = "1px solid var(--divider)";
+    const f = (frame, label, note, rec) => ({ src: "a19-go-to-and-arriving.dc.html?frame=" + frame, label, note: note || "", edge: rec ? "2px solid var(--accent-line)" : "1px solid var(--line-strong)" });
+
+    // Go to, with "pri" typed. Groups in a fixed order; names A to Z inside each.
+    const groups = [
+      { name: "People", rows: [
+        { name: "Prisha Menon", note: "Student, Electronics", kind: "Person", sel: true },
+        { name: "Priya Nair", note: "Student, Design", kind: "Person", sel: false },
+      ] },
+      { name: "Projects", rows: [
+        { name: "3D printing", note: "4 roles", kind: "Project", sel: false },
+      ] },
+      { name: "Apps", rows: [
+        { name: "Print portal", note: "Roles from 3D printing", kind: "App", sel: false },
+      ] },
+    ];
+
+    const pending = [
+      { what: "Give Operator in Laser cutting, until 26 Nov", when: "Queued 2 minutes ago, by you", note: "She can't use it yet" },
+      { what: "Give Hand tools in Wood shop", when: "Queued 2 minutes ago, by you · comes with Laser cutting", note: "Comes with the role above" },
+    ];
+
+    const Q = (ask, rec) => ({ ask, rec });
+    const questions = [
+      Q("Go to: / and Cmd K open one jump surface everywhere; on a phone it is the Go to sheet with an Input at the top, in both views?", "Yes. One Modal sm, one Input, the name catalog and nav.ts. Nothing pinned; A to Z inside each group."),
+      Q("The name arrives: a row seeds the next page, and the person's tab lives in the URL?", "Yes. It is the rule already written: show the name while loading. Nothing moves between the screens."),
+      Q("\"Waiting for you to send\" filters Pending changes to that person, and the names there link back?", "Yes. The link finishes the sentence it started. Send still sends all."),
+      Q("Should Go to list pages by their nav title only, never a thing inside a page (a person's role, a setting)?", "Yes. The surface opens pages; a page has its own search. Keeps it one job."),
+    ];
+    questions.forEach((x, i) => { x.n = String(i + 1); x.rule = i === 0 ? "0" : DIV; });
+
+    return {
+      isBoard: !this.frame,
+      isGoto: kind === "goto",
+      isArriveToday: kind === "today",
+      isArrive: kind === "arrive",
+      isLanding: kind === "landing",
+      operator: this.operator, rootData: this.rootData, noop,
+      groups, pending, questions,
+      gotoFrames: [
+        f("goto", "Go to · dark", "The sheet over the operator's Home. The first match is selected; Enter opens it. The footer says the three keys once, in the Kbd part."),
+        f("goto-light", "Go to · light", "The same in daylight. The selected row is the tint-2 fill every chosen thing uses."),
+      ],
+      arriveFrames: [
+        f("today", "Today · the first frame", "A nameless skeleton and a blank breadcrumb, although the row you pressed knew her name.", false),
+        f("arrive", "Proposed · the first frame · dark", "The header paints from the row: name, email, kind, avatar, the tabs and the two header buttons. The skeleton covers only her access, and only after 200ms.", true),
+        f("arrive-light", "Proposed · light", "The same in daylight.", true),
+      ],
+      landingFrames: [
+        f("landing", "Pending changes, landed on Priya · dark", "Her chip is in force in the read line, with the count of what is shown and what Send does. Her name links to her page."),
+        f("landing-light", "The same · light"),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

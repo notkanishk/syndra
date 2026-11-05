@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
@@ -17,6 +18,7 @@ import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
 import { FilterBar } from "@/components/ui/FilterBar";
+import { FilterChip } from "@/components/ui/FilterChip";
 import { Input } from "@/components/ui/Input";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -78,16 +80,30 @@ export default function PendingChangesPage() {
   const params = useSearchParams();
   const [query, setQuery] = useState(() => params?.get("q") ?? "");
   const needle = query.trim().toLowerCase();
+  // "Waiting for you to send →" on a person's change lands here narrowed to
+  // them (A-19 P3): an in-force chip, cleared by its own ✕.
+  const asked = params?.get("person") ?? null;
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const person = asked && asked !== dismissed ? asked : null;
+  function clearPerson() {
+    setDismissed(asked);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("person");
+    window.history.replaceState(window.history.state, "", url);
+  }
   const matched = useMemo(
-    () => (needle ? rows.filter((row) => matches(row, needle, resolver)) : rows),
-    [rows, needle, resolver],
+    () =>
+      rows
+        .filter((row) => !person || row.user_id === person)
+        .filter((row) => !needle || matches(row, needle, resolver)),
+    [rows, person, needle, resolver],
   );
   // S5: a row that goes on a later read (cancelled by someone, sent by someone)
   // fades where it was and closes its gap after, and not under the pointer. A row
   // a search drops goes the same way, but its gap does not wait for the pointer
   // (A-05 §2.10), and the rows that still match are the same rows.
   const leaving = useLeavingRows(matched, (row) => row.id, !pending.isLoading && !pending.error, {
-    narrowedBy: needle,
+    narrowedBy: needle + (person ?? ""),
   });
   const shown = leaving.rows;
   const groups = groupByCascade(shown);
@@ -151,7 +167,12 @@ export default function PendingChangesPage() {
           read={
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <ReadFreshness state={readStateOfQuery(pending)} subject="The queue" />
-              {needle && (
+              {person && (
+                <FilterChip onClear={clearPerson} clearLabel="Show everyone's changes">
+                  <UserName id={person} />
+                </FilterChip>
+              )}
+              {(needle || person) && (
                 <span className="text-[13.5px] text-muted">
                   {`${shown.length} of the ${rows.length} changes match. Sending sends all ${rows.length}, in order.`}
                 </span>
@@ -199,8 +220,12 @@ export default function PendingChangesPage() {
                   />
                 ) : (
                   <EmptyState
-                    title={`No pending change matches \u201c${query.trim()}\u201d.`}
-                    guidance="Search by a person's name or a role."
+                    title={
+                      needle
+                        ? `No pending change matches \u201c${query.trim()}\u201d.`
+                        : "Nothing is waiting for you to send for this person."
+                    }
+                    guidance={needle ? "Search by a person's name or a role." : "Their changes have reached the system they were for."}
                   />
                 )
               }
@@ -282,7 +307,7 @@ function PendingGroups({
                 <LeavingRow key={row.id} {...leave(row.id)}>
                   <div className="row-divider flex min-h-[60px] flex-col items-start gap-1.5 px-5 py-3 tablet:flex-row tablet:items-center tablet:gap-[18px]">
                     <span className="w-full text-[14.5px] font-semibold tablet:w-[130px] tablet:shrink-0">
-                      <UserName id={row.user_id} />
+                      <PersonLink id={row.user_id} />
                     </span>
 
                     <span className="flex w-full min-w-0 flex-col gap-[3px] tablet:flex-1">
@@ -451,6 +476,15 @@ function RowStatus({ row, skipWait }: { row: PendingPropagationRow; skipWait?: s
   );
 }
 
+/** A person's name, linking to their page (G14). */
+function PersonLink({ id }: { id: string }) {
+  return (
+    <Link href={`/users/${encodeURIComponent(id)}`} className="link-hover">
+      <UserName id={id} />
+    </Link>
+  );
+}
+
 /** Search by person or role: the name as the operator reads it, never the id. */
 function matches(
   row: PendingPropagationRow,
@@ -499,7 +533,7 @@ function CausedBy({
         ) : row.initiated_by.startsWith("system:") ? (
           machineName(row.initiated_by)
         ) : (
-          <UserName id={row.initiated_by} />
+          <PersonLink id={row.initiated_by} />
         )}
       </span>
     );
