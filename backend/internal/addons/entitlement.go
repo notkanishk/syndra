@@ -140,13 +140,6 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 		// could never verify from spending a dispatch and a retry to learn it.
 		return ApplyResponse{Outcome: OutcomeUnreached, Err: ErrNoFingerprint}
 	}
-	if !a.br.allow(timeNow()) {
-		return ApplyResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("%w: %s", ErrCircuitOpen, req.Target)}
-	}
-	cred, err := credentialFor(a.Registration)
-	if err != nil {
-		return ApplyResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: %w", req.Target, err)}
-	}
 
 	body, err := json.Marshal(applyEnvelope{
 		ContractVersion: ContractVersion,
@@ -162,8 +155,14 @@ func Apply(ctx context.Context, req ApplyRequest) ApplyResponse {
 		return ApplyResponse{Outcome: OutcomeUnreached, Err: fmt.Errorf("addon %s: encode apply: %w", req.Target, err)}
 	}
 
-	resp := doAuthenticated(ctx, cred, http.MethodPost, a.Registration.BaseURL+"/apply", body, callTimeout)
-	a.br.record(timeNow(), resp)
+	// The outbox row's id is the call id and the trace: it was committed before
+	// this call, and the add-on deduplicates on it.
+	resp, err := a.send(ctx, sendSpec{
+		Method: http.MethodPost, Path: "/apply", Body: body, Write: true, TraceID: req.CallID,
+	})
+	if err != nil {
+		return ApplyResponse{Outcome: OutcomeUnreached, Err: err}
+	}
 
 	out := ApplyResponse{
 		Outcome: resp.Outcome, Status: resp.Status, Err: resp.Err,

@@ -25,6 +25,7 @@ import (
 	"syndra/internal/directory"
 	"syndra/internal/handlers"
 	"syndra/internal/observe"
+	"syndra/internal/ratelimit"
 	"syndra/internal/seed"
 	"syndra/internal/services"
 	"syndra/internal/services/drift"
@@ -251,6 +252,9 @@ func main() {
 	// this process's snapshot either way.
 	db.ConnectRedis()
 	handlers.StartClaimsPlane(ctx, db.Redis)
+	// Failed signatures per source, and a member's own writes per person
+	// (rate-limits); a verified call is never counted, Redis down allows all.
+	handlers.SetRateLimiter(ratelimit.FromEnv(db.Redis, os.Getenv))
 
 	// The admin side needs both datastores. Waiting for them is not fatal:
 	// the data plane above keeps answering while they come up (S15).

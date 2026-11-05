@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"syndra/internal/claimtel"
+	"syndra/internal/ratelimit"
 	"syndra/internal/services/periodic"
 )
 
@@ -37,6 +38,9 @@ type Process struct {
 	Out   *Outbox
 	rdb   RelayRedis
 	door  *Door
+	// Limit counts calls whose signature failed (rate-limits); nil limits
+	// nothing. Set before the server starts.
+	Limit *ratelimit.Limiter
 }
 
 // NewProcess wires the claims process over rdb. envKey is the bootstrap and
@@ -56,6 +60,7 @@ func NewProcess(rdb RelayRedis, envKey string, devMode bool) *Process {
 		OnMiss:     func(u string) { p.Out.Signal(Signal{Kind: "repair", UserID: u}) },
 		OnMismatch: func() { p.Out.Signal(Signal{Kind: "nudge"}) },
 		Debug:      processDebug{p},
+		Limit:      func() *ratelimit.Limiter { return p.Limit },
 	}
 	return p
 }
@@ -118,6 +123,8 @@ func (p *Process) health(w http.ResponseWriter, r *http.Request) {
 	if n := periodic.Panics(); n > 0 {
 		soft = append(soft, "BACKGROUND_PANIC")
 	}
+	rl := p.Limit.Stats()
+	h.RateLimits = &rl
 	code := h.Verdict(hard, soft)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, code, h)
