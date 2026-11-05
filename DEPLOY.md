@@ -495,7 +495,7 @@ cd /home/runner/actions-runner && ./svc.sh install runner && ./svc.sh start
 ./svc.sh status
 ```
 
-The label `syndra-prod` is what `.github/workflows/deploy-prod.yml` targets.
+The label `syndra-prod` is what the production job in `.github/workflows/deploy.yml` targets. Staging (the dev LXC) has the same runner under user `runner`, named and labelled `syndra-staging`, with its checkout at `/opt/syndra` there.
 
 > **Security.** Anyone who can push to `main` can execute arbitrary commands in
 > production through the workflow file, because the workflow is itself part of
@@ -503,20 +503,58 @@ The label `syndra-prod` is what `.github/workflows/deploy-prod.yml` targets.
 
 ---
 
-## Routine deploys
+## Routine deploys: CI, then staging, then production
 
-Push to `main`. That is the whole procedure.
+Nothing reaches production that has not passed CI and then run on staging
+against last night's copy of production's data.
 
-The workflow (`.github/workflows/deploy-prod.yml`) checks the pushed SHA out
-into `/opt/syndra`, runs `docker compose up -d --build --remove-orphans`, prunes
-dangling images, and smoke-tests `/healthz` and the UI root. Concurrency is
-serialized, so overlapping pushes queue instead of racing.
+1. **CI** (`.github/workflows/ci.yml`, GitHub-hosted, every branch and PR):
+   - backend `go vet` and `go test`, with the live-DB tests running against a
+     real Postgres;
+   - the TrueNAS add-on's tests;
+   - the UI's tests, lint and `next build`;
+   - every Docker image built (none pushed).
 
-Manual run of the same path, without a push:
+   Branch protection on `main` requires the `ci-ok` check, so a red change
+   cannot merge.
+2. **Staging** (`deploy.yml` → `_staging.yml`, runner `syndra-staging` on the
+   dev LXC):
+   - check the merged commit out into `/opt/syndra`;
+   - reset its database to production's copy (`/var/lib/syndra-staging/prod-latest.dump`);
+   - `docker compose up -d --build`;
+   - smoke-test the backend, the UI and both claims doors;
+   - assert the database is at the newest migration and not dirty.
+3. **Production** (`deploy.yml`, runner `syndra-prod`) runs only if staging
+   passed. It works on the same commit:
+   - take a `pg_dump` into `~runner/syndra-backups` (the last 14 are kept);
+   - deploy;
+   - run the smoke tests, the L1 probe and the Action-URL checks.
 
-```bash
-# GitHub → Actions → deploy-prod → Run workflow   (workflow_dispatch)
-```
+Merging to `main` is the whole procedure.
+
+**Production's data on staging.** The copy goes to staging every night at
+02:30, from production: `syndra-staging-dump.timer` runs
+`/usr/local/bin/syndra-push-staging-dump`.
+- Production pushes with `/root/.ssh/staging_push`. On staging, that key's
+  `authorized_keys` line only accepts connections from production and can only
+  write that one file (`command=` plus `from=`).
+- Staging holds no way into production.
+- Staging runs with `ZITADEL_DOMAIN` empty and the TrueNAS add-on off
+  (`COMPOSE_PROFILES=` in its `.env`), so production's rows never reach a real
+  Zitadel or NAS from there.
+
+**Experiments on staging only:** Actions › `deploy-staging` › Run workflow
+(or `gh workflow run deploy-staging.yml -f ref=<branch>`). This deploys any
+branch to staging and never goes on to production. The next merge to `main`
+replaces it, and resets the database.
+
+**Rolling production back:**
+1. Merge a revert. That is the normal path, through staging.
+2. In an emergency, on the box as `runner`:
+   - check out the previous SHA in `/opt/syndra` and run `docker compose up -d --build`;
+   - if a migration must be undone, restore the matching
+     `~/syndra-backups/pre-deploy-*.dump` with `pg_restore --clean` into the
+     postgres container.
 
 Deploying by hand on the box, when the runner is down:
 
