@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"syndra/internal/clock"
 	"syndra/internal/models"
 	"syndra/internal/services"
 )
@@ -67,7 +68,7 @@ func TestInsightsAsOfHandler_BadDatesAre400AndNeverReachTheService(t *testing.T)
 		called = true
 		return models.InsightsAsOf{}, nil
 	}
-	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
+	tomorrow := clock.Now().AddDate(0, 0, 1).Format("2006-01-02") // IST, as the service judges "today"
 	for _, q := range []string{"", "?date=", "?date=" + tomorrow, "?date=2026-13-01", "?date=yesterday", "?date=2026-1-5"} {
 		rr := getAsOf(q)
 		var body ErrorResponse
