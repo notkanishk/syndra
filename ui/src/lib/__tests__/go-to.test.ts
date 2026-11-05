@@ -4,7 +4,7 @@ import { flatItems, goTo, type GoToSource } from "@/lib/go-to";
 import { ADVANCED_NAV, BASIC_NAV, MEMBER_NAV } from "@/lib/nav";
 
 const user = (id: string, name: string, extra: object = {}) =>
-  ({ id, name, email: `${id}@x.edu`, title: "", team: "Fabrication", status: "active", avatar: "", ...extra }) as never;
+  ({ id, name, email: `${id}@example.edu`, title: "", team: "Fabrication", status: "active", avatar: "", ...extra }) as never;
 
 const source = (over: Partial<GoToSource> = {}): GoToSource => ({
   nav: ADVANCED_NAV,
