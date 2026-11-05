@@ -57,8 +57,8 @@ vi.mock("@/components/names", () => ({ UserName: ({ id }: { id: string }) => <sp
 
 function mount() {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-  const setQueryData = client.setQueryData.bind(client);
-  client.setQueryData = ((...args: Parameters<typeof setQueryData>) => {
+  const setQueryData = client.setQueryData.bind(client) as (...a: unknown[]) => unknown;
+  client.setQueryData = ((...args: unknown[]) => {
     wire.cacheWrites += 1;
     return setQueryData(...args);
   }) as typeof client.setQueryData;

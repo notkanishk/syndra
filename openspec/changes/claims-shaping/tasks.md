@@ -31,6 +31,7 @@ Contract: `design.md`. Tags per `docs/agents/triage-labels.md`.
 - [x] 4.7 The project default stays at `/projects/{id}/claim-profile`; the per-app override endpoints are removed
 - [x] 4.8 Drop `overrides`, `emitted_keys` and `conflicts` from `GET /projects/{id}/claim-shape` (the UI slice replaced the app's token screen)
 - [ ] 4.9 [ready-for-human] Drop `app_claim_overrides` once every environment has been seeded (check that `app_claim_shape_versions` has a version 1 for each app)
+  - Checked 5 Nov 2026, NOT done: nothing writes the table, but `ListAppClaimOverrides` (db/claim_profiles.go) is read by `seedApp` (services/claim_shape.go), which runs at start and hourly. Remove that reader, then drop with a guard refusing while an override's app has no shape version. See NEXT.md 0c.
 - [ ] 4.10 [ready-for-human] Run `TestClaimShapeVersions_Live` against a `_test` database (it is skipped without `SYNDRA_TEST_DATABASE_URL`)
 
 ## 5. The seed

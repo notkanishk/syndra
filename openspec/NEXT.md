@@ -19,6 +19,15 @@ Four buckets, in the order they actually unblock each other:
 
 Source: `from-design/A-20-second-pass.md`; plan and tasks in [`changes/second-pass`](changes/second-pass/tasks.md). Built so far: **P5** (one word per state across the System group) and **P8** (the forecast on Drift, Remove, Give, bulk and Cancel; the rail's count set from the answer). Open from them: the plain-language guard for state words, "people" for counts in the System group, a backend `recent` array on `/zitadel/health` so Offline survives a reload, and the rail counts for bulk decisions. **P11** (Technical detail, the one fold for the machine's words across the System group) is built on `feat/a20-p11-system`; open from it: `ErrorState` body under Technical detail, `RoleRef` showing a role key outside System, and the signing key rotated by Syndra itself (owner chose hands-off; replaces the unbuilt four-step guide).
 
+## 0c. Dead-schema cleanup: stopped, and guards added (5 Nov 2026)
+
+Branch `chore/dead-schema-and-guards`. Owner approved two removals on condition that nothing still reads or writes them. Both are still read, so neither was removed and no migration 000078 was written.
+
+- **`confirmation_mode` columns** (reconcile-build 3.9). Still read and written: `db/bundles.go`, `db/rules.go`, `db/cascade.go` (bulk set), `db/role_waits.go` (wait suggestions), `services/welcome_claims.go:53` (before the switch over), `services/cascade.go` `applyMode`, `handlers/cascade_surfaces.go`, plus the UI (policies, cascades). Migration 000058 only sets `confirmation.model = roles`; it does not retire the reads. Whether production has switched over could not be checked (no production access). `?apply=true` is not part of this: it is the plan-gated apply on requests and drift.
+- **`app_claim_overrides`** (claims-shaping 4.9). Nothing writes it. One reader remains: `db/claim_profiles.go` `ListAppClaimOverrides`, used by `services/claim_shape.go` `seedApp`, which runs at start and hourly. The seed folds an override into an app's version 1 only when the app has no shape yet, so dropping the table means the hourly seed stops folding.
+- **To finish.** Delete the readers first (and the UI), then a migration that refuses while `app_claim_overrides` has a row whose application has no `app_claim_shape_versions` row, or `confirmation.model` is not `roles`.
+- **Guards added.** `bun run typecheck` (CI ui job), the System state words guard, the people-not-users guard. Note `bunx tsc` runs the unrelated `tsc` package; use `bun run typecheck`.
+
 ## 0b. Syndra replaces the action signing key itself
 
 Source: owner, 5 Nov 2026, "Automatic + button". It reverses #71. Change: [`changes/action-key-autorotation`](changes/action-key-autorotation/tasks.md), ADR-005, migration 000077, on branch `feat/action-key-autorotate`.
