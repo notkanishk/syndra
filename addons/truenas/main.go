@@ -13,6 +13,9 @@
 package main
 
 import (
+	// Zone data in the binary, so TZ works in a minimal image.
+	_ "time/tzdata"
+
 	"context"
 	"crypto/ed25519"
 	"crypto/tls"
