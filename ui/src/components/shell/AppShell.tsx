@@ -1,5 +1,6 @@
 "use client";
 
+import { GoToHost } from "@/components/shell/GoToHost";
 import Sidebar from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { TouchNav } from "@/components/shell/TouchNav";
@@ -95,6 +96,7 @@ export function AppShell({
             </div>
           </div>
           <TouchNav />
+          <GoToHost />
         </div>
       </PageCrumbProvider>
     </UiViewProvider>

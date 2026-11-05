@@ -49,6 +49,7 @@ export function ActionOutcome({
   outcome,
   placement = "block",
   word,
+  person,
   className = "",
 }: {
   outcome: Outcome;
@@ -59,6 +60,8 @@ export function ActionOutcome({
    * never a generic "Applied" for something the reader did in their own words.
    */
   word: string;
+  /** The person this change is about: "Waiting for you to send →" opens Pending changes narrowed to them. */
+  person?: string;
   className?: string;
 }) {
   const grave = outcome.kind === "failed" || outcome.kind === "refused";
@@ -81,7 +84,7 @@ export function ActionOutcome({
             {grave ? sentence(outcome.message) : outcome.detail}
           </span>
         )}
-        {outcome.kind === "queued" && <NextStep dot={false} className="pl-[14px]" />}
+        {outcome.kind === "queued" && <NextStep dot={false} person={person} className="pl-[14px]" />}
         {outcome.kind === "failed" && outcome.requestId && (
           <CopyableValue value={outcome.requestId} label="Reference" className="pl-[14px]" />
         )}
@@ -100,7 +103,7 @@ export function ActionOutcome({
         className={`tint-in inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 ${className}`}
       >
         {outcome.kind === "queued" ? (
-          <NextStep />
+          <NextStep person={person} />
         ) : (
           <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink">
             <StatusDot tone={SEAT_DOT[outcome.kind]} />
@@ -136,7 +139,7 @@ export function ActionOutcome({
       {outcome.detail && (
         <p className="text-[13px] leading-[1.5] text-faint">{outcome.detail}</p>
       )}
-      {outcome.kind === "queued" && <NextStep dot={false} />}
+      {outcome.kind === "queued" && <NextStep dot={false} person={person} />}
       {outcome.sessionEnded && <SignInAgain />}
       {outcome.requestId && <QuoteThis id={outcome.requestId} />}
     </div>

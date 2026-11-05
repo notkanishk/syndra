@@ -152,7 +152,7 @@ function RequestRow({
             </Button>
           </span>
         ) : outcome && optimisticallyResolved ? (
-          <ActionOutcome placement="seat" word={outcome.word ?? OUTCOME_LABEL[outcome.outcome.kind]} outcome={outcome.outcome} />
+          <ActionOutcome placement="seat" word={outcome.word ?? OUTCOME_LABEL[outcome.outcome.kind]} outcome={outcome.outcome} person={entry.requester_id} />
         ) : optimisticallyResolved ? null : (
           <Outcome status={entry.status} note={[keepResult(entry), entry.review_note].filter(Boolean).join(" · ")} />
         )}
@@ -161,6 +161,7 @@ function RequestRow({
         {outcome && !optimisticallyResolved && (
           <ActionOutcome
             placement="seat"
+            person={entry.requester_id}
             className="tint-in"
             word={outcome.word ?? OUTCOME_LABEL[outcome.outcome.kind]}
             outcome={outcome.outcome}

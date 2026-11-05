@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 
 import {
   AccessSourceList,
@@ -21,7 +22,7 @@ import { PersonActivity } from "@/components/people/PersonActivity";
 import { PersonRequests } from "@/components/people/PersonRequests";
 import { PersonStorage } from "@/components/people/PersonStorage";
 import { RemovalDialog, type Removal } from "@/components/people/RemovalDialog";
-import { EmptyState, ErrorState, RowSkeleton } from "@/components/states";
+import { EmptyState, ErrorState, RowSkeleton, SkeletonAfterDelay } from "@/components/states";
 import { ReadGate } from "@/components/states/ReadGate";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, Mono } from "@/components/ui/Badge";
@@ -47,6 +48,7 @@ import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
 import { driftHref } from "@/lib/drift-filters";
 import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
+import { useSeededUser } from "@/lib/queries/seed";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
 import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
@@ -59,6 +61,9 @@ import { projectSignInLine } from "@/lib/sign-in-line";
 import { sortByName } from "@/lib/sort";
 
 type Tab = "access" | "requests" | "activity";
+
+const PERSON_LEDE =
+  "Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why.";
 
 const TAB_LABELS: Record<Tab, string> = {
   access: "Access",
@@ -106,6 +111,32 @@ interface AccessRole {
  */
 export function PersonAccess({ userId, isOperator }: { userId: string; isOperator: boolean }) {
   const access = useUserAccess(userId);
+  // A page opened from a row already knows the name (A-19 P1): the header
+  // paints from the row, and only the access below it waits on the read.
+  const seed = useSeededUser(userId);
+  useCrumb(seed?.name);
+  // The header is the row's own, so it is not behind the 200ms skeleton delay:
+  // it is there on the first frame, and only the access below it waits (S7).
+  if (access.isLoading && seed) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:gap-[22px]">
+          <Avatar name={seed.name} size="header" />
+          <PageHeader
+            className="w-full flex-1"
+            title={seed.name}
+            lede={PERSON_LEDE}
+            meta={<MetaRow>{[seed.email, seed.title || null, seed.team || null]}</MetaRow>}
+          />
+        </div>
+        <SkeletonAfterDelay>
+          <Card>
+            <RowSkeleton rows={5} label="Loading this person's access" />
+          </Card>
+        </SkeletonAfterDelay>
+      </div>
+    );
+  }
   // One hand-over (S7): a skeleton only if the read is slow, then the page arrives.
   return (
     <ReadGate
@@ -127,7 +158,26 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
   const advanced = useIsAdvanced();
   const { revealInAdvanced } = useUiView();
 
-  const [tab, setTab] = useState<Tab>("access");
+  // The tab lives in the URL (?tab=), so a link, a reload and Back keep it.
+  const asked = useSearchParams()?.get("tab");
+  const fromUrl: Tab = tabsFor(isOperator).find((entry) => entry === asked) ?? "access";
+  const [tab, pick] = useState<Tab>(fromUrl);
+  const [seen, setSeen] = useState(fromUrl);
+  if (seen !== fromUrl) {
+    // The address itself changed (a link, Back): follow it. Our own write
+    // below picks first, so the address catching up later changes nothing.
+    setSeen(fromUrl);
+    pick(fromUrl);
+  }
+  const setTab = useCallback((next: Tab) => {
+    pick(next);
+    // A replace, not a push: the tab is where you are, not somewhere you went.
+    // Next folds a history.replaceState into its own router state.
+    const url = new URL(window.location.href);
+    if (next === "access") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", next);
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
   const [bundlesOpen, setBundlesOpen] = useState(false);
   const [grantOpen, setGrantOpen] = useState(false);
   const [removal, setRemoval] = useState<Removal | null>(null);
@@ -273,7 +323,7 @@ function ReadPersonAccess({ userId, isOperator }: { userId: string; isOperator: 
         <PageHeader
           className="w-full flex-1"
           title={user.name}
-          lede="Everything this person can use, and where each piece of access came from. Change it here; Syndra keeps the record of why."
+          lede={PERSON_LEDE}
           meta={
             <MetaRow>
               {[
@@ -776,7 +826,7 @@ function ExtendSeat({
   return (
     <Crossfade id={done ? "outcome" : "open"}>
       {outcome && done ? (
-        <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />
+        <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} person={userId} />
       ) : (
     <>
       <Button
@@ -901,7 +951,7 @@ function RoleGroup({
                   {givenAt(role.reasons) && (
                     <span className="text-muted">Given {formatAgoShort(givenAt(role.reasons))}</span>
                   )}
-                  <NotSentYet />
+                  <NotSentYet person={userId} />
                 </>
               ) : standing === false ? (
                 // Recorded here, absent there, and nothing queued to carry it.

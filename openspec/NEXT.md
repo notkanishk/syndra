@@ -194,6 +194,16 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 
 - **Record a first sign-in** (one timestamp, written once), so the one-time welcome ("Welcome to Syndra. It keeps the makerspace's list of who can use what, and why.") can exist. Backend change, then UI. Q9 of A-18: yes, later.
 
+### An extension of you (A-19), wave 1 navigation — what the build left open
+
+[`changes/extension-of-you`](changes/extension-of-you/proposal.md) section A is built on `feat/a19-wave1-nav` (P1 the name arrives with you, P3 "Waiting for you to send" lands on you, P4 Go to; the owner said "all yes", 5 Nov). Section B (P2, P11, P12, P14) is the parallel build's. Open:
+
+- **Resync and publish the design bundle** with `GoTo`, `GoToPanel` and `Kbd` (`ui/.design-sync`, previews written) [ready-for-human: needs Chrome and a publish].
+- **Seed project and bundle pages** from their lists, as person and app now are [ready-for-agent].
+- **Pass `person` from the Removal dialog and Roles that wait** to `NextStep`, so every "Waiting for you to send" narrows [ready-for-agent].
+- **A phone Go to in Basic.** Basic's tab bar has no sheet, so the phone Input is reached through the sheet only (Advanced). Whether to add an entry is a structure question [needs-triage].
+- Second wave not started: P5 Back keeps your place, P6, P7 Keys (`?`, arrows between rows), P10.
+
 ### Audit of 27 Oct — remediation in batches
 
 The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checked claim by claim (`docs/from another side/AUDIT-2026-10-27-REVIEW.md`). Batch 1 fixes the claims cache, the route gates, the proxy, the sign-in redirect, the add-on's integrity and the screens that claimed unread data. Batches 2 to 4 fix partial reads passed off as whole, one answer per fact, keyboard, scale and dead code (`changes/audit-2026-10/tasks.md`). 3.2 is built (A-09 §1–2 tokens and text floors; stale data recedes instead of dimming, A-13 (d)). 2.9 is built in `changes/unconfirmed-and-self-settling` (A-09 §3–5 as revised by A-13 §5).
