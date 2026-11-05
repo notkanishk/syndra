@@ -163,7 +163,7 @@ describe("a removal that would cancel a grant still waiting", () => {
 
   it("going ahead sends the removal again, naming what was shown", async () => {
     removeBundle.mockReset();
-    removeBundle.mockRejectedValueOnce(refusal()).mockResolvedValueOnce({ cascade: { enqueued: 0, mode: "manual" } });
+    removeBundle.mockRejectedValueOnce(refusal()).mockResolvedValueOnce({ cascade: { enqueued: 0 } });
     open({ sources: [bundle] });
 
     fireEvent.click(screen.getByRole("button", { name: "Remove bundle" }));

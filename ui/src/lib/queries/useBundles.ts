@@ -14,7 +14,6 @@ export interface BundleRow {
   roles?: string[];
   /** How many distinct roles the latest version grants. The list never carries `roles` itself. */
   role_count?: number;
-  confirmation_mode?: "auto" | "manual";
   /** How many people currently hold this bundle. Editing it changes all of them. */
   holder_count?: number;
   /** Highest published version. */
@@ -52,8 +51,6 @@ export interface BundleImpactView {
 export interface CreateBundleInput {
   name: string;
   description: string;
-  /** Optional override — omitted falls back to the global default (Task 22). */
-  confirmation_mode?: "auto" | "manual";
   /**
    * What the bundle's first published version contains. Required, and the
    * backend refuses without it.
@@ -69,7 +66,6 @@ export interface CreateBundleInput {
   includes?: string[];
 }
 
-/** No confirmation_mode: that is changed on the index, alongside every other rule and bundle. */
 export interface UpdateBundleInput {
   name: string;
   description: string;
@@ -271,7 +267,7 @@ export function useDeleteBundle() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) =>
-      request<{ message: string; was_welcome: boolean; cascade: { enqueued: number; mode: string } }>(
+      request<{ message: string; was_welcome: boolean; cascade: { enqueued: number; waiting?: number; wait_reason?: string } }>(
         `/bundles/${id}`,
         { method: "DELETE" },
       ),

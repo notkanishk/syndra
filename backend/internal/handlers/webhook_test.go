@@ -43,8 +43,6 @@ func TestWebhookRoute_RejectsInvalidActionsV2Signature(t *testing.T) {
 func resetWebhookDeps(t *testing.T) {
 	t.Helper()
 	origRebuild := cacheRebuildUser
-	origEnforce := webhookEnforceMappingRules
-	origRevoke := webhookRevokeMappingRules
 	origOnboard := webhookTriggerOnboarding
 	origInsert := dbInsertWebhookEvent
 	origComplete := dbCompleteWebhookEvent
@@ -58,8 +56,6 @@ func resetWebhookDeps(t *testing.T) {
 	origUpsertDriftItem := dbUpsertDriftItemWithEvidence
 	t.Cleanup(func() {
 		cacheRebuildUser = origRebuild
-		webhookEnforceMappingRules = origEnforce
-		webhookRevokeMappingRules = origRevoke
 		webhookTriggerOnboarding = origOnboard
 		dbInsertWebhookEvent = origInsert
 		dbCompleteWebhookEvent = origComplete
@@ -86,8 +82,6 @@ func setupNoopWebhookDeps(t *testing.T) {
 	t.Helper()
 	resetWebhookDeps(t)
 	cacheRebuildUser = func(_ context.Context, _ string, _ []string) {}
-	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error { return nil }
-	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error { return nil }
 	webhookTriggerOnboarding = func(_ context.Context, _, _, _ string) error { return nil }
 	dbInsertWebhookEvent = func(_ context.Context, _, _, _, _, _ string) (string, bool, error) {
 		return "evt-1", true, nil
@@ -117,9 +111,9 @@ func TestHandleZitadelWebhook_RedeliveryDedupesOnStableKey(t *testing.T) {
 		return "evt-1", len(keys) == 1, nil // ON CONFLICT: only the first insert lands
 	}
 	var dispatches int
-	webhookEnforceMappingRules = func(context.Context, string, string, string) error {
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) {
 		dispatches++
-		return nil
+		return false, nil
 	}
 
 	body := []byte(`{"aggregateID":"agg-7","aggregateType":"user_grant","resourceOwner":"org","instanceID":"inst","version":"v1","sequence":42,"event_type":"user.grant.added","created_at":"2026-07-16T00:00:00Z","userID":"human-1","event_payload":{"userId":"u1","projectId":"p1","roleKeys":["maker"]}}`)
@@ -159,9 +153,9 @@ func postWebhook(t *testing.T, body []byte) *httptest.ResponseRecorder {
 func TestHandleZitadelWebhook_InternalMissingEventType_Returns400(t *testing.T) {
 	setupNoopWebhookDeps(t)
 
-	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
-		t.Error("EnforceMappingRules must not be called when event_type is missing")
-		return nil
+	svcUserExpectsRole = func(_ context.Context, _, _, _ string) (bool, error) {
+		t.Error("no grant processing when event_type is missing")
+		return false, nil
 	}
 
 	body := []byte(`{"user_id":"u1","source_project":"p1","role_keys":["editor"]}`)
@@ -178,12 +172,7 @@ func TestHandleZitadelWebhook_InternalMissingEventType_Returns400(t *testing.T) 
 func TestWebhook_GrantRemoved(t *testing.T) {
 	setupNoopWebhookDeps(t)
 
-	var revokeCalled bool
 	var invalidateCalled bool
-	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error {
-		revokeCalled = true
-		return nil
-	}
 	var refreshed []string
 	cacheRebuildUser = func(_ context.Context, _ string, projects []string) {
 		invalidateCalled = true
@@ -195,9 +184,6 @@ func TestWebhook_GrantRemoved(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if !revokeCalled {
-		t.Error("expected RevokeMappingRules to be called")
 	}
 	if !invalidateCalled || len(refreshed) != 1 || refreshed[0] != "p1" {
 		t.Errorf("expected the cache recompiled for the removed grant's project; refreshed=%v", refreshed)
@@ -250,47 +236,15 @@ func TestWebhook_GrantRemoved_ReObservesAffectedUser(t *testing.T) {
 	}
 }
 
-// TestWebhook_GrantAdded_ProcessingFailure_SkipsReObserve: if the cascade
-// itself failed, the state to re-check has not settled yet — re-observing
-// on a failed dispatch would just record a half-applied moment. The event
-// stays in the retry path (dbFailWebhookEvent) and Zitadel gets retried
-// upstream, so the eventual re-observe happens after a real success.
-func TestWebhook_GrantAdded_ProcessingFailure_SkipsReObserve(t *testing.T) {
-	setupNoopWebhookDeps(t)
-
-	webhookEnforceMappingRules = func(context.Context, string, string, string) error {
-		return fmt.Errorf("boom")
-	}
-	var observeCalled bool
-	observeUser = func(_ context.Context, userID string) (db.Observation, error) {
-		observeCalled = true
-		return db.Observation{}, nil
-	}
-
-	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor","grant_id":"g1"}`)
-	rr := postWebhook(t, body)
-
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500 on cascade failure, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if observeCalled {
-		t.Error("expected observeUser NOT to be called when processing failed")
-	}
-}
-
 func TestWebhook_UserDeactivated(t *testing.T) {
 	setupNoopWebhookDeps(t)
 
 	var invalidateCalled bool
-	var enforceCalled, revokeCalled bool
+	var enforceCalled bool
 	cacheRebuildUser = func(_ context.Context, _ string, _ []string) { invalidateCalled = true }
-	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+	svcUserExpectsRole = func(_ context.Context, _, _, _ string) (bool, error) {
 		enforceCalled = true
-		return nil
-	}
-	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error {
-		revokeCalled = true
-		return nil
+		return false, nil
 	}
 
 	body := []byte(`{"event_type":"user_deactivated","user_id":"u1","source_project":"p1"}`)
@@ -303,10 +257,7 @@ func TestWebhook_UserDeactivated(t *testing.T) {
 		t.Error("expected cache invalidation")
 	}
 	if enforceCalled {
-		t.Error("enforce should NOT be called for user_deactivated")
-	}
-	if revokeCalled {
-		t.Error("revoke should NOT be called for user_deactivated")
+		t.Error("no per-role grant processing for user_deactivated")
 	}
 }
 
@@ -428,9 +379,9 @@ func TestWebhook_DeduplicationSkips(t *testing.T) {
 	}
 
 	var enforceCalled bool
-	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+	svcUserExpectsRole = func(_ context.Context, _, _, _ string) (bool, error) {
 		enforceCalled = true
-		return nil
+		return false, nil
 	}
 
 	body := []byte(`{"event_type":"grant_added","user_id":"u1","source_project":"p1","role_key":"editor"}`)
@@ -488,13 +439,13 @@ func TestHandleZitadelWebhook_RoleKeysPlural_DispatchesEachRole(t *testing.T) {
 
 	// Capture the roles passed to the orchestrator. Other deps stay at the
 	// no-op defaults installed by the helper above.
-	prevEnforce := webhookEnforceMappingRules
-	t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+	prevEnforce := svcUserExpectsRole
+	t.Cleanup(func() { svcUserExpectsRole = prevEnforce })
 
 	var seenRoles []string
-	webhookEnforceMappingRules = func(ctx context.Context, userID, project, role string) error {
+	svcUserExpectsRole = func(ctx context.Context, userID, project, role string) (bool, error) {
 		seenRoles = append(seenRoles, role)
-		return nil
+		return false, nil
 	}
 
 	body := []byte(`{
@@ -545,13 +496,13 @@ func TestHandleZitadelWebhook_RoleKeysBlankEntries_RejectedOrFiltered(t *testing
 		t.Run(tc.name, func(t *testing.T) {
 			setupNoopWebhookDeps(t)
 
-			prevEnforce := webhookEnforceMappingRules
-			t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+			prevEnforce := svcUserExpectsRole
+			t.Cleanup(func() { svcUserExpectsRole = prevEnforce })
 
 			var seen []string
-			webhookEnforceMappingRules = func(ctx context.Context, userID, project, role string) error {
+			svcUserExpectsRole = func(ctx context.Context, userID, project, role string) (bool, error) {
 				seen = append(seen, role)
-				return nil
+				return false, nil
 			}
 
 			rr := postWebhook(t, []byte(tc.body))
@@ -574,16 +525,16 @@ func TestHandleZitadelWebhook_RoleKeysOverridesSingular_ForAuditAndLog(t *testin
 	var dispatchedRole string
 	var persistedRole string
 
-	prevEnforce := webhookEnforceMappingRules
+	prevEnforce := svcUserExpectsRole
 	prevInsert := dbInsertWebhookEvent
 	t.Cleanup(func() {
-		webhookEnforceMappingRules = prevEnforce
+		svcUserExpectsRole = prevEnforce
 		dbInsertWebhookEvent = prevInsert
 	})
 
-	webhookEnforceMappingRules = func(ctx context.Context, userID, project, role string) error {
+	svcUserExpectsRole = func(ctx context.Context, userID, project, role string) (bool, error) {
 		dispatchedRole = role
-		return nil
+		return false, nil
 	}
 	dbInsertWebhookEvent = func(ctx context.Context, eventType, userID, sourceProject, roleKey, idempotencyKey string) (string, bool, error) {
 		persistedRole = roleKey
@@ -646,13 +597,13 @@ func TestHandleZitadelWebhook_RoleKeysExplicitEmpty_RejectedDistinctFromOmitted(
 		t.Run(tc.name, func(t *testing.T) {
 			setupNoopWebhookDeps(t)
 
-			prevEnforce := webhookEnforceMappingRules
-			t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
+			prevEnforce := svcUserExpectsRole
+			t.Cleanup(func() { svcUserExpectsRole = prevEnforce })
 
 			var dispatched string
-			webhookEnforceMappingRules = func(ctx context.Context, userID, project, role string) error {
+			svcUserExpectsRole = func(ctx context.Context, userID, project, role string) (bool, error) {
 				dispatched = role
-				return nil
+				return false, nil
 			}
 
 			rr := postWebhook(t, []byte(tc.body))
@@ -671,11 +622,11 @@ func TestHandleZitadelWebhook_TranslatesZitadelShape(t *testing.T) {
 	setupNoopWebhookDeps(t)
 
 	var seenRoles []string
-	prevEnforce := webhookEnforceMappingRules
-	t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
-	webhookEnforceMappingRules = func(_ context.Context, _, _, role string) error {
+	prevEnforce := svcUserExpectsRole
+	t.Cleanup(func() { svcUserExpectsRole = prevEnforce })
+	svcUserExpectsRole = func(_ context.Context, _, _, role string) (bool, error) {
 		seenRoles = append(seenRoles, role)
-		return nil
+		return false, nil
 	}
 
 	body := []byte(`{
@@ -697,11 +648,11 @@ func TestHandleZitadelWebhook_DropsSelfMutation(t *testing.T) {
 	setupNoopWebhookDeps(t)
 
 	called := false
-	prevEnforce := webhookEnforceMappingRules
-	t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
-	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+	prevEnforce := svcUserExpectsRole
+	t.Cleanup(func() { svcUserExpectsRole = prevEnforce })
+	svcUserExpectsRole = func(_ context.Context, _, _, _ string) (bool, error) {
 		called = true
-		return nil
+		return false, nil
 	}
 
 	body := []byte(`{"aggregateID":"u1","aggregateType":"user_grant","resourceOwner":"org","instanceID":"inst","version":"v1","sequence":1,"event_type":"user.grant.added","created_at":"2026-05-07T00:00:00Z","userID":"service-user-99","event_payload":{"userId":"u1","projectId":"p1","roleKeys":["x"]}}`)
@@ -710,7 +661,7 @@ func TestHandleZitadelWebhook_DropsSelfMutation(t *testing.T) {
 		t.Fatalf("expected 200 short-circuit, got %d", rr.Code)
 	}
 	if called {
-		t.Fatal("orchestrator MUST NOT be called on self-mutation event")
+		t.Fatal("a self-mutation event MUST NOT be processed")
 	}
 }
 
@@ -782,15 +733,9 @@ func TestHandleZitadelWebhook_ZitadelGrant_EnrichmentMiss_AcksWithoutDispatch(t 
 	setupNoopWebhookDeps(t)
 
 	enforceCalled := false
-	revokeCalled := false
-	prevEnforce := webhookEnforceMappingRules
-	prevRevoke := webhookRevokeMappingRules
-	t.Cleanup(func() {
-		webhookEnforceMappingRules = prevEnforce
-		webhookRevokeMappingRules = prevRevoke
-	})
-	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error { enforceCalled = true; return nil }
-	webhookRevokeMappingRules = func(_ context.Context, _, _, _ string) error { revokeCalled = true; return nil }
+	prevEnforce := svcUserExpectsRole
+	t.Cleanup(func() { svcUserExpectsRole = prevEnforce })
+	svcUserExpectsRole = func(_ context.Context, _, _, _ string) (bool, error) { enforceCalled = true; return false, nil }
 
 	// Both enrichment paths fail: index miss + Zitadel API miss (the default
 	// installed by setupNoopWebhookDeps).
@@ -799,7 +744,7 @@ func TestHandleZitadelWebhook_ZitadelGrant_EnrichmentMiss_AcksWithoutDispatch(t 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 (enrichment miss must not 4xx Zitadel), got %d body=%s", rr.Code, rr.Body.String())
 	}
-	if enforceCalled || revokeCalled {
+	if enforceCalled {
 		t.Fatal("processors MUST NOT run on incomplete enrichment; dispatch must be skipped")
 	}
 	if !strings.Contains(rr.Body.String(), "enrichment incomplete") {
@@ -812,11 +757,11 @@ func TestHandleZitadelWebhook_UnknownZitadelEvent_NoOp(t *testing.T) {
 	setupNoopWebhookDeps(t)
 
 	called := false
-	prevEnforce := webhookEnforceMappingRules
-	t.Cleanup(func() { webhookEnforceMappingRules = prevEnforce })
-	webhookEnforceMappingRules = func(_ context.Context, _, _, _ string) error {
+	prevEnforce := svcUserExpectsRole
+	t.Cleanup(func() { svcUserExpectsRole = prevEnforce })
+	svcUserExpectsRole = func(_ context.Context, _, _, _ string) (bool, error) {
 		called = true
-		return nil
+		return false, nil
 	}
 
 	body := []byte(`{"aggregateID":"u1","aggregateType":"user","resourceOwner":"org","instanceID":"inst","version":"v1","sequence":1,"event_type":"user.password.changed","created_at":"2026-05-07T00:00:00Z","userID":"human-1","event_payload":{}}`)
@@ -825,7 +770,7 @@ func TestHandleZitadelWebhook_UnknownZitadelEvent_NoOp(t *testing.T) {
 		t.Fatalf("expected 200 no-op, got %d body=%s", rr.Code, rr.Body.String())
 	}
 	if called {
-		t.Fatal("orchestrator MUST NOT be called on unknown event")
+		t.Fatal("an unknown event MUST NOT be processed")
 	}
 }
 
@@ -995,33 +940,5 @@ func TestProcessGrantRemoved_ARemovalSyndraDidNotIntendIsNotAFinding(t *testing.
 	}
 	if called {
 		t.Fatal("Zitadel and Syndra agreeing is not a finding")
-	}
-}
-
-// The order that makes the check mean anything. The cascade below removes
-// derived intent, so asking after it would answer about the world the cascade
-// made rather than the one the removal happened in.
-func TestProcessGrantRemoved_DetectionRunsBeforeTheCascade(t *testing.T) {
-	setupNoopWebhookDeps(t)
-	seq := []string{}
-	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) {
-		seq = append(seq, "expects")
-		return true, nil
-	}
-	dbUpsertDriftItemWithEvidence = func(context.Context, string, string, string, []string, string, string, string, db.DriftEvidence) (string, bool, error) {
-		seq = append(seq, "finding")
-		return "d1", true, nil
-	}
-	webhookRevokeMappingRules = func(context.Context, string, string, string) error {
-		seq = append(seq, "cascade")
-		return nil
-	}
-
-	ev := WebhookPayload{EventType: "grant_removed", UserID: "u1", SourceProject: "p1", RoleKeys: []string{"operator"}}
-	if err := processGrantRemoved(context.Background(), ev, "evt-1"); err != nil {
-		t.Fatal(err)
-	}
-	if len(seq) < 3 || seq[len(seq)-1] != "cascade" {
-		t.Fatalf("the finding must be raised before the cascade runs: %v", seq)
 	}
 }

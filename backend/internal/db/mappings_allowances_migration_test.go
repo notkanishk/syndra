@@ -205,11 +205,11 @@ func TestTheMappingCohortCountsEverySourceOfTheRole(t *testing.T) {
 	// bundle_version_effective_roles, not bundle_version_roles: a role held
 	// through an included bundle (B8) is held just as much as the bundle's own.
 	for _, frag := range []string{"FROM direct_role_grants", "user_bundle_assignments", "bundle_version_effective_roles",
-		// The rule arm, which the comment above the query promised and the
-		// query did not have: a role a rule derives is held just as much.
-		"mapping_rules",
-		// Chains, not one hop: the resolver follows them.
-		"WITH RECURSIVE",
+		// The rule arm: a role a rule derives is held just as much, and the
+		// chain is followed by the one closure the token and Zitadel share,
+		// never by a second copy of it (rules-on-the-pipeline).
+		"GetActiveMappingRules",
+		"models.RuleClosure(",
 		// And a lapsed grant is not held, so counting it overstates the cohort
 		// in the other direction.
 		"expires_at IS NULL OR expires_at > NOW()"} {

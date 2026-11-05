@@ -67,7 +67,40 @@ type EnqueueResult struct {
 	// WaitReason says why the change isn't in Zitadel yet, when it isn't:
 	// role_waits, manual, or halted:<reason> (services.Deliver).
 	WaitReason string `json:"wait_reason,omitempty"`
+	// RuleOutboxIDs are the rows the mapping rules added to this write: what a
+	// chain of rules derives from the role given, or takes back with the role
+	// removed. Written in the same transaction, delivered with OutboxID.
+	RuleOutboxIDs []string `json:"rule_outbox_ids,omitempty"`
 }
+
+// OutboxIDs is every row this write queued: its own, then the rules'.
+func (r EnqueueResult) OutboxIDs() []string {
+	ids := make([]string, 0, 1+len(r.RuleOutboxIDs))
+	if r.OutboxID != "" {
+		ids = append(ids, r.OutboxID)
+	}
+	return append(ids, r.RuleOutboxIDs...)
+}
+
+// FollowRules carries a direct write through the mapping rules. Wired by
+// services (services.followRules), which owns the one definition of what a
+// person holds and the one closure (models.RuleClosure) the token is compiled
+// from.
+//
+// enqueueWrites hands it the write as a function. It reads the person's
+// closure, runs the write, reads the closure again — all inside this
+// transaction and under the access-mutation lock — and returns the writes the
+// difference owes Zitadel beyond the write's own roles: source 'rule', no
+// ledger row, the same outbox and drain every bundle and rule cascade uses.
+//
+// This is the chokepoint because every direct write passes it: a grant, a
+// replace or revoke by grant id, an approved request, a bulk give or extend,
+// an adopted drift. Rules used to fire only from Zitadel's webhook, which drops
+// Syndra's own changes, so a role Syndra gave never reached its rule targets.
+//
+// Nil only in this package's own tests, where services is not linked: the write
+// then goes alone. The binary always links services, whose init wires it.
+var FollowRules func(ctx context.Context, p EnqueueParams, write func() error) ([]EnqueueParams, error)
 
 // EnqueueDirectGrantPropagation writes the intent ledger rows (one
 // direct_role_grants row per role on add/replace), one audit row, and one outbox
@@ -95,7 +128,7 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 		defer tx.Rollback(ctx) // no-op after a successful Commit
 	}
 
-	outboxID, err := enqueueWrites(ctx, tx, p, key)
+	outboxID, ruleIDs, err := enqueueWrites(ctx, tx, p, key)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
@@ -105,7 +138,7 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 			return EnqueueResult{}, fmt.Errorf("commit enqueue tx: %w", err)
 		}
 	}
-	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: enqueuedStatus(outboxID)}, nil
+	return EnqueueResult{OutboxID: outboxID, IdempotencyKey: key, Status: enqueuedStatus(outboxID), RuleOutboxIDs: ruleIDs}, nil
 }
 
 // enqueueWrites performs the ledger upsert (add/replace) + audit + outbox insert
@@ -113,14 +146,42 @@ func enqueueTx(ctx context.Context, p EnqueueParams, key string) (EnqueueResult,
 // that must bundle extra writes into the same atomic unit — e.g.
 // ApproveRequestAndEnqueue, which also resolves the access request — can share
 // one transaction with the enqueue rather than splitting it across two.
-func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (string, error) {
+//
+// It returns the write's own outbox id and the ids of the rows the mapping
+// rules owe on top of it (FollowRules), all in tx.
+func enqueueWrites(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (string, []string, error) {
 	// The second of the two enqueue chokepoints. See enqueueCascadeRows: a
 	// writer that computed its delta under this lock is only protected while
 	// every other writer has to wait for it.
 	if err := LockAccessMutationTx(ctx, tx); err != nil {
-		return "", err
+		return "", nil, err
 	}
+	if FollowRules == nil {
+		id, err := enqueueOwn(ctx, tx, p, key)
+		return id, nil, err
+	}
+	var own string
+	derived, err := FollowRules(context.WithValue(ctx, txKey, tx), p, func() error {
+		var err error
+		own, err = enqueueOwn(ctx, tx, p, key)
+		return err
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	if len(derived) == 0 {
+		return own, nil, nil
+	}
+	ruleIDs, err := enqueueCascadeRows(ctx, tx, nil, derived)
+	if err != nil {
+		return "", nil, fmt.Errorf("enqueue rule writes: %w", err)
+	}
+	return own, ruleIDs, nil
+}
 
+// enqueueOwn is the write itself: ledger, audit and outbox for exactly the
+// roles the caller named.
+func enqueueOwn(ctx context.Context, tx pgx.Tx, p EnqueueParams, key string) (string, error) {
 	source := p.Source
 	if source == "" {
 		source = "direct"

@@ -29,10 +29,6 @@ func resetBundleDeps(t *testing.T) {
 	origGetByID := dbGetBundleByID
 	origCascadeDelete := svcCascadeBundleRetired
 	origAudit := dbInsertAuditLog
-	origGetConfig := dbGetConfigSetting
-	// Default: no configured global default (resolveConfirmationMode normalizes "" to "auto") —
-	// keeps every existing test that doesn't set confirmation_mode from hitting a real DB call.
-	dbGetConfigSetting = func(ctx context.Context, key string) (string, error) { return "", nil }
 	t.Cleanup(func() {
 		dbCreateBundle = origCreate
 		dbGetAllBundles = origGetAll
@@ -44,7 +40,6 @@ func resetBundleDeps(t *testing.T) {
 		dbGetBundleByID = origGetByID
 		svcCascadeBundleRetired = origCascadeDelete
 		dbInsertAuditLog = origAudit
-		dbGetConfigSetting = origGetConfig
 	})
 }
 
@@ -131,7 +126,7 @@ func TestHandleCreateBundle_UnknownField(t *testing.T) {
 func TestHandleCreateBundle_HappyPath(t *testing.T) {
 	resetBundleDeps(t)
 
-	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
+	dbCreateBundle = func(ctx context.Context, name, description string, roles []models.BundleRole) (string, error) {
 		return "bundle-1", nil
 	}
 	auditAction := ""
@@ -164,7 +159,7 @@ func TestHandleCreateBundle_HappyPath(t *testing.T) {
 func TestHandleCreateBundle_DuplicateNameIs409(t *testing.T) {
 	resetBundleDeps(t)
 
-	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
+	dbCreateBundle = func(ctx context.Context, name, description string, roles []models.BundleRole) (string, error) {
 		return "", &pgconn.PgError{Code: "23505"}
 	}
 
@@ -178,28 +173,21 @@ func TestHandleCreateBundle_DuplicateNameIs409(t *testing.T) {
 	}
 }
 
-// TestHandleCreateBundle_ResolvedModeReachesCreate is Minor Fix #5: the RESOLVED confirmation
-// mode (not the raw request body) must be the value that actually reaches dbCreateBundle.
-func TestHandleCreateBundle_ResolvedModeReachesCreate(t *testing.T) {
+// A bundle has no confirmation mode any more (000078): an old client still
+// sending one is told so, by the same strict decoding every mutation uses,
+// rather than having a setting silently dropped.
+func TestHandleCreateBundle_RefusesTheRetiredConfirmationMode(t *testing.T) {
 	resetBundleDeps(t)
-
-	var gotMode string
-	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
-		gotMode = confirmationMode
-		return "bundle-1", nil
+	dbCreateBundle = func(context.Context, string, string, []models.BundleRole) (string, error) {
+		t.Fatal("a refused body must create nothing")
+		return "", nil
 	}
-	dbInsertAuditLog = func(ctx context.Context, actorID, targetID, action, resourceID string) error { return nil }
-
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bundles",
 		strings.NewReader(`{"name":"Engineering","confirmation_mode":"manual","roles":[{"project_id":"p1","role_key":"laser"}]}`))
 	rr := httptest.NewRecorder()
 	handleCreateBundle(rr, req)
-
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body.String())
-	}
-	if gotMode != "manual" {
-		t.Fatalf("expected resolved mode 'manual' to reach dbCreateBundle, got %q", gotMode)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -211,7 +199,7 @@ func TestHandleCreateBundle_RefusesABundleWithNoRoles(t *testing.T) {
 	resetBundleDeps(t)
 
 	reached := false
-	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
+	dbCreateBundle = func(ctx context.Context, name, description string, roles []models.BundleRole) (string, error) {
 		reached = true
 		return "bundle-1", nil
 	}
@@ -244,7 +232,7 @@ func TestHandleCreateBundle_RolesReachTheWriteDedupedAndTrimmed(t *testing.T) {
 	resetBundleDeps(t)
 
 	var got []models.BundleRole
-	dbCreateBundle = func(ctx context.Context, name, description, confirmationMode string, roles []models.BundleRole) (string, error) {
+	dbCreateBundle = func(ctx context.Context, name, description string, roles []models.BundleRole) (string, error) {
 		got = roles
 		return "bundle-1", nil
 	}
@@ -509,7 +497,7 @@ func TestHandleAssignBundleToUser_Idempotent(t *testing.T) {
 	// The atomic AssignBundleAndEnqueue is itself ON CONFLICT DO NOTHING — the cascade stub
 	// always succeeds, second call is a no-op from the handler's perspective.
 	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
-		return services.CascadeResult{Mode: "auto"}, nil
+		return services.CascadeResult{}, nil
 	}
 
 	call := func() int {
@@ -541,7 +529,7 @@ func TestHandleAssignBundleToUser_CallsCascadeWithActorAndTarget(t *testing.T) {
 	var gotActor, gotUserID, gotBundleID string
 	svcCascadeBundleAssigned = func(ctx context.Context, actor, userID, bundleID string) (services.CascadeResult, error) {
 		gotActor, gotUserID, gotBundleID = actor, userID, bundleID
-		return services.CascadeResult{Mode: "auto"}, nil
+		return services.CascadeResult{}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/u1/bundles", strings.NewReader(`{"bundle_id":"b2"}`))
@@ -841,7 +829,7 @@ func TestHandleRetireBundle_ReportsThatItWasTheWelcomeBundle(t *testing.T) {
 		return models.Bundle{ID: id, Name: "Newcomer", IsWelcome: true}, nil
 	}
 	svcCascadeBundleRetired = func(ctx context.Context, actor, bundleID string) (services.CascadeResult, error) {
-		return services.CascadeResult{Enqueued: 2, Mode: "auto"}, nil
+		return services.CascadeResult{Enqueued: 2}, nil
 	}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/bundles/b1", nil)

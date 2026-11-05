@@ -130,8 +130,10 @@ func setupSignInDeps(t *testing.T) *[]usageCall {
 		trip("webhook_events")
 		return "", true, nil
 	}
-	webhookEnforceMappingRules = func(context.Context, string, string, string) error { trip("mapping rules"); return nil }
-	webhookRevokeMappingRules = func(context.Context, string, string, string) error { trip("mapping rules"); return nil }
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) {
+		trip("grant processing")
+		return false, nil
+	}
 	webhookTriggerOnboarding = func(context.Context, string, string, string) error { trip("onboarding"); return nil }
 	cacheRebuildUser = func(context.Context, string, []string) { trip("the cache") }
 	observeUser = func(context.Context, string) (db.Observation, error) {
@@ -269,7 +271,7 @@ func TestWebhook_GrantPathUnchangedBySignInRouting(t *testing.T) {
 		inserted++
 		return "evt", true, nil
 	}
-	webhookEnforceMappingRules = func(context.Context, string, string, string) error { enforced++; return nil }
+	svcUserExpectsRole = func(context.Context, string, string, string) (bool, error) { enforced++; return false, nil }
 	rr := postWebhook(t, realZitadelBody("g1", "user_grant", "user.grant.added", "e", `{"userId":"u1","projectId":"p1","roleKeys":["maker"]}`))
 	if rr.Code != http.StatusOK || inserted != 1 || enforced != 1 {
 		t.Errorf("status %d inserted %d enforced %d", rr.Code, inserted, enforced)
