@@ -205,12 +205,11 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 		return ApplyOutcome{
 			Subject: req.Subject, Effect: EffectApply,
 			Detail:      fmt.Sprintf("Creates %s.", name),
-			Consequence: describeHolding(projected(nil, desired, name)),
+			Consequence: describeHolding(projected(desired, name)),
 			Username:    name, Fingerprint: fingerprint,
 		}
 	}
 
-	after := projected(current, desired, current.Username)
 	// The home and its limit, decided by the apply's own rules and reads, so
 	// the plan never promises a folder or a limit the apply would not make.
 	home, err := s.decideHome(desired, current.Username, current.Home, current.UID)
@@ -222,15 +221,15 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 			Username:    current.Username, Fingerprint: fingerprint,
 		}
 	}
-	if home.path != "" {
-		after.Home = home.path
-	}
+	// The one decision `apply` also executes (apply.go decide), so what is
+	// planned is what is written.
+	c := decide(current, desired, home)
+	after := c.applyTo(*current)
 	// A limit that can't be read is not planned: the apply would fail to read
 	// it too, and planning it would queue a row every pass.
 	_, quota, quotaOwed, _ := s.quotaOwed(desired, after.Home, current.UID)
 
-	changes := !sameSet(after.Groups, current.Groups) || after.Enabled != current.Enabled ||
-		after.SMBEnabled != current.SMBEnabled || after.Home != current.Home
+	changes := c.writes()
 	if !changes && !quotaOwed {
 		detail := "Already in the requested state."
 		if desired.managed[FieldSMBEnabled] && desired.smbEnabled && !current.SMBEnabled {
@@ -263,38 +262,19 @@ func (s *server) planOne(req PlanSubject, byName map[string]*Subject, claimed ma
 	}
 }
 
-// projected is the state a subject would be left in.
-//
-// Computed by the same rules the apply applies, from the same decoded desired
-// state — an unmanaged field is carried through unchanged rather than defaulted,
-// because a plan that predicted a change the apply does not make is a plan
-// nobody should trust.
-func projected(current *Subject, desired desiredState, username string) Subject {
-	out := Subject{Username: username}
-	if current != nil {
-		out = *current
-	}
-	if desired.managed[FieldGroup] {
-		out.Groups = desired.groups
-	}
-	if desired.managed[FieldEnabled] {
-		out.Enabled = desired.enabled
-	} else if current == nil {
-		// A new account is usable unless something says otherwise, matching
-		// what the create path does.
-		out.Enabled = true
-	}
-	// Only ever switched OFF: the apply never switches SMB on, the member's next
-	// password does. Planning it on promised a change no apply makes, and each
-	// reconciliation pass queued another convergence that drained to nothing.
-	if desired.managed[FieldSMBEnabled] && !desired.smbEnabled {
-		out.SMBEnabled = false
-	}
+// projected is the state a NEW account would be left in: the shared decision
+// (apply.go decide, nil current) applied to a blank account. An unmanaged field
+// is carried through unchanged rather than defaulted, because a plan that
+// predicted a change the apply does not make is a plan nobody should trust.
+// An existing account is not projected here; plan applies decide to it directly.
+func projected(desired desiredState, username string) Subject {
+	// A new account is usable unless something says otherwise, matching what the
+	// create path does. SMB stays off: the apply never switches it on, the
+	// member's next password does.
+	out := decide(nil, desired, homeDecision{}).applyTo(Subject{Username: username, Enabled: true})
 	// A home folder is planned only where the apply would make one: a home
-	// location chosen, and no home yet. Moving one is never planned, because it
-	// is never done.
-	// For a new account only; an existing one's is decided by decideHome.
-	if current == nil && desired.managed[FieldHome] && desired.wantsHome && desired.homeRoot != "" &&
+	// location chosen. Whether the folder is free is the apply's read to make.
+	if desired.managed[FieldHome] && desired.wantsHome && desired.homeRoot != "" &&
 		(!desired.managed[FieldEnabled] || desired.enabled) {
 		out.Home = path.Join(desired.homeRoot, username)
 	}
