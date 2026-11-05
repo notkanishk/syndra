@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { DirectWriteWarning, UpstreamShell } from "@/components/upstream/UpstreamShell";
+import { DirectWriteWarning, UpstreamShell, sendsWhen } from "@/components/upstream/UpstreamShell";
 
 /**
  * The four upstream consoles write to Zitadel with no rehearsal, no cascade
@@ -30,7 +30,31 @@ describe("a write that goes straight to the provider", () => {
     unmount();
     render(<DirectWriteWarning traced what="Anything." />);
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByText(/writes to Zitadel through Syndra/)).toBeInTheDocument();
+    expect(screen.getByText(/goes through Syndra/)).toBeInTheDocument();
+  });
+
+  // C3: the traced path writes a record, so its tick never says there is none,
+  // and its caption says when the change is sent, never "when Pending changes is sent".
+  it("on the traced path, ticks for what is missing and says when it is sent", () => {
+    render(<DirectWriteWarning traced what="Anything." sends={sendsWhen([])} acknowledged={false} onAcknowledge={() => {}} />);
+    expect(screen.getByText("I understand this changes Zitadel now, with no preview and no reason.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/no record in Syndra/);
+    expect(document.body.textContent).toMatch(/It is sent to Zitadel straight away\./);
+    expect(document.body.textContent).not.toMatch(/when Pending changes is sent/);
+  });
+});
+
+describe("when a direct change is sent (C3)", () => {
+  it("says straight away, and names the roles that wait", () => {
+    expect(sendsWhen([])).toBe("It is sent to Zitadel straight away.");
+    expect(sendsWhen(["trained"])).toBe(
+      "It is sent to Zitadel straight away, except trained: that role always waits for you, so its change waits in Pending changes until you send it.",
+    );
+    expect(sendsWhen(["trained", "keyholder"])).toMatch(/^It is sent to Zitadel straight away, except keyholder and trained: those roles always wait for you/);
+  });
+
+  it("before the list of roles that wait is read, names the case without guessing", () => {
+    expect(sendsWhen(undefined)).toMatch(/straight away, unless a role waits for you/);
   });
 
   it("is a tick, so it can gate the button", () => {

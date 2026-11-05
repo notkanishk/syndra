@@ -170,14 +170,29 @@ export interface ZitadelGrantChange {
   given_roles?: string[];
   revoked_roles?: string[];
   retained_roles?: string[];
+  /** The least delivered role's state: applied, pending (incl. waiting), failed, or unchanged (all kept). */
+  status?: "applied" | "pending" | "failed" | "unchanged";
   wait_reason?: string;
+  /** Each role's own outcome (W8). */
+  roles?: ZitadelRoleChange[];
+}
+
+/** One role's part of a change, after delivery. */
+export interface ZitadelRoleChange {
+  /** "project/role". */
+  role: string;
+  change: "given" | "revoked" | "kept";
+  /** applied: in Zitadel now; waiting: held for you to send; pending: not taken yet; kept: nothing sent. */
+  status: "applied" | "waiting" | "pending" | "failed" | "kept";
 }
 
 function useUpstreamMutation<V, R = unknown>(fn: (value: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => {
+    // Settled, not only succeeded: a write whose outcome is unknown (the
+    // answer was lost, C6) may have changed Zitadel, so every reader re-reads.
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["upstream"] });
       qc.invalidateQueries({ queryKey: ["drift"] });
       // A role created or renamed here changes the names every screen resolves.
@@ -208,7 +223,7 @@ export const useUpstreamUpdateGrant = () =>
     }),
   );
 
-/** Sent at once, as a removal on a person's page is (`?apply=true`). */
+/** Sent at once unless a role waits, as a removal on a person's page is (`?apply=true`). */
 export const useUpstreamRemoveGrant = () =>
   useUpstreamMutation(({ userId, grantId }: { userId: string; grantId: string }) =>
     request<ZitadelGrantChange>(`/zitadel/users/${userId}/grants/${grantId}?apply=true`, { method: "DELETE" }),

@@ -14,10 +14,11 @@ Decision record: [ADR-005](../../../docs/adr/005-syndra-replaces-the-action-sign
    - Set `claims:keyring:rotating` (see §2).
    - `POST /v2/actions/targets/{id}` with `{"expirationSigningKey":"0s"}`. This is rotate.sh's call, and the new key comes back in the answer.
    - `adoptKey` publishes the new key to the keyring before anything else happens. The row's `replaced` gets the target name next, so a crash after Zitadel answered still says which keys changed.
-   - If Zitadel refuses (4xx), stop. Any other error (5xx, transport) may mean Zitadel replaced the key and the answer was lost, so Syndra reads the keys back from Zitadel at once.
+   - If Zitadel refuses (a final 4xx), stop. Any other error (408, 429, 5xx, transport) may mean Zitadel replaced the key and the answer was lost, so Syndra reads the key back from Zitadel at once: a changed key counts as replaced and the loop goes on; an unchanged one stops it; a failed read stops it with the outcome unknown.
 6. **Check** (§4), then the outcome:
-   - `verified`, `unverified` or `failed` is written to the row.
-   - An `audit_logs` row is written (`action_key.replaced` or `action_key.not_replaced`, with trigger, outcome, targets, probe class and error).
+   - `verified`, `unverified`, `partial` (one key of two), `unknown` (answer lost, read-back failed) or `failed` (none replaced) is written to the row (migration 000081 widens the CHECK).
+   - The answer and the row carry `reason`: a plain sentence, never an HTTP status or Zitadel's text, because it travels in a 200 body past the error envelope (coherence audit W4).
+   - An `audit_logs` row is written (`action_key.replaced`, `action_key.partly_replaced`, `action_key.replace_unknown` or `action_key.not_replaced`, with trigger, outcome, targets, probe class and reason).
    - `KEY_ROTATION` is raised, or settled.
 
 The targets are `claimcheck.ClaimTarget` and `claimcheck.EventTarget`, which `TestManifestMatchesTargetsJSON` keeps equal to `targets.json`. Keys are never logged, never stored in Postgres, and never in an answer.
@@ -74,22 +75,22 @@ Each probe records itself as its schedule would. The results lead to these outco
 - **Zitadel refused:** `failed`.
   - The old key still verifies.
   - `KEY_ROTATION:failed` is raised.
-  - The schedule tries again in a later window, at most once per window.
+  - The schedule tries again at its next attempt (`auto.next_attempt_at`), which after a Replace now on a key not yet due can be weeks away, and only while it is on and not waiting for a test sign-in. The screen says that date, or why not (W5).
 
 ## 5. The schedule
 
 `RunActionKeyAutoRotate` runs every 5 minutes (`ACTION-KEY`, started with the keyring when a Management client exists).
 - `nextAutoAttempt = windowFrom(max(now, last + threshold − lead, lastAuto + 20h))`.
 - An unknown age is due.
-- The window is `HH:MM-HH:MM` in the container's local time (`TZ`, an IANA zone; the image embeds `time/tzdata`) and may cross midnight.
-- It replaces only when the next attempt is now, L1 passed in the last 5 minutes, and the switch is on.
+- The window is `HH:MM-HH:MM` in the makerspace's zone (`clock.Loc`: `TZ`, an IANA zone, or Asia/Kolkata when unset or invalid; the image embeds `time/tzdata`) and may cross midnight.
+- It replaces only when the next attempt is now, L1 passed in the last 5 minutes, and the switch is on. The status reports the L1 condition as `auto.waiting_for`: `test_sign_in_setup` (no L1 can run, `SYNDRA_EXTERNAL_URL` unset) or `test_sign_in` (none passed recently), from the same `scheduleWaitingFor` the schedule uses.
 
 | Env | Default | Meaning |
 |---|---|---|
 | `SYNDRA_ACTION_KEY_AUTOROTATE` | on | `off` (or false/0/no) is the kill switch. The look still runs, to confirm an unverified attempt. |
 | `SYNDRA_ACTION_KEY_LEAD_DAYS` | 5 | Days before the threshold. Must be under the threshold. |
 | `SYNDRA_ACTION_KEY_WINDOW` | `03:00-05:00` | The quiet window. |
-| `TZ` | unset (UTC) | The zone the window is read in. |
+| `TZ` | unset (Asia/Kolkata) | The zone the window is read in. |
 | `SYNDRA_SERVER_DIR` | `${PWD}` from compose | The checkout the by-hand guide's command `cd`s into. |
 
 On staging `ZITADEL_DOMAIN` is empty, so the schedule is off (`off_reason: no_zitadel`).
@@ -103,7 +104,7 @@ On staging `ZITADEL_DOMAIN` is empty, so the schedule is off (`off_reason: no_zi
 
 - `POST /api/v1/zitadel/action-key/rotate` (operator).
   - Body: `{"force": bool}`, strict.
-  - 200: `{outcome, replaced_at, replaced[], probe, next_due_at, error}`.
+  - 200: `{outcome, replaced_at, replaced[], probe, next_due_at, reason}`.
   - Errors: 409 `ROTATION_IN_FLIGHT`, `RECENTLY_REPLACED` or `NOT_REGISTERED`; 503 `ZITADEL_UNAVAILABLE` or `NOT_CONFIGURED`.
   - It runs on a context detached from the request (2 min), because a Zitadel write cut off halfway is the one outcome nobody can read back.
 - `POST /api/v1/zitadel/action-key/verify` (operator). Body `{}`, strict.
@@ -111,9 +112,9 @@ On staging `ZITADEL_DOMAIN` is empty, so the schedule is off (`off_reason: no_zi
   - It changes no key and writes no record row. It answers `{probe, last_rotated_at, next_due_at}`.
 - `GET /api/v1/zitadel/action-rotation-status` gains:
   - `last_rotated_source`, `due_at` and `register_command`;
-  - `auto{on, off_reason, lead_days, window, next_attempt_at}`;
+  - `auto{on, off_reason, lead_days, window, next_attempt_at, waiting_for}`;
   - `rotating`;
-  - `last_outcome{trigger, started_at, finished_at, outcome, replaced, probe, error}`.
+  - `last_outcome{trigger, started_at, finished_at, outcome, replaced, probe, reason}`.
   - `?watch=1` asks the keyring to read Zitadel now, at most once per 10s whoever asks: the guide's watch.
   - `rotate_command` and `register_command` carry `cd $SYNDRA_SERVER_DIR && …` when that is an absolute, plain path.
 
