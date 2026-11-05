@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { AcknowledgeCount } from "@/components/ui/Acknowledge";
 import { ApiError } from "@/lib/api-client";
-import { outcomeFromError, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { outcomeFromError, succeeded, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
 import {
@@ -30,6 +30,26 @@ import { sortByName } from "@/lib/sort";
 
 /** What is recorded: the same as making the role under Access › Roles. */
 const RECORDED = "Syndra recorded this in Audit before it changed Zitadel, as Access › Roles does.";
+
+/** The word for an outcome nobody knows (C6, W13): never "Nothing was changed". */
+const NOT_KNOWN = "Not known";
+
+/**
+ * A role write's error as an outcome. OUTCOME_UNKNOWN is a write whose answer
+ * was lost and whose read-back failed: Zitadel may hold the change, so it is a
+ * neutral result in its own words, not a failure that "changed nothing".
+ */
+function roleWriteOutcome(error: unknown, what: string): Outcome {
+  if (error instanceof ApiError && error.code === "OUTCOME_UNKNOWN") {
+    return {
+      kind: "no_change",
+      message: `Zitadel didn't answer, so Syndra can't tell whether ${what}`,
+      detail:
+        "Syndra kept its record and wrote this to Audit. Open this project again in a minute to see what Zitadel holds.",
+    };
+  }
+  return outcomeFromError(error);
+}
 
 /**
  * Projects and their roles, as the identity provider holds them.
@@ -171,7 +191,7 @@ function RoleRow({
   // Who Zitadel shows holding the role, as the refusal named them. Set only
   // once Syndra has refused for that reason; the next press confirms the count.
   const [held, setHeld] = useState<{ count: number; holders: string } | null>(null);
-  const done = outcome?.kind === "applied";
+  const done = succeeded(outcome);
   const name = role.displayName || role.key;
 
   return (
@@ -203,7 +223,7 @@ function RoleRow({
             lede={
               done
                 ? undefined
-                : "Syndra checks who holds it first. If anybody does, it names them and asks you again before anything changes."
+                : "Syndra checks first. It refuses while Syndra itself gives this role, or while it can’t tell who holds it. If people hold it in Zitadel, it names them and asks you again before anything changes."
             }
           />
           {/* The count comes from Syndra's refusal, never from this screen's own reading:
@@ -220,7 +240,7 @@ function RoleRow({
               />
             </div>
           )}
-          {outcome && <WriteResult outcome={outcome} word="Deleted" />}
+          {outcome && <WriteResult outcome={outcome} word="Deleted" neutral={NOT_KNOWN} />}
 
           <WriteFooter outcome={outcome} onClose={() => setConfirming(false)}>
             {/* Retires on success: left armed, a second click deleted the same
@@ -241,7 +261,7 @@ function RoleRow({
                     setOutcome(null);
                     return;
                   }
-                  setOutcome(outcomeFromError(error));
+                  setOutcome(roleWriteOutcome(error, `Zitadel deleted ${name}, and took it from anybody holding it`));
                 }
               }}
             >
@@ -269,7 +289,7 @@ function RoleDialog({
   const [key, setKey] = useState(role?.key ?? "");
   const [displayName, setDisplayName] = useState(role?.displayName ?? "");
   const [group, setGroup] = useState(role?.group ?? "");
-  const done = outcome?.kind === "applied";
+  const done = succeeded(outcome);
 
   const busy = create.isPending || update.isPending;
 
@@ -280,7 +300,7 @@ function RoleDialog({
         lede={
           done
             ? undefined
-            : "The same as Access › Roles: Syndra records it, then changes Zitadel, and puts its record back if Zitadel says no."
+            : "The same as Access › Roles: Syndra records it, then changes Zitadel, and puts its record back if Zitadel did not make the change."
         }
       />
       {!done && (
@@ -319,7 +339,9 @@ function RoleDialog({
       )}
       {/* The dialog reports its own result and stays open to do it, so a refusal
           and what Syndra recorded are read where the change was made. */}
-      {outcome && <WriteResult outcome={outcome} word={role ? "Saved" : "Created"} className="mx-6 mb-1 mt-3" />}
+      {outcome && (
+        <WriteResult outcome={outcome} word={role ? "Saved" : "Created"} neutral={NOT_KNOWN} className="mx-6 mb-1 mt-3" />
+      )}
 
       <WriteFooter outcome={outcome} onClose={onClose}>
         <Button
@@ -338,7 +360,9 @@ function RoleDialog({
                 setOutcome({ kind: "applied", message: `${key.trim()} created in Zitadel`, detail: RECORDED });
               }
             } catch (error) {
-              setOutcome(outcomeFromError(error));
+              setOutcome(
+                roleWriteOutcome(error, role ? `Zitadel saved the change to ${role.key}` : `Zitadel created ${key.trim()}`),
+              );
             }
           }}
         >

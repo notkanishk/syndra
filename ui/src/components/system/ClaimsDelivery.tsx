@@ -11,6 +11,7 @@ import { Mono, StatusDot, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
+import { UNCONFIRMED_HOLD } from "@/components/system/SigningKeyGuide";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
 import { Unfold } from "@/lib/motion";
 import { LANDS_LABEL, outcomePhrase } from "@/lib/claims";
@@ -221,17 +222,27 @@ function FindingNotice({ group, names }: { group: ClaimFinding[]; names: Names }
       );
       break;
     }
-    // action-key-autorotation: subject "unverified" (replaced, the test sign-in
-    // after it didn't get its claims) or "failed" (Zitadel didn't replace it).
+    // action-key-autorotation: the subject is the attempt's outcome. unverified
+    // (replaced, the test sign-in after it didn't pass), partial (one key of
+    // two), unknown (answer lost, read-back failed) or failed (none replaced).
+    // This Notice can't see the schedule, so it never promises a retry (W5):
+    // the row below says whether Syndra tries again, and when.
     case "KEY_ROTATION":
       if (group.some((f) => f.subject === "unverified")) {
         title = "The new signing key isn't confirmed";
+        body = `Syndra replaced the action signing key, but the test sign-in after it didn't pass. ${UNCONFIRMED_HOLD} The Action signing key row, below, says when it happened.`;
+      } else if (group.some((f) => f.subject === "partial")) {
+        title = "Zitadel replaced only one of the signing keys";
         body =
-          "Syndra replaced the action signing key, but the test sign-in after it didn't get its claims. Syndra still accepts the old key and the new one, and won't replace it again on its own. The Action signing key row, below, says when it happened.";
+          "Syndra uses the new key, and the old one still works for the other. The Action signing key row, below, says which, and what to do.";
+      } else if (group.some((f) => f.subject === "unknown")) {
+        title = "Syndra can't tell whether the signing key was replaced";
+        body =
+          "Zitadel didn't answer, and Syndra couldn't read the key back. The old key keeps working either way. The Action signing key row, below, shows what Syndra reads next.";
       } else {
         title = "Zitadel didn't replace the signing key";
         body =
-          "Syndra tried to replace the action signing key and Zitadel didn't do it. The old key still works, and Syndra tries again in the next quiet hours. The Action signing key row, below, says when.";
+          "Syndra tried to replace the action signing key and Zitadel didn't do it. The old key still works. The Action signing key row, below, says why, and whether Syndra tries again on its own.";
       }
       break;
     default:

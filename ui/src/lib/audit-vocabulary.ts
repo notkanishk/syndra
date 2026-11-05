@@ -77,6 +77,10 @@ export const AUDIT_ACTIONS: Record<
   "role.deleted": { verb: "Deleted a role", destructive: true },
   // The second row of a role change Zitadel refused: Syndra put its own record back.
   "role.not_changed": { verb: "Tried to change a role; Zitadel didn't, so Syndra put its record back" },
+  // C6: the answer was lost and the read-back failed. Syndra kept its record; Zitadel may hold the change.
+  "role.change_unknown": {
+    verb: "Changed a role in Zitadel, but couldn't tell whether Zitadel made the change; Syndra kept its record. Open the project under Zitadel › Projects to see what Zitadel holds",
+  },
   "access_request.created": { verb: "Asked for access" },
   // Roles that wait for you (N14 B): settings, not access, so no passive.
   "role.waits_marked": { verb: "Marked a role to wait for you" },
@@ -88,7 +92,12 @@ export const AUDIT_ACTIONS: Record<
   "welcome_claims.turned_off": { verb: "Turned off welcome roles at a first sign-in" },
   // action-key-autorotation: Syndra replacing the action signing key, on its own or from Replace now.
   "action_key.replaced": { verb: "Replaced the action signing key" },
-  "action_key.not_replaced": { verb: "Tried to replace the action signing key; Zitadel didn't" },
+  "action_key.not_replaced": { verb: "Tried to replace the action signing keys; Zitadel replaced neither" },
+  // W4: one of the two keys replaced, or an answer lost with no read-back. The details carry the reason.
+  "action_key.partly_replaced": { verb: "Replaced one action signing key; Zitadel didn't replace the other" },
+  "action_key.replace_unknown": {
+    verb: "Tried to replace the action signing key; Zitadel didn't answer, so Syndra can't tell whether it did",
+  },
   "action_key.verified_later": { verb: "Confirmed the new action signing key with a test sign-in" },
   // Look up sign-ins (owner, 3 Nov): recorded before Zitadel's log is read, with the
   // reason and the range in its details. The person is the target; an app lookup has none.
@@ -175,6 +184,8 @@ export const OPERATION_NOUN: Record<string, string> = {
   "account.adopt": "an account assignment",
   "account.release": "a release of an account",
   "setting.put": "a settings change",
+  // S5: addon.<t>.lifecycle.set.dispatched (backend/internal/addons/read.go).
+  "lifecycle.set": "a maintenance change",
 };
 
 export function describeAction(

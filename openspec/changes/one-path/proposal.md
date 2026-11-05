@@ -13,13 +13,13 @@
   1. writes the trace (Syndra's `roles` row plus an audit row, in one transaction under the access lock);
   2. calls Zitadel;
   3. on any error, reads the role back;
-  4. undoes the record only if Zitadel is not in the state asked for, and audits that undo as `role.not_changed`.
+  4. undoes the record only when Zitadel is known not to be in the state asked for: the read-back shows it absent, or Zitadel answered a final refusal (a 4xx other than 408/429). That undo is audited as `role.not_changed`. When the answer was lost (a timeout, a broken connection, 408, 429, 5xx) AND the read-back failed, nobody knows: the record stays, the audit says `role.change_unknown`, and the route answers 502 `OUTCOME_UNKNOWN` with a sentence that says Syndra can't tell and how to check, never "Nothing was changed" (coherence audit C6 and W13, 5 Nov 2026). Before this, a failed read-back always undid, so a delete that may already have taken the role from every holder was reported as not having happened.
 - **Delete never strips silently.** It is refused (409 `ROLE_IN_USE`) while Syndra gives the role through a person, a bundle or a rule. It is refused (409 `ROLE_HELD`) while anyone holds it in Zitadel, with the holders' names and their count, until the caller sends that exact count back as `?confirm_holders=N`. It is refused (409 `HOLDERS_UNKNOWN`) when there is no complete, current observation to count from.
 - **Grants: the person page's pipe.** The three `/api/v1/zitadel/users/{id}/grants` routes call the same pieces as People › Access:
   - Assign runs `checkRoleOffered` and `dbRequestHolding` on every role before any write, then writes one direct grant per role.
   - Remove sends a role with a direct grant through `services.DeleteDirectGrant`. A role Syndra still gives (`UserExpectsRole`) is kept. Only a role nothing in Syndra gives is revoked directly.
   - Replace is remove-then-give over the difference.
-  - All three rebuild the person's cache and deliver through `services.Deliver`.
+  - All three rebuild the person's cache and deliver through `services.Deliver`. Each answers `roles[]`, every role with its change (given, revoked, kept) and its own status after delivery (applied, waiting, pending, failed, kept), and `status` is the least delivered of them (coherence audit W8). The screen reports each role, never "done" for one that waits or that Zitadel didn't take.
 - **The legacy routes stay.** They are now thin callers.
 
 **Not in scope.**
