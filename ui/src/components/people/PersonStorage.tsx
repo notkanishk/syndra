@@ -14,13 +14,14 @@ import { NotOpenYet } from "@/components/ui/NotOpenYet";
 import { Notice } from "@/components/ui/Notice";
 import { Relative } from "@/components/ui/Time";
 import { Tinted } from "@/lib/motion";
-import { formatClock, formatList, formatRelative, formatShortDate, humanizeKey } from "@/lib/format";
+import { formatClock, formatList, formatRelative, formatShortDate } from "@/lib/format";
 import { targetLabel } from "@/lib/nav";
 import { usePersonTargets, type PersonTargetView, type RoleSource, type StoragePlace } from "@/lib/queries/useMyStorage";
-import { useNameResolver } from "@/lib/queries/useNameResolver";
+
 import { useTargets } from "@/lib/queries/useTargets";
 import { sortByName, sortNames } from "@/lib/sort";
 import { useIsAdvanced } from "@/lib/ui-view";
+import { useShownNames } from "@/components/names/shownNames";
 
 /**
  * A person's network storage, for operators (A-10 Part 1): one read-only card
@@ -44,11 +45,8 @@ function gbWords(bytes: number | undefined): string {
 }
 
 function useRoleNames() {
-  const resolver = useNameResolver();
-  return (roles: RoleSource[] | undefined) =>
-    sortNames(
-      (roles ?? []).map((r) => resolver.resolveRole(r.project_id, r.role_key).value?.display_name || humanizeKey(r.role_key)),
-    );
+  const shown = useShownNames();
+  return (roles: RoleSource[] | undefined) => sortNames((roles ?? []).map((r) => shown.role(r.project_id, r.role_key)));
 }
 
 /** The person's storage section: a label, then one card per system. */

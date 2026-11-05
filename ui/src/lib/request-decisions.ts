@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { formatShortDate, humanizeKey } from "@/lib/format";
+import { formatShortDate } from "@/lib/format";
+import { roleName } from "@/lib/names";
 import { FORECAST, forecastFor, outcomeFromError, type ActionOutcome } from "@/lib/outcome";
 import { useRoleWaits } from "@/lib/queries/useRoleWaits";
 import { useNameResolver } from "@/lib/queries/useNameResolver";
@@ -164,8 +165,7 @@ export function useRequestDecisions({ pauseBeat = false }: { pauseBeat?: boolean
           outcome: approvalOutcome(
             result?.wait_reason,
             resolver.resolveUser(entry.requester_id).value?.display_name || "They",
-            resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name ||
-              humanizeKey(entry.role_key),
+            roleName(resolver.resolveRole(entry.project_id, entry.role_key).value?.display_name, entry.role_key),
             result,
           ),
         };

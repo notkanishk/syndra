@@ -29,34 +29,39 @@ func upstreamSentence(status int) string {
 	return "Something went wrong inside Syndra."
 }
 
-// rawUpstreamCodes are the codes whose message at 502/503/504 is an upstream's
-// own text (a Zitadel rpc error, an add-on body). Every other 5xx message is a
-// sentence its handler wrote, and some carry safety ("the change may have
-// applied"), so those stay. ponytail: a code list is the ceiling; the upgrade
-// is a writeUpstream(w, status, code, err) at each call site, which needs the
-// files other waves own.
-var rawUpstreamCodes = map[string]bool{
-	"ZITADEL_ERROR": true, "SWEEP_ERROR": true, "UPSTREAM_ERROR": true,
-	"DRAIN_ERROR": true, "RECONCILE_FAILED": true, "ADOPTION_FAILED": true,
-	"RELEASE_FAILED": true, "ADDON_UNREACHABLE": true,
-}
-
-// jsonErrorResponse writes the envelope. A 500, and any upstream failure whose
-// message is raw upstream text, never shows that text: it goes to the log with
-// a reference, and the screen gets a plain sentence and the same reference in
-// details.request_id, so the cause stays one grep away.
+// jsonErrorResponse writes the envelope. A 500 never shows its message: it goes
+// to the log with a reference, and the screen gets a plain sentence and the
+// same reference in details.request_id, so the cause stays one grep away. A
+// 502/503/504 that carries an upstream's error goes through writeUpstream, not
+// here; a 5xx sentence passed here is one the handler wrote.
 func jsonErrorResponse(w http.ResponseWriter, status int, errStr, msg string) {
-	if status == http.StatusInternalServerError || (status > 500 && rawUpstreamCodes[errStr]) {
-		ref := supportReference()
-		log.Printf("[HTTP] error status=%d ref=%s code=%s: %s", status, ref, errStr, msg)
-		jsonResponse(w, status, ErrorResponse{
-			Error:   errStr,
-			Message: upstreamSentence(status),
-			Details: map[string]string{"request_id": ref},
-		})
+	if status == http.StatusInternalServerError {
+		writeSanitised(w, status, errStr, msg)
 		return
 	}
 	jsonResponse(w, status, ErrorResponse{Error: errStr, Message: msg})
+}
+
+// writeUpstream answers 502 for a failure of Zitadel or an add-on: the raw
+// error (an rpc error, an add-on body) is logged with a reference, and the
+// caller gets a plain sentence plus that reference.
+func writeUpstream(w http.ResponseWriter, err error, code string) {
+	writeUpstreamStatus(w, http.StatusBadGateway, err, code)
+}
+
+// writeUpstreamStatus is writeUpstream for the call sites that answer 503.
+func writeUpstreamStatus(w http.ResponseWriter, status int, err error, code string) {
+	writeSanitised(w, status, code, err.Error())
+}
+
+func writeSanitised(w http.ResponseWriter, status int, code, raw string) {
+	ref := supportReference()
+	log.Printf("[HTTP] error status=%d ref=%s code=%s: %s", status, ref, code, raw)
+	jsonResponse(w, status, ErrorResponse{
+		Error:   code,
+		Message: upstreamSentence(status),
+		Details: map[string]string{"request_id": ref},
+	})
 }
 
 // supportReference is a short id an operator can read out and grep for.

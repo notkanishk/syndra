@@ -38,7 +38,7 @@
 - [x] Move the envelope to `handlers/errors.go`; sanitise raw upstream text at 502/503/504 `ready-for-agent`
 - [x] Proxy errors use the envelope; gateway text never reaches the screen
 - [x] `merge_findings.go` and `claim_shape.go` bodies use the envelope
-- [ ] `writeUpstream` at every raw call site, then delete `rawUpstreamCodes` (needs W1a, W1e files) `needs-triage`
+- [x] `writeUpstream` at every raw call site, `rawUpstreamCodes` deleted; guard `TestNoErrorTextReachesAFiveHundredBody` (branch `fix/one-name-path`)
 - [ ] Route `bundles.go`, `access.go`, `claimserve/door.go`, the add-on writer through one envelope type `needs-triage`
 
 Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
@@ -62,3 +62,15 @@ Branch `fix/one-addon-pipe`, 5 Nov 2026. Proposal: [proposal.md](proposal.md).
 - [ ] Create-path home: plan projects a new account's home from the desired state, apply asks `decideHome` (which reads the target). They can still disagree when the folder already exists. Fixing it makes plan read the filesystem for new accounts, which changes plan output, so it was left. #needs-triage
 - [ ] The Unconfirmed changes card (`ui/.../UnconfirmedChanges.tsx`) and `ui/src/lib/audit-vocabulary.ts` have no wording for `lifecycle.set`; it falls back to the default sentence. A lifecycle row that settles `indeterminate` is settled by a person, not from a read. #ready-for-agent
 - [ ] Outcome-to-HTTP mapping per handler (audit family 2, "differs per handler") and "reads drop the breaker reason" are not part of W1e. #needs-triage
+
+## W2d: one path for a name (branch `fix/one-name-path`)
+
+- [x] `ui/src/lib/names.ts` `roleName`; inline chains, local hooks and `shownNames.ts` routed through it
+- [x] Ids out of the audit CSV name columns (id columns added), People on a target, Unexplained access picker, plan review sort, create-role picker
+- [x] `backend/internal/textsort`; twelve backend name sorts routed through it
+- [x] Guards: `names-one-path.test.ts`, `repoguard/name_sort_test.go`
+- [ ] One person fallback phrase across screens (`this person`, `Somebody`, `They`) #ready-for-agent
+- [ ] Backend returns `("", false)` rather than the id as a name in six places (`directory/zitadel.go:430-436`, `insights_trends.go:240`, `insights_lens.go:165`, `claim_shape.go:644`, `role_members.go:120`, `directory/demo.go:48`) #ready-for-agent
+- [ ] Go `roleLabel` (`services/views.go`) deleted or pinned to `humanizeKey` by a golden test #ready-for-agent
+- [ ] SQL `ORDER BY name` (`db/bundle_includes.go`, `target_bindings.go`, `role_waits.go`): DB collation UNVERIFIED #needs-triage
+- [ ] One envelope type for `bundles.go`, `access.go`, `claimserve/door.go`, add-on writer #needs-triage

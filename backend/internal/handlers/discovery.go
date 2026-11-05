@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"slices"
@@ -137,7 +138,7 @@ func handleListZitadelUsers(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListUsers(r.Context(), p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -154,7 +155,7 @@ func handleGetZitadelUser(w http.ResponseWriter, r *http.Request) {
 
 	user, err := zitadelGetUser(r.Context(), userID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, user)
@@ -166,7 +167,7 @@ func handleListZitadelProjects(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListProjects(r.Context(), p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -186,7 +187,7 @@ func handleListZitadelProjectRoles(w http.ResponseWriter, r *http.Request) {
 	p := parseSearchParams(r)
 	result, err := zitadelListProjectRoles(r.Context(), projectID, p)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, paginatedResponse{
@@ -253,7 +254,7 @@ func writeRoleWriteError(w http.ResponseWriter, err error) {
 			Details: map[string]string{"count": strconv.Itoa(len(names)), "holders": strings.Join(names, ", ")},
 		})
 	case errors.Is(err, services.ErrRoleNotChangedInZitadel):
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 	default:
 		jsonErrorResponse(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 	}
@@ -488,7 +489,7 @@ func handleUpdateZitadelGrant(w http.ResponseWriter, r *http.Request) {
 
 	projectID, current, err := resolveGrantTarget(r.Context(), userID, grantID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	adds, removes := setDiff(want, current), setDiff(current, want)
@@ -522,7 +523,7 @@ func handleRemoveZitadelGrant(w http.ResponseWriter, r *http.Request) {
 
 	projectID, roleKeys, err := resolveGrantTarget(r.Context(), userID, grantID)
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "ZITADEL_ERROR", err.Error())
+		writeUpstream(w, err, "ZITADEL_ERROR")
 		return
 	}
 	res := newZitadelGrantChange()
@@ -713,12 +714,13 @@ func handleZitadelHealth(w http.ResponseWriter, r *http.Request) {
 	latency := time.Since(start).Milliseconds()
 
 	if err != nil {
+		log.Printf("[ZITADEL] health probe failed: %v", err)
 		jsonResponse(w, http.StatusBadGateway, zitadelHealthResponse{
 			Status:    "error",
 			Mode:      "live",
 			Domain:    domain,
 			LatencyMs: latency,
-			Error:     err.Error(),
+			Error:     upstreamSentence(http.StatusBadGateway),
 		})
 		return
 	}

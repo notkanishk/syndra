@@ -414,7 +414,7 @@ func handleBulkMarkDriftExternal(w http.ResponseWriter, r *http.Request) {
 func handleReconcileDrift(w http.ResponseWriter, r *http.Request) {
 	res, err := svcDriftSweep(r.Context())
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "SWEEP_ERROR", err.Error())
+		writeUpstream(w, err, "SWEEP_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)

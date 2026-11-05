@@ -33,6 +33,7 @@ import { targetLabel } from "@/lib/nav";
 import { useMyStorage } from "@/lib/queries/useMyStorage";
 import { useRequestsMine } from "@/lib/queries/useRequests";
 import { sortByName } from "@/lib/sort";
+import { roleName } from "@/lib/names";
 
 /**
  * Member · My access (route-me, 52b + 52c). The landing route for members, and
@@ -92,10 +93,8 @@ export function MemberAccess({ session }: { session: SessionUser }) {
 
   // Labels from the catalogue the page already reads below; a role it doesn't
   // list falls back to its key, humanised.
-  const roleName = (projectId: string, roleKey: string) =>
-    catalog.data
-      .find((project) => project.id === projectId)
-      ?.roles.find((role) => role.key === roleKey)?.label || humanizeKey(roleKey);
+  const roleNameIn = (projectId: string, roleKey: string) =>
+    roleName(catalog.data.find((project) => project.id === projectId)?.roles.find((role) => role.key === roleKey)?.label, roleKey);
 
   // The role a rule gives each role for, read off the access already on the
   // page: /me/changes says a rule gave it, not which role it follows. Two
@@ -112,7 +111,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
     );
     if (triggers.size !== 1) return undefined;
     const [triggerProject, trigger] = Array.from(triggers)[0].split("\u0000");
-    return roleName(triggerProject, trigger);
+    return roleNameIn(triggerProject, trigger);
   };
 
   // An approval still on its way (N19), so its role's row can say so.
@@ -153,7 +152,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
   };
   const named = (projectId: string, roleKey: string): NamedRole => {
     const project = projectName(projectId);
-    const role = roleName(projectId, roleKey);
+    const role = roleNameIn(projectId, roleKey);
     return { label: project ? `${role} in ${project}` : role, projectId, project };
   };
   const held = (projectId: string, roleKey: string) =>
@@ -278,7 +277,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
       {changes.data && (
         <RecentChanges
           items={feed}
-          roleName={roleName}
+          roleName={roleNameIn}
           triggerRole={triggerRole}
           endOf={(projectId, roleKey) => expiryFor(grants.data, projectId, roleKey)}
         />
@@ -342,7 +341,7 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                 {!unread && roles.map((role) => (
                   <RoleRow
                     key={role.role_key}
-                    name={roleName(project.project_id, role.role_key)}
+                    name={roleNameIn(project.project_id, role.role_key)}
                     reasons={role.reasons}
                     expiresAt={role.expiresAt}
                     endKnown={grantsRead}
@@ -363,11 +362,11 @@ export function MemberAccess({ session }: { session: SessionUser }) {
                     holding it should not be the only one who cannot see it. */}
                 {sortByName(
                   (project.observed_role_keys ?? []).filter((roleKey) => !project.effective_role_keys.includes(roleKey)),
-                  (roleKey) => roleName(project.project_id, roleKey),
+                  (roleKey) => roleNameIn(project.project_id, roleKey),
                   (roleKey) => roleKey,
                 ).map((roleKey) => (
                     <div key={`held-${roleKey}`} className="row-divider px-5 py-3">
-                      <span className="text-[15px] font-semibold">{roleName(project.project_id, roleKey)}</span>
+                      <span className="text-[15px] font-semibold">{roleNameIn(project.project_id, roleKey)}</span>
                     </div>
                   ))}
               </Card>

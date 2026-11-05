@@ -18,7 +18,7 @@ import { Notice } from "@/components/ui/Notice";
 import { RunLabel, SortHead, orderBy, runStarts, useSort } from "@/components/ui/SortHead";
 import { Unfold } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { formatShortDate, humanizeKey } from "@/lib/format";
+import { formatShortDate } from "@/lib/format";
 import { holdersLine } from "@/lib/holders";
 import { describeFailure, sentence, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { usePendingPropagations } from "@/lib/queries/usePropagation";
@@ -28,6 +28,7 @@ import {
   useSetRolesWait,
 } from "@/lib/queries/useRolesThatWait";
 import { compareNames } from "@/lib/sort";
+import { roleName } from "@/lib/names";
 
 const roleId = (projectId: string, roleKey: string) =>
   `${projectId}:${roleKey}`;
@@ -99,10 +100,6 @@ export default function RolesThatWaitPage() {
   );
 }
 
-function roleName(r: CatalogRole | undefined, roleKey: string) {
-  return r?.display_name || humanizeKey(roleKey);
-}
-
 function peopleOf(r: CatalogRole | undefined) {
   return r
     ? holdersLine(
@@ -154,7 +151,7 @@ function WaitingRoles({
   const [sort, setSort, view] = useSort<WaitSort>("role", { list: "roles-that-wait", keys: ["role", "marked", "people"] });
   const { sorted: rows, runAt } = useMemo(() => {
     const by: Record<WaitSort, (m: (typeof marked)[number]) => string | number> = {
-      role: (m) => roleName(byId.get(roleId(m.project_id, m.role_key)), m.role_key),
+      role: (m) => roleName(byId.get(roleId(m.project_id, m.role_key))?.display_name, m.role_key),
       marked: (m) => Date.parse(m.marked_at) || 0,
       people: (m) => {
         const r = byId.get(roleId(m.project_id, m.role_key));
@@ -223,7 +220,7 @@ function WaitingRoles({
                       href={`/projects/${m.project_id}/roles/${encodeURIComponent(m.role_key)}`}
                       className="text-[15px] font-semibold link-hover"
                     >
-                      {roleName(role, m.role_key)}
+                      {roleName(role?.display_name, m.role_key)}
                     </Link>{" "}
                     <Mono className="font-normal text-faint">{m.role_key}</Mono>
                     {waitingOn(m.project_id, m.role_key) && (
@@ -248,7 +245,7 @@ function WaitingRoles({
                         setFailure(null);
                         try {
                           await stop.mutateAsync({ ids: [id], waits: false });
-                          setStopped(roleName(role, m.role_key));
+                          setStopped(roleName(role?.display_name, m.role_key));
                         } catch (e) {
                           setFailure(sentence(describeFailure(e)));
                         }
@@ -318,7 +315,7 @@ function AddRoles({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const chosen = Array.from(selected);
   const names = chosen.map((id) =>
-    roleName(byId.get(id), id.slice(id.indexOf(":") + 1)),
+    roleName(byId.get(id)?.display_name, id.slice(id.indexOf(":") + 1)),
   );
   const people = chosen.reduce((sum, id) => {
     const r = byId.get(id);

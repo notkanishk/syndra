@@ -18,7 +18,7 @@ import (
 func handleDrainPropagations(w http.ResponseWriter, r *http.Request) {
 	res, err := svcDrainPropagations(r.Context())
 	if err != nil {
-		jsonErrorResponse(w, http.StatusBadGateway, "DRAIN_ERROR", err.Error())
+		writeUpstream(w, err, "DRAIN_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)
@@ -43,7 +43,7 @@ func handleDrainTarget(w http.ResponseWriter, r *http.Request) {
 				"Zitadel drains with the whole deployment, not on its own.")
 			return
 		}
-		jsonErrorResponse(w, http.StatusBadGateway, "DRAIN_ERROR", err.Error())
+		writeUpstream(w, err, "DRAIN_ERROR")
 		return
 	}
 	jsonResponse(w, http.StatusOK, res)

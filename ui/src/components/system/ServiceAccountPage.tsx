@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardRow } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ApiError } from "@/lib/api-client";
-import { formatShortDate, humanizeKey } from "@/lib/format";
+import { formatShortDate } from "@/lib/format";
+import { useShownNames } from "@/components/names/shownNames";
 import { useCrumb } from "@/lib/page-crumb";
 import { kindLabel, useServiceAccount } from "@/lib/queries/useServiceAccounts";
 import { useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
@@ -184,6 +185,7 @@ function SettingRow({
  * access.
  */
 function Holds({ userId, name }: { userId: string; name: string }) {
+  const shown = useShownNames();
   const access = useUserAccess(userId);
   const grants = useUserGrants(userId);
   const [removal, setRemoval] = useState<Removal | null>(null);
@@ -191,7 +193,7 @@ function Holds({ userId, name }: { userId: string; name: string }) {
   const grantsResolved = !grants.isLoading && !grants.error;
 
   const rows = sortByName(access.data?.projects ?? [], (p) => p.project_name, (p) => p.project_id).flatMap((project) =>
-    sortByName(project.effective_role_keys, humanizeKey, (k) => k).map((roleKey) => {
+    sortByName(project.effective_role_keys, (k) => shown.role(project.project_id, k), (k) => k).map((roleKey) => {
       const reasons: RoleReason[] = [...project.source_roles, ...project.derived_roles]
         .filter((role) => role.role_key === roleKey)
         .flatMap((role) => role.reasons);
@@ -215,7 +217,7 @@ function Holds({ userId, name }: { userId: string; name: string }) {
           const sources = orderedSources(reasons);
           const strongest = sources[0];
           const verb = strongest?.queued ? "Cancel the change" : strongest?.kind === "direct" ? "Revoke" : "Remove";
-          const roleName = humanizeKey(roleKey);
+          const roleName = shown.role(project.project_id, roleKey);
           return (
             <CardRow key={`${project.project_id}::${roleKey}`} first={index === 0}>
               <span className="min-w-0 flex-1 text-[15px] font-semibold tablet:flex-none tablet:basis-[260px]">

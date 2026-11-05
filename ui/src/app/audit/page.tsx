@@ -15,7 +15,7 @@ import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { Select } from "@/components/ui/Select";
-import { UserName } from "@/components/names";
+import { UNKNOWN_ACCOUNT, UserName } from "@/components/names";
 import { EventSentence } from "@/components/audit/EventLine";
 import { TraceCell } from "@/components/audit/TraceCell";
 import { describeAction, machineName, targetKind, shortId } from "@/lib/audit-vocabulary";
@@ -244,7 +244,10 @@ function downloadCsv(
   rows: AuditEntry[],
   resolver: ReturnType<typeof useNameResolver>,
 ): void {
-  const header = ["when", "who", "what", "target", "resource"];
+  // Names where there are names; the ids sit in their own columns, so the file
+  // can still be matched to Zitadel but never has an id in a name column.
+  const header = ["when", "who", "who_id", "what", "target", "target_id", "resource"];
+  const person = (id: string) => resolver.resolveUser(id).value?.display_name ?? UNKNOWN_ACCOUNT;
   const lines = rows.map((entry) => {
     const kind = targetKind(entry.action);
     const target =
@@ -253,12 +256,14 @@ function downloadCsv(
           `a retired bundle (${shortId(entry.target_id, "b")})`)
         : kind === "rule"
           ? `a rule (${shortId(entry.target_id, "R")})`
-          : (resolver.resolveUser(entry.target_id).value?.display_name ?? entry.target_id);
+          : person(entry.target_id);
     return [
       entry.created_at,
-      resolver.resolveUser(entry.actor_id).value?.display_name ?? entry.actor_id,
+      entry.actor_id.startsWith("system:") ? humanizeKey(entry.actor_id.slice(7)) : person(entry.actor_id),
+      entry.actor_id,
       describeAction(entry.action).verb,
       target,
+      entry.target_id,
       entry.resource_id,
     ];
   });

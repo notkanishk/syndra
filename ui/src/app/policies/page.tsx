@@ -29,10 +29,11 @@ import {
 } from "@/lib/queries/useMappingRules";
 import { useProjects } from "@/lib/queries/useProjects";
 import { useGlobalRoleCatalog } from "@/lib/queries/useRoles";
-import { humanizeKey } from "@/lib/format";
+
 import { UNKNOWN_PROJECT } from "@/components/names/Unresolved";
 import { sortByName } from "@/lib/sort";
 import { useShownNames } from "@/components/names/shownNames";
+import { roleName } from "@/lib/names";
 
 /**
  * S2 · Automation › Automatic rules.
@@ -226,7 +227,7 @@ function RuleEditor({
       };
       place.roles.push({
         key: role.role_key,
-        name: role.display_name || humanizeKey(role.role_key),
+        name: roleName(role.display_name, role.role_key),
         description: role.description,
         people: role.assigned_user_count,
         waits: role.waits_for_send,
@@ -258,7 +259,7 @@ function RuleEditor({
     );
   const targetEntry = roleEntry(targetProject, targetRole);
   const targetWaits = Boolean(targetEntry?.waits_for_send);
-  const targetName = targetEntry?.display_name || humanizeKey(targetRole);
+  const targetName = roleName(targetEntry?.display_name, targetRole);
 
   const complete = Boolean(
     sourceProject && sourceRole && targetProject && targetRole,
