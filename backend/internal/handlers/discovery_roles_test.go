@@ -70,6 +70,26 @@ func TestZitadelRoleUpdate_ZitadelRefusalIs502(t *testing.T) {
 	}
 }
 
+// C6: an unknown outcome has its own code and never says nothing changed.
+func TestZitadelRoleDelete_UnknownOutcomeIsItsOwnAnswer(t *testing.T) {
+	stubRolePipe(t)
+	svcDeleteRole = func(context.Context, string, string, string, int) error {
+		return fmt.Errorf("%w: context deadline exceeded", services.ErrRoleChangeUnknown)
+	}
+	w := serveRole(handleDeleteZitadelProjectRole, http.MethodDelete, "/", "")
+	var body ErrorResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if w.Code != http.StatusBadGateway || body.Error != roleChangeUnknownCode {
+		t.Fatalf("want 502 %s, got %d: %s", roleChangeUnknownCode, w.Code, w.Body.String())
+	}
+	if strings.Contains(body.Message, "Nothing was changed") || !strings.Contains(body.Message, "can't tell") {
+		t.Fatalf("an unknown outcome must say so, never that nothing changed: %q", body.Message)
+	}
+	if strings.Contains(body.Message, "deadline") {
+		t.Fatalf("raw error text leaked: %q", body.Message)
+	}
+}
+
 func TestZitadelRoleDelete_HeldNamesWhoAndHowMany(t *testing.T) {
 	stubRolePipe(t)
 	var confirmed int

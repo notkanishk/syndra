@@ -203,17 +203,64 @@ func TestCreateRole_RefusalReadBackShowsNothing_UndoesAndSaysSo(t *testing.T) {
 	}
 }
 
-func TestCreateRole_UnreadableAfterError_UndoesRatherThanGuess(t *testing.T) {
+// C6: a lost answer plus a failed read-back is unknown, never "not changed".
+// Undoing would claim nothing happened when Zitadel may hold the change.
+func TestRoleWrite_LostAnswerAndUnreadable_KeepsTheRecordAndSaysUnknown(t *testing.T) {
+	for _, sendErr := range []error{context.DeadlineExceeded, &zitadel.StatusError{Code: 503}} {
+		t.Run(fmt.Sprint(sendErr), func(t *testing.T) {
+			p := newRolePipe(t)
+			p.sendErr = sendErr
+			p.readErr = errors.New("still down")
+
+			_, err := CreateRole(context.Background(), CreateRoleRequest{ProjectID: "p1", RoleKey: "trained"}, "op")
+			if !errors.Is(err, ErrRoleChangeUnknown) || errors.Is(err, ErrRoleNotChangedInZitadel) {
+				t.Fatalf("want ErrRoleChangeUnknown only, got %v", err)
+			}
+			if slices.ContainsFunc(p.log, func(s string) bool { return strings.HasPrefix(s, "local:delete") }) {
+				t.Fatalf("an unknown outcome must never be undone; log: %v", p.log)
+			}
+			if !slices.Equal(p.audits, []string{auditRoleCreated, auditRoleChangeUnknown}) {
+				t.Fatalf("want the write then the unknown audited, got %v", p.audits)
+			}
+			if p.audit["read_back_error"] == nil || p.audit["error"] == nil {
+				t.Fatalf("the audit row must carry both errors: %v", p.audit)
+			}
+		})
+	}
+}
+
+func TestDeleteRole_LostAnswerAndUnreadable_NeverRestoresTheRole(t *testing.T) {
 	p := newRolePipe(t)
+	p.roles["trained"] = zitadel.ProjectRoleResult{Key: "trained"}
 	p.sendErr = context.DeadlineExceeded
+	p.landAnyway = true // Zitadel did take it from everybody
+	p.readErr = errors.New("still down")
+
+	err := DeleteRole(context.Background(), "p1", "trained", "op", 0)
+	if !errors.Is(err, ErrRoleChangeUnknown) {
+		t.Fatalf("want ErrRoleChangeUnknown, got %v", err)
+	}
+	if slices.Contains(p.log, "local:create") {
+		t.Fatalf("the record must not come back for a delete that may have landed; log: %v", p.log)
+	}
+	if slices.Contains(p.audits, auditRoleNotChanged) {
+		t.Fatalf("role.not_changed would say Zitadel didn't; it may have: %v", p.audits)
+	}
+}
+
+// A final refusal is Zitadel's word that it did not do it, so the undo stays
+// right even when the read-back fails.
+func TestCreateRole_RefusedAndUnreadable_StillUndoes(t *testing.T) {
+	p := newRolePipe(t)
+	p.sendErr = &zitadel.StatusError{Code: 400, Message: "invalid"}
 	p.readErr = errors.New("still down")
 
 	_, err := CreateRole(context.Background(), CreateRoleRequest{ProjectID: "p1", RoleKey: "trained"}, "op")
 	if !errors.Is(err, ErrRoleNotChangedInZitadel) {
 		t.Fatalf("want ErrRoleNotChangedInZitadel, got %v", err)
 	}
-	if p.audit["read_back_error"] == nil {
-		t.Fatalf("the undo's audit row must say the read-back failed: %v", p.audit)
+	if !slices.Contains(p.log, "local:delete:row-trained") {
+		t.Fatalf("a refused create must be undone; log: %v", p.log)
 	}
 }
 

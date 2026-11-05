@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"syndra/internal/claimtel"
 	"syndra/internal/clock"
 	"syndra/internal/db"
+	"syndra/internal/extcall"
 	"syndra/internal/zitadel"
 )
 
@@ -41,7 +43,7 @@ import (
 const (
 	envAutoRotate  = "SYNDRA_ACTION_KEY_AUTOROTATE" // "off" is the kill switch
 	envLeadDays    = "SYNDRA_ACTION_KEY_LEAD_DAYS"
-	envQuietWindow = "SYNDRA_ACTION_KEY_WINDOW" // "HH:MM-HH:MM", server local time
+	envQuietWindow = "SYNDRA_ACTION_KEY_WINDOW" // "HH:MM-HH:MM", in the makerspace's zone (clock.Loc: TZ, else Asia/Kolkata)
 
 	defaultLeadDays    = 5
 	defaultQuietWindow = "03:00-05:00"
@@ -75,14 +77,24 @@ var (
 	errNoClaimTarget    = errors.New("zitadel has no claims target to replace a key on")
 )
 
-// rotationResult is what one replacement came to.
+// rotationResult is what one replacement came to. Outcome:
+//
+//	verified   : every key replaced, and the test sign-in passed
+//	unverified : every key replaced, the test sign-in did not pass (or could not run)
+//	partial    : one key replaced, the other not (refused, or its answer lost)
+//	unknown    : nothing confirmed replaced; Zitadel's answer was lost and the
+//	             read-back failed, so it may have been
+//	failed     : Zitadel replaced nothing
+//
+// Reason is a plain sentence for the screen and the audit row: never an HTTP
+// status or upstream text (it travels in a 200 body, past the error envelope).
 type rotationResult struct {
-	Outcome    string       `json:"outcome"` // verified | unverified | failed
+	Outcome    string       `json:"outcome"`
 	ReplacedAt *time.Time   `json:"replaced_at,omitempty"`
 	Replaced   []string     `json:"replaced"`
 	Probe      *probeResult `json:"probe,omitempty"`
 	NextDueAt  *time.Time   `json:"next_due_at,omitempty"`
-	Error      string       `json:"error,omitempty"`
+	Reason     string       `json:"reason,omitempty"`
 }
 
 // rotationProbe is the test sign-in after a replacement: L1 at once, and L2
@@ -141,9 +153,9 @@ func rotateActionKeys(ctx context.Context, trigger, actor string, force bool) (r
 	if err != nil {
 		return rotationResult{}, fmt.Errorf("%w (%v)", errZitadelDown, err)
 	}
-	ids := map[string]string{}
+	ids, before := map[string]string{}, map[string]string{}
 	for _, t := range targets {
-		ids[t.Name] = t.ID
+		ids[t.Name], before[t.Name] = t.ID, t.SigningKey
 	}
 	if ids[claimcheck.ClaimTarget] == "" {
 		return rotationResult{}, errNoClaimTarget
@@ -166,24 +178,39 @@ func rotateActionKeys(ctx context.Context, trigger, actor string, force bool) (r
 	}
 	res := rotationResult{Replaced: []string{}}
 	newKeys := map[string]string{}
-	var failure string
+	// cause is why the attempt stopped short, in a sentence; lost is whether
+	// nobody knows if Zitadel replaced the key it stopped on.
+	var cause string
+	var lost bool
 	for _, name := range plan {
 		rctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		key, err := rotator.RotateTargetSigningKey(rctx, ids[name])
 		cancel()
 		if err != nil {
-			failure = fmt.Sprintf("Zitadel did not replace the key for %s: %s", name, rotationReason(err))
-			var se *zitadel.StatusError
-			if !errors.As(err, &se) || se.Code >= 500 {
-				// Zitadel may have replaced it and the answer was lost: read the
-				// key back now rather than in up to a minute.
-				_ = followKeyring(ctx)
+			log.Printf("[ACTION] replacing %s: %v", name, err)
+			if !keyAnswerLost(err) {
+				cause = keyRefusal(err)
+				break
 			}
-			break
+			// Zitadel may have replaced it and the answer was lost: read the key
+			// back now rather than guess.
+			key, err = readBackKey(ctx, name, before[name])
+			if err != nil {
+				log.Printf("[ACTION] reading %s back: %v", name, err)
+				cause, lost = "Zitadel didn't answer, and Syndra couldn't read the key back, so it can't tell whether Zitadel replaced it. Syndra reads the keys from Zitadel again every minute and follows whatever it finds.", true
+				break
+			}
+			if key == "" {
+				cause = "Zitadel didn't answer. Syndra read the key again: it didn't change."
+				break
+			}
+			log.Printf("[ACTION] %s: the answer was lost, but the read-back shows a new key", name)
 		}
-		// The key first: every door verifies with it before anything else.
+		// The key first: every door verifies with it before anything else. A
+		// publish that fails is caught by the check below (Syndra not yet
+		// verifying with the new key), and the keyring reads it within a minute.
 		if err := adoptKey(ctx, name, key, time.Now()); err != nil {
-			failure = fmt.Sprintf("Zitadel replaced the key for %s, but Syndra could not publish it (%v); it reads it from Zitadel again within a minute", name, err)
+			log.Printf("[ACTION] could not publish the new key for %s: %v", name, err)
 		}
 		newKeys[name] = key
 		res.Replaced = append(res.Replaced, name)
@@ -199,15 +226,27 @@ func rotateActionKeys(ctx context.Context, trigger, actor string, force bool) (r
 		res.ReplacedAt = &now
 	}
 
-	res.Outcome = "failed"
+	switch {
+	case len(res.Replaced) == 0 && lost:
+		res.Outcome, res.Reason = "unknown", cause
+	case len(res.Replaced) == 0:
+		res.Outcome, res.Reason = "failed", cause
+	case cause != "":
+		res.Outcome = "partial"
+		res.Reason = fmt.Sprintf("Zitadel replaced %s, but not %s. %s", keyWords(res.Replaced), keyWords(slices.DeleteFunc(slices.Clone(plan),
+			func(n string) bool { return slices.Contains(res.Replaced, n) })), cause)
+	}
 	if len(res.Replaced) > 0 {
 		probe := verifyRotation(ctx, newKeys)
 		res.Probe = &probe
 		switch {
-		case failure == "" && probe.Pass:
+		case res.Outcome != "":
+		case probe.Pass:
 			res.Outcome = "verified"
-		case failure == "":
-			res.Outcome = "unverified"
+		case probe.Class == "not_set_up":
+			res.Outcome, res.Reason = "unverified", "Replaced. No test sign-in could run, because SYNDRA_EXTERNAL_URL is not set."
+		default:
+			res.Outcome, res.Reason = "unverified", "The test sign-in after the replacement did not get its claims: "+probe.Detail
 		}
 		if !probe.Pass {
 			// Both keys stay accepted while somebody looks.
@@ -218,25 +257,25 @@ func rotateActionKeys(ctx context.Context, trigger, actor string, force bool) (r
 			}
 		}
 	}
-	res.Error = failure
-	if res.Outcome == "unverified" && res.Probe != nil {
-		res.Error = "The test sign-in after the replacement did not get its claims: " + res.Probe.Detail
-	}
-
-	if err := dbFinishActionKeyRotation(ctx, id, res.Outcome, res.Probe, res.Error); err != nil {
+	if err := dbFinishActionKeyRotation(ctx, id, res.Outcome, res.Probe, res.Reason); err != nil {
 		log.Printf("[ACTION] could not record the outcome of attempt %d: %v", id, err)
 	}
-	recordRotationFinding(ctx, res.Outcome, res.Error, now)
-	auditAction := "action_key.replaced"
-	if res.Outcome == "failed" {
-		auditAction = "action_key.not_replaced"
-	}
+	recordRotationFinding(ctx, res.Outcome, res.Reason, now)
 	details := map[string]any{"trigger": trigger, "outcome": res.Outcome, "replaced": res.Replaced, "targets": plan}
 	if res.Probe != nil {
 		details["probe"] = map[string]any{"pass": res.Probe.Pass, "class": res.Probe.Class}
 	}
-	if res.Error != "" {
-		details["error"] = res.Error
+	if res.Reason != "" {
+		details["reason"] = res.Reason
+	}
+	auditAction := "action_key.replaced" // verified, unverified
+	switch res.Outcome {
+	case "partial":
+		auditAction = "action_key.partly_replaced"
+	case "unknown":
+		auditAction = "action_key.replace_unknown"
+	case "failed":
+		auditAction = "action_key.not_replaced"
 	}
 	if err := dbInsertAuditLogDetails(ctx, actor, "", auditAction, strconv.FormatInt(id, 10), details); err != nil {
 		log.Printf("[ACTION] could not audit attempt %d: %v", id, err)
@@ -275,7 +314,7 @@ func firstKey(ks []claimserve.SlotKey) string {
 func recordRotationFinding(ctx context.Context, outcome, detail string, at time.Time) {
 	var err error
 	if outcome == "verified" {
-		err = dbSettleUnseenClaimFindings(ctx, claimtel.KindKeyRotation, []string{"unverified", "failed"}, []string{""})
+		err = dbSettleUnseenClaimFindings(ctx, claimtel.KindKeyRotation, []string{"unverified", "partial", "unknown", "failed"}, []string{""})
 		err = errors.Join(err, refreshClaimFindings(ctx))
 	} else {
 		err = applyClaimFindings(ctx, []claimtel.Observation{{Kind: claimtel.KindKeyRotation, Subject: outcome, Fail: true, At: at,
@@ -286,19 +325,68 @@ func recordRotationFinding(ctx context.Context, outcome, detail string, at time.
 	}
 }
 
-// rotationReason is a Zitadel error in a sentence, never a key or a token.
+// rotationReason is a Zitadel error in a few plain words: never a key, a
+// token, an HTTP status or Zitadel's own text (those go to the log).
 func rotationReason(err error) string {
 	var se *zitadel.StatusError
-	if errors.As(err, &se) {
-		switch se.Code {
-		case http.StatusForbidden:
-			return "Syndra's service account is not allowed to change Actions targets"
-		case http.StatusNotFound:
-			return "the target was not found"
-		}
-		return fmt.Sprintf("HTTP %d", se.Code)
+	switch {
+	case keyAnswerLost(err):
+		return "Zitadel didn't answer"
+	case errors.As(err, &se) && se.Code == http.StatusForbidden:
+		return "Zitadel doesn't allow Syndra's service account to do this"
+	case errors.As(err, &se) && se.Code == http.StatusNotFound:
+		return "Zitadel couldn't find the target"
 	}
-	return truncate(err.Error(), 200)
+	return "Zitadel refused"
+}
+
+// keyRefusal is why Zitadel's final answer to a key replacement was no, and
+// what to do about it.
+func keyRefusal(err error) string {
+	var se *zitadel.StatusError
+	if errors.As(err, &se) && se.Code == http.StatusForbidden {
+		return "Zitadel refused because Syndra's service account is not allowed to change Actions targets. Give it action.target.write, then Replace now."
+	}
+	return rotationReason(err) + "."
+}
+
+// keyAnswerLost is whether err leaves the key's state unknown: no answer, or
+// a status that means "try again" (408, 429, 5xx).
+func keyAnswerLost(err error) bool {
+	var se *zitadel.StatusError
+	return !errors.As(err, &se) || extcall.RetryableStatus(se.Code)
+}
+
+// readBackKey is name's key as Zitadel holds it now when it differs from
+// was, "" when it is unchanged, or the read's error.
+func readBackKey(ctx context.Context, name, was string) (string, error) {
+	rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	keys, err := readTargetKeys(rctx)
+	if err != nil {
+		return "", err
+	}
+	if k := keys[name]; k != "" && k != was {
+		return k, nil
+	}
+	return "", nil
+}
+
+// keyWords names keys the way the screen does: "the claims action's key and
+// the event listener's key".
+func keyWords(targets []string) string {
+	words := make([]string, 0, len(targets))
+	for _, t := range targets {
+		switch t {
+		case claimcheck.ClaimTarget:
+			words = append(words, "the claims action's key")
+		case claimcheck.EventTarget:
+			words = append(words, "the event listener's key")
+		default:
+			words = append(words, "the key for "+t)
+		}
+	}
+	return strings.Join(words, " and ")
 }
 
 // ---------------------------------------------------------------------------
@@ -460,8 +548,9 @@ func RunActionKeyAutoRotate(ctx context.Context) error {
 	if nextAutoAttempt(now, last, st.LastAutoAt, c).After(now) {
 		return nil
 	}
-	if !probeRecentlyPassed(now) {
-		log.Printf("[ACTION] the key is due, but the test sign-in has not passed in the last %s; waiting", probeFreshFor)
+	// The same test the status reports as auto.waiting_for.
+	if w := scheduleWaitingFor(now); w != "" {
+		log.Printf("[ACTION] the key is due, but the test sign-in has not passed in the last %s (%s); waiting", probeFreshFor, w)
 		return nil
 	}
 	if _, err := rotateActionKeys(ctx, "auto", "system", false); err != nil && !errors.Is(err, errRotationInFlight) && !errors.Is(err, errRecentlyReplaced) {

@@ -60,8 +60,10 @@ type fakeKeys struct {
 	keys      map[string]string
 	listErr   error
 	rotateErr map[string]error
-	gate      chan struct{} // when set, a rotation waits on it
-	n         int
+	// lose replaces the key and then answers 503, the way a lost answer does.
+	lose map[string]bool
+	gate chan struct{} // when set, a rotation waits on it
+	n    int
 }
 
 func (f *fakeKeys) ListActionTargets(context.Context) ([]zitadel.ActionTarget, error) {
@@ -95,6 +97,9 @@ func (f *fakeKeys) RotateTargetSigningKey(_ context.Context, id string) (string,
 	f.n++
 	k := fmt.Sprintf("%s-new%d-0123456789abcdef0123456789", name, f.n)
 	f.keys[name] = k
+	if f.lose[name] {
+		return "", &zitadel.StatusError{Code: 503, Message: "upstream connect error"}
+	}
 	return k, nil
 }
 
@@ -469,7 +474,7 @@ func TestRotate_RefusedWriteIsAnHonestFailure(t *testing.T) {
 	log := captureCalls(t)
 	g.zit.rotateErr = map[string]error{claimcheck.ClaimTarget: &zitadel.StatusError{Code: 403, Message: "no permission"}}
 	res, err := rotateActionKeys(context.Background(), "button", "admin-1", true)
-	if err != nil || res.Outcome != "failed" || !strings.Contains(res.Error, "not allowed") {
+	if err != nil || res.Outcome != "failed" || !strings.Contains(res.Reason, "not allowed") || !strings.Contains(res.Reason, "action.target.write") {
 		t.Fatalf("got %+v, %v", res, err)
 	}
 	if g.ev.count("zitadel:rotate:"+claimcheck.EventTarget) != 0 {
@@ -480,6 +485,123 @@ func TestRotate_RefusedWriteIsAnHonestFailure(t *testing.T) {
 	}
 	if g.sink.kinds()[claimtel.KindKeyRotation+" failed"] == 0 || g.ev.count("audit:action_key.not_replaced") != 1 {
 		t.Fatalf("findings %v events %v", g.sink.kinds(), g.ev.list())
+	}
+}
+
+// W4: one key replaced and the other refused is partial, not "didn't replace",
+// and its reason is plain words, never an HTTP status.
+func TestRotate_OneKeyReplacedIsPartial(t *testing.T) {
+	g := newRotationRig(t)
+	g.zit.rotateErr = map[string]error{claimcheck.EventTarget: &zitadel.StatusError{Code: 409, Message: "conflict raw text"}}
+	res, err := rotateActionKeys(context.Background(), "button", "admin-1", true)
+	if err != nil || res.Outcome != "partial" || !slices.Equal(res.Replaced, []string{claimcheck.ClaimTarget}) {
+		t.Fatalf("got %+v, %v", res, err)
+	}
+	if !strings.Contains(res.Reason, "replaced the claims action's key, but not the event listener's key") {
+		t.Fatalf("the reason must say which key changed: %q", res.Reason)
+	}
+	assertPlainReason(t, res.Reason)
+	if g.ev.count("audit:action_key.partly_replaced") != 1 || g.ev.count("record:finish:partial") != 1 {
+		t.Fatalf("events %v", g.ev.list())
+	}
+}
+
+// W4: a lost answer is read back. A key that changed counts as replaced; one
+// that didn't is failed; one that can't be read is unknown.
+func TestRotate_LostAnswerIsReadBack(t *testing.T) {
+	t.Run("changed", func(t *testing.T) {
+		g := newRotationRig(t)
+		g.zit.lose = map[string]bool{claimcheck.ClaimTarget: true, claimcheck.EventTarget: true}
+		res, err := rotateActionKeys(context.Background(), "button", "admin-1", true)
+		if err != nil || res.Outcome != "verified" || len(res.Replaced) != 2 {
+			t.Fatalf("Zitadel did replace both; got %+v, %v", res, err)
+		}
+	})
+	t.Run("unchanged", func(t *testing.T) {
+		g := newRotationRig(t)
+		g.zit.rotateErr = map[string]error{claimcheck.ClaimTarget: &zitadel.StatusError{Code: 503, Message: "raw"}}
+		res, err := rotateActionKeys(context.Background(), "button", "admin-1", true)
+		if err != nil || res.Outcome != "failed" || !strings.Contains(res.Reason, "it didn't change") {
+			t.Fatalf("got %+v, %v", res, err)
+		}
+		assertPlainReason(t, res.Reason)
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		g := newRotationRig(t)
+		g.zit.lose = map[string]bool{claimcheck.ClaimTarget: true}
+		calls := 0
+		zitadelActions = func() zitadel.ActionsReader {
+			if calls++; calls > 1 {
+				return unreadable{g.zit}
+			}
+			return g.zit
+		}
+		res, err := rotateActionKeys(context.Background(), "button", "admin-1", true)
+		if err != nil || res.Outcome != "unknown" || !strings.Contains(res.Reason, "can't tell") {
+			t.Fatalf("got %+v, %v", res, err)
+		}
+		assertPlainReason(t, res.Reason)
+		if g.ev.count("audit:action_key.replace_unknown") != 1 || g.sink.kinds()[claimtel.KindKeyRotation+" unknown"] == 0 {
+			t.Fatalf("events %v findings %v", g.ev.list(), g.sink.kinds())
+		}
+	})
+}
+
+// W9: with no test sign-in set up, the result says none ran, not that one failed.
+func TestRotate_NoTestSignInSaysSo(t *testing.T) {
+	g := newRotationRig(t)
+	g.probe = probeResult{Pass: false, Class: "not_set_up", Detail: "SYNDRA_EXTERNAL_URL is unset, so no test sign-in can run"}
+	res, _ := rotateActionKeys(context.Background(), "button", "admin-1", true)
+	if res.Outcome != "unverified" || !strings.Contains(res.Reason, "No test sign-in could run") {
+		t.Fatalf("got %+v", res)
+	}
+}
+
+// W5: the status says what the schedule waits on, by the same test it uses.
+func TestRotationStatus_WaitingFor(t *testing.T) {
+	newRotationRig(t)
+	status := func() autoRotateStatus {
+		rr := httptest.NewRecorder()
+		HandleActionRotationStatus(rr, httptest.NewRequest(http.MethodGet, "/api/v1/zitadel/action-rotation-status", nil))
+		var s ActionRotationStatus
+		_ = json.Unmarshal(rr.Body.Bytes(), &s)
+		return s.Auto
+	}
+	orig := lastProbeL1.Load()
+	t.Cleanup(func() { lastProbeL1.Store(orig) })
+
+	t.Setenv("SYNDRA_EXTERNAL_URL", "")
+	lastProbeL1.Store(nil)
+	if a := status(); !a.On || a.WaitingFor != "test_sign_in_setup" {
+		t.Fatalf("no test sign-in can run: %+v", a)
+	}
+	t.Setenv("SYNDRA_EXTERNAL_URL", "https://syndra.example.org")
+	lastProbeL1.Store(&probeResult{At: time.Now(), Pass: false})
+	if a := status(); a.WaitingFor != "test_sign_in" {
+		t.Fatalf("the test sign-in is failing: %+v", a)
+	}
+	lastProbeL1.Store(&probeResult{At: time.Now(), Pass: true})
+	if a := status(); a.WaitingFor != "" {
+		t.Fatalf("nothing to wait on: %+v", a)
+	}
+	t.Setenv(envAutoRotate, "off")
+	if a := status(); a.On || a.WaitingFor != "" {
+		t.Fatalf("off says off, not waiting: %+v", a)
+	}
+}
+
+type unreadable struct{ *fakeKeys }
+
+func (unreadable) ListActionTargets(context.Context) ([]zitadel.ActionTarget, error) {
+	return nil, errors.New("dial tcp: connection refused")
+}
+
+func assertPlainReason(t *testing.T, reason string) {
+	t.Helper()
+	for _, raw := range []string{"HTTP", "503", "409", "raw", "upstream", "conflict", "dial tcp"} {
+		if strings.Contains(reason, raw) {
+			t.Fatalf("the reason carries raw text %q: %q", raw, reason)
+		}
 	}
 }
 

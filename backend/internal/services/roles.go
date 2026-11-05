@@ -14,6 +14,7 @@ import (
 
 	"syndra/internal/db"
 	"syndra/internal/directory"
+	"syndra/internal/extcall"
 	"syndra/internal/models"
 	"syndra/internal/zitadel"
 )
@@ -254,12 +255,15 @@ func nonEmpty(s string) *string {
 
 // Audit actions for role writes. role.not_changed is the second row of a
 // write Zitadel refused: Syndra undid its own record and says so.
+// role.change_unknown is the second row of a write whose answer was lost and
+// whose read-back failed: Syndra kept its record and says it can't tell.
 const (
-	auditRoleCreated    = "role.created"
-	auditRoleUpdated    = "role.updated"
-	auditRoleDeleted    = "role.deleted"
-	auditRoleNotChanged = "role.not_changed"
-	auditNoTarget       = "-"
+	auditRoleCreated       = "role.created"
+	auditRoleUpdated       = "role.updated"
+	auditRoleDeleted       = "role.deleted"
+	auditRoleNotChanged    = "role.not_changed"
+	auditRoleChangeUnknown = "role.change_unknown"
+	auditNoTarget          = "-"
 )
 
 // ErrInvalidRoleKey is a role key Zitadel and Syndra would not agree on.
@@ -268,6 +272,12 @@ var ErrInvalidRoleKey = errors.New("role_key must match [a-zA-Z0-9_-]+")
 // ErrRoleNotChangedInZitadel wraps a Zitadel refusal the read-back confirmed:
 // nothing changed there, and Syndra undid its own record.
 var ErrRoleNotChangedInZitadel = errors.New("zitadel did not make the change, so syndra undid its record")
+
+// ErrRoleChangeUnknown is a write whose answer was lost (a timeout, a broken
+// connection, a 5xx) and whose read-back failed too. Zitadel may have made
+// the change: a delete may already have taken the role from every holder. So
+// Syndra keeps its record rather than undo something that may have happened.
+var ErrRoleChangeUnknown = errors.New("zitadel didn't answer and the read-back failed, so syndra can't tell whether the change was made; it kept its record")
 
 var (
 	svcDbUpdateRole          = db.UpdateRole
@@ -293,8 +303,11 @@ type roleWrite struct {
 //  2. the call.
 //  3. on any error, a read-back before anything is undone: a 503 or a timeout
 //     can hide a write that landed, and undoing that would orphan the role.
-//  4. only when the read-back does not show the change, the undo, traced as
-//     role.not_changed in its own transaction.
+//  4. only when Zitadel is known not to hold the change, the undo, traced as
+//     role.not_changed in its own transaction: the read-back shows it absent,
+//     or Zitadel answered a refusal (a final 4xx). When the answer was lost
+//     AND the read-back failed, nobody knows: the record stays, the audit
+//     says role.change_unknown, and the caller gets ErrRoleChangeUnknown.
 //
 // The directory's cached roles for the project are dropped either way, so
 // every picker sees what Zitadel now holds.
@@ -330,6 +343,12 @@ func writeRole(ctx context.Context, w roleWrite) error {
 	why := map[string]any{"action": w.action, "error": sendErr.Error()}
 	if readErr != nil {
 		why["read_back_error"] = readErr.Error()
+		if answerLost(sendErr) {
+			if err := svcInsertAuditLogDetails(dctx, w.actor, auditNoTarget, auditRoleChangeUnknown, w.projectID+"/"+w.roleKey, why); err != nil {
+				log.Printf("[ROLES] WARNING: could not audit the unknown outcome of %s %s:%s: %v", w.action, w.projectID, w.roleKey, err)
+			}
+			return fmt.Errorf("%w: %v", ErrRoleChangeUnknown, sendErr)
+		}
 	}
 	if err := svcInTxLockingAccess(dctx, func(ctx context.Context) error {
 		if err := w.undo(ctx); err != nil {
@@ -340,6 +359,14 @@ func writeRole(ctx context.Context, w roleWrite) error {
 		log.Printf("[ROLES] WARNING: could not undo %s %s:%s after Zitadel refused it: %v", w.action, w.projectID, w.roleKey, err)
 	}
 	return fmt.Errorf("%w: %v", ErrRoleNotChangedInZitadel, sendErr)
+}
+
+// answerLost is whether err leaves Zitadel's state unknown: no answer at all,
+// or a status that means "try again" (408, 429, 5xx). Any other status is
+// Zitadel's final word that it did not do it.
+func answerLost(err error) bool {
+	var se *zitadel.StatusError
+	return !errors.As(err, &se) || extcall.RetryableStatus(se.Code)
 }
 
 // readBackRole is the role as Zitadel holds it now, or nil when it has none.

@@ -77,6 +77,23 @@ type autoRotateStatus struct {
 	LeadDays      int        `json:"lead_days"`
 	Window        string     `json:"window"`
 	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
+	// WaitingFor is what keeps the schedule from replacing the key even when
+	// it is due (W5): "test_sign_in_setup" (no test sign-in can run, because
+	// SYNDRA_EXTERNAL_URL is unset) or "test_sign_in" (none has passed in the
+	// last probeFreshFor). Empty when the schedule would act at its time.
+	WaitingFor string `json:"waiting_for,omitempty"`
+}
+
+// scheduleWaitingFor is what the schedule waits on before it may replace the
+// key, the same test RunActionKeyAutoRotate applies; "" when nothing.
+func scheduleWaitingFor(now time.Time) string {
+	switch {
+	case probeRecentlyPassed(now):
+		return ""
+	case !ProbeL1Enabled():
+		return "test_sign_in_setup"
+	}
+	return "test_sign_in"
 }
 
 // rotationOutcomeStatus is Syndra's latest attempt, without its id or actor.
@@ -87,7 +104,8 @@ type rotationOutcomeStatus struct {
 	Outcome    string          `json:"outcome"`
 	Replaced   []string        `json:"replaced"`
 	Probe      json.RawMessage `json:"probe,omitempty"`
-	Error      string          `json:"error,omitempty"`
+	// Reason is the attempt's plain sentence (rotationResult.Reason).
+	Reason string `json:"reason,omitempty"`
 }
 
 // HandleActionRotationStatus reports the Action signing key: whether one is
@@ -134,7 +152,7 @@ func HandleActionRotationStatus(w http.ResponseWriter, r *http.Request) {
 	if l := st.Last; l != nil {
 		resp.Rotating = l.Outcome == "in_flight"
 		resp.LastOutcome = &rotationOutcomeStatus{Trigger: l.Trigger, StartedAt: l.StartedAt, FinishedAt: l.FinishedAt,
-			Outcome: l.Outcome, Replaced: l.Replaced, Probe: l.Probe, Error: l.Error}
+			Outcome: l.Outcome, Replaced: l.Replaced, Probe: l.Probe, Reason: l.Error}
 	}
 
 	now := nowFn()
@@ -142,6 +160,7 @@ func HandleActionRotationStatus(w http.ResponseWriter, r *http.Request) {
 	if c.On {
 		next := nextAutoAttempt(now, t, st.LastAutoAt, c)
 		resp.Auto.NextAttemptAt = &next
+		resp.Auto.WaitingFor = scheduleWaitingFor(now)
 	}
 	// Precedence 2: no observed date (none recorded, the .env one unset,
 	// malformed or in the future: a typo in the year must never hide an old
