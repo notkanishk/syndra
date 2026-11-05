@@ -112,7 +112,7 @@ export function WithdrawnAccess() {
   const [search, setSearch] = useState("");
   const [where, setWhere] = useState("");
   // Most recent first, as the board draws it: `when` is how long ago, so ascending is newest.
-  const [sort, flipSort, view] = useSort<SortKey>("when");
+  const [sort, flipSort, view] = useSort<SortKey>("when", { list: "withdrawn", keys: ["who", "what", "where", "when"] });
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({ spent: true, queued: true });
 
   const text = useMemo(
@@ -313,7 +313,7 @@ function RevocationSection({
   sort: Sort<SortKey>;
   onSort: (key: SortKey) => void;
 }) {
-  const paging = usePaging();
+  const paging = usePaging(undefined, undefined, "withdrawn");
   const resolver = useNameResolver();
   const anchor = useRef<HTMLDivElement>(null);
   const shown = rows.slice(0, paging.limit);

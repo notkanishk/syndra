@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePill } from "@/lib/place";
 import { useQueueCleared } from "@/lib/useQueueCleared";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -64,6 +65,7 @@ const RehearsalDialog = dynamic(() => import("@/components/ui/RehearsalDialog").
 
 type RequestSort = "who" | "when";
 type StatusFilter = "pending" | "approved" | "rejected" | "withdrawn" | "all";
+const STATUSES: readonly StatusFilter[] = ["pending", "approved", "rejected", "withdrawn", "all"];
 
 /**
  * One reading of a request's status, in both registers.
@@ -133,7 +135,8 @@ export function RequestsScreen({ isOperator, userId }: { isOperator: boolean; us
 
 /** The operator queue — same row shape as the Home block, terminal actions. */
 function OperatorQueue({ userId }: { userId?: string }) {
-  const [status, setStatus] = useState<StatusFilter>("pending");
+  // The pill is a preference: the status you last looked at (A-19 P8).
+  const [status, setStatus] = usePill<StatusFilter>("requests", "pending", STATUSES);
   const requests = useRequestsAdmin(status);
   const [bulkStatus, setBulkStatus] = useState<"approved" | "rejected" | null>(null);
   // The beat of a bulk decision starts when its dialog closes: until then the
@@ -148,7 +151,7 @@ function OperatorQueue({ userId }: { userId?: string }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
   // The read comes newest first, so "When" ascending is that order; Who is A to Z.
-  const [sort, setSort, view] = useSort<RequestSort>("when");
+  const [sort, setSort, view] = useSort<RequestSort>("when", { list: "requests", keys: ["who", "when"] });
 
   // What the read holds, narrowed by the search. A decided row is in it until
   // the refetch lands, and then it is not: the open list is a list of requests

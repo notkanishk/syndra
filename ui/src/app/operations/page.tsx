@@ -67,7 +67,7 @@ export default function EventActivityPage() {
   const [source, setSource] = useState<Source>("all");
   const [outcome, setOutcome] = useState<EventOutcome>("all");
   const [query, setQuery] = useState("");
-  const [sort, flipOrSet, view] = useSort<SortKey>("time");
+  const [sort, flipOrSet, view] = useSort<SortKey>("time", { list: "operations", keys: ["time", "event", "outcome"] });
   const events = useWebhookEvents();
   const triggers = useOnboardingTriggers();
   const resolver = useNameResolver();

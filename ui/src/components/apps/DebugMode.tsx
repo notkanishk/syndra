@@ -190,7 +190,7 @@ function LiveList({
   }, [held]);
   const shown = cutoff === null ? signIns : signIns.filter((s) => s.seq <= cutoff);
   const waiting = signIns.length - shown.length;
-  const paging = usePaging();
+  const paging = usePaging(undefined, undefined, "debug");
   const firstSeen = useRef<number | null>(null);
   if (firstSeen.current === null) firstSeen.current = newest;
 

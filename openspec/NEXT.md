@@ -247,7 +247,7 @@ The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checke
 
 ### A-19 · An extension of you
 
-Wave 1 · feel is built (P2 forecast tense, P11 Appearance Device, P12 scrim/layer/tap tokens, P14 Drift revoke wording): `changes/extension-of-you/tasks.md`. Open: EOY-F9 (copy guide forecast table), EOY-F10 (dialog forecasts, rail count at the answer), EOY-F11 (`--tap` adoption). Second wave P5, P6, P7, P10; third P8, P9, P13.
+Wave 1 · feel is built (P2 forecast tense, P11 Appearance Device, P12 scrim/layer/tap tokens, P14 Drift revoke wording): `changes/extension-of-you/tasks.md`. Open: EOY-F9 (copy guide forecast table), EOY-F10 (dialog forecasts, rail count at the answer), EOY-F11 (`--tap` adoption). Wave 2 · place is built on `feat/a19-place` (P5 Back keeps your place, P8 your last view, P9 intent prefetch; `tasks.md` section C). Open there: EOY-P5.4 (other open folds), EOY-P5.5 (scroll keyed by path only), EOY-P9.2 (project and bundle prefetch). Still ahead: P6, P7, P10 (parallel build), P13.
 
 ---
 
