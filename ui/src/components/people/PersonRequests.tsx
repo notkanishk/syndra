@@ -6,7 +6,7 @@ import { RoleRef } from "@/components/names";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { keepResult, requestOutcome } from "@/components/requests/RequestsScreen";
 import { ArrowLink } from "@/components/ui/ArrowLink";
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 import { StatusSeat } from "@/components/ui/StatusSeat";
 import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";

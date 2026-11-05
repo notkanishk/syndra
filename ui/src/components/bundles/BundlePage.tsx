@@ -19,13 +19,13 @@ import { KEPT, PushedStep, useCancelStep } from "@/components/ui/CancelQueuedSte
 import { Card, CardHeader } from "@/components/ui/Card";
 import { FormPart, useAddedKeys } from "@/components/ui/FormPart";
 import { FieldLabel, Input } from "@/components/ui/Input";
-import { useLeavingRows } from "@/components/ui/LeavingRows";
+import { useLeavingRows } from "@/lib/motion";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { MetaRow, PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { Tabs } from "@/components/ui/Tabs";
 import { Term } from "@/components/ui/Term";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { glideTo } from "@/lib/motion";
 import { WaitsMark } from "@/components/ui/WaitsMark";
 import { formatList, formatShortDate, humanizeKey, roleLabel } from "@/lib/format";

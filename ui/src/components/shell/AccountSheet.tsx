@@ -9,7 +9,7 @@ import { Modal, ModalHeader } from "@/components/ui/Modal";
 import { SyndraMark, WELCOMED } from "@/components/shell/SyndraMark";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { Segmented } from "@/components/ui/Select";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { ACCOUNT_NAV } from "@/lib/nav";
 import type { SessionUser } from "@/lib/session";
 import { useTheme } from "@/lib/theme";

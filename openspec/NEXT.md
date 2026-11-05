@@ -202,7 +202,7 @@ Claude Design is retired. Design now lives on the Syndra Project canvas, and the
 - **Seed project and bundle pages** from their lists, as person and app now are [ready-for-agent].
 - **Pass `person` from the Removal dialog and Roles that wait** to `NextStep`, so every "Waiting for you to send" narrows [ready-for-agent].
 - **A phone Go to in Basic.** Basic's tab bar has no sheet, so the phone Input is reached through the sheet only (Advanced). Whether to add an entry is a structure question [needs-triage].
-- Second wave not started: P5 Back keeps your place, P6, P7 Keys (`?`, arrows between rows), P10.
+- Second wave: P6, P7 and P10 are built on `feat/a19-motion-keys` (below). P5 Back keeps your place, P8 and P9 are other builds.
 
 ### Audit of 27 Oct — remediation in batches
 
@@ -246,6 +246,8 @@ The outside audit (`docs/from another side/AUDIT-2026-10-27.md`) has been checke
 - **⌘K command palette** — optional, struck from spec in the May 2026 audit. Only if operator navigation demand shows up.
 
 ### A-19 · An extension of you
+
+Wave 2 · motion and keys is built on `feat/a19-motion-keys` (`changes/extension-of-you/tasks.md` section C): `lib/motion/` is the one motion module, every design-system card has generated Moves and Phone lines (`ui/.design-sync/moves.json`), `?` opens the Keys sheet, ↑ ↓ and Enter work on row links in `ArriveList`, and six dead ends are closed (Q9, Q10, Q11 and the rest). Open: resync and publish the bundle with the lines, `GoTo`, `Kbd` and `KeysSheet`, and the Design System's `tokens.css` motion tokens `ready-for-human`; arrow keys on the queues (Pending, Requests, Expiring, Holds), whose rows are not whole-row links `needs-triage`.
 
 Wave 1 · feel is built (P2 forecast tense, P11 Appearance Device, P12 scrim/layer/tap tokens, P14 Drift revoke wording): `changes/extension-of-you/tasks.md`. Open: EOY-F9 (copy guide forecast table), EOY-F10 (dialog forecasts, rail count at the answer), EOY-F11 (`--tap` adoption). Second wave P5, P6, P7, P10; third P8, P9, P13.
 

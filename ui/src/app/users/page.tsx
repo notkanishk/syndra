@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness, type ReadState } from "@/components/ui/ReadFreshness";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { SortHead, orderBy, useSort } from "@/components/ui/SortHead";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { FilterPanel, FilterField } from "@/components/ui/FilterPanel";
@@ -517,7 +517,12 @@ export default function PeoplePage() {
           initial={
             give.roleKey || give.bundleId ? give : { projectId: filters.project, roleKey: filters.role }
           }
-          onClose={() => setBulkOp(null)}
+          onClose={(applied) => {
+            setBulkOp(null);
+            // Select is a mode, not structure (A-19 P10.2): it ends when the dialog closes on its
+            // result. Closing the plan without applying leaves the selection where it was.
+            if (applied) exitBulk();
+          }}
         />
       )}
     </div>
@@ -622,7 +627,7 @@ function PersonRow({
 
   if (!bulkMode) {
     return (
-      <Link href={`/users/${entry.user.id}`} className={shared}>
+      <Link data-row href={`/users/${entry.user.id}`} className={shared}>
         {body}
       </Link>
     );

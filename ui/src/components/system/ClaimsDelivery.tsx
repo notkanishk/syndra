@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardColumns, CardHeader } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { ReadFreshness, readStateOfQuery } from "@/components/ui/ReadFreshness";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { LANDS_LABEL, outcomePhrase } from "@/lib/claims";
 import { formatClock, formatList, formatSignIn, formatWhen } from "@/lib/format";
 import { sortByName } from "@/lib/sort";

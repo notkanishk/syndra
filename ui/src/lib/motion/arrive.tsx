@@ -2,6 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
+import { moveBetweenRows, rowFocused, useRovingRows } from "@/lib/keys";
+
 /**
  * The arrive tokens, for the places a timer has to agree with CSS. Held to
  * globals.css by design-system.test.ts.
@@ -94,6 +96,9 @@ export const armedRecently = () => Date.now() - armedAt <= ARRIVE_MEMORY_MS;
  * staggered from the first new one, while the rows already there hold.
  *
  * Key the rows by id so rows that stay are not remounted.
+ *
+ * It also carries the list's keys (A-19 P7): a row link marked `data-row` is a
+ * stop for the arrow keys, with roving focus (`lib/keys.ts`).
  */
 export function ArriveList({
   children,
@@ -108,6 +113,7 @@ export function ArriveList({
 }) {
   const [settled, setSettled] = useState(startSettled);
   const node = useRef<HTMLDivElement | null>(null);
+  useRovingRows(node);
 
   // After mount, not in the initial state: the server cannot know about a Back,
   // and a different first render is a hydration mismatch.
@@ -146,6 +152,8 @@ export function ArriveList({
   return (
     <div
       ref={node}
+      onFocus={(event) => rowFocused(node.current, event.target)}
+      onKeyDown={(event) => moveBetweenRows(node.current, event)}
       className={`${className} arrive-list`}
       data-settled={settled ? "" : undefined}
     >

@@ -15,7 +15,7 @@ import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { RoleWordsTable, type RoleWordRow } from "@/components/ui/RoleWordsTable";
 import { Segmented, Select } from "@/components/ui/Select";
 import { Ticks } from "@/components/ui/TokenBlock";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import {
   ADD_MENU,
   addMuted,
@@ -43,7 +43,7 @@ import {
   type AddEntry,
   type ClaimLine,
 } from "@/lib/claims";
-import { formatShortDate } from "@/lib/format";
+import { formatClock, formatShortDate } from "@/lib/format";
 import type {
   AppClaimShape,
   Claim,
@@ -71,6 +71,7 @@ export function ShapeCard({
   shape,
   draft,
   setDraft,
+  restoredAt,
   token,
   person,
   preview,
@@ -86,6 +87,8 @@ export function ShapeCard({
   shape: AppClaimShape;
   draft: ShapeDraft | null;
   setDraft: (d: ShapeDraft | null) => void;
+  /** When the draft on the card was last kept, if this visit found it waiting. */
+  restoredAt?: string;
   /** The token the editors' "Sent as" lines read: the draft's, else what applies now. */
   token: Record<string, unknown> | null;
   person: string;
@@ -130,6 +133,7 @@ export function ShapeCard({
           shape={shape}
           draft={draft}
           setDraft={setDraft}
+          restoredAt={restoredAt}
           token={token}
           person={person}
           preview={preview}
@@ -301,6 +305,7 @@ function ShapeForm({
   shape,
   draft,
   setDraft,
+  restoredAt,
   token,
   person,
   preview,
@@ -316,6 +321,7 @@ function ShapeForm({
   shape: AppClaimShape;
   draft: ShapeDraft | null;
   setDraft: (d: ShapeDraft | null) => void;
+  restoredAt?: string;
   token: Record<string, unknown> | null;
   person: string;
   preview?: Preview;
@@ -603,6 +609,9 @@ function ShapeForm({
           <span className={`flex min-w-0 flex-[1_1_240px] items-start gap-2 text-[13px] leading-[1.5] ${beforeLine.warn ? "text-warn-text" : "text-faint"}`}>
             {beforeLine.warn && <StatusDot tone="warn" className="mt-[7px]" />}
             <span>
+              {restoredAt && (
+                <span className="block text-muted">You have an unsaved draft from {formatClock(restoredAt)}.</span>
+              )}
               <Ticks text={beforeLine.text} />
             </span>
           </span>

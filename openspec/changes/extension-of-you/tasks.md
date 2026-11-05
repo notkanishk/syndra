@@ -40,3 +40,32 @@
 - [ ] EOY-F9 Copy guide: add the forecast tense table to section 5 (`plain-language-copy/design.md`). `ready-for-agent`
 - [ ] EOY-F10 Forecast in dialogs and `setQueryData` on the rail indicators, if the owner wants counts to move at the answer. `needs-triage`
 - [ ] EOY-F11 `--tap` is declared but components still write `min-h-[44px]`; convert as touched. `ready-for-agent`
+
+## C. Wave 2 · motion and keys (P6, P7, P10)
+
+The owner approved all of it on 5 Nov 2026 (Q8, Q9, Q10, Q11). P5, P8, P9 and P13 are other builds.
+
+### C1. P6, one motion module, one motion page
+- [x] C1.1 `ui/src/lib/motion/` holds the motion code: `still` (reduced motion, exit phase, token durations), `glide` (+ `glide-indicator`), `arrive`, `unfold`, `leave`, `crossfade`, `flash`, behind one `index.ts`. Moved, not rewritten: the components' own tests pass unchanged. `bloom` and `lift` are CSS classes and stay in `globals.css`.
+- [x] C1.2 The binding test grows to every `--duration-*` (7, with `PRESS_MS`, `BREATHE_MS`, `GLIDE_MS` added) and every `--ease-*` (6): `src/lib/motion/__tests__/motion.test.tsx`.
+- [x] C1.3 Moves and Phone lines on every card, generated from `ui/.design-sync/moves.json` by `moves.mjs` into each preview and `MOVES.md`; stale output fails a test.
+- [x] C1.4 Motion tokens: none missing from `globals.css`. The gap is the design-system artifact's `tokens.css`, which is a publish step.
+- [ ] C1.5 Resync and publish the bundle with the lines, `GoTo`, `Kbd` and `KeysSheet` `ready-for-human: needs Chrome and a publish`
+- [ ] C1.6 `tokens.css` of the Design System artifact gains the motion tokens when it is next published `ready-for-human`
+
+### C2. P7, keys (Q8)
+- [x] C2.1 `lib/keys.ts`: the key table, `typingIn`, `otherDialogOpen`, roving focus (`useRovingRows`, `rowFocused`, `moveBetweenRows`). `/` stays Go to's.
+- [x] C2.2 `KeysSheet` (Modal sm, `Kbd`) and `KeysHost` in `AppShell`: `?` when nothing is typed into and nothing else is open. Insights' map keeps `?` for its own sheet and takes the event first.
+- [x] C2.3 `ArriveList` carries the roving index: one `[data-row]` link per list is in the Tab order, ↑ ↓ move, Enter is the link's own press, a row's buttons stay on Tab. Marked on People, Projects, Apps, Roles and a role's holders.
+- [x] C2.4 Esc closes things: a Modal's own, Select's (People), and the Keys sheet.
+- [x] C2.5 Tests: `?` opens and not while typing, not over a dialog, not with a modifier; no letter verbs; arrows, ends, Tab stop, Enter, fields and buttons left alone.
+- [ ] C2.6 Arrow rows on the queues (Pending, Requests, Expiring, Holds). Their rows are not whole-row links, so the person link inside each would carry `data-row`. `needs-triage`
+
+### C3. P10, six dead ends closed
+- [x] C3.1 "Everything has reached Zitadel." links to Change history (Q11).
+- [x] C3.2 Select ends when a bulk dialog closes on its result, on People and on Expiring; `BulkDialog` `onClose(applied)`. Closing without applying keeps the selection (Q9).
+- [x] C3.3 Expiring rows link the person: already true through `WhoSeat`; now held by a test.
+- [x] C3.4 "Ask to keep it" is a button that opens the ask on My access; once asked, "Asked to keep it" takes the button's seat (Q10).
+- [x] C3.5 Home's "Sent, not seen back" opens People at `?attention=unseen`. Backend: `unseen_count` on the People list from the same read as the card (`UnconfirmedWriteSummary.Users`, not sent on the indicators payload).
+- [x] C3.6 The claims draft is kept in `sessionStorage` per app, restored with "You have an unsaved draft from 14:02." beside Discard; "Preview for" remembers its person per app and falls back if they are gone.
+- [x] C3.7 Tests for each.

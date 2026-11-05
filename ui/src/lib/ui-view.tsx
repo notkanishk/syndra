@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { markViewSwitched } from "@/components/ui/ArriveList";
+import { markViewSwitched } from "@/lib/motion";
 import { glideTo } from "@/lib/motion";
 import type { Audience, UiView } from "@/lib/nav";
 import { parseUiView, writeViewCookie } from "@/lib/ui-view-cookie";

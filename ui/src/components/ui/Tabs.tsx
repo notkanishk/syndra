@@ -3,7 +3,7 @@
 import React from "react";
 
 import { PILL } from "@/components/ui/Button";
-import { GlideIndicator, useGlideIndicator } from "@/components/ui/GlideIndicator";
+import { GlideIndicator, useGlideIndicator } from "@/lib/motion";
 
 /**
  * The page-level tab row: two or three views of one subject, switched in place.

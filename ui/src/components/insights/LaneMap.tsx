@@ -1,6 +1,6 @@
 "use client";
 
-import { ArriveList } from "@/components/ui/ArriveList";
+import { ArriveList } from "@/lib/motion";
 import { useRef, useState } from "react";
 
 import { LANES, type Highlight, type Model, type Tone } from "@/components/insights/model";

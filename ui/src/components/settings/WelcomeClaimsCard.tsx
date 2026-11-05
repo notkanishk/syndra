@@ -6,7 +6,7 @@ import { ListStates, RowSkeleton } from "@/components/states";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Notice } from "@/components/ui/Notice";
 import { Segmented } from "@/components/ui/Select";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { ApiError } from "@/lib/api-client";
 import { describeFailure, sentence } from "@/lib/outcome";
 import { useSaveWelcomeClaims, useWelcomeClaims } from "@/lib/queries/useWelcomeClaims";

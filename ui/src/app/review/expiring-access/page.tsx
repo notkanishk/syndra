@@ -7,7 +7,7 @@ import { useMemo, useRef, useState } from "react";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
-import { Crossfade } from "@/components/ui/Crossfade";
+import { Crossfade } from "@/lib/motion";
 import { FoldChevron } from "@/components/ui/FoldChevron";
 import { WhatSeat, WhoSeat } from "@/components/review/RowSeats";
 import { BulkDialog } from "@/components/people/BulkDialog";
@@ -18,9 +18,9 @@ import { PaginationRow, usePaging } from "@/components/ui/PaginationRow";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
 import { ReadLine, SectionPill } from "@/components/ui/SectionNav";
 import { FilterPills } from "@/components/ui/Select";
-import { LeavingRow, useLeavingRows, type LeaveProps } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows, type LeaveProps } from "@/lib/motion";
 import { RunLabel, SortHead, runStarts, useSort, type Sort } from "@/components/ui/SortHead";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import {
   RowCheckbox,
   SelectAllRow,
@@ -404,9 +404,14 @@ export default function ExpiringAccessPage() {
           userIds={selectedUsers}
           grantIds={selectedGrantIds}
           scope="with access that ends"
-          onClose={() => {
+          onClose={(applied) => {
             setExtending(false);
-            selection.clear();
+            // Select is a mode, not structure (A-19 P10.2): it ends with the result. Closing
+            // the plan without applying leaves the selection where it was.
+            if (applied) {
+              selection.clear();
+              setSelecting(false);
+            }
           }}
         />
       )}

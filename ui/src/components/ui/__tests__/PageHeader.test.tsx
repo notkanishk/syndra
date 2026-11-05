@@ -2,7 +2,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ARRIVE_SETTLED_MS } from "@/components/ui/ArriveList";
+import { ARRIVE_SETTLED_MS } from "@/lib/motion";
 import { BELOW_HEADER, CONTENT_GAP, HEADER_TO_CONTENT, PageHeader } from "@/components/ui/PageHeader";
 import { TINT_MS } from "@/lib/motion";
 

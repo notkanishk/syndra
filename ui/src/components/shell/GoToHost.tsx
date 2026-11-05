@@ -3,15 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { GoTo } from "@/components/ui/GoTo";
+import { otherDialogOpen, typingIn } from "@/lib/keys";
 import { navFor, targetNav } from "@/lib/nav";
 import { useTargets } from "@/lib/queries/useTargets";
 import { useUiView } from "@/lib/ui-view";
-
-/** A key pressed in a field belongs to the field. */
-function typingIn(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
-}
 
 /**
  * Mounts Go to once and owns its two keys: `/` when no field has the focus, and
@@ -31,10 +26,7 @@ export function GoToHost() {
       const slash = event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !typingIn(event.target);
       if (!chord && !slash) return;
       // Another dialog is open (Go to's own is told apart by its label).
-      const other = Array.from(document.querySelectorAll('[role="dialog"]')).some(
-        (el) => !el.querySelector('[role="combobox"][aria-label="Go to"]'),
-      );
-      if (other) return;
+      if (otherDialogOpen('[role="combobox"][aria-label="Go to"]')) return;
       event.preventDefault();
       setOpen((was) => (chord ? !was : true));
     }

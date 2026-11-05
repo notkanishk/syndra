@@ -7,7 +7,7 @@ import {
   ARRIVE_MS,
   ARRIVE_SETTLED_MS,
   ARRIVE_STEP_MS,
-} from "@/components/ui/ArriveList";
+} from "@/lib/motion";
 
 /**
  * Design-system canary.
@@ -386,7 +386,7 @@ describe("design system", () => {
     const declared = /--duration-flash:\s*(\d+)ms/.exec(css);
     expect(declared, "globals.css must declare --duration-flash").not.toBeNull();
 
-    const hook = readFileSync(resolve(SRC_ROOT, "lib/useFlashOnChange.ts"), "utf8");
+    const hook = readFileSync(resolve(SRC_ROOT, "lib/motion/flash.ts"), "utf8");
     const constant = /FLASH_MS = (\d+)/.exec(hook);
     expect(constant, "useFlashOnChange must export FLASH_MS").not.toBeNull();
 

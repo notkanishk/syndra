@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MemberAccess } from "@/components/member/MemberAccess";
@@ -11,6 +11,14 @@ const changes = vi.hoisted(() => ({ value: [] as unknown[] }));
 const mine = vi.hoisted(() => ({ requests: [] as unknown[], targets: [] as unknown[] }));
 
 vi.mock("@/components/member/MemberCatalog", () => ({ MemberCatalog: () => null }));
+vi.mock("@/components/requests/AskForAccess", () => ({
+  AskForAccess: ({ initial, onClose }: { initial: { projectId: string; roleKey: string }; onClose: () => void }) => (
+    <div role="dialog">
+      Asking for {initial.projectId}/{initial.roleKey}
+      <button onClick={onClose}>Close</button>
+    </div>
+  ),
+}));
 vi.mock("@/components/names", () => ({
   ResolvedProjectName: ({ name }: { name: string }) => <span>{name}</span>,
   UserName: ({ id }: { id: string }) => <span>{id}</span>,
@@ -182,12 +190,51 @@ describe("MemberAccess expiry lives on its row", () => {
     expect(rows[0].textContent).toContain("Mill · Operator");
     expect(rows[0].getAttribute("data-ends")).toBe("true");
     expect(rows[0].textContent).toMatch(/Given to you until .+ · 10 days left/);
-    const keep = screen.getByText("Ask to keep it").closest("a")!;
+    // A button, not a link: it opens the ask here, with no arrow (A-04 §7.5, A-19 P10.4).
+    const keep = screen.getByText("Ask to keep it").closest("button")!;
+    expect(keep.closest("a")).toBeNull();
     expect(keep.textContent).not.toContain("→");
-    expect(keep.getAttribute("href")).toBe("/requests?project=p1&role=mill&extend=1");
     expect(rows[1].getAttribute("data-ends")).toBeNull();
     // No separate warning box any more.
     expect(container.querySelector(".warn-note")).toBeNull();
+  });
+});
+
+describe("MemberAccess asks to keep a role without leaving (A-19 P10.4)", () => {
+  function endingRole() {
+    reset();
+    grants.value = [{ project_id: "p1", role_key: "mill", expires_at: inDays(10) }];
+    access.value = view(COMPLETE, ["laser", "mill"], { observed_role_count: 2 });
+  }
+
+  it("opens the ask on this page for that role, and closing it leaves the page where it was", () => {
+    endingRole();
+    render(<MemberAccess session={session} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask to keep it" }));
+    expect(screen.getByRole("dialog").textContent).toContain("Asking for p1/mill");
+    // Still on My access: the greeting and the rows are behind the sheet.
+    expect(screen.getByText(/Here.s what you can use/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("Mill · Operator")).toBeTruthy();
+  });
+
+  it("answers in the button's seat once it is asked, and offers it only for that row", () => {
+    endingRole();
+    mine.requests = [{ status: "pending", kind: "extend", project_id: "p1", role_key: "mill" }];
+    render(<MemberAccess session={session} />);
+    expect(screen.queryByRole("button", { name: "Ask to keep it" })).toBeNull();
+    expect(screen.getByText("Asked to keep it")).toBeTruthy();
+  });
+
+  it("a request for something else does not take the seat", () => {
+    endingRole();
+    mine.requests = [{ status: "pending", kind: "access", project_id: "p1", role_key: "mill" }];
+    render(<MemberAccess session={session} />);
+    expect(screen.getByRole("button", { name: "Ask to keep it" })).toBeTruthy();
   });
 });
 

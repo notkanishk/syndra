@@ -2,7 +2,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FLASH_MS, useFlashOnChange } from "@/lib/useFlashOnChange";
+import { FLASH_MS, useFlashOnChange } from "@/lib/motion";
 
 function Probe({ count, ready = true }: { count: number; ready?: boolean }) {
   const changed = useFlashOnChange(count, ready);

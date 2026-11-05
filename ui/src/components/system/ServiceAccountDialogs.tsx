@@ -10,7 +10,7 @@ import { ChoiceRow } from "@/components/ui/ChoiceRow";
 import { FieldHint, FieldLabel, Input } from "@/components/ui/Input";
 import { Modal, ModalFooter, ModalHeader } from "@/components/ui/Modal";
 import { Notice } from "@/components/ui/Notice";
-import { Unfold } from "@/components/ui/Unfold";
+import { Unfold } from "@/lib/motion";
 import { personLine } from "@/lib/format";
 import { describeFailure, sentence } from "@/lib/outcome";
 import {

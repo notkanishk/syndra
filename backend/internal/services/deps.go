@@ -150,7 +150,10 @@ var (
 		if err != nil {
 			return models.UnconfirmedWriteSummary{}, err
 		}
-		out := models.UnconfirmedWriteSummary{Count: len(rows)}
+		out := models.UnconfirmedWriteSummary{Count: len(rows), Users: map[string]int{}}
+		for _, r := range rows {
+			out.Users[r.UserID]++
+		}
 		top := rows
 		if len(top) > unconfirmedWriteTopN {
 			top = top[:unconfirmedWriteTopN]

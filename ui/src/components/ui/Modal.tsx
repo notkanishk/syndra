@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState, type Rea
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/Button";
-import { FLASH_MS } from "@/lib/useFlashOnChange";
+import { FLASH_MS } from "@/lib/motion";
 import { LIGHT_LEAD_MS, SETTLE_MS, TINT_MS, stillMotion } from "@/lib/motion";
 
 /**

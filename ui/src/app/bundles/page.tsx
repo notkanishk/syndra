@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { RetiredBundlesFold } from "@/components/bundles/RetiredBundle";
 import { RolePicker, splitRoleId } from "@/components/bundles/RolePicker";
 import { EmptyState, ListStates, RowSkeleton } from "@/components/states";
-import { LeavingRow, useLeavingRows } from "@/components/ui/LeavingRows";
+import { LeavingRow, useLeavingRows } from "@/lib/motion";
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Button } from "@/components/ui/Button";
 import { Card, CardColumns } from "@/components/ui/Card";
