@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"syndra/internal/claimtel"
+	"syndra/internal/ratelimit"
 )
 
 // Door is the claims target's HTTP route: signature, decode, answer, count.
@@ -38,6 +39,8 @@ type Door struct {
 	OnMismatch func()
 	// Debug, when set, is asked about each answered call (debug mode).
 	Debug Debugger
+	// Limit, when set, counts calls whose signature failed (rate-limits).
+	Limit func() *ratelimit.Limiter
 }
 
 // Debugger is debug mode as the data plane sees it.
@@ -103,7 +106,7 @@ func (d *Door) Delivery(next http.HandlerFunc) http.HandlerFunc {
 // Signature verifies the call against Keys, then the next handler reads the
 // same body again.
 func (d *Door) Signature(next http.HandlerFunc) http.HandlerFunc {
-	return SignatureCheck("ZITADEL_ACTION_SIGNING_KEY", d.Keys, d.Refresh, d.OnMismatch, d.DevMode, next)
+	return SignatureCheck("ZITADEL_ACTION_SIGNING_KEY", d.Keys, d.Refresh, d.OnMismatch, d.DevMode, d.Limit, next)
 }
 
 // SignatureCheck verifies against each of keys() in turn. With no key at all
@@ -113,7 +116,14 @@ func (d *Door) Signature(next http.HandlerFunc) http.HandlerFunc {
 // moment ago verifies on its first call, not after the next poll
 // (action-key-autorotation). onMismatch, when set, hears every call whose
 // signature still matched none.
-func SignatureCheck(envName string, keys func() []SlotKey, refresh func(context.Context) []SlotKey, onMismatch func(), devMode func() bool, next http.HandlerFunc) http.HandlerFunc {
+//
+// limit (rate-limits), when set, hears only a call whose signature failed,
+// after every key and the refresh were tried: a call that verifies is never
+// counted, so no limit can stand between Zitadel and a sign-in. A source over
+// its limit is answered 429 instead of 401, still counted in its outcome
+// class and still heard by onMismatch, and its failures are not logged one
+// by one.
+func SignatureCheck(envName string, keys func() []SlotKey, refresh func(context.Context) []SlotKey, onMismatch func(), devMode func() bool, limit func() *ratelimit.Limiter, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var ks []SlotKey
 		if keys != nil {
@@ -149,6 +159,12 @@ func SignatureCheck(envName string, keys func() []SlotKey, refresh func(context.
 			claimtel.From(r.Context()).Set(o)
 			if o == claimtel.SigMismatch && onMismatch != nil {
 				onMismatch()
+			}
+			if limit != nil {
+				if wait := limit().Failed(r); wait > 0 {
+					ratelimit.Refuse(w, wait)
+					return
+				}
 			}
 			log.Printf("[ACTION] Signature verification failed: %v", err)
 			writeError(w, http.StatusUnauthorized, "INVALID_SIGNATURE", "Invalid or missing Zitadel signature", nil)

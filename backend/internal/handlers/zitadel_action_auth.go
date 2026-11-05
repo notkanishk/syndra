@@ -46,7 +46,7 @@ func withZitadelActionSignature(secretEnvVar string, next http.HandlerFunc) http
 			return keys()
 		})
 	}
-	return claimserve.SignatureCheck(secretEnvVar, keys, refresh, func() { nudgeKeyring() }, devModeNoZitadel, next)
+	return claimserve.SignatureCheck(secretEnvVar, keys, refresh, func() { nudgeKeyring() }, devModeNoZitadel, limiter, next)
 }
 
 // eventKeyring is the event listener target's keyring in this process: loaded

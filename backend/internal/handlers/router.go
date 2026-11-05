@@ -204,7 +204,9 @@ func NewRouter() http.Handler {
 	// that owns the target rather than by a service polling for work.
 
 	// Shadow Password Vault (user-facing, self-only)
-	mux.HandleFunc("DELETE /api/v1/users/{uid}/shadow-credential", withCORS(withUserAuth(handleClearShadowCredential)))
+	// The member's own writes carry a per-person limit no person typing
+	// meets (withSelfServiceLimit, rate-limits): a stuck client stops there.
+	mux.HandleFunc("DELETE /api/v1/users/{uid}/shadow-credential", withCORS(withUserAuth(withSelfServiceLimit(handleClearShadowCredential))))
 	mux.HandleFunc("GET /api/v1/users/{uid}/shadow-credential/status", withCORS(withUserAuth(handleGetShadowCredentialStatus)))
 	mux.HandleFunc("GET /api/v1/users/{uid}/shadow-credential/audit", withCORS(withUserAuth(handleGetShadowCredentialAudit)))
 
@@ -318,7 +320,7 @@ func NewRouter() http.Handler {
 	// ON and not only who may call it.
 	mux.HandleFunc("GET /api/v1/me/targets", withCORS(withUserAuth(handleMyTargets)))
 	mux.HandleFunc("GET /api/v1/me/changes", withCORS(withUserAuth(handleMyChanges)))
-	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(handleSetMyCredential)))
+	mux.HandleFunc("POST /api/v1/me/targets/{target}/credential", withCORS(withUserAuth(withSelfServiceLimit(handleSetMyCredential))))
 
 	// The add-on roster. Deployment configuration, not data: an operator on a
 	// deployment running a TrueNAS add-on sees the TrueNAS entry whether or not
@@ -425,7 +427,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/revoke", withCORS(withOperatorAuth(handleRevokeDrift)))
 	mux.HandleFunc("POST /api/v1/governance/drift/{id}/mark-external", withCORS(withOperatorAuth(handleMarkDriftExternal)))
 
-	// Data Plane routes — verified by their own mechanisms (HMAC / Redis)
+	// Data Plane routes — verified by their own mechanisms (HMAC / Redis).
+	// A call whose signature fails is counted per source and answered 429
+	// past the limit; a verified call is never counted (rate-limits).
 	mux.HandleFunc("POST /api/webhooks/zitadel",
 		withCORS(withZitadelActionSignature("ZITADEL_EVENT_SIGNING_KEY", HandleZitadelWebhook)))
 	// withClaimDelivery is outermost so the signature check is counted too:

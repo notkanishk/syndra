@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"syndra/internal/claimtel"
+	"syndra/internal/ratelimit"
 )
 
 // Health is the data plane's half of /healthz/claims: what both doors know
@@ -22,6 +23,10 @@ type Health struct {
 	// Snapshot is the data plane's config: its generation, how long since
 	// Redis last confirmed it current, and the last-known-good copy's size.
 	Snapshot Status `json:"snapshot"`
+	// RateLimits is this process's limiter: requests limited per endpoint,
+	// and those allowed because Redis did not answer (rate-limits). Counts
+	// only; it moves no status.
+	RateLimits *ratelimit.Stats `json:"rate_limits,omitempty"`
 }
 
 const (

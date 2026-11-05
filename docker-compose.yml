@@ -73,6 +73,11 @@ services:
       # be a real one (it verifies until the keyring is read from Redis).
       - ZITADEL_DOMAIN=${ZITADEL_DOMAIN:-}
       - ZITADEL_ACTION_SIGNING_KEY=${ZITADEL_ACTION_SIGNING_KEY:-}
+      # Rate limits (openspec/changes/rate-limits): failed signatures per
+      # source and a member's own writes per person; signed calls are never
+      # counted. Empty is the default; SYNDRA_RATE_LIMITS=off turns all off.
+      - SYNDRA_RATE_LIMITS=${SYNDRA_RATE_LIMITS:-}
+      - SYNDRA_RATE_LIMIT_FAILURES=${SYNDRA_RATE_LIMIT_FAILURES:-}
     ports:
       - "${CLAIMS_HOST_PORT:-8090}:8090"
     networks: [edge, data]
@@ -112,6 +117,12 @@ services:
       - DB_DSN=${DB_DSN:-postgres://syndra:${POSTGRES_PASSWORD}@postgres:5432/syndradb?sslmode=disable}
       - REDIS_URL=${REDIS_URL:-redis:6379}
       - SYNDRA_API_KEY=${SYNDRA_API_KEY:-dev_auth_token_secret}
+      # Rate limits (openspec/changes/rate-limits): failed signatures per
+      # source and a member's own writes per person; signed calls are never
+      # counted. Empty is the default; SYNDRA_RATE_LIMITS=off turns all off.
+      - SYNDRA_RATE_LIMITS=${SYNDRA_RATE_LIMITS:-}
+      - SYNDRA_RATE_LIMIT_FAILURES=${SYNDRA_RATE_LIMIT_FAILURES:-}
+      - SYNDRA_RATE_LIMIT_SELF_SERVICE=${SYNDRA_RATE_LIMIT_SELF_SERVICE:-}
       # Deliberately has no compose-level default. Unset, the backend seeds
       # only when no live Zitadel client came up — demo data locally, nothing
       # in production. Defaulting to `true` here overrode that decision and

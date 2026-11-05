@@ -43,6 +43,20 @@ Source: owner, 5 Nov 2026, "Automatic + button". It reverses #71. Change: [`chan
 - Confirm the backend's service account still holds `action.target.write`.
 - After the first replacement, read the Zitadel row and the audit.
 
+## 0c. Rate limits that never get in the way
+
+Source: owner, 5 Nov 2026, "it should never come in the way of legitimate use". Change: [`changes/rate-limits`](changes/rate-limits/tasks.md), branch `feat/rate-limits`.
+
+**What it does.**
+- On the three signed doors (`/api/action/inject` in both processes, and `/api/webhooks/zitadel`), only failed signatures are counted, per source IP (30 a minute). A signed call is never counted.
+- A member's own storage password and shadow-credential writes are limited per person (10 a minute, 50 an hour).
+- Redis down allows everything. `SYNDRA_RATE_LIMITS=off` turns all of it off.
+- The counts are under `rate_limits` on `/healthz/claims`.
+
+**Open, owner** (#ready-for-human):
+- After deploy, read `rate_limits` on production's `/healthz/claims`.
+- Confirm Caddy writes the client's address as the last `X-Forwarded-For` entry. This is unverified on the live box.
+
 ## 1. Code
 
 ### A-20 second pass — [`changes/second-pass`](changes/second-pass/proposal.md)
