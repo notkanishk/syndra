@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"syndra/internal/extcall"
 )
 
 // MgmtClient is the live Zitadel Management API client.
@@ -93,7 +96,7 @@ func (c *managementClient) AddUserGrant(ctx context.Context, userID, projectID s
 		"roleKeys":  roleKeys,
 	}
 
-	resp, err := c.doRequest(ctx, http.MethodPost, path, body)
+	resp, err := c.call(ctx, http.MethodPost, path, body, c.grantHolds(userID, projectID, roleKeys))
 	if err != nil {
 		return err
 	}
@@ -169,7 +172,7 @@ func (c *managementClient) AddProjectRole(ctx context.Context, projectID, roleKe
 		"group":       group,
 	}
 
-	resp, err := c.doRequest(ctx, http.MethodPost, path, body)
+	resp, err := c.call(ctx, http.MethodPost, path, body, c.roleExists(projectID, roleKey))
 	if err != nil {
 		return err
 	}
@@ -455,11 +458,27 @@ func (d searchDetails) totalInt() int {
 
 // --- HTTP transport layer ---
 
-const maxRetries = 3
+// zitadelPolicy is every Management API call's retry budget: three tries,
+// 100ms doubling to a 2s cap, 10s per try. A var so tests can shorten it.
+var zitadelPolicy = extcall.Policy{Attempts: 3, Base: 100 * time.Millisecond, Max: 2 * time.Second, Timeout: 10 * time.Second}
 
-// doRequest executes an authenticated request to the Zitadel Management API.
-// Handles token injection, 401 refresh-and-retry, and retries on 429/503.
+// idempotent is what may be sent twice: reads. Zitadel's searches are POSTs,
+// named `_search` (v1) or `search` (v2). Every other POST, PUT and DELETE is a
+// write, and a write is repeated only after a 429 (see extcall).
+func idempotent(method, path string) bool {
+	return method == http.MethodGet || strings.HasSuffix(path, "/_search") || strings.HasSuffix(path, "/search")
+}
+
+// doRequest executes an authenticated request to the Zitadel Management API
+// through extcall: token injection, one token refresh on a 401 (on any try),
+// and extcall's retry rules. A non-2xx answer comes back as a StatusError
+// carrying the HTTP status so callers classify by code.
 func (c *managementClient) doRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
+	return c.call(ctx, method, path, body, nil)
+}
+
+// call is doRequest with a read-back for a write whose outcome is unknown.
+func (c *managementClient) call(ctx context.Context, method, path string, body any, readBack func(context.Context) (bool, error)) (*http.Response, error) {
 	var reqBody []byte
 	if body != nil {
 		var err error
@@ -469,85 +488,122 @@ func (c *managementClient) doRequest(ctx context.Context, method, path string, b
 		}
 	}
 
-	var lastErr error
-	lastStatus := 0
-	backoff := 100 * time.Millisecond
+	refreshed := false // once per call, not once per first try: a 401 after a 429 still refreshes
+	op := func(ctx context.Context) (*http.Response, error) {
+		for {
+			token, err := c.tokens.Token(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("obtain access token: %w", err)
+			}
+			var bodyReader io.Reader
+			if reqBody != nil {
+				bodyReader = bytes.NewReader(reqBody)
+			}
+			req, err := http.NewRequestWithContext(ctx, method, fmt.Sprintf("https://%s%s", c.domain, path), bodyReader)
+			if err != nil {
+				return nil, fmt.Errorf("build request: %w", err)
+			}
+			req.Header.Set("Authorization", "Bearer "+token)
+			if reqBody != nil {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("X-Request-Id", extcall.RequestID(ctx))
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		token, err := c.tokens.Token(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("obtain access token: %w", err)
-		}
-
-		url := fmt.Sprintf("https://%s%s", c.domain, path)
-		var bodyReader io.Reader
-		if reqBody != nil {
-			bodyReader = bytes.NewReader(reqBody)
-		}
-
-		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
-		if err != nil {
-			return nil, fmt.Errorf("build request: %w", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		if reqBody != nil {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		req.Header.Set("Accept", "application/json")
-
-		resp, err := httpDo(c.http, req)
-		if err != nil {
-			return nil, fmt.Errorf("execute request: %w", err)
-		}
-
-		switch {
-		case resp.StatusCode >= 200 && resp.StatusCode < 300:
-			return resp, nil
-
-		case resp.StatusCode == http.StatusUnauthorized:
-			resp.Body.Close()
-			if attempt == 0 {
-				// Token may be expired — force refresh and retry once.
+			resp, err := httpDo(c.http, req)
+			if err != nil {
+				return nil, fmt.Errorf("execute request: %w", err)
+			}
+			if resp.StatusCode == http.StatusUnauthorized && !refreshed {
+				// Token may be expired. A 401 is a refusal, not a processed
+				// write, so refreshing and resending is safe for any method.
+				resp.Body.Close()
+				refreshed = true
 				c.tokens.ForceRefresh()
 				continue
 			}
-			// Terminal: surface as a 401 StatusError so callers classify it as a
-			// non-retryable failure rather than an opaque transient error.
-			return nil, &StatusError{Code: http.StatusUnauthorized, Message: "unauthorized after token refresh"}
-
-		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable:
-			resp.Body.Close()
-			lastStatus = resp.StatusCode
-			lastErr = fmt.Errorf("retryable status %d on %s %s", resp.StatusCode, method, path)
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff):
-				backoff *= 2
-				continue
-			}
-
-		default:
-			// Non-retryable error — read body for diagnostics and return a
-			// StatusError carrying the HTTP status so callers classify by code.
-			defer resp.Body.Close()
-			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-			var ae apiError
-			if json.Unmarshal(errBody, &ae) == nil && ae.Message != "" {
-				return nil, &StatusError{Code: resp.StatusCode, Message: ae.Message}
-			}
-			return nil, &StatusError{Code: resp.StatusCode, Message: string(errBody)}
+			return resp, nil
 		}
 	}
 
-	// Retries exhausted on 429/503 — preserve the last HTTP status so the caller
-	// can still treat it as transient (load-bearing for the propagation drain's
-	// 429 handling) rather than collapsing it to an unclassifiable error.
-	if lastStatus != 0 {
-		return nil, &StatusError{Code: lastStatus, Message: fmt.Sprintf("max retries exceeded on %s %s", method, path)}
+	resp, err := extcall.Do(ctx, zitadelPolicy, extcall.Call{
+		Name:       method + " " + path,
+		Idempotent: idempotent(method, path),
+		ReadBack:   readBack,
+		Subsystem:  "ZITADEL",
+	}, op)
+	if err != nil {
+		return nil, err
 	}
-	if lastErr != nil {
-		return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return resp, nil
 	}
-	return nil, fmt.Errorf("max retries exceeded")
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		// Terminal: surface as a 401 StatusError so callers classify it as a
+		// non-retryable failure rather than an opaque transient error.
+		return nil, &StatusError{Code: http.StatusUnauthorized, Message: "unauthorized after token refresh"}
+	}
+	// Read the body for diagnostics. A retryable status that ran out of tries
+	// keeps its code, so the propagation drain still treats it as transient.
+	errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	var ae apiError
+	if json.Unmarshal(errBody, &ae) == nil && ae.Message != "" {
+		return nil, &StatusError{Code: resp.StatusCode, Message: ae.Message}
+	}
+	return nil, &StatusError{Code: resp.StatusCode, Message: string(errBody)}
+}
+
+// grantHolds is AddUserGrant's read-back: does the user's grant on the project
+// carry every role asked for? Only a complete read may answer yes.
+func (c *managementClient) grantHolds(userID, projectID string, roleKeys []string) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		res, err := c.ListUserGrants(ctx, userID, SearchParams{Limit: 100})
+		if err != nil {
+			return false, err
+		}
+		if res.Total > len(res.Items) {
+			return false, fmt.Errorf("incomplete grant read: %d of %d", len(res.Items), res.Total)
+		}
+		for _, g := range res.Items {
+			if g.ProjectID == projectID && containsAll(g.RoleKeys, roleKeys) {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+}
+
+// roleExists is AddProjectRole's read-back. Without it a role created by a try
+// whose answer was lost read as a failure, the caller rolled back its own row,
+// and the Zitadel role was left an orphan only drift would find.
+func (c *managementClient) roleExists(projectID, roleKey string) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		res, err := c.ListProjectRoles(ctx, projectID, SearchParams{Limit: 1000})
+		if err != nil {
+			return false, err
+		}
+		if res.Total > len(res.Items) {
+			return false, fmt.Errorf("incomplete role read: %d of %d", len(res.Items), res.Total)
+		}
+		for _, r := range res.Items {
+			if r.Key == roleKey {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+}
+
+func containsAll(have, want []string) bool {
+	set := make(map[string]bool, len(have))
+	for _, h := range have {
+		set[h] = true
+	}
+	for _, w := range want {
+		if !set[w] {
+			return false
+		}
+	}
+	return true
 }
