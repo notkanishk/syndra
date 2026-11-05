@@ -32,6 +32,21 @@ function fallbackMessage(status: number): string {
   return "Syndra's server had a problem and gave no reason.";
 }
 
+/**
+ * A write whose reply never arrived: the request may have been sent and done.
+ * Still a TypeError, so every reader of a lost reply (`lostReply`, the network
+ * words) treats it as before; it only adds which method was lost.
+ */
+export class LostReply extends TypeError {
+  constructor(
+    cause: unknown,
+    readonly method: string,
+  ) {
+    super(cause instanceof Error ? cause.message : "Failed to fetch");
+    this.name = "LostReply";
+  }
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -139,11 +154,18 @@ export async function request<T = unknown>(path: string, init?: RequestInitJSON)
     }
   }
 
-  const res = await fetch(url, {
-    ...init,
-    headers,
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers,
+      body,
+    });
+  } catch (e) {
+    // A read that fails fails harmlessly; a write may have been done.
+    if (method !== "GET" && e instanceof TypeError) throw new LostReply(e, method);
+    throw e;
+  }
 
   if (res.status === 204) {
     return undefined as T;
