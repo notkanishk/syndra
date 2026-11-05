@@ -64,3 +64,17 @@ Each part adds its own section. Tags per `docs/agents/triage-labels.md`.
 - [x] Tests: `forecastReach.test.tsx`, `requestForecast.test.tsx`, `RemovalForecast.test.tsx`, `GrantForecast.test.tsx`, `CancelForecast.test.tsx`, `RehearsalForecast.test.tsx`, Drift cases in `UnexplainedAccess.test.tsx`
 - [ ] Remove's rail count: only a withdrawn queued grant moves it; a direct revoke's count is left to the refetch (`needs-triage`)
 - [ ] Bulk decision and bulk extend rail counts (`ready-for-agent`)
+
+## P12 · Insights to the rules
+
+- [x] Finding chips keep five seats (drift, waiting for you to send, single routes, unused, overlaps); the count is a hollow Badge at zero, the chip is disabled then, and no number is shown before the read
+- [x] Unused nodes recede (canvas ground, line-strong edge, solid); "N more" is solid; dashed keeps meaning NotOpenYet
+- [x] A warn or danger answer is one surface with a Notice-toned line (StatusDot plus tone text on the eyebrow), not a tinted box
+- [x] Dots are StatusDot (`ToneDot`; `StatusDot` gains `fill` for the accent shades a pin needs)
+- [x] "Back" is "Back to the map"; "Pin" and "Pin this" are "Keep this answer"
+- [x] "Showing 3 Oct" is a FilterChip with "Back to now" as its clear; the map's Keys pill is a Button
+- [x] Trends: ReadFreshness; a failed recent-use read says "Couldn't read recent use." apart from "Reading recent use."; all-clear lines take the resolved dot
+- [x] Below tablet: the lens Select, the answer above, then the nodes as a plain list per lane with observed people counts (`PhoneNodes`); no number where Zitadel was not read
+- [x] Tests: `p12.test.tsx`, phone list, Trends freshness and failed read, chip seats; `bun run test && bun run lint && bun run build` green
+- [ ] `needs-triage` Timeline track is still hand-drawn over a native range (no shared slider part exists)
+- [ ] `needs-triage` Drift and Expiring all-clear lines (refinement-sweep L4) were not re-checked here; Insights has none left

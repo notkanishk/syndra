@@ -745,3 +745,7 @@ Don't re-litigate these without new information.
 
 - **OE15** — `golang-migrate` kept. Its dirty-state guard on mid-migration failure is worth the one dependency; a stdlib runner would drop that recovery.
 - **OE21** — `sortedKeys` → `slices.Sorted(maps.Keys(…))` declined. `sortedKeys` returns a non-nil empty slice, `slices.Sorted` returns `nil`, and `zitadelByPair[k]` is allocated before its `RoleKeys` loop — so a Zitadel grant with zero roles would flip `"role_keys": []` to `null` in the reconciliation response. Six lines is not worth a JSON contract change.
+
+### A-20 second pass, P12 Insights to the rules (built 5 Nov 2026)
+
+On `feat/a20-p12-insights` ([`changes/second-pass`](changes/second-pass/tasks.md) P12): five chip seats with a hollow count, receded (not dashed) unused nodes, Notice-toned warn/danger answers, StatusDot everywhere, "Back to the map" / "Keep this answer", Trends freshness and a distinct failed read, and the phone's plain node list under the answer. Open: the Timeline track is still hand-drawn [needs-triage]; Drift and Expiring all-clear lines (sweep L4) not re-checked [needs-triage].
