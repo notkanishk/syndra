@@ -210,11 +210,6 @@ function SigningKey({
           {!loading && keyring && (
             <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">{keyringSentence(keyring)}</p>
           )}
-          {!loading && !error && (
-            <p className="max-w-[80ch] text-[13.5px] leading-[1.55] text-muted">
-              {notSetUp ? "Set the key up" : "Rotate the key"} on the Syndra server. The person who runs it has the command.
-            </p>
-          )}
         </div>
         {!loading && !error && !inFlight && (
           <span className="flex flex-wrap items-start gap-2.5">
