@@ -7,7 +7,7 @@ import type { SessionUser } from "@/lib/session";
 
 const setTheme = vi.fn();
 vi.mock("@/lib/theme", () => ({
-  useTheme: () => ({ theme: "dark", toggle: vi.fn(), setTheme }),
+  useTheme: () => ({ theme: "dark", choice: "dark", toggle: vi.fn(), setTheme }),
 }));
 
 const session = {
@@ -101,6 +101,7 @@ describe("the account sheet", () => {
     const controls = [
       screen.getByRole("radio", { name: "Dark" }),
       screen.getByRole("radio", { name: "Light" }),
+      screen.getByRole("radio", { name: "Device" }),
       screen.getByRole("button", { name: /Sign out/ }),
     ];
     for (const control of controls) {

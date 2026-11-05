@@ -100,6 +100,18 @@
   --radius-nav: 12px;
   --radius-pill: 999px;
 
+  /* ── Layers (A-19 P12) ───────────────────────────────────────────────────
+   * The four steps that exist, named for what sits on them. A popover opened
+   * inside a dialog shows over it, so popover is the highest. Components say
+   * `z-(--layer-dialog)`, never a number. */
+  --layer-bar: 20; /* sticky bars: the selection bar, the section pill */
+  --layer-pill: 30; /* a floating pill over the page, below any dialog */
+  --layer-dialog: 50; /* dialogs, sheets and their scrim */
+  --layer-popover: 60; /* over a dialog; also the skip link */
+
+  /* The touch floor: nothing a thumb must hit is smaller. */
+  --tap: 44px;
+
   /* ── Breakpoints ─────────────────────────────────────────────────────────
    * Three states, not four. Three is enough to specify and few enough to
    * test, and each one is a different device in somebody's hands rather than
@@ -498,6 +510,8 @@
     --divider: rgba(255, 255, 255, 0.05);
 
     --shadow-dialog: 0 22px 50px rgba(0, 0, 0, 0.55);
+    /* The wash behind a dialog or sheet: today's black in the dark room. */
+    --scrim: rgba(0, 0, 0, 0.55);
     --shadow-popover: 0 18px 40px rgba(0, 0, 0, 0.5);
     --shadow-card: none;
 
@@ -567,6 +581,8 @@
     --divider: rgba(37, 28, 66, 0.06);
 
     --shadow-dialog: 0 22px 50px rgba(60, 40, 120, 0.18);
+    /* The same violet-black as the dialog shadow, so daylight is never greyed by pure black. */
+    --scrim: rgba(60, 40, 120, 0.35);
     --shadow-popover: 0 18px 40px rgba(60, 40, 120, 0.14);
     --shadow-card: 0 2px 10px rgba(60, 40, 120, 0.05);
 
@@ -959,6 +975,11 @@ html.theme-fading *::after {
 }
 
 /* The scrim tints first (S1); the card follows 40ms behind it. */
+/* The scrim's colour, thinned by `--scrim-keep` (1 at rest) while a sheet is dragged away. */
+@utility bg-scrim {
+  background-color: color-mix(in srgb, var(--scrim) calc(var(--scrim-keep, 1) * 100%), transparent);
+}
+
 @utility settle-scrim {
   animation: fade var(--duration-tint) var(--ease-tint) both;
 }

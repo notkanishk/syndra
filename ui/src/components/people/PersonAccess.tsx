@@ -32,7 +32,7 @@ import { ArrowLink } from "@/components/ui/ArrowLink";
 import { Button } from "@/components/ui/Button";
 import { KEPT, useCancelStep } from "@/components/ui/CancelQueuedStep";
 import { Crossfade } from "@/components/ui/Crossfade";
-import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { ActionForecast, ActionOutcome } from "@/components/ui/ActionOutcome";
 import { Card } from "@/components/ui/Card";
 import { CopyableValue } from "@/components/ui/CopyableValue";
 import { ReadFreshness } from "@/components/ui/ReadFreshness";
@@ -49,7 +49,7 @@ import { peopleHref } from "@/lib/people-filters";
 import { useCrumb } from "@/lib/page-crumb";
 import { useUpstreamUserGrants } from "@/lib/queries/useUpstream";
 import { useCreateGrant, useUserAccess, useUserGrants } from "@/lib/queries/useUsers";
-import { EXTEND_DAYS, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
+import { EXTEND_DAYS, FORECAST, outcomeFromError, outcomeFromExtend, statesNothingChanged, type ActionOutcome as Outcome } from "@/lib/outcome";
 import { daysUntil, expiryLabel, formatAgoShort, formatShortDate, humanizeKey } from "@/lib/format";
 import { useIsAdvanced, useUiView } from "@/lib/ui-view";
 import { useApplications } from "@/lib/queries/useApplications";
@@ -774,8 +774,10 @@ function ExtendSeat({
 
   const done = outcome !== null && !statesNothingChanged(outcome.kind);
   return (
-    <Crossfade id={done ? "outcome" : "open"}>
-      {outcome && done ? (
+    <Crossfade id={done ? "outcome" : extend.isPending ? "forecast" : "open"}>
+      {extend.isPending && !done ? (
+        <ActionForecast word={`${FORECAST.extend} by ${EXTEND_DAYS} days`} />
+      ) : outcome && done ? (
         <ActionOutcome placement="seat" word={outcome.message} outcome={outcome} />
       ) : (
     <>

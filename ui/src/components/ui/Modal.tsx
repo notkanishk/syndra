@@ -316,7 +316,7 @@ export function Modal({
       aria-modal="true"
       aria-labelledby={labelledBy ?? titleId}
       aria-describedby={describedBy}
-      className="settle-scrim fixed inset-0 z-50 flex items-end justify-center bg-black/55 tablet:items-center tablet:px-4"
+      className="settle-scrim fixed inset-0 z-(--layer-dialog) flex items-end justify-center bg-scrim tablet:items-center tablet:px-4"
       onClick={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -368,7 +368,6 @@ const FLICK_PX_PER_MS = 0.5;
 /** Busy (7a): 15% of the finger's travel, capped at the travel cap. */
 const RESIST = 0.15;
 const RESIST_CAP_PX = 10;
-const SCRIM_ALPHA = 0.55;
 
 /**
  * Drag the sheet down by its grabber (S3), phone only: the grabber is hidden
@@ -391,15 +390,12 @@ export function useSheetDrag({
   busy,
   onClose,
   draggedAway,
-  scrimAlpha = SCRIM_ALPHA,
 }: {
   panelRef: React.RefObject<HTMLDivElement | null>;
   scrimRef: React.RefObject<HTMLDivElement | null>;
   busy: boolean;
   onClose: () => void;
   draggedAway: React.RefObject<boolean>;
-  /** The scrim's strength at rest, which a drag thins from. */
-  scrimAlpha?: number;
 }): SheetDrag {
   const hold = useRef<{ y: number; at: number } | null>(null);
   const travelled = useRef(false);
@@ -422,9 +418,9 @@ export function useSheetDrag({
     const scrim = scrimRef.current;
     if (panel) panel.style.transform = offset ? `translateY(${offset}px)` : "";
     if (scrim) {
-      scrim.style.backgroundColor = offset
-        ? `rgba(0, 0, 0, ${scrimAlpha * (1 - Math.min(1, offset / (height || 1)))})`
-        : "";
+      // The wash thins by what the finger has dragged away; the colour is the token's.
+      if (offset) scrim.style.setProperty("--scrim-keep", String(1 - Math.min(1, offset / (height || 1))));
+      else scrim.style.removeProperty("--scrim-keep");
     }
   };
 
@@ -500,7 +496,7 @@ export function useSheetDrag({
         }
         if (scrim) {
           scrim.style.transition = `background-color ${SETTLE_MS}ms var(--ease-tint)`;
-          scrim.style.backgroundColor = "rgba(0, 0, 0, 0)";
+          scrim.style.backgroundColor = "transparent";
         }
         setTimeout(() => {
           draggedAway.current = true;

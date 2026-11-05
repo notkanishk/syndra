@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ActionOutcome } from "@/components/ui/ActionOutcome";
+import { REVOKE_SENDS_ITSELF, REVOKE_SENDS_ITSELF_WORD } from "@/lib/outcome";
 
 const queued = { kind: "queued" as const, message: "Given in Syndra", detail: "It waits." };
 
@@ -144,5 +145,29 @@ describe("a session that ended before the action ran", () => {
     expect(link).toHaveAttribute("href", "/auth/zitadel?then=close");
     expect(link).toHaveAttribute("target", "_blank");
     expect(screen.getByText(/This tab stays as it is/)).toBeInTheDocument();
+  });
+});
+
+// A-19 P14: a queued revoke says exactly one of two true things, never both.
+describe("a queued revoke (Drift)", () => {
+  it("that sends itself: On its way, a neutral dot, no link, no second line", () => {
+    render(
+      <ActionOutcome
+        placement="seat"
+        word={REVOKE_SENDS_ITSELF_WORD}
+        outcome={REVOKE_SENDS_ITSELF}
+      />,
+    );
+    const seat = screen.getByRole("status");
+    expect(seat.textContent).toBe("On its wayRevocations send on their own");
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(seat.querySelector(".bg-warn")).toBeNull();
+    expect(seat.querySelector("[data-dot]")?.className).toContain("bg-faint");
+  });
+
+  it("that waits for the operator: the next step stands, and nothing claims it sends on its own", () => {
+    render(<ActionOutcome placement="seat" word="Recorded" outcome={{ kind: "queued", message: "Recorded" }} />);
+    expect(screen.getByRole("link", { name: /Waiting for you to send/ })).toBeInTheDocument();
+    expect(screen.queryByText(/send on their own/i)).toBeNull();
   });
 });
